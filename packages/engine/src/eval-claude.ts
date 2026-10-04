@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { costOf, type TokenUsage } from '@g-code/core';
+import { addUsage, costOf, ZERO_USAGE, type TokenUsage } from '@g-code/core';
 import { childEnv } from './child-env.js';
 import { EngineError } from './errors.js';
 import type { AgentAdapter, AgentRunResult } from './eval-run.js';
@@ -36,14 +36,6 @@ const usageOf = (u: z.infer<typeof apiUsage>): TokenUsage => ({
   output: u.output_tokens,
 });
 
-const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
-  input: a.input + b.input,
-  cacheRead: a.cacheRead + b.cacheRead,
-  cacheWrite: a.cacheWrite + b.cacheWrite,
-  output: a.output + b.output,
-});
-
-const ZERO: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
 
 const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
@@ -57,12 +49,13 @@ function required(env: Readonly<Record<string, string | undefined>>, name: strin
 export function claudeEnv(
   env: Readonly<Record<string, string | undefined>>,
   model: string,
-  home: string,
-  configDir: string,
+  dirs: { readonly home: string; readonly config: string; readonly tmp: string },
 ): Record<string, string> {
   return childEnv(env, {
-    HOME: home,
-    CLAUDE_CONFIG_DIR: configDir,
+    HOME: dirs.home,
+    CLAUDE_CONFIG_DIR: dirs.config,
+    // Claude Code's Bash tool keeps state under /tmp/claude-<uid> by default, which the sandbox cannot write.
+    CLAUDE_CODE_TMPDIR: dirs.tmp,
     ANTHROPIC_BASE_URL: required(env, 'DASHSCOPE_BASE_URL'),
     ANTHROPIC_AUTH_TOKEN: required(env, 'DASHSCOPE_API_KEY'),
     ANTHROPIC_API_KEY: '',
@@ -87,11 +80,13 @@ export function claudeEnv(
  */
 export const claudeCodeAdapter: AgentAdapter = {
   async run(input, { io, store }) {
-    const home = path.join(input.tempDir, 'home');
-    const configDir = path.join(input.tempDir, 'claude-config');
-    await mkdir(home, { recursive: true });
-    await mkdir(configDir, { recursive: true });
-    const env = claudeEnv(io.env, input.model, home, configDir);
+    const dirs = {
+      home: path.join(input.tempDir, 'home'),
+      config: path.join(input.tempDir, 'claude-config'),
+      tmp: path.join(input.tempDir, 'claude-tmp'),
+    };
+    for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
+    const env = claudeEnv(io.env, input.model, dirs);
     const host = new URL(env['ANTHROPIC_BASE_URL']!).hostname;
     const realHome = io.env['HOME'] ?? '';
     const sandbox = await openSandbox(
@@ -125,7 +120,7 @@ export const claudeCodeAdapter: AgentAdapter = {
       if (assistant.success) {
         const { message } = assistant.data;
         seen.set(message.id, usageOf(message.usage));
-        const spent = costOf(input.model, [...seen.values()].reduce(addUsage, ZERO)) ?? 0;
+        const spent = costOf(input.model, [...seen.values()].reduce(addUsage, ZERO_USAGE)) ?? 0;
         if (spent > input.maxCostUsd && !overBudget) {
           overBudget = true;
           stop.abort();
@@ -167,7 +162,7 @@ export const claudeCodeAdapter: AgentAdapter = {
       await writeFile(path.join(input.runDir, `${input.task.id}.claude.stderr.txt`), run.output);
     }
 
-    const streamed = [...seen.values()].reduce(addUsage, ZERO);
+    const streamed = [...seen.values()].reduce(addUsage, ZERO_USAGE);
     const usage = result?.usage === undefined ? streamed : usageOf(result.usage);
     const stopReason: AgentRunResult['stop'] = overBudget
       ? 'budget'

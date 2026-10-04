@@ -1,6 +1,6 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { baseOf, EDIT_FORMAT_SPECS, editPrompt, proposeChange, type ApplyResult, type ProposedChange } from './edit.js';
-import { nextSeq, toolUsesOf, type TokenUsage, type TurnEvent, type TurnResult } from './session.js';
+import { addUsage, nextSeq, toolUsesOf, ZERO_USAGE, type TurnEvent, type TurnResult } from './session.js';
 import type { Applier, ApplierRun, ApplyOutcome, EditFormat, FirstTry } from './types.js';
 
 /** One model round trip over the conversation so far. The engine binds it to a gateway and a session. */
@@ -20,15 +20,6 @@ The user's message holds the file's complete current content, every line prefixe
 Your only tool is the edit tool you are given. There is no read, search or shell tool, and no other file can be changed. If the instruction also describes changes to other files, make only the part that belongs in this file.
 
 Make the smallest change that carries out the instruction, matching the file's existing style. Leave unrelated lines exactly as they are. When the edit is made, end your turn with one short sentence.`;
-
-const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
-
-const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
-  input: a.input + b.input,
-  cacheRead: a.cacheRead + b.cacheRead,
-  cacheWrite: a.cacheWrite + b.cacheWrite,
-  output: a.output + b.output,
-});
 
 type Failure = Extract<ApplyResult, { kind: 'failed' }>;
 

@@ -37,6 +37,15 @@ export type TokenUsage = {
   readonly output: number;
 };
 
+export const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+
+export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
+  input: a.input + b.input,
+  cacheRead: a.cacheRead + b.cacheRead,
+  cacheWrite: a.cacheWrite + b.cacheWrite,
+  output: a.output + b.output,
+});
+
 export const TURN_ERROR_KINDS = ['refusal', 'transport', 'abort', 'max-turns', 'budget'] as const;
 export type TurnErrorKind = (typeof TURN_ERROR_KINDS)[number];
 
