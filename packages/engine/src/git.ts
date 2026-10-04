@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 import type { ChangedFile, CommitFacts, FileStatus } from '@g-code/core';
 import { EngineError } from './errors.js';
@@ -86,9 +87,12 @@ export async function changedFiles(repo: string, sha: string): Promise<ChangedFi
 export const fileAt = (repo: string, rev: string, path: string): Promise<string> =>
   git(repo, ['cat-file', 'blob', `${rev}:${path}`]);
 
+// A full clone would hand the agent the commits after `commit`, which for a history replay
+// include the answer. Fetching only `commit` keeps its ancestry and leaves no remote to pull from.
 export async function cloneAt(repo: string, dest: string, commit: string): Promise<void> {
-  await git(repo, ['clone', '--no-hardlinks', '--quiet', repo, dest]);
-  await git(dest, ['checkout', '--quiet', '--detach', commit]);
+  await git(dirname(dest), ['init', '--quiet', dest]);
+  await git(dest, ['fetch', '--quiet', '--no-tags', repo, commit]);
+  await git(dest, ['checkout', '--quiet', '--detach', 'FETCH_HEAD']);
 }
 
 export async function resetWorktree(dir: string): Promise<void> {
