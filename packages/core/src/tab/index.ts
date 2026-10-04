@@ -7,3 +7,4 @@ export * from './report.js';
 export * from './stream.js';
 export * from './history.js';
 export * from './zeta.js';
+export * from './moments.js';
