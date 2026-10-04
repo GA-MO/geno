@@ -139,6 +139,7 @@ describe('glob', () => {
 describe('list', () => {
   it('shows entries to the depth asked, counting files below the cut, without hidden files or symlinks', async () => {
     expect(await call('list', { depth: 1 })).toEqual(ok('README.md\nimage.bin\nsrc/ (2 files)'));
+    expect(await call('list', { directory: '', depth: 1 })).toEqual(ok('README.md\nimage.bin\nsrc/ (2 files)'));
     expect(await call('list', { directory: 'src' })).toEqual(ok('src/config.ts\nsrc/lib/\nsrc/lib/util.ts'));
   });
 

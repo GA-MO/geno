@@ -28,11 +28,12 @@ export function listEntries(files: readonly string[], depth: number): string[] {
 
 export const list = executor({
   input: z.strictObject({
-    directory: optional(z.string().min(1)),
+    // A model may send an empty string to mean the root.
+    directory: optional(z.string()).transform((dir) => dir || '.'),
     depth: optional(z.number().int().positive()),
   }),
-  describe: ({ directory, depth }) => `list ${directory ?? '.'}${depth === undefined ? '' : ` depth=${depth}`}`,
-  async run({ directory = '.', depth = DEFAULT_DEPTH }, ctx) {
+  describe: ({ directory, depth }) => `list ${directory}${depth === undefined ? '' : ` depth=${depth}`}`,
+  async run({ directory, depth = DEFAULT_DEPTH }, ctx) {
     const real = await resolveInside(ctx, directory);
     if (!(await stat(real)).isDirectory()) throw new ToolError(`${directory} is not a directory; use read`);
     const files = await ripgrep(ctx, real, ['--files', '--sort=path']);
