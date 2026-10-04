@@ -133,7 +133,7 @@ type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   'session-start': ({ session }) => [
     `session: ${session.id}`,
-    `created: ${session.createdAt}  workspace: ${session.workspace}  model: ${session.model}  effort: ${session.effort}`,
+    `created: ${session.createdAt}  workspace: ${session.workspace}  provider: ${session.provider}  model: ${session.model}  effort: ${session.effort}`,
   ],
   user: ({ seq, content }) => [`#${seq} user: ${content}`],
   assistant: ({ seq, content, stopReason, model, usage, costUsd, latencyMs }) => [
