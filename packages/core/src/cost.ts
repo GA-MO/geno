@@ -10,6 +10,7 @@ export const PRICES: Readonly<Record<string, Rates>> = {
   // Model Studio Singapore list price. It lists no cache rates, so cache reads bill at the full input rate
   // and writes at 1.25x input: both overstate the cost on purpose, so a budget never underestimates.
   'qwen3.8-flash': { input: 0.15, output: 0.47, cacheRead: 0.15, cacheWrite: 0.1875 },
+  'qwen3.7-plus': { input: 0.4, output: 1.6, cacheRead: 0.4, cacheWrite: 0.5 },
 };
 
 /** Null for an unpriced model, so an unknown cost never reads as free. */
