@@ -15,6 +15,9 @@ export type ToolContext = {
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}
 
+/** A command that was refused before it ran. It becomes a `denied` tool result. */
+export class ToolDenied extends ToolError {}
+
 /** A tool's executor, typed on its parsed input. */
 export type ToolDef<I> = {
   readonly input: z.ZodType<I>;
@@ -72,6 +75,19 @@ export async function resolveInside(ctx: ToolContext, raw: string): Promise<stri
   const spillRoot = await realOrUndefined(ctx.spillDir);
   if (within(ctx.workspace, real) || (spillRoot !== undefined && within(spillRoot, real))) return real;
   throw outside;
+}
+
+/** The real path to write for `raw`, which may not exist yet; rejected unless it lands inside the workspace. */
+export async function resolveWritable(ctx: ToolContext, raw: string): Promise<string> {
+  const target = path.resolve(ctx.workspace, raw);
+  const outside = new ToolError(`${raw} is outside the workspace`);
+  if (!within(ctx.workspace, target)) throw outside;
+  let existing = target;
+  let real: string | undefined;
+  while ((real = await realOrUndefined(existing)) === undefined) existing = path.dirname(existing);
+  const resolved = path.join(real, path.relative(existing, target));
+  if (!within(ctx.workspace, resolved)) throw outside;
+  return resolved;
 }
 
 /** How a path inside the workspace is shown to the model. Spill files keep their absolute path. */

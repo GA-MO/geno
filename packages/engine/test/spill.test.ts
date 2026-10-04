@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { SPILL_EDGE, spillNotice } from '@g-code/core';
-import { runTool, type ToolContext } from '../src/tools/index.js';
+import { EXECUTORS, runTool, type ToolContext } from '../src/tools/index.js';
 import { settle, spillFile } from '../src/tools/spill.js';
 import { rgCommand } from './helpers.js';
 
@@ -19,7 +19,7 @@ describe('output spill', () => {
     await writeFile(path.join(ws, 'big.ts'), `${lines.join('\n')}\n`);
     const ctx: ToolContext = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), rg: rgCommand(), signal: new AbortController().signal };
 
-    const result = await runTool(use('grep', { pattern: 'NEEDLE_' }), ctx);
+    const result = await runTool(use('grep', { pattern: 'NEEDLE_' }), ctx, EXECUTORS);
     expect(result.status).toBe('ok');
     expect(result.text.length).toBeGreaterThan(100_000);
 
@@ -42,7 +42,7 @@ describe('output spill', () => {
     expect(visible).not.toContain('NEEDLE_1000');
     expect(visible.length).toBeLessThan(2 * SPILL_EDGE + 500);
 
-    expect(await runTool(use('read', { path: file, start_line: 1001, end_line: 1001 }), ctx)).toEqual({
+    expect(await runTool(use('read', { path: file, start_line: 1001, end_line: 1001 }), ctx, EXECUTORS)).toEqual({
       status: 'ok',
       text: "1001\tbig.ts:1001:const NEEDLE_1000 = 'padding padding padding';\n[lines 1001-1001 of 2000]",
     });

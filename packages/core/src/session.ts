@@ -53,7 +53,8 @@ export type TurnResult =
   | { readonly kind: 'answer'; readonly turn: AssistantTurn }
   | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
 
-export const TOOL_STATUSES = ['ok', 'error'] as const;
+/** `denied` is a command the user, or the non-interactive policy, refused to run. */
+export const TOOL_STATUSES = ['ok', 'error', 'denied'] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
 
 /** A result is either short enough to keep inline or spilled to a file the model can read in ranges. */
@@ -144,7 +145,7 @@ const toolResultBlock = (event: ToolResultEvent): ToolResultBlockParam => ({
   type: 'tool_result',
   tool_use_id: event.toolUseId,
   content: toolResultText(event),
-  ...(event.status === 'error' ? { is_error: true } : {}),
+  ...(event.status === 'ok' ? {} : { is_error: true }),
 });
 
 /**
