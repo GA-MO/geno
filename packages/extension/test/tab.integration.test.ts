@@ -40,7 +40,13 @@ describe('Tab in VS Code', () => {
     const { port } = server.address() as AddressInfo;
     await writeFile(
       path.join(workspace, '.vscode', 'settings.json'),
-      JSON.stringify({ 'gcode.tab.endpoint': `http://127.0.0.1:${port}`, 'gcode.tab.debounceMs': 10 }),
+      JSON.stringify({
+        'gcode.tab.endpoint': `http://127.0.0.1:${port}`,
+        'gcode.tab.debounceMs': 10,
+        // VS Code's chat panel otherwise opens at startup and takes keyboard focus from the editor under test.
+        'chat.disableAIFeatures': true,
+        'workbench.secondarySideBar.defaultVisibility': 'hidden',
+      }),
     );
 
     const common: BuildOptions = { bundle: true, platform: 'node', format: 'cjs', target: 'node20', external: ['vscode'] };

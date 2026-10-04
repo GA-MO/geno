@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import { TAB_DOCUMENTS } from '../../src/tab/documents.js';
 
 const logFile = () => path.join(process.env['GCODE_HOME']!, 'tab-events.jsonl');
 
@@ -22,14 +23,32 @@ const logLines = async (): Promise<{ kind: string; request?: { outcome: { kind: 
   }
 };
 
+// Editors that are not files, such as the chat input box, must never get Tab completions.
+async function assertTabSkipsNonFileEditors(fileDocument: vscode.TextDocument): Promise<void> {
+  const scheme = 'gcode-test';
+  const registration = vscode.workspace.registerTextDocumentContentProvider(scheme, { provideTextDocumentContent: () => 'x' });
+  try {
+    const virtual = await vscode.workspace.openTextDocument(vscode.Uri.parse(`${scheme}:/virtual.ts`));
+    if (vscode.languages.match(TAB_DOCUMENTS, virtual) > 0) throw new Error(`Tab matches a ${scheme}: document`);
+    if (vscode.languages.match(TAB_DOCUMENTS, fileDocument) === 0) throw new Error('Tab does not match a file document');
+  } finally {
+    registration.dispose();
+  }
+}
+
 export async function run(): Promise<void> {
   const folder = vscode.workspace.workspaceFolders![0]!.uri;
   const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(folder, 'math.ts'));
+  await assertTabSkipsNonFileEditors(document);
   const editor = await vscode.window.showTextDocument(document);
   const line = document.lineAt(1);
   editor.selection = new vscode.Selection(line.range.end, line.range.end);
 
   const shown = await waitFor('a shown completion in the log', async () => {
+    // VS Code can open its chat panel at startup and move focus into its input box, so put focus back each time.
+    await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+    await vscode.window.showTextDocument(document, { preserveFocus: false });
+    await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
     await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
     await new Promise((r) => setTimeout(r, 300));
     return (await logLines()).find((e) => e.kind === 'request' && e.request?.outcome.kind === 'shown')?.request;

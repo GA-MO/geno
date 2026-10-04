@@ -3,6 +3,7 @@ import type { CompletionId } from '@g-code/core/tab';
 import { openTabLog, tabEventsFile } from './tab/log.js';
 import { readSettings, TabProvider } from './tab/provider.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
+import { TAB_DOCUMENTS } from './tab/documents.js';
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('g-code');
@@ -17,7 +18,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(ACCEPT_COMMAND, (uri: vscode.Uri, id: CompletionId, text: string) =>
       tracker.accepted(uri, id, text),
     ),
-    vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, new TabProvider(readSettings, log, tracker)),
+    vscode.languages.registerInlineCompletionItemProvider(TAB_DOCUMENTS, new TabProvider(readSettings, log, tracker)),
   );
 }
 
