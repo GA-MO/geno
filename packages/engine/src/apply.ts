@@ -69,9 +69,9 @@ function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal):
   let gateway: Gateway | undefined;
   return {
     name: model,
-    call: (events, tools) => {
+    call: (events, tools, system) => {
       gateway ??= gatewayFor(provider, io.env, io.fetch);
-      return gateway.turn({ session, events, tools, signal, onText: () => {} });
+      return gateway.turn({ session, events, tools, system, signal, onText: () => {} });
     },
   };
 }

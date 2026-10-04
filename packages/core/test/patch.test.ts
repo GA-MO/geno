@@ -38,11 +38,20 @@ describe('parsePatch and applyUpdate', () => {
     const [op] = ops(patch);
     expect(op).toMatchObject({ kind: 'update', path: 'cart.js' });
     if (op?.kind !== 'update') throw new Error('expected an update');
-    expect(op.chunks.map((chunk) => chunk.anchor)).toEqual(['add(item) {', 'total() {']);
+    expect(op.chunks.map((chunk) => chunk.anchors)).toEqual([['add(item) {'], ['total() {']]);
     expect(applyUpdate('cart.js', file, op.chunks)).toEqual({
       kind: 'applied',
       after: file.replace('this.items.push(item);', 'this.items = [...this.items, item];').replace('return 0;', 'return this.items.length;'),
     });
+  });
+
+  it('narrows the place with stacked @@ anchors', () => {
+    const twins = lines('class A:', '    def method(self):', '        return 1', '', 'class B:', '    def method(self):', '        return 1');
+    const [op] = ops(
+      ['*** Begin Patch', '*** Update File: m.py', '@@ class B:', '@@     def method(self):', '-        return 1', '+        return 2', '*** End Patch'].join('\n'),
+    );
+    if (op?.kind !== 'update') throw new Error('expected an update');
+    expect(applyUpdate('m.py', twins, op.chunks)).toEqual({ kind: 'applied', after: `${twins.slice(0, -'        return 1\n'.length)}        return 2\n` });
   });
 
   it('keeps the file text of context lines that matched only after trimming', () => {

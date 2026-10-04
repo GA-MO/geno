@@ -3,9 +3,12 @@ import type { ApplyOutcome } from './types.js';
 
 export type PatchLine = { readonly op: 'keep' | 'remove' | 'add'; readonly text: string };
 
-/** One `@@` section: the lines to find (keep and remove) and what replaces them (keep and add). */
+/**
+ * One `@@` section: the lines to find (keep and remove) and what replaces them (keep and add). Stacked `@@`
+ * lines narrow the place step by step, as in `@@ class B:` then `@@ def method(self):`.
+ */
 export type PatchChunk = {
-  readonly anchor: string | null;
+  readonly anchors: readonly string[];
   readonly lines: readonly PatchLine[];
   readonly atEnd: boolean;
 };
@@ -100,7 +103,7 @@ const BODY_PARSERS: Record<PatchOp['kind'], (path: string, body: readonly string
   update(path, body, firstLine) {
     if (body[0]?.startsWith('*** Move to:')) throw new PatchError(firstLine, 'Move to is not supported; change the file in place');
     const chunks: PatchChunk[] = [];
-    let current: { anchor: string | null; lines: PatchLine[]; atEnd: boolean } | undefined;
+    let current: { anchors: string[]; lines: PatchLine[]; atEnd: boolean } | undefined;
     // Models often drop the leading space of an empty context line, and leave blank lines before the next
     // header; a bare blank line only counts as context once a later line in the same chunk follows it.
     let blanks = 0;
@@ -111,12 +114,13 @@ const BODY_PARSERS: Record<PatchOp['kind'], (path: string, body: readonly string
     };
     body.forEach((line, k) => {
       if (line.startsWith('@@')) {
-        close();
+        if (current !== undefined && current.lines.length > 0) close();
+        current ??= { anchors: [], lines: [], atEnd: false };
         const anchor = line.slice(2).trim();
-        current = { anchor: anchor === '' ? null : anchor, lines: [], atEnd: false };
+        if (anchor !== '') current.anchors.push(anchor);
         return;
       }
-      current ??= { anchor: null, lines: [], atEnd: false };
+      current ??= { anchors: [], lines: [], atEnd: false };
       if (line.trim() === END_OF_FILE) {
         current.atEnd = true;
         return;
@@ -163,20 +167,21 @@ export function applyUpdate(path: string, text: string, chunks: readonly PatchCh
   const splices: Splice[] = [];
   let cursor = 0;
   for (const [n, chunk] of chunks.entries()) {
-    if (chunk.anchor !== null) {
-      const anchorAt = findLines(lines, [chunk.anchor], cursor, false);
+    for (const [k, anchor] of chunk.anchors.entries()) {
+      // The last anchor may be the chunk's own first context line, so the search starts on it, not after it.
+      const anchorAt = findLines(lines, [anchor], k === 0 ? cursor : cursor + 1, false);
       if (anchorAt === -1) {
         return {
           kind: 'failed',
           reason: 'zero-matches',
-          detail: `chunk ${n + 1}: the @@ line "${chunk.anchor}" does not appear in ${path} after line ${cursor}. An @@ line names an existing line just above the change, copied exactly.`,
+          detail: `chunk ${n + 1}: the @@ line "${anchor}" does not appear in ${path} after line ${cursor}. An @@ line names an existing line just above the change, copied exactly.`,
         };
       }
       cursor = anchorAt;
     }
     const target = chunk.lines.filter((line) => line.op !== 'add').map((line) => line.text);
     if (target.length === 0) {
-      const at = chunk.anchor === null || chunk.atEnd ? lines.length : cursor + 1;
+      const at = chunk.anchors.length === 0 || chunk.atEnd ? lines.length : cursor + 1;
       splices.push({ start: at, removed: 0, inserted: chunk.lines.map((line) => line.text) });
       cursor = at;
       continue;

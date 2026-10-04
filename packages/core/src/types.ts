@@ -39,6 +39,7 @@ export const APPLY_FAILURES = [
   'stale-base',
   'parse-error',
   'wrong-file',
+  'wrong-tool',
   'no-edit',
   'model-error',
 ] as const;

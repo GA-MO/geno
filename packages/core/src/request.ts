@@ -53,12 +53,13 @@ export function buildRequest(
   session: Session,
   events: readonly TurnEvent[],
   tools: readonly Tool[] = [],
+  system: string = SYSTEM_PROMPT,
 ): MessageStreamParams {
   return {
     model: session.model,
     max_tokens: MAX_TOKENS,
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
-    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: EPHEMERAL }],
+    system: [{ type: 'text', text: system, cache_control: EPHEMERAL }],
     messages: withNewestUserBreakpoint(replayMessages(events)),
     output_config: { effort: session.effort },
   };

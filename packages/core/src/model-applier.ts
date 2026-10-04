@@ -4,12 +4,22 @@ import { nextSeq, toolUsesOf, type TokenUsage, type TurnEvent, type TurnResult }
 import type { Applier, ApplierRun, ApplyOutcome, EditFormat, FirstTry } from './types.js';
 
 /** One model round trip over the conversation so far. The engine binds it to a gateway and a session. */
-export type ModelCall = (events: readonly TurnEvent[], tools: readonly Tool[]) => Promise<TurnResult>;
+export type ModelCall = (events: readonly TurnEvent[], tools: readonly Tool[], system: string) => Promise<TurnResult>;
 
-/** Failed edits whose error goes back to the model before the applier gives up. */
+/** Model turns with a failed edit whose errors go back to the model before the applier gives up. */
 export const MAX_EDIT_RETRIES = 2;
 /** Model calls per edit, so a model that never ends its turn cannot loop forever. */
 export const MAX_EDIT_CALLS = 8;
+
+// The agent's prompt promises read, search and shell tools; here the file is in the message and the edit
+// tool is the only one, so the model must not go looking for others.
+export const EDIT_SYSTEM_PROMPT = `You are g-code's edit applier. You change exactly one file to carry out an instruction from an experienced engineer.
+
+The user's message holds the file's complete current content, every line prefixed with its number and a tab. Those prefixes are not part of the file.
+
+Your only tool is the edit tool you are given. There is no read, search or shell tool, and no other file can be changed. If the instruction also describes changes to other files, make only the part that belongs in this file.
+
+Make the smallest change that carries out the instruction, matching the file's existing style. Leave unrelated lines exactly as they are. When the edit is made, end your turn with one short sentence.`;
 
 const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
 
@@ -23,11 +33,12 @@ const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
 type Failure = Extract<ApplyResult, { kind: 'failed' }>;
 
 const ENDS_TURN = new Set(['end_turn', 'stop_sequence']);
+const CARRIES_TOOL_USES = new Set(['tool_use', 'end_turn', 'stop_sequence']);
 
 /**
- * Asks the model for an edit in `format` and applies each edit call to the working text. A failed edit goes
- * back as an error result so the model can fix it; the change succeeds when the model ends its turn with no
- * failure left unfixed by a later edit.
+ * Asks the model for an edit in `format` and applies each edit call to the working text. A turn with failed
+ * edits sends their errors back so the model can fix them; the change succeeds when the model ends its turn
+ * and its last turn of edits had no failure.
  */
 export function modelApplier(format: EditFormat, model: string, call: ModelCall): Applier {
   const spec = EDIT_FORMAT_SPECS[format];
@@ -39,9 +50,9 @@ export function modelApplier(format: EditFormat, model: string, call: ModelCall)
       const changes: ProposedChange[] = [];
       let text = before;
       let edited = false;
-      let unresolved: Failure | undefined;
+      let lastTurnFailure: Failure | undefined;
       let firstTry: FirstTry | undefined;
-      let failures = 0;
+      let retries = 0;
       let calls = 0;
       let usage = ZERO_USAGE;
       let costUsd: number | null = 0;
@@ -51,7 +62,7 @@ export function modelApplier(format: EditFormat, model: string, call: ModelCall)
         attempt: {
           model,
           firstTry: firstTry ?? (outcome.kind === 'failed' ? outcome.reason : 'applied'),
-          retries: Math.min(failures, MAX_EDIT_RETRIES),
+          retries,
           calls,
           usage,
           costUsd,
@@ -64,41 +75,40 @@ export function modelApplier(format: EditFormat, model: string, call: ModelCall)
         if (calls === MAX_EDIT_CALLS) {
           return fail({ reason: 'model-error', detail: `the model did not end its turn within ${MAX_EDIT_CALLS} calls` });
         }
-        const result = await call(events, [spec.tool]);
+        const result = await call(events, [spec.tool], EDIT_SYSTEM_PROMPT);
         calls++;
         if (result.kind === 'error') return fail({ reason: 'model-error', detail: `${result.error}: ${result.message}` });
         const { turn } = result;
         usage = addUsage(usage, turn.usage);
         costUsd = costUsd === null || turn.costUsd === null ? null : costUsd + turn.costUsd;
         events.push({ kind: 'assistant', seq: nextSeq(events), at: at(), ...turn });
+        const stop = turn.stopReason ?? 'no stop reason';
 
         const uses = toolUsesOf(turn.content);
+        if (uses.length > 0 && !CARRIES_TOOL_USES.has(stop)) {
+          // A max_tokens stop can cut a tool input short, and a truncated file must never count as applied.
+          return fail({ reason: 'model-error', detail: `the model stopped with ${stop} in the middle of a tool call` });
+        }
         if (uses.length === 0) {
           firstTry ??= 'no-edit';
-          if (!ENDS_TURN.has(turn.stopReason ?? '')) {
-            return fail({ reason: 'model-error', detail: `the model stopped with ${turn.stopReason ?? 'no stop reason'}` });
-          }
-          if (unresolved !== undefined) return fail(unresolved);
+          if (!ENDS_TURN.has(stop)) return fail({ reason: 'model-error', detail: `the model stopped with ${stop}` });
+          if (lastTurnFailure !== undefined) return fail(lastTurnFailure);
           if (!edited) return fail({ reason: 'no-edit', detail: `the model ended its turn without calling ${spec.tool.name}` });
           return finish({ kind: 'applied', after: text });
         }
 
-        let firstFailure: Failure | undefined;
+        lastTurnFailure = undefined;
         for (const use of uses) {
           const { change, after } =
             use.name === spec.tool.name
               ? proposeChange({ format, raw: use.input, path, base: baseOf(text, null), current: text, turn: null })
-              : unknownTool(use.name, spec.tool.name, format, path, use.input);
+              : wrongTool(use.name, spec.tool.name, format, path, use.input);
           changes.push(change);
-          const ok = after !== null;
-          if (ok) {
+          if (after !== null) {
             text = after;
             edited = true;
-            unresolved = undefined;
           } else if (change.result.kind === 'failed') {
-            unresolved = change.result;
-            firstFailure ??= change.result;
-            failures++;
+            lastTurnFailure ??= change.result;
           }
           events.push({
             kind: 'tool-result',
@@ -106,18 +116,21 @@ export function modelApplier(format: EditFormat, model: string, call: ModelCall)
             at: at(),
             toolUseId: use.id,
             name: use.name,
-            status: ok ? 'ok' : 'error',
+            status: after === null ? 'error' : 'ok',
             output: change.result.kind === 'failed' ? change.result.detail : `Edited ${path}.`,
           });
         }
-        firstTry ??= firstFailure?.reason ?? 'applied';
-        if (failures > MAX_EDIT_RETRIES && unresolved !== undefined) return fail(unresolved);
+        firstTry ??= lastTurnFailure?.reason ?? 'applied';
+        if (lastTurnFailure !== undefined) {
+          if (retries === MAX_EDIT_RETRIES) return fail(lastTurnFailure);
+          retries++;
+        }
       }
     },
   };
 }
 
-function unknownTool(name: string, expected: string, format: EditFormat, path: string, raw: unknown) {
+function wrongTool(name: string, expected: string, format: EditFormat, path: string, raw: unknown) {
   const change: ProposedChange = {
     turn: null,
     path,
@@ -125,7 +138,7 @@ function unknownTool(name: string, expected: string, format: EditFormat, path: s
     format,
     raw,
     hunks: [],
-    result: { kind: 'failed', reason: 'parse-error', detail: `there is no tool ${name}; use ${expected}` },
+    result: { kind: 'failed', reason: 'wrong-tool', detail: `there is no tool ${name}; the file is in the message, and ${expected} is the only tool` },
     check: null,
   };
   return { change, after: null };
