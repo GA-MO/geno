@@ -180,6 +180,9 @@ export function printSummary(io: Io, results: readonly TaskResult[]): void {
 
 export async function runEval(ctx: Context, options: EvalRunOptions): Promise<EvalRun> {
   const { io } = ctx;
+  // One interrupt listener for the whole run; each task asking for its own would pile up SIGINT handlers.
+  const interrupt = io.interrupts();
+  const taskCtx: Context = { ...ctx, io: { ...io, interrupts: () => interrupt } };
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${options.agent}-${options.model.replace(/[^\w.-]/g, '_')}`;
   const runDir = path.join(options.runsDir, runId);
   const file = path.join(runDir, 'results.jsonl');
@@ -197,7 +200,7 @@ export async function runEval(ctx: Context, options: EvalRunOptions): Promise<Ev
       stopped = true;
       break;
     }
-    const result = await runTask(task, options, runId, runDir, Math.min(options.maxCostPerTaskUsd, left), ctx);
+    const result = await runTask(task, options, runId, runDir, Math.min(options.maxCostPerTaskUsd, left), taskCtx);
     results.push(result);
     await appendFile(file, `${JSON.stringify(result)}\n`);
     io.out(`[${i + 1}/${options.tasks.length}] ${task.id} ${result.outcome} turns=${result.turns} ${formatCost(result.costUsd)} ${seconds(result.wallMs)}`);
