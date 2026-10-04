@@ -1,29 +1,23 @@
 import Anthropic, { AnthropicError, APIUserAbortError } from '@anthropic-ai/sdk';
-import type { Message } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { Message, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
   costOf,
-  type AssistantTurn,
   type ProviderName,
   type Session,
   type TokenUsage,
-  type TurnErrorKind,
-  type ToolSpec,
   type TurnEvent,
+  type TurnResult,
 } from '@g-code/core';
 import { EngineError } from './errors.js';
 
 export type TurnInput = {
   readonly session: Session;
   readonly events: readonly TurnEvent[];
-  readonly tools: readonly ToolSpec[];
+  readonly tools: readonly Tool[];
   readonly signal: AbortSignal;
   onText(delta: string): void;
 };
-
-export type TurnResult =
-  | { readonly kind: 'answer'; readonly turn: AssistantTurn }
-  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
 
 /** One model round trip. A wire format other than Anthropic Messages would be another implementation. */
 export type Gateway = { turn(input: TurnInput): Promise<TurnResult> };

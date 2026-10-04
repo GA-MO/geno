@@ -1,6 +1,5 @@
-import type { MessageParam, MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { MessageParam, MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { replayMessages, type Session, type TurnEvent } from './session.js';
-import type { ToolSpec } from './tools.js';
 
 // Byte-stable on purpose: it is the cached prefix of every request, so any volatile text here busts the cache.
 export const SYSTEM_PROMPT = `You are g-code, a coding agent working inside the user's own repository. The user is an experienced engineer who owns this code and will read every change you make. Your job is to understand what they asked for, find the code it touches, make the smallest correct change, and say plainly what you did and how you know it works.
@@ -53,7 +52,7 @@ function withNewestUserBreakpoint(messages: MessageParam[]): MessageParam[] {
 export function buildRequest(
   session: Session,
   events: readonly TurnEvent[],
-  tools: readonly ToolSpec[] = [],
+  tools: readonly Tool[] = [],
 ): MessageStreamParams {
   return {
     model: session.model,

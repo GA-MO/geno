@@ -49,6 +49,10 @@ export type AssistantTurn = {
   readonly model: string;
 };
 
+export type TurnResult =
+  | { readonly kind: 'answer'; readonly turn: AssistantTurn }
+  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
+
 export const TOOL_STATUSES = ['ok', 'error'] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
 
