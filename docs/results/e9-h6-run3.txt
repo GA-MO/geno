@@ -1,0 +1,23 @@
+label: e9-h6-run3
+server args: --ctx-size 8192 
+llama-server: version: 0.5.0 (build 11146, commit 7fe450e19)
+triples: 47 in /Users/me/.g-code/evals/apply, moments: 69, history: 6
+endpoint: http://127.0.0.1:8013, warmup: 3 uncounted, sequential
+load average at start: 2.81 2.91 2.13
+model: zeta-2.1.Q4_K_M
+results: /Users/me/Development/g-code/.claude/worktrees/agent-a7ce99685aa9b0dd2/docs/results/e9-h6-run3.jsonl
+load average at end: 6.94 5.88 4.21
+grades (of 69):
+  exact: 3
+  region: 7
+  wrong-location: 9
+  none: 50
+target inside the editable region: 62; exact among those: 3
+time to first token: p50 7665 ms, p90 14464 ms
+total latency: p50 9555 ms, p90 20877 ms
+prompt tokens (server): p50 788, p90 1458
+prompt tokens processed: p50 679, p90 1333
+generated tokens: p50 14, p90 134
+server prompt eval: p50 7646 ms, p90 14396 ms
+server generation: p50 979 ms, p90 11400 ms
+malformed replies: 0
