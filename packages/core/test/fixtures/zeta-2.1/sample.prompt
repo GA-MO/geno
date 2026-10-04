@@ -1,0 +1,368 @@
+<[fim-suffix]>
+<[fim-prefix]><filename>zed/crates/project/src/project.rs
+pub struct Project {
+    active_entry: Option<ProjectEntryId>,
+    buffer_ordered_messages_tx: mpsc::UnboundedSender<BufferOrderedMessage>,
+    languages: Arc<LanguageRegistry>,
+    dap_store: Entity<DapStore>,
+    agent_server_store: Entity<AgentServerStore>,
+
+    breakpoint_store: Entity<BreakpointStore>,
+    collab_client: Arc<client::Client>,
+    join_project_response_message_id: u32,
+    task_store: Entity<TaskStore>,
+    user_store: Entity<UserStore>,
+    fs: Arc<dyn Fs>,
+    remote_client: Option<Entity<RemoteClient>>,
+    // todo lw explain the client_state x remote_client matrix, its super confusing
+    client_state: ProjectClientState,
+    git_store: Entity<GitStore>,
+    collaborators: HashMap<proto::PeerId, Collaborator>,
+    client_subscriptions: Vec<client::Subscription>,
+    worktree_store: Entity<WorktreeStore>,
+    buffer_store: Entity<BufferStore>,
+    context_server_store: Entity<ContextServerStore>,
+    image_store: Entity<ImageStore>,
+    lsp_store: Entity<LspStore>,
+    _subscriptions: Vec<gpui::Subscription>,
+    buffers_needing_diff: HashSet<WeakEntity<Buffer>>,
+    git_diff_debouncer: DebouncedDelay<Self>,
+    remotely_created_models: Arc<Mutex<RemotelyCreatedModels>>,
+    terminals: Terminals,
+    node: Option<NodeRuntime>,
+    search_history: SearchHistory,
+    search_included_history: SearchHistory,
+    search_excluded_history: SearchHistory,
+    snippets: Entity<SnippetProvider>,
+    environment: Entity<ProjectEnvironment>,
+    settings_observer: Entity<SettingsObserver>,
+    toolchain_store: Option<Entity<ToolchainStore>>,
+    agent_location: Option<AgentLocation>,
+    downloading_files: Arc<Mutex<HashMap<(WorktreeId, String), DownloadingFile>>>,
+}
+...
+pub enum Event {
+    LanguageServerAdded(LanguageServerId, LanguageServerName, Option<WorktreeId>),
+    LanguageServerRemoved(LanguageServerId),
+    LanguageServerLog(LanguageServerId, LanguageServerLogType, String),
+...
+    LanguageServerBufferRegistered {
+        server_id: LanguageServerId,
+...
+    },
+    ToggleLspLogs {
+        server_id: LanguageServerId,
+...
+    },
+    Toast {
+        notification_id: SharedString,
+...
+    },
+    HideToast {
+        notification_id: SharedString,
+    },
+    LanguageServerPrompt(LanguageServerPromptRequest),
+    LanguageNotFound(Entity<Buffer>),
+    ActiveEntryChanged(Option<ProjectEntryId>),
+    ActivateProjectPanel,
+    WorktreeAdded(WorktreeId),
+    WorktreeOrderChanged,
+    WorktreeRemoved(WorktreeId),
+    WorktreeUpdatedEntries(WorktreeId, UpdatedEntriesSet),
+    DiskBasedDiagnosticsStarted {
+        language_server_id: LanguageServerId,
+    },
+    DiskBasedDiagnosticsFinished {
+        language_server_id: LanguageServerId,
+    },
+    DiagnosticsUpdated {
+        paths: Vec<ProjectPath>,
+...
+    },
+    RemoteIdChanged(Option<u64>),
+    DisconnectedFromHost,
+    DisconnectedFromRemote {
+        server_not_running: bool,
+    },
+    Closed,
+    DeletedEntry(WorktreeId, ProjectEntryId),
+    CollaboratorUpdated {
+        old_peer_id: proto::PeerId,
+...
+    },
+    CollaboratorJoined(proto::PeerId),
+    CollaboratorLeft(proto::PeerId),
+    HostReshared,
+    Reshared,
+    Rejoined,
+    RefreshInlayHints {
+        server_id: LanguageServerId,
+...
+    },
+    RefreshSemanticTokens {
+        server_id: LanguageServerId,
+...
+    },
+    RefreshCodeLens,
+    RevealInProjectPanel(ProjectEntryId),
+    SnippetEdit(BufferId, Vec<(lsp::Range, Snippet)>),
+    ExpandedAllForEntry(WorktreeId, ProjectEntryId),
+    EntryRenamed(ProjectTransaction, ProjectPath, PathBuf),
+    WorkspaceEditApplied(ProjectTransaction),
+    AgentLocationChanged,
+    BufferEdited,
+}
+...
+pub struct ProjectPath {
+    pub worktree_id: WorktreeId,
+    pub path: Arc<RelPath>,
+}
+...
+<filename>zed/crates/edit_prediction/src/edit_prediction.rs
+pub struct EditPredictionJumpsFeatureFlag;
+...
+pub struct EditPredictionStore {
+    client: Arc<Client>,
+    user_store: Entity<UserStore>,
+    llm_token: LlmApiToken,
+    _llm_token_subscription: Subscription,
+    projects: HashMap<EntityId, ProjectState>,
+    update_required: bool,
+    edit_prediction_model: EditPredictionModel,
+    zeta2_raw_config: Option<Zeta2RawConfig>,
+    pub sweep_ai: SweepAi,
+    pub mercury: Mercury,
+    data_collection_choice: DataCollectionChoice,
+    reject_predictions_tx: mpsc::UnboundedSender<EditPredictionRejection>,
+    shown_predictions: VecDeque<EditPrediction>,
+    rated_predictions: HashSet<EditPredictionId>,
+}
+...
+struct ProjectState {
+    events: VecDeque<StoredEvent>,
+    last_event: Option<LastEvent>,
+    recent_paths: VecDeque<ProjectPath>,
+    registered_buffers: HashMap<gpui::EntityId, RegisteredBuffer>,
+    current_prediction: Option<CurrentEditPrediction>,
+    next_pending_prediction_id: usize,
+    pending_predictions: ArrayVec<PendingPrediction, 2>,
+    debug_tx: Option<mpsc::UnboundedSender<DebugEvent>>,
+    last_edit_prediction_refresh: Option<(EntityId, Instant)>,
+    last_jump_prediction_refresh: Option<(EntityId, Instant)>,
+    cancelled_predictions: HashSet<usize>,
+    context: Entity<RelatedExcerptStore>,
+    license_detection_watchers: HashMap<WorktreeId, Rc<LicenseDetectionWatcher>>,
+    user_actions: VecDeque<UserActionRecord>,
+    _subscriptions: [gpui::Subscription; 2],
+    copilot: Option<Entity<Copilot>>,
+}
+...
+impl EditPredictionStore {
+    pub fn try_global(cx: &App) -> Option<Entity<Self>> {
+...
+    }
+
+    pub fn global(
+        client: &Arc<Client>,
+        user_store: &Entity<UserStore>,
+        cx: &mut App,
+    ) -> Entity<Self> {
+...
+    }
+
+    pub fn new(client: Arc<Client>, user_store: Entity<UserStore>, cx: &mut Context<Self>) -> Self {
+...
+    }
+
+    fn zeta2_raw_config_from_env() -> Option<Zeta2RawConfig> {
+...
+    }
+
+    pub fn set_edit_prediction_model(&mut self, model: EditPredictionModel) {
+        self.edit_prediction_model = model;
+    }
+
+    pub fn set_zeta2_raw_config(&mut self, config: Zeta2RawConfig) {
+        self.zeta2_raw_config = Some(config);
+    }
+
+    pub fn zeta2_raw_config(&self) -> Option<&Zeta2RawConfig> {
+        self.zeta2_raw_config.as_ref()
+    }
+
+    pub fn icons(&self, cx: &App) -> edit_prediction_types::EditPredictionIconSet {
+...
+    }
+
+    pub fn has_sweep_api_token(&self, cx: &App) -> bool {
+        self.sweep_ai.api_token.read(cx).has_key()
+    }
+
+    pub fn has_mercury_api_token(&self, cx: &App) -> bool {
+        self.mercury.api_token.read(cx).has_key()
+    }
+
+    pub fn clear_history(&mut self) {
+...
+    }
+
+    pub fn clear_history_for_project(&mut self, project: &Entity<Project>) {
+...
+    }
+
+    pub fn edit_history_for_project(
+        &self,
+        project: &Entity<Project>,
+        cx: &App,
+    ) -> Vec<StoredEvent> {
+...
+    }
+
+    pub fn context_for_project<'a>(
+        &'a self,
+        project: &Entity<Project>,
+        cx: &'a mut App,
+    ) -> Vec<RelatedFile> {
+...
+    }
+
+    pub fn copilot_for_project(&self, project: &Entity<Project>) -> Option<Entity<Copilot>> {
+...
+    }
+
+    pub fn start_copilot_for_project(
+        &mut self,
+        project: &Entity<Project>,
+        cx: &mut Context<Self>,
+    ) -> Option<Entity<Copilot>> {
+...
+    }
+
+    pub fn context_for_project_with_buffers<'a>(
+        &'a self,
+        project: &Entity<Project>,
+        cx: &'a mut App,
+    ) -> Vec<(RelatedFile, Entity<Buffer>)> {
+...
+    }
+
+    fn handle_project_event(
+        &mut self,
+        project: Entity<Project>,
+        event: &project::Event,
+        cx: &mut Context<Self>,
+    ) {
+...
+                let Some(project_state) = self.projects.get_mut(&project.entity_id()) else {
+...
+                if let Some(path) = path {
+...
+    }
+
+    fn register_buffer_impl<'a>(
+        project_state: &'a mut ProjectState,
+        buffer: &Entity<Buffer>,
+        project: &Entity<Project>,
+        cx: &mut Context<Self>,
+    ) -> &'a mut RegisteredBuffer {
+...
+    }
+
+    pub fn refresh_prediction_from_diagnostics(
+        &mut self,
+        project: Entity<Project>,
+        scope: DiagnosticSearchScope,
+        cx: &mut Context<Self>,
+    ) {
+...
+    }
+
+    fn predictions_enabled_at(
+        snapshot: &BufferSnapshot,
+        position: Option<language::Anchor>,
+        cx: &App,
+    ) -> bool {
+...
+<filename>zed/crates/gpui/src/app/context.rs
+pub struct Context<'a, T> {
+    app: &'a mut App,
+    entity_state: WeakEntity<T>,
+}
+...
+<filename>zed/crates/feature_flags/src/feature_flags.rs
+impl FeatureFlagAppExt for App {
+...
+    fn has_flag<T: FeatureFlag>(&self) -> bool {
+        self.try_global::<FeatureFlags>()
+            .map(|flags| flags.has_flag::<T>())
+            .unwrap_or_else(|| {
+                (cfg!(debug_assertions) && T::enabled_for_staff() && !*ZED_DISABLE_STAFF)
+                    || T::enabled_for_all()
+            })
+    }
+...
+}
+...
+<filename>zed/crates/gpui/src/app/entity_map.rs
+pub struct Entity<T> {
+    #[deref]
+    #[deref_mut]
+    pub(crate) any_entity: AnyEntity,
+    pub(crate) entity_type: PhantomData<fn(T) -> T>,
+}
+...
+
+<filename>edit_history
+--- a/zed/crates/edit_prediction/src/edit_prediction.rs
++++ b/zed/crates/edit_prediction/src/edit_prediction.rs
+@@ -1035,7 +1035,7 @@
+                     project_state.recent_paths.push_front(path);
+                 }
+             }
+-            project::Event::DiagnosticsUpdated { .. } => {
++            project::Event::Disk { .. } => {
+                 if cx.has_flag::<EditPredictionJumpsFeatureFlag>() {
+                     self.refresh_prediction_from_diagnostics(
+                         project,
+
+<filename>crates/edit_prediction/src/edit_prediction.rs
+    ) {
+        if !is_ep_store_provider(all_language_settings(None, cx).edit_predictions.provider) {
+            return;
+        }
+        // TODO [zeta2] init with recent paths
+        match event {
+            project::Event::ActiveEntryChanged(Some(active_entry_id)) => {
+                let Some(project_state) = self.projects.get_mut(&project.entity_id()) else {
+<|marker_1|>                    return;
+                };
+                let path = project.read(cx).path_for_entry(*active_entry_id, cx);
+                if let Some(path) = path {
+                    if let Some(ix) = project_state
+                        .recent_paths
+                        .iter()
+                        .position(|probe| probe == &path)
+                    {
+                        project_state.recent_paths.remove(ix);
+                    }
+                    project_state.recent_paths.push_front(path);
+                }
+            }
+            project::Event::Disk<|user_cursor|> { .. } => {
+                if cx.has_flag::<EditPredictionJumpsFeatureFlag>() {
+<|marker_2|>                    self.refresh_prediction_from_diagnostics(
+                        project,
+                        DiagnosticSearchScope::Global,
+                        cx,
+                    );
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn register_buffer_impl<'a>(
+        project_state: &'a mut ProjectState,
+        buffer: &Entity<Buffer>,
+        project: &Entity<Project>,<|marker_3|>
+<[fim-middle]>

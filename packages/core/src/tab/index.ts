@@ -5,3 +5,5 @@ export * from './cache.js';
 export * from './change.js';
 export * from './report.js';
 export * from './stream.js';
+export * from './history.js';
+export * from './zeta.js';
