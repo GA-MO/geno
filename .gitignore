@@ -3,3 +3,6 @@ dist/
 *.vsix
 todo.md
 .DS_Store
+.env
+.env.*
+!.env.example
