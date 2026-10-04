@@ -146,8 +146,17 @@ const TRIPLE_IDS: Record<TripleScope, (repoName: string, sha: string, sliceIndex
   'file-slice': (repoName, sha, sliceIndex) => asTripleId(`${repoName}-${shortSha(sha)}-${sliceIndex}`),
 };
 
+const TRAILER = /^[A-Za-z]+(?:-[A-Za-z]+)+:\s/;
+
+const stripTrailers = (body: string): string => {
+  const paragraphs = body.trim().split(/\n\s*\n/);
+  const last = paragraphs.at(-1) ?? '';
+  const isTrailerBlock = last !== '' && last.split('\n').every((line) => TRAILER.test(line));
+  return (isTrailerBlock ? paragraphs.slice(0, -1) : paragraphs).join('\n\n').trim();
+};
+
 export const instructionOf = (facts: Pick<CommitFacts, 'subject' | 'body'>): string => {
-  const body = facts.body.trim();
+  const body = stripTrailers(facts.body);
   return body === '' ? facts.subject.trim() : `${facts.subject.trim()}\n\n${body}`;
 };
 

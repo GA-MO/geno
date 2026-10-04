@@ -3,6 +3,7 @@ import {
   buildTriple,
   countLines,
   DEFAULT_MINE_LIMITS,
+  instructionOf,
   screenCommit,
   screenContents,
   type ChangedFile,
@@ -132,5 +133,21 @@ describe('screenContents', () => {
     expect(countLines('')).toBe(0);
     expect(countLines('a')).toBe(1);
     expect(countLines('a\nb\n')).toBe(2);
+  });
+});
+
+describe('instructionOf', () => {
+  it('drops a trailing trailer block', () => {
+    const body = 'Explain the change.\n\nCo-Authored-By: A <a@x>\nSigned-off-by: B <b@x>\n';
+    expect(instructionOf({ subject: 'Fix the thing', body })).toBe('Fix the thing\n\nExplain the change.');
+  });
+
+  it('drops a body that is only trailers', () => {
+    expect(instructionOf({ subject: 'Fix the thing', body: 'Co-Authored-By: A <a@x>' })).toBe('Fix the thing');
+  });
+
+  it('keeps a last paragraph that is prose with a colon', () => {
+    const body = 'First.\n\nNote: this stays.';
+    expect(instructionOf({ subject: 'Fix', body })).toBe('Fix\n\nFirst.\n\nNote: this stays.');
   });
 });
