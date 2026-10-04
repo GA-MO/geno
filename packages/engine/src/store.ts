@@ -21,6 +21,7 @@ const evalTaskSchema = z.strictObject({
   repo: absolutePath,
   baseCommit: z.string().min(1),
   prompt: z.string(),
+  setup: z.string(),
   verify: z.string(),
 });
 
