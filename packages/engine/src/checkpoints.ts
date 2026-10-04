@@ -43,7 +43,6 @@ const exists = (file: string) =>
     () => false,
   );
 
-/** Commits the whole work tree as it is now and returns the commit sha. */
 export async function snapshot(repo: ShadowRepo, label: string): Promise<string> {
   if (!(await exists(repo.gitDir))) {
     await exec('git', ['init', '--quiet', '--bare', repo.gitDir], { env: childEnv(process.env) });
@@ -59,7 +58,6 @@ export async function changedBetween(repo: ShadowRepo, from: string, to: string)
   return lines(await git(repo, ['diff', '--name-only', '--no-renames', from, to, '--']));
 }
 
-/** Removes `dir` and its empty parents, up to but not including `root`. */
 async function pruneEmpty(dir: string, root: string): Promise<void> {
   for (let current = dir; current !== root && current.startsWith(root + path.sep); current = path.dirname(current)) {
     try {
@@ -94,7 +92,6 @@ export async function restore(repo: ShadowRepo, sha: string): Promise<string[]> 
 const lastCheckpoint = (events: readonly TurnEvent[]) =>
   events.findLast((e): e is Extract<TurnEvent, { kind: 'checkpoint' }> => e.kind === 'checkpoint');
 
-/** The checkpoint event to log before the next model turn. */
 export async function takeCheckpoint(
   repo: ShadowRepo,
   sessionId: SessionId,

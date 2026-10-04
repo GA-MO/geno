@@ -5,7 +5,6 @@ export type ShellOptions = {
   readonly env: Readonly<Record<string, string>>;
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
-  /** Called with each stdout chunk as it arrives. */
   readonly onStdout?: (chunk: string) => void;
 };
 
@@ -76,7 +75,6 @@ export function runShell(command: string, options: ShellOptions): Promise<ShellR
   });
 }
 
-/** The last `lines` lines of `output`, at most `chars` characters. */
 export function tail(output: string, lines = 40, chars = 4000): string {
   const kept = output.trimEnd().split('\n').slice(-lines).join('\n');
   return kept.length > chars ? kept.slice(-chars) : kept;

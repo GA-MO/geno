@@ -15,7 +15,6 @@ import { agentExecutors, type Approver } from './tools/agent.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
-/** The `check` field of the workspace's `.gcode.json`, if it has one. */
 export async function configuredCheck(workspace: string): Promise<string | undefined> {
   const file = path.join(workspace, '.gcode.json');
   let text: string;
@@ -44,7 +43,6 @@ export type AgentOptions = {
   readonly approve: Approver;
 };
 
-/** Every denied command is refused without asking, as in an eval. */
 export const denyAll: Approver = async () => false;
 
 export const askOnTerminal =
@@ -52,7 +50,6 @@ export const askOnTerminal =
   (denial) =>
     io.confirm(`Allow \`${denial.command}\`? It uses ${denial.reason}.`);
 
-/** Runs the agent loop on an open session with its sandbox, tools and checkpoints, then closes the sandbox. */
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
   const { session } = opened.log;
   const workspace = await workspaceDir(io.cwd, session.workspace);

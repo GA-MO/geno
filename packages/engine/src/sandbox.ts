@@ -17,9 +17,6 @@ export type SandboxPolicy = {
 };
 
 export type Sandbox = {
-  readonly policy: SandboxPolicy;
-  /** The shell command that runs `command` under the policy. */
-  wrap(command: string): Promise<string>;
   run(command: string, options: ShellOptions): Promise<ShellResult>;
   close(): Promise<void>;
 };
@@ -82,11 +79,8 @@ export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
     },
   });
   opened = true;
-  const wrap = (command: string) => SandboxManager.wrapWithSandbox(command);
   return {
-    policy,
-    wrap,
-    run: async (command, options) => runShell(await wrap(command), options),
+    run: async (command, options) => runShell(await SandboxManager.wrapWithSandbox(command), options),
     async close() {
       if (!opened) return;
       opened = false;
