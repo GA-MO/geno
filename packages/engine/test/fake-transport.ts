@@ -10,6 +10,60 @@ export type RecordedRequest = { readonly url: string; readonly headers: Headers;
 
 export type CacheUsage = { readonly input: number; readonly cacheRead: number; readonly cacheWrite: number };
 
+function messageStart(usage: CacheUsage): SseEvent {
+  return {
+    type: 'message_start',
+    message: {
+      id: 'msg_fake',
+      type: 'message',
+      role: 'assistant',
+      model: 'qwen3.8-flash',
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      stop_details: null,
+      usage: {
+        input_tokens: usage.input,
+        cache_creation_input_tokens: usage.cacheWrite,
+        cache_read_input_tokens: usage.cacheRead,
+        output_tokens: 1,
+      },
+    },
+  };
+}
+
+export type FakeToolUse = { readonly id: string; readonly name: string; readonly input: unknown };
+
+/** A Messages stream that says `text`, then asks for each tool use with its input streamed as JSON fragments. */
+export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage): Reply {
+  const blocks = uses.flatMap((use, i): SseEvent[] => {
+    const index = i + 1;
+    const json = JSON.stringify(use.input);
+    const half = Math.ceil(json.length / 2);
+    return [
+      { type: 'content_block_start', index, content_block: { type: 'tool_use', id: use.id, name: use.name, input: {}, caller: { type: 'direct' } } },
+      { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json.slice(0, half) } },
+      { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json.slice(half) } },
+      { type: 'content_block_stop', index },
+    ];
+  });
+  return {
+    events: [
+      messageStart(usage),
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '', citations: null } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
+      { type: 'content_block_stop', index: 0 },
+      ...blocks,
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'tool_use', stop_sequence: null, stop_details: null },
+        usage: { output_tokens: 30 },
+      },
+      { type: 'message_stop' },
+    ],
+  };
+}
+
 /** A hand-built Messages stream: a thinking block, then the text in chunks of `chunk` characters. */
 export function answer(text: string, usage: CacheUsage, opts: { stopReason?: string; chunk?: number } = {}): Reply {
   const chunk = opts.chunk ?? 8;

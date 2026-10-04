@@ -12,6 +12,7 @@ import {
   type EvalTask,
   type ReplayResult,
 } from '@g-code/core';
+import { ask } from './ask.js';
 import { chat, showSession } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
@@ -28,6 +29,7 @@ import {
 } from './store.js';
 
 export const USAGE = `usage:
+  gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
   gcode eval list
@@ -205,6 +207,7 @@ const group =
   };
 
 const commands: Record<string, Command> = {
+  ask,
   chat,
   eval: group(evalCommands),
   session: group({ show: showSession }),

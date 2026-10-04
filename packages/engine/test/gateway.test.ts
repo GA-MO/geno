@@ -25,6 +25,7 @@ describe('gatewayFor', () => {
       session,
       events,
       signal: new AbortController().signal,
+      tools: [],
       onText: (d) => deltas.push(d),
     });
 
@@ -58,6 +59,7 @@ describe('gatewayFor', () => {
       session,
       events,
       signal: new AbortController().signal,
+      tools: [],
       onText: () => {},
     });
     expect(result).toEqual({ kind: 'error', error: 'refusal', message: 'the model refused' });
@@ -79,6 +81,7 @@ describe('gatewayFor', () => {
       session: qwen,
       events: [{ kind: 'session-start', session: qwen }, ...events.slice(1)],
       signal: new AbortController().signal,
+      tools: [],
       onText: () => {},
     });
 

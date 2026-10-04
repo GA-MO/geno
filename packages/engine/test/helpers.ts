@@ -19,7 +19,10 @@ export async function runCli(argv: string[], env: Record<string, string>, option
   const code = await run(argv, {
     env,
     cwd,
-    out: (line) => stdout.push(partial + line),
+    out: (line) => {
+      stdout.push(partial + line);
+      partial = '';
+    },
     err: (line) => stderr.push(line),
     write: (text) => {
       partial += text;

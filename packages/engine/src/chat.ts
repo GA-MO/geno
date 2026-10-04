@@ -44,7 +44,7 @@ export async function openSessionLog(store: Store, rawId: string, io: Io): Promi
 
 async function newSession(
   store: Store,
-  io: Io,
+  workspace: string,
   provider: ProviderName,
   model: string,
   effort: Effort,
@@ -52,7 +52,7 @@ async function newSession(
   const session: Session = {
     id: asSessionId(randomUUID()),
     createdAt: new Date().toISOString(),
-    workspace: io.cwd,
+    workspace,
     provider,
     model,
     effort,
@@ -61,6 +61,33 @@ async function newSession(
   const start: TurnEvent = { kind: 'session-start', session };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
+}
+
+export type OpenSession = { readonly log: SessionLog; readonly gateway: Gateway };
+
+export type SessionChoice = {
+  readonly workspace: string;
+  readonly provider: string | undefined;
+  readonly model: string | undefined;
+  readonly effort: string | undefined;
+};
+
+// The gateway is built before anything is written, so a missing key leaves no stray session behind.
+export async function startSession(store: Store, io: Io, choice: SessionChoice): Promise<OpenSession> {
+  const effort = choice.effort ?? DEFAULT_EFFORT;
+  if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
+  const provider = choice.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
+  if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
+  const model = choice.model ?? (io.env['GCODE_MODEL'] || PROVIDER_TABLE[provider].defaultModel);
+  const gateway = gatewayFor(provider, io.env, io.fetch);
+  return { log: await newSession(store, choice.workspace, provider, model, effort), gateway };
+}
+
+export async function resumeSession(store: Store, io: Io, rawId: string): Promise<OpenSession> {
+  const log = await openSessionLog(store, rawId, io);
+  const gateway = gatewayFor(log.session.provider, io.env, io.fetch);
+  await dropTornTail(log);
+  return { log, gateway };
 }
 
 export const chat: Command = async (args, { io, store }) => {
@@ -76,27 +103,23 @@ export const chat: Command = async (args, { io, store }) => {
     },
   });
   const message = positionals.join(' ').trim();
-  const effort = values.effort ?? DEFAULT_EFFORT;
-  if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
 
-  // The gateway is built before anything is written, so a missing key leaves no stray session behind.
-  let log: SessionLog;
-  let gateway: Gateway;
+  let opened: OpenSession;
   if (values.session === undefined) {
     if (message === '') throw new UsageError('a message is required to start a session');
-    const provider = values.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
-    if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
-    const model = values.model ?? (io.env['GCODE_MODEL'] || PROVIDER_TABLE[provider].defaultModel);
-    gateway = gatewayFor(provider, io.env, io.fetch);
-    log = await newSession(store, io, provider, model, effort);
+    opened = await startSession(store, io, {
+      workspace: io.cwd,
+      provider: values.provider,
+      model: values.model,
+      effort: values.effort,
+    });
   } else {
     if (values.provider !== undefined || values.model !== undefined || values.effort !== undefined) {
       throw new UsageError('--provider, --model and --effort are fixed when a session starts; drop them with --session');
     }
-    log = await openSessionLog(store, values.session, io);
-    gateway = gatewayFor(log.session.provider, io.env, io.fetch);
-    await dropTornTail(log);
+    opened = await resumeSession(store, io, values.session);
   }
+  const { log, gateway } = opened;
   const { session, file } = log;
   io.out(`session: ${session.id}`);
 
@@ -115,6 +138,7 @@ export const chat: Command = async (args, { io, store }) => {
   const result = await gateway.turn({
     session,
     events,
+    tools: [],
     signal: io.interrupts(),
     onText: (delta) => {
       streamed = true;
@@ -136,6 +160,30 @@ export const chat: Command = async (args, { io, store }) => {
 };
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
+
+export type Totals = {
+  readonly turns: number;
+  readonly usage: TokenUsage;
+  readonly costUsd: number | null;
+  readonly latencyMs: number;
+};
+
+/** Usage summed over every model call in `events`. */
+export function totalOf(events: readonly TurnEvent[]): Totals {
+  const answers = events.filter((e): e is EventOf<'assistant'> => e.kind === 'assistant');
+  const sum = (pick: (e: EventOf<'assistant'>) => number) => answers.reduce((n, e) => n + pick(e), 0);
+  return {
+    turns: answers.length,
+    usage: {
+      input: sum((e) => e.usage.input),
+      cacheRead: sum((e) => e.usage.cacheRead),
+      cacheWrite: sum((e) => e.usage.cacheWrite),
+      output: sum((e) => e.usage.output),
+    },
+    costUsd: answers.some((e) => e.costUsd === null) ? null : sum((e) => e.costUsd ?? 0),
+    latencyMs: sum((e) => e.latencyMs),
+  };
+}
 
 const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   'session-start': ({ session }) => [
@@ -168,15 +216,7 @@ export const showSession: Command = async (args, { io, store }) => {
   const { events } = await openSessionLog(store, singleId(positionals, 'session'), io);
   for (const event of events) for (const line of render(event)) io.out(line);
 
-  const answers = events.filter((e): e is EventOf<'assistant'> => e.kind === 'assistant');
-  const sum = (pick: (e: EventOf<'assistant'>) => number) => answers.reduce((n, e) => n + pick(e), 0);
-  const total: TokenUsage = {
-    input: sum((e) => e.usage.input),
-    cacheRead: sum((e) => e.usage.cacheRead),
-    cacheWrite: sum((e) => e.usage.cacheWrite),
-    output: sum((e) => e.usage.output),
-  };
-  const cost = answers.some((e) => e.costUsd === null) ? null : sum((e) => e.costUsd ?? 0);
-  io.out(`total: turns=${answers.length} ${formatUsage(total, cost)} latency=${sum((e) => e.latencyMs)}ms`);
+  const total = totalOf(events);
+  io.out(`total: turns=${total.turns} ${formatUsage(total.usage, total.costUsd)} latency=${total.latencyMs}ms`);
   return 0;
 };
