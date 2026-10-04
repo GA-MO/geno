@@ -1,0 +1,228 @@
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdtemp, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, DENY_RULE_IDS, type TurnEvent } from '@g-code/core';
+import { readSessionLog, sessionFile } from '../src/sessions.js';
+import { openStore } from '../src/store.js';
+import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
+import { makeRepo } from './git-fixture.js';
+import { rgCommand, runCli } from './helpers.js';
+
+const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
+
+async function setup(files: Record<string, string>) {
+  const workspace = await realpath(makeRepo('ws', [{ message: 'start', files }]));
+  const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
+  const env = {
+    GCODE_HOME: home,
+    GCODE_PROVIDER: 'modelstudio',
+    DASHSCOPE_API_KEY: 'sk-parent-key-must-not-leak',
+    DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
+    FAKE_SECRET: 'fake-secret-must-not-leak',
+    GCODE_RG: rgCommand(),
+    PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+  };
+  return { workspace, env, store: openStore(env) };
+}
+
+const sessionIdOf = (stdout: string): string => /^session: (\S+)$/m.exec(stdout)![1]!;
+const sha256 = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const ofKind = <K extends TurnEvent['kind']>(events: readonly TurnEvent[], kind: K) =>
+  events.filter((e): e is Extract<TurnEvent, { kind: K }> => e.kind === kind);
+
+let nextId = 0;
+const use = (name: string, input: unknown): FakeToolUse => ({ id: `tu_${nextId++}`, name, input });
+const bash = (command: string) => use('bash', { command });
+
+describe('gcode agent', () => {
+  it('edits two files across two turns, and rewind restores both byte for byte', async () => {
+    const original = { 'a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' };
+    const { workspace, env, store } = await setup(original);
+    const files = ['a.ts', 'src/b.ts'].map((f) => path.join(workspace, f));
+    const before = files.map(sha256);
+
+    const transport = fakeTransport([
+      toolCall('Reading.', [use('read', { path: 'a.ts' }), use('read', { path: 'src/b.ts' })], usage),
+      toolCall('Editing a.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 10' })], usage),
+      toolCall('Editing b.', [
+        use('edit', { path: 'src/b.ts', old_str: 'b = 2', new_str: 'b = 20' }),
+        use('edit', { path: 'src/c.ts', create: true, new_str: 'export const c = 3;\n' }),
+      ], usage),
+      answer('Done.', usage),
+    ]);
+    const result = await runCli(
+      ['agent', '--workspace', workspace, '--non-interactive', '--check', 'grep -q "a = 10" a.ts', 'Bump the constants'],
+      env,
+      { fetch: transport.fetch },
+    );
+    expect(result.stderr).toBe('');
+    expect(result.code).toBe(0);
+    expect(readFileSync(files[0]!, 'utf8')).toBe('export const a = 10;\n');
+    expect(readFileSync(files[1]!, 'utf8')).toBe('export const b = 20;\n');
+    expect(existsSync(path.join(workspace, 'src', 'c.ts'))).toBe(true);
+
+    const [first] = transport.requests;
+    expect(first!.body.tools).toEqual(AGENT_TOOL_DEFINITIONS);
+    expect(first!.body.system[0].text).toBe(AGENT_SYSTEM_PROMPT);
+
+    const id = sessionIdOf(result.stdout);
+    const log = await readSessionLog(sessionFile(store, asSessionId(id)));
+    const checkpoints = ofKind(log.events, 'checkpoint');
+    expect(checkpoints.map((c) => [c.turnSeq, c.files])).toEqual([
+      [3, []],
+      [7, []],
+      [10, ['a.ts']],
+      [14, ['src/b.ts', 'src/c.ts']],
+    ]);
+    for (const c of checkpoints) {
+      expect(ofKind(log.events, 'assistant').some((a) => a.seq === c.turnSeq)).toBe(true);
+    }
+    const editResults = ofKind(log.events, 'tool-result').filter((r) => r.name === 'edit');
+    expect(editResults.map((r) => ('output' in r ? r.output : ''))).toEqual([
+      'Edited a.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
+      'Edited src/b.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
+      'Edited src/c.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
+    ]);
+
+    const firstEditTurn = checkpoints[1]!.turnSeq;
+    const rewound = await runCli(['rewind', '--session', id, '--to', String(firstEditTurn)], env);
+    expect(rewound.code).toBe(0);
+    expect(rewound.stdout).toContain('a.ts');
+    const after = files.map(sha256);
+    console.log(`sha256 before: ${before.join(' ')}`);
+    console.log(`sha256 after rewind to turn ${firstEditTurn}: ${after.join(' ')}`);
+    expect(after).toEqual(before);
+    expect(existsSync(path.join(workspace, 'src', 'c.ts'))).toBe(false);
+
+    const again = await runCli(['rewind', '--session', id, '--to', String(firstEditTurn)], env);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toContain('no files changed');
+    expect(files.map(sha256)).toEqual(before);
+    const restored = ofKind((await readSessionLog(sessionFile(store, asSessionId(id)))).events, 'restored');
+    expect(restored.map((r) => r.files)).toEqual([['a.ts', 'src/b.ts', 'src/c.ts'], []]);
+
+    const missing = await runCli(['rewind', '--session', id, '--to', '4'], env);
+    expect(missing.code).toBe(1);
+    expect(missing.stderr).toContain('checkpoints exist before turns: 3, 7, 10, 14');
+  });
+
+  it('tells the next model call what a rewind restored', async () => {
+    const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([
+      toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
+      answer('Done.', usage),
+      answer('Noted.', usage),
+    ]);
+    const first = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Change a'], env, { fetch: transport.fetch });
+    const id = sessionIdOf(first.stdout);
+    expect((await runCli(['rewind', '--session', id, '--to', '6'], env)).code).toBe(0);
+    const resumed = await runCli(['agent', '--session', id, '--non-interactive', 'What changed?'], env, { fetch: transport.fetch });
+    expect(resumed.code).toBe(0);
+    expect(transport.requests[3]!.body.messages.at(-1).content.map((b: { text: string }) => b.text)).toEqual([
+      '[The user rewound the workspace to how it was before turn 6. These files were restored: a.ts. Read a file again before editing it.]',
+      'What changed?',
+    ]);
+  });
+
+  it('refuses to edit a file the model has not read, and one that changed since it was read', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([
+      toolCall('Editing blind.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
+      toolCall('Reading, then changing it behind my own back.', [
+        use('read', { path: 'a.ts' }),
+        bash("printf 'export const a = 5;\\n' > a.ts"),
+        use('edit', { path: 'a.ts', old_str: 'a = 5', new_str: 'a = 6' }),
+      ], usage),
+      answer('Gave up.', usage),
+    ]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Change a'], env, { fetch: transport.fetch });
+    expect(result.code).toBe(0);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    const edits = ofKind(log.events, 'tool-result').filter((r) => r.name === 'edit');
+    expect(edits.map((r) => [r.status, 'output' in r ? r.output : ''])).toEqual([
+      ['error', 'read a.ts before editing it'],
+      ['error', 'a.ts changed since it was last read; read it again before editing'],
+    ]);
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 5;\n');
+  });
+
+  it('denies every deny-list rule without asking in non-interactive mode, and runs npx vitest run', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const denied = [
+      'rm -rf src',
+      'git push origin main',
+      'git reset --hard HEAD',
+      'cat /etc/hosts',
+      'curl https://example.com',
+      'gcloud projects list',
+      'psql -c "select 1"',
+    ];
+    const asked: string[] = [];
+    const transport = fakeTransport([
+      toolCall('Trying things.', [...denied.map(bash), bash('npx vitest run')], usage),
+      answer('Done.', usage),
+    ]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Try things'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return true;
+      },
+    });
+    expect(result.code).toBe(0);
+    expect(asked).toEqual([]);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    const results = ofKind(log.events, 'tool-result');
+    expect(results.map((r) => r.status)).toEqual([...denied.map(() => 'denied'), 'ok']);
+    expect(results.slice(0, denied.length).map((r) => ('output' in r ? r.output.split(' uses ')[1]!.split(',')[0] : ''))).toEqual([
+      'rm -rf outside the temp dir',
+      'git push',
+      'git reset --hard',
+      'a path outside the workspace',
+      'curl or wget',
+      'a cloud CLI',
+      'a database CLI',
+    ]);
+    expect(DENY_RULE_IDS).toHaveLength(denied.length);
+    const vitest = results.at(-1)!;
+    expect('output' in vitest && vitest.output).toMatch(/\[exit code \d+\]$/);
+    expect(transport.requests[1]!.body.messages.at(-1).content[0]).toMatchObject({ is_error: true });
+  });
+
+  it('asks on the terminal in interactive mode and runs the command when the user says yes', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const asked: string[] = [];
+    const transport = fakeTransport([toolCall('Cleaning.', [bash('rm -rf src')], usage), answer('Done.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, 'Clean up'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return true;
+      },
+    });
+    expect(result.code).toBe(0);
+    expect(asked).toEqual(['Allow `rm -rf src`? It uses rm -rf outside the temp dir.']);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(ofKind(log.events, 'tool-result')[0]).toMatchObject({ status: 'ok', output: '[exit code 0]' });
+  });
+
+  it('runs bash with only PATH, HOME, LANG, TERM and TMPDIR from the parent environment', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([toolCall('Looking.', [bash('env')], usage), answer('Done.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Show env'], env, { fetch: transport.fetch });
+    expect(result.code).toBe(0);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    const output = ofKind(log.events, 'tool-result')[0]!;
+    expect(output.status).toBe('ok');
+    const text = 'output' in output ? output.output : '';
+    console.log(`env inside bash:\n${text}`);
+    expect(text).toContain(`PATH=${env.PATH}`);
+    for (const secret of ['sk-parent-key-must-not-leak', 'fake-secret-must-not-leak', 'DASHSCOPE', 'GCODE_HOME']) {
+      expect(text).not.toContain(secret);
+    }
+  });
+});

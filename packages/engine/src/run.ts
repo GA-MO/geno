@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { asTaskId, DEFAULT_MINE_LIMITS, type EvalTask } from '@g-code/core';
+import { agent } from './agent.js';
 import { applyCommand, replayCommand } from './apply.js';
 import { ask } from './ask.js';
 import { chat, showSession } from './chat.js';
@@ -14,6 +15,7 @@ import { tabCommands } from './tab.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
+  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--non-interactive] <task...>
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
@@ -146,6 +148,7 @@ const group =
   };
 
 const commands: Record<string, Command> = {
+  agent,
   ask,
   chat,
   eval: group(evalCommands),
