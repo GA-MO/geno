@@ -28,7 +28,7 @@ export class UsageError extends Error {}
 
 export const USAGE = `usage:
   gcode eval list
-  gcode eval mine --repo <path> [--limit 50] [--max-lines 40]
+  gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier noop|oracle]
   gcode eval apply [--applier noop|oracle]`;
 
@@ -59,16 +59,19 @@ const mineCommand: Command = async (args, { io, store }) => {
   const { values } = parseArgs({
     args,
     strict: true,
+    allowNegative: true,
     options: {
+      slices: { type: 'boolean', default: true },
       repo: { type: 'string' },
       limit: { type: 'string', default: '50' },
       'max-lines': { type: 'string', default: String(DEFAULT_MINE_LIMITS.maxChangedLines) },
     },
   });
   if (values.repo === undefined) throw new UsageError('--repo is required');
-  const report = await mine(store, path.resolve(io.cwd, values.repo), positiveInt('limit', values.limit), {
-    ...DEFAULT_MINE_LIMITS,
-    maxChangedLines: positiveInt('max-lines', values['max-lines']),
+  const report = await mine(store, path.resolve(io.cwd, values.repo), {
+    limit: positiveInt('limit', values.limit),
+    limits: { ...DEFAULT_MINE_LIMITS, maxChangedLines: positiveInt('max-lines', values['max-lines']) },
+    slices: values.slices,
   });
   const skippedTotal = [...report.skipped.values()].reduce((sum, n) => sum + n, 0);
   io.out(`repo: ${report.repo}`);
