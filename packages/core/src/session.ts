@@ -69,8 +69,28 @@ export type ToolResultEvent = {
   readonly status: ToolStatus;
 } & ToolOutput;
 
+/** The workspace as it was before model turn `turnSeq`, committed to the workspace's shadow repo. */
+export type Checkpoint = {
+  readonly sessionId: SessionId;
+  readonly turnSeq: number;
+  readonly sha: string;
+  /** Paths that changed since the session's previous checkpoint. */
+  readonly files: readonly string[];
+  readonly label: string;
+};
+
 export type TurnEvent =
   | { readonly kind: 'session-start'; readonly session: Session }
+  | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
+  | {
+      readonly kind: 'restored';
+      readonly seq: number;
+      readonly at: string;
+      readonly turnSeq: number;
+      readonly sha: string;
+      /** Paths rewritten or deleted to match the checkpoint. */
+      readonly files: readonly string[];
+    }
   | { readonly kind: 'user'; readonly seq: number; readonly at: string; readonly content: string }
   | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string } & AssistantTurn)
   | {
@@ -83,6 +103,22 @@ export type TurnEvent =
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
+
+/** Checkpoints and restores record what happened to the workspace; the loop steps over them. */
+export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
+  'session-start': true,
+  user: true,
+  assistant: true,
+  error: true,
+  'tool-result': true,
+  checkpoint: false,
+  restored: false,
+};
+
+export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
+  `[The user rewound the workspace to how it was before turn ${event.turnSeq}. ${
+    event.files.length === 0 ? 'No files changed.' : `These files were restored: ${event.files.join(', ')}.`
+  } Read a file again before editing it.]`;
 
 export const nextSeq = (events: readonly TurnEvent[]): number => {
   const last = events.at(-1);
@@ -129,6 +165,7 @@ export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
   };
   for (const event of events) {
     if (event.kind === 'user') prompts.push({ type: 'text', text: event.content });
+    if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event));
     if (event.kind === 'assistant') {

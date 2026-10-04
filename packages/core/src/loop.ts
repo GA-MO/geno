@@ -1,5 +1,5 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { KEEPS_PENDING_PROMPT, toolUsesOf, type TurnErrorKind, type TurnEvent } from './session.js';
+import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, toolUsesOf, type TurnErrorKind, type TurnEvent } from './session.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
 export type DoneReason = (typeof DONE_REASONS)[number];
@@ -38,9 +38,12 @@ const AFTER_STOP: Record<StopReason, LoopStep> = {
   model_context_window_exceeded: done('error'),
 };
 
-type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
+type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' }>;
+type EventOf<K extends ConversationEvent['kind']> = Extract<ConversationEvent, { kind: K }>;
 
-const AFTER_EVENT: { [K in TurnEvent['kind']]: (event: EventOf<K>) => LoopStep } = {
+const isConversation = (event: TurnEvent): event is ConversationEvent => IN_CONVERSATION[event.kind];
+
+const AFTER_EVENT: { [K in ConversationEvent['kind']]: (event: EventOf<K>) => LoopStep } = {
   'session-start': () => done('end_turn'),
   user: () => CALL,
   'tool-result': () => CALL,
@@ -48,17 +51,18 @@ const AFTER_EVENT: { [K in TurnEvent['kind']]: (event: EventOf<K>) => LoopStep }
   error: ({ error }) => done(ERROR_REASON[error]),
 };
 
-const after = <K extends TurnEvent['kind']>(event: EventOf<K>): LoopStep =>
+const after = <K extends ConversationEvent['kind']>(event: EventOf<K>): LoopStep =>
   (AFTER_EVENT[event.kind] as (e: EventOf<K>) => LoopStep)(event);
 
 const seqOf = (event: TurnEvent): number => (event.kind === 'session-start' ? 0 : event.seq);
 
 // An interruption logged by an earlier run is what this run resumes from, so it does not end this one.
-function lastLiveEvent(events: readonly TurnEvent[], run: Run): TurnEvent {
+function lastLiveEvent(events: readonly TurnEvent[], run: Run): ConversationEvent {
   const live = events.findLast(
-    (e) => !(e.kind === 'error' && e.seq < run.firstSeq && KEEPS_PENDING_PROMPT[e.error]),
+    (e): e is ConversationEvent =>
+      isConversation(e) && !(e.kind === 'error' && e.seq < run.firstSeq && KEEPS_PENDING_PROMPT[e.error]),
   );
-  return live ?? events[0]!;
+  return live ?? (events[0] as ConversationEvent);
 }
 
 /** Tool uses of the newest assistant turn that have no logged result yet, in the order the model sent them. */

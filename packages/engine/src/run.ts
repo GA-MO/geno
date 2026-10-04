@@ -9,6 +9,7 @@ import { childEnv } from './child-env.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
+import { rewind } from './rewind.js';
 import { tabCommands } from './tab.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
@@ -16,6 +17,7 @@ export const USAGE = `usage:
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
+  gcode rewind --session <id> --to <turn>
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier <name>] [--model <id>]
@@ -147,6 +149,7 @@ const commands: Record<string, Command> = {
   ask,
   chat,
   eval: group(evalCommands),
+  rewind,
   session: group({ show: showSession }),
   tab: group(tabCommands),
 };
