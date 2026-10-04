@@ -8,9 +8,10 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/cli.js"
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/cli.js --external:@anthropic-ai/sandbox-runtime"
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.78",
     "@anthropic-ai/sdk": "^0.131.0",
     "@g-code/core": "workspace:*",
     "zod": "^4.6.5"
