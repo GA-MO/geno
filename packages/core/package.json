@@ -8,5 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
   }
 }
