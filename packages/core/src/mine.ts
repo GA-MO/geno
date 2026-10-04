@@ -129,6 +129,7 @@ export function buildTriple(input: {
 }): ApplyTriple {
   return {
     id: tripleId(input.repoName, input.facts.sha),
+    scope: 'commit',
     repo: input.repo,
     commit: input.facts.sha,
     path: input.path,

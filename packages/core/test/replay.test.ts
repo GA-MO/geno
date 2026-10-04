@@ -10,6 +10,7 @@ import {
 
 const triple: ApplyTriple = {
   id: asTripleId('fixture-abc1234'),
+  scope: 'commit',
   repo: '/tmp/fixture',
   commit: 'abc1234def',
   path: 'math.js',

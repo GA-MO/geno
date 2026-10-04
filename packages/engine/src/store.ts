@@ -3,7 +3,14 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { EngineError } from './errors.js';
-import { asTaskId, asTripleId, type ApplyTriple, type EvalTask, type TripleId } from '@g-code/core';
+import {
+  asTaskId,
+  asTripleId,
+  TRIPLE_SCOPES,
+  type ApplyTriple,
+  type EvalTask,
+  type TripleId,
+} from '@g-code/core';
 
 export class StoreError extends EngineError {
   constructor(
@@ -27,6 +34,8 @@ const evalTaskSchema = z.strictObject({
 
 const applyTripleSchema = z.strictObject({
   id: z.string().min(1).transform(asTripleId),
+  // Triples mined before file slicing existed carry no scope; they were all whole commits.
+  scope: z.enum(TRIPLE_SCOPES).default('commit'),
   repo: absolutePath,
   commit: z.string().min(1),
   path: z.string().min(1),
