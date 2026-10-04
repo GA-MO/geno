@@ -21,7 +21,8 @@ export const USAGE = `usage:
   gcode eval apply [--applier <name>] [--model <id>] [--limit n] [--max-cost 0.50] [--out <file> | --resume <file>]
     appliers: noop, oracle, str_replace, apply_patch, whole_file
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
-  gcode tab report [--since <iso>]`;
+  gcode tab report [--since <iso>]
+  gcode tab replay [--history 6] [--limit 100] [--warmup 3] [--endpoint <url>] [--out <file>]`;
 
 const preview = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, 60);
 
