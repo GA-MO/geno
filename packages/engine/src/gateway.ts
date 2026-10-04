@@ -15,6 +15,8 @@ export type TurnInput = {
   readonly session: Session;
   readonly events: readonly TurnEvent[];
   readonly tools: readonly Tool[];
+  /** Replaces the agent's system prompt, for callers such as the apply harness that are not the agent. */
+  readonly system?: string;
   readonly signal: AbortSignal;
   onText(delta: string): void;
 };
@@ -75,10 +77,10 @@ export function gatewayFor(providerName: ProviderName, env: Env, fetch?: typeof 
   const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, fetch });
 
   return {
-    async turn({ session, events, tools, signal, onText }) {
+    async turn({ session, events, tools, system, signal, onText }) {
       const started = performance.now();
       try {
-        const stream = client.messages.stream(buildRequest(session, events, tools), {
+        const stream = client.messages.stream(buildRequest(session, events, tools, system), {
           signal,
           headers: provider.sessionHeaders(session),
         });

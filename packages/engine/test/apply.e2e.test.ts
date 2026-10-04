@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { baseOf, EDIT_FORMAT_SPECS } from '@g-code/core';
+import { baseOf, EDIT_FORMAT_SPECS, EDIT_SYSTEM_PROMPT } from '@g-code/core';
 import { applyEditToFile } from '../src/apply.js';
 import { answer, fakeTransport, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
@@ -50,6 +50,7 @@ describe('a model-backed applier', () => {
     expect(result.stdout).toContain('final failures: none');
 
     expect(transport.requests[0]!.body.tools).toEqual([EDIT_FORMAT_SPECS.str_replace.tool]);
+    expect(transport.requests[0]!.body.system[0].text).toBe(EDIT_SYSTEM_PROMPT);
     const retry = transport.requests[1]!.body.messages.at(-1);
     expect(retry.content).toEqual([
       expect.objectContaining({
