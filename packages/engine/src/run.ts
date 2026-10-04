@@ -2,17 +2,28 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   appliersFor,
+  asTaskId,
   asTripleId,
   DEFAULT_MINE_LIMITS,
   isApplierName,
   replay,
   summarize,
   type ApplierName,
+  type EvalTask,
   type ReplayResult,
 } from '@g-code/core';
+import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
-import { openStore, readTasks, readTriple, readTriples, type Store } from './store.js';
+import {
+  openStore,
+  readTask,
+  readTasks,
+  readTriple,
+  readTriples,
+  taskDir,
+  type Store,
+} from './store.js';
 
 export type Io = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -30,7 +41,8 @@ export const USAGE = `usage:
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier noop|oracle]
-  gcode eval apply [--applier noop|oracle]`;
+  gcode eval apply [--applier noop|oracle]
+  gcode eval check-task <task-id>|--all [--verbose] [--keep]`;
 
 const preview = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, 60);
 
@@ -103,9 +115,7 @@ const replayCommand: Command = async (args, { io, store }) => {
     allowPositionals: true,
     options: applierOption,
   });
-  const [rawId, ...extra] = positionals;
-  if (rawId === undefined || extra.length > 0) throw new UsageError('expected exactly one triple id');
-  if (/[\\/]/.test(rawId)) throw new UsageError(`invalid triple id: ${rawId}`);
+  const rawId = singleId(positionals, 'triple');
   const name = applierName(values.applier);
   const triple = await readTriple(store, asTripleId(rawId));
   if (triple === undefined) throw new EngineError(`no triple ${rawId} in ${store.triplesDir}`);
@@ -136,11 +146,68 @@ const applyCommand: Command = async (args, { io, store }) => {
   return 0;
 };
 
+function singleId(positionals: readonly string[], kind: string): string {
+  const [rawId, ...extra] = positionals;
+  if (rawId === undefined || extra.length > 0) throw new UsageError(`expected exactly one ${kind} id`);
+  if (/[\\/]/.test(rawId)) throw new UsageError(`invalid ${kind} id: ${rawId}`);
+  return rawId;
+}
+
+const checkTaskCommand: Command = async (args, { io, store }) => {
+  const { values, positionals } = parseArgs({
+    args,
+    strict: true,
+    allowPositionals: true,
+    options: {
+      all: { type: 'boolean', default: false },
+      verbose: { type: 'boolean', default: false },
+      keep: { type: 'boolean', default: false },
+    },
+  });
+  if (values.all && positionals.length > 0) throw new UsageError('pass a task id or --all, not both');
+  const tasks = values.all ? await readTasks(store) : [await requireTask(store, singleId(positionals, 'task'))];
+
+  const reports: [EvalTask, CheckReport][] = [];
+  for (const task of tasks) {
+    reports.push([
+      task,
+      await checkTask(task, {
+        taskDir: taskDir(store, task.id),
+        env: io.env,
+        verbose: values.verbose,
+        keep: values.keep,
+        log: io.out,
+      }),
+    ]);
+  }
+  if (values.all) printSummary(io, reports);
+  return reports.every(([, report]) => report.verdict.valid) ? 0 : 1;
+};
+
+async function requireTask(store: Store, rawId: string): Promise<EvalTask> {
+  const task = await readTask(store, asTaskId(rawId));
+  if (task === undefined) throw new EngineError(`no task ${rawId} in ${store.tasksDir}`);
+  return task;
+}
+
+function printSummary(io: Io, reports: readonly [EvalTask, CheckReport][]): void {
+  const width = Math.max(4, ...reports.map(([task]) => task.id.length));
+  io.out('');
+  io.out(`${'task'.padEnd(width)}  ${'time'.padStart(8)}  verdict`);
+  for (const [task, { verdict, ms }] of reports) {
+    const text = verdict.valid ? 'valid' : `invalid: ${verdict.reason}`;
+    io.out(`${task.id.padEnd(width)}  ${formatSeconds(ms).padStart(8)}  ${text}`);
+  }
+  const valid = reports.filter(([, report]) => report.verdict.valid).length;
+  io.out(`${valid}/${reports.length} tasks valid`);
+}
+
 const evalCommands: Record<string, Command> = {
   list,
   mine: mineCommand,
   replay: replayCommand,
   apply: applyCommand,
+  'check-task': checkTaskCommand,
 };
 
 export async function run(argv: string[], io: Io): Promise<number> {

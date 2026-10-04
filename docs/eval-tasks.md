@@ -23,3 +23,7 @@ An eval task is one request you would give the agent, plus a command that decide
 - `verify` runs offline, without a database or secrets, in under two minutes once `setup` has run.
 - `verify` checks behavior, not one exact spelling of the code. A correct solution that differs from the reference patch must pass.
 - `prompt` reads like a request a developer would type. It never names the hidden check, and it never pastes the reference solution.
+
+## Checking a task
+
+`gcode eval check-task <id>` proves the first two rules. It clones `repo` at `baseCommit`, runs `setup`, and expects `verify` to fail. It then resets the clone, applies `reference.patch`, and expects `verify` to pass. It prints each step with its duration and ends with `valid` or `invalid: <reason>`, exiting 0 or 1. `--verbose` streams `setup` and `verify` output, `--keep` leaves the clone in place, and `--all` checks every task and prints a summary.

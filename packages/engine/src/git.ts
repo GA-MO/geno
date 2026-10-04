@@ -85,3 +85,17 @@ export async function changedFiles(repo: string, sha: string): Promise<ChangedFi
 
 export const fileAt = (repo: string, rev: string, path: string): Promise<string> =>
   git(repo, ['cat-file', 'blob', `${rev}:${path}`]);
+
+export async function cloneAt(repo: string, dest: string, commit: string): Promise<void> {
+  await git(repo, ['clone', '--no-hardlinks', '--quiet', repo, dest]);
+  await git(dest, ['checkout', '--quiet', '--detach', commit]);
+}
+
+export async function resetWorktree(dir: string): Promise<void> {
+  await git(dir, ['checkout', '--', '.']);
+  await git(dir, ['clean', '-fdq']);
+}
+
+export async function applyPatch(dir: string, patch: string): Promise<void> {
+  await git(dir, ['apply', patch]);
+}

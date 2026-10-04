@@ -9,6 +9,7 @@ import {
   TRIPLE_SCOPES,
   type ApplyTriple,
   type EvalTask,
+  type TaskId,
   type TripleId,
 } from '@g-code/core';
 
@@ -88,6 +89,17 @@ async function readDir<T>(dir: string, schema: z.ZodType<T>): Promise<T[]> {
 }
 
 export const readTasks = (store: Store): Promise<EvalTask[]> => readDir(store.tasksDir, evalTaskSchema);
+
+export const taskDir = (store: Store, id: TaskId): string => path.join(store.tasksDir, id);
+
+export async function readTask(store: Store, id: TaskId): Promise<EvalTask | undefined> {
+  try {
+    return await parseFile(path.join(store.tasksDir, `${id}.json`), evalTaskSchema);
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+}
 
 export const readTriples = (store: Store): Promise<ApplyTriple[]> =>
   readDir(store.triplesDir, applyTripleSchema);
