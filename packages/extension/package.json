@@ -1,0 +1,28 @@
+{
+  "name": "g-code",
+  "displayName": "g-code",
+  "version": "0.0.0",
+  "private": true,
+  "publisher": "g-code",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gcode.hello",
+        "title": "g-code: Hello"
+      }
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.95.0",
+    "esbuild": "^0.28.2"
+  }
+}
