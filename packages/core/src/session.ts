@@ -1,6 +1,5 @@
 import type {
   ContentBlock,
-  ContentBlockParam,
   MessageParam,
   StopReason,
   TextBlockParam,
@@ -81,7 +80,7 @@ export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
     if (event.kind === 'assistant') {
       flush();
       // Response blocks go back verbatim: thinking signatures are verified against the exact bytes.
-      messages.push({ role: 'assistant', content: event.content as ContentBlockParam[] });
+      messages.push({ role: 'assistant', content: [...event.content] });
     }
   }
   flush();
