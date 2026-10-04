@@ -19,6 +19,12 @@ const apiUsage = z.looseObject({
 
 // Claude Code's stream-json lines. Only the fields this adapter reads are checked.
 const assistantLine = z.looseObject({ type: z.literal('assistant'), message: z.looseObject({ id: z.string(), usage: apiUsage }) });
+const modelUsage = z.looseObject({
+  inputTokens: count,
+  outputTokens: count,
+  cacheReadInputTokens: count.nullish(),
+  cacheCreationInputTokens: count.nullish(),
+});
 const resultLine = z.looseObject({
   type: z.literal('result'),
   subtype: z.string(),
@@ -26,6 +32,7 @@ const resultLine = z.looseObject({
   result: z.string().optional(),
   total_cost_usd: z.number().optional(),
   usage: apiUsage.optional(),
+  modelUsage: z.record(z.string(), modelUsage).optional(),
   permission_denials: z.array(z.unknown()).optional(),
 });
 
@@ -36,6 +43,16 @@ const usageOf = (u: z.infer<typeof apiUsage>): TokenUsage => ({
   output: u.output_tokens,
 });
 
+
+// `usage` on the result covers the main loop only; modelUsage also counts subagent calls such as Explore.
+export function resultUsage(result: z.infer<typeof resultLine>): TokenUsage | undefined {
+  if (result.modelUsage !== undefined) {
+    return Object.values(result.modelUsage)
+      .map((u) => ({ input: u.inputTokens, cacheRead: u.cacheReadInputTokens ?? 0, cacheWrite: u.cacheCreationInputTokens ?? 0, output: u.outputTokens }))
+      .reduce(addUsage, ZERO_USAGE);
+  }
+  return result.usage === undefined ? undefined : usageOf(result.usage);
+}
 
 const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
@@ -76,7 +93,9 @@ export function claudeEnv(
 /**
  * Claude Code in print mode, inside the same sandbox as our bash except that the Model Studio host is
  * reachable. stream-json rather than json, so the per-task budget can stop it mid-run: Claude Code does not
- * know Model Studio's prices, so its own --max-budget-usd would count the wrong rates.
+ * know Model Studio's prices, so its own --max-budget-usd would count the wrong rates. The streamed
+ * per-message usage carries input tokens only, so the mid-run estimate runs low; the recorded usage comes
+ * from the final result line.
  */
 export const claudeCodeAdapter: AgentAdapter = {
   async run(input, { io, store }) {
@@ -162,8 +181,7 @@ export const claudeCodeAdapter: AgentAdapter = {
       await writeFile(path.join(input.runDir, `${input.task.id}.claude.stderr.txt`), run.output);
     }
 
-    const streamed = [...seen.values()].reduce(addUsage, ZERO_USAGE);
-    const usage = result?.usage === undefined ? streamed : usageOf(result.usage);
+    const usage = (result === undefined ? undefined : resultUsage(result)) ?? [...seen.values()].reduce(addUsage, ZERO_USAGE);
     const stopReason: AgentRunResult['stop'] = overBudget
       ? 'budget'
       : run.timedOut

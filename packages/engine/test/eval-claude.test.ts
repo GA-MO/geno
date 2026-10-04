@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { claudeEnv } from '../src/eval-claude.js';
+import { claudeEnv, resultUsage } from '../src/eval-claude.js';
 
 describe('claudeEnv', () => {
   it('points every Claude Code model slot at the model, uses the Model Studio key as the auth token, and drops other secrets', () => {
@@ -35,5 +35,23 @@ describe('claudeEnv', () => {
       DISABLE_TELEMETRY: '1',
       DISABLE_ERROR_REPORTING: '1',
     });
+  });
+});
+
+describe('resultUsage', () => {
+  it('sums modelUsage, which counts subagent calls, rather than the main-loop usage', () => {
+    const result = {
+      type: 'result' as const,
+      subtype: 'success',
+      num_turns: 9,
+      usage: { input_tokens: 48, cache_read_input_tokens: 110403, cache_creation_input_tokens: 35981, output_tokens: 2334 },
+      modelUsage: {
+        'qwen3.8-flash': { inputTokens: 500, outputTokens: 24000, cacheReadInputTokens: 880000, cacheCreationInputTokens: 75000 },
+        'qwen3.7-plus': { inputTokens: 28, outputTokens: 499, cacheReadInputTokens: 8797, cacheCreationInputTokens: 721 },
+      },
+    };
+    expect(resultUsage(result)).toEqual({ input: 528, output: 24499, cacheRead: 888797, cacheWrite: 75721 });
+    const { modelUsage: _, ...older } = result;
+    expect(resultUsage(older)).toEqual({ input: 48, output: 2334, cacheRead: 110403, cacheWrite: 35981 });
   });
 });
