@@ -8,21 +8,48 @@
     "vscode": "^1.95.0"
   },
   "main": "./dist/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
       {
         "command": "gcode.hello",
         "title": "g-code: Hello"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "g-code",
+      "properties": {
+        "gcode.tab.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show ghost-text completions from the local FIM model."
+        },
+        "gcode.tab.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8012",
+          "description": "Base URL of the llama-server that serves Tab completions."
+        },
+        "gcode.tab.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 0,
+          "description": "Milliseconds to wait after the last keystroke before asking the model."
+        }
+      }
+    }
   },
   "scripts": {
     "typecheck": "tsc -p .",
     "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js"
   },
+  "dependencies": {
+    "@g-code/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/vscode": "~1.95.0",
+    "@vscode/test-electron": "^3.1.0",
     "esbuild": "^0.28.2"
   }
 }
