@@ -49,19 +49,22 @@ export type Store = {
   readonly evalsDir: string;
   readonly tasksDir: string;
   readonly triplesDir: string;
+  readonly sessionsDir: string;
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
   const home = env['GCODE_HOME'] || path.join(homedir(), '.g-code');
-  const evalsDir = path.join(path.resolve(home), 'evals');
+  const root = path.resolve(home);
+  const evalsDir = path.join(root, 'evals');
   return {
     evalsDir,
+    sessionsDir: path.join(root, 'sessions'),
     tasksDir: path.join(evalsDir, 'tasks'),
     triplesDir: path.join(evalsDir, 'apply'),
   };
 }
 
-const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
+export const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 async function parseFile<T>(file: string, schema: z.ZodType<T>): Promise<T> {
   const text = await readFile(file, 'utf8');
