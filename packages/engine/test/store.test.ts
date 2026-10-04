@@ -2,7 +2,8 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { openStore, readTasks, StoreError } from '../src/store.js';
+import { asTripleId } from '@g-code/core';
+import { openStore, readTasks, readTriple, StoreError } from '../src/store.js';
 import { runCli } from './helpers.js';
 
 async function tempHome() {
@@ -58,5 +59,21 @@ describe('store parsing', () => {
     const badFlag = await runCli(['eval', 'list', '--nope'], { GCODE_HOME: home });
     expect(badFlag.code).toBe(2);
     expect(badFlag.stderr).toContain('usage:');
+  });
+
+  it('reads a triple written before scope existed as a whole-commit triple', async () => {
+    const { store } = await tempHome();
+    await mkdir(store.triplesDir, { recursive: true });
+    const legacy = {
+      id: 'old-abc1234',
+      repo: '/tmp/old',
+      commit: 'abc1234def',
+      path: 'a.ts',
+      instruction: 'Fix the thing here',
+      before: 'a\n',
+      expected: 'b\n',
+    };
+    await writeFile(path.join(store.triplesDir, 'old-abc1234.json'), JSON.stringify(legacy));
+    expect(await readTriple(store, asTripleId('old-abc1234'))).toEqual({ ...legacy, scope: 'commit' });
   });
 });

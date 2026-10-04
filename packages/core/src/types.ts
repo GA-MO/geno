@@ -16,8 +16,12 @@ export type EvalTask = {
   readonly verify: string;
 };
 
+export const TRIPLE_SCOPES = ['commit', 'file-slice'] as const;
+export type TripleScope = (typeof TRIPLE_SCOPES)[number];
+
 export type ApplyTriple = {
   readonly id: TripleId;
+  readonly scope: TripleScope;
   readonly repo: string;
   readonly commit: string;
   readonly path: string;
