@@ -51,6 +51,7 @@ export type Store = {
   readonly triplesDir: string;
   readonly sessionsDir: string;
   readonly spillDir: string;
+  readonly tabEvents: string;
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
@@ -61,6 +62,7 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
     evalsDir,
     sessionsDir: path.join(root, 'sessions'),
     spillDir: path.join(root, 'spill'),
+    tabEvents: path.join(root, 'tab-events.jsonl'),
     tasksDir: path.join(evalsDir, 'tasks'),
     triplesDir: path.join(evalsDir, 'apply'),
   };
