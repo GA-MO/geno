@@ -8,6 +8,9 @@
     "vscode": "^1.95.0"
   },
   "main": "./dist/extension.js",
+  "enabledApiProposals": [
+    "inlineCompletionsAdditions"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -36,6 +39,16 @@
           "default": 250,
           "minimum": 0,
           "description": "Milliseconds to wait after the last keystroke before asking the model."
+        },
+        "gcode.tab.nextEdit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Predict the next edit from recent edits with the local Zeta model, shown as inline edits. Needs VS Code Insiders with the inlineCompletionsAdditions proposal. Off by default because Zeta misses the latency bar on this Mac (docs/e9-e10-e11.md)."
+        },
+        "gcode.tab.nextEditEndpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8013",
+          "description": "Base URL of the llama-server that serves next-edit predictions (scripts/next-edit-server.sh)."
         }
       }
     }
