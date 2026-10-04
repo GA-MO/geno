@@ -1,15 +1,15 @@
-import { FIM_TOKENS } from './prompt.js';
+import { FIM_TOKENS, type FimPrompt } from './prompt.js';
 
 export const DEFAULT_N_PREDICT = 64;
 
 /** A llama-server /completion body. The prompt already carries Qwen's FIM tokens, so /infill's own layout is not used. */
-export const fimRequestBody = (prompt: string, nPredict: number = DEFAULT_N_PREDICT) => ({
-  prompt,
+export const fimRequestBody = (prompt: FimPrompt, nPredict: number = DEFAULT_N_PREDICT) => ({
+  prompt: prompt.prompt,
   n_predict: nPredict,
   temperature: 0,
   stream: true,
   cache_prompt: true,
-  stop: [FIM_TOKENS.file, FIM_TOKENS.prefix, FIM_TOKENS.repo],
+  stop: [FIM_TOKENS.file, FIM_TOKENS.prefix, FIM_TOKENS.repo, ...(prompt.singleLine ? ['\n'] : [])],
 });
 
 export type ServerTimings = {
@@ -32,7 +32,7 @@ export type FimResult = {
 export type FimCall = {
   readonly fetch: typeof globalThis.fetch;
   readonly endpoint: string;
-  readonly prompt: string;
+  readonly prompt: FimPrompt;
   readonly signal?: AbortSignal;
   readonly now: () => number;
   readonly nPredict?: number;

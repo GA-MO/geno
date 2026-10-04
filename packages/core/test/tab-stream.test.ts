@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { streamFim } from '../src/tab/index.js';
+import { buildFimPrompt, DEFAULT_FIM_BUDGET, streamFim } from '../src/tab/index.js';
 
 const sse = (chunks: object[]): Response => {
   const encoder = new TextEncoder();
@@ -22,7 +22,7 @@ describe('streamFim', () => {
     let sent: { url: string; body: unknown } | undefined;
     const result = await streamFim({
       endpoint: 'http://127.0.0.1:9',
-      prompt: '<|fim_prefix|>a<|fim_suffix|>b<|fim_middle|>',
+      prompt: buildFimPrompt({ repo: 'r', path: 'a.ts', prefix: 'const a = ', suffix: '', snippets: [] }, DEFAULT_FIM_BUDGET),
       now: () => (clock += 5),
       fetch: async (url, init) => {
         sent = { url: String(url), body: JSON.parse(String(init?.body)) };
@@ -42,6 +42,7 @@ describe('streamFim', () => {
     });
     expect(sent!.url).toBe('http://127.0.0.1:9/completion');
     expect(sent!.body).toMatchObject({ stream: true, cache_prompt: true, temperature: 0 });
+    expect((sent!.body as { stop: string[] }).stop).toContain('\n');
     expect(result).toEqual({
       text: 'return a;',
       model: 'qwen',

@@ -91,4 +91,10 @@ describe('buildFimPrompt', () => {
     expect(trimmed.prefix).toBe('x'.repeat(30));
     expect(trimmed.suffix).toBe('y'.repeat(30));
   });
+
+  it('asks for one line when code precedes the cursor on its line, and several on a blank line', () => {
+    expect(buildFimPrompt(inputs({ prefix: 'a\n  const x = ' }), roomy).singleLine).toBe(true);
+    expect(buildFimPrompt(inputs({ prefix: 'a\n  ' }), roomy).singleLine).toBe(false);
+    expect(buildFimPrompt(inputs({ prefix: '' }), roomy).singleLine).toBe(false);
+  });
 });
