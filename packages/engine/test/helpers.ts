@@ -1,5 +1,8 @@
 import { run } from '../src/run.js';
 
+/** The ripgrep the tool tests run: GCODE_RG when set, else rg on PATH. */
+export const rgCommand = (): string => process.env['GCODE_RG'] || 'rg';
+
 export type CliOptions = {
   readonly cwd?: string;
   readonly fetch?: typeof globalThis.fetch;
