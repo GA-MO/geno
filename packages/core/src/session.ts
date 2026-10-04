@@ -3,7 +3,10 @@ import type {
   MessageParam,
   StopReason,
   TextBlockParam,
+  ToolResultBlockParam,
+  ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
+import { spillNotice, type Spill } from './tools.js';
 import type { Brand } from './types.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
@@ -34,7 +37,7 @@ export type TokenUsage = {
   readonly output: number;
 };
 
-export const TURN_ERROR_KINDS = ['refusal', 'transport', 'abort'] as const;
+export const TURN_ERROR_KINDS = ['refusal', 'transport', 'abort', 'max-turns', 'budget'] as const;
 export type TurnErrorKind = (typeof TURN_ERROR_KINDS)[number];
 
 export type AssistantTurn = {
@@ -46,6 +49,22 @@ export type AssistantTurn = {
   readonly model: string;
 };
 
+export const TOOL_STATUSES = ['ok', 'error'] as const;
+export type ToolStatus = (typeof TOOL_STATUSES)[number];
+
+/** A result is either short enough to keep inline or spilled to a file the model can read in ranges. */
+export type ToolOutput = { readonly output: string } | { readonly spill: Spill };
+
+export type ToolResultEvent = {
+  readonly kind: 'tool-result';
+  readonly seq: number;
+  readonly at: string;
+  readonly toolUseId: string;
+  /** As the model sent it, so a call to an unknown tool is still logged. */
+  readonly name: string;
+  readonly status: ToolStatus;
+} & ToolOutput;
+
 export type TurnEvent =
   | { readonly kind: 'session-start'; readonly session: Session }
   | { readonly kind: 'user'; readonly seq: number; readonly at: string; readonly content: string }
@@ -56,7 +75,8 @@ export type TurnEvent =
       readonly at: string;
       readonly error: TurnErrorKind;
       readonly message: string;
-    };
+    }
+  | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
@@ -65,28 +85,53 @@ export const nextSeq = (events: readonly TurnEvent[]): number => {
   return last === undefined || last.kind === 'session-start' ? 1 : last.seq + 1;
 };
 
-// A refused prompt is dropped so later turns do not resend it; an interrupted one is answered on the next run.
-const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
+// A refused prompt is dropped so later turns do not resend it; an interrupted or stopped one is answered on the next run.
+export const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
   refusal: false,
   transport: true,
   abort: true,
+  'max-turns': true,
+  budget: true,
 };
 
-/** The conversation to send next. Consecutive unanswered user events merge into one user message. */
+export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
+  content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
+
+export const toolResultText = (event: ToolResultEvent): string =>
+  'spill' in event ? spillNotice(event.spill) : event.output;
+
+const toolResultBlock = (event: ToolResultEvent): ToolResultBlockParam => ({
+  type: 'tool_result',
+  tool_use_id: event.toolUseId,
+  content: toolResultText(event),
+  ...(event.status === 'error' ? { is_error: true } : {}),
+});
+
+/**
+ * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
+ * results in the order the model asked for them, then any unanswered prompts.
+ */
 export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
   const messages: MessageParam[] = [];
-  let pending: TextBlockParam[] = [];
+  let toolUses: readonly ToolUseBlock[] = [];
+  let results = new Map<string, ToolResultBlockParam>();
+  let prompts: TextBlockParam[] = [];
   const flush = () => {
-    if (pending.length > 0) messages.push({ role: 'user', content: pending });
-    pending = [];
+    const content = [...toolUses.flatMap((use) => results.get(use.id) ?? []), ...prompts];
+    if (content.length > 0) messages.push({ role: 'user', content });
+    toolUses = [];
+    results = new Map();
+    prompts = [];
   };
   for (const event of events) {
-    if (event.kind === 'user') pending.push({ type: 'text', text: event.content });
-    if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) pending = [];
+    if (event.kind === 'user') prompts.push({ type: 'text', text: event.content });
+    if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
+    if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event));
     if (event.kind === 'assistant') {
       flush();
       // Response blocks go back verbatim: thinking signatures are verified against the exact bytes.
       messages.push({ role: 'assistant', content: [...event.content] });
+      toolUses = toolUsesOf(event.content);
     }
   }
   flush();
