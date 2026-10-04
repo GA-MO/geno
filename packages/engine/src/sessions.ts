@@ -5,6 +5,7 @@ import type { ContentBlock, StopReason } from '@anthropic-ai/sdk/resources/messa
 import {
   asSessionId,
   EFFORTS,
+  PROVIDERS,
   TURN_ERROR_KINDS,
   type Session,
   type SessionId,
@@ -20,6 +21,8 @@ const sessionSchema = z.strictObject({
   id: z.string().min(1).transform(asSessionId),
   createdAt: z.iso.datetime(),
   workspace: z.string().refine(path.isAbsolute, 'must be an absolute path'),
+  // Logs written before providers existed all went to OpenRouter.
+  provider: z.enum(PROVIDERS).default('openrouter'),
   model: z.string().min(1),
   effort: z.enum(EFFORTS),
 });

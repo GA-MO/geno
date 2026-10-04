@@ -14,6 +14,7 @@ const session: Session = {
   id: asSessionId('s1'),
   createdAt: '2026-10-04T00:00:00.000Z',
   workspace: '/tmp/ws',
+  provider: 'openrouter',
   model: 'anthropic/claude-opus-5.5',
   effort: 'medium',
 };

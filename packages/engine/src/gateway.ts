@@ -4,6 +4,7 @@ import {
   buildRequest,
   costOf,
   type AssistantTurn,
+  type ProviderName,
   type Session,
   type TokenUsage,
   type TurnErrorKind,
@@ -25,8 +26,38 @@ export type TurnResult =
 /** One model round trip. A wire format other than Anthropic Messages would be another implementation. */
 export type Gateway = { turn(input: TurnInput): Promise<TurnResult> };
 
-export const KEY_VARIABLE = 'OPENROUTER_API_KEY';
-const OPENROUTER_ANTHROPIC_URL = 'https://openrouter.ai/api';
+type Env = Readonly<Record<string, string | undefined>>;
+
+/** Providers that speak the Anthropic Messages wire format. */
+type Provider = {
+  readonly keyVariable: string;
+  readonly baseUrl: (env: Env) => string;
+  readonly defaultModel: string;
+  readonly sessionHeaders: (session: Session) => Record<string, string>;
+};
+
+export const PROVIDER_TABLE: Readonly<Record<ProviderName, Provider>> = {
+  openrouter: {
+    keyVariable: 'OPENROUTER_API_KEY',
+    baseUrl: () => 'https://openrouter.ai/api',
+    defaultModel: 'anthropic/claude-opus-5.5',
+    // OpenRouter routes requests with the same session id to the same provider, so the cache it wrote is hit.
+    sessionHeaders: (session) => ({ 'x-session-id': session.id }),
+  },
+  modelstudio: {
+    keyVariable: 'DASHSCOPE_API_KEY',
+    // The URL embeds the workspace id and region, and keys only work in their own region.
+    baseUrl: (env) => required(env, 'DASHSCOPE_BASE_URL', 'your Model Studio Anthropic endpoint'),
+    defaultModel: 'qwen3.8-flash',
+    sessionHeaders: () => ({}),
+  },
+};
+
+function required(env: Env, variable: string, what: string): string {
+  const value = env[variable];
+  if (!value) throw new EngineError(`${variable} is not set; put ${what} in it`);
+  return value;
+}
 
 const usageOf = ({ usage }: Message): TokenUsage => ({
   input: usage.input_tokens,
@@ -41,14 +72,11 @@ function refusalMessage(message: Message): string {
   return details?.explanation ?? (text || `the model refused${details?.category ? ` (${details.category})` : ''}`);
 }
 
-export function openRouterGateway(
-  env: Readonly<Record<string, string | undefined>>,
-  fetch?: typeof globalThis.fetch,
-): Gateway {
-  const key = env[KEY_VARIABLE];
-  if (!key) throw new EngineError(`${KEY_VARIABLE} is not set; export your OpenRouter API key in it`);
+export function gatewayFor(providerName: ProviderName, env: Env, fetch?: typeof globalThis.fetch): Gateway {
+  const provider = PROVIDER_TABLE[providerName];
+  const key = required(env, provider.keyVariable, `your ${providerName} API key`);
   // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment.
-  const client = new Anthropic({ baseURL: OPENROUTER_ANTHROPIC_URL, authToken: key, apiKey: null, fetch });
+  const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, fetch });
 
   return {
     async turn({ session, events, signal, onText }) {
@@ -56,8 +84,7 @@ export function openRouterGateway(
       try {
         const stream = client.messages.stream(buildRequest(session, events), {
           signal,
-          // OpenRouter routes requests with the same session id to the same provider, so the cache it wrote is hit.
-          headers: { 'x-session-id': session.id },
+          headers: provider.sessionHeaders(session),
         });
         stream.on('text', onText);
         const message = await stream.finalMessage();

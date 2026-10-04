@@ -13,6 +13,7 @@ const start: TurnEvent = {
     id: asSessionId('s1'),
     createdAt: at,
     workspace: '/tmp/ws',
+    provider: 'openrouter',
     model: 'anthropic/claude-opus-5.5',
     effort: 'medium',
   },
@@ -26,6 +27,14 @@ async function logWith(events: TurnEvent[]): Promise<string> {
 }
 
 describe('session log', () => {
+  it('reads a log written before providers existed as an OpenRouter session', async () => {
+    const file = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-session-')), 's1.jsonl');
+    const { provider: _, ...legacy } = start.kind === 'session-start' ? start.session : ({} as never);
+    await appendFile(file, `${JSON.stringify({ kind: 'session-start', session: legacy })}\n`);
+    const log = await readSessionLog(file);
+    expect(log.session.provider).toBe('openrouter');
+  });
+
   it('reads back what was appended', async () => {
     const file = await logWith([start, user(1)]);
     const log = await readSessionLog(file);
