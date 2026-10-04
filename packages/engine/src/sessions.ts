@@ -6,6 +6,7 @@ import {
   asSessionId,
   EFFORTS,
   PROVIDERS,
+  TOOL_STATUSES,
   TURN_ERROR_KINDS,
   type Session,
   type SessionId,
@@ -33,20 +34,36 @@ const contentBlock = z.custom<ContentBlock>(
   'content block must be an object with a string type',
 );
 
-const turnEventSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('session-start'), session: sessionSchema }),
-  z.strictObject({ kind: z.literal('user'), ...seqFields, content: z.string() }),
+const toolResultFields = {
+  kind: z.literal('tool-result'),
+  ...seqFields,
+  toolUseId: z.string().min(1),
+  name: z.string(),
+  status: z.enum(TOOL_STATUSES),
+};
+
+// A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
+const turnEventSchema = z.union([
+  z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema }),
+    z.strictObject({ kind: z.literal('user'), ...seqFields, content: z.string() }),
+    z.strictObject({
+      kind: z.literal('assistant'),
+      ...seqFields,
+      content: z.array(contentBlock),
+      stopReason: z.string().nullable().transform((reason) => reason as StopReason | null),
+      usage: z.strictObject({ input: count, cacheRead: count, cacheWrite: count, output: count }),
+      costUsd: z.number().nonnegative().nullable(),
+      latencyMs: count,
+      model: z.string().min(1),
+    }),
+    z.strictObject({ kind: z.literal('error'), ...seqFields, error: z.enum(TURN_ERROR_KINDS), message: z.string() }),
+  ]),
+  z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
-    kind: z.literal('assistant'),
-    ...seqFields,
-    content: z.array(contentBlock),
-    stopReason: z.string().nullable().transform((reason) => reason as StopReason | null),
-    usage: z.strictObject({ input: count, cacheRead: count, cacheWrite: count, output: count }),
-    costUsd: z.number().nonnegative().nullable(),
-    latencyMs: count,
-    model: z.string().min(1),
+    ...toolResultFields,
+    spill: z.strictObject({ path: z.string().min(1), bytes: count, head: z.string(), tail: z.string() }),
   }),
-  z.strictObject({ kind: z.literal('error'), ...seqFields, error: z.enum(TURN_ERROR_KINDS), message: z.string() }),
 ]);
 
 export type SessionLog = {

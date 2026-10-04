@@ -6,6 +6,7 @@ import {
   nextSeq,
   replayMessages,
   SYSTEM_PROMPT,
+  TOOL_DEFINITIONS,
   type Session,
   type TurnEvent,
 } from '../src/index.js';
@@ -87,7 +88,92 @@ describe('replayMessages', () => {
   });
 });
 
+const toolCall = (seq: number, ...uses: [id: string, name: string, input: object][]): TurnEvent => ({
+  kind: 'assistant',
+  seq,
+  at,
+  content: [
+    { type: 'text', text: 'Looking.', citations: null },
+    ...uses.map(([id, name, input]) => ({ type: 'tool_use' as const, id, name, input, caller: { type: 'direct' as const } })),
+  ],
+  stopReason: 'tool_use',
+  usage: { input: 10, cacheRead: 0, cacheWrite: 900, output: 5 },
+  costUsd: 0.001,
+  latencyMs: 100,
+  model: session.model,
+});
+const result = (seq: number, toolUseId: string, output: string, status: 'ok' | 'error' = 'ok'): TurnEvent => ({
+  kind: 'tool-result',
+  seq,
+  at,
+  toolUseId,
+  name: 'grep',
+  status,
+  output,
+});
+
+describe('replayMessages with tools', () => {
+  it('puts every result of one assistant turn into one user message, in tool-use order', () => {
+    const events = [
+      start,
+      user(1, 'where?'),
+      toolCall(2, ['tu_a', 'grep', { pattern: 'x' }], ['tu_b', 'read', { path: 'a.ts' }]),
+      result(3, 'tu_b', 'no such file: a.ts', 'error'),
+      result(4, 'tu_a', 'a.ts:1:x'),
+      assistant(5, 'done'),
+    ];
+    const messages = replayMessages(events);
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+    expect(messages[2]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: 'tu_a', content: 'a.ts:1:x' },
+        { type: 'tool_result', tool_use_id: 'tu_b', content: 'no such file: a.ts', is_error: true },
+      ],
+    });
+  });
+
+  it('shows a spilled result as its notice with head, tail and path', () => {
+    const spilled: TurnEvent = {
+      kind: 'tool-result',
+      seq: 3,
+      at,
+      toolUseId: 'tu_a',
+      name: 'grep',
+      status: 'ok',
+      spill: { path: '/home/spill/s1/3-grep.txt', bytes: 100_000, head: 'HEAD', tail: 'TAIL' },
+    };
+    const [, , results] = replayMessages([start, user(1, 'q'), toolCall(2, ['tu_a', 'grep', {}]), spilled]);
+    const block = (results!.content as { content: string }[])[0]!;
+    expect(block.content).toContain('/home/spill/s1/3-grep.txt');
+    expect(block.content).toContain('100000 bytes');
+    expect(block.content).toMatch(/HEAD[\s\S]*TAIL/);
+  });
+
+  it('follows tool results with a prompt sent after them in the same user message', () => {
+    const events = [start, user(1, 'q'), toolCall(2, ['tu_a', 'grep', {}]), result(3, 'tu_a', 'hit'), error(4, 'abort'), user(5, 'go on')];
+    expect(replayMessages(events).at(-1)).toEqual({
+      role: 'user',
+      content: [
+        { type: 'tool_result', tool_use_id: 'tu_a', content: 'hit' },
+        { type: 'text', text: 'go on' },
+      ],
+    });
+  });
+});
+
 describe('buildRequest', () => {
+  it('sends the tool definitions only when asked, and breaks the cache on the newest tool result', () => {
+    const events = [start, user(1, 'q'), toolCall(2, ['tu_a', 'grep', {}]), result(3, 'tu_a', 'hit')];
+    expect(buildRequest(session, events)).not.toHaveProperty('tools');
+    const request = buildRequest(session, events, TOOL_DEFINITIONS);
+    expect(request.tools).toEqual(TOOL_DEFINITIONS);
+    expect(request.messages.at(-1)).toEqual({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'tu_a', content: 'hit', cache_control: { type: 'ephemeral' } }],
+    });
+  });
+
   it('marks the system block and only the newest user block as cache breakpoints', () => {
     const request = buildRequest(session, [start, user(1, 'hi'), assistant(2, 'hello'), user(3, 'a'), error(4, 'abort'), user(5, 'b')]);
     expect(request.system).toEqual([{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }]);

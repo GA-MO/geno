@@ -6,6 +6,7 @@ import {
   isEffort,
   isProviderName,
   nextSeq,
+  toolUsesOf,
   type Effort,
   type ProviderName,
   type Session,
@@ -21,7 +22,13 @@ import type { Store } from './store.js';
 export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
 const DEFAULT_EFFORT: Effort = 'medium';
 
-const EXIT_CODES: Record<TurnErrorKind, number> = { refusal: 1, transport: 1, abort: 130 };
+export const EXIT_CODES: Record<TurnErrorKind, number> = {
+  refusal: 1,
+  transport: 1,
+  abort: 130,
+  'max-turns': 3,
+  budget: 3,
+};
 
 export const formatCost = (costUsd: number | null): string =>
   costUsd === null ? 'cost=unknown' : `cost=$${costUsd.toFixed(6)}`;
@@ -140,9 +147,17 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     `#${seq} assistant (${stopReason ?? 'no stop reason'}, ${model}): ${content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
       .join('')}`,
+    ...toolUsesOf(content).map((use) => `  tool_use ${use.id} ${use.name} ${JSON.stringify(use.input)}`),
     `  usage: ${formatUsage(usage, costUsd)} latency=${latencyMs}ms`,
   ],
   error: ({ seq, error, message }) => [`#${seq} error (${error}): ${message}`],
+  'tool-result': (event) => [
+    `#${event.seq} tool-result ${event.toolUseId} ${event.name} (${event.status}): ${
+      'spill' in event
+        ? `spilled ${event.spill.bytes} bytes to ${event.spill.path}`
+        : event.output.replace(/\s+/g, ' ').trim().slice(0, 120)
+    }`,
+  ],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

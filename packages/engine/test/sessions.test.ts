@@ -67,6 +67,17 @@ describe('session log', () => {
     expect((error as StoreError).message).toContain('line 2');
   });
 
+  it('round-trips inline and spilled tool results, and rejects one that is both', async () => {
+    const fields = { kind: 'tool-result', at, toolUseId: 'tu_1', name: 'grep', status: 'ok' } as const;
+    const inline: TurnEvent = { ...fields, seq: 1, output: 'a.ts:1:x' };
+    const spilled: TurnEvent = { ...fields, seq: 2, spill: { path: '/h/spill/s1/2-grep.txt', bytes: 9, head: 'a', tail: 'b' } };
+    const file = await logWith([start, inline, spilled]);
+    expect((await readSessionLog(file)).events).toEqual([start, inline, spilled]);
+
+    await appendFile(file, `${JSON.stringify({ ...spilled, seq: 3, output: 'both' })}\n`);
+    await expect(readSessionLog(file)).rejects.toThrow(`${file}: line 4`);
+  });
+
   it('fails on a schema violation even on the last line', async () => {
     const file = await logWith([start]);
     await appendFile(file, `${JSON.stringify({ kind: 'user', seq: 0, at, content: 'x' })}\n`);
