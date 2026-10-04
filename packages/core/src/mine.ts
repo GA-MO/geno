@@ -1,4 +1,4 @@
-import { asTripleId, type ApplyTriple } from './types.js';
+import { asTripleId, type ApplyTriple, type TripleId, type TripleScope } from './types.js';
 
 export type FileStatus = 'added' | 'modified' | 'deleted' | 'other';
 
@@ -36,9 +36,17 @@ export const SKIP_REASONS = [
 ] as const;
 export type SkipReason = (typeof SKIP_REASONS)[number];
 
-export type CommitVerdict =
-  | { readonly kind: 'candidate'; readonly parent: string; readonly file: ChangedFile }
-  | { readonly kind: 'skip'; readonly reason: SkipReason };
+export type Candidate = {
+  readonly scope: TripleScope;
+  readonly parent: string;
+  readonly file: ChangedFile;
+  readonly sliceIndex: number;
+};
+
+export type Screening = {
+  readonly candidates: readonly Candidate[];
+  readonly skipped: readonly SkipReason[];
+};
 
 const LOCKFILES = new Set([
   'package-lock.json',
@@ -86,18 +94,37 @@ export const countLines = (text: string): number =>
 
 const wordCount = (text: string): number => text.split(/\s+/).filter(Boolean).length;
 
-export function screenCommit(facts: CommitFacts, limits: MineLimits): CommitVerdict {
-  const skip = (reason: SkipReason): CommitVerdict => ({ kind: 'skip', reason });
-  const [file, ...others] = facts.files;
-  if (file === undefined) return skip('no-files');
-  if (others.length > 0) return skip('multi-file');
-  if (file.changedLines === 'binary') return skip('binary');
-  if (isLockfile(file.path)) return skip('lockfile');
-  if (isGeneratedPath(file.path)) return skip('generated');
-  if (file.status !== 'modified' || facts.parent === undefined) return skip('not-in-both');
-  if (wordCount(facts.subject) < 3) return skip('short-subject');
-  if (file.changedLines > limits.maxChangedLines) return skip('diff-too-large');
-  return { kind: 'candidate', parent: facts.parent, file };
+type FileRule = (file: ChangedFile, facts: CommitFacts, limits: MineLimits) => boolean;
+
+// Order matters: a file that fails several rules reports only the first.
+const FILE_RULES: readonly (readonly [SkipReason, FileRule])[] = [
+  ['binary', (file) => file.changedLines === 'binary'],
+  ['lockfile', (file) => isLockfile(file.path)],
+  ['generated', (file) => isGeneratedPath(file.path)],
+  ['not-in-both', (file, facts) => file.status !== 'modified' || facts.parent === undefined],
+  ['short-subject', (_, facts) => wordCount(facts.subject) < 3],
+  [
+    'diff-too-large',
+    (file, _, limits) => file.changedLines !== 'binary' && file.changedLines > limits.maxChangedLines,
+  ],
+];
+
+const failedRule = (file: ChangedFile, facts: CommitFacts, limits: MineLimits): SkipReason | undefined =>
+  FILE_RULES.find(([, fails]) => fails(file, facts, limits))?.[0];
+
+export function screenCommit(facts: CommitFacts, limits: MineLimits, slices: boolean): Screening {
+  const files = [...facts.files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  if (files.length === 0) return { candidates: [], skipped: ['no-files'] };
+  if (files.length > 1 && !slices) return { candidates: [], skipped: ['multi-file'] };
+  const scope: TripleScope = files.length === 1 ? 'commit' : 'file-slice';
+  const candidates: Candidate[] = [];
+  const skipped: SkipReason[] = [];
+  files.forEach((file, sliceIndex) => {
+    const reason = failedRule(file, facts, limits);
+    if (reason !== undefined) skipped.push(reason);
+    else if (facts.parent !== undefined) candidates.push({ scope, parent: facts.parent, file, sliceIndex });
+  });
+  return { candidates, skipped };
 }
 
 export function screenContents(
@@ -112,28 +139,40 @@ export function screenContents(
   return undefined;
 }
 
-export const tripleId = (repoName: string, sha: string) => asTripleId(`${repoName}-${sha.slice(0, 7)}`);
+const shortSha = (sha: string) => sha.slice(0, 7);
+
+const TRIPLE_IDS: Record<TripleScope, (repoName: string, sha: string, sliceIndex: number) => TripleId> = {
+  commit: (repoName, sha) => asTripleId(`${repoName}-${shortSha(sha)}`),
+  'file-slice': (repoName, sha, sliceIndex) => asTripleId(`${repoName}-${shortSha(sha)}-${sliceIndex}`),
+};
 
 export const instructionOf = (facts: Pick<CommitFacts, 'subject' | 'body'>): string => {
   const body = facts.body.trim();
   return body === '' ? facts.subject.trim() : `${facts.subject.trim()}\n\n${body}`;
 };
 
+const INSTRUCTIONS: Record<TripleScope, (message: string, path: string) => string> = {
+  commit: (message) => message,
+  'file-slice': (message, path) =>
+    `${message}\n\nApply only the part of this change that belongs in ${path}.`,
+};
+
 export function buildTriple(input: {
   readonly repo: string;
   readonly repoName: string;
   readonly facts: CommitFacts;
-  readonly path: string;
+  readonly candidate: Candidate;
   readonly before: string;
   readonly expected: string;
 }): ApplyTriple {
+  const { scope, file, sliceIndex } = input.candidate;
   return {
-    id: tripleId(input.repoName, input.facts.sha),
-    scope: 'commit',
+    id: TRIPLE_IDS[scope](input.repoName, input.facts.sha, sliceIndex),
+    scope,
     repo: input.repo,
     commit: input.facts.sha,
-    path: input.path,
-    instruction: instructionOf(input.facts),
+    path: file.path,
+    instruction: INSTRUCTIONS[scope](instructionOf(input.facts), file.path),
     before: input.before,
     expected: input.expected,
   };
