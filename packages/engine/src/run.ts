@@ -5,6 +5,7 @@ import { applyCommand, replayCommand } from './apply.js';
 import { ask } from './ask.js';
 import { chat, showSession } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
+import { childEnv } from './child-env.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
@@ -96,7 +97,7 @@ const checkTaskCommand: Command = async (args, { io, store }) => {
       task,
       await checkTask(task, {
         taskDir: taskDir(store, task.id),
-        env: io.env,
+        env: childEnv(io.env),
         verbose: values.verbose,
         keep: values.keep,
         log: io.out,

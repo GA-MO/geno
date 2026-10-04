@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
+import { ENGINE_ENV_FILE } from './child-env.js';
 import { run } from './run.js';
 
-// The engine runs inside other projects, so its .env is found next to the engine, not in cwd.
 function projectEnv(): Record<string, string | undefined> {
   try {
-    return parseEnv(readFileSync(new URL('../../../.env', import.meta.url), 'utf8'));
+    return parseEnv(readFileSync(ENGINE_ENV_FILE, 'utf8'));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
     throw error;
