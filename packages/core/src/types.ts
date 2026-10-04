@@ -35,6 +35,8 @@ export const APPLY_FAILURES = [
   'multiple-matches',
   'stale-base',
   'parse-error',
+  'wrong-file',
+  'no-edit',
   'model-error',
 ] as const;
 export type ApplyFailure = (typeof APPLY_FAILURES)[number];
@@ -42,6 +44,9 @@ export type ApplyFailure = (typeof APPLY_FAILURES)[number];
 export type ApplyOutcome =
   | { readonly kind: 'applied'; readonly after: string }
   | { readonly kind: 'failed'; readonly reason: ApplyFailure; readonly detail: string };
+
+export const EDIT_FORMATS = ['str_replace', 'apply_patch', 'whole_file'] as const;
+export type EditFormat = (typeof EDIT_FORMATS)[number];
 
 export const APPLIER_NAMES = ['noop', 'oracle'] as const;
 export type ApplierName = (typeof APPLIER_NAMES)[number];
