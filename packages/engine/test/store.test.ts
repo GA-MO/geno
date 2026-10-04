@@ -29,7 +29,7 @@ describe('store parsing', () => {
     const bad = path.join(store.tasksDir, 'relative.json');
     await writeFile(
       bad,
-      JSON.stringify({ id: 't1', repo: 'not/absolute', baseCommit: 'abc', prompt: 'p', verify: 'true' }),
+      JSON.stringify({ id: 't1', repo: 'not/absolute', baseCommit: 'abc', prompt: 'p', setup: '', verify: 'true' }),
     );
 
     await expect(readTasks(store)).rejects.toThrow(bad);

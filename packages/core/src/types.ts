@@ -12,6 +12,7 @@ export type EvalTask = {
   readonly repo: string;
   readonly baseCommit: string;
   readonly prompt: string;
+  readonly setup: string;
   readonly verify: string;
 };
 
