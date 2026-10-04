@@ -47,12 +47,15 @@ type Chunk = {
 
 const num = (raw: unknown): number | null => (typeof raw === 'number' ? raw : null);
 
-function timingsOf(chunk: Chunk): ServerTimings | null {
-  const t = chunk.timings;
-  const values = [t?.prompt_n, t?.prompt_ms, t?.predicted_n, t?.predicted_ms].map(num);
-  if (values.some((v) => v === null)) return null;
-  const [promptTokens, promptMs, predictedTokens, predictedMs] = values as number[];
-  return { promptTokens: promptTokens!, promptMs: promptMs!, predictedTokens: predictedTokens!, predictedMs: predictedMs! };
+function timingsOf({ timings: t }: Chunk): ServerTimings | null {
+  const [promptTokens, promptMs, predictedTokens, predictedMs] = [
+    t?.prompt_n,
+    t?.prompt_ms,
+    t?.predicted_n,
+    t?.predicted_ms,
+  ].map(num);
+  if (promptTokens == null || promptMs == null || predictedTokens == null || predictedMs == null) return null;
+  return { promptTokens, promptMs, predictedTokens, predictedMs };
 }
 
 export class FimServerError extends Error {}
