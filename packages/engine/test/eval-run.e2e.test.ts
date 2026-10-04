@@ -31,7 +31,7 @@ async function setUp() {
     repo,
     baseCommit,
     prompt: 'Say goodbye instead',
-    setup: 'env > setup-env.txt',
+    setup: 'test -d "$GCODE_TASK_DIR" && env > setup-env.txt',
     verify: 'sh "$GCODE_TASK_DIR/check.sh"',
   }));
   for (const task of tasks) {

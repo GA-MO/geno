@@ -123,7 +123,8 @@ async function runTask(task: EvalTask, options: EvalRunOptions, runId: string, r
       if (error instanceof EngineError) return record('clone-failed', NOT_RUN, 0, error.message);
       throw error;
     }
-    const setup = await runShell(task.setup, { cwd: workspace, env: childEnv(io.env), timeoutMs: SETUP_TIMEOUT_MS });
+    const taskEnv = childEnv(io.env, { GCODE_TASK_DIR: taskDir(store, task.id) });
+    const setup = await runShell(task.setup, { cwd: workspace, env: taskEnv, timeoutMs: SETUP_TIMEOUT_MS });
     if (setup.code !== 0) return record('setup-failed', NOT_RUN, 0, tail(setup.output));
 
     const agentStarted = performance.now();
@@ -135,7 +136,7 @@ async function runTask(task: EvalTask, options: EvalRunOptions, runId: string, r
 
     const verify = await runShell(task.verify, {
       cwd: workspace,
-      env: childEnv(io.env, { GCODE_TASK_DIR: taskDir(store, task.id) }),
+      env: taskEnv,
       timeoutMs: VERIFY_TIMEOUT_MS,
     });
     return record(verify.code === 0 ? 'pass' : 'fail', agentRun, agentMs, tail(verify.output, 20, 2000));
