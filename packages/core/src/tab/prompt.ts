@@ -76,6 +76,8 @@ export type FimPrompt = {
   /** The inputs as trimmed into the prompt. */
   readonly inputs: FimInputs;
   readonly tokens: number;
+  /** Code already sits before the cursor on its line, so only the rest of that line is wanted. */
+  readonly singleLine: boolean;
 };
 
 /** Qwen2.5-Coder repository-level FIM: other files under <|file_sep|>, then the current file's prefix, suffix, middle. */
@@ -95,5 +97,6 @@ export function buildFimPrompt(inputs: FimInputs, budget: FimBudget): FimPrompt 
   const prompt =
     `${FIM_TOKENS.repo}${trimmed.repo}\n${context}${fileHeader(trimmed.path)}` +
     `${FIM_TOKENS.prefix}${trimmed.prefix}${FIM_TOKENS.suffix}${trimmed.suffix}${FIM_TOKENS.middle}`;
-  return { prompt, inputs: trimmed, tokens: estimateTokens(prompt) };
+  const cursorLine = inputs.prefix.slice(inputs.prefix.lastIndexOf('\n') + 1);
+  return { prompt, inputs: trimmed, tokens: estimateTokens(prompt), singleLine: cursorLine.trim() !== '' };
 }
