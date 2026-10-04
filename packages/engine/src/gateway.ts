@@ -8,6 +8,7 @@ import {
   type Session,
   type TokenUsage,
   type TurnErrorKind,
+  type ToolSpec,
   type TurnEvent,
 } from '@g-code/core';
 import { EngineError } from './errors.js';
@@ -15,6 +16,7 @@ import { EngineError } from './errors.js';
 export type TurnInput = {
   readonly session: Session;
   readonly events: readonly TurnEvent[];
+  readonly tools: readonly ToolSpec[];
   readonly signal: AbortSignal;
   onText(delta: string): void;
 };
@@ -79,10 +81,10 @@ export function gatewayFor(providerName: ProviderName, env: Env, fetch?: typeof 
   const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, fetch });
 
   return {
-    async turn({ session, events, signal, onText }) {
+    async turn({ session, events, tools, signal, onText }) {
       const started = performance.now();
       try {
-        const stream = client.messages.stream(buildRequest(session, events), {
+        const stream = client.messages.stream(buildRequest(session, events, tools), {
           signal,
           headers: provider.sessionHeaders(session),
         });

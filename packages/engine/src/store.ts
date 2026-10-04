@@ -50,6 +50,7 @@ export type Store = {
   readonly tasksDir: string;
   readonly triplesDir: string;
   readonly sessionsDir: string;
+  readonly spillDir: string;
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
@@ -59,6 +60,7 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
   return {
     evalsDir,
     sessionsDir: path.join(root, 'sessions'),
+    spillDir: path.join(root, 'spill'),
     tasksDir: path.join(evalsDir, 'tasks'),
     triplesDir: path.join(evalsDir, 'apply'),
   };
