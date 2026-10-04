@@ -36,10 +36,10 @@ describe('gcode eval replay and apply', () => {
     const { home } = await minedHome();
     const oracle = await runCli(['eval', 'apply', '--applier', 'oracle'], { GCODE_HOME: home });
     expect(oracle.code).toBe(0);
-    expect(oracle.stdout).toContain('exact match: 1/1 (100.0%)');
-    expect(oracle.stdout).toContain('failed: 0/1 (0.0%)');
+    expect(oracle.stdout).toMatch(/^all +1 +1\/1 \(100\.0%\) +1\/1 \(100\.0%\) +0\/1 \(0\.0%\) +0\/1 \(0\.0%\) +0\.00$/m);
+    expect(oracle.stdout).toMatch(/^commit +1 +1\/1 \(100\.0%\)/m);
     const noop = await runCli(['eval', 'apply'], { GCODE_HOME: home });
-    expect(noop.stdout).toContain('exact match: 0/1 (0.0%)');
+    expect(noop.stdout).toMatch(/^all +1 +0\/1 \(0\.0%\)/m);
   });
 
   it('rejects an unknown applier with exit 2 and a missing triple with exit 1', async () => {
