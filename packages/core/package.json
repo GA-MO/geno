@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "diff": "^9.0.0"
   }
 }
