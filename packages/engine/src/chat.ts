@@ -168,7 +168,6 @@ export type Totals = {
   readonly latencyMs: number;
 };
 
-/** Usage summed over every model call in `events`. */
 export function totalOf(events: readonly TurnEvent[]): Totals {
   const answers = events.filter((e): e is EventOf<'assistant'> => e.kind === 'assistant');
   const sum = (pick: (e: EventOf<'assistant'>) => number) => answers.reduce((n, e) => n + pick(e), 0);
