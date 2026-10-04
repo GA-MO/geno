@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { z } from 'zod';
 import {
   APPLY_FAILURES,
   appliersFor,
@@ -159,8 +160,10 @@ export const applyCommand: Command = async (args, { io, store }) => {
       limit: { type: 'string' },
       'max-cost': { type: 'string', default: '0.50' },
       out: { type: 'string' },
+      resume: { type: 'string' },
     },
   });
+  if (values.out !== undefined && values.resume !== undefined) throw new UsageError('pass --out or --resume, not both');
   const name = applierName(values.applier);
   const maxCostUsd = positiveNumber('max-cost', values['max-cost'], false);
   const all = await readTriples(store);
@@ -171,18 +174,29 @@ export const applyCommand: Command = async (args, { io, store }) => {
     throw new UsageError(`no price for ${model.name}, so --max-cost cannot be enforced; add it to PRICES`);
   }
 
-  const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}${usesModel ? `-${model.name.replace(/[^\w.-]/g, '_')}` : ''}`;
-  const out = values.out === undefined ? path.join(store.evalsDir, 'apply-runs', `${runId}.jsonl`) : path.resolve(io.cwd, values.out);
-  await mkdir(path.dirname(out), { recursive: true });
-  await writeFile(out, '');
+  const modelName = usesModel ? model.name : null;
+  let runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${name}${usesModel ? `-${model.name.replace(/[^\w.-]/g, '_')}` : ''}`;
+  let out: string;
+  let earlier: RunRecord[] = [];
+  if (values.resume === undefined) {
+    out = values.out === undefined ? path.join(store.evalsDir, 'apply-runs', `${runId}.jsonl`) : path.resolve(io.cwd, values.out);
+    await mkdir(path.dirname(out), { recursive: true });
+    await writeFile(out, '');
+  } else {
+    out = path.resolve(io.cwd, values.resume);
+    earlier = await readRun(out, name, modelName);
+    runId = earlier[0]?.runId ?? runId;
+  }
+  const done = new Set<string>(earlier.map((record) => record.tripleId));
 
   io.out(`applier: ${name}`);
   io.out(`model: ${usesModel ? model.name : 'none'}`);
   io.out(`results: ${out}`);
-  const results: ReplayResult[] = [];
+  const results: ReplayResult[] = [...earlier];
   let spent = 0;
   let stopped = false;
   for (const [i, triple] of triples.entries()) {
+    if (done.has(triple.id)) continue;
     if (spent >= maxCostUsd) {
       io.err(`budget: stopped at an estimated $${spent.toFixed(6)} before triple ${i + 1} of ${triples.length}, past --max-cost ${maxCostUsd}`);
       stopped = true;
@@ -202,3 +216,35 @@ export const applyCommand: Command = async (args, { io, store }) => {
   io.out(`usage: ${formatUsage(summary.usage, summary.costUsd)}`);
   return stopped ? 3 : 0;
 };
+
+type RunRecord = ReplayResult & { readonly runId: string };
+
+const runRecordSchema = z.looseObject({
+  runId: z.string().min(1),
+  tripleId: z.string().min(1),
+  applier: z.string(),
+  attempt: z.looseObject({ model: z.string() }).nullable(),
+});
+
+// Only the fields that decide whether a resume is safe are checked; the rest is this command's own output.
+async function readRun(file: string, applier: ApplierName, model: string | null): Promise<RunRecord[]> {
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (error) {
+    if (isMissing(error)) throw new EngineError(`no results file ${file} to resume`);
+    throw error;
+  }
+  return text
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line, i) => {
+      const parsed = runRecordSchema.safeParse(JSON.parse(line));
+      if (!parsed.success) throw new EngineError(`${file}:${i + 1}: ${z.prettifyError(parsed.error)}`);
+      const { applier: recorded, attempt } = parsed.data;
+      if (recorded !== applier || (attempt !== null && attempt.model !== model)) {
+        throw new UsageError(`${file} holds a ${recorded} run${attempt === null ? '' : ` on ${attempt.model}`}; resume it with the same --applier and --model`);
+      }
+      return parsed.data as unknown as RunRecord;
+    });
+}

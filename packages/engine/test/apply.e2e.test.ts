@@ -91,6 +91,46 @@ describe('a model-backed applier', () => {
   });
 });
 
+describe('gcode eval apply --resume', () => {
+  it('runs only the triples the results file lacks and summarizes the whole file', async () => {
+    const repo = makeRepo('resumable', [
+      { message: 'Add the greeting', files: { 'greet.ts': 'export const hi = "hello";\n' } },
+      { message: 'Shout the greeting', files: { 'greet.ts': 'export const hi = "HELLO";\n' } },
+      { message: 'Add a farewell', files: { 'greet.ts': 'export const hi = "HELLO";\nexport const bye = "bye";\n' } },
+    ]);
+    const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
+    const env = { GCODE_HOME: home, GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'sk-test', DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic' };
+    await runCli(['eval', 'mine', '--repo', repo], env);
+    const write = () => [
+      toolCall('Writing.', [{ id: 'tu_1', name: 'write_file', input: { path: 'greet.ts', content: 'x\n' } }], usage),
+      answer('Done.', usage),
+    ];
+    const out = path.join(home, 'run.jsonl');
+
+    const first = fakeTransport(write());
+    await runCli(['eval', 'apply', '--applier', 'whole_file', '--limit', '1', '--out', out], env, { fetch: first.fetch });
+    const second = fakeTransport(write());
+    const resumed = await runCli(['eval', 'apply', '--applier', 'whole_file', '--resume', out], env, { fetch: second.fetch });
+
+    expect(second.requests).toHaveLength(2);
+    expect(resumed.stdout).toMatch(/^\[2\/2\] /m);
+    expect(resumed.stdout).not.toMatch(/^\[1\/2\] /m);
+    expect(resumed.stdout).toMatch(/^all +2 /m);
+    const records = (await readFile(out, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(new Set(records.map((r) => r.runId)).size).toBe(1);
+    expect(new Set(records.map((r) => r.tripleId)).size).toBe(2);
+  });
+
+  it('refuses to resume a run of another applier', async () => {
+    const { home, env } = await minedHome();
+    const out = path.join(home, 'noop.jsonl');
+    await runCli(['eval', 'apply', '--out', out], env);
+    const result = await runCli(['eval', 'apply', '--applier', 'oracle', '--resume', out], env);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('holds a noop run');
+  });
+});
+
 describe('applyEditToFile', () => {
   it('writes nothing when the file changed since the model read it', async () => {
     const file = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-edit-')), 'a.ts');
