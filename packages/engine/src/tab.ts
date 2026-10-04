@@ -176,6 +176,8 @@ type ReplayRow = {
   readonly promptTokens: number | null;
   readonly processedTokens: number | null;
   readonly generatedTokens: number | null;
+  readonly promptMs: number | null;
+  readonly generationMs: number | null;
   readonly ttftMs: number | null;
   readonly latencyMs: number;
   readonly output: string;
@@ -243,6 +245,8 @@ const replayCommand: Command = async (args, { io, store }) => {
       promptTokens: result.promptTokens,
       processedTokens: result.timings?.promptTokens ?? null,
       generatedTokens: result.timings?.predictedTokens ?? null,
+      promptMs: result.timings?.promptMs ?? null,
+      generationMs: result.timings?.predictedMs ?? null,
       ttftMs: result.ttftMs,
       latencyMs: result.latencyMs,
       output: result.text,
@@ -267,6 +271,10 @@ const replayCommand: Command = async (args, { io, store }) => {
   io.out(`prompt tokens (server): ${pair(spread(rows.map((r) => r.promptTokens)), tokens)}`);
   io.out(`prompt tokens processed: ${pair(spread(rows.map((r) => r.processedTokens)), tokens)}`);
   io.out(`generated tokens: ${pair(spread(rows.map((r) => r.generatedTokens)), tokens)}`);
+  io.out(`server prompt eval: ${pair(spread(rows.map((r) => r.promptMs)), millis)}`);
+  io.out(`server generation: ${pair(spread(rows.map((r) => r.generationMs)), millis)}`);
+  const unparsed = rows.filter((r) => r.none === 'malformed').length;
+  io.out(`malformed replies: ${unparsed}`);
   return 0;
 };
 
