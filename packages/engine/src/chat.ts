@@ -4,19 +4,21 @@ import {
   asSessionId,
   hasPendingPrompt,
   isEffort,
+  isProviderName,
   nextSeq,
   type Effort,
+  type ProviderName,
   type Session,
   type TokenUsage,
   type TurnErrorKind,
   type TurnEvent,
 } from '@g-code/core';
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
-import { openRouterGateway } from './gateway.js';
+import { gatewayFor, PROVIDER_TABLE, type Gateway } from './gateway.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
 
-export const DEFAULT_MODEL = 'anthropic/claude-opus-5.5';
+export const DEFAULT_PROVIDER: ProviderName = 'openrouter';
 const DEFAULT_EFFORT: Effort = 'medium';
 
 const EXIT_CODES: Record<TurnErrorKind, number> = { refusal: 1, transport: 1, abort: 130 };
@@ -33,11 +35,18 @@ export async function openSessionLog(store: Store, rawId: string, io: Io): Promi
   return log;
 }
 
-async function newSession(store: Store, io: Io, model: string, effort: Effort): Promise<SessionLog> {
+async function newSession(
+  store: Store,
+  io: Io,
+  provider: ProviderName,
+  model: string,
+  effort: Effort,
+): Promise<SessionLog> {
   const session: Session = {
     id: asSessionId(randomUUID()),
     createdAt: new Date().toISOString(),
     workspace: io.cwd,
+    provider,
     model,
     effort,
   };
@@ -52,23 +61,33 @@ export const chat: Command = async (args, { io, store }) => {
     args,
     strict: true,
     allowPositionals: true,
-    options: { session: { type: 'string' }, model: { type: 'string' }, effort: { type: 'string' } },
+    options: {
+      session: { type: 'string' },
+      provider: { type: 'string' },
+      model: { type: 'string' },
+      effort: { type: 'string' },
+    },
   });
   const message = positionals.join(' ').trim();
   const effort = values.effort ?? DEFAULT_EFFORT;
   if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
-  const gateway = openRouterGateway(io.env, io.fetch);
 
+  // The gateway is built before anything is written, so a missing key leaves no stray session behind.
   let log: SessionLog;
+  let gateway: Gateway;
   if (values.session === undefined) {
     if (message === '') throw new UsageError('a message is required to start a session');
-    const model = values.model ?? (io.env['GCODE_MODEL'] || DEFAULT_MODEL);
-    log = await newSession(store, io, model, effort);
+    const provider = values.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
+    if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
+    const model = values.model ?? (io.env['GCODE_MODEL'] || PROVIDER_TABLE[provider].defaultModel);
+    gateway = gatewayFor(provider, io.env, io.fetch);
+    log = await newSession(store, io, provider, model, effort);
   } else {
-    if (values.model !== undefined || values.effort !== undefined) {
-      throw new UsageError('--model and --effort are fixed when a session starts; drop them with --session');
+    if (values.provider !== undefined || values.model !== undefined || values.effort !== undefined) {
+      throw new UsageError('--provider, --model and --effort are fixed when a session starts; drop them with --session');
     }
     log = await openSessionLog(store, values.session, io);
+    gateway = gatewayFor(log.session.provider, io.env, io.fetch);
     await dropTornTail(log);
   }
   const { session, file } = log;

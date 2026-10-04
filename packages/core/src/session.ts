@@ -13,10 +13,16 @@ export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Effort = (typeof EFFORTS)[number];
 export const isEffort = (raw: string): raw is Effort => (EFFORTS as readonly string[]).includes(raw);
 
+export const PROVIDERS = ['openrouter', 'modelstudio'] as const;
+export type ProviderName = (typeof PROVIDERS)[number];
+export const isProviderName = (raw: string): raw is ProviderName =>
+  (PROVIDERS as readonly string[]).includes(raw);
+
 export type Session = {
   readonly id: SessionId;
   readonly createdAt: string;
   readonly workspace: string;
+  readonly provider: ProviderName;
   readonly model: string;
   readonly effort: Effort;
 };
