@@ -82,7 +82,7 @@ describe('gatewayFor', () => {
       onText: () => {},
     });
 
-    expect(result).toMatchObject({ kind: 'answer', turn: { costUsd: null } });
+    expect(result).toMatchObject({ kind: 'answer', turn: { costUsd: (3 * 0.15 + 42 * 0.47) / 1e6 } });
     const [request] = transport.requests;
     expect(request?.url).toBe('https://ws-1.ap-southeast-1.maas.aliyuncs.com/apps/anthropic/v1/messages');
     expect(request?.headers.get('authorization')).toBe('Bearer sk-test');

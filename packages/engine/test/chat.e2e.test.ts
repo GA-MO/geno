@@ -10,7 +10,7 @@ import { runCli } from './helpers.js';
 
 async function setup() {
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-chat-'));
-  return { env: { GCODE_HOME: home, OPENROUTER_API_KEY: 'test-key' }, store: openStore({ GCODE_HOME: home }) };
+  return { env: { GCODE_HOME: home, GCODE_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'test-key' }, store: openStore({ GCODE_HOME: home }) };
 }
 
 const sessionIdOf = (stdout: string): string => /^session: (\S+)$/m.exec(stdout)![1]!;
@@ -121,11 +121,11 @@ describe('gcode chat', () => {
     ]);
   });
 
-  it('fails clearly without OPENROUTER_API_KEY and creates no session', async () => {
+  it('defaults to Model Studio, fails clearly without its key, and creates no session', async () => {
     const { env, store } = await setup();
     const result = await runCli(['chat', 'hi'], { GCODE_HOME: env.GCODE_HOME });
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('OPENROUTER_API_KEY is not set');
+    expect(result.stderr).toContain('DASHSCOPE_API_KEY is not set');
     await expect(readdir(store.sessionsDir)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
