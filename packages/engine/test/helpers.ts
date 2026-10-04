@@ -8,10 +8,12 @@ export type CliOptions = {
   readonly fetch?: typeof globalThis.fetch;
   /** Called with each streamed chunk, with the controller behind the interrupt signal. */
   readonly onWrite?: (text: string, interrupt: AbortController) => void;
+  /** Answers the agent's approval questions; every question is refused when absent. */
+  readonly confirm?: (question: string) => boolean;
 };
 
 export async function runCli(argv: string[], env: Record<string, string>, options: CliOptions = {}) {
-  const { cwd = process.cwd(), fetch, onWrite } = options;
+  const { cwd = process.cwd(), fetch, onWrite, confirm = () => false } = options;
   const stdout: string[] = [];
   const stderr: string[] = [];
   const interrupt = new AbortController();
@@ -29,6 +31,7 @@ export async function runCli(argv: string[], env: Record<string, string>, option
       onWrite?.(text, interrupt);
     },
     interrupts: () => interrupt.signal,
+    confirm: async (question) => confirm(question),
     ...(fetch === undefined ? {} : { fetch }),
   });
   return { code, stdout: [...stdout, ...(partial ? [partial] : [])].join('\n'), stderr: stderr.join('\n') };

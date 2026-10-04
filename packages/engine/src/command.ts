@@ -9,6 +9,8 @@ export type Io = {
   write(text: string): void;
   /** Starts listening for the user's interrupt (SIGINT) and returns a signal that fires on it. */
   interrupts(): AbortSignal;
+  /** Asks the user a yes/no question on the terminal; false when nobody can answer. */
+  confirm(question: string): Promise<boolean>;
   readonly fetch?: typeof globalThis.fetch;
 };
 
