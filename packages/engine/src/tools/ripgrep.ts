@@ -13,8 +13,9 @@ const NO_MATCH = 1;
 export async function ripgrep(ctx: ToolContext, cwd: string, args: readonly string[]): Promise<string[]> {
   let stdout: string;
   try {
+    // Config such as .github/ lives in hidden directories, so those are searched; .git is never useful.
     // An explicit path stops ripgrep from searching stdin when stdin is not a terminal.
-    ({ stdout } = await execFileAsync(ctx.rg, [...args, '--', '.'], {
+    ({ stdout } = await execFileAsync(ctx.rg, ['--hidden', '--glob', '!.git', ...args, '--', '.'], {
       cwd,
       signal: ctx.signal,
       maxBuffer: 256 * 1024 * 1024,

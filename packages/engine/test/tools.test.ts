@@ -23,6 +23,10 @@ beforeAll(async () => {
   );
   await writeFile(path.join(ws, 'src', 'lib', 'util.ts'), 'export const util = SERVER_URL;\n');
   await writeFile(path.join(ws, '.hidden.ts'), 'SERVER_URL hidden\n');
+  await mkdir(path.join(ws, '.github', 'workflows'), { recursive: true });
+  await writeFile(path.join(ws, '.github', 'workflows', 'ci.yml'), 'env:\n  SERVER_URL: https://ci\n');
+  await mkdir(path.join(ws, '.git'));
+  await writeFile(path.join(ws, '.git', 'config'), 'SERVER_URL in git internals\n');
   await writeFile(path.join(ws, 'image.bin'), Buffer.from([0x89, 0x50, 0x00, 0x01]));
   await writeFile(path.join(root, 'outside', 'secret.txt'), 'secret\n');
   await symlink(path.join(root, 'outside', 'secret.txt'), path.join(ws, 'escape.txt'));
@@ -93,10 +97,12 @@ describe('workspace confinement', () => {
 });
 
 describe('grep', () => {
-  it('returns path:line:text sorted by path, skipping hidden files', async () => {
+  it('returns path:line:text sorted by path, including hidden files but not .git', async () => {
     expect(await call('grep', { pattern: 'SERVER_URL' })).toEqual(
       ok(
         [
+          '.github/workflows/ci.yml:2:  SERVER_URL: https://ci',
+          '.hidden.ts:1:SERVER_URL hidden',
           "src/config.ts:1:export const SERVER_URL = process.env.SERVER_URL ?? '';",
           "src/config.ts:2:export const trimmed = SERVER_URL.replace(/\\/$/, '');",
           'src/lib/util.ts:1:export const util = SERVER_URL;',
@@ -132,14 +138,17 @@ describe('glob', () => {
   it('lists matching files sorted, relative to the workspace, without symlinks', async () => {
     expect(await call('glob', { pattern: 'src/**/*.ts' })).toEqual(ok('src/config.ts\nsrc/lib/util.ts'));
     expect(await call('glob', { pattern: '*.md' })).toEqual(ok('README.md'));
+    expect(await call('glob', { pattern: '.github/workflows/*' })).toEqual(ok('.github/workflows/ci.yml'));
+    expect(await call('glob', { pattern: 'config' })).toEqual(ok('no files match'));
     expect(await call('glob', { pattern: '*.py' })).toEqual(ok('no files match'));
   });
 });
 
 describe('list', () => {
-  it('shows entries to the depth asked, counting files below the cut, without hidden files or symlinks', async () => {
-    expect(await call('list', { depth: 1 })).toEqual(ok('README.md\nimage.bin\nsrc/ (2 files)'));
-    expect(await call('list', { directory: '', depth: 1 })).toEqual(ok('README.md\nimage.bin\nsrc/ (2 files)'));
+  it('shows entries to the depth asked, counting files below the cut, without .git or symlinks', async () => {
+    const root = '.github/ (1 file)\n.hidden.ts\nREADME.md\nimage.bin\nsrc/ (2 files)';
+    expect(await call('list', { depth: 1 })).toEqual(ok(root));
+    expect(await call('list', { directory: '', depth: 1 })).toEqual(ok(root));
     expect(await call('list', { directory: 'src' })).toEqual(ok('src/config.ts\nsrc/lib/\nsrc/lib/util.ts'));
   });
 
