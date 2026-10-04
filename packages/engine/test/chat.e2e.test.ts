@@ -1,4 +1,4 @@
-import { mkdtemp, readdir } from 'node:fs/promises';
+import { appendFile, mkdtemp, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -90,6 +90,34 @@ describe('gcode chat', () => {
       'user',
       'error',
       'assistant',
+    ]);
+  });
+
+  it('session show prints each turn with usage, the abort, a torn tail warning, and the totals', async () => {
+    const { env, store } = await setup();
+    const transport = fakeTransport([
+      answer('One.', { input: 20, cacheRead: 0, cacheWrite: 1000 }),
+      { ...answer('Two and more.', { input: 10, cacheRead: 1000, cacheWrite: 0 }), stallAfter: 7 },
+    ]);
+    const id = sessionIdOf((await runCli(['chat', 'first'], env, { fetch: transport.fetch })).stdout);
+    await runCli(['chat', '--session', id, 'second'], env, {
+      fetch: transport.fetch,
+      onWrite: (_text, interrupt) => interrupt.abort(),
+    });
+    await appendFile(sessionFile(store, asSessionId(id)), '{"kind":"us');
+
+    const shown = await runCli(['session', 'show', id], env);
+    expect(shown.code).toBe(0);
+    expect(shown.stderr).toMatch(/warning: .*\.jsonl: skipped torn line 6/);
+    const lines = shown.stdout.split('\n');
+    expect(lines[0]).toBe(`session: ${id}`);
+    expect(lines.slice(2)).toEqual([
+      '#1 user: first',
+      '#2 assistant (end_turn, anthropic/claude-opus-5.5): One.',
+      expect.stringMatching(/^ {2}usage: in=20 cache_read=0 cache_write=1000 out=42 cost=\$0\.005920 latency=\d+ms$/),
+      '#3 user: second',
+      '#4 error (abort): interrupted by the user',
+      expect.stringMatching(/^total: turns=1 in=20 cache_read=0 cache_write=1000 out=42 cost=\$0\.005920 latency=\d+ms$/),
     ]);
   });
 

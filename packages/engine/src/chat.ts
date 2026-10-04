@@ -11,7 +11,7 @@ import {
   type TurnErrorKind,
   type TurnEvent,
 } from '@g-code/core';
-import { checkId, UsageError, type Command, type Io } from './command.js';
+import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { openRouterGateway } from './gateway.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
@@ -55,14 +55,15 @@ export const chat: Command = async (args, { io, store }) => {
     options: { session: { type: 'string' }, model: { type: 'string' }, effort: { type: 'string' } },
   });
   const message = positionals.join(' ').trim();
-  if (values.effort !== undefined && !isEffort(values.effort)) throw new UsageError(`unknown effort: ${values.effort}`);
+  const effort = values.effort ?? DEFAULT_EFFORT;
+  if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
   const gateway = openRouterGateway(io.env, io.fetch);
 
   let log: SessionLog;
   if (values.session === undefined) {
     if (message === '') throw new UsageError('a message is required to start a session');
     const model = values.model ?? (io.env['GCODE_MODEL'] || DEFAULT_MODEL);
-    log = await newSession(store, io, model, (values.effort as Effort | undefined) ?? DEFAULT_EFFORT);
+    log = await newSession(store, io, model, effort);
   } else {
     if (values.model !== undefined || values.effort !== undefined) {
       throw new UsageError('--model and --effort are fixed when a session starts; drop them with --session');
@@ -105,5 +106,43 @@ export const chat: Command = async (args, { io, store }) => {
   const { turn } = result;
   await record({ kind: 'assistant', seq: nextSeq(events), at, ...turn });
   io.out(`usage: ${formatUsage(turn.usage, turn.costUsd)} latency=${turn.latencyMs}ms`);
+  return 0;
+};
+
+type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
+
+const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
+  'session-start': ({ session }) => [
+    `session: ${session.id}`,
+    `created: ${session.createdAt}  workspace: ${session.workspace}  model: ${session.model}  effort: ${session.effort}`,
+  ],
+  user: ({ seq, content }) => [`#${seq} user: ${content}`],
+  assistant: ({ seq, content, stopReason, model, usage, costUsd, latencyMs }) => [
+    `#${seq} assistant (${stopReason ?? 'no stop reason'}, ${model}): ${content
+      .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+      .join('')}`,
+    `  usage: ${formatUsage(usage, costUsd)} latency=${latencyMs}ms`,
+  ],
+  error: ({ seq, error, message }) => [`#${seq} error (${error}): ${message}`],
+};
+
+const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>
+  (RENDER[event.kind] as (e: EventOf<K>) => string[])(event);
+
+export const showSession: Command = async (args, { io, store }) => {
+  const { positionals } = parseArgs({ args, strict: true, allowPositionals: true, options: {} });
+  const { events } = await openSessionLog(store, singleId(positionals, 'session'), io);
+  for (const event of events) for (const line of render(event)) io.out(line);
+
+  const answers = events.filter((e): e is EventOf<'assistant'> => e.kind === 'assistant');
+  const sum = (pick: (e: EventOf<'assistant'>) => number) => answers.reduce((n, e) => n + pick(e), 0);
+  const total: TokenUsage = {
+    input: sum((e) => e.usage.input),
+    cacheRead: sum((e) => e.usage.cacheRead),
+    cacheWrite: sum((e) => e.usage.cacheWrite),
+    output: sum((e) => e.usage.output),
+  };
+  const cost = answers.some((e) => e.costUsd === null) ? null : sum((e) => e.costUsd ?? 0);
+  io.out(`total: turns=${answers.length} ${formatUsage(total, cost)} latency=${sum((e) => e.latencyMs)}ms`);
   return 0;
 };
