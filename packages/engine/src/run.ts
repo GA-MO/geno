@@ -18,6 +18,7 @@ import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
+import { tabCommands } from './tab.js';
 import {
   openStore,
   readTask,
@@ -36,7 +37,8 @@ export const USAGE = `usage:
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier noop|oracle]
   gcode eval apply [--applier noop|oracle]
-  gcode eval check-task <task-id>|--all [--verbose] [--keep]`;
+  gcode eval check-task <task-id>|--all [--verbose] [--keep]
+  gcode tab report [--since <iso>]`;
 
 const preview = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, 60);
 
@@ -211,6 +213,7 @@ const commands: Record<string, Command> = {
   chat,
   eval: group(evalCommands),
   session: group({ show: showSession }),
+  tab: group(tabCommands),
 };
 
 export async function run(argv: string[], io: Io): Promise<number> {
