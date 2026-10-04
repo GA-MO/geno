@@ -89,3 +89,49 @@ All times are in ms. The 3B model, 2 runs each, measured a cold TTFT p50 of 519 
 - The corpus is small. 27 files yield prompts of 305 tokens at p50, far under the budget, so larger repos would cost more cold.
 - The requests are sequential, and the 5 warmup requests are excluded.
 - Errors: every run completed all 100 requests with a non-empty reply, since the bench throws on any failed request.
+
+# Next-edit model: Zeta 2.1 on llama.cpp
+
+Tab v2 predicts the next edit, possibly away from the cursor, from the recent edit history. It uses Zed's Zeta 2.1, an 8B model finetuned from Seed-Coder-8B-Base (Apache-2.0). It is off by default (`gcode.tab.nextEdit`), because it misses the latency bar on this Mac. `docs/e9-e10-e11.md` has the measurements.
+
+## Model file
+
+| File | Source | sha256 |
+| --- | --- | --- |
+| `~/.g-code/models/zeta-2.1.Q4_K_M.gguf` (5,071,410,080 bytes) | https://huggingface.co/mradermacher/zeta-2.1-GGUF at revision `8c2528af755e2a640232eb25e7991cd812e04b07`, file `zeta-2.1.Q4_K_M.gguf` | `f031e71d3a467f23457964f7168b9158189a91231efc28cc8b91e6ea473dd71b` |
+
+The hash matches the LFS object id Hugging Face lists for that file. The model's own repo, https://huggingface.co/zed-industries/zeta-2.1 (revision `9a83b321df711c0d207a1c23a92534337798c2ab`), holds only safetensors. Its page links its quantizations through the model tree, and `mradermacher/zeta-2.1-GGUF` is the GGUF repo there with the most downloads. That repo's card names `zed-industries/zeta-2.1` as its base model.
+
+## Prompt
+
+`buildNextEditPrompt` in `packages/core/src/tab/zeta.ts` ports Zed's `V0318SeedMultiRegions` format, which Zed's source names as the Zeta 2.1 format (`crates/zeta_prompt` in zed-industries/zed). The model card gives the outline. Zed's source gives the details the card leaves out:
+
+```
+<[fim-suffix]>{code after the editable region}
+<[fim-prefix]><filename>{related file}
+{its lines}
+<filename>edit_history
+--- a/{path}
++++ b/{path}
+@@ -l,n +l,n @@
+{unified diff of one edit, 3 lines of context}
+
+<filename>{current file}
+{context before the editable region}<|marker_1|>{block}<|marker_2|>{block with <|user_cursor|>}...<|marker_k|>
+<[fim-middle]>
+```
+
+- The editable region is about 350 estimated tokens of whole lines around the cursor, with about 150 more tokens of context lines. A token is estimated as 3 characters, as Zed does. Zed also widens the region to syntax nodes. This port has no syntax tree and grows line by line.
+- Markers split the region into blocks of 6 to 16 lines, preferring a split after a blank line and never starting a block on a closing line such as `}` or `return;`.
+- History holds at most 6 edits, newest kept first when the 4096-token budget runs short, then related files. Related files are the open tabs, each cut to the lines from its top that fit.
+- The reply is `<|marker_i|>{new text}<|marker_j|>`, a rewrite of the blocks from marker i to marker j. A repeated marker means no edit. `parseNextEdit` trims the rewrite to the smallest changed range.
+
+The builder reproduces the card's sample prompt byte for byte (`packages/core/test/tab-zeta.test.ts`), and the parser reads the card's sample output as the one-word edit it is.
+
+**The BOS token.** Seed-Coder was trained with `<[begin▁of▁sentence]>` at the start of every prompt, but the GGUF tells llama-server not to add it. Without it, Zeta answered "no edit" to the card's own sample. With it, it returned the sample output, apart from where it placed the cursor marker. `nextEditRequestBody` prepends it.
+
+## Server
+
+`scripts/next-edit-server.sh` runs `tab-server.sh` with the Zeta file on port 8013 and `--ctx-size 8192`. Zeta's prompts run up to 4096 estimated tokens, and the reply can rewrite the whole region, so 4096 would be too small. On the replayed prompts the 3-character estimate ran 5% above the real Seed-Coder count (`docs/results/*.jsonl`). The FIM server keeps port 8012, so the two can run side by side.
+
+Speculative decoding by prompt n-grams (`--spec-type ngram-simple --spec-draft-n-max 16`) suits Zeta, because most of its reply copies the region from the prompt. On the card's sample, with the prompt cached, it cut generation from 7.7 s to 3.4 s for the same 151 tokens. Over the 69 replayed moments it cut generation p90 from about 11 s to 5.2 s and returned all 69 replies unchanged. It is still not the default, for two reasons. It does not change the verdict, and with `--spec-ngram-simple-size-n 6` the sample's reply changed from the edit to "no edit". Speculation is therefore not guaranteed to preserve output on this backend at temperature 0, and its settings need checking against a replay before use.
