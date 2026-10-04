@@ -1,0 +1,17 @@
+<|marker_1|>                    return;
+                };
+                let path = project.read(cx).path_for_entry(*active_entry_id, cx);
+                if let Some(path) = path {
+                    if let Some(ix) = project_state
+                        .recent_paths
+                        .iter()
+                        .position(|probe| probe == &path)
+                    {
+                        project_state.recent_paths.remove(ix);
+                    }
+                    project_state.recent_paths.push_front(path);
+                }
+            }
+            project::Event::DiskBasedDiagnosticsFinished<|user_cursor|> { .. } => {
+                if cx.has_flag::<EditPredictionJumpsFeatureFlag>() {
+<|marker_2|>

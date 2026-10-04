@@ -1,0 +1,1 @@
+`sample.prompt` and `sample.output` are the real-world example linked from the Zeta 2.1 model card, https://huggingface.co/zed-industries/zeta-2.1 (Apache-2.0), at revision `9a83b321df711c0d207a1c23a92534337798c2ab`.
