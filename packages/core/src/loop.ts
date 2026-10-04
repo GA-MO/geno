@@ -79,7 +79,6 @@ function limitReached(events: readonly TurnEvent[], run: Run): LoopStep | undefi
   return undefined;
 }
 
-/** What the agent loop does next, derived from the session log alone. */
 export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   const last = lastLiveEvent(events, run);
   if (last.kind === 'error') return after(last);

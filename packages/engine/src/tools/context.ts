@@ -8,7 +8,6 @@ export type ToolContext = {
   readonly workspace: string;
   /** This session's spill directory: the one readable root outside the workspace. */
   readonly spillDir: string;
-  /** The ripgrep command. */
   readonly rg: string;
   readonly signal: AbortSignal;
 };
@@ -83,5 +82,5 @@ export function displayPath(ctx: ToolContext, real: string): string {
 }
 
 export const optional = <T extends z.ZodType>(schema: T) =>
-  // Some models send null for an argument they mean to leave out.
+  // A model may send null for an argument it means to leave out.
   schema.nullish().transform((value) => value ?? undefined);
