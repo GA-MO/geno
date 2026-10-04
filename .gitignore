@@ -7,3 +7,4 @@ todo.md
 .env.*
 !.env.example
 .claude/worktrees/
+decisions.tsv
