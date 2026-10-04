@@ -18,7 +18,7 @@ export const USAGE = `usage:
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier <name>] [--model <id>]
-  gcode eval apply [--applier <name>] [--model <id>] [--limit n] [--max-cost 0.50] [--out <file>]
+  gcode eval apply [--applier <name>] [--model <id>] [--limit n] [--max-cost 0.50] [--out <file> | --resume <file>]
     appliers: noop, oracle, str_replace, apply_patch, whole_file
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
   gcode tab report [--since <iso>]`;
