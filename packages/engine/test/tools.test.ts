@@ -37,7 +37,7 @@ beforeAll(async () => {
 
 let nextId = 0;
 const call = (name: string, input: unknown) =>
-  runTool({ type: 'tool_use', id: `tu_${nextId++}`, name, input, caller: { type: 'direct' } } as ToolUseBlock, ctx);
+  runTool({ type: 'tool_use', id: `tu_${nextId++}`, name, input, caller: { type: 'direct' } } as ToolUseBlock, ctx, EXECUTORS);
 const ok = (text: string) => ({ status: 'ok', text });
 const failure = (pattern: RegExp) => ({ status: 'error', text: expect.stringMatching(pattern) });
 
@@ -128,7 +128,7 @@ describe('grep', () => {
   it('fails clearly when ripgrep is not installed', async () => {
     const missing = { ...ctx, rg: '/nonexistent/bin/rg' };
     const use = { type: 'tool_use', id: 'tu_rg', name: 'grep', input: { pattern: 'x' }, caller: { type: 'direct' } } as const;
-    expect(await runTool(use, missing)).toEqual(
+    expect(await runTool(use, missing, EXECUTORS)).toEqual(
       failure(/ripgrep \(\/nonexistent\/bin\/rg\) is not installed or not on PATH; install ripgrep or set GCODE_RG/),
     );
   });
@@ -168,11 +168,11 @@ describe('the tool table', () => {
 
   it('prints each call as one line', () => {
     const use = (name: string, input: unknown) => ({ type: 'tool_use', id: 'x', name, input, caller: { type: 'direct' } }) as const;
-    expect(describeCall(use('grep', { pattern: 'SERVER_URL', path: 'src/**' }))).toBe('grep "SERVER_URL" src/**');
-    expect(describeCall(use('read', { path: 'a.ts', start_line: 3, end_line: 9 }))).toBe('read a.ts:3-9');
-    expect(describeCall(use('list', {}))).toBe('list .');
-    expect(describeCall(use('glob', { pattern: '*.md' }))).toBe('glob "*.md"');
-    expect(describeCall(use('read', { nope: 1 }))).toBe('{"nope":1}');
+    expect(describeCall(use('grep', { pattern: 'SERVER_URL', path: 'src/**' }), EXECUTORS)).toBe('grep "SERVER_URL" src/**');
+    expect(describeCall(use('read', { path: 'a.ts', start_line: 3, end_line: 9 }), EXECUTORS)).toBe('read a.ts:3-9');
+    expect(describeCall(use('list', {}), EXECUTORS)).toBe('list .');
+    expect(describeCall(use('glob', { pattern: '*.md' }), EXECUTORS)).toBe('glob "*.md"');
+    expect(describeCall(use('read', { nope: 1 }), EXECUTORS)).toBe('{"nope":1}');
   });
 
   it('parses exactly the fields each published schema declares', () => {

@@ -1,12 +1,14 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { isToolName, TOOL_NAMES, type ToolName, type ToolStatus } from '@g-code/core';
-import { ToolError, type Executor, type ToolContext } from './context.js';
+import type { ToolName, ToolStatus } from '@g-code/core';
+import { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
 import { list } from './list.js';
 import { read } from './read.js';
 
-export { ToolError, type ToolContext } from './context.js';
+export { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
+
+export type Executors = Readonly<Record<string, Executor>>;
 
 export const EXECUTORS: Readonly<Record<ToolName, Executor>> = { glob, grep, list, read };
 
@@ -15,18 +17,19 @@ export type ToolRun = { readonly status: ToolStatus; readonly text: string };
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
 
-export const describeCall = (use: ToolUseBlock): string =>
-  isToolName(use.name) ? EXECUTORS[use.name].describe(use.input) : `${use.name} ${JSON.stringify(use.input)}`;
+export const describeCall = (use: ToolUseBlock, executors: Executors): string =>
+  Object.hasOwn(executors, use.name) ? executors[use.name]!.describe(use.input) : `${use.name} ${JSON.stringify(use.input)}`;
 
 /** Runs one tool use. Anything the model got wrong comes back as an `error` result for it to read. */
-export async function runTool(use: ToolUseBlock, ctx: ToolContext): Promise<ToolRun> {
-  if (!isToolName(use.name)) {
-    return { status: 'error', text: `unknown tool ${use.name}; the tools are ${TOOL_NAMES.join(', ')}` };
+export async function runTool(use: ToolUseBlock, ctx: ToolContext, executors: Executors): Promise<ToolRun> {
+  if (!Object.hasOwn(executors, use.name)) {
+    return { status: 'error', text: `unknown tool ${use.name}; the tools are ${Object.keys(executors).sort().join(', ')}` };
   }
   try {
-    return { status: 'ok', text: await EXECUTORS[use.name].run(use.input, ctx) };
+    return { status: 'ok', text: await executors[use.name]!.run(use.input, ctx) };
   } catch (error) {
     if (ctx.signal.aborted) throw error;
+    if (error instanceof ToolDenied) return { status: 'denied', text: error.message };
     if (error instanceof ToolError) return { status: 'error', text: error.message };
     if (isFsError(error)) return { status: 'error', text: `${use.name} failed: ${error.message}` };
     throw error;
