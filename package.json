@@ -10,7 +10,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "gcode": "tsx packages/engine/src/cli.ts"
+    "gcode": "tsx packages/engine/src/cli.ts",
+    "tab:bench": "tsx scripts/tab-bench.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
