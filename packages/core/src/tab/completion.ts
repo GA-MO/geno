@@ -1,5 +1,6 @@
 import type { Brand } from '../types.js';
 import type { FilterName } from './filters.js';
+import type { NextEditInputs, PredictedEdit } from './zeta.js';
 
 export type CompletionId = Brand<string, 'CompletionId'>;
 export const asCompletionId = (raw: string): CompletionId => raw as CompletionId;
@@ -50,24 +51,33 @@ export const WAS_SHOWN: Readonly<Record<OutcomeKind, boolean>> = {
 /** Whether accepted text still exists unchanged later; unknown until checked. */
 export type Persisted = boolean | 'unknown';
 
-export type CompletionRequest = {
+type RequestFields = {
   readonly id: CompletionId;
-  readonly kind: CompletionKind;
   readonly path: string;
   readonly version: number;
   readonly offset: number;
-  /** The inputs after trimming to the budget, so the record shows what the model saw. */
-  readonly inputs: FimInputs;
   readonly model: string;
   readonly source: CompletionSource;
   readonly promptTokens: number;
   readonly sentAt: string;
   readonly ttftMs: number | null;
   readonly latencyMs: number | null;
+  /** For next-edit, the replacement text of the predicted edit. */
   readonly text: string | null;
   readonly outcome: Outcome;
   readonly persisted: Persisted;
 };
+
+/** The inputs are recorded after trimming to the budget, so the record shows what the model saw. */
+export type FimRequest = RequestFields & { readonly kind: 'fim'; readonly inputs: FimInputs };
+
+export type NextEditRequest = RequestFields & {
+  readonly kind: 'next-edit';
+  readonly inputs: NextEditInputs;
+  readonly edit: PredictedEdit | null;
+};
+
+export type CompletionRequest = FimRequest | NextEditRequest;
 
 /** One line of tab-events.jsonl. Later lines refine the request with the same id. */
 export type TabEvent =

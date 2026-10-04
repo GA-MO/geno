@@ -5,6 +5,8 @@ import {
   percentile,
   tabReport,
   type CompletionRequest,
+  type FimRequest,
+  type NextEditRequest,
   type Outcome,
   type TabEvent,
 } from '../src/tab/index.js';
@@ -12,8 +14,8 @@ import {
 const request = (
   n: number,
   outcome: Outcome,
-  overrides: Partial<CompletionRequest> = {},
-): CompletionRequest => ({
+  overrides: Partial<FimRequest> = {},
+): FimRequest => ({
   id: asCompletionId(`c${n}`),
   kind: 'fim',
   path: '/w/a.ts',
@@ -82,6 +84,7 @@ describe('tabReport', () => {
     expect(other!.model).toBe('other');
     expect(other!.total).toBe(1);
     expect(qwen).toEqual({
+      kind: 'fim',
       model: 'qwen-1.5b',
       total: 7,
       byOutcome: { cancelled: 1, suppressed: 1, shown: 1, accepted: 2, partial: 1, rejected: 0, 'typed-over': 1 },
@@ -102,5 +105,21 @@ describe('tabReport', () => {
     expect(qwen!.ttftMs).toEqual({ p50: null, p90: null });
     expect(qwen!.acceptPerShown).toBe(0);
     expect(qwen!.persistedPerAccepted).toBeNull();
+  });
+
+  it('reports next-edit apart from FIM even on the same model', () => {
+    const { inputs: _, ...fields } = request(1, { kind: 'shown' });
+    const nextEdit: NextEditRequest = {
+      ...fields,
+      id: asCompletionId('n1'),
+      kind: 'next-edit',
+      inputs: { path: 'a.ts', cursor: 0, region: { start: 0, end: 1, text: 'x' }, history: [], related: [] },
+      edit: { start: 0, end: 1, text: 'y' },
+    };
+    const reports = tabReport([request(1, { kind: 'shown' }), nextEdit] satisfies CompletionRequest[]);
+    expect(reports.map((r) => [r.kind, r.model, r.total])).toEqual([
+      ['fim', 'qwen-1.5b', 1],
+      ['next-edit', 'qwen-1.5b', 1],
+    ]);
   });
 });

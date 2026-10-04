@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFimPrompt, DEFAULT_FIM_BUDGET, streamFim } from '../src/tab/index.js';
+import { buildFimPrompt, buildNextEditPrompt, DEFAULT_FIM_BUDGET, streamFim, streamNextEdit } from '../src/tab/index.js';
 
 const sse = (chunks: object[]): Response => {
   const encoder = new TextEncoder();
@@ -51,5 +51,24 @@ describe('streamFim', () => {
       promptTokens: 12,
       timings: { promptTokens: 12, promptMs: 30, predictedTokens: 3, predictedMs: 20 },
     });
+  });
+});
+
+describe('streamNextEdit', () => {
+  it('prepends the BOS token Zeta was trained with and sets no stop words, so the reply runs to its end marker', async () => {
+    const prompt = buildNextEditPrompt([], { path: 'a.ts', text: 'const a = 1;\n' }, 0, []);
+    let body: { prompt: string; stop?: unknown } | undefined;
+    const result = await streamNextEdit({
+      endpoint: 'http://127.0.0.1:9',
+      prompt,
+      now: () => 0,
+      fetch: async (_, init) => {
+        body = JSON.parse(String(init?.body));
+        return sse([{ content: '<|marker_1|><|marker_1|>', stop: true, model: 'zeta' }]);
+      },
+    });
+    expect(body!.prompt).toBe(`<[begin▁of▁sentence]>${prompt.prompt}`);
+    expect(body!.stop).toBeUndefined();
+    expect(result.text).toBe('<|marker_1|><|marker_1|>');
   });
 });

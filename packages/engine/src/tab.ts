@@ -3,7 +3,6 @@ import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
   asCompletionId,
-  COMPLETION_KINDS,
   COMPLETION_SOURCES,
   FILTER_NAMES,
   foldTabEvents,
@@ -25,34 +24,61 @@ const outcome = z.discriminatedUnion('kind', [
 ]);
 
 const snippet = z.strictObject({ path: z.string(), text: z.string() });
+const offset = z.number().int().nonnegative();
+const span = { start: offset, end: offset };
 
-const tabEventSchema = z.discriminatedUnion('kind', [
+const requestFields = {
+  id,
+  path: z.string(),
+  version: z.number().int(),
+  offset,
+  model: z.string().min(1),
+  source: z.enum(COMPLETION_SOURCES),
+  promptTokens: z.number().int().nonnegative(),
+  sentAt: z.iso.datetime(),
+  ttftMs: ms.nullable(),
+  latencyMs: ms.nullable(),
+  text: z.string().nullable(),
+  outcome,
+  persisted: z.union([z.boolean(), z.literal('unknown')]),
+};
+
+const historyEntry = z.strictObject({
+  path: z.string(),
+  at: z.iso.datetime(),
+  line: offset,
+  oldText: z.string(),
+  newText: z.string(),
+});
+
+const request = z.discriminatedUnion('kind', [
   z.strictObject({
-    kind: z.literal('request'),
-    request: z.strictObject({
-      id,
-      kind: z.enum(COMPLETION_KINDS),
+    ...requestFields,
+    kind: z.literal('fim'),
+    inputs: z.strictObject({
+      repo: z.string(),
       path: z.string(),
-      version: z.number().int(),
-      offset: z.number().int().nonnegative(),
-      inputs: z.strictObject({
-        repo: z.string(),
-        path: z.string(),
-        prefix: z.string(),
-        suffix: z.string(),
-        snippets: z.array(snippet),
-      }),
-      model: z.string().min(1),
-      source: z.enum(COMPLETION_SOURCES),
-      promptTokens: z.number().int().nonnegative(),
-      sentAt: z.iso.datetime(),
-      ttftMs: ms.nullable(),
-      latencyMs: ms.nullable(),
-      text: z.string().nullable(),
-      outcome,
-      persisted: z.union([z.boolean(), z.literal('unknown')]),
+      prefix: z.string(),
+      suffix: z.string(),
+      snippets: z.array(snippet),
     }),
   }),
+  z.strictObject({
+    ...requestFields,
+    kind: z.literal('next-edit'),
+    inputs: z.strictObject({
+      path: z.string(),
+      cursor: offset,
+      region: z.strictObject({ ...span, text: z.string() }),
+      history: z.array(historyEntry),
+      related: z.array(snippet),
+    }),
+    edit: z.strictObject({ ...span, text: z.string() }).nullable(),
+  }),
+]);
+
+const tabEventSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('request'), request }),
   z.strictObject({ kind: z.literal('outcome'), id, at: z.iso.datetime(), outcome }),
   z.strictObject({ kind: z.literal('persisted'), id, at: z.iso.datetime(), persisted: z.boolean() }),
 ]);
@@ -90,7 +116,7 @@ const rate = (value: number | null): string => (value === null ? '-' : `${(value
 const pair = (s: Spread, show: (v: number | null) => string): string => `p50 ${show(s.p50)}, p90 ${show(s.p90)}`;
 
 function printModel(out: (line: string) => void, r: ModelReport): void {
-  out(`model: ${r.model}`);
+  out(`model: ${r.model} (${r.kind})`);
   out(`  requests: ${r.total}`);
   for (const [kind, count] of Object.entries(r.byOutcome)) out(`    ${kind}: ${count}`);
   out(`  shown: ${r.shown} (${r.timedShown} answered by the model, ${r.shown - r.timedShown} reused)`);
