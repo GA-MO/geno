@@ -18,7 +18,7 @@ import { gatewayFor, PROVIDER_TABLE, type Gateway } from './gateway.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
 
-export const DEFAULT_PROVIDER: ProviderName = 'openrouter';
+export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
 const DEFAULT_EFFORT: Effort = 'medium';
 
 const EXIT_CODES: Record<TurnErrorKind, number> = { refusal: 1, transport: 1, abort: 130 };

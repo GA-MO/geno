@@ -7,6 +7,7 @@ describe('costOf', () => {
   it('prices each usage bucket at its own rate', () => {
     expect(costOf('anthropic/claude-opus-5.5', million)).toBeCloseTo(4 + 0.2 + 5 + 20);
     expect(costOf('anthropic/claude-sonnet-5.5', million)).toBeCloseTo(2 + 0.2 + 2.5 + 10);
+    expect(costOf('qwen3.8-flash', million)).toBeCloseTo(0.15 + 0.15 + 0.1875 + 0.47);
     expect(
       costOf('anthropic/claude-opus-5.5', { input: 12, cacheRead: 3000, cacheWrite: 0, output: 40 }),
     ).toBeCloseTo((12 * 4 + 3000 * 0.2 + 40 * 20) / 1e6, 12);
