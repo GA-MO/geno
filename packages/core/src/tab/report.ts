@@ -1,4 +1,4 @@
-import { OUTCOME_KINDS, WAS_SHOWN, type CompletionRequest, type OutcomeKind } from './completion.js';
+import { OUTCOME_KINDS, WAS_SHOWN, type CompletionKind, type CompletionRequest, type OutcomeKind } from './completion.js';
 
 /** Linear interpolation between closest ranks, so the median of an even count is the mean of the middle two. */
 export function percentile(values: readonly number[], p: number): number | null {
@@ -17,6 +17,7 @@ const spread = (values: readonly number[]): Spread => ({ p50: percentile(values,
 const ratio = (part: number, whole: number): number | null => (whole === 0 ? null : part / whole);
 
 export type ModelReport = {
+  readonly kind: CompletionKind;
   readonly model: string;
   readonly total: number;
   readonly byOutcome: Readonly<Record<OutcomeKind, number>>;
@@ -30,13 +31,14 @@ export type ModelReport = {
   readonly persistedPerAccepted: number | null;
 };
 
-function reportFor(model: string, requests: readonly CompletionRequest[]): ModelReport {
+function reportFor(kind: CompletionKind, model: string, requests: readonly CompletionRequest[]): ModelReport {
   const byOutcome = Object.fromEntries(OUTCOME_KINDS.map((kind) => [kind, 0])) as Record<OutcomeKind, number>;
   for (const request of requests) byOutcome[request.outcome.kind]++;
   const shown = requests.filter((r) => WAS_SHOWN[r.outcome.kind]);
   const timed = shown.filter((r) => r.source === 'model');
   const accepted = requests.filter((r) => r.outcome.kind === 'accepted');
   return {
+    kind,
     model,
     total: requests.length,
     byOutcome,
@@ -50,11 +52,15 @@ function reportFor(model: string, requests: readonly CompletionRequest[]): Model
   };
 }
 
+/** One report per completion kind and model, so next-edit and FIM compare side by side. */
 export function tabReport(requests: readonly CompletionRequest[], since?: string): ModelReport[] {
   const sinceMs = since === undefined ? -Infinity : Date.parse(since);
-  const byModel = new Map<string, CompletionRequest[]>();
+  const groups = new Map<string, CompletionRequest[]>();
+  const keyOf = (r: CompletionRequest) => `${r.kind}\t${r.model}`;
   for (const request of requests.filter((r) => Date.parse(r.sentAt) >= sinceMs)) {
-    byModel.set(request.model, [...(byModel.get(request.model) ?? []), request]);
+    groups.set(keyOf(request), [...(groups.get(keyOf(request)) ?? []), request]);
   }
-  return [...byModel].sort(([a], [b]) => a.localeCompare(b)).map(([model, rs]) => reportFor(model, rs));
+  return [...groups]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, rs]) => reportFor(rs[0]!.kind, rs[0]!.model, rs));
 }

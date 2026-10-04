@@ -2,10 +2,10 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { asCompletionId, type CompletionRequest, type TabEvent } from '@g-code/core/tab';
+import { asCompletionId, type FimRequest, type NextEditRequest, type TabEvent } from '@g-code/core/tab';
 import { runCli } from './helpers.js';
 
-const request = (n: number, latencyMs: number): CompletionRequest => ({
+const request = (n: number, latencyMs: number): FimRequest => ({
   id: asCompletionId(`c${n}`),
   kind: 'fim',
   path: '/w/a.ts',
@@ -64,5 +64,28 @@ describe('gcode tab report', () => {
     const { code, stderr } = await runCli(['tab', 'report'], { GCODE_HOME: home });
     expect(code).toBe(1);
     expect(stderr).toContain('line 1');
+  });
+
+  it('reports next-edit requests under their own heading', async () => {
+    const { inputs: _, ...fields } = request(1, 900);
+    const nextEdit: NextEditRequest = {
+      ...fields,
+      id: asCompletionId('n1'),
+      kind: 'next-edit',
+      model: 'zeta-2.1.Q4_K_M',
+      inputs: {
+        path: 'a.ts',
+        cursor: 3,
+        region: { start: 0, end: 10, text: 'const a = ' },
+        history: [{ path: 'a.ts', at: '2026-10-01T00:00:00.000Z', line: 0, oldText: 'x\n', newText: 'y\n' }],
+        related: [],
+      },
+      edit: { start: 10, end: 10, text: '1;' },
+    };
+    const home = await homeWith([{ kind: 'request', request: nextEdit }]);
+    const { code, stdout } = await runCli(['tab', 'report'], { GCODE_HOME: home });
+    expect(code).toBe(0);
+    expect(stdout).toContain('model: zeta-2.1.Q4_K_M (next-edit)');
+    expect(stdout).toContain('  total latency: p50 900 ms, p90 900 ms');
   });
 });
