@@ -68,7 +68,7 @@ export async function appendEvent(file: string, event: TurnEvent): Promise<void>
 function parseLine(file: string, lineNo: number, line: string): TurnEvent {
   const parsed = turnEventSchema.safeParse(JSON.parse(line));
   if (!parsed.success) throw new StoreError(file, `line ${lineNo}: ${z.prettifyError(parsed.error)}`);
-  const event = parsed.data as TurnEvent;
+  const event: TurnEvent = parsed.data;
   if ((lineNo === 1) !== (event.kind === 'session-start')) {
     throw new StoreError(file, `line ${lineNo}: session-start must be line 1 and only line 1`);
   }
