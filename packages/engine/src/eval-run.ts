@@ -2,7 +2,7 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { asTaskId, PRICES, type EvalTask, type TokenUsage } from '@g-code/core';
+import { addUsage, asTaskId, PRICES, ZERO_USAGE, type EvalTask, type TokenUsage } from '@g-code/core';
 import { formatCost } from './chat.js';
 import { childEnv } from './child-env.js';
 import { UsageError, type Command, type Context, type Io } from './command.js';
@@ -70,7 +70,6 @@ export type TaskResult = {
   readonly verifyTail: string;
 } & AgentRunResult;
 
-const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
 const NOT_RUN: AgentRunResult = {
   stop: 'not-run',
   turns: 0,
@@ -160,12 +159,6 @@ const COLUMNS: readonly [heading: string, cell: (r: TaskResult) => string][] = [
   ['denials', (r) => String(r.denials)],
 ];
 
-const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
-  input: a.input + b.input,
-  cacheRead: a.cacheRead + b.cacheRead,
-  cacheWrite: a.cacheWrite + b.cacheWrite,
-  output: a.output + b.output,
-});
 
 export const spentOf = (results: readonly TaskResult[]): number => results.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
 

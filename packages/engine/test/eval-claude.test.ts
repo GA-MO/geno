@@ -13,13 +13,13 @@ describe('claudeEnv', () => {
         ANTHROPIC_API_KEY: 'sk-ant',
       },
       'qwen3.8-flash',
-      '/tmp/t/home',
-      '/tmp/t/claude-config',
+      { home: '/tmp/t/home', config: '/tmp/t/claude-config', tmp: '/tmp/t/claude-tmp' },
     );
     expect(env).toEqual({
       PATH: '/usr/bin',
       HOME: '/tmp/t/home',
       CLAUDE_CONFIG_DIR: '/tmp/t/claude-config',
+      CLAUDE_CODE_TMPDIR: '/tmp/t/claude-tmp',
       ANTHROPIC_BASE_URL: 'https://ws.example.com/apps/anthropic',
       ANTHROPIC_AUTH_TOKEN: 'sk-ms',
       ANTHROPIC_API_KEY: '',
