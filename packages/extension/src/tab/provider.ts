@@ -21,7 +21,13 @@ import {
 import type { TabLog } from './log.js';
 import { ACCEPT_COMMAND, type OutcomeTracker } from './tracker.js';
 
-export type TabSettings = { readonly enabled: boolean; readonly endpoint: string; readonly debounceMs: number };
+export type TabSettings = {
+  readonly enabled: boolean;
+  readonly endpoint: string;
+  readonly debounceMs: number;
+  readonly nextEdit: boolean;
+  readonly nextEditEndpoint: string;
+};
 
 export const readSettings = (): TabSettings => {
   const config = vscode.workspace.getConfiguration('gcode.tab');
@@ -29,6 +35,8 @@ export const readSettings = (): TabSettings => {
     enabled: config.get('enabled', true),
     endpoint: config.get('endpoint', 'http://127.0.0.1:8012'),
     debounceMs: config.get('debounceMs', 250),
+    nextEdit: config.get('nextEdit', false),
+    nextEditEndpoint: config.get('nextEditEndpoint', 'http://127.0.0.1:8013'),
   };
 };
 
@@ -53,7 +61,7 @@ type Answer = {
   readonly waitedMs: number;
 };
 
-const debounce = (ms: number, token: vscode.CancellationToken): Promise<boolean> =>
+export const debounce = (ms: number, token: vscode.CancellationToken): Promise<boolean> =>
   new Promise((resolve) => {
     const listener = token.onCancellationRequested(() => {
       clearTimeout(timer);
@@ -87,7 +95,7 @@ function join(flight: Flight, token: vscode.CancellationToken): Promise<FimResul
   });
 }
 
-function snippetsFor(document: vscode.TextDocument): Snippet[] {
+export function snippetsFor(document: vscode.TextDocument): Snippet[] {
   const visible = new Set(vscode.window.visibleTextEditors.map((e) => e.document));
   return vscode.workspace.textDocuments
     .filter((d) => d !== document && d.uri.scheme === 'file' && d.getText().length <= MAX_SNIPPET_FILE_CHARS)
