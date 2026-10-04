@@ -1,0 +1,19 @@
+{
+  "name": "@g-code/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "gcode": "./dist/cli.js"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/cli.js"
+  },
+  "dependencies": {
+    "@g-code/core": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
