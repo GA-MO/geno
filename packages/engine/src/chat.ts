@@ -20,7 +20,7 @@ import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog
 import type { Store } from './store.js';
 
 export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
-const DEFAULT_EFFORT: Effort = 'medium';
+export const DEFAULT_EFFORT: Effort = 'medium';
 
 export const EXIT_CODES: Record<TurnErrorKind, number> = {
   refusal: 1,
@@ -72,13 +72,21 @@ export type SessionChoice = {
   readonly effort: string | undefined;
 };
 
+/** The provider and model from flags, then GCODE_PROVIDER and GCODE_MODEL, then the defaults. */
+export function chooseModel(
+  io: Io,
+  choice: { readonly provider: string | undefined; readonly model: string | undefined },
+): { readonly provider: ProviderName; readonly model: string } {
+  const provider = choice.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
+  if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
+  return { provider, model: choice.model ?? (io.env['GCODE_MODEL'] || PROVIDER_TABLE[provider].defaultModel) };
+}
+
 // The gateway is built before anything is written, so a missing key leaves no stray session behind.
 export async function startSession(store: Store, io: Io, choice: SessionChoice): Promise<OpenSession> {
   const effort = choice.effort ?? DEFAULT_EFFORT;
   if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
-  const provider = choice.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
-  if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
-  const model = choice.model ?? (io.env['GCODE_MODEL'] || PROVIDER_TABLE[provider].defaultModel);
+  const { provider, model } = chooseModel(io, choice);
   const gateway = gatewayFor(provider, io.env, io.fetch);
   return { log: await newSession(store, choice.workspace, provider, model, effort), gateway };
 }

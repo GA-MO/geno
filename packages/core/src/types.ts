@@ -1,3 +1,6 @@
+import type { ProposedChange } from './edit.js';
+import type { TokenUsage } from './session.js';
+
 declare const brand: unique symbol;
 export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
@@ -48,7 +51,7 @@ export type ApplyOutcome =
 export const EDIT_FORMATS = ['str_replace', 'apply_patch', 'whole_file'] as const;
 export type EditFormat = (typeof EDIT_FORMATS)[number];
 
-export const APPLIER_NAMES = ['noop', 'oracle'] as const;
+export const APPLIER_NAMES = ['noop', 'oracle', ...EDIT_FORMATS] as const;
 export type ApplierName = (typeof APPLIER_NAMES)[number];
 
 export const isApplierName = (raw: string): raw is ApplierName =>
@@ -62,13 +65,32 @@ export type ApplyInput = {
 
 export type Applier = {
   readonly name: ApplierName;
-  apply(input: ApplyInput): Promise<ApplyOutcome>;
+  apply(input: ApplyInput): Promise<ApplierRun>;
+};
+
+/** `attempt` is null for appliers that call no model. */
+export type ApplierRun = { readonly outcome: ApplyOutcome; readonly attempt: ModelAttempt | null };
+
+export type FirstTry = 'applied' | ApplyFailure;
+
+export type ModelAttempt = {
+  readonly model: string;
+  readonly firstTry: FirstTry;
+  /** Failed edits whose error went back to the model for another try. */
+  readonly retries: number;
+  readonly calls: number;
+  readonly usage: TokenUsage;
+  readonly costUsd: number | null;
+  readonly changes: readonly ProposedChange[];
 };
 
 export type ReplayResult = {
   readonly tripleId: TripleId;
+  readonly scope: TripleScope;
   readonly applier: ApplierName;
   readonly outcome: ApplyOutcome;
   readonly exactMatch: boolean;
+  readonly exactIgnoringTrailingWhitespace: boolean;
+  readonly attempt: ModelAttempt | null;
   readonly diff: string;
 };

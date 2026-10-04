@@ -1,17 +1,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import {
-  appliersFor,
-  asTaskId,
-  asTripleId,
-  DEFAULT_MINE_LIMITS,
-  isApplierName,
-  replay,
-  summarize,
-  type ApplierName,
-  type EvalTask,
-  type ReplayResult,
-} from '@g-code/core';
+import { asTaskId, DEFAULT_MINE_LIMITS, type EvalTask } from '@g-code/core';
+import { applyCommand, replayCommand } from './apply.js';
 import { ask } from './ask.js';
 import { chat, showSession } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
@@ -19,15 +9,7 @@ import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
 import { tabCommands } from './tab.js';
-import {
-  openStore,
-  readTask,
-  readTasks,
-  readTriple,
-  readTriples,
-  taskDir,
-  type Store,
-} from './store.js';
+import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
@@ -35,8 +17,9 @@ export const USAGE = `usage:
   gcode session show <session-id>
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
-  gcode eval replay <triple-id> [--applier noop|oracle]
-  gcode eval apply [--applier noop|oracle]
+  gcode eval replay <triple-id> [--applier <name>] [--model <id>]
+  gcode eval apply [--applier <name>] [--model <id>] [--limit n] [--max-cost 0.50] [--out <file>]
+    appliers: noop, oracle, str_replace, apply_patch, whole_file
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
   gcode tab report [--since <iso>]`;
 
@@ -89,56 +72,6 @@ const mineCommand: Command = async (args, { io, store }) => {
     io.out(`  skipped ${reason}: ${count}`);
   }
   for (const id of report.kept) io.out(`  kept ${id}`);
-  return 0;
-};
-
-const applierOption = { applier: { type: 'string', default: 'noop' } } as const;
-
-function applierName(raw: string): ApplierName {
-  if (!isApplierName(raw)) throw new UsageError(`unknown applier: ${raw}`);
-  return raw;
-}
-
-function describeOutcome(result: ReplayResult): string {
-  const { outcome } = result;
-  return outcome.kind === 'applied' ? 'applied' : `failed (${outcome.reason}): ${outcome.detail}`;
-}
-
-const replayCommand: Command = async (args, { io, store }) => {
-  const { values, positionals } = parseArgs({
-    args,
-    strict: true,
-    allowPositionals: true,
-    options: applierOption,
-  });
-  const rawId = singleId(positionals, 'triple');
-  const name = applierName(values.applier);
-  const triple = await readTriple(store, asTripleId(rawId));
-  if (triple === undefined) throw new EngineError(`no triple ${rawId} in ${store.triplesDir}`);
-
-  const result = await replay(triple, appliersFor(triple)[name]);
-  io.out(`triple: ${result.tripleId}`);
-  io.out(`applier: ${result.applier}`);
-  io.out(`outcome: ${describeOutcome(result)}`);
-  io.out(`exact match: ${result.exactMatch ? 'yes' : 'no'}`);
-  if (result.diff !== '') io.out(result.diff.trimEnd());
-  return result.exactMatch ? 0 : 1;
-};
-
-const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`;
-
-const applyCommand: Command = async (args, { io, store }) => {
-  const { values } = parseArgs({ args, strict: true, options: applierOption });
-  const name = applierName(values.applier);
-  const results: ReplayResult[] = [];
-  for (const triple of await readTriples(store)) {
-    results.push(await replay(triple, appliersFor(triple)[name]));
-  }
-  const summary = summarize(results);
-  io.out(`applier: ${name}`);
-  io.out(`triples: ${summary.total}`);
-  io.out(`exact match: ${summary.exact}/${summary.total} (${percent(summary.exactRate)})`);
-  io.out(`failed: ${summary.failed}/${summary.total} (${percent(summary.failureRate)})`);
   return 0;
 };
 
