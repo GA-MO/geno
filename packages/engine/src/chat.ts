@@ -206,6 +206,12 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     `  usage: ${formatUsage(usage, costUsd)} latency=${latencyMs}ms`,
   ],
   error: ({ seq, error, message }) => [`#${seq} error (${error}): ${message}`],
+  checkpoint: ({ seq, turnSeq, sha, files }) => [
+    `#${seq} checkpoint before turn ${turnSeq}: ${sha.slice(0, 12)}${files.length === 0 ? '' : ` changed ${files.join(', ')}`}`,
+  ],
+  restored: ({ seq, turnSeq, sha, files }) => [
+    `#${seq} restored to the checkpoint before turn ${turnSeq} (${sha.slice(0, 12)}): ${files.length === 0 ? 'no files changed' : files.join(', ')}`,
+  ],
   'tool-result': (event) => [
     `#${event.seq} tool-result ${event.toolUseId} ${event.name} (${event.status}): ${
       'spill' in event

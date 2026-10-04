@@ -58,6 +58,22 @@ const turnEventSchema = z.union([
       model: z.string().min(1),
     }),
     z.strictObject({ kind: z.literal('error'), ...seqFields, error: z.enum(TURN_ERROR_KINDS), message: z.string() }),
+    z.strictObject({
+      kind: z.literal('checkpoint'),
+      ...seqFields,
+      sessionId: z.string().min(1).transform(asSessionId),
+      turnSeq: z.number().int().positive(),
+      sha: z.string().min(1),
+      files: z.array(z.string()),
+      label: z.string(),
+    }),
+    z.strictObject({
+      kind: z.literal('restored'),
+      ...seqFields,
+      turnSeq: z.number().int().positive(),
+      sha: z.string().min(1),
+      files: z.array(z.string()),
+    }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
