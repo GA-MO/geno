@@ -2,9 +2,10 @@ import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
+import { EngineError } from './errors.js';
 import { asTaskId, asTripleId, type ApplyTriple, type EvalTask, type TripleId } from '@g-code/core';
 
-export class StoreError extends Error {
+export class StoreError extends EngineError {
   constructor(
     readonly file: string,
     detail: string,
