@@ -11,7 +11,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   glob: {
     name: 'glob',
     description:
-      'Find files by name. Returns matching file paths relative to the workspace root, sorted. Files ignored by .gitignore, hidden directories and symlinks are skipped. A pattern without a slash matches file names in any directory, like .gitignore.',
+      'Find files by name. Returns matching file paths relative to the workspace root, sorted. Files ignored by .gitignore, the .git directory and symlinks are skipped; other hidden files are included. A pattern without a slash matches file names in any directory, like .gitignore.',
     input_schema: {
       type: 'object',
       properties: {
@@ -24,7 +24,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   grep: {
     name: 'grep',
     description:
-      'Search file contents with ripgrep. Returns path:line:text for every matching line, sorted by path. Files ignored by .gitignore, hidden files and symlinks are skipped.',
+      'Search file contents with ripgrep. Returns path:line:text for every matching line, sorted by path. Files ignored by .gitignore, the .git directory and symlinks are skipped; other hidden files are included.',
     input_schema: {
       type: 'object',
       properties: {
@@ -42,7 +42,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   list: {
     name: 'list',
     description:
-      'List the files and directories under a directory, as paths relative to the workspace root. Directories end in a slash; one at the depth limit shows how many files it holds. Files ignored by .gitignore, hidden files and symlinks are skipped.',
+      'List the files and directories under a directory, as paths relative to the workspace root. Directories end in a slash; one at the depth limit shows how many files it holds. Files ignored by .gitignore, the .git directory and symlinks are skipped; other hidden files are included.',
     input_schema: {
       type: 'object',
       properties: {
