@@ -31,6 +31,14 @@ describe('strReplace', () => {
     });
   });
 
+  it('treats a resent edit whose result is already there as applied without changing the file', () => {
+    const edited = file.replace('add(a, b) {\n  return a - b;', 'add(a, b) {\n  return a + b;');
+    expect(strReplace('m.js', edited, 'add(a, b) {\n  return a - b;', 'add(a, b) {\n  return a + b;')).toEqual({
+      kind: 'applied',
+      after: edited,
+    });
+  });
+
   it('gives the count and start lines of several matches', () => {
     expect(strReplace('m.js', file, '  return a - b;', '  return 0;')).toEqual({
       kind: 'failed',
