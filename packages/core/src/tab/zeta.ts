@@ -87,7 +87,6 @@ export function markerOffsets(text: string): number[] {
 
 export type Range = { readonly start: number; readonly end: number };
 
-/** Character offsets where each line starts. */
 const lineStarts = (text: string): number[] => {
   const starts = [0];
   for (let i = 0; i < text.length; i++) if (text[i] === '\n') starts.push(i + 1);
@@ -122,8 +121,8 @@ class Rows {
 
 type Span = { start: number; end: number; left: number };
 
-/** Grows the row span a line at a time on each side, up first unless `downFirst`, while lines fit the budget. */
-function expandLinewise(rows: Rows, span: Span, downFirst: boolean): Span {
+/** Grows the row span a line at a time, up then down, while lines fit the budget. */
+function expandLinewise(rows: Rows, span: Span): Span {
   const next = { ...span };
   const grow = (side: 'up' | 'down'): boolean => {
     const row = side === 'up' ? next.start - 1 : next.end + 1;
@@ -136,8 +135,7 @@ function expandLinewise(rows: Rows, span: Span, downFirst: boolean): Span {
     return true;
   };
   for (;;) {
-    const order: ('up' | 'down')[] = downFirst ? ['down', 'up'] : ['up', 'down'];
-    const grew = order.map(grow);
+    const grew = [grow('up'), grow('down')];
     if (!grew.some(Boolean)) return next;
   }
 }
@@ -165,8 +163,8 @@ export function regionsAround(text: string, cursor: number, budget: NextEditBudg
     }
     if (down === undefined && up === undefined) break;
   }
-  span = expandLinewise(rows, { ...span, left: span.left + budget.editableTokens - initial }, false);
-  const context = expandLinewise(rows, { start: span.start, end: span.end, left: budget.contextTokens }, false);
+  span = expandLinewise(rows, { ...span, left: span.left + budget.editableTokens - initial });
+  const context = expandLinewise(rows, { start: span.start, end: span.end, left: budget.contextTokens });
   return { editable: rows.range(span.start, span.end), context: rows.range(context.start, context.end) };
 }
 
@@ -376,6 +374,5 @@ export function parseNextEdit(output: string, region: EditableRegion): NextEdit 
   };
 }
 
-/** The document with the edit applied. */
 export const applyEdit = (text: string, edit: PredictedEdit): string =>
   text.slice(0, edit.start) + edit.text + text.slice(edit.end);
