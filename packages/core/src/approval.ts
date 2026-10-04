@@ -1,6 +1,5 @@
 import path from 'node:path';
 
-/** Where a command runs, which decides what counts as outside. */
 export type CommandScope = {
   readonly workspace: string;
   /** The one directory `rm -rf` may target. */
@@ -207,7 +206,6 @@ export function simpleCommand(words: readonly string[]): SimpleCommand {
   return { program: path.basename(words[i] ?? ''), args: words.slice(i + 1), words };
 }
 
-/** The first deny rule any part of `command` matches, or undefined when it may run without asking. */
 export function denialFor(command: string, scope: CommandScope): Denial | undefined {
   for (const words of splitCommand(command)) {
     const simple = simpleCommand(words);

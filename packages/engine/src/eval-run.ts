@@ -24,7 +24,6 @@ export type AgentRunInput = {
   readonly workspace: string;
   /** Scratch space the agent may write; deleted after the task. */
   readonly tempDir: string;
-  /** Where the agent's transcript goes. */
   readonly runDir: string;
   readonly model: string;
   readonly maxCostUsd: number;
@@ -178,7 +177,6 @@ export function printSummary(io: Io, results: readonly TaskResult[]): void {
   );
 }
 
-/** Runs each task in a fresh clone, appends one line per task to the run's results.jsonl, and prints a summary. */
 export async function runEval(ctx: Context, options: EvalRunOptions): Promise<EvalRun> {
   const { io } = ctx;
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${options.agent}-${options.model.replace(/[^\w.-]/g, '_')}`;

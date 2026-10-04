@@ -23,10 +23,8 @@ export type Approver = (denial: Denial) => Promise<boolean>;
 
 export type AgentToolEnv = {
   readonly sandbox: Sandbox;
-  /** The environment every command sees: see childEnv. */
   readonly env: Readonly<Record<string, string>>;
   readonly scope: CommandScope;
-  /** The workspace's check command, or undefined when it has none. */
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
   readonly approve: Approver;
@@ -59,8 +57,8 @@ async function currentBase(file: string): Promise<BaseRead> {
   }
 }
 
-/** The read, edit, bash and check tools of `gcode agent`. `reads` remembers what the model last saw of each file. */
 export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolName, Executor>> {
+  // What the model last saw of each file: the base an edit must still match.
   const reads = new Map<string, BaseRead>();
 
   const read: Executor = {

@@ -10,7 +10,6 @@ import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
 
-/** What the model is given in a session: its tools, how they run, and its system prompt. */
 export type Mode = {
   readonly tools: readonly Tool[];
   readonly executors: Executors;
@@ -58,7 +57,6 @@ export async function workspaceDir(cwd: string, raw: string): Promise<string> {
   throw new EngineError(`workspace ${raw} is not a directory`);
 }
 
-/** Starts a session in --workspace for a first prompt, or resumes --session; prints the session id. */
 export async function openForPrompt(
   io: Io,
   store: Store,
