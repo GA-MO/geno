@@ -1,0 +1,97 @@
+type SseEvent = { readonly type: string } & Record<string, unknown>;
+
+export type Reply = {
+  readonly events: readonly SseEvent[];
+  /** Emit this many events, then stall until the request is aborted. */
+  readonly stallAfter?: number;
+};
+
+export type RecordedRequest = { readonly url: string; readonly headers: Headers; readonly body: any };
+
+export type CacheUsage = { readonly input: number; readonly cacheRead: number; readonly cacheWrite: number };
+
+/** A hand-built Messages stream: a thinking block, then the text in chunks of `chunk` characters. */
+export function answer(text: string, usage: CacheUsage, opts: { stopReason?: string; chunk?: number } = {}): Reply {
+  const chunk = opts.chunk ?? 8;
+  const deltas: SseEvent[] = [];
+  for (let i = 0; i < text.length; i += chunk) {
+    deltas.push({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: text.slice(i, i + chunk) } });
+  }
+  return {
+    events: [
+      {
+        type: 'message_start',
+        message: {
+          id: 'msg_fake',
+          type: 'message',
+          role: 'assistant',
+          model: 'anthropic/claude-opus-5.5',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          stop_details: null,
+          usage: {
+            input_tokens: usage.input,
+            cache_creation_input_tokens: usage.cacheWrite,
+            cache_read_input_tokens: usage.cacheRead,
+            output_tokens: 1,
+          },
+        },
+      },
+      { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: `pondering ${text.length}` } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: `sig-${text.length}` } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '', citations: null } },
+      ...deltas,
+      { type: 'content_block_stop', index: 1 },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: opts.stopReason ?? 'end_turn', stop_sequence: null, stop_details: null },
+        usage: { output_tokens: 42 },
+      },
+      { type: 'message_stop' },
+    ],
+  };
+}
+
+const encode = (event: SseEvent) => new TextEncoder().encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+
+function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStream<Uint8Array> {
+  const events = reply.stallAfter === undefined ? reply.events : reply.events.slice(0, reply.stallAfter);
+  let next = 0;
+  return new ReadableStream({
+    pull(controller) {
+      const event = events[next++];
+      if (event !== undefined) return controller.enqueue(encode(event));
+      if (reply.stallAfter === undefined) return controller.close();
+      return new Promise<void>((resolve) => {
+        const fail = () => {
+          controller.error(new DOMException('aborted', 'AbortError'));
+          resolve();
+        };
+        if (signal?.aborted) fail();
+        else signal?.addEventListener('abort', fail, { once: true });
+      });
+    },
+  });
+}
+
+/** A fetch that serves replies in order and records every request it receives. */
+export function fakeTransport(replies: readonly Reply[]) {
+  const requests: RecordedRequest[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const reply = replies[requests.length];
+    requests.push({
+      url: String(input),
+      headers: new Headers(init?.headers),
+      body: JSON.parse(String(init?.body)),
+    });
+    if (reply === undefined) throw new Error(`fake transport has no reply for request ${requests.length}`);
+    return new Response(body(reply, init?.signal), {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  };
+  return { fetch, requests };
+}
