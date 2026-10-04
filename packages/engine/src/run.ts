@@ -12,7 +12,9 @@ import {
   type EvalTask,
   type ReplayResult,
 } from '@g-code/core';
+import { chat } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
+import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
 import {
@@ -25,19 +27,8 @@ import {
   type Store,
 } from './store.js';
 
-export type Io = {
-  readonly env: Readonly<Record<string, string | undefined>>;
-  readonly cwd: string;
-  out(line: string): void;
-  err(line: string): void;
-};
-
-type Context = { readonly io: Io; readonly store: Store };
-type Command = (args: string[], ctx: Context) => Promise<number>;
-
-export class UsageError extends Error {}
-
 export const USAGE = `usage:
+  gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier noop|oracle]
@@ -146,13 +137,6 @@ const applyCommand: Command = async (args, { io, store }) => {
   return 0;
 };
 
-function singleId(positionals: readonly string[], kind: string): string {
-  const [rawId, ...extra] = positionals;
-  if (rawId === undefined || extra.length > 0) throw new UsageError(`expected exactly one ${kind} id`);
-  if (/[\\/]/.test(rawId)) throw new UsageError(`invalid ${kind} id: ${rawId}`);
-  return rawId;
-}
-
 const checkTaskCommand: Command = async (args, { io, store }) => {
   const { values, positionals } = parseArgs({
     args,
@@ -210,12 +194,23 @@ const evalCommands: Record<string, Command> = {
   'check-task': checkTaskCommand,
 };
 
+const group =
+  (commands: Record<string, Command>): Command =>
+  async ([name, ...rest], ctx) => {
+    if (name === undefined || !Object.hasOwn(commands, name)) {
+      throw new UsageError(name === undefined ? 'missing command' : `unknown command: ${name}`);
+    }
+    return commands[name]!(rest, ctx);
+  };
+
+const commands: Record<string, Command> = {
+  chat,
+  eval: group(evalCommands),
+};
+
 export async function run(argv: string[], io: Io): Promise<number> {
-  const [group, name, ...rest] = argv;
-  const command =
-    group === 'eval' && name !== undefined && Object.hasOwn(evalCommands, name)
-      ? evalCommands[name]
-      : undefined;
+  const [name, ...rest] = argv;
+  const command = name !== undefined && Object.hasOwn(commands, name) ? commands[name] : undefined;
   if (command === undefined) {
     io.err(USAGE);
     return 2;
