@@ -1,9 +1,18 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { DEFAULT_MINE_LIMITS } from '@g-code/core';
+import {
+  appliersFor,
+  asTripleId,
+  DEFAULT_MINE_LIMITS,
+  isApplierName,
+  replay,
+  summarize,
+  type ApplierName,
+  type ReplayResult,
+} from '@g-code/core';
 import { EngineError } from './errors.js';
 import { mine } from './mine.js';
-import { openStore, readTasks, readTriples, type Store } from './store.js';
+import { openStore, readTasks, readTriple, readTriples, type Store } from './store.js';
 
 export type Io = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -72,7 +81,64 @@ const mineCommand: Command = async (args, { io, store }) => {
   return 0;
 };
 
-const evalCommands: Record<string, Command> = { list, mine: mineCommand };
+const applierOption = { applier: { type: 'string', default: 'noop' } } as const;
+
+function applierName(raw: string): ApplierName {
+  if (!isApplierName(raw)) throw new UsageError(`unknown applier: ${raw}`);
+  return raw;
+}
+
+function describeOutcome(result: ReplayResult): string {
+  const { outcome } = result;
+  return outcome.kind === 'applied' ? 'applied' : `failed (${outcome.reason}): ${outcome.detail}`;
+}
+
+const replayCommand: Command = async (args, { io, store }) => {
+  const { values, positionals } = parseArgs({
+    args,
+    strict: true,
+    allowPositionals: true,
+    options: applierOption,
+  });
+  const [rawId, ...extra] = positionals;
+  if (rawId === undefined || extra.length > 0) throw new UsageError('expected exactly one triple id');
+  if (/[\\/]/.test(rawId)) throw new UsageError(`invalid triple id: ${rawId}`);
+  const name = applierName(values.applier);
+  const triple = await readTriple(store, asTripleId(rawId));
+  if (triple === undefined) throw new EngineError(`no triple ${rawId} in ${store.triplesDir}`);
+
+  const result = await replay(triple, appliersFor(triple)[name]);
+  io.out(`triple: ${result.tripleId}`);
+  io.out(`applier: ${result.applier}`);
+  io.out(`outcome: ${describeOutcome(result)}`);
+  io.out(`exact match: ${result.exactMatch ? 'yes' : 'no'}`);
+  if (result.diff !== '') io.out(result.diff.trimEnd());
+  return result.exactMatch ? 0 : 1;
+};
+
+const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`;
+
+const applyCommand: Command = async (args, { io, store }) => {
+  const { values } = parseArgs({ args, strict: true, options: applierOption });
+  const name = applierName(values.applier);
+  const results: ReplayResult[] = [];
+  for (const triple of await readTriples(store)) {
+    results.push(await replay(triple, appliersFor(triple)[name]));
+  }
+  const summary = summarize(results);
+  io.out(`applier: ${name}`);
+  io.out(`triples: ${summary.total}`);
+  io.out(`exact match: ${summary.exact}/${summary.total} (${percent(summary.exactRate)})`);
+  io.out(`failed: ${summary.failed}/${summary.total} (${percent(summary.failureRate)})`);
+  return 0;
+};
+
+const evalCommands: Record<string, Command> = {
+  list,
+  mine: mineCommand,
+  replay: replayCommand,
+  apply: applyCommand,
+};
 
 export async function run(argv: string[], io: Io): Promise<number> {
   const [group, name, ...rest] = argv;
