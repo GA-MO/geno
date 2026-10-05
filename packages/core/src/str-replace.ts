@@ -114,8 +114,10 @@ export function strReplace(path: string, text: string, oldStr: string, newStr: s
   }
   if (normalized.length > 1) return multiple(path, normalized.map((start) => start + 1));
   // Models resend an edit they already made; when its result is there once and its old text is gone, the
-  // file is already in the state the call asks for.
-  if (newStr !== '' && exactStarts(text, newStr).length === 1) return { kind: 'applied', after: text };
+  // file is already in the state the call asks for. A one-line result can be there by chance, so it must not
+  // pass a wrong edit off as done.
+  const distinctive = newStr.split('\n').filter((line) => line.trim() !== '').length >= 2;
+  if (distinctive && exactStarts(text, newStr).length === 1) return { kind: 'applied', after: text };
   return zero(path, lines, target);
 }
 
