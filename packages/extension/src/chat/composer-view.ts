@@ -42,16 +42,16 @@ function contextRing() {
  * engine offers, with a muted note on what an effort change costs. It keeps the keys of the mode menu.
  */
 function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement) {
-  const menu = h('ul', { class: 'mode-menu model-menu', id: 'model-menu', role: 'menu', 'aria-label': 'Model and effort', hidden: true });
+  const menu = h('ul', { class: 'model-menu', id: 'model-menu', role: 'menu', 'aria-label': 'Model and effort', hidden: true });
   let shown: ModelMenu = { models: [], efforts: [], note: undefined };
 
   const items = () => [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
   const option = (attrs: Record<string, string>, label: string, checked: boolean | undefined, run: () => void, detail?: string) =>
     h(
       'li',
-      { class: 'mode-option', tabindex: '-1', ...attrs, ...(checked === undefined ? {} : { 'aria-checked': String(checked) }), onclick: () => (close(), run()) },
-      h('span', { class: 'mode-option-text' }, h('span', { class: 'mode-option-name' }, label), detail !== undefined && h('span', { class: 'mode-option-detail' }, detail)),
-      checked === true && icon('check', 'mode-check'),
+      { class: 'model-option', tabindex: '-1', ...attrs, ...(checked === undefined ? {} : { 'aria-checked': String(checked) }), onclick: () => (close(), run()) },
+      h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, label), detail !== undefined && h('span', { class: 'model-option-detail' }, detail)),
+      checked === true && icon('check', 'model-check'),
     );
   const heading = (text: string) => h('li', { class: 'menu-heading', role: 'presentation' }, text);
 

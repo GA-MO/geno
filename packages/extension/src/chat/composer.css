@@ -201,25 +201,27 @@
   color: var(--ok);
 }
 
-/* The model menu opens over the model button, on the right, one line per row. */
+/* The model menu opens over the model button, on the right, one line per row. It shares the mode menu's frame. */
 .composer .model-menu {
   left: auto;
   right: var(--gap);
   width: min(360px, calc(100% - 2 * var(--gap)));
 }
 
-.composer .model-menu .mode-option {
+.composer .model-option {
   align-items: center;
   padding: 4px 8px;
 }
 
-.composer .model-menu .mode-option-text {
-  flex-direction: row;
+.model-option-text {
+  display: flex;
+  flex: 1;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
-.composer .model-menu .mode-option-name {
+.model-option-name {
   font-weight: 500;
 }
 
@@ -245,8 +247,9 @@
   font-size: var(--small);
 }
 
-.model-menu .mode-option-detail {
+.model-option-detail {
   color: var(--muted);
+  font-size: var(--small);
 }
 
 /* Stop is a square on a dark circle in both glasses; high contrast keeps the native colors. */
