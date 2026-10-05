@@ -34,7 +34,7 @@ beforeAll(async () => {
   await symlink(path.join(root, 'outside', 'secret.txt'), path.join(ws, 'escape.txt'));
   await symlink(path.join(root, 'outside'), path.join(ws, 'escape-dir'));
   await symlink(path.join(ws, 'src', 'config.ts'), path.join(ws, 'alias.ts'));
-  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [] };
+  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {} };
 });
 
 let nextId = 0;

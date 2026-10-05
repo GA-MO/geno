@@ -49,6 +49,7 @@ export function withRuleAttachments(read: Executor, rules: RuleAttacher): Execut
       if (typeof reply !== 'string') return reply;
       const file = displayPath(ctx, await resolveInside(ctx, (raw as { path: string }).path));
       if (path.isAbsolute(file)) return reply;
+      await ctx.earlierCalls();
       const fresh = rules.take(file);
       return fresh.length === 0 ? reply : `${reply}\n\n${attachments(reply, fresh, file)}`;
     },

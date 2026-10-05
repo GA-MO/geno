@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { z } from 'zod';
-import { displayPath, executor, optional, resolveInside, ToolError } from './context.js';
+import { ALWAYS, displayPath, executor, optional, resolveInside, ToolError } from './context.js';
 import { ripgrep } from './ripgrep.js';
 
 const DEFAULT_DEPTH = 2;
@@ -27,6 +27,7 @@ export function listEntries(files: readonly string[], depth: number): string[] {
 }
 
 export const list = executor({
+  concurrent: ALWAYS,
   input: z.strictObject({
     // A model may send an empty string to mean the root.
     directory: optional(z.string()).transform((dir) => dir || '.'),

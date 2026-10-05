@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { executor, optional } from './context.js';
+import { ALWAYS, executor, optional } from './context.js';
 import { searchRoot, searchWorkspace } from './ripgrep.js';
 
 export const grep = executor({
+  concurrent: ALWAYS,
   input: z.strictObject({
     pattern: z.string().min(1),
     path: optional(z.string().min(1)),

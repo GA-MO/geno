@@ -85,6 +85,7 @@ const ctx = (workspace: string): ToolContext => ({
   signal: new AbortController().signal,
   files: { read: async () => null, write: async () => 'written', unsaved: async () => [] },
   events: () => [{ kind: 'user', seq: 1, at: '2026-01-01T00:00:00.000Z', content: 'use the fake server' }],
+  earlierCalls: async () => {},
 });
 
 const isAlive = (pid: number): boolean => {

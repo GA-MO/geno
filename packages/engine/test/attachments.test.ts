@@ -97,6 +97,7 @@ describe('read of an image', () => {
       signal: new AbortController().signal,
       files: DISK_FILES,
       events: () => [],
+      earlierCalls: async () => {},
     };
     const read = (file: string) => runTool({ type: 'tool_use', id: 'tu', name: 'read', input: { path: file }, caller: { type: 'direct' } }, ctx, EXECUTORS);
 

@@ -176,14 +176,15 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   const reads = new Map<string, BaseRead>();
 
   const read: Executor = {
-    input: EXECUTORS.read.input,
-    describe: EXECUTORS.read.describe,
+    ...EXECUTORS.read,
     async run(raw, ctx) {
       // The base is the very text the read tool showed, so a change a moment later makes the next edit stale.
       let seen: string | null = null;
       const files: Files = { ...ctx.files, read: async (file) => (seen = await ctx.files.read(file)) };
       const text = await EXECUTORS.read.run(raw, { ...ctx, files });
-      reads.set(await resolveInside(ctx, (raw as { path: string }).path), baseOf(seen, null));
+      const file = await resolveInside(ctx, (raw as { path: string }).path);
+      await ctx.earlierCalls();
+      reads.set(file, baseOf(seen, null));
       return text;
     },
   };

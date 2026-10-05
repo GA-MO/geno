@@ -15,6 +15,7 @@ export * from './context-window.js';
 export * from './tools.js';
 export * from './page.js';
 export * from './loop.js';
+export * from './tool-batch.js';
 export * from './model-error.js';
 export * from './hunks.js';
 export * from './review.js';
