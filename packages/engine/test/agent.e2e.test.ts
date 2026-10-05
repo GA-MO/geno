@@ -153,7 +153,7 @@ describe('gcode agent', () => {
   it('denies every deny-list rule without asking in non-interactive mode, and runs npx vitest run', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
     const denied = [
-      'rm -rf src',
+      'rm -rf .git',
       'git push origin main',
       'git reset --hard HEAD',
       'cat /etc/hosts',
@@ -179,7 +179,7 @@ describe('gcode agent', () => {
     const results = ofKind(log.events, 'tool-result');
     expect(results.map((r) => r.status)).toEqual([...denied.map(() => 'denied'), 'ok']);
     expect(results.slice(0, denied.length).map((r) => ('output' in r ? r.output.split(' uses ')[1]!.split(',')[0] : ''))).toEqual([
-      'rm -rf outside the temp dir',
+      'rm -rf of the workspace',
       'git push',
       'git reset --hard',
       'a path outside the workspace',
@@ -196,7 +196,7 @@ describe('gcode agent', () => {
   it('asks on the terminal in interactive mode and runs the command when the user says yes', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
     const asked: string[] = [];
-    const transport = fakeTransport([toolCall('Cleaning.', [bash('rm -rf src')], usage), answer('Done.', usage)]);
+    const transport = fakeTransport([toolCall('Cleaning.', [bash('rm -rf .git')], usage), answer('Done.', usage)]);
     const result = await runCli(['agent', '--workspace', workspace, 'Clean up'], env, {
       fetch: transport.fetch,
       confirm: (question) => {
@@ -205,7 +205,7 @@ describe('gcode agent', () => {
       },
     });
     expect(result.code).toBe(0);
-    expect(asked).toEqual(['Allow `rm -rf src`? It uses rm -rf outside the temp dir.']);
+    expect(asked).toEqual(['Allow `rm -rf .git`? It uses rm -rf of the workspace, its .git or a path outside it.']);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(ofKind(log.events, 'tool-result')[0]).toMatchObject({ status: 'ok', output: '[exit code 0]' });
   });
