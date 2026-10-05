@@ -1,112 +1,211 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
-import type { FromView, ToView } from './messages.js';
+import { h, icon, reconcile, type Keyed } from './dom.js';
+import type { Block, FromView, ToView, Transcript, Turn } from './messages.js';
+import { emptyState, errorBlock, permissionCard, textBlock, toolRow, turnFooter, userMessage, type Ui } from './render.js';
+import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
-declare function acquireVsCodeApi(): { postMessage(message: FromView): void };
+/** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
+type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
+
+declare function acquireVsCodeApi(): { postMessage(message: FromView): void; getState(): ViewState | undefined; setState(state: ViewState): void };
 
 const host = acquireVsCodeApi();
+let state: ViewState = { draft: '', open: [], unfolded: [], ...host.getState() };
+let transcript: Transcript = emptyTranscript('');
 
-document.head.insertAdjacentHTML(
-  'beforeend',
-  `<style>
-  body { display: flex; flex-direction: column; height: 100vh; margin: 0; padding: 0 8px; box-sizing: border-box; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
-  #log { flex: 1; overflow-y: auto; padding: 8px 0; }
-  .user { margin: 12px 0 4px; padding: 6px 8px; border-radius: 4px; background: var(--vscode-input-background); white-space: pre-wrap; }
-  .assistant { white-space: pre-wrap; margin: 4px 0; }
-  .tool { font-family: var(--vscode-editor-font-family); font-size: 0.9em; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tool.failed { color: var(--vscode-errorForeground); }
-  .permission { margin: 6px 0; padding: 6px 8px; border: 1px solid var(--vscode-focusBorder); border-radius: 4px; }
-  .permission button { margin: 6px 6px 0 0; }
-  .error { color: var(--vscode-errorForeground); margin: 4px 0; }
-  .stopped { opacity: 0.7; font-style: italic; margin: 4px 0; }
-  form { display: flex; gap: 6px; padding: 8px 0; }
-  textarea { flex: 1; resize: vertical; min-height: 3em; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); font-family: inherit; }
-  button { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: none; padding: 4px 10px; cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: default; }
-</style>`,
-);
-document.body.innerHTML = `<main id="log"></main>
-<form><textarea placeholder="Ask for a change"></textarea><button type="submit">Send</button><button type="button" disabled>Stop</button></form>`;
+/** Composer height stops growing here and scrolls instead. */
+const MAX_COMPOSER_PX = 240;
 
-const log = document.querySelector('#log')!;
-const input = document.querySelector('textarea')!;
-const [send, stop] = document.querySelectorAll('button');
-
-const STATUS_MARKS: Readonly<Record<string, string>> = { pending: '○', in_progress: '…', completed: '✓', failed: '✗' };
-
-let answer: HTMLElement | undefined;
-const tools = new Map<string, { element: HTMLElement; title: string }>();
-const permissions = new Map<string, HTMLElement>();
-
-function append(className: string, text: string): HTMLElement {
-  const element = document.createElement('div');
-  element.className = className;
-  element.textContent = text;
-  log.append(element);
-  log.scrollTop = log.scrollHeight;
-  return element;
+function save(next: ViewState): void {
+  state = next;
+  host.setState(state);
 }
 
-const RENDER: { readonly [K in ToView['type']]: (message: Extract<ToView, { type: K }>) => void } = {
-  user({ text }) {
-    append('user', text);
-    answer = undefined;
+const toggled = (list: readonly string[], id: string): string[] => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+const ui: Ui = {
+  post: (message) => host.postMessage(message),
+  isOpen: (id) => state.open.includes(id),
+  toggle: (id) => {
+    save({ ...state, open: toggled(state.open, id) });
+    schedule();
   },
-  text({ text }) {
-    answer ??= append('assistant', '');
-    answer.textContent += text;
-    log.scrollTop = log.scrollHeight;
-  },
-  tool({ id, title, status }) {
-    answer = undefined;
-    const tool = tools.get(id) ?? { element: append('tool', ''), title: title ?? id };
-    tool.title = title ?? tool.title;
-    tools.set(id, tool);
-    tool.element.textContent = `${STATUS_MARKS[status ?? ''] ?? '…'} ${tool.title}`;
-    tool.element.classList.toggle('failed', status === 'failed');
-  },
-  permission({ id, title, options }) {
-    const element = append('permission', '');
-    element.append(Object.assign(document.createElement('div'), { textContent: title }));
-    for (const option of options) {
-      const button = document.createElement('button');
-      button.textContent = option.name;
-      button.addEventListener('click', () => host.postMessage({ type: 'permission', id, optionId: option.optionId }));
-      element.append(button);
-    }
-    permissions.set(id, element);
-  },
-  'permission-done'({ id }) {
-    permissions.get(id)?.querySelectorAll('button').forEach((button) => (button.disabled = true));
-  },
-  turn({ running, stopReason }) {
-    send!.disabled = running;
-    stop!.disabled = !running;
-    if (!running && stopReason !== undefined && stopReason !== 'end_turn') append('stopped', `stopped: ${stopReason}`);
-  },
-  error({ message }) {
-    append('error', message);
+  isUnfolded: (id) => state.unfolded.includes(id),
+  unfold: (id) => {
+    save({ ...state, unfolded: [...state.unfolded, id] });
+    schedule();
   },
 };
 
+const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'g-code chat', 'aria-live': 'polite', tabindex: '-1' });
+const status = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
+const input = h('textarea', { rows: 1, placeholder: 'Ask for a change', 'aria-label': 'Ask g-code for a change', 'data-focus': 'composer' });
+const send = h('button', { type: 'submit', class: 'icon-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('send'));
+const stop = h('button', { type: 'button', class: 'icon-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('stop-circle'));
+const modelLabel = h('span', { class: 'composer-model' });
+const form = h(
+  'form',
+  { class: 'composer' },
+  h('div', { class: 'input-box' }, input, h('div', { class: 'input-toolbar' }, modelLabel, h('span', { class: 'spacer' }), stop, send)),
+);
+document.body.append(log, form, status);
+
+/**
+ * Streamed text appears a little at a time, each frame showing a sixth of what has arrived but is not yet
+ * shown, so it keeps up within about a quarter second instead of landing in the bursts the network delivers.
+ */
+const revealed = new Map<string, number>();
+let frame: number | undefined;
+
+function shownLength(id: string, text: string, streaming: boolean): number {
+  if (!streaming) return text.length;
+  const shown = revealed.get(id) ?? 0;
+  if (shown >= text.length) return text.length;
+  const next = Math.min(text.length, shown + Math.max(2, Math.ceil((text.length - shown) / 6)));
+  revealed.set(id, next);
+  return next;
+}
+
+function blockItem(turn: Turn, block: Block, last: boolean): Keyed {
+  if (block.kind === 'text') {
+    const streaming = turn.status === 'streaming';
+    const shown = shownLength(block.id, block.text, streaming);
+    const caret = streaming && last;
+    return { key: block.id, deps: [block.text, shown, caret], build: () => textBlock(block.text.slice(0, shown), caret, ui) };
+  }
+  if (block.kind === 'tool') return { key: block.id, deps: [block, ...state.open, '|', ...state.unfolded], build: () => toolRow(block, ui) };
+  if (block.kind === 'permission') return { key: `permission:${block.id}`, deps: [block], build: () => permissionCard(block, ui) };
+  return { key: block.id, deps: [block], build: () => errorBlock(block) };
+}
+
+function turnShell(turn: Turn): HTMLElement {
+  return h('article', { class: 'turn', 'data-turn': turn.id }, userMessage(turn.prompt), h('div', { class: 'response' }), h('div', { class: 'footer-slot' }));
+}
+
+const pendingText = (turn: Turn): boolean =>
+  turn.blocks.some((b) => b.kind === 'text' && (revealed.get(b.id) ?? b.text.length) < b.text.length);
+
+function render(): void {
+  frame = undefined;
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  const focused = (document.activeElement as HTMLElement | null)?.dataset['focus'];
+
+  const empty = transcript.turns.length === 0;
+  const shells = reconcile(
+    log,
+    empty
+      ? [{ key: 'empty', deps: [transcript.model], build: () => emptyState(transcript.model, fill) }]
+      : transcript.turns.map((turn) => ({ key: turn.id, deps: [turn.id], build: () => turnShell(turn) })),
+  );
+  let animating = false;
+  if (!empty) {
+    transcript.turns.forEach((turn, i) => {
+      const shell = shells[i]!;
+      shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
+      reconcile(shell.querySelector<HTMLElement>(':scope > .response')!, turn.blocks.map((block, j) => blockItem(turn, block, j === turn.blocks.length - 1)));
+      reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
+      animating ||= turn.status === 'streaming' && pendingText(turn);
+    });
+  }
+
+  const running = isRunning(transcript);
+  send.hidden = running;
+  stop.hidden = !running;
+  modelLabel.textContent = transcript.model;
+  if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
+  focusNewPermission();
+  if (atBottom) log.scrollTop = log.scrollHeight;
+  if (animating) schedule();
+}
+
+function schedule(): void {
+  frame ??= requestAnimationFrame(render);
+}
+
+/** A question from the engine takes the keyboard once, on its default button. */
+const asked = new Set<string>();
+function focusNewPermission(): void {
+  for (const card of document.querySelectorAll<HTMLElement>('.permission-open[data-permission]')) {
+    const id = card.dataset['permission']!;
+    if (asked.has(id)) continue;
+    asked.add(id);
+    card.querySelector('button')?.focus();
+  }
+}
+
+const ENDED = { done: 'g-code finished', stopped: 'Stopped', failed: 'The turn failed' } as const;
+
+/** What a screen reader hears besides the transcript itself. */
+const ANNOUNCEMENTS: { readonly [K in ToView['type']]?: (message: Extract<ToView, { type: K }>) => string } = {
+  'turn-start': () => 'g-code is working',
+  permission: ({ command }) => `g-code asks to run ${command}`,
+  'turn-end': ({ status }) => ENDED[status],
+};
+const announcement = (message: ToView): string | undefined => (ANNOUNCEMENTS[message.type] as ((m: ToView) => string) | undefined)?.(message);
+
 window.addEventListener('message', (event: MessageEvent<ToView>) => {
-  (RENDER[event.data.type] as (message: ToView) => void)(event.data);
+  const message = event.data;
+  transcript = reduce(transcript, message);
+  // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
+  if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
+  const said = announcement(message);
+  if (said !== undefined) status.textContent = said;
+  schedule();
 });
 
-document.querySelector('form')!.addEventListener('submit', (event) => {
-  event.preventDefault();
+function resize(): void {
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, MAX_COMPOSER_PX)}px`;
+  input.style.overflowY = input.scrollHeight > MAX_COMPOSER_PX ? 'auto' : 'hidden';
+}
+
+function fill(text: string): void {
+  input.value = text;
+  save({ ...state, draft: text });
+  resize();
+  input.focus();
+  input.setSelectionRange(text.length, text.length);
+}
+
+function submit(): void {
   const text = input.value.trim();
-  if (text === '' || send!.disabled) return;
-  input.value = '';
+  if (text === '' || isRunning(transcript)) return;
   host.postMessage({ type: 'send', text });
+  fill('');
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  submit();
+});
+input.addEventListener('input', () => {
+  save({ ...state, draft: input.value });
+  resize();
 });
 input.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
-    document.querySelector('form')!.requestSubmit();
+    submit();
   }
 });
-stop!.addEventListener('click', () => host.postMessage({ type: 'stop' }));
+stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && isRunning(transcript)) {
+    event.preventDefault();
+    host.postMessage({ type: 'stop' });
+  }
+});
+// The view's focus command focuses the webview itself; the composer is what the user means to type into.
+// A webview created by that command can receive the focus before this script runs, hence the check at start.
+const focusComposer = () => {
+  if (document.activeElement === document.body || document.activeElement === null) input.focus();
+};
+window.addEventListener('focus', () => requestAnimationFrame(focusComposer));
 
+input.value = state.draft;
+resize();
+render();
+if (document.hasFocus()) focusComposer();
 host.postMessage({ type: 'ready' });

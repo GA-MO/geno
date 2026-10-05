@@ -1,4 +1,4 @@
-import { isProviderName, PROVIDER_ENV, type ProviderName } from '@g-code/core';
+import { DEFAULT_MODELS, isProviderName, PROVIDER_ENV, type ProviderName } from '@g-code/core';
 
 export const SET_KEY_COMMAND = 'gcode.setApiKey';
 
@@ -27,6 +27,10 @@ export function providerOf(settings: Settings): ProviderName {
   if (!isProviderName(provider)) throw new Error(`gcode.provider is ${provider}, which is not a provider g-code knows`);
   return provider;
 }
+
+/** The model a new session would use, named the way the engine chooses it: the setting, GCODE_MODEL, then the provider's default. */
+export const modelLabel = (settings: Settings, env: Env): string =>
+  settings.get('model', '') || env['GCODE_MODEL'] || DEFAULT_MODELS[providerOf(settings)];
 
 /** A key in SecretStorage wins; one in the environment VS Code was started with is the fallback. */
 export async function readModelRuntime(settings: Settings, secrets: Secrets, env: Env): Promise<ModelRuntime> {

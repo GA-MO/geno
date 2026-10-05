@@ -156,11 +156,13 @@
         {
           "type": "webview",
           "id": "gcode.chat",
-          "name": "Chat"
+          "name": "Chat",
+          "initialSize": 3
         },
         {
           "id": "gcode.changes",
-          "name": "Changes"
+          "name": "Changes",
+          "initialSize": 1
         }
       ]
     },
@@ -231,9 +233,13 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.7.0",
     "@g-code/core": "workspace:*",
+    "@vscode/codicons": "0.0.46-24",
+    "marked": "^18.0.14",
+    "prismjs": "^1.30.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/prismjs": "^1.26.6",
     "@types/vscode": "~1.95.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
