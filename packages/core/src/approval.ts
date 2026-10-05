@@ -8,6 +8,7 @@ export type CommandScope = {
 
 export const DENY_RULE_IDS = [
   'rm-rf-outside-workspace',
+  'rm-rf-in-workspace',
   'git-push',
   'git-reset-hard',
   'path-outside-workspace',
@@ -28,12 +29,26 @@ export type SimpleCommand = {
   readonly cwd: string | undefined;
 };
 
+/** Interactive runs have a user to ask; non-interactive runs, such as evals, do not. */
+export type ApprovalMode = 'interactive' | 'non-interactive';
+export type Verdict = 'allow' | 'ask' | 'deny';
+/** What a run in each mode does with a command a rule matches. Nobody is there to ask in non-interactive mode. */
+export type Verdicts = { readonly interactive: Verdict; readonly 'non-interactive': Exclude<Verdict, 'ask'> };
+
 type DenyRule = {
   readonly reason: string;
-  denies(command: SimpleCommand, scope: CommandScope): boolean;
+  readonly verdicts: Verdicts;
+  matches(command: SimpleCommand, scope: CommandScope): boolean;
 };
 
-export type Denial = { readonly rule: DenyRuleId; readonly reason: string; readonly command: string };
+export type Denial = {
+  readonly rule: DenyRuleId;
+  readonly reason: string;
+  readonly command: string;
+  readonly verdict: Exclude<Verdict, 'allow'>;
+};
+
+const ASK_OR_DENY: Verdicts = { interactive: 'ask', 'non-interactive': 'deny' };
 
 const CLOUD_CLIS = new Set([
   'aws', 'az', 'bq', 'doctl', 'eksctl', 'firebase', 'fly', 'flyctl', 'gcloud', 'gsutil', 'helm', 'heroku',
@@ -96,21 +111,30 @@ function isOutside(target: string, scope: CommandScope): boolean {
   return !allowed.some((root) => within(root, target));
 }
 
-/** Whether `rm -rf` of this operand can only remove scratch: something strictly inside the workspace but not its .git, or strictly inside a temp dir. */
-function removable(operand: string, cwd: string | undefined, scope: CommandScope): boolean {
+/**
+ * What `rm -rf` of this operand can remove: only temp scratch, strictly inside a temp dir; only something strictly
+ * inside the workspace but not its .git; or anything else.
+ */
+type RemovalTarget = 'temp' | 'workspace' | 'protected';
+
+function removalTarget(operand: string, cwd: string | undefined, scope: CommandScope): RemovalTarget {
   // An unset variable expands to nothing, which removes nothing.
-  if (operand === '') return true;
-  if (/[$`]/.test(operand) || /^~[^/]/.test(operand)) return false;
+  if (operand === '') return 'temp';
+  if (/[$`]/.test(operand) || /^~[^/]/.test(operand)) return 'protected';
   const parts = operand.split('/');
   const glob = parts.findIndex((part) => /[*?[{]/.test(part));
   // A glob removes only what is below its literal prefix, so that prefix must itself be removable.
   const literal = glob === -1 ? operand : parts.slice(0, glob).join('/') || (operand.startsWith('/') ? '/' : '.');
   const expanded = literal === '~' || literal.startsWith('~/') ? path.join(scope.home, literal.slice(1)) : literal;
-  if (!path.isAbsolute(expanded) && cwd === undefined) return false;
+  if (!path.isAbsolute(expanded) && cwd === undefined) return 'protected';
   const target = path.resolve(cwd ?? '/', expanded);
-  const inWorkspace = strictlyWithin(scope.workspace, target) && !within(path.join(scope.workspace, '.git'), target);
-  return inWorkspace || [scope.tempDir, ...TEMP_ROOTS].some((root) => strictlyWithin(root, target));
+  // The workspace wins over a temp root it may sit in, so the user's project under /tmp is still theirs.
+  if (strictlyWithin(scope.workspace, target) && !within(path.join(scope.workspace, '.git'), target)) return 'workspace';
+  return [scope.tempDir, ...TEMP_ROOTS].some((root) => strictlyWithin(root, target)) ? 'temp' : 'protected';
 }
+
+const removes = ({ program, args, cwd }: SimpleCommand, scope: CommandScope, kind: RemovalTarget): boolean =>
+  program === 'rm' && isRecursiveForce(args) && operands(args).some((operand) => removalTarget(operand, cwd, scope) === kind);
 
 function isLocalUrl(word: string): boolean {
   const host = URL_HOST.exec(word)?.[1];
@@ -162,23 +186,33 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   'rm-rf-outside-workspace': {
     reason: 'rm -rf of the workspace, its .git or a path outside it',
-    denies: ({ program, args, cwd }, scope) =>
-      program === 'rm' && isRecursiveForce(args) && operands(args).some((target) => !removable(target, cwd, scope)),
+    verdicts: ASK_OR_DENY,
+    matches: (command, scope) => removes(command, scope, 'protected'),
+  },
+  // A throwaway eval clone can lose anything, but the user's own project has folders, such as node_modules, that no
+  // checkpoint restores.
+  'rm-rf-in-workspace': {
+    reason: 'rm -rf of a path inside the workspace',
+    verdicts: { interactive: 'ask', 'non-interactive': 'allow' },
+    matches: (command, scope) => removes(command, scope, 'workspace'),
   },
   'git-push': {
     reason: 'git push',
-    denies: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
+    verdicts: ASK_OR_DENY,
+    matches: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
   },
   'git-reset-hard': {
     reason: 'git reset --hard',
-    denies: ({ program, args }) => {
+    verdicts: ASK_OR_DENY,
+    matches: ({ program, args }) => {
       const { name, rest } = gitSubcommand(args);
       return program === 'git' && name === 'reset' && rest.includes('--hard');
     },
   },
   'path-outside-workspace': {
     reason: 'a path outside the workspace',
-    denies: ({ words }, scope) =>
+    verdicts: ASK_OR_DENY,
+    matches: ({ words }, scope) =>
       words.some((word) => {
         const target = pathOf(word, scope);
         return target !== undefined && isOutside(target, scope);
@@ -186,18 +220,21 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'network-download': {
     reason: 'curl or wget',
-    denies: ({ program, args }) => {
+    verdicts: ASK_OR_DENY,
+    matches: ({ program, args }) => {
       const options = DOWNLOADERS.get(program);
       return options !== undefined && !onlyLocalUrls(options, args);
     },
   },
   'cloud-cli': {
     reason: 'a cloud CLI',
-    denies: ({ program }) => CLOUD_CLIS.has(program),
+    verdicts: ASK_OR_DENY,
+    matches: ({ program }) => CLOUD_CLIS.has(program),
   },
   'database-cli': {
     reason: 'a database CLI',
-    denies: ({ program }) => DATABASE_CLIS.has(program),
+    verdicts: ASK_OR_DENY,
+    matches: ({ program }) => DATABASE_CLIS.has(program),
   },
 };
 
@@ -438,18 +475,25 @@ function variants(words: readonly string[], vars: Bindings): readonly (readonly 
   return expanded.reduce<string[][]>((combos, values) => combos.flatMap((combo) => values.map((v) => [...combo, v])), [[]]);
 }
 
-export function denialFor(command: string, scope: CommandScope): Denial | undefined {
+/** The first command in the line a rule denies in this mode, or else the first one a rule asks about. */
+export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const commands = splitCommand(command);
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
   const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
+  let ask: Denial | undefined;
   for (const words of commands) {
     for (const variant of variants(words, vars)) {
       const simple = simpleCommand(variant, cwd);
       for (const rule of DENY_RULE_IDS) {
-        if (DENY_RULES[rule].denies(simple, scope)) return { rule, reason: DENY_RULES[rule].reason, command: words.join(' ') };
+        const { reason, verdicts, matches } = DENY_RULES[rule];
+        const verdict = verdicts[mode];
+        if (verdict === 'allow' || !matches(simple, scope)) continue;
+        const denial = { rule, reason, command: words.join(' '), verdict };
+        if (verdict === 'deny') return denial;
+        ask ??= denial;
       }
     }
   }
-  return undefined;
+  return ask;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { denialFor, DENY_RULE_IDS, splitCommand, type CommandScope, type DenyRuleId } from '../src/approval.js';
+import { denialFor, DENY_RULE_IDS, splitCommand, type ApprovalMode, type CommandScope, type DenyRuleId } from '../src/approval.js';
 
 const scope: CommandScope = { workspace: '/Users/me/ws', tempDir: '/private/var/folders/x/T/gcode-tmp', home: '/Users/me' };
 
@@ -73,6 +73,22 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ['echo $(curl -s https://example.com)', 'network-download'],
 ];
 
+const MODES: readonly ApprovalMode[] = ['interactive', 'non-interactive'];
+
+// Scratch in a throwaway eval clone, but in the user's own project a folder such as node_modules is not checkpointed.
+const WORKSPACE_DELETES = [
+  'rm -rf node_modules',
+  'rm -rf src',
+  'rm -fr dist',
+  'rm -r -f build',
+  'rm --recursive --force src',
+  'rm -rf ./build a/b/../c',
+  'rm -rf .github',
+  'rm -rf src/*',
+  'rm -rf /Users/me/ws/dist',
+  'rm -rf /tmp/scratch src',
+];
+
 const ALLOWED = [
   'npx vitest run',
   'npx vitest run src/__tests__/counter.test.ts',
@@ -81,14 +97,6 @@ const ALLOWED = [
   'git status',
   'git diff HEAD',
   'git reset --soft HEAD~1',
-  'rm -rf node_modules',
-  'rm -fr dist',
-  'rm -r -f build',
-  'rm --recursive --force src',
-  'rm -rf ./build a/b/../c',
-  'rm -rf .github',
-  'rm -rf src/*',
-  'rm -rf /Users/me/ws/dist',
   'rm -rf /private/var/folders/x/T/gcode-tmp/build',
   'rm -rf /tmp/scratch',
   'd=$(mktemp -d); rm -rf "$d"',
@@ -111,14 +119,15 @@ const ALLOWED = [
 ];
 
 // Every command the Phase 4 evals (E5 and E14 on qwen3.8-flash) denied, verbatim from the session logs.
-const EVAL_FALSE_POSITIVES: readonly [string, string][] = [
+// The third column is interactive mode's verdict: it asks before the commands that rm -rf a folder inside the workspace.
+const EVAL_FALSE_POSITIVES: readonly [string, string, 'ask' | undefined][] = [
   ['payload-migration-check-lines', String.raw`npm run check:migrations 2>&1 | tail -3
 S=/tmp/migdemo; rm -rf $S; mkdir -p $S/src/migrations $S/scripts
 printf "\nexport async function up({ db }: any) {\n  await db.execute('CREATE INDEX x ON y')\n  await db.execute('DROP TABLE a; DROP TABLE b')\n  await db.execute('TRUNCATE c')\n}\n" > $S/src/migrations/20260105_demo.ts
 cp scripts/check-migrations.ts $S/scripts/
-cd $S && ln -sf "$(cd - >/dev/null; pwd)" 2>/dev/null; true`],
-  ['payload-site-url-runtime', String.raw`node --import tsx scripts/check-migrations.ts 2>&1 | head -5; echo ===; d=$(mktemp -d); mkdir -p $d/scripts $d/src/migrations; cp scripts/check-migrations.ts $d/scripts/; (cd $d && node --import tsx scripts/check-migrations.ts) 2>&1 | head -5; rm -rf $d`],
-  ['next-base-path', String.raw`cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && (NEXT_PUBLIC_BASE_PATH=/app-path PORT=3100 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js > /tmp/next-server.log 2>&1 &) && sleep 3 && for p in "/" "/app-path" "/app-path/" "/app-path/en" "/app-path/th" "/mockup/demo/list.json" "/app-path/mockup/demo/list.json" "/app-path/_next/static"; do echo "== $p"; curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" "http://127.0.0.1:3100$p"; done`],
+cd $S && ln -sf "$(cd - >/dev/null; pwd)" 2>/dev/null; true`, undefined],
+  ['payload-site-url-runtime', String.raw`node --import tsx scripts/check-migrations.ts 2>&1 | head -5; echo ===; d=$(mktemp -d); mkdir -p $d/scripts $d/src/migrations; cp scripts/check-migrations.ts $d/scripts/; (cd $d && node --import tsx scripts/check-migrations.ts) 2>&1 | head -5; rm -rf $d`, undefined],
+  ['next-base-path', String.raw`cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && (NEXT_PUBLIC_BASE_PATH=/app-path PORT=3100 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js > /tmp/next-server.log 2>&1 &) && sleep 3 && for p in "/" "/app-path" "/app-path/" "/app-path/en" "/app-path/th" "/mockup/demo/list.json" "/app-path/mockup/demo/list.json" "/app-path/_next/static"; do echo "== $p"; curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" "http://127.0.0.1:3100$p"; done`, undefined],
   ['payload-manual-code-fences', String.raw`git stash -q && mkdir -p .tmp-check && git show HEAD:src/lib/manual.ts | sed 's/^function parseSections/export function parseSections/' > .tmp-check/manual-old.ts && cat > .tmp-check/old.test.ts <<'EOF'
 import { expect, it } from 'vitest'
 import { parseSections } from './manual-old'
@@ -128,7 +137,7 @@ it('old parser leaks shell comments from ~~~ fences as headings', () => {
   expect(got).toEqual(['Deploy', 'update packages'])
 })
 EOF
-npx vitest run --project unit .tmp-check/old.test.ts 2>&1 | tail -6; git stash pop -q; rm -rf .tmp-check; git status --short`],
+npx vitest run --project unit .tmp-check/old.test.ts 2>&1 | tail -6; git stash pop -q; rm -rf .tmp-check; git status --short`, 'ask'],
   ['payload-manual-search-words', String.raw`mkdir -p .scratch && cat > .scratch/manual-check.ts <<'EOF'
 import { buildManualIndex } from '../src/lib/manual'
 import { searchManual } from '../src/lib/manual-search'
@@ -140,7 +149,7 @@ for (const h of hits.slice(0, 3)) console.log('-', h.section.docTitle, '>', h.se
 console.log('short query:', searchManual(index, 'a').length, '| empty query:', searchManual(index, '   ').length)
 console.log('phrase order irrelevant:', searchManual(index, 'alt upload').length)
 EOF
-node --import tsx .scratch/manual-check.ts; rm -rf .scratch`],
+node --import tsx .scratch/manual-check.ts; rm -rf .scratch`, 'ask'],
   ['payload-manual-search-words', String.raw`cat > .scratch/manual-check.ts <<'EOF'
 import { buildManualIndex } from '@/lib/manual'
 import { searchManual } from '@/lib/manual-search'
@@ -152,7 +161,7 @@ for (const h of hits.slice(0, 3)) console.log('-', h.section.docTitle, '>', h.se
 console.log('short query:', searchManual(index, 'a').length, '| empty query:', searchManual(index, '   ').length)
 console.log('reverse order:', searchManual(index, 'alt upload').length)
 EOF
-node --import tsx .scratch/manual-check.ts; rm -rf .scratch`],
+node --import tsx .scratch/manual-check.ts; rm -rf .scratch`, 'ask'],
   ['payload-metadata-media-image', String.raw`mkdir -p scripts/__tests__ && cat > scripts/__tests__/scratch.test.ts <<'EOF'
 import { describe, expect, it } from 'vitest'
 import { mediaImage } from '../../src/lib/media'
@@ -163,7 +172,7 @@ describe('scratch', () => {
   })
 })
 EOF
-npx vitest run --project unit scripts/__tests__/scratch.test.ts 2>&1 | tail -20`],
+npx vitest run --project unit scripts/__tests__/scratch.test.ts 2>&1 | tail -20`, undefined],
   ['payload-noindex-env', String.raw`d=$(mktemp -d); cat > "$d/probe.ts" <<'EOF'
 process.env.SITE_NOINDEX = 'true'
 process.env.SERVER_URL = 'https://uat.example.com'
@@ -175,29 +184,65 @@ delete process.env.SITE_NOINDEX
 console.log('robots(default):', JSON.stringify(await robots()))
 console.log('page robots:', JSON.stringify((await pageMetadata({ title: 't', path: '/x' })).robots))
 EOF
-node --import tsx "$d/probe.ts" 2>&1 | tail -20; rm -rf "$d"`],
-  ['payload-noindex-env', String.raw`(SITE_NOINDEX=true SERVER_URL=https://uat.example.com npx next dev -p 3210 > /tmp/dev1.log 2>&1 &) ; sleep 20; echo '--- robots.txt (SITE_NOINDEX=true):'; curl -s http://127.0.0.1:3210/robots.txt; echo '--- home <meta name=robots>:'; curl -s http://127.0.0.1:3210/ | grep -o '<meta name="robots"[^>]*>'; pkill -f 'next dev -p 3210'; sleep 2; echo done`],
+node --import tsx "$d/probe.ts" 2>&1 | tail -20; rm -rf "$d"`, undefined],
+  ['payload-noindex-env', String.raw`(SITE_NOINDEX=true SERVER_URL=https://uat.example.com npx next dev -p 3210 > /tmp/dev1.log 2>&1 &) ; sleep 20; echo '--- robots.txt (SITE_NOINDEX=true):'; curl -s http://127.0.0.1:3210/robots.txt; echo '--- home <meta name=robots>:'; curl -s http://127.0.0.1:3210/ | grep -o '<meta name="robots"[^>]*>'; pkill -f 'next dev -p 3210'; sleep 2; echo done`, undefined],
 ];
 
 describe('the deny-to-approve list', () => {
-  it.each(DENIED)('denies %s by %s', (command, rule) => {
-    expect(denialFor(command, scope)?.rule).toBe(rule);
+  describe.each(MODES)('in %s mode', (mode) => {
+    it.each(DENIED)('flags %s by %s', (command, rule) => {
+      expect(denialFor(command, scope, mode)?.rule).toBe(rule);
+    });
+
+    it.each(ALLOWED)('allows %s', (command) => {
+      expect(denialFor(command, scope, mode)).toBeUndefined();
+    });
   });
 
-  it.each(ALLOWED)('allows %s', (command) => {
-    expect(denialFor(command, scope)).toBeUndefined();
+  it.each(DENIED)('asks before %s in interactive mode and denies it in non-interactive mode', (command) => {
+    expect(denialFor(command, scope, 'interactive')?.verdict).toBe('ask');
+    expect(denialFor(command, scope, 'non-interactive')?.verdict).toBe('deny');
   });
 
-  it.each(EVAL_FALSE_POSITIVES)('allows the command %s was denied', (_task, command) => {
-    expect(denialFor(command, scope)).toBeUndefined();
+  it.each(WORKSPACE_DELETES)('asks before %s in interactive mode and allows it in non-interactive mode', (command) => {
+    expect(denialFor(command, scope, 'interactive')).toMatchObject({ rule: 'rm-rf-in-workspace', verdict: 'ask' });
+    expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
+  });
+
+  it.each(EVAL_FALSE_POSITIVES)('allows the command %s was denied in non-interactive mode', (_task, command) => {
+    expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
+  });
+
+  it.each(EVAL_FALSE_POSITIVES)('gives the command %s was denied its interactive verdict', (_task, command, verdict) => {
+    expect(denialFor(command, scope, 'interactive')?.verdict).toBe(verdict);
+  });
+
+  it('asks before rm -rf inside a workspace that sits under /tmp, as for any other workspace', () => {
+    const underTmp = { ...scope, workspace: '/tmp/ws' };
+    expect(denialFor('rm -rf src', underTmp, 'interactive')).toMatchObject({ rule: 'rm-rf-in-workspace', verdict: 'ask' });
+    expect(denialFor('rm -rf src', underTmp, 'non-interactive')).toBeUndefined();
+  });
+
+  it('denies a line in non-interactive mode when a later command is denied, though it allows the delete before it', () => {
+    expect(denialFor('rm -rf dist; git push', scope, 'non-interactive')).toEqual({
+      rule: 'git-push',
+      reason: 'git push',
+      command: 'git push',
+      verdict: 'deny',
+    });
   });
 
   it('has a case for every rule', () => {
-    expect(new Set(DENIED.map(([, rule]) => rule))).toEqual(new Set(DENY_RULE_IDS));
+    expect(new Set<DenyRuleId>([...DENIED.map(([, rule]) => rule), 'rm-rf-in-workspace'])).toEqual(new Set(DENY_RULE_IDS));
   });
 
   it('names the part of a compound command that was denied', () => {
-    expect(denialFor('npm ci; git push --force', scope)).toEqual({ rule: 'git-push', reason: 'git push', command: 'git push --force' });
+    expect(denialFor('npm ci; git push --force', scope, 'non-interactive')).toEqual({
+      rule: 'git-push',
+      reason: 'git push',
+      command: 'git push --force',
+      verdict: 'deny',
+    });
   });
 });
 
