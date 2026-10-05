@@ -6,6 +6,7 @@ import { h, icon, reconcile, type Keyed } from './dom.js';
 import { setRoots } from './images.js';
 import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
 import type { FromView, Header, Modes, ToView, Transcript, Turn } from './messages.js';
+import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { mcpPanel } from './mcp-panel.js';
 import { modePicker } from './modes.js';
@@ -112,25 +113,26 @@ function showHeader({ project, title }: Header): void {
   header.title = `${project} / ${title ?? 'New chat'}`;
 }
 
-// The history and the MCP servers each take the transcript's and the composer's place while open, one at a time.
-const showPane = (open: boolean, other: { close(): void }): void => {
-  if (open) other.close();
-  const pane = history.isOpen() ? 'history' : mcp.isOpen() ? 'mcp' : 'chat';
-  document.body.dataset['view'] = pane;
-  log.hidden = pane !== 'chat';
-  form.hidden = pane !== 'chat';
-  if (pane === 'chat') input.focus();
+type Pane = { isOpen(): boolean; close(): void };
+
+// The history, the MCP servers, the rules and the memory each take the transcript's and the composer's place while open, one at a time.
+const showPane = (name: string, open: boolean): void => {
+  if (open) for (const [other, pane] of Object.entries(panes)) if (other !== name) pane.close();
+  const shown = Object.entries(panes).find(([, pane]) => pane.isOpen())?.[0] ?? 'chat';
+  document.body.dataset['view'] = shown;
+  log.hidden = shown !== 'chat';
+  form.hidden = shown !== 'chat';
+  if (shown === 'chat') input.focus();
 };
-const history = historyPanel(
-  (message) => host.postMessage(message),
-  (open) => showPane(open, mcp),
-);
-const mcp = mcpPanel(
-  (message) => host.postMessage(message),
-  (open) => showPane(open, history),
-);
+const post = (message: FromView) => host.postMessage(message);
+const history = historyPanel(post, (open) => showPane('history', open));
+const mcp = mcpPanel(post, (open) => showPane('mcp', open));
+const rules = rulesPanel(post, (open) => showPane('rules', open));
+const memory = memoryPanel(post, (open) => showPane('memory', open));
+const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory };
+const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
 inputBox.insertBefore(attachments.element, chips);
 
@@ -254,7 +256,7 @@ function focusNewPermission(): void {
     const id = card.dataset['permission']!;
     if (asked.has(id)) continue;
     asked.add(id);
-    card.querySelector('button')?.focus();
+    card.querySelector<HTMLElement>('textarea, button')?.focus();
   }
 }
 
@@ -263,7 +265,7 @@ const ENDED = { done: 'Geno finished', stopped: 'Stopped', failed: 'The turn fai
 /** What a screen reader hears besides the transcript itself. */
 const ANNOUNCEMENTS: { readonly [K in ToView['type']]?: (message: Extract<ToView, { type: K }>) => string } = {
   'turn-start': () => 'Geno is working',
-  permission: ({ command }) => `Geno asks to run ${command}`,
+  permission: ({ command, ask }) => (ask === undefined ? `Geno asks to run ${command}` : ask.kind === 'memory' ? `Geno asks to remember: ${command}` : `Geno asks: ${command}`),
   'turn-end': ({ status }) => ENDED[status],
 };
 const announcement = (message: ToView): string | undefined => (ANNOUNCEMENTS[message.type] as ((m: ToView) => string) | undefined)?.(message);
@@ -295,6 +297,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'history-failed') return history.failed(message.scope, message.message);
   if (message.type === 'mcp') return mcp.listed(message.listing);
   if (message.type === 'show-mcp') return mcp.open();
+  if (message.type === 'rules') return rules.listed(message.listing);
+  if (message.type === 'show-rules') return rules.open();
+  if (message.type === 'memory') return memory.listed(message.listing);
+  if (message.type === 'show-memory') return memory.open();
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -498,7 +504,7 @@ input.addEventListener('keydown', (event) => {
 });
 stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && isRunning(transcript) && !history.isOpen() && !mcp.isOpen()) {
+  if (event.key === 'Escape' && isRunning(transcript) && !anyPaneOpen()) {
     event.preventDefault();
     host.postMessage({ type: 'stop' });
   }

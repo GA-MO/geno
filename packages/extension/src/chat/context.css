@@ -1,0 +1,201 @@
+/* The rules and memory panes, in the transcript's place while open, and the memory and question cards in a turn. */
+
+.context-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px var(--gap) 12px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.context-pane[hidden] {
+  display: none;
+}
+
+.context-pane-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-edit-global {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  font-size: var(--small);
+}
+
+.rules-list,
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rules-row,
+.memory-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.rules-open {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rules-open:hover .rules-path,
+.rules-open:focus-visible .rules-path {
+  text-decoration: underline;
+}
+
+.rules-open .codicon {
+  color: var(--muted);
+}
+
+.rules-path {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--code-size);
+  overflow-wrap: anywhere;
+}
+
+.rules-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.rules-trigger {
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  line-height: 18px;
+}
+
+.memory-heading {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.memory-entry-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.memory-foot,
+.memory-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-date {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.memory-input,
+.question-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 7px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  resize: vertical;
+}
+
+.memory-input:focus,
+.question-input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* The note a remember card asks to keep, quoted exactly. */
+.memory-text {
+  margin: 8px 0 6px;
+  padding: 7px 10px;
+  border-left: 3px solid color-mix(in srgb, var(--warn) 60%, transparent);
+  border-radius: 0 7px 7px 0;
+  background: var(--vscode-textCodeBlock-background, var(--surface-2));
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question-text {
+  margin: 8px 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question-free {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.question-free .question-input {
+  flex: 1;
+  min-width: 0;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  & .rules-row,
+  & .memory-row {
+    border-color: var(--glass-edge);
+    background: var(--glass-pane);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .rules-trigger {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  & .memory-text {
+    background: var(--glass-well);
+  }
+
+  & .memory-input,
+  & .question-input {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-well);
+  }
+}

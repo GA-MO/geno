@@ -9,7 +9,10 @@ import {
   HUNK_STATUSES,
   hunkIdOf,
   APPROVAL_META,
+  ASK_USER_FIELDS,
   INLINE_EDIT_META,
+  MEMORY_SCOPES,
+  REMEMBER_META,
   RENAME_SESSION_METHOD,
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
@@ -32,6 +35,7 @@ import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './brid
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
+import { ContextPanes } from './context-host.js';
 import { McpServers } from './mcp-host.js';
 import { Mentions } from './context.js';
 import {
@@ -90,6 +94,15 @@ const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.st
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
 const permissionInput = z.object({ command: z.string(), reason: z.string() });
+const rememberInput = z.object({ text: z.string(), scope: z.enum(MEMORY_SCOPES) });
+/** An ask_user question, as the engine sends it in `elicitation/create`: its options are the choice field's. */
+const questionForm = z.object({
+  mode: z.literal('form'),
+  message: z.string(),
+  requestedSchema: z.object({
+    properties: z.record(z.string(), z.object({ oneOf: z.array(z.object({ const: z.string(), title: z.string() })).optional() }).loose()).optional(),
+  }).loose(),
+}).loose();
 const replayedTurn = z.object({
   mode: z.string().optional(),
   startedAt: z.number(),
@@ -273,6 +286,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly sessions = new WeakMap<Connection, Promise<string>>();
   private turn: SessionLink | undefined;
   private readonly permissions = new Map<string, (optionId: string | undefined) => void>();
+  /** Open questions, each answered with the user's words, empty to decline, or undefined when cancelled. */
+  private readonly questions = new Map<string, (answer: string | undefined) => void>();
   private nextPermission = 0;
   private readonly mentions = new Mentions();
   /** The session of the latest turn, whose attachments folder a pasted image opens from. */
@@ -294,6 +309,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly mcp: McpServers;
   /** The MCP action ran before the webview was ready; it opens the panel once it is. */
   private mcpAsked = false;
+  /** The rules and memory panes. */
+  private readonly panes: ContextPanes;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -310,6 +327,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -359,6 +377,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         }),
       )
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) => this.askPermission(params))
+      .onRequest(acp.methods.client.elicitation.create, ({ params, signal }) => this.askQuestion(params, signal))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update));
@@ -420,6 +439,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     'new-chat': () => this.newChat(),
     history: async () => this.showHistory(),
     model: async () => void (await vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model')),
+    rules: async () => void this.view?.webview.postMessage({ type: 'show-rules' } satisfies ToView),
+    memory: async () => void this.view?.webview.postMessage({ type: 'show-memory' } satisfies ToView),
   };
 
   /** A logged command as its chip shows it; a command no longer listed shows as a prompt template. */
@@ -477,6 +498,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (turn === undefined) return;
     // ACP: a client that cancels a turn answers its open permission requests as cancelled.
     for (const answer of this.permissions.values()) answer(undefined);
+    for (const answer of this.questions.values()) answer(undefined);
     await turn.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: turn.sessionId });
   }
 
@@ -673,19 +695,51 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
       const { command, reason } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '' };
+      const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
       this.dispatch({
         type: 'permission',
         id,
-        command,
+        command: memory.success ? memory.data.text : command,
         reason,
         options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),
         classifier: classifierReasonOf(toolCall.title),
+        ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
       });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.permissions.delete(id);
     this.dispatch({ type: 'permission-done', id, optionId });
     return { outcome: optionId === undefined ? { outcome: 'cancelled' } : { outcome: 'selected', optionId } };
+  }
+
+  /**
+   * An ask_user question: a card with its options and a free-text answer, the same card path as a permission. The
+   * engine cancels it when the turn stops, which takes the card down.
+   */
+  private async askQuestion(params: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {
+    const form = questionForm.safeParse(params);
+    if (!form.success) return { action: 'decline' };
+    const choices = form.data.requestedSchema.properties?.[ASK_USER_FIELDS.choice]?.oneOf ?? [];
+    const id = String(this.nextPermission++);
+    const answer = await new Promise<string | undefined>((resolve) => {
+      this.questions.set(id, resolve);
+      signal.addEventListener('abort', () => resolve(undefined), { once: true });
+      this.dispatch({
+        type: 'permission',
+        id,
+        command: form.data.message,
+        reason: '',
+        options: choices.map((choice) => ({ optionId: choice.const, name: choice.title, kind: 'answer' })),
+        ask: { kind: 'question', question: form.data.message },
+      });
+      void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
+    });
+    this.questions.delete(id);
+    this.dispatch({ type: 'permission-done', id, optionId: undefined, ...(answer === undefined ? {} : { answer }) });
+    if (answer === undefined) return { action: 'cancel' };
+    if (answer === '') return { action: 'decline' };
+    const field = choices.some((choice) => choice.const === answer) ? ASK_USER_FIELDS.choice : ASK_USER_FIELDS.answer;
+    return { action: 'accept', content: { [field]: answer } };
   }
 
   /** Applies a change to the transcript and sends it to the webview, which applies the same change. */
@@ -728,6 +782,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'want-commands': () => void this.link().catch(() => {}),
       stop: () => void this.stop(),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
+      answer: ({ id, text }) => this.questions.get(id)?.(text.trim()),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
@@ -741,6 +796,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),
       'delete-session': ({ id, scope }) => void this.deleteChat(id).then(() => this.postHistory(view, scope), warn),
       ...this.mcp.handlers,
+      ...this.panes.handlers,
     };
   }
 

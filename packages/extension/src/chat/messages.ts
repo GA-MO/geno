@@ -1,4 +1,4 @@
-import type { HunkStatus } from '@g-code/core';
+import type { AppliedRule, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { MentionCompletion } from './mentions.js';
@@ -87,9 +87,23 @@ export type DiffHunk = {
 
 export type PermissionChoice = { readonly optionId: string; readonly name: string; readonly kind: string };
 
-export type PermissionOutcome = { readonly kind: 'open' } | { readonly kind: 'chosen'; readonly optionId: string } | { readonly kind: 'cancelled' };
+export type PermissionOutcome =
+  | { readonly kind: 'open' }
+  | { readonly kind: 'chosen'; readonly optionId: string }
+  /** A question's answer: an option picked or words typed; empty when the user declined to answer. */
+  | { readonly kind: 'answered'; readonly text: string }
+  | { readonly kind: 'cancelled' };
 
-/** The engine asking before it runs a command its rules hold back. */
+/**
+ * What a card asks besides running a command: to keep a note across sessions (`remember`), or a question
+ * (`ask_user`), whose `options` are answers to pick and which also takes the user's own words.
+ */
+export type PermissionAsk = { readonly kind: 'memory'; readonly text: string; readonly scope: MemoryScope } | { readonly kind: 'question'; readonly question: string };
+
+/**
+ * The engine waiting on the user: before it runs a command its rules hold back, or, with `ask`, before it keeps a
+ * note or for the answer to a question. Every such card is one of these, so whatever shows a waiting card shows all.
+ */
 export type PermissionBlock = {
   readonly kind: 'permission';
   readonly id: string;
@@ -99,6 +113,7 @@ export type PermissionBlock = {
   readonly outcome: PermissionOutcome;
   /** Why the classifier would not decide, when Auto asked it first. */
   readonly classifier?: string | undefined;
+  readonly ask?: PermissionAsk | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -144,8 +159,10 @@ export type Action =
       readonly reason: string;
       readonly options: readonly PermissionChoice[];
       readonly classifier?: string | undefined;
+      readonly ask?: PermissionAsk | undefined;
     }
-  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined }
+  /** `answer` settles a question; otherwise `optionId` is the choice, undefined when the request was cancelled. */
+  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: string | undefined }
   | { readonly type: 'error'; readonly message: string }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
 
@@ -203,7 +220,32 @@ export type ToView =
   | { readonly type: 'hide-history' }
   | { readonly type: 'history'; readonly scope: HistoryScope; readonly rows: readonly HistoryRow[] }
   | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
-  | McpToView;
+  | McpToView
+  | ContextToView;
+
+/** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
+export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
+
+export type RulesListing = Listing<{ readonly rules: readonly AppliedRule[]; readonly globalFile: string }>;
+export type MemoryListing = Listing<{ readonly entries: readonly MemoryEntry[] }>;
+
+/** The rules and memory panes, which the `/rules` and `/memory` built-ins open. */
+export type ContextToView =
+  | { readonly type: 'rules'; readonly listing: RulesListing }
+  | { readonly type: 'show-rules' }
+  | { readonly type: 'memory'; readonly listing: MemoryListing }
+  | { readonly type: 'show-memory' };
+
+/** Each is answered by a `rules` or `memory` message, but `open-file`, which opens an editor tab. */
+export type ContextFromView =
+  | { readonly type: 'rules-list' }
+  /** `file` is absolute. */
+  | { readonly type: 'open-file'; readonly file: string }
+  /** Creates the global rules file when missing and opens it. */
+  | { readonly type: 'edit-global-rules' }
+  | { readonly type: 'memory-list' }
+  | { readonly type: 'memory-edit'; readonly id: string; readonly text: string }
+  | { readonly type: 'memory-delete'; readonly id: string };
 
 /** A folder the webview may load images from: its absolute path and the address of that folder inside the webview. */
 export type WebviewRoot = { readonly path: string; readonly uri: string };
@@ -225,6 +267,8 @@ export type FromView =
   | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
+  /** The answer to a question card; empty declines to answer. */
+  | { readonly type: 'answer'; readonly id: string; readonly text: string }
   /** Keep or undo hunks, one from a hunk's buttons or every pending one of a turn from its changes card. */
   | { readonly type: 'keep'; readonly hunks: readonly string[] }
   | { readonly type: 'undo'; readonly hunks: readonly string[] }
@@ -245,4 +289,5 @@ export type FromView =
   /** The list is answered again once the change is made. */
   | { readonly type: 'rename-session'; readonly id: string; readonly title: string; readonly scope: HistoryScope }
   | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
-  | McpFromView;
+  | McpFromView
+  | ContextFromView;

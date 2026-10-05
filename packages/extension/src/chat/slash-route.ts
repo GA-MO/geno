@@ -34,7 +34,7 @@ export const BUILTIN_OPTIONS: readonly CommandOption[] = Object.entries(BUILTIN_
 }));
 
 /** The panel actions the editor's built-ins run instead of a prompt. */
-export const EDITOR_ACTIONS = { new: 'new-chat', clear: 'new-chat', history: 'history', model: 'model' } as const;
+export const EDITOR_ACTIONS = { new: 'new-chat', clear: 'new-chat', history: 'history', model: 'model', rules: 'rules', memory: 'memory' } as const;
 export type EditorAction = (typeof EDITOR_ACTIONS)[keyof typeof EDITOR_ACTIONS];
 
 /**
