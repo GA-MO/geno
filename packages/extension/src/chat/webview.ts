@@ -1,8 +1,10 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
+import { composerAttachments } from './composer-attachments.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
-import { formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
+import { setRoots } from './images.js';
+import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
 import type { FromView, ToView, Transcript, Turn } from './messages.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { callsStep, changesCard, emptyState, errorBlock, permissionCard, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
@@ -76,6 +78,9 @@ const inputBox = h(
 );
 const form = h('form', { class: 'composer' }, menu, inputBox);
 document.body.append(log, form, status);
+// Pasted and dropped files become chips above the text; the form takes drops anywhere on the composer.
+const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
+inputBox.insertBefore(attachments.element, chips);
 
 // The glass style floats the composer over the transcript, which keeps this much room below its last line.
 new ResizeObserver(() => document.body.style.setProperty('--composer-height', `${form.offsetHeight}px`)).observe(form);
@@ -135,7 +140,7 @@ function turnShell(turn: Turn): HTMLElement {
   return h(
     'article',
     { class: 'turn', 'data-turn': turn.id },
-    userMessage(turn.prompt),
+    userMessage(turn.prompt, turn.attachments, ui),
     h('div', { class: 'head-slot' }),
     h('ol', { class: 'rail' }),
     h('div', { class: 'footer-slot' }),
@@ -217,6 +222,14 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     document.body.dataset['style'] = message.style;
     return;
   }
+  if (message.type === 'picked') {
+    attachments.picked(message.files, message.refused);
+    return;
+  }
+  if (message.type === 'roots') {
+    setRoots(message.roots);
+    return;
+  }
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -280,7 +293,7 @@ function fill(text: string): void {
  * question is shown, so a slow answer never replaces a newer one.
  */
 let lastQuestion = 0;
-let pending: { readonly id: number; readonly start: number } | undefined;
+let pending: { readonly id: number; readonly start: number; readonly query: string } | undefined;
 let completing: { readonly start: number; readonly items: readonly MentionCompletion[]; readonly active: number } | undefined;
 
 function askCompletions(): void {
@@ -289,13 +302,13 @@ function askCompletions(): void {
     closeMenu();
     return;
   }
-  pending = { id: ++lastQuestion, start: at.start };
+  pending = { id: ++lastQuestion, start: at.start, query: at.query };
   host.postMessage({ type: 'complete', id: pending.id, query: at.query });
 }
 
 function showCompletions(id: number, items: readonly MentionCompletion[]): void {
   if (pending?.id !== id) return;
-  completing = { start: pending.start, items, active: 0 };
+  completing = { start: pending.start, items: pending.query === '' ? [ATTACH_ROW, ...items] : items, active: 0 };
   renderMenu();
 }
 
@@ -308,6 +321,15 @@ function closeMenu(): void {
 function accept(index: number): void {
   const item = completing?.items[index];
   if (completing === undefined || item === undefined) return;
+  if (item.kind === 'attach') {
+    // The `@` that opened the list was only the way in; the picker replaces it.
+    const text = input.value.slice(0, completing.start) + input.value.slice(input.selectionStart);
+    const caret = completing.start;
+    closeMenu();
+    edit(text, caret);
+    host.postMessage({ type: 'pick-files' });
+    return;
+  }
   const next = insertMention(input.value, completing.start, input.selectionStart, item.label);
   closeMenu();
   input.value = next.text;
@@ -346,13 +368,13 @@ function renderMenu(): void {
           class: i === completing!.active ? 'mention active' : 'mention',
           role: 'option',
           'aria-selected': String(i === completing!.active),
-          'data-mention': item.label,
+          ...(item.kind === 'attach' ? { 'data-action': 'attach' } : { 'data-mention': item.label }),
           // Keeps the focus in the composer, so the click does not close the list before it lands.
           onmousedown: (event) => event.preventDefault(),
           onclick: () => accept(i),
         },
-        icon(item.kind === 'selection' ? 'selection' : 'file'),
-        h('span', { class: 'mention-label' }, item.kind === 'selection' ? item.label : item.label.slice(item.label.lastIndexOf('/') + 1)),
+        icon(item.kind === 'attach' ? 'attach' : item.kind === 'selection' ? 'selection' : 'file'),
+        h('span', { class: 'mention-label' }, item.kind === 'file' ? item.label.slice(item.label.lastIndexOf('/') + 1) : item.label),
         h('span', { class: 'mention-detail' }, item.detail),
       ),
     ),
@@ -367,8 +389,10 @@ function renderMenu(): void {
 
 function submit(): void {
   const text = input.value.trim();
-  if (text === '' || isRunning(transcript)) return;
-  host.postMessage({ type: 'send', text });
+  const attached = attachments.ready();
+  if ((text === '' && attached.length === 0) || isRunning(transcript) || attachments.busy()) return;
+  host.postMessage({ type: 'send', text, ...(attached.length === 0 ? {} : { attachments: attached }) });
+  attachments.clear();
   fill('');
 }
 

@@ -1,0 +1,198 @@
+/*
+ * Attachments: chips in the composer, what the user sent above their bubble, a read's thumbnails on its step,
+ * and images inline in an answer. Every frame reads the panel's own surface and edge tokens, so glass, native
+ * and high contrast each style them their way, and an image is the only color they add.
+ */
+
+.request {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  backdrop-filter: var(--glass-blur, none);
+  color: var(--muted);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+button.thumb {
+  cursor: pointer;
+}
+
+button.thumb:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachment-chips[hidden] {
+  display: none;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 3px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  backdrop-filter: var(--glass-blur, none);
+}
+
+.attachment-chip .thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.attachment-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.attachment-name {
+  overflow: hidden;
+  max-width: 160px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--small);
+}
+
+.attachment-detail {
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  white-space: nowrap;
+}
+
+.attachment-rejected {
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 45%, transparent);
+}
+
+.attachment-rejected .thumb-icon {
+  color: var(--vscode-errorForeground);
+}
+
+.attachment-note {
+  flex-basis: 100%;
+  color: var(--vscode-errorForeground);
+  font-size: var(--small);
+}
+
+.composer.dropping .input-box {
+  border-color: var(--vscode-focusBorder);
+}
+
+.sent-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 85%;
+}
+
+.sent-attachments .thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+}
+
+.sent-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-2);
+  backdrop-filter: var(--glass-blur, none);
+  color: var(--vscode-foreground);
+}
+
+.sent-file .codicon {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.step-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 2px 26px;
+}
+
+.step-images .thumb {
+  width: 96px;
+  height: 72px;
+  border-radius: 10px;
+}
+
+.inline-image {
+  display: inline-block;
+  vertical-align: top;
+}
+
+.thumb-inline {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 12px;
+}
+
+.thumb-inline img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+}
+
+.blocked-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.blocked-image .codicon {
+  color: var(--muted);
+}
+
+.blocked-note {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.mention .codicon-attach {
+  color: var(--vscode-foreground);
+}
