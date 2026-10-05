@@ -1,7 +1,11 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
+import type { OutgoingAttachment } from './attachment-model.js';
 import { composerAttachments } from './composer-attachments.js';
+import { composerView, NO_FACTS, type ComposerFacts } from './composer-model.js';
+import { composerControls } from './composer-view.js';
+import type { McpListing } from './mcp-model.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { setRoots } from './images.js';
 import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
@@ -89,14 +93,19 @@ const input = h('textarea', {
 });
 const send = h('button', { type: 'submit', class: 'round-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('arrow-up'));
 const stop = h('button', { type: 'button', class: 'round-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('debug-stop'));
-const modelName = h('span', { class: 'model-name' });
-const modelLabel = h(
-  'button',
-  { type: 'button', class: 'composer-model', title: 'Choose the model', onclick: () => host.postMessage({ type: 'choose-model' }) },
-  icon('sparkle'),
-  modelName,
-  icon('chevron-down'),
-);
+/** What the extension host knows for the composer, the shown session's MCP servers, and a follow-up waiting on the turn. */
+let facts: ComposerFacts = NO_FACTS;
+let mcpListing: McpListing = { kind: 'loading' };
+type Queued = { readonly text: string; readonly attachments: readonly OutgoingAttachment[] };
+let queued: Queued | undefined;
+const controls = composerControls((message) => host.postMessage(message), {
+  addContext: () => addContext(),
+  openCommands: () => openCommands(),
+  unqueue: () => {
+    queued = undefined;
+    schedule();
+  },
+});
 let mode = '';
 const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeId }), (modes: Modes) => {
   // Auto marks the whole composer, so it shows wherever the user looks to type.
@@ -106,14 +115,21 @@ const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeI
 });
 const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
+/** Attachments and connections above the text, in one row that scrolls sideways. */
+const tray = h('div', { class: 'tray', hidden: true }, ...controls.tray, chips);
 // The composer always wears the running rainbow edge; the ring is its own element so the edge can turn on the compositor.
 const inputBox = h(
   'div',
   { class: 'input-box rainbow' },
   h('span', { class: 'ring', 'aria-hidden': 'true' }),
-  chips,
+  tray,
   input,
-  h('div', { class: 'input-toolbar' }, modelLabel, picker.element, h('span', { class: 'spacer' }), stop, send),
+  h(
+    'div',
+    { class: 'input-toolbar' },
+    h('span', { class: 'toolbar-left' }, ...controls.left, picker.element),
+    h('span', { class: 'toolbar-right' }, ...controls.right, stop, send),
+  ),
 );
 const slash = slashPicker(input, {
   edited: () => {
@@ -124,7 +140,7 @@ const slash = slashPicker(input, {
   submit,
 });
 const peek = peekOver();
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, peek.element, inputBox);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, peek.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
 const peekInput = (): PeekInput => ({
   turns: transcript.turns.length,
@@ -178,8 +194,14 @@ const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, set
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
 document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, log, form, status);
-const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
-inputBox.insertBefore(attachments.element, chips);
+const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
+tray.insertBefore(attachments.element, chips);
+inputBox.insertBefore(attachments.note, input);
+
+/** The tray shows while any chip is in it. */
+function showTray(): void {
+  tray.hidden = !(chips.childElementCount > 0 || !attachments.element.hidden || controls.tray.some((chip) => !chip.hidden));
+}
 
 // The glass style floats the composer over the transcript, which keeps this much room below its last line.
 new ResizeObserver(() => document.body.style.setProperty('--composer-height', `${form.offsetHeight}px`)).observe(form);
@@ -293,10 +315,13 @@ function render(): void {
   wasEmpty = empty;
   gate.set('shown', empty && document.body.dataset['view'] === 'chat');
   peek.update(peekInput());
-  send.hidden = running;
-  stop.hidden = !running;
-  modelName.textContent = transcript.model === '' ? 'Default model' : transcript.model;
-  input.placeholder = empty ? 'Describe the change you want, @ to add context, / for commands' : 'Ask a follow-up, @ to add context, / for commands';
+  const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now() });
+  controls.show(view);
+  showTray();
+  send.hidden = view.action !== 'send';
+  stop.hidden = view.action !== 'stop';
+  input.placeholder = view.placeholder;
+  tick(running);
   if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
   focusNewPermission();
   if (!keepPlace() && atBottom) log.scrollTop = log.scrollHeight;
@@ -305,6 +330,16 @@ function render(): void {
 
 function schedule(): void {
   frame ??= requestAnimationFrame(render);
+}
+
+/** The running turn's clock, redrawn each second while it runs. */
+let ticking: ReturnType<typeof setInterval> | undefined;
+function tick(running: boolean): void {
+  if (running && ticking === undefined) ticking = setInterval(schedule, 1000);
+  if (!running && ticking !== undefined) {
+    clearInterval(ticking);
+    ticking = undefined;
+  }
 }
 
 /** A waiting card's control that takes the keyboard: the one it marks, such as a question's first option, or else its first field or button. */
@@ -362,7 +397,16 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     return history.listed(message.scope, message.rows);
   }
   if (message.type === 'history-failed') return history.failed(message.scope, message.message);
-  if (message.type === 'mcp') return mcp.listed(message.listing);
+  if (message.type === 'mcp') {
+    mcpListing = message.listing;
+    schedule();
+    return mcp.listed(message.listing);
+  }
+  if (message.type === 'composer') {
+    facts = message.facts;
+    schedule();
+    return;
+  }
   if (message.type === 'show-mcp') return mcp.open();
   if (message.type === 'settings') return settings.listed(message.listing);
   if (message.type === 'show-settings') return settings.open();
@@ -377,8 +421,22 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
   const said = announcement(message);
   if (said !== undefined) status.textContent = said;
+  if (message.type === 'turn-end') sendQueued(message.status);
   schedule();
 });
+
+/** A follow-up queued during the turn goes once it finishes; after a stop or a failure it comes back to the composer instead. */
+function sendQueued(ended: 'done' | 'stopped' | 'failed'): void {
+  const next = queued;
+  queued = undefined;
+  if (next === undefined) return;
+  if (ended === 'done') {
+    host.postMessage({ type: 'send', text: next.text, ...(next.attachments.length === 0 ? {} : { attachments: next.attachments }) });
+    return;
+  }
+  if (input.value.trim() === '') edit(next.text, undefined);
+  attachments.restore(next.attachments);
+}
 
 /** The composer after its text changed: its height, and a chip for each `@` mention in it. */
 function redraft(): void {
@@ -403,8 +461,8 @@ function redraft(): void {
         ),
       ),
     ),
-    h('button', { type: 'button', class: 'context-add', title: 'Add context (@)', 'aria-label': 'Add context', onclick: addContext }, icon('add')),
   );
+  showTray();
 }
 
 /** Replaces the draft, putting the caret at `caret` or the end, and keeps the focus in the composer. */
@@ -424,6 +482,13 @@ function addContext(): void {
   const mention = before === '' || /\s$/.test(before) ? '@' : ' @';
   edit(before + mention + input.value.slice(input.selectionEnd), caret + mention.length);
   askCompletions();
+}
+
+/** The `/` button: a `/` at the start of the draft, with the caret after it, which opens the command picker. */
+function openCommands(): void {
+  const text = input.value.startsWith('/') ? input.value : input.value === '' ? '/' : `/ ${input.value}`;
+  edit(text, 1);
+  slash.refresh();
 }
 
 function fill(text: string): void {
@@ -530,14 +595,28 @@ function renderMenu(): void {
   input.setAttribute('aria-expanded', String(items.length > 0));
 }
 
+/** Sends the draft, or while a turn runs queues it to send when the turn finishes; one follow-up waits at a time. */
 function submit(): void {
   const text = input.value.trim();
   const attached = attachments.ready();
-  if ((text === '' && attached.length === 0) || isRunning(transcript) || attachments.busy()) return;
-  host.postMessage({ type: 'send', text, ...(attached.length === 0 ? {} : { attachments: attached }) });
+  if ((text === '' && attached.length === 0) || attachments.busy()) return;
+  if (isRunning(transcript)) {
+    if (queued !== undefined) return;
+    queued = { text, attachments: attached };
+    schedule();
+  } else host.postMessage({ type: 'send', text, ...(attached.length === 0 ? {} : { attachments: attached }) });
   attachments.clear();
   fill('');
 }
+
+/**
+ * An IME such as Thai's is composing: its Enter commits the composition and must not send. Chromium marks such keys
+ * `isComposing` and gives them keyCode 229; the composition events cover an IME that does neither.
+ */
+let composing = false;
+input.addEventListener('compositionstart', () => (composing = true));
+input.addEventListener('compositionend', () => (composing = false));
+const imeKey = (event: KeyboardEvent): boolean => event.isComposing || composing || event.keyCode === 229;
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -561,7 +640,7 @@ input.addEventListener('keyup', (event) => {
 });
 input.addEventListener('keydown', (event) => {
   if (slash.keydown(event)) return;
-  if (completing !== undefined && completing.items.length > 0 && !event.isComposing) {
+  if (completing !== undefined && completing.items.length > 0 && !imeKey(event)) {
     const move = MENU_KEYS[event.key];
     if (move !== undefined) {
       event.preventDefault();
@@ -570,7 +649,7 @@ input.addEventListener('keydown', (event) => {
       return;
     }
   }
-  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+  if (event.key === 'Enter' && !event.shiftKey && !imeKey(event)) {
     event.preventDefault();
     submit();
   }

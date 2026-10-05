@@ -204,7 +204,7 @@ async function setUserValue(provider: ProviderName, field: FieldId, value: strin
 }
 
 /** Chat is `gcode.provider` and `gcode.model`; the other roles live in `gcode.roles`. An empty provider unmaps a role. */
-async function setRole(role: string, provider: string, model: string): Promise<void> {
+export async function setRole(role: string, provider: string, model: string): Promise<void> {
   if (role === 'chat') {
     if (!isProviderName(provider)) return;
     await config().update('provider', provider, vscode.ConfigurationTarget.Global);

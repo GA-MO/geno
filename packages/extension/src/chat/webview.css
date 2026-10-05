@@ -5,6 +5,7 @@
 @import './settings.css';
 @import './context.css';
 @import './question.css';
+@import './composer.css';
 
 /*
  * Trail: a run is a path. In the native style every color comes from the theme's variables, mixed with color-mix
@@ -1596,8 +1597,7 @@ body.diagram-tab {
   background: var(--surface-2);
 }
 
-.chip-remove,
-.context-add {
+.chip-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1610,21 +1610,12 @@ body.diagram-tab {
   color: var(--muted);
 }
 
-.context-add {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  background: var(--surface-2);
-}
-
-.chip-remove:hover,
-.context-add:hover {
+.chip-remove:hover {
   color: var(--vscode-foreground);
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-.chip-remove .codicon,
-.context-add .codicon {
+.chip-remove .codicon {
   font-size: 12px;
 }
 
@@ -2502,8 +2493,7 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 
   & .step-target,
   & .file-chip,
-  & .context-chip,
-  & .context-add {
+  & .context-chip {
     border: 1px solid var(--glass-edge);
     background: var(--glass-pane-raised);
     backdrop-filter: var(--glass-blur);

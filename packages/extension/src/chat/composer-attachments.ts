@@ -62,8 +62,10 @@ const urisOf = (data: DataTransfer): string[] =>
     .filter((line, i, all) => line !== '' && !line.startsWith('#') && all.indexOf(line) === i);
 
 export type ComposerAttachments = {
-  /** The chip strip, shown above the composer's text while it holds anything. */
+  /** The chips, in the composer's tray while it holds anything. */
   readonly element: HTMLElement;
+  /** Why a file was not attached, under the tray. */
+  readonly note: HTMLElement;
   /** What the next message sends: the ready attachments. */
   ready(): OutgoingAttachment[];
   /** True while a file is still being read, when sending would leave it behind. */
@@ -71,6 +73,8 @@ export type ComposerAttachments = {
   clear(): void;
   /** Files the extension read from the picker or the explorer. */
   picked(files: readonly PickedFile[], refused: readonly Refused[]): void;
+  /** Puts back attachments that were queued with a follow-up that did not go. */
+  restore(attachments: readonly OutgoingAttachment[]): void;
 };
 
 /** Wires paste and drop on `target` and keeps the drafts. `changed` runs whenever the drafts change. */
@@ -78,6 +82,7 @@ export function composerAttachments(target: HTMLElement, post: (message: FromVie
   let drafts: Draft[] = [];
   let next = 0;
   const element = h('div', { class: 'attachment-chips', role: 'list', 'aria-label': 'Attachments for the next message', hidden: true });
+  const note = h('div', { class: 'attachment-note', role: 'alert', hidden: true });
 
   const set = (updated: Draft[]) => {
     drafts = updated;
@@ -105,10 +110,12 @@ export function composerAttachments(target: HTMLElement, post: (message: FromVie
       ready?.kind === 'image'
         ? h('span', { class: 'thumb' }, h('img', { src: ready.thumb, alt: '' }))
         : h('span', { class: 'thumb thumb-icon' }, icon(draft.state === 'reading' ? 'loading' : draft.state === 'rejected' ? 'error' : 'file', draft.state === 'reading' ? 'codicon-modifier-spin' : ''));
-    const detail = draft.state === 'reading' ? 'Reading…' : draft.state === 'rejected' ? 'Not attached' : ready!.kind === 'image' ? `${ready!.width}×${ready!.height} · ${formatBytes(ready!.bytes)}` : formatBytes(ready!.bytes);
+    // An image shows its size in pixels, as the model will see it, with its bytes in the tooltip.
+    const detail = draft.state === 'reading' ? 'Reading…' : draft.state === 'rejected' ? 'Not attached' : ready!.kind === 'image' ? `${ready!.width}×${ready!.height}` : formatBytes(ready!.bytes);
+    const title = draft.state === 'rejected' ? draft.reason : ready === undefined ? draft.name : `${draft.name}, ${formatBytes(ready.bytes)}`;
     return h(
       'div',
-      { class: `attachment-chip attachment-${draft.state}`, role: 'listitem', 'data-attachment': draft.name, title: draft.state === 'rejected' ? draft.reason : draft.name },
+      { class: `attachment-chip attachment-${draft.state} attachment-${ready?.kind ?? 'pending'}`, role: 'listitem', 'data-attachment': draft.name, title },
       preview,
       h('span', { class: 'attachment-text' }, h('span', { class: 'attachment-name' }, draft.name), h('span', { class: 'attachment-detail' }, detail)),
       h('button', { type: 'button', class: 'chip-remove', 'aria-label': `Remove ${draft.name}`, title: 'Remove', onclick: () => remove(draft.id) }, icon('close')),
@@ -118,7 +125,9 @@ export function composerAttachments(target: HTMLElement, post: (message: FromVie
   function render(): void {
     element.hidden = drafts.length === 0;
     const reasons = drafts.flatMap((d) => (d.state === 'rejected' ? [d.reason] : []));
-    element.replaceChildren(...drafts.map(chip), ...(reasons.length === 0 ? [] : [h('div', { class: 'attachment-note', role: 'alert' }, reasons.join(' '))]));
+    element.replaceChildren(...drafts.map(chip));
+    note.hidden = reasons.length === 0;
+    note.textContent = reasons.join(' ');
   }
 
   target.addEventListener('paste', (event) => {
@@ -148,12 +157,16 @@ export function composerAttachments(target: HTMLElement, post: (message: FromVie
 
   return {
     element,
+    note,
     ready: () => drafts.flatMap((d) => (d.state === 'ready' ? [d.attachment] : [])),
     busy: () => drafts.some((d) => d.state === 'reading'),
     clear: () => set([]),
     picked(files, refused) {
       for (const file of files) add(file.name, blobOfBase64(file.data), file.path);
       if (refused.length > 0) set([...drafts, ...refused.map(({ name, reason }): Draft => ({ id: `a${next++}`, name, state: 'rejected', reason }))]);
+    },
+    restore(attachments) {
+      set([...drafts, ...attachments.map((attachment): Draft => ({ id: `a${next++}`, name: attachment.name, state: 'ready', attachment }))]);
     },
   };
 }

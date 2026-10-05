@@ -1,0 +1,242 @@
+/*
+ * The composer's tray and bottom row (U36). The tray holds attachments and connections in one row that scrolls
+ * sideways; the bottom row has +, / and the mode on the left, and the run status, the context ring, the model and
+ * Send or Stop on the right. Rules that override the glass ones go through .input-box, so they win wherever this
+ * file is imported.
+ */
+
+.tray {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.tray[hidden],
+.tray-chip[hidden],
+.run-status[hidden],
+.model-effort[hidden] {
+  display: none;
+}
+
+.tray > *,
+.tray .attachment-chip {
+  flex: none;
+}
+
+.tray .attachment-chips,
+.tray .context-chips {
+  flex-wrap: nowrap;
+}
+
+.tray .context-chips:empty {
+  display: none;
+}
+
+.tray-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  padding: 3px 3px 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  backdrop-filter: var(--glass-blur, none);
+  font-size: var(--small);
+  white-space: nowrap;
+}
+
+.tray-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.browser-globe {
+  color: var(--ok);
+}
+
+.queued-chip {
+  color: var(--muted);
+}
+
+.input-box .input-toolbar {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.toolbar-left {
+  flex: none;
+}
+
+.toolbar-right {
+  flex: 0 1 auto;
+  gap: 8px;
+}
+
+.input-box .composer-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  backdrop-filter: none;
+  color: var(--muted);
+}
+
+.input-box .composer-icon:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.input-box .composer-icon .codicon {
+  font-size: 14px;
+}
+
+.slash-button span {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.input-box .composer-model {
+  margin-left: 0;
+  color: var(--vscode-foreground);
+}
+
+.model-effort {
+  color: var(--muted);
+}
+
+.composer-model .model-chevron {
+  color: var(--muted);
+}
+
+/* The context ring: a 16px track with an arc from the top, amber from 80% and dashed while the window is unknown. */
+.context-ring {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+  border-radius: 50%;
+}
+
+.context-ring svg {
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+
+.ring-track,
+.ring-fill {
+  fill: none;
+  stroke-width: 2;
+}
+
+.ring-track {
+  stroke: color-mix(in srgb, currentColor 28%, transparent);
+}
+
+.ring-fill {
+  stroke: currentColor;
+}
+
+.context-ring[data-level='high'] {
+  color: var(--warn);
+}
+
+.context-ring[data-level='unknown'] .ring-track {
+  stroke-dasharray: 2 2;
+}
+
+.context-ring:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.run-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.run-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.agents-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--vscode-foreground);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.agents-pill .codicon {
+  color: var(--ok);
+}
+
+.model-menu .menu-heading {
+  padding: 6px 8px 2px;
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: 600;
+}
+
+.model-menu .menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--vscode-widget-border, var(--border));
+}
+
+.model-menu .menu-note {
+  padding: 4px 8px 6px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.model-menu .mode-option-detail {
+  color: var(--muted);
+}
+
+/* Stop is a square on a dark circle in both glasses; high contrast keeps the native colors. */
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.stop {
+  border: 1px solid var(--glass-edge-hi);
+  background: #0c0c0d;
+  color: #f2f2f2;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.stop:hover {
+  background: #000000;
+}
+
+body[data-style='glass'].vscode-light:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.stop {
+  border-color: transparent;
+  background: #171717;
+  color: #ffffff;
+}

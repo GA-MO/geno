@@ -314,6 +314,12 @@
           "default": "compact",
           "description": "How much of each turn the chat shows. The answer, the files a turn changed, and anything waiting on you show either way."
         },
+        "gcode.chat.bahtPerUsd": {
+          "type": "number",
+          "default": 33,
+          "exclusiveMinimum": 0,
+          "description": "Baht to one US dollar, for the cost the composer shows while a turn runs. The tooltip gives the cost in US dollars."
+        },
         "gcode.ui.showChanges": {
           "type": "boolean",
           "default": false,
