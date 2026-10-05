@@ -109,7 +109,11 @@ export function answer(text: string, usage: CacheUsage, opts: { stopReason?: str
   };
 }
 
-const encode = (event: SseEvent) => new TextEncoder().encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+const sseEvent = (event: SseEvent) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+const encode = (event: SseEvent) => new TextEncoder().encode(sseEvent(event));
+
+/** A whole reply as one server-sent-events body, for a fake served over HTTP. */
+export const sseBody = (reply: Reply): string => reply.events.map(sseEvent).join('');
 
 function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStream<Uint8Array> {
   const events = reply.stallAfter === undefined ? reply.events : reply.events.slice(0, reply.stallAfter);
