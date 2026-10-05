@@ -19,7 +19,8 @@ import {
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { childEnv } from './child-env.js';
-import { homeOf, loadCommands, pluginLoader } from './commands.js';
+import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
+import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
@@ -88,7 +89,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir }));
   try {
     const { plugins } = await pluginLoader(io)(workspace);
-    const commands = () => loadCommands(workspace, homeOf(store), plugins);
+    const homes = homesOf(store, io.env);
+    const commands = () => loadCommands(workspace, homes, plugins);
+    const skillRoots = await globalSkillRoots(homes, claudeDirOf(io.env));
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
     const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
     const executors = agentExecutors({
@@ -116,7 +119,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       tools: mcp === undefined ? own : [...own, ...mcp.tools],
       executors: { ...mcp?.executors, ...user, ...executors },
       system: [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n'),
-      readRoots: [...plugins.map((plugin) => plugin.root), ...(genoTools === undefined ? [] : [genoTools])],
+      readRoots: [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);

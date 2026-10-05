@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COMMAND_META, type SlashCommand } from '@g-code/core';
-import { availableCommands, loadCommands, watchCommands } from '../src/commands.js';
+import { availableCommands, globalSkillRoots, loadCommands, watchCommands } from '../src/commands.js';
 import { runCli } from './helpers.js';
 
 async function tree(files: Readonly<Record<string, string>>): Promise<{ readonly workspace: string; readonly home: string }> {
@@ -37,7 +37,7 @@ describe('command discovery', () => {
       'home/skills/tidy/SKILL.md': skill('tidy', 'Tidy the repo'),
     });
 
-    const commands = await loadCommands(workspace, home, []);
+    const commands = await loadCommands(workspace, { app: home, user: undefined }, []);
 
     expect(commands.slice(0, 8).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init']);
     expect(summary(commands)).toEqual([
@@ -54,12 +54,12 @@ describe('command discovery', () => {
 
   it('never lets a file shadow a built-in', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/new.md': 'Pretend to be new.' });
-    expect((await loadCommands(workspace, home, [])).filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
+    expect((await loadCommands(workspace, { app: home, user: undefined }, [])).filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
   });
 
   it('lists each command for ACP with its description, its input hint, and whether a built-in is the editor\'s to run', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/review.md': '---\ndescription: Review a file\nargument-hint: <file>\n---\nReview $1.' });
-    const listed = availableCommands(await loadCommands(workspace, home, []));
+    const listed = availableCommands(await loadCommands(workspace, { app: home, user: undefined }, []));
     expect(listed.find((c) => c.name === 'new')).toEqual({ name: 'new', description: 'Start a new chat', input: null, _meta: { [COMMAND_META]: { kind: 'builtin', runs: 'client' } } });
     expect(listed.find((c) => c.name === 'mode')).toEqual({
       name: 'mode',
@@ -73,7 +73,7 @@ describe('command discovery', () => {
   it('calls back after a change, including in a commands folder created after the watch began', async () => {
     const { workspace, home } = await tree({});
     let calls = 0;
-    const stop = watchCommands(workspace, home, () => calls++, 50);
+    const stop = watchCommands(workspace, { app: home, user: undefined }, () => calls++, 50);
     // FSEvents misses changes made in the first moments of a watch.
     await new Promise((r) => setTimeout(r, 100));
     try {
@@ -101,7 +101,7 @@ describe('command discovery', () => {
     let calls = 0;
     const stop = watchCommands(
       workspace,
-      home,
+      { app: home, user: undefined },
       () => {
         // A client re-lists on the callback and the user adds the next command at once.
         if (++calls === 1) writeFileSync(path.join(home, 'commands', 'two.md'), 'Two.');
@@ -113,6 +113,54 @@ describe('command discovery', () => {
       await mkdir(path.join(workspace, '.claude', 'commands'), { recursive: true });
       await writeFile(path.join(workspace, '.claude', 'commands', 'one.md'), 'One.');
       await until(() => calls >= 2);
+    } finally {
+      stop();
+    }
+  });
+
+  it('reads the standard ~/.agents/skills too: ~/.g-code wins a name in both, and the workspace wins over either', async () => {
+    const { workspace, home } = await tree({
+      'ws/.agents/skills/lint/SKILL.md': skill('lint', 'Workspace lint'),
+      'home/skills/tidy/SKILL.md': skill('tidy', 'Geno tidy'),
+      'user/.agents/skills/tidy/SKILL.md': skill('tidy', 'Agents tidy'),
+      'user/.agents/skills/lint/SKILL.md': skill('lint', 'Agents lint'),
+      'user/.agents/skills/deploy/SKILL.md': skill('deploy', 'Deploy the site'),
+    });
+    const user = path.join(path.dirname(home), 'user');
+    const commands = await loadCommands(workspace, { app: home, user }, []);
+    expect(summary(commands)).toEqual(['skill lint workspace: Workspace lint', 'skill tidy global: Geno tidy', 'skill deploy global: Deploy the site']);
+    expect(commands.find((c) => c.name === 'deploy')).toMatchObject({ path: path.join(user, '.agents', 'skills', 'deploy', 'SKILL.md') });
+    expect(summary(await loadCommands(workspace, { app: home, user: undefined }, []))).toEqual(['skill lint workspace: Workspace lint', 'skill tidy global: Geno tidy']);
+  });
+
+  it('opens the global skill folders for reading, as real paths, and never one that holds the home or the Claude config dir', async () => {
+    const { home } = await tree({ 'home/skills/tidy/SKILL.md': skill('tidy', 'Tidy'), 'user/.agents/skills/deploy/SKILL.md': skill('deploy', 'Deploy') });
+    const user = path.join(path.dirname(home), 'user');
+    const claude = path.join(user, '.claude');
+    expect(await globalSkillRoots({ app: home, user }, claude)).toEqual([path.join(home, 'skills'), path.join(user, '.agents', 'skills')]);
+    expect(await globalSkillRoots({ app: path.join(home, 'missing'), user: undefined }, undefined)).toEqual([]);
+
+    const { symlink, rm } = await import('node:fs/promises');
+    await rm(path.join(user, '.agents', 'skills'), { recursive: true });
+    await symlink(user, path.join(user, '.agents', 'skills'));
+    expect(await globalSkillRoots({ app: home, user }, claude)).toEqual([path.join(home, 'skills')]);
+    await rm(path.join(user, '.agents', 'skills'));
+    await symlink(claude, path.join(user, '.agents', 'skills'));
+    await mkdir(claude, { recursive: true });
+    expect(await globalSkillRoots({ app: home, user: undefined }, path.join(home, 'skills'))).toEqual([]);
+  });
+
+  it('calls back when a skill appears in ~/.agents/skills, a folder created after the watch began', async () => {
+    const { workspace, home } = await tree({});
+    const user = path.join(path.dirname(home), 'user');
+    await mkdir(user, { recursive: true });
+    let calls = 0;
+    const stop = watchCommands(workspace, { app: home, user }, () => calls++, 50);
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      await mkdir(path.join(user, '.agents', 'skills', 'deploy'), { recursive: true });
+      await writeFile(path.join(user, '.agents', 'skills', 'deploy', 'SKILL.md'), skill('deploy', 'Deploy'));
+      await until(() => calls > 0);
     } finally {
       stop();
     }
