@@ -1,7 +1,8 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type Run, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type Run, type Sha256, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -162,6 +163,7 @@ export async function drive(
   const ctx: ToolContext = {
     workspace: await workspaceDir(io.cwd, session.workspace),
     spillDir: path.join(store.spillDir, session.id),
+    attachmentsDir: attachmentsDir(store, session.id),
     rg: io.env['GCODE_RG'] || 'rg',
     signal,
     files: surface.files,
@@ -176,10 +178,10 @@ export async function drive(
       for (const [i, use] of toolUses.entries()) {
         const seq = firstSeq + i;
         watcher.toolStart(use, describeCall(use, mode.executors));
-        const { status, text, change, approval } = await runTool(use, ctx, mode.executors);
+        const { status, text, change, approval, images } = await runTool(use, ctx, mode.executors);
         watcher.toolEnd(use, status);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
-        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, ...output });
+        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output });
       }
       return results;
     })();
@@ -189,12 +191,15 @@ export async function drive(
     return true;
   };
 
+  // The attachments a run has loaded, by hash: every model call of a run replays the same images.
+  const loaded = new Map<Sha256, string>();
   const callModel = async (): Promise<void> => {
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
       session,
       events,
       tools: mode.tools,
+      stored: await loadAttachments(ctx.attachmentsDir, events, loaded),
       ...(mode.system === undefined ? {} : { system: mode.system }),
       signal,
       onText: (delta) => watcher.text(delta),

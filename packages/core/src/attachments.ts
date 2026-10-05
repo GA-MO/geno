@@ -12,6 +12,12 @@ import type { Brand } from './types.js';
 export type Sha256 = Brand<string, 'Sha256'>;
 export const asSha256 = (raw: string): Sha256 => raw as Sha256;
 
+/**
+ * Key in the `_meta` of a session/prompt block the user attached, `{ name }`: an `image` block, or an embedded text
+ * `resource` that is a file's content rather than an `@selection`.
+ */
+export const ATTACHMENT_META = 'gcode/attachment';
+
 /** The image types the model reads. */
 export const IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
 export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
