@@ -1,4 +1,4 @@
-import { realpath } from 'node:fs/promises';
+import { readdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
@@ -21,12 +21,12 @@ import {
   type ApprovalRecord,
   type BrowserPage,
   type BrowserSettings,
+  type ImageAttachment,
   type McpServerConfig,
   type McpToolInfo,
 } from '@g-code/core';
-import { readFile, readdir } from 'node:fs/promises';
 import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
-import { executor, resolveInside, resolveWritable, ToolDenied, ToolError, type Executor, type ToolContext, type ToolReply } from '../tools/context.js';
+import { executor, resolveInside, resolveWritable, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import type { McpServerHandle } from './server.js';
 
 /** How the server process is started; the flags that matter for safety are added after it by browserServerConfig. */
@@ -162,10 +162,8 @@ export type BrowserToolDeps = {
   /** Tools the user allowed for the session, by model-facing name. */
   readonly allowed: Set<string>;
   /** Runs the call on the server and turns its result into a reply, as for every MCP tool. */
-  readonly call: (args: Record<string, unknown>, ctx: ToolContext) => Promise<{ readonly text: string; readonly images: ToolReplyImages }>;
+  readonly call: (args: Record<string, unknown>, ctx: ToolContext) => Promise<{ readonly text: string; readonly images: readonly ImageAttachment[] }>;
 };
-
-type ToolReplyImages = Extract<ToolReply, { text: string }>['images'];
 
 /**
  * One tool of the built-in browser. Before it runs: the URL rules for a navigation, the remote-page rule, the risky
@@ -229,7 +227,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       const local = target !== undefined && browserUrlOf(target, ctx.workspace).kind === 'local';
       if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target, await devCommand(ctx.workspace)));
       const text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;
-      const images = reply.images ?? [];
+      const { images } = reply;
       if (record === undefined && images.length === 0) return text;
       return { text, ...(record === undefined ? {} : { approval: record }), ...(images.length === 0 ? {} : { images }) };
     },
