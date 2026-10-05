@@ -157,6 +157,10 @@ const KEYS: Readonly<Record<string, { readonly key: string; readonly code: strin
   Tab: { key: 'Tab', code: 'Tab', keyCode: 9 },
   ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
   ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
+  ArrowLeft: { key: 'ArrowLeft', code: 'ArrowLeft', keyCode: 37 },
+  ArrowRight: { key: 'ArrowRight', code: 'ArrowRight', keyCode: 39 },
+  Space: { key: ' ', code: 'Space', keyCode: 32, text: ' ' },
+  ...Object.fromEntries(['1', '2', '3', '4', '5'].map((d) => [d, { key: d, code: `Digit${d}`, keyCode: 48 + Number(d), text: d }])),
   Backspace: { key: 'Backspace', code: 'Backspace', keyCode: 8, commands: ['deleteBackward'] },
   selectAll: { key: 'a', code: 'KeyA', keyCode: 65, commands: ['selectAll'] },
 };
