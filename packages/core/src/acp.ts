@@ -12,6 +12,18 @@ export const DIAGNOSTICS_CAPABILITY = 'gcode/diagnostics';
 /** Key in fs/write_text_file's `_meta`: the hash of the text the write was computed from, null for a new file. */
 export const BASE_HASH_META = 'gcode/baseHash';
 
+/** Key in fs/write_text_file's `_meta`: the id of the tool call making the write, so the editor can show the edit on it. */
+export const TOOL_CALL_META = 'gcode/toolCallId';
+
+/** What a turn's model calls came to, in session/prompt's response `_meta` beside ACP's token `usage`. */
+export const TURN_USAGE_META = 'gcode/usage';
+
+/** `costUsd` is null when any call of the turn had no known price. */
+export type TurnUsage = { readonly model: string; readonly costUsd: number | null };
+
+/** session/request_permission's `toolCall.rawInput`: the command asked about and why it needs asking. */
+export type PermissionInput = { readonly command: string; readonly reason: string };
+
 /** The JSON-RPC error a client answers fs/write_text_file with when the file no longer holds that text. */
 export const STALE_BASE_ERROR = { code: -32010, reason: 'stale-base' } as const;
 

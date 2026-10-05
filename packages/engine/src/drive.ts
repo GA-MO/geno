@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { loopStep, nextSeq, type DoneReason, type Run, type ToolResultEvent, type TurnEvent } from '@g-code/core';
+import { loopStep, nextSeq, type DoneReason, type Run, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { EXIT_CODES, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -27,6 +27,8 @@ export type Watcher = {
   text(delta: string): void;
   /** A tool use about to run, with its one-line description. */
   toolStart(use: ToolUseBlock, title: string): void;
+  /** That tool use finished; its result is logged once every tool of the batch has run. */
+  toolEnd(use: ToolUseBlock, status: ToolStatus): void;
   /** Every event, as it is appended to the session log. */
   logged(event: TurnEvent): void;
 };
@@ -44,6 +46,7 @@ export function terminalSurface(io: Io): Surface {
         io.write(delta);
       },
       toolStart: (_use, title) => io.out(`> ${title}`),
+      toolEnd: () => {},
       logged() {
         if (midLine) io.write('\n');
         midLine = false;
@@ -169,6 +172,7 @@ export async function drive(
         const seq = firstSeq + i;
         watcher.toolStart(use, describeCall(use, mode.executors));
         const { status, text, change } = await runTool(use, ctx, mode.executors);
+        watcher.toolEnd(use, status);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
         results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, ...output });
       }

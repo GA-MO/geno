@@ -16,6 +16,8 @@ import {
   REVIEW_METHOD,
   REWIND_METHOD,
   STALE_BASE_ERROR,
+  TOOL_CALL_META,
+  TURN_USAGE_META,
   type CheckpointTextRequest,
   type CheckpointTextResponse,
   type DiagnosticsResponse,
@@ -165,7 +167,7 @@ describe('gcode serve', () => {
 
     expect(toolResultOf(transport.requests[1]!.body).content).toContain('export const unsaved = true;');
     expect(editor.writes).toEqual([
-      expect.objectContaining({ path: file, content: 'export const a = 1;\nexport const unsaved = false;\n', _meta: { [BASE_HASH_META]: hashText(BUFFER) } }),
+      expect.objectContaining({ path: file, content: 'export const a = 1;\nexport const unsaved = false;\n', _meta: { [BASE_HASH_META]: hashText(BUFFER), [TOOL_CALL_META]: edit.id } }),
     ]);
     expect(readFileSync(file, 'utf8')).toBe(DISK);
     expect(editor.updates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Reading.' } });
@@ -173,6 +175,26 @@ describe('gcode serve', () => {
       expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: edit.id, title: 'edit a.ts', kind: 'edit', status: 'in_progress' }),
     );
     expect(editor.updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: edit.id, status: 'completed' }));
+  });
+
+  it('ends each tool call as it finishes and answers the prompt with the turn\'s tokens, model and cost', async () => {
+    const first = use('read', { path: 'a.ts' });
+    const second = use('read', { path: 'a.ts' });
+    const { editor, connect } = await setup([toolCall('Reading.', [first, second], usage), answer('Done.', usage)]);
+
+    const response = await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Read twice' }] }));
+
+    const steps = editor.updates.flatMap((u) =>
+      u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update' ? [`${u.sessionUpdate} ${u.toolCallId} ${u.status}`] : [],
+    );
+    expect(steps.slice(0, 4)).toEqual([
+      `tool_call ${first.id} in_progress`,
+      `tool_call_update ${first.id} completed`,
+      `tool_call ${second.id} in_progress`,
+      `tool_call_update ${second.id} completed`,
+    ]);
+    expect(response.usage).toEqual({ inputTokens: 2000, outputTokens: 72, cachedReadTokens: 0, cachedWriteTokens: 0, totalTokens: 2072 });
+    expect(response._meta?.[TURN_USAGE_META]).toEqual({ model: 'anthropic/claude-opus-5.5', costUsd: expect.any(Number) });
   });
 
   it('fails the edit as stale-base when the buffer changes between the read and the edit', async () => {
@@ -218,7 +240,10 @@ describe('gcode serve', () => {
     expect(await prompt('Push it')).toBe('end_turn');
 
     expect(editor.permissions).toEqual([
-      expect.objectContaining({ toolCall: expect.objectContaining({ toolCallId: push.id, kind: 'execute' }), options: expect.any(Array) }),
+      expect.objectContaining({
+        toolCall: expect.objectContaining({ toolCallId: push.id, kind: 'execute', rawInput: { command: 'git push origin main', reason: expect.any(String) } }),
+        options: expect.any(Array),
+      }),
     ]);
     expect(toolResultOf(transport.requests[1]!.body)).toMatchObject({ is_error: true });
     expect(toolResultOf(transport.requests[1]!.body).content).toMatch(/^denied: `git push origin main`/);
