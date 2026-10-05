@@ -7,15 +7,25 @@ const ICONS: Readonly<Record<CommandRoute, string>> = { editor: 'window', engine
 /** A sent command in the user's bubble: a chip naming it, then its arguments as typed. */
 export const commandContent = ({ name, args, route }: SentCommand): Child[] => [
   h('span', { class: 'command-chip', 'data-command': name, 'data-route': route }, icon(ICONS[route]), h('span', {}, `/${name}`)),
+  // A space rather than a margin, so the bubble's text reads as the user typed it.
+  args !== '' && ' ',
   args !== '' && h('span', { class: 'command-args' }, args),
 ];
 
+type Hooks = {
+  /** The draft changed: a chosen command went in. */
+  readonly edited: () => void;
+  /** The picker opened for the first time, so the extension can have the engine list the session's commands. */
+  readonly wanted: () => void;
+  readonly submit: () => void;
+};
+
 /**
- * The `/` picker over the composer, beside the `@` list and with its keys: arrows move, Enter or Tab puts the
- * command in the draft, Escape closes, and a click chooses. `edited` hears the draft after a command goes in, and
- * `wanted` fires the first time the picker opens, so the extension can have the engine list the session's commands.
+ * The `/` picker over the composer, beside the `@` list and with its keys: arrows move, Tab or a click puts the
+ * command in the draft, and Escape closes. Enter does what Tab does, and sends a command that takes no arguments
+ * at once, so `/new` and Enter start a new chat.
  */
-export function slashPicker(input: HTMLTextAreaElement, edited: () => void, wanted: () => void) {
+export function slashPicker(input: HTMLTextAreaElement, { edited, wanted, submit }: Hooks) {
   let commands: readonly CommandOption[] = [];
   let picker: Picker = CLOSED;
   let asked = false;
@@ -57,15 +67,16 @@ export function slashPicker(input: HTMLTextAreaElement, edited: () => void, want
     }
   }
 
-  function accept(index: number): void {
+  function accept(index: number): CommandOption | undefined {
     const command = picker.kind === 'open' ? picker.items[index] : undefined;
-    if (command === undefined) return;
+    if (command === undefined) return undefined;
     const next = insertCommand(input.value, input.selectionStart, command.name);
     close();
     input.value = next.text;
     input.focus();
     input.setSelectionRange(next.caret, next.caret);
     edited();
+    return command;
   }
 
   function close(): void {
@@ -79,7 +90,9 @@ export function slashPicker(input: HTMLTextAreaElement, edited: () => void, want
   const KEYS: Readonly<Record<string, () => void>> = {
     ArrowDown: () => show(movePicker(picker, 1)),
     ArrowUp: () => show(movePicker(picker, -1)),
-    Enter: () => picker.kind === 'open' && accept(picker.active),
+    Enter: () => {
+      if (picker.kind === 'open' && accept(picker.active)?.hint === undefined) submit();
+    },
     Tab: () => picker.kind === 'open' && accept(picker.active),
     Escape: close,
   };

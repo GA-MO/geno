@@ -84,14 +84,14 @@ const inputBox = h(
   input,
   h('div', { class: 'input-toolbar' }, modelLabel, picker.element, h('span', { class: 'spacer' }), stop, send),
 );
-const slash = slashPicker(
-  input,
-  () => {
+const slash = slashPicker(input, {
+  edited: () => {
     save({ ...state, draft: input.value });
     redraft();
   },
-  () => host.postMessage({ type: 'want-commands' }),
-);
+  wanted: () => host.postMessage({ type: 'want-commands' }),
+  submit: () => submit(),
+});
 const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, inputBox);
 
 const projectLabel = h('span', { class: 'header-project' });
