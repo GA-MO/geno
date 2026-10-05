@@ -287,10 +287,10 @@ export function permissionCard(block: PermissionBlock, ui: Ui): HTMLElement {
         );
   return h(
     'section',
-    { class: `permission permission-${outcome.kind}`, role: 'group', 'aria-label': 'g-code asks to run a command', 'data-permission': block.id },
+    { class: `permission permission-${outcome.kind}`, role: 'group', 'aria-label': 'Geno asks to run a command', 'data-permission': block.id },
     h('div', { class: 'permission-title' }, icon('shield'), h('span', {}, 'Run this command?')),
     h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
-    h('p', { class: 'permission-reason' }, `g-code asks because it uses ${block.reason}.`),
+    h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
     result,
   );
 }
@@ -321,7 +321,7 @@ export function turnHead(turn: Turn): HTMLElement {
     'div',
     { class: 'turn-head' },
     dino('avatar'),
-    h('span', { class: 'turn-name' }, 'g-code'),
+    h('span', { class: 'turn-name' }, 'Geno'),
     h('span', { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta' }, headerOf(turn, formatDuration)),
   );
 }
@@ -362,7 +362,7 @@ export const EXAMPLE_PROMPTS: readonly { readonly icon: string; readonly text: s
 ];
 
 export function emptyState(model: string, fill: (text: string) => void): HTMLElement {
-  const who = model === '' ? 'g-code' : model;
+  const who = model === '' ? 'Geno' : model;
   return h(
     'div',
     { class: 'empty-state' },

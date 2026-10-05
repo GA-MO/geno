@@ -1,6 +1,6 @@
 {
   "name": "g-code",
-  "displayName": "g-code",
+  "displayName": "Geno",
   "version": "0.4.0",
   "private": true,
   "publisher": "g-code",
@@ -23,73 +23,73 @@
     "commands": [
       {
         "command": "gcode.hello",
-        "title": "g-code: Hello"
+        "title": "Geno: Hello"
       },
       {
         "command": "gcode.chat.send",
-        "title": "g-code: Ask for a Change"
+        "title": "Geno: Ask for a Change"
       },
       {
         "command": "gcode.chat.stop",
-        "title": "g-code: Stop the Chat Turn"
+        "title": "Geno: Stop the Chat Turn"
       },
       {
         "command": "gcode.setApiKey",
-        "title": "g-code: Set API Key"
+        "title": "Geno: Set API Key"
       },
       {
         "command": "gcode.tab.toggle",
-        "title": "g-code: Toggle Tab"
+        "title": "Geno: Toggle Tab"
       },
       {
         "command": "gcode.review.keep",
         "title": "Keep",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(check)"
       },
       {
         "command": "gcode.review.undo",
         "title": "Undo",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(discard)"
       },
       {
         "command": "gcode.review.keepFile",
         "title": "Keep All Changes in File",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(check-all)"
       },
       {
         "command": "gcode.review.undoFile",
         "title": "Undo All Changes in File",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(discard)"
       },
       {
         "command": "gcode.review.undoSession",
         "title": "Undo All Changes of the Session",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(history)"
       },
       {
         "command": "gcode.review.openDiff",
         "title": "Open Diff Against Checkpoint",
-        "category": "g-code",
+        "category": "Geno",
         "icon": "$(diff)"
       },
       {
         "command": "gcode.review.reveal",
         "title": "Show Change",
-        "category": "g-code"
+        "category": "Geno"
       },
       {
         "command": "gcode.inlineEdit",
         "title": "Edit Selection (Cmd-K)",
-        "category": "g-code"
+        "category": "Geno"
       }
     ],
     "configuration": {
-      "title": "g-code",
+      "title": "Geno",
       "properties": {
         "gcode.provider": {
           "type": "string",
@@ -98,7 +98,7 @@
             "openrouter"
           ],
           "default": "modelstudio",
-          "description": "The model provider for chat, review and Cmd-K. Run `g-code: Set API Key` to store its key."
+          "description": "The model provider for chat, review and Cmd-K. Run `Geno: Set API Key` to store its key."
         },
         "gcode.baseUrl": {
           "type": "string",
@@ -136,7 +136,7 @@
         "gcode.tab.modelPath": {
           "type": "string",
           "default": "",
-          "description": "The GGUF file the Tab model server loads. Empty uses ~/.g-code/models/qwen2.5-coder-1.5b-q8_0.gguf. When Tab is on and nothing answers at gcode.tab.endpoint, g-code starts llama-server with it, and stops it when VS Code closes."
+          "description": "The GGUF file the Tab model server loads. Empty uses ~/.g-code/models/qwen2.5-coder-1.5b-q8_0.gguf. When Tab is on and nothing answers at gcode.tab.endpoint, Geno starts llama-server with it, and stops it when VS Code closes."
         },
         "gcode.tab.debounceMs": {
           "type": "number",
@@ -160,7 +160,7 @@
       "activitybar": [
         {
           "id": "gcode",
-          "title": "g-code",
+          "title": "Geno",
           "icon": "dist/dino/mono.svg"
         }
       ]

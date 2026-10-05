@@ -37,7 +37,7 @@ describe('the model runtime', () => {
   it('names the fix for a missing key, then for a missing Model Studio endpoint', async () => {
     const keyless = await readModelRuntime(settingsOf({ baseUrl: URL }), secretsOf({}), {});
     expect(setupProblem(keyless)).toEqual({
-      message: 'g-code has no Model Studio API key. Run g-code: Set API Key.',
+      message: 'Geno has no Model Studio API key. Run Geno: Set API Key.',
       fix: { label: 'Set API Key', command: 'gcode.setApiKey', args: [] },
     });
     expect(describeRuntime(keyless)).toBe('modelstudio, model default, key from nowhere');

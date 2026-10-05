@@ -18,7 +18,7 @@ export const anchorLine = (document: vscode.TextDocument, hunk: Tracked): number
   Math.min(document.positionAt(hunk.span.start).line, document.lineCount - 1);
 
 const removedHover = (hunk: Tracked): vscode.MarkdownString =>
-  new vscode.MarkdownString().appendMarkdown('**Removed by g-code**').appendCodeblock(hunk.oldText.replace(/\n$/, ''));
+  new vscode.MarkdownString().appendMarkdown('**Removed by Geno**').appendCodeblock(hunk.oldText.replace(/\n$/, ''));
 
 /** Background on added lines and a gutter marker where lines were removed, for every pending hunk in view. */
 export class ReviewDecorations implements vscode.Disposable {
