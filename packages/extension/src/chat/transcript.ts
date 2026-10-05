@@ -45,6 +45,9 @@ function withTool(turn: Turn, id: string, at: number, change: (tool: ToolBlock) 
 const ended = (tool: ToolBlock, status: ToolBlock['status'] | undefined, at: number): number | undefined =>
   tool.endedAt ?? (status === undefined || status === 'running' ? undefined : at);
 
+/** The turn without its passing status, which any new output replaces. */
+const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...turn, notice: undefined });
+
 const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, action: ActionOf<K>) => Transcript } = {
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
@@ -53,14 +56,16 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     turns: [...transcript.turns, { id, prompt, blocks: [], status: 'streaming', usage: undefined }],
   }),
   text: (transcript, { text }) =>
-    onLast(transcript, (turn) => {
+    onLast(transcript, (raw) => {
+      const turn = quiet(raw);
       const last = turn.blocks.at(-1);
       if (last?.kind === 'text') return { ...turn, blocks: [...turn.blocks.slice(0, -1), { ...last, text: last.text + text }] };
       return { ...turn, blocks: [...turn.blocks, { kind: 'text', id: nextId(turn), text }] };
     }),
+  notice: (transcript, { text }) => onLast(transcript, (turn) => (turn.status !== 'streaming' || turn.notice === text ? turn : { ...turn, notice: text })),
   tool: (transcript, { id, at, type: _type, ...fields }) =>
     onLast(transcript, (turn) =>
-      withTool(turn, id, at, (tool) => {
+      withTool(quiet(turn), id, at, (tool) => {
         const defined = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Partial<ToolBlock>;
         const next = { ...tool, ...defined, endedAt: ended(tool, fields.status, at) };
         return (Object.keys(next) as (keyof ToolBlock)[]).every((key) => next[key] === tool[key]) ? tool : next;
@@ -90,7 +95,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
-      return { ...settled, status, usage };
+      return { ...quiet(settled), status, usage };
     }),
 };
 

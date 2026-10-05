@@ -98,7 +98,7 @@ const diagnosticsResponse = z.object({
   ),
 });
 
-type Peer = { readonly files: boolean; readonly diagnostics: boolean; readonly unsaved: boolean };
+type Peer = { readonly files: boolean; readonly diagnostics: boolean; readonly unsaved: boolean; readonly notices: boolean };
 
 type Updates = { send(update: acp.SessionUpdate): void; flush(): Promise<void> };
 
@@ -119,7 +119,17 @@ const textUpdate = (text: string): acp.SessionUpdate => ({ sessionUpdate: 'agent
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 
-const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>) => acp.SessionUpdate } = {
+const RETRY_REASONS: readonly (readonly [RegExp, string])[] = [
+  [/overload|capacity|high demand|\b529\b/i, 'model overloaded'],
+  [/rate.?limit|too many requests|\b429\b/i, 'rate limited'],
+  [/timed? ?out|timeout/i, 'timed out'],
+  [/connect|network|socket|fetch failed|ECONNRESET|EAI_AGAIN|closed|terminated|ended/i, 'connection dropped'],
+];
+
+/** The few words a status line gives for why a call is retried; the full message goes in the notice's description. */
+export const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) => pattern.test(message))?.[1] ?? 'server error';
+
+const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
   'tool-result': (event) => ({
     sessionUpdate: 'tool_call_update',
     toolCallId: event.toolUseId,
@@ -128,10 +138,15 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>) => acp.S
   }),
   // ACP's notices are unstable, so a failure reaches the user as agent text, as the spec suggests.
   error: (event) => textUpdate(`\n\n[${event.error}] ${event.message}`),
+  // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
+  retry: ({ delayMs, message }, peer) =>
+    peer.notices
+      ? { sessionUpdate: 'notice', severity: 'warning', title: `Retrying in ${Math.round(delayMs / 1000)}s (${retryReason(message)})`, description: message }
+      : undefined,
 };
 
-function loggedUpdate<K extends TurnEvent['kind']>(event: EventOf<K>): acp.SessionUpdate | undefined {
-  return (LOGGED[event.kind] as ((e: EventOf<K>) => acp.SessionUpdate) | undefined)?.(event);
+function loggedUpdate<K extends TurnEvent['kind']>(event: EventOf<K>, peer: Peer): acp.SessionUpdate | undefined {
+  return (LOGGED[event.kind] as ((e: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined) | undefined)?.(event, peer);
 }
 
 /** The editor's buffers, through ACP's client file system. `writer` names the tool call a write belongs to. */
@@ -232,7 +247,7 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
               costUsd: spent?.costUsd === null || event.costUsd === null ? null : (spent?.costUsd ?? 0) + event.costUsd,
             };
           }
-          const update = loggedUpdate(event);
+          const update = loggedUpdate(event, peer);
           if (update !== undefined) sent.send(update);
         },
       },
@@ -300,7 +315,7 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false, unsaved: false };
+  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false };
   const turns = new Map<string, AbortController | undefined>();
   // A turn and a review decision both append to the session log and number their events from what they read,
   // so each session's writers take turns.
@@ -317,11 +332,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
   return acp
     .agent({ name: 'gcode' })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
-      const { fs, _meta } = params.clientCapabilities ?? {};
+      const { fs, _meta, session } = params.clientCapabilities ?? {};
       peer = {
         files: fs?.readTextFile === true && fs.writeTextFile === true,
         diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true,
         unsaved: _meta?.[UNSAVED_BUFFERS_CAPABILITY] === true,
+        notices: session?.notices != null,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,

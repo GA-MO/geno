@@ -4,7 +4,7 @@
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { insertMention, mentionAtCaret, type MentionCompletion } from './mentions.js';
 import type { Block, FromView, ToView, Transcript, Turn } from './messages.js';
-import { emptyState, errorBlock, permissionCard, textBlock, toolRow, turnFooter, userMessage, type Ui } from './render.js';
+import { emptyState, errorBlock, turnNotice, permissionCard, textBlock, toolRow, turnFooter, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
@@ -91,7 +91,14 @@ function blockItem(turn: Turn, block: Block, last: boolean): Keyed {
 }
 
 function turnShell(turn: Turn): HTMLElement {
-  return h('article', { class: 'turn', 'data-turn': turn.id }, userMessage(turn.prompt), h('div', { class: 'response' }), h('div', { class: 'footer-slot' }));
+  return h(
+    'article',
+    { class: 'turn', 'data-turn': turn.id },
+    userMessage(turn.prompt),
+    h('div', { class: 'response' }),
+    h('div', { class: 'notice-slot' }),
+    h('div', { class: 'footer-slot' }),
+  );
 }
 
 const pendingText = (turn: Turn): boolean =>
@@ -115,6 +122,10 @@ function render(): void {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
       reconcile(shell.querySelector<HTMLElement>(':scope > .response')!, turn.blocks.map((block, j) => blockItem(turn, block, j === turn.blocks.length - 1)));
+      reconcile(
+        shell.querySelector<HTMLElement>(':scope > .notice-slot')!,
+        turn.notice === undefined ? [] : [{ key: 'notice', deps: [turn.notice], build: () => turnNotice(turn.notice!) }],
+      );
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });

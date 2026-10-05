@@ -250,6 +250,9 @@ export function turnFooter(turn: Turn): HTMLElement {
   return h('div', { class: 'turn-footer' }, ...parts.flatMap((part, i) => (i === 0 ? [part] : [h('span', { class: 'sep', 'aria-hidden': 'true' }, '·'), part])));
 }
 
+/** A passing status in a running turn, such as a retry. */
+export const turnNotice = (text: string): HTMLElement => h('div', { class: 'turn-notice', role: 'status' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, text));
+
 export const userMessage = (prompt: string): HTMLElement => h('div', { class: 'request' }, h('div', { class: 'request-bubble' }, prompt));
 
 /** What a new panel suggests: each fills the composer for the user to edit or send. */
