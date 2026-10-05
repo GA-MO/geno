@@ -14,12 +14,17 @@ import { isMissing } from './store.js';
 
 export type WriteResult = 'written' | 'stale-base';
 
+/** Text open in the editor that differs from the disk. */
+export type UnsavedBuffer = { readonly path: string; readonly text: string };
+
 /** Where tools read and write file text: the disk, or an editor's buffers over ACP. Paths are absolute. */
 export type Files = {
   /** The file's current text, or null when it does not exist. */
   read(file: string): Promise<string | null>;
   /** Writes `text` only while the file still holds the text that hashes to `baseHash` (null: the file is absent). */
   write(file: string, text: string, baseHash: string | null): Promise<WriteResult>;
+  /** Every buffer with unsaved edits, so searches see what the user sees; the disk has none. */
+  unsaved(): Promise<readonly UnsavedBuffer[]>;
 };
 
 async function readDisk(file: string): Promise<string | null> {
@@ -33,6 +38,7 @@ async function readDisk(file: string): Promise<string | null> {
 
 export const DISK_FILES: Files = {
   read: readDisk,
+  unsaved: async () => [],
   async write(file, text, baseHash) {
     if (hashText(await readDisk(file)) !== baseHash) return 'stale-base';
     await mkdir(path.dirname(file), { recursive: true });

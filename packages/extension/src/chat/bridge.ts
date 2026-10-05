@@ -10,6 +10,7 @@ import {
   type DiagnosticsResponse,
   type FileChange,
   type Severity,
+  type UnsavedBuffersResponse,
 } from '@g-code/core';
 
 export const realOrSelf = (file: string): Promise<string> => realpath(file).catch(() => file);
@@ -97,6 +98,12 @@ export async function writeTextFile(
   // The edit is in the buffer either way; a failed save leaves it unsaved rather than failing a write that happened.
   if (save) await document.save().then(undefined, () => false);
   return {};
+}
+
+/** Every file buffer with edits not yet saved, by real path; the engine keeps those inside its workspace. */
+export async function unsavedBuffers(): Promise<UnsavedBuffersResponse> {
+  const dirty = vscode.workspace.textDocuments.filter((d) => d.uri.scheme === 'file' && d.isDirty && !d.isClosed);
+  return { buffers: await Promise.all(dirty.map(async (d) => ({ path: await realOrSelf(d.uri.fsPath), text: d.getText() }))) };
 }
 
 const SEVERITY: Readonly<Record<vscode.DiagnosticSeverity, Severity>> = {

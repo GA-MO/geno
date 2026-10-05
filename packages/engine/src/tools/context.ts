@@ -12,7 +12,7 @@ export type ToolContext = {
   readonly spillDir: string;
   readonly rg: string;
   readonly signal: AbortSignal;
-  /** Where read and edit get file text. grep, glob and list always search the disk. */
+  /** Where read and edit get file text, and the unsaved buffers grep and glob search. list sees only the disk. */
   readonly files: Files;
 };
 

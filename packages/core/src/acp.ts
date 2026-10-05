@@ -9,6 +9,16 @@ export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
 /** Key in the client capabilities' `_meta`, true when the client answers DIAGNOSTICS_METHOD. */
 export const DIAGNOSTICS_CAPABILITY = 'gcode/diagnostics';
 
+/** Extension method, sent by the engine: the editor's buffers with unsaved edits, for grep and glob. */
+export const UNSAVED_BUFFERS_METHOD = '_gcode/unsavedBuffers';
+
+/** Key in the client capabilities' `_meta`, true when the client answers UNSAVED_BUFFERS_METHOD. */
+export const UNSAVED_BUFFERS_CAPABILITY = 'gcode/unsavedBuffers';
+
+export type UnsavedBuffersRequest = { readonly sessionId: string };
+/** `path` is absolute, with symlinks resolved. */
+export type UnsavedBuffersResponse = { readonly buffers: readonly { readonly path: string; readonly text: string }[] };
+
 /** Key in fs/write_text_file's `_meta`: the hash of the text the write was computed from, null for a new file. */
 export const BASE_HASH_META = 'gcode/baseHash';
 

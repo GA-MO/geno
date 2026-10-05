@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type * as vscode from 'vscode';
-import { DIAGNOSTICS_CAPABILITY } from '@g-code/core';
+import { DIAGNOSTICS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY } from '@g-code/core';
 
 const RESTART_DELAY_MS = 1000;
 
@@ -61,7 +61,7 @@ export class Engine implements vscode.Disposable {
     const { agent } = this.client().connect(stream);
     await agent.request(acp.methods.agent.initialize, {
       protocolVersion: acp.PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true } },
+      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true } },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });
     return { agent, child, cwd };

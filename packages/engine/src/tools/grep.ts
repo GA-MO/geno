@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { executor, optional } from './context.js';
-import { ripgrep } from './ripgrep.js';
+import { searchWorkspace } from './ripgrep.js';
 
 export const grep = executor({
   input: z.strictObject({
@@ -11,7 +11,7 @@ export const grep = executor({
   describe: ({ pattern, path, ignore_case }) =>
     [`grep ${JSON.stringify(pattern)}`, ...(path === undefined ? [] : [path]), ...(ignore_case ? ['-i'] : [])].join(' '),
   async run({ pattern, path, ignore_case }, ctx) {
-    const lines = await ripgrep(ctx, ctx.workspace, [
+    const lines = await searchWorkspace(ctx, [
       '--line-number',
       '--no-heading',
       '--color=never',
@@ -23,7 +23,7 @@ export const grep = executor({
       ...(path === undefined ? [] : ['--glob', path]),
       '--regexp',
       pattern,
-    ]);
+    ], 'matches');
     return lines.length === 0 ? 'no matches' : lines.join('\n');
   },
 });

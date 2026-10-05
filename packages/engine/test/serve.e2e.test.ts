@@ -18,6 +18,8 @@ import {
   STALE_BASE_ERROR,
   TOOL_CALL_META,
   TURN_USAGE_META,
+  UNSAVED_BUFFERS_CAPABILITY,
+  UNSAVED_BUFFERS_METHOD,
   type CheckpointTextRequest,
   type CheckpointTextResponse,
   type DiagnosticsResponse,
@@ -26,6 +28,7 @@ import {
   type ReviewResponse,
   type RewindRequest,
   type RewindResponse,
+  type UnsavedBuffersResponse,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -120,6 +123,9 @@ async function setup(replies: readonly Reply[]) {
       editor.diagnosticRequests.push(params);
       return { diagnostics: [{ path: file, line: 2, character: 14, severity: 'error', message: "Cannot find name 'nope'.", source: 'ts' }] };
     })
+    .onRequest(UNSAVED_BUFFERS_METHOD, (raw) => raw, (): UnsavedBuffersResponse => ({
+      buffers: [...editor.buffers].map(([path, text]) => ({ path, text })),
+    }))
     .onNotification(acp.methods.client.session.update, ({ params }) => {
       editor.updates.push(params.update);
     });
@@ -128,7 +134,7 @@ async function setup(replies: readonly Reply[]) {
     client.connectWith(gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
       await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
-        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true } },
+        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true } },
       });
       if (resume !== undefined) {
         await ctx.request(acp.methods.agent.session.resume, { sessionId: resume, cwd: workspace });
@@ -175,6 +181,22 @@ describe('gcode serve', () => {
       expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: edit.id, title: 'edit a.ts', kind: 'edit', status: 'in_progress' }),
     );
     expect(editor.updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: edit.id, status: 'completed' }));
+  });
+
+  it('greps and globs the unsaved buffer in place of the file on disk', async () => {
+    const grep = use('grep', { pattern: 'unsaved|const a' });
+    const glob = use('glob', { pattern: '*.ts' });
+    const { workspace, editor, transport, prompt } = await setup([toolCall('Searching.', [grep, glob], usage), answer('Found it.', usage)]);
+    editor.buffers.set(path.join(workspace, 'draft.ts'), 'export const unsaved = "new file";\n');
+    editor.buffers.set(path.join(path.dirname(workspace), 'elsewhere.ts'), 'export const unsaved = "outside";\n');
+
+    expect(await prompt('Where is unsaved?')).toBe('end_turn');
+
+    const results = (transport.requests[1]!.body.messages.at(-1)!.content as { content: string }[]).map((block) => block.content);
+    expect(results).toEqual([
+      'a.ts:1:export const a = 1;\na.ts:2:export const unsaved = true;\ndraft.ts:1:export const unsaved = "new file";',
+      'a.ts\ndraft.ts',
+    ]);
   });
 
   it('ends each tool call as it finishes and answers the prompt with the turn\'s tokens, model and cost', async () => {

@@ -33,12 +33,12 @@ describe('applyEditToFile', () => {
   it('fails as stale-base, keeping the newer text, when the file changes between resolving the edit and writing it', async () => {
     const file = await fileWith('const a = 1;\n');
     const racing: Files = {
+      ...DISK_FILES,
       read: async (f) => {
         const text = await DISK_FILES.read(f);
         await writeFile(f, 'const a = 1; // typed meanwhile\n');
         return text;
       },
-      write: DISK_FILES.write,
     };
     const { proposed, change } = await applyEditToFile(racing, file, { ...bump, base: baseOf('const a = 1;\n', null) }, null);
     expect(proposed.result).toEqual({ kind: 'failed', reason: 'stale-base', detail: 'a.ts changed since it was last read; read it again before editing' });
