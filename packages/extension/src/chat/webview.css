@@ -861,8 +861,60 @@ button {
 /* Composer */
 
 .composer {
+  position: relative;
   flex: none;
   padding: 8px var(--gap) 12px;
+}
+
+/* The @ completion list, above the composer like VS Code's suggest widget. */
+.mentions {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: var(--gap);
+  right: var(--gap);
+  max-height: 220px;
+  margin: 0;
+  padding: 2px 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, transparent));
+  border-radius: 4px;
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-quickInput-background));
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+  z-index: 10;
+}
+
+.mention {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mention.active {
+  background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+  outline: 1px solid var(--vscode-list-focusOutline, transparent);
+  outline-offset: -1px;
+}
+
+.mention .codicon {
+  flex: none;
+}
+
+.mention-label {
+  flex: none;
+}
+
+.mention-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+  font-size: var(--small);
 }
 
 .input-box {

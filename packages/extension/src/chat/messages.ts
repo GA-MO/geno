@@ -1,4 +1,5 @@
 import type { HunkStatus } from '@g-code/core';
+import type { MentionCompletion } from './mentions.js';
 
 /**
  * The chat transcript, the one model the panel renders. The extension owns it and sends every change as an
@@ -105,13 +106,16 @@ export type Action =
   | { readonly type: 'error'; readonly message: string }
   | { readonly type: 'turn-end'; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
 
-/** What the extension tells the chat webview. */
-export type ToView = Action;
+/** What the extension tells the chat webview: transcript changes, and answers to its completion requests. */
+export type ToView = Action | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] };
 
 /** What the webview asks of the extension. */
 export type FromView =
   | { readonly type: 'ready' }
+  /** `@` mentions in the text are resolved by the extension when it sends. */
   | { readonly type: 'send'; readonly text: string }
+  /** Asks what an `@` mention typed so far could be; answered by a `completions` message with the same id. */
+  | { readonly type: 'complete'; readonly id: number; readonly query: string }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
   | { readonly type: 'keep'; readonly hunk: string }

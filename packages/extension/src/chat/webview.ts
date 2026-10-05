@@ -2,6 +2,7 @@
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
 import { h, icon, reconcile, type Keyed } from './dom.js';
+import { insertMention, mentionAtCaret, type MentionCompletion } from './mentions.js';
 import type { Block, FromView, ToView, Transcript, Turn } from './messages.js';
 import { emptyState, errorBlock, permissionCard, textBlock, toolRow, turnFooter, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
@@ -41,13 +42,22 @@ const ui: Ui = {
 
 const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'g-code chat', 'aria-live': 'polite', tabindex: '-1' });
 const status = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
-const input = h('textarea', { rows: 1, placeholder: 'Ask for a change', 'aria-label': 'Ask g-code for a change', 'data-focus': 'composer' });
+const input = h('textarea', {
+  rows: 1,
+  placeholder: 'Ask for a change, @ to add context',
+  'aria-label': 'Ask g-code for a change',
+  'data-focus': 'composer',
+  'aria-autocomplete': 'list',
+  'aria-controls': 'mentions',
+});
 const send = h('button', { type: 'submit', class: 'icon-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('send'));
 const stop = h('button', { type: 'button', class: 'icon-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('stop-circle'));
 const modelLabel = h('span', { class: 'composer-model' });
+const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
 const form = h(
   'form',
   { class: 'composer' },
+  menu,
   h('div', { class: 'input-box' }, input, h('div', { class: 'input-toolbar' }, modelLabel, h('span', { class: 'spacer' }), stop, send)),
 );
 document.body.append(log, form, status);
@@ -147,6 +157,10 @@ const announcement = (message: ToView): string | undefined => (ANNOUNCEMENTS[mes
 
 window.addEventListener('message', (event: MessageEvent<ToView>) => {
   const message = event.data;
+  if (message.type === 'completions') {
+    showCompletions(message.id, message.items);
+    return;
+  }
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -169,6 +183,93 @@ function fill(text: string): void {
   input.setSelectionRange(text.length, text.length);
 }
 
+/**
+ * The `@` completion list. Each keystroke in a mention asks the extension again; only the answer to the newest
+ * question is shown, so a slow answer never replaces a newer one.
+ */
+let lastQuestion = 0;
+let pending: { readonly id: number; readonly start: number } | undefined;
+let completing: { readonly start: number; readonly items: readonly MentionCompletion[]; readonly active: number } | undefined;
+
+function askCompletions(): void {
+  const at = mentionAtCaret(input.value, input.selectionStart);
+  if (at === undefined || input.selectionStart !== input.selectionEnd) {
+    closeMenu();
+    return;
+  }
+  pending = { id: ++lastQuestion, start: at.start };
+  host.postMessage({ type: 'complete', id: pending.id, query: at.query });
+}
+
+function showCompletions(id: number, items: readonly MentionCompletion[]): void {
+  if (pending?.id !== id) return;
+  completing = { start: pending.start, items, active: 0 };
+  renderMenu();
+}
+
+function closeMenu(): void {
+  pending = undefined;
+  completing = undefined;
+  renderMenu();
+}
+
+function accept(index: number): void {
+  const item = completing?.items[index];
+  if (completing === undefined || item === undefined) return;
+  const next = insertMention(input.value, completing.start, input.selectionStart, item.label);
+  closeMenu();
+  input.value = next.text;
+  input.setSelectionRange(next.caret, next.caret);
+  save({ ...state, draft: input.value });
+  resize();
+}
+
+const moveActive = (by: number) => () => {
+  if (completing === undefined) return;
+  const count = completing.items.length;
+  completing = { ...completing, active: (completing.active + by + count) % count };
+  renderMenu();
+};
+
+const MENU_KEYS: Readonly<Record<string, () => void>> = {
+  ArrowDown: moveActive(1),
+  ArrowUp: moveActive(-1),
+  Enter: () => accept(completing?.active ?? 0),
+  Tab: () => accept(completing?.active ?? 0),
+  Escape: closeMenu,
+};
+
+function renderMenu(): void {
+  const items = completing?.items ?? [];
+  menu.hidden = items.length === 0;
+  menu.replaceChildren(
+    ...items.map((item, i) =>
+      h(
+        'li',
+        {
+          id: `mention-${i}`,
+          class: i === completing!.active ? 'mention active' : 'mention',
+          role: 'option',
+          'aria-selected': String(i === completing!.active),
+          'data-mention': item.label,
+          // Keeps the focus in the composer, so the click does not close the list before it lands.
+          onmousedown: (event) => event.preventDefault(),
+          onclick: () => accept(i),
+        },
+        icon(item.kind === 'selection' ? 'selection' : 'file'),
+        h('span', { class: 'mention-label' }, item.kind === 'selection' ? item.label : item.label.slice(item.label.lastIndexOf('/') + 1)),
+        h('span', { class: 'mention-detail' }, item.detail),
+      ),
+    ),
+  );
+  if (items.length === 0) input.removeAttribute('aria-activedescendant');
+  else {
+    input.setAttribute('aria-activedescendant', `mention-${completing!.active}`);
+    menu.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+  }
+  input.setAttribute('aria-expanded', String(items.length > 0));
+}
+
 function submit(): void {
   const text = input.value.trim();
   if (text === '' || isRunning(transcript)) return;
@@ -183,8 +284,20 @@ form.addEventListener('submit', (event) => {
 input.addEventListener('input', () => {
   save({ ...state, draft: input.value });
   resize();
+  askCompletions();
 });
+input.addEventListener('click', askCompletions);
+input.addEventListener('blur', closeMenu);
 input.addEventListener('keydown', (event) => {
+  if (completing !== undefined && completing.items.length > 0 && !event.isComposing) {
+    const move = MENU_KEYS[event.key];
+    if (move !== undefined) {
+      event.preventDefault();
+      event.stopPropagation();
+      move();
+      return;
+    }
+  }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     submit();
