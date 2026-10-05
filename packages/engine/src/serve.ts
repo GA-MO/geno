@@ -20,6 +20,8 @@ import {
   STALE_BASE_ERROR,
   TOOL_CALL_META,
   TURN_USAGE_META,
+  UNSAVED_BUFFERS_CAPABILITY,
+  UNSAVED_BUFFERS_METHOD,
   addUsage,
   type CheckpointTextResponse,
   type PermissionInput,
@@ -33,6 +35,7 @@ import {
   type RewindResponse,
   type ToolStatus,
   type TurnEvent,
+  type UnsavedBuffersRequest,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
 import { openSessionLog, resumeSession, startSession } from './chat.js';
@@ -76,6 +79,8 @@ const PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
 ];
 
+const unsavedBuffersResponse = z.object({ buffers: z.array(z.object({ path: z.string(), text: z.string() })) });
+
 const diagnosticsResponse = z.object({
   diagnostics: z.array(
     z.object({
@@ -89,7 +94,7 @@ const diagnosticsResponse = z.object({
   ),
 });
 
-type Peer = { readonly files: boolean; readonly diagnostics: boolean };
+type Peer = { readonly files: boolean; readonly diagnostics: boolean; readonly unsaved: boolean };
 
 type Updates = { send(update: acp.SessionUpdate): void; flush(): Promise<void> };
 
@@ -126,7 +131,7 @@ function loggedUpdate<K extends TurnEvent['kind']>(event: EventOf<K>): acp.Sessi
 }
 
 /** The editor's buffers, through ACP's client file system. `writer` names the tool call a write belongs to. */
-function editorFiles(client: acp.AgentContext, sessionId: string, writer: () => acp.ToolCallId): Files {
+function editorFiles(client: acp.AgentContext, sessionId: string, peer: Peer, writer: () => acp.ToolCallId): Files {
   const failure = (verb: string, file: string, error: unknown) =>
     new ToolError(`the editor could not ${verb} ${file}: ${error instanceof Error ? error.message : String(error)}`);
   return {
@@ -151,6 +156,13 @@ function editorFiles(client: acp.AgentContext, sessionId: string, writer: () => 
         if (error instanceof acp.RequestError && error.code === STALE_BASE_ERROR.code) return 'stale-base';
         throw failure('write', file, error);
       }
+    },
+    async unsaved() {
+      if (!peer.unsaved) return [];
+      const raw = await client.request<unknown, UnsavedBuffersRequest>(UNSAVED_BUFFERS_METHOD, { sessionId });
+      const parsed = unsavedBuffersResponse.safeParse(raw);
+      if (!parsed.success) throw new ToolError(`the editor sent malformed buffers: ${z.prettifyError(parsed.error)}`);
+      return parsed.data.buffers;
     },
   };
 }
@@ -198,7 +210,7 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
     updates: sent,
     usage: () => usageOf(spent),
     surface: {
-      files: peer.files ? editorFiles(client, sessionId, () => running) : DISK_FILES,
+      files: peer.files ? editorFiles(client, sessionId, peer, () => running) : DISK_FILES,
       watcher: {
         text: (delta) => sent.send(textUpdate(delta)),
         toolStart(use, title) {
@@ -261,7 +273,7 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false };
+  let peer: Peer = { files: false, diagnostics: false, unsaved: false };
   const turns = new Map<string, AbortController | undefined>();
   // A turn and a review decision both append to the session log and number their events from what they read,
   // so each session's writers take turns.
@@ -279,7 +291,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
     .agent({ name: 'gcode' })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
       const { fs, _meta } = params.clientCapabilities ?? {};
-      peer = { files: fs?.readTextFile === true && fs.writeTextFile === true, diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true };
+      peer = {
+        files: fs?.readTextFile === true && fs.writeTextFile === true,
+        diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true,
+        unsaved: _meta?.[UNSAVED_BUFFERS_CAPABILITY] === true,
+      };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} } },

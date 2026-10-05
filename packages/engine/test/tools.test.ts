@@ -7,6 +7,7 @@ import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages
 import { TOOL_SPECS, type ToolName } from '@g-code/core';
 import { DISK_FILES } from '../src/files.js';
 import { listEntries } from '../src/tools/list.js';
+import { comparePaths } from '../src/tools/ripgrep.js';
 import { describeCall, EXECUTORS, runTool, type ToolContext } from '../src/tools/index.js';
 import { rgCommand } from './helpers.js';
 
@@ -132,6 +133,28 @@ describe('grep', () => {
     expect(await runTool(use, missing, EXECUTORS)).toEqual(
       failure(/ripgrep \(\/nonexistent\/bin\/rg\) is not installed or not on PATH; install ripgrep or set GCODE_RG/),
     );
+  });
+});
+
+describe('unsaved buffers', () => {
+  it('replace their files for grep, keeping the path glob and ripgrep order, and ignore buffers outside', async () => {
+    const buffers = [
+      { path: path.join(ctx.workspace, 'src', 'config.ts'), text: 'export const SERVER_URL = 1;\nconst a = { b: SERVER_URL };\n' },
+      { path: path.join(ctx.workspace, 'src', 'a:b.ts'), text: 'SERVER_URL in a new file\n' },
+      { path: path.join(ctx.workspace, '..', 'outside', 'secret.txt'), text: 'SERVER_URL secret\n' },
+    ];
+    const editor = { ...ctx, files: { ...DISK_FILES, unsaved: async () => buffers } };
+    const grep = (input: unknown) =>
+      runTool({ type: 'tool_use', id: `tu_${nextId++}`, name: 'grep', input, caller: { type: 'direct' } } as ToolUseBlock, editor, EXECUTORS);
+    expect((await grep({ pattern: 'SERVER_URL', path: 'src/**' })).text).toBe(
+      ['src/a:b.ts:1:SERVER_URL in a new file', 'src/config.ts:1:export const SERVER_URL = 1;', 'src/config.ts:2:const a = { b: SERVER_URL };', 'src/lib/util.ts:1:export const util = SERVER_URL;'].join('\n'),
+    );
+    const glob = await runTool({ type: 'tool_use', id: 'tu_g', name: 'glob', input: { pattern: 'src/**/*.ts' }, caller: { type: 'direct' } } as ToolUseBlock, editor, EXECUTORS);
+    expect(glob.text).toBe('src/a:b.ts\nsrc/config.ts\nsrc/lib/util.ts');
+  });
+
+  it('sort as ripgrep does, directory by directory', () => {
+    expect(['a-b/x', 'a/x', 'a/b/c', 'a.ts'].toSorted(comparePaths)).toEqual(['a/b/c', 'a/x', 'a-b/x', 'a.ts']);
   });
 });
 

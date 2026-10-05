@@ -9,6 +9,7 @@ import {
   INLINE_EDIT_META,
   TOOL_CALL_META,
   TURN_USAGE_META,
+  UNSAVED_BUFFERS_METHOD,
   type FileChange,
   type HunkId,
   type HunkStatus,
@@ -16,7 +17,7 @@ import {
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
-import { diagnostics, readTextFile, writeTextFile } from './bridge.js';
+import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { TOOL_KINDS, type Action, type FileDiff, type FromView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type Usage } from './messages.js';
@@ -27,6 +28,7 @@ export const SEND_COMMAND = 'gcode.chat.send';
 export const STOP_COMMAND = 'gcode.chat.stop';
 
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
+const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
 const permissionInput = z.object({ command: z.string(), reason: z.string() });
 
@@ -197,6 +199,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       )
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) => this.askPermission(params))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
+      .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
       .onNotification(acp.methods.client.session.update, ({ params }) => {
         const action = actionOf(params.update, Date.now());
         if (action !== undefined) this.dispatch(action);
