@@ -44,6 +44,7 @@ import {
   type ToolStatus,
   type Attachment,
   type ContextItem,
+  type Expansion,
   type Mention,
   type TurnEvent,
   type UnsavedBuffersRequest,
@@ -53,6 +54,7 @@ import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments,
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
+import { homeOf, runBuiltin, sessionCommands } from './commands.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
@@ -333,7 +335,17 @@ type Attached = { readonly mentions: readonly Mention[]; readonly attachments: r
 
 const hasAttached = ({ mentions, attachments }: Attached): boolean => mentions.length > 0 || attachments.length > 0;
 
-async function logPrompt(store: Store, opened: OpenSession, content: string, attached: Attached, files: Files, sessionId: string): Promise<OpenSession> {
+type Expanded = Extract<Expansion, { kind: 'message' }>;
+
+async function logPrompt(
+  store: Store,
+  opened: OpenSession,
+  content: string,
+  attached: Attached,
+  files: Files,
+  sessionId: string,
+  expanded: Expanded | undefined,
+): Promise<OpenSession> {
   const { log } = opened;
   let context: ContextItem[];
   let attachments: Attachment[];
@@ -349,8 +361,9 @@ async function logPrompt(store: Store, opened: OpenSession, content: string, att
     seq: nextSeq(log.events),
     at: new Date().toISOString(),
     content,
-    context,
+    context: [...(expanded?.context ?? []), ...context],
     ...(attachments.length === 0 ? {} : { attachments }),
+    ...(expanded === undefined ? {} : { command: expanded.command }),
   };
   await appendEvent(log.file, event);
   return { ...opened, log: { ...log, events: [...log.events, event] } };
@@ -379,6 +392,17 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
     writers.set(sessionId, next.catch(() => {}));
     return next;
   };
+  const commands = sessionCommands(homeOf(store), io);
+  const switchMode = async (client: acp.AgentContext, sessionId: string, mode: SessionMode) => {
+    modes.set(sessionId, mode);
+    await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } });
+    // Not awaited: a running turn holds the log until it ends, and the switch must not wait for it.
+    void serially(sessionId, async () => {
+      const log = await openSessionLog(store, sessionId, io);
+      await dropTornTail(log);
+      await logMode(log, mode);
+    }).catch((error: unknown) => io.err(`could not log the mode of ${sessionId}: ${String(error)}`));
+  };
   const known = (sessionId: string) => {
     if (!turns.has(sessionId)) throw acp.RequestError.invalidParams({ sessionId }, `no session ${sessionId}`);
   };
@@ -399,22 +423,24 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
         agentInfo: { name: 'gcode', version: '0.0.0' },
       };
     })
-    .onRequest(acp.methods.agent.session.new, async ({ params }) => {
+    .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
       const workspace = await workspaceDir(io.cwd, params.cwd);
       const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
       const { id } = opened.log.session;
       turns.set(id, undefined);
       modes.set(id, DEFAULT_SESSION_MODE);
+      commands.attach(client, id, workspace);
       io.err(`session: ${id} log: ${opened.log.file}`);
       return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
     })
-    .onRequest(acp.methods.agent.session.resume, async ({ params }) => {
+    .onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
       const log = await openSessionLog(store, params.sessionId, io).catch((error: unknown) => {
         throw acp.RequestError.resourceNotFound(`session ${params.sessionId}: ${error instanceof Error ? error.message : String(error)}`);
       });
       const id = log.session.id;
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
+      commands.attach(client, id, log.session.workspace);
       io.err(`session: ${id} resumed, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!) };
     })
@@ -422,14 +448,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       const { sessionId, modeId } = params;
       known(sessionId);
       if (!isSessionMode(modeId)) throw acp.RequestError.invalidParams({ modeId }, `unknown mode ${modeId}; the modes are ${SESSION_MODES.join(', ')}`);
-      modes.set(sessionId, modeId);
-      await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: modeId } });
-      // Not awaited: a running turn holds the log until it ends, and the switch must not wait for it.
-      void serially(sessionId, async () => {
-        const log = await openSessionLog(store, sessionId, io);
-        await dropTornTail(log);
-        await logMode(log, modeId);
-      }).catch((error: unknown) => io.err(`could not log the mode of ${sessionId}: ${String(error)}`));
+      await switchMode(client, sessionId, modeId);
       return {};
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
@@ -442,6 +461,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       const rawTarget = params._meta?.[INLINE_EDIT_META];
       const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
       if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
+      const slash = target === undefined ? await commands.expand(sessionId, text) : undefined;
+      if (slash?.kind === 'builtin') {
+        const reply = await runBuiltin(slash, { setMode: (mode) => switchMode(client, sessionId, mode) });
+        await client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
+        return { stopReason: 'end_turn' };
+      }
+      if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
 
       const controller = new AbortController();
       turns.set(sessionId, controller);
@@ -451,7 +477,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       try {
         return await serially(sessionId, async () => {
           const resumed = await resumeSession(store, io, sessionId);
-          const opened = target === undefined && hasAttached(attached) ? await logPrompt(store, resumed, text, attached, turn.surface.files, sessionId) : resumed;
+          const opened =
+            target === undefined && (hasAttached(attached) || slash !== undefined)
+              ? await logPrompt(store, resumed, slash?.content ?? text, attached, turn.surface.files, sessionId, slash)
+              : resumed;
           const prompt = opened === resumed ? text : '';
           const result =
             target === undefined
