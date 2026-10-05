@@ -1,8 +1,10 @@
 import type * as acp from '@agentclientprotocol/sdk';
-import type { McpServersResponse } from '@g-code/core';
+import type { BrowserSettings, McpServersResponse } from '@g-code/core';
 import type { Env } from '../child-env.js';
 import type { Store } from '../store.js';
 import type { Approval } from '../tools/agent.js';
+import { homeOf } from '../store.js';
+import { NPX_LAUNCHER, type BrowserLauncher } from './browser.js';
 import { openMcpHub, type McpHub, type McpToolset } from './hub.js';
 
 /**
@@ -10,8 +12,11 @@ import { openMcpHub, type McpHub, type McpToolset } from './hub.js';
  * opens, so its first prompt never waits for a cold server; each turn takes the tools of the servers ready by then.
  */
 export type McpSessions = {
-  /** Records what session/new, session/load or session/resume said, and starts the session's servers. */
-  register(sessionId: string, workspace: string, servers: readonly acp.McpServer[]): void;
+  /**
+   * Records what session/new, session/load or session/resume said, and starts the session's servers. The browser
+   * waits for its first call.
+   */
+  register(sessionId: string, workspace: string, servers: readonly acp.McpServer[], browser: BrowserSettings | undefined): void;
   toolset(sessionId: string, approval: Approval): Promise<McpToolset>;
   servers(sessionId: string): Promise<McpServersResponse>;
   trust(sessionId: string, name: string, hash: string): Promise<McpServersResponse>;
@@ -21,14 +26,14 @@ export type McpSessions = {
   stopAll(): Promise<void>;
 };
 
-export function mcpSessions(store: Store, env: Env, log: (line: string) => void = () => {}): McpSessions {
-  const pending = new Map<string, { readonly workspace: string; readonly servers: readonly acp.McpServer[] }>();
+export function mcpSessions(store: Store, env: Env, log: (line: string) => void = () => {}, launcher: BrowserLauncher = NPX_LAUNCHER): McpSessions {
+  const pending = new Map<string, { readonly workspace: string; readonly servers: readonly acp.McpServer[]; readonly browser: BrowserSettings | undefined }>();
   const hubs = new Map<string, Promise<McpHub>>();
   const hubOf = (sessionId: string): Promise<McpHub> => {
     const open = hubs.get(sessionId);
     if (open !== undefined) return open;
-    const { workspace, servers } = pending.get(sessionId) ?? { workspace: '', servers: [] };
-    const hub = openMcpHub({ store, env, workspace, acp: servers });
+    const { workspace, servers, browser } = pending.get(sessionId) ?? { workspace: '', servers: [], browser: undefined };
+    const hub = openMcpHub({ store, env, workspace, acp: servers, browser: browser === undefined ? undefined : { settings: browser, launcher, home: homeOf(store) } });
     // A hub that failed to open, such as for a malformed trust file, is retried at the next need.
     hub.catch(() => hubs.delete(sessionId));
     hubs.set(sessionId, hub);
@@ -41,8 +46,8 @@ export function mcpSessions(store: Store, env: Env, log: (line: string) => void 
       .catch((error: unknown) => log(`mcp: could not start the servers of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`));
   const response = (hub: McpHub): McpServersResponse => ({ servers: hub.views(), problems: hub.problems });
   return {
-    register(sessionId, workspace, servers) {
-      if (!pending.has(sessionId)) pending.set(sessionId, { workspace, servers });
+    register(sessionId, workspace, servers, browser) {
+      if (!pending.has(sessionId)) pending.set(sessionId, { workspace, servers, browser });
       startInBackground(sessionId);
     },
     async toolset(sessionId, approval) {

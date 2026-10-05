@@ -3,7 +3,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import {
+  BROWSER_META,
   BROWSER_PACKAGE,
+  DEFAULT_BROWSER_SETTINGS,
   BROWSER_SERVER,
   BROWSER_SERVER_ENV,
   BROWSER_SERVER_VERSION,
@@ -35,6 +37,19 @@ export const NPX_LAUNCHER: BrowserLauncher = { command: 'npx', args: ['-y', `${B
 
 /** A session's browser: the editor's settings and how to start the server. */
 export type BrowserOptions = { readonly settings: BrowserSettings; readonly launcher: BrowserLauncher; readonly home: string };
+
+const settingsSchema = z.object({ enabled: z.boolean(), headless: z.boolean().default(true) });
+
+/**
+ * The browser settings the editor sent in a session request's `_meta`. A client that sends none, such as one that
+ * predates the browser, gets a session without it; settings it cannot read leave the browser listed but off.
+ */
+export function browserSettingsOf(meta: Readonly<Record<string, unknown>> | null | undefined): BrowserSettings | undefined {
+  const raw = meta?.[BROWSER_META];
+  if (raw === undefined) return undefined;
+  const parsed = settingsSchema.safeParse(raw);
+  return parsed.success ? parsed.data : DEFAULT_BROWSER_SETTINGS;
+}
 
 /**
  * The built-in server. It runs in the app home rather than the workspace, so a repository's `.npmrc` cannot choose
