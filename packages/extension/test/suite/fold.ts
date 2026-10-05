@@ -68,6 +68,8 @@ async function screenshots(name: string, place: () => Promise<unknown>): Promise
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);
     await place();
+    // A window nobody looks at repaints the frosted panes a moment after a long scroll.
+    await sleep(500);
     await ui({ do: 'screenshot', name: `${name}-${slug}` });
   }
   await useTheme(THEMES.dark);
@@ -135,13 +137,15 @@ export async function run(): Promise<void> {
 
   await send(PROMPTS.remove);
   await waitFor('the permission card', async () => (await count('.permission-open')) === 1);
+  // The command's own step and its permission card can arrive in either order, so the steps are compared as a set.
   const running = await railOf('t1');
   check(
-    JSON.stringify(running) === JSON.stringify({ steps: ['fold', 'calls', 'text', 'calls', 'permission'], fold: '+7 earlier steps', open: 'false' }),
+    JSON.stringify({ ...running, steps: [...running.steps].sort() }) === JSON.stringify({ steps: ['calls', 'calls', 'fold', 'permission', 'text'], fold: '+7 earlier steps', open: 'false' }),
     'the running turn shows its last four steps, the approval card among them, and folds the rest',
     running,
   );
-  check((await panel<string>(`doc.querySelector('[data-turn="t1"] .step-text').textContent`)) === 'Removing the build output.', 'only the latest narration shows');
+  // Streamed text reveals over a few frames, so the narration is complete a moment after the card shows.
+  await waitFor('only the latest narration to show', async () => (await panel<string[]>(`[...doc.querySelectorAll('[data-turn="t1"] .step-text')].map((s) => s.textContent)`)).join() === 'Removing the build output.');
   await screenshots('running', scrollTo('bottom'));
   await click('.permission-open button', 'Deny');
   await waitFor('the denied turn to finish', async () => (await count('.turn-footer')) === 2);
