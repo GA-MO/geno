@@ -129,3 +129,17 @@ export const spillNotice = ({ path, bytes, head, tail }: Spill): string =>
     `--- last ${tail.length} characters ---`,
     tail,
   ].join('\n');
+
+/** The last line of a bash result. */
+export const commandStatusLine = (code: number | null, killedAfterSeconds: number | undefined): string =>
+  killedAfterSeconds === undefined ? `[exit code ${code ?? 'killed'}]` : `[killed after ${killedAfterSeconds} seconds]`;
+
+/** The first line of a check run, alone or after an edit's own line. */
+export const checkHeadline = (command: string, code: number | null, timedOut: boolean): string =>
+  `check \`${command}\` ${timedOut ? 'timed out' : code === 0 ? 'passed' : `failed (exit ${code ?? 'killed'})`}`;
+
+const FAILED_COMMAND = /\[(?:exit code (?!0\])[^\]]+|killed after \d+ seconds)\]\s*$/;
+const FAILED_CHECK = /^check `.*` (?:failed \(exit [^)]+\)|timed out)$/m;
+
+/** Whether a tool's text reports a failed command or check, by the lines above. */
+export const reportsFailure = (text: string): boolean => FAILED_COMMAND.test(text) || FAILED_CHECK.test(text);

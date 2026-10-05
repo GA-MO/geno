@@ -2,7 +2,9 @@ import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
   baseOf,
+  checkHeadline,
   classifierInputOf,
+  commandStatusLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   denialFor,
   formatDiagnostics,
@@ -140,10 +142,8 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
     timeoutMs: CHECK_TIMEOUT_MS,
     signal: ctx.signal,
   });
-  const passed = result.code === 0;
-  const verdict = result.timedOut ? 'timed out' : passed ? 'passed' : `failed (exit ${result.code ?? 'killed'})`;
   const output = tail(result.output);
-  return { passed, text: `check \`${tools.check}\` ${verdict}${output === '' ? '' : `\n${output}`}` };
+  return { passed: result.code === 0, text: `${checkHeadline(tools.check, result.code, result.timedOut)}${output === '' ? '' : `\n${output}`}` };
 }
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
@@ -208,9 +208,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         timeoutMs: timeout_seconds * 1000,
         signal: ctx.signal,
       });
-      const status = result.timedOut
-        ? `[killed after ${timeout_seconds} seconds]`
-        : `[exit code ${result.code ?? 'killed'}]`;
+      const status = commandStatusLine(result.code, result.timedOut ? timeout_seconds : undefined);
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
       const text = `${truncated}${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}${status}`;
       return approval === undefined ? text : { text, approval };
