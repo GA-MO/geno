@@ -86,6 +86,23 @@ pstack is MIT (Lauren Tan; Michael Denyer; some skills Cursor). Geno cannot run 
 - U16, later and only if wanted, adds a subagent tool. It runs a child session with its own context, a model, a per-child and per-parent cost cap, and an optional worktree. swarm, arena, architect, interrogate and reflect need it.
 - Out of reach by design: skills that need `gh`, the network, or Claude Code's own transcripts (babysit, fix-ci, get-pr-comments, recall).
 
-## U11b, U12b, U13, U14
+## U11b: `/` in the composer
 
-Briefs for these are written when their wave starts, from what the A-wave reports actually built.
+- **Picker.** Typing `/` at the start of the composer opens a picker beside the existing `@` mention list. It shows the commands the engine publishes through `available_commands_update`, each with its name, description and argument hint. It filters as the user types and follows the same keyboard rules as `@`.
+- **Routing by `_meta["gcode/command"]`:**
+  - Editor built-ins run the existing panel commands: `/new` and `/clear` start a new chat, `/history` opens history, and `/model` opens the model setting.
+  - Engine built-ins (`/mode`, `/rules`, `/memory`, `/init`) are sent as a prompt.
+  - Prompt and skill commands are sent as typed.
+- **Display.** A sent command shows in the user bubble as a command chip with its name, followed by its arguments, not as the expanded text. A skill shows its name.
+- **Check.** Click and key tests for the picker, routing and chips, plus screenshots in dark glass, light glass and high contrast.
+
+## U12b: MCP in the panel
+
+- **MCP view.** A view or panel section lists servers from `_gcode/mcpServers`: name, source, state (untrusted, starting, ready, failed with reason, needs sign-in), and tool count.
+- **Trust card.** An untrusted workspace server shows a trust card with the exact command or URL. Its Allow action calls `_gcode/mcpTrust`.
+- **Per-server controls.** Each server has enable and disable.
+- **Non-blocking cold start.** A session's first prompt must not wait on cold `npx` server starts; 32 seconds was measured. Start trusted servers in the background when the session opens, send the first prompt with whatever tools are ready, and add the rest on the next request. Keep each request's tool bytes stable within a turn.
+- **Rail.** MCP tool calls show on the rail with the server name.
+- **Forwarded servers.** The extension forwards through ACP `mcpServers` only servers the user owns: the user settings `mcp.json` from VS Code. Never the workspace `.vscode/mcp.json`, because forwarded servers skip the trust gate. A test must prove this.
+- **Check.** Integration tests with a fake stdio server, plus screenshots.
+
