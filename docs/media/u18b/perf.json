@@ -1,0 +1,56 @@
+[
+  {
+    "label": "running turn, Noodle thinking, run 1, attempt 1",
+    "timers": 193,
+    "seconds": 10.003556,
+    "busyMs": 786.738,
+    "busyPercent": 7.864583354159262,
+    "frames": 600,
+    "fps": 59.97867158438459
+  },
+  {
+    "label": "running turn, Noodle resting, run 1",
+    "timers": 50,
+    "seconds": 10.003859,
+    "busyMs": 917.104,
+    "busyPercent": 9.167502260877528,
+    "frames": 600,
+    "fps": 59.97685493168186
+  },
+  {
+    "label": "running turn, Noodle thinking, run 2, attempt 1",
+    "timers": 192,
+    "seconds": 10.004048,
+    "busyMs": 593.485,
+    "busyPercent": 5.932448544829054,
+    "frames": 600,
+    "fps": 59.97572182780411
+  },
+  {
+    "label": "running turn, Noodle resting, run 2",
+    "timers": 50,
+    "seconds": 10.004047,
+    "busyMs": 917.822,
+    "busyPercent": 9.174507076985945,
+    "frames": 600,
+    "fps": 59.975727822950056
+  },
+  {
+    "label": "running turn, Noodle thinking, run 3, attempt 1",
+    "timers": 192,
+    "seconds": 10.003169,
+    "busyMs": 726.508,
+    "busyPercent": 7.262778425516954,
+    "frames": 600,
+    "fps": 59.980992023627714
+  },
+  {
+    "label": "running turn, Noodle resting, run 3",
+    "timers": 50,
+    "seconds": 10.015811,
+    "busyMs": 796.777,
+    "busyPercent": 7.955192045856298,
+    "frames": 600,
+    "fps": 59.905283755853624
+  }
+]
