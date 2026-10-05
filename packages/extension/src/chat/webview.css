@@ -1795,6 +1795,28 @@ body.diagram-tab {
   line-height: 1.4;
 }
 
+/* A turn that ran in Plan says so quietly beside its status; the last one offers to carry the plan out. */
+
+.turn-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  line-height: 16px;
+}
+
+.turn-mode .codicon {
+  font-size: 11px;
+}
+
+.start-building {
+  margin: 8px 0 0 var(--rail-indent);
+}
+
 /* What Auto settled without asking, with the classifier's reason, under the step it settled. */
 
 .auto-note {
@@ -2531,6 +2553,11 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   & .mode-option:hover,
   & .mode-option:focus {
     background: var(--glass-hover);
+  }
+
+  & .turn-mode {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
   }
 
   & .auto-badge {

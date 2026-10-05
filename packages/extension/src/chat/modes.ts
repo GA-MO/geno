@@ -4,6 +4,7 @@ import type { ModeOption, Modes } from './messages.js';
 
 /** How the composer names each mode the engine offers, with its icon; an unknown mode shows the engine's own name. */
 const LOOKS: Readonly<Record<string, { readonly label: string; readonly icon: string }>> = {
+  plan: { label: 'Plan', icon: 'checklist' },
   ask: { label: 'Ask before risky commands', icon: 'shield' },
   auto: { label: 'Auto', icon: 'zap' },
 };

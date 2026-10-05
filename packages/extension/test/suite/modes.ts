@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
-import { COMMANDS, PROMPTS, REASONS, THEMES } from './modes-fixture.js';
+import { START_BUILDING_PROMPT } from '../../src/chat/chat.js';
+import { COMMANDS, FOLLOW_UP, PROMPTS, REASONS, THEMES } from './modes-fixture.js';
+
+const MODES_IN_ORDER = ['plan', 'ask', 'auto'];
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -65,6 +68,7 @@ async function send(prompt: string): Promise<void> {
 }
 
 export async function run(): Promise<void> {
+  check(FOLLOW_UP === START_BUILDING_PROMPT, 'the fixture sends what Start building sends');
   await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
   await vscode.commands.executeCommand('notifications.clearAll');
   await showPanel();
@@ -88,7 +92,9 @@ export async function run(): Promise<void> {
   await screenshots('auto');
 
   await click('.mode-picker');
-  await waitFor('the mode menu', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 2);
+  await waitFor('the mode menu', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 3);
+  const order = await panel<string[]>(`[...doc.querySelectorAll('.mode-option')].map((o) => o.dataset.mode)`);
+  check(order.join() === MODES_IN_ORDER.join(), 'the menu lists Plan, Ask and Auto in that order', order);
   check((await panel<string>('doc.activeElement?.dataset.mode ?? ""')) === 'auto', 'the menu opens on the current mode');
   check((await textOf('.mode-option[aria-checked="true"] .mode-option-name')) === 'Auto', 'the menu marks the current mode');
   await screenshots('menu');
@@ -97,7 +103,7 @@ export async function run(): Promise<void> {
   check((await panel<string>('doc.activeElement?.className ?? ""')).includes('mode-picker'), 'closing the menu returns the focus to the picker');
 
   await click('.mode-picker');
-  await waitFor('the mode menu again', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 2);
+  await waitFor('the mode menu again', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 3);
   await click('.mode-option[data-mode="ask"]');
   await waitFor('the engine to confirm Ask', async () => (await picker()).mode === 'ask');
   check(JSON.stringify(await picker()) === JSON.stringify({ mode: 'ask', label: 'Ask before risky commands', box: 'ask' }), 'Ask drops the Auto marker', await picker());
@@ -108,4 +114,24 @@ export async function run(): Promise<void> {
   await screenshots('ask');
   await click('.permission-open button', 'Deny');
   await waitFor('the Ask turn to finish', async () => (await count('.turn-footer')) === 2);
+  check((await count('.start-building')) === 0, 'an Ask turn offers no Start building');
+
+  await click('.mode-picker');
+  await waitFor('the mode menu for Plan', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 3);
+  await click('.mode-option[data-mode="plan"]');
+  await waitFor('the engine to confirm Plan', async () => (await picker()).mode === 'plan');
+  check((await picker()).label === 'Plan', 'the picker names Plan', await picker());
+  await send(PROMPTS.plan);
+  await waitFor('the Plan turn to finish', async () => (await count('.turn-footer')) === 3);
+  check((await textOf('.turn:last-child .turn-mode')) === 'Plan', 'the Plan turn is marked Plan', await textOf('.turn:last-child .turn-mode'));
+  check((await count('.turn:not(:last-child) .turn-mode')) === 0, 'turns in Ask and Auto carry no mode marker');
+  check((await textOf('.turn:last-child .start-building button')) === 'Start building', 'a finished Plan turn offers Start building');
+  await screenshots('plan');
+
+  await click('.start-building button');
+  await waitFor('Start building to run the plan', async () => (await count('.turn-footer')) === 4);
+  check((await textOf('.turn:last-child .request-bubble')) === FOLLOW_UP, 'Start building sends the follow-up', await textOf('.turn:last-child .request-bubble'));
+  check((await picker()).mode === 'auto', 'Start building switches to the default mode, here Auto', await picker());
+  check((await count('.start-building')) === 0, 'Start building goes once the session left Plan');
+  check((await count('.turn:last-child .turn-mode')) === 0, 'the building turn ran outside Plan');
 }

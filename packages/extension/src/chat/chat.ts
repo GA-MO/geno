@@ -61,8 +61,12 @@ export const HISTORY_COMMAND = 'gcode.chat.history';
 export const STYLE_SETTING = 'gcode.ui.style';
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
 
+/** What Start building sends once the session has left Plan. */
+export const START_BUILDING_PROMPT = 'Go ahead with the plan.';
+
 /** The approval modes the engine advertises, until it says so itself. */
 const MODE_FALLBACK: Modes['available'] = [
+  { id: 'plan', name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
   { id: 'ask', name: 'Ask', description: 'Ask before risky commands.' },
   { id: 'auto', name: 'Auto', description: 'Run safe commands on its own and let a classifier judge the rest.' },
 ];
@@ -83,6 +87,7 @@ const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
 const permissionInput = z.object({ command: z.string(), reason: z.string() });
 const replayedTurn = z.object({
+  mode: z.string().optional(),
   startedAt: z.number(),
   endedAt: z.number(),
   status: z.enum(['done', 'stopped', 'failed']),
@@ -361,7 +366,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (this.replay === undefined || update.content.type !== 'text') return;
       if (this.replay.end !== undefined) this.dispatch(this.replay.end);
       const start = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
-      this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: start.success ? start.data.startedAt : Date.now(), prompt: update.content.text });
+      this.dispatch({
+        type: 'turn-start',
+        id: `t${this.nextTurn++}`,
+        at: start.success ? start.data.startedAt : Date.now(),
+        prompt: update.content.text,
+        mode: start.success ? start.data.mode : undefined,
+      });
       this.replay.end = replayedEnd(update);
       return;
     }
@@ -395,7 +406,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     attached: readonly AttachmentView[] = [],
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
-    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached });
+    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current });
     try {
       this.turn = await this.link();
       this.lastSession = this.turn.sessionId;
@@ -521,6 +532,15 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (this.shown === undefined) return this.remode({ ...this.modes, current: modeId });
     const { connection, sessionId } = await this.link();
     await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId });
+    // The engine switched when it answered; its notice can come later than a prompt sent right after.
+    if (sessionId === this.shown) this.remode({ ...this.modes, current: modeId });
+  }
+
+  /** Leaves Plan for the mode the settings give new chats, Ask unless they say Auto, and has the agent carry out the plan. */
+  async startBuilding(): Promise<acp.StopReason> {
+    this.idle();
+    await this.setMode(this.defaultMode());
+    return this.send(START_BUILDING_PROMPT);
   }
 
   private idle(): void {
@@ -657,6 +677,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'choose-model': () => void vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model'),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
+      'start-building': () => void this.startBuilding().catch(warn),
       'list-sessions': ({ scope }) => this.postHistory(view, scope),
       'open-session': ({ id, workspace }) => void this.openChat(id, workspace).catch(warn),
       'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),

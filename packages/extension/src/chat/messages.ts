@@ -23,6 +23,8 @@ export type Turn = {
   readonly notice?: string | undefined;
   /** Images and files the user sent with the prompt. */
   readonly attachments?: readonly AttachmentView[] | undefined;
+  /** The session's approval mode when the prompt was sent; undefined for a turn replayed from an older log. */
+  readonly mode?: string | undefined;
 };
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -104,7 +106,14 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 export type Action =
   | { readonly type: 'reset'; readonly transcript: Transcript }
   | { readonly type: 'model'; readonly model: string }
-  | { readonly type: 'turn-start'; readonly id: string; readonly at: number; readonly prompt: string; readonly attachments?: readonly AttachmentView[] | undefined }
+  | {
+      readonly type: 'turn-start';
+      readonly id: string;
+      readonly at: number;
+      readonly prompt: string;
+      readonly attachments?: readonly AttachmentView[] | undefined;
+      readonly mode?: string | undefined;
+    }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
   /** Starts a tool call or updates one; an absent field keeps its value. */
@@ -218,6 +227,8 @@ export type FromView =
   | { readonly type: 'open-diagram'; readonly source: string }
   /** Switches the session's approval mode; the engine confirms with the modes. */
   | { readonly type: 'set-mode'; readonly modeId: string }
+  /** After a Plan turn: leave Plan and tell the agent to carry out the plan. */
+  | { readonly type: 'start-building' }
   /** Asks for the history list; answered by `history` or `history-failed`. */
   | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
   | { readonly type: 'open-session'; readonly id: string; readonly workspace: string }
