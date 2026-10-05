@@ -44,7 +44,31 @@ const DATABASE_CLIS = new Set([
   'mysqldump', 'pg_dump', 'pg_restore', 'psql', 'redis-cli', 'sqlcmd',
 ]);
 
-const DOWNLOADERS = new Set(['curl', 'wget']);
+type DownloaderOptions = {
+  readonly flags: string;
+  readonly valued: string;
+  readonly long: ReadonlySet<string>;
+  readonly longValued: ReadonlySet<string>;
+};
+// Options that only shape the request or where its output goes. Any other option, such as a proxy, --resolve or a
+// config file, can send the request to another host.
+const DOWNLOADERS: ReadonlyMap<string, DownloaderOptions> = new Map([
+  ['curl', {
+    flags: 'sSfiILvkN',
+    valued: 'oHXdwmAeu',
+    long: new Set(['--silent', '--show-error', '--fail', '--fail-with-body', '--include', '--head', '--location', '--verbose', '--insecure', '--compressed', '--no-buffer']),
+    longValued: new Set(['--output', '--header', '--request', '--data', '--data-raw', '--data-binary', '--write-out', '--max-time', '--connect-timeout', '--retry', '--user-agent']),
+  }],
+  ['wget', {
+    flags: 'qSv',
+    valued: 'OTt',
+    long: new Set(['--quiet', '--spider', '--server-response']),
+    longValued: new Set(['--output-document', '--timeout', '--tries']),
+  }],
+]);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+// The host must end at a port, a path, a query, a fragment or the end, so `127.0.0.1:3000@example.com` is not local.
+const URL_HOST = /^(?:https?:\/\/)?(\[[^\]]*\]|[^/?#:@[\]]*)(?::\d+)?(?:[/?#]|$)/i;
 
 // Read-only system locations a build or test command legitimately names by absolute path.
 const SYSTEM_PREFIXES = ['/dev', '/usr', '/bin', '/sbin', '/opt/homebrew', '/tmp', '/private/tmp'];
@@ -86,6 +110,33 @@ function removable(operand: string, cwd: string | undefined, scope: CommandScope
   const target = path.resolve(cwd ?? '/', expanded);
   const inWorkspace = strictlyWithin(scope.workspace, target) && !within(path.join(scope.workspace, '.git'), target);
   return inWorkspace || [scope.tempDir, ...TEMP_ROOTS].some((root) => strictlyWithin(root, target));
+}
+
+function isLocalUrl(word: string): boolean {
+  const host = URL_HOST.exec(word)?.[1];
+  return host !== undefined && LOCAL_HOSTS.has(host.toLowerCase());
+}
+
+function onlyLocalUrls(options: DownloaderOptions, args: readonly string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg.startsWith('--')) {
+      const name = arg.split('=')[0]!;
+      if (options.longValued.has(name)) {
+        if (!arg.includes('=')) i++;
+      } else if (!options.long.has(arg)) return false;
+    } else if (arg.startsWith('-') && arg.length > 1) {
+      for (let j = 1; j < arg.length; j++) {
+        const letter = arg[j]!;
+        if (options.valued.includes(letter)) {
+          if (j === arg.length - 1) i++;
+          break;
+        }
+        if (!options.flags.includes(letter)) return false;
+      }
+    } else if (!isLocalUrl(arg)) return false;
+  }
+  return true;
 }
 
 const flags = (args: readonly string[]) => args.filter((arg) => arg.startsWith('-'));
@@ -135,7 +186,10 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'network-download': {
     reason: 'curl or wget',
-    denies: ({ program }) => DOWNLOADERS.has(program),
+    denies: ({ program, args }) => {
+      const options = DOWNLOADERS.get(program);
+      return options !== undefined && !onlyLocalUrls(options, args);
+    },
   },
   'cloud-cli': {
     reason: 'a cloud CLI',
