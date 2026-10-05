@@ -40,6 +40,8 @@ import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
 import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
+import type { SettingsPage } from './settings-host.js';
+import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
 import {
   TOOL_KINDS,
@@ -325,6 +327,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private mcpAsked = false;
   /** The rules and memory panes. */
   private readonly panes: ContextPanes;
+  /** The providers, keys and roles page. */
+  private readonly settingsPage: SettingsPage;
+  /** The settings action ran before the webview was ready; it opens the page once it is. */
+  private settingsAsked = false;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -338,10 +344,12 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly defaultMode: () => 'ask' | 'auto',
     /** The MCP servers the user owns, from VS Code's user mcp.json; never the workspace's, which skip no approval this way. */
     private readonly forwardedServers: () => Promise<acp.McpServer[]>,
+    settingsPage: (post: (message: SettingsToView) => void) => SettingsPage,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.settingsPage = settingsPage((message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -379,6 +387,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   dispose(): void {
     this.mcp.dispose();
+    this.settingsPage.dispose();
     this.switched.dispose();
     this.engine.dispose();
   }
@@ -649,6 +658,12 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     else void this.view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
   }
 
+  /** Opens the providers, keys and roles page. */
+  showSettings(): void {
+    if (this.view === undefined) this.settingsAsked = true;
+    else void this.view.webview.postMessage({ type: 'show-settings' } satisfies ToView);
+  }
+
   /** Starts a fresh session; the current one stays on disk. A chat with no turns yet is already fresh. */
   async newChat(): Promise<void> {
     this.idle();
@@ -788,6 +803,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
         if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
         this.mcpAsked = false;
+        if (this.settingsAsked) void view.webview.postMessage({ type: 'show-settings' } satisfies ToView);
+        this.settingsAsked = false;
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -818,6 +835,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'delete-session': ({ id, scope }) => void this.deleteChat(id).then(() => this.postHistory(view, scope), warn),
       ...this.mcp.handlers,
       ...this.panes.handlers,
+      ...this.settingsPage.handlers,
     };
   }
 

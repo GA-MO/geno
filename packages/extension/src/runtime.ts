@@ -50,7 +50,7 @@ export type ProviderSettings = Readonly<Partial<Record<ProviderName, Readonly<Pa
  * A non-secret field's value from the user's own settings. Workspace values are never read: a base URL from a
  * repository's settings.json would send the user's key wherever its author chose.
  */
-function userValue(settings: Settings, provider: ProviderName, field: FieldId): string | undefined {
+export function userValue(settings: Settings, provider: ProviderName, field: FieldId): string | undefined {
   const key = settingKey(provider, field).slice('gcode.'.length);
   if (key === 'baseUrl') return settings.inspect<string>(key)?.globalValue || undefined;
   const value = settings.inspect<ProviderSettings>(key)?.globalValue?.[provider]?.[field];
@@ -65,13 +65,18 @@ async function supplied(provider: ProviderName, field: ProviderField, settings: 
   return inherited ? { source: 'environment', value: inherited } : undefined;
 }
 
-export async function providerRuntime(provider: ProviderName, model: string | undefined, settings: Settings, secrets: Secrets, env: Env): Promise<ModelRuntime> {
+/** Each of the provider's fields that has a value, and where the value came from. */
+export async function suppliedValues(provider: ProviderName, settings: Settings, secrets: Secrets, env: Env): Promise<Partial<Record<FieldId, Supplied>>> {
   const values: Partial<Record<FieldId, Supplied>> = {};
   for (const field of specOf(provider).fields) {
     const value = await supplied(provider, field, settings, secrets, env);
     if (value !== undefined) values[field.id] = value;
   }
-  const { apiKey, baseUrl, ...more } = values;
+  return values;
+}
+
+export async function providerRuntime(provider: ProviderName, model: string | undefined, settings: Settings, secrets: Secrets, env: Env): Promise<ModelRuntime> {
+  const { apiKey, baseUrl, ...more } = await suppliedValues(provider, settings, secrets, env);
   return { provider, baseUrl: baseUrl?.value, model, key: apiKey, ...(Object.keys(more).length === 0 ? {} : { more }) };
 }
 

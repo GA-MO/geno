@@ -10,6 +10,7 @@ import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } fr
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { mcpPanel } from './mcp-panel.js';
+import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, type Step } from './rail.js';
 import { callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
@@ -157,7 +158,7 @@ function showHeader(next: Header): void {
 
 type Pane = { isOpen(): boolean; close(): void };
 
-// The history, the MCP servers, the rules and the memory each take the transcript's and the composer's place while open, one at a time.
+// The history, the MCP servers, the rules, the memory and the settings each take the transcript's and the composer's place while open, one at a time.
 const showPane = (name: string, open: boolean): void => {
   if (open) for (const [other, pane] of Object.entries(panes)) if (other !== name) pane.close();
   const shown = Object.entries(panes).find(([, pane]) => pane.isOpen())?.[0] ?? 'chat';
@@ -172,10 +173,11 @@ const history = historyPanel(post, (open) => showPane('history', open));
 const mcp = mcpPanel(post, (open) => showPane('mcp', open));
 const rules = rulesPanel(post, (open) => showPane('rules', open));
 const memory = memoryPanel(post, (open) => showPane('memory', open));
-const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory };
+const settings = settingsPanel(post, (open) => showPane('settings', open));
+const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings };
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
 inputBox.insertBefore(attachments.element, chips);
 
@@ -362,6 +364,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'history-failed') return history.failed(message.scope, message.message);
   if (message.type === 'mcp') return mcp.listed(message.listing);
   if (message.type === 'show-mcp') return mcp.open();
+  if (message.type === 'settings') return settings.listed(message.listing);
+  if (message.type === 'show-settings') return settings.open();
+  if (message.type === 'settings-tested') return settings.tested(message.provider, message.state);
+  if (message.type === 'settings-models') return settings.modelsListed(message.provider, message.state);
   if (message.type === 'rules') return rules.listed(message.listing);
   if (message.type === 'show-rules') return rules.open();
   if (message.type === 'memory') return memory.listed(message.listing);

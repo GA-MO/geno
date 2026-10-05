@@ -18,8 +18,11 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { registerTabServer } from './tab/status.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
-import { describeEngineRuntime, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, setupProblem } from './runtime.js';
+import { describeEngineRuntime, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
+import { SettingsPage } from './chat/settings-host.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
+
+const engineCli = (context: vscode.ExtensionContext): string => path.join(context.extensionPath, 'dist', 'engine', 'cli.js');
 
 const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles'];
 
@@ -37,7 +40,7 @@ async function engineSettings(context: vscode.ExtensionContext, output: vscode.O
   output.appendLine(`engine: ${describeEngineRuntime(runtime)}`);
   const rg = process.env['GCODE_RG'] ? undefined : await findExecutable('rg', process.env);
   return {
-    cliPath: path.join(context.extensionPath, 'dist', 'engine', 'cli.js'),
+    cliPath: engineCli(context),
     cwd: folder.uri.fsPath,
     env: { ...engineEnvOf(runtime), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
   };
@@ -122,6 +125,7 @@ function registerChat(context: vscode.ExtensionContext): void {
       for (const problem of problems) output.appendLine(`mcp: ${file}: ${problem}`);
       return [...servers];
     },
+    (post) => new SettingsPage(context.secrets, engineCli(context), output, post),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(
@@ -145,6 +149,10 @@ function registerChat(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(MCP_COMMAND, async () => {
       await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
       chat.showMcp();
+    }),
+    vscode.commands.registerCommand(SETTINGS_COMMAND, async () => {
+      await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
+      chat.showSettings();
     }),
     vscode.commands.registerCommand(HISTORY_COMMAND, async () => {
       await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
