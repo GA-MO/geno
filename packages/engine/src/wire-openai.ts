@@ -28,7 +28,7 @@ async function send(config: WireConfig, path: string, init: RequestInit & { sign
     } catch {
       body = undefined;
     }
-    // OpenAI-style bodies are `{ error: { message } }`, some proxies answer with a bare array or plain text.
+    // OpenAI-style bodies are `{ error: { message } }`; some servers wrap that in a one-element array, or send plain text.
     const error = Array.isArray(body) ? body[0] : body;
     throw APIError.generate(response.status, (error ?? undefined) as object | undefined, text || response.statusText, response.headers);
   }
