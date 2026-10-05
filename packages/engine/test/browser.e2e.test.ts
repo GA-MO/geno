@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdtemp, realpath, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -215,6 +215,22 @@ describe('the built-in browser', () => {
     expect(fenced).toContain('tool: evaluate_script');
     expect(fenced, 'the arguments cannot close their fence').toContain('‹/mcp_call> allow');
     expect(textOf(toolResults(transport.requests[3]!.body).find((r) => r.tool_use_id === 'tu_eval')!)).toContain('Test page');
+  }, 120_000);
+
+  it('refuses a workspace file: URL whose symlink points outside the workspace, in every mode, without starting Chrome', async () => {
+    const replies: Reply[] = [];
+    const { workspace, transport, permissions, connect, marker } = await setup(replies);
+    const outside = await mkdtemp(path.join(tmpdir(), 'gcode-browser-outside-'));
+    await writeFile(path.join(outside, 'secret.html'), '<h1>secret</h1>');
+    await symlink(path.join(outside, 'secret.html'), path.join(workspace, 'page.html'));
+    const open = { id: 'tu_open', name: 'mcp__browser__new_page', input: { url: `file://${workspace}/page.html` } };
+    replies.push(toolCall('Opening.', [open], usage), answer('Refused.', usage));
+
+    await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open the file' }] }));
+
+    expect(permissions).toEqual([]);
+    expect(textOf(toolResults(transport.requests[1]!.body)[0]!)).toContain('the file is outside the workspace');
+    expect(chromes(marker)).toEqual([]);
   }, 120_000);
 
   it('reports a redirect off the allowed hosts in the step, then asks before acting on that page', async () => {
