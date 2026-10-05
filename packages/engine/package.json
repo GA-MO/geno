@@ -8,7 +8,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/cli.js --external:@anthropic-ai/sandbox-runtime"
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/cli.js --external:@anthropic-ai/sandbox-runtime --banner:js=\"import { createRequire as __gcodeCreateRequire } from 'node:module'; const require = __gcodeCreateRequire(import.meta.url);\""
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.7.0",
