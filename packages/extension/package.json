@@ -52,6 +52,12 @@
         "icon": "$(server-process)"
       },
       {
+        "command": "gcode.chat.settings",
+        "title": "Models and Keys",
+        "category": "Geno",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "gcode.setApiKey",
         "title": "Geno: Set API Key"
       },
@@ -113,20 +119,151 @@
           "type": "string",
           "enum": [
             "modelstudio",
-            "openrouter"
+            "openrouter",
+            "anthropic",
+            "bedrock",
+            "vertex",
+            "openai",
+            "azure-openai",
+            "gemini",
+            "deepseek",
+            "groq",
+            "cerebras",
+            "xai",
+            "mistral",
+            "ollama",
+            "lmstudio"
           ],
           "default": "modelstudio",
-          "description": "The model provider for chat, review and Cmd-K. Run `Geno: Set API Key` to store its key."
+          "description": "The model provider for chat, review and Cmd-K. Set its key in Geno: Models and Keys, or with `Geno: Set API Key`."
         },
         "gcode.baseUrl": {
           "type": "string",
           "default": "",
-          "description": "Model Studio's Anthropic-compatible endpoint, which embeds your workspace id and region. OpenRouter ignores it."
+          "description": "Model Studio's Anthropic-compatible endpoint, which embeds your workspace id and region. Read from your user settings only. Other providers ignore it.",
+          "scope": "application"
         },
         "gcode.model": {
           "type": "string",
           "default": "",
           "description": "The model for chat, review and Cmd-K. Empty uses the provider's default (qwen3.8-flash on Model Studio)."
+        },
+        "gcode.providers": {
+          "type": "object",
+          "scope": "application",
+          "default": {},
+          "markdownDescription": "Per-provider values that are not secret: a base URL override, an AWS region or profile, a Google Cloud project. Read from your user settings only, so a workspace cannot send your key elsewhere. Keys never go here: set them in **Geno: Models and Keys**, which keeps them in VS Code's secret storage.",
+          "propertyNames": {
+            "enum": [
+              "openrouter",
+              "modelstudio",
+              "anthropic",
+              "bedrock",
+              "vertex",
+              "openai",
+              "azure-openai",
+              "gemini",
+              "deepseek",
+              "groq",
+              "cerebras",
+              "xai",
+              "mistral",
+              "ollama",
+              "lmstudio"
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "baseUrl": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "profile": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "gcode.roles": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Which provider and model each helper runs on. Chat runs on `gcode.provider` and `gcode.model`, and Tab on its local llama-server. A role left out keeps Geno's default.",
+          "properties": {
+            "classifier": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "openrouter",
+                    "modelstudio",
+                    "anthropic",
+                    "bedrock",
+                    "vertex",
+                    "openai",
+                    "azure-openai",
+                    "gemini",
+                    "deepseek",
+                    "groq",
+                    "cerebras",
+                    "xai",
+                    "mistral",
+                    "ollama",
+                    "lmstudio"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider"
+              ],
+              "additionalProperties": false,
+              "description": "The Auto mode classifier, which judges commands no rule settles."
+            },
+            "explore": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "openrouter",
+                    "modelstudio",
+                    "anthropic",
+                    "bedrock",
+                    "vertex",
+                    "openai",
+                    "azure-openai",
+                    "gemini",
+                    "deepseek",
+                    "groq",
+                    "cerebras",
+                    "xai",
+                    "mistral",
+                    "ollama",
+                    "lmstudio"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider"
+              ],
+              "additionalProperties": false,
+              "description": "The explore helper, once Geno has one."
+            }
+          },
+          "additionalProperties": false
         },
         "gcode.approvalMode": {
           "type": "string",
@@ -256,6 +393,11 @@
           "command": "gcode.chat.mcp",
           "when": "view == gcode.chat",
           "group": "navigation@3"
+        },
+        {
+          "command": "gcode.chat.settings",
+          "when": "view == gcode.chat",
+          "group": "navigation@4"
         },
         {
           "command": "gcode.review.undoSession",

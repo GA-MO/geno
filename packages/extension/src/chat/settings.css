@@ -1,0 +1,288 @@
+/* The models and keys page, in the transcript's place while open, laid out as the MCP servers panel is. */
+
+.settings {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px var(--gap) 12px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.settings[hidden],
+.settings .history-note[hidden] {
+  display: none;
+}
+
+.settings-heading {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.settings-intro {
+  margin: 0 2px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.settings-roles,
+.provider-list,
+.provider-models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-roles {
+  gap: 0;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.role-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+}
+
+.role-row + .role-row {
+  border-top: 1px solid var(--border);
+}
+
+.role-label {
+  flex: none;
+  min-width: 9.5em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role-choice {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 12em;
+}
+
+.role-fixed {
+  flex: 1;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.role-provider {
+  flex: 0 1 11em;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--vscode-dropdown-border, var(--border));
+  border-radius: 6px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  font: inherit;
+}
+
+.provider-input {
+  flex: 1;
+  min-width: 8em;
+  padding: 3px 8px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 6px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+}
+
+.provider-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.provider-input:focus,
+.role-provider:focus {
+  border-color: var(--vscode-focusBorder);
+  outline: none;
+}
+
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.provider-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.provider-head:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+
+.provider-chevron {
+  color: var(--muted);
+}
+
+.provider-name {
+  font-weight: 600;
+}
+
+.provider-format {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.provider-tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  line-height: 16px;
+}
+
+.provider-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px 30px;
+}
+
+.provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+}
+
+.provider-field-label {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.provider-field-note {
+  margin-left: 6px;
+  opacity: 0.75;
+}
+
+.provider-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.provider-test,
+.provider-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.provider-note {
+  color: var(--muted);
+}
+
+.provider-test[data-tone='ok'] {
+  color: var(--ok);
+}
+
+.provider-test[data-tone='failed'] {
+  color: var(--vscode-errorForeground);
+}
+
+.provider-test[data-tone='busy'] {
+  color: var(--muted);
+}
+
+.provider-models {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.provider-model {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 0.5px);
+  cursor: pointer;
+}
+
+.provider-model:hover {
+  background: var(--surface-2);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  & .settings-roles,
+  & .provider-card {
+    border-color: var(--glass-edge);
+    background: var(--glass-pane);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .role-row + .role-row {
+    border-top-color: var(--glass-edge);
+  }
+
+  & .provider-head:hover {
+    background: var(--glass-hover);
+  }
+
+  & .provider-input,
+  & .role-provider {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-well);
+  }
+
+  & .provider-tag,
+  & .provider-model {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  & .provider-model:hover {
+    background: var(--glass-hover);
+  }
+}

@@ -1,6 +1,7 @@
 import type { AppliedRule, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
+import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
 
@@ -236,6 +237,7 @@ export type ToView =
   | { readonly type: 'history'; readonly scope: HistoryScope; readonly rows: readonly HistoryRow[] }
   | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
   | McpToView
+  | SettingsToView
   | ContextToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
@@ -305,4 +307,5 @@ export type FromView =
   | { readonly type: 'rename-session'; readonly id: string; readonly title: string; readonly scope: HistoryScope }
   | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
   | McpFromView
+  | SettingsFromView
   | ContextFromView;
