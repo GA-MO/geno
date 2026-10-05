@@ -1,10 +1,11 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TurnEvent } from '@g-code/core';
-import { denyAll, runAgent } from './agent.js';
+import { runAgent } from './agent.js';
 import { startSession, totalOf } from './chat.js';
 import type { Io } from './command.js';
 import type { AgentAdapter } from './eval-run.js';
+import { NON_INTERACTIVE } from './tools/agent.js';
 
 export const EVAL_MAX_TURNS = 40;
 
@@ -13,7 +14,10 @@ const finalText = (events: readonly TurnEvent[]): string => {
   return last?.kind === 'assistant' ? last.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim() : '';
 };
 
-/** Our agent, in-process, with every deny-list command refused. Its console output goes to a log in the run dir. */
+/**
+ * Our agent, in-process and non-interactive, so a command the deny list flags is refused, not asked about. Its console
+ * output goes to a log in the run dir.
+ */
 export const gcodeAdapter: AgentAdapter = {
   async run(input, { io, store }) {
     const lines: string[] = [];
@@ -35,7 +39,7 @@ export const gcodeAdapter: AgentAdapter = {
       limits: { maxTurns: EVAL_MAX_TURNS, maxCostUsd: input.maxCostUsd },
       check: input.check,
       checkAfterEdit: input.checkAfterEdit,
-      approve: denyAll,
+      approval: NON_INTERACTIVE,
     });
     await writeFile(path.join(input.runDir, `${input.task.id}.gcode.log`), [...lines, partial].join('\n'));
     const thisRun = result.events.filter((e) => e.kind !== 'session-start' && e.seq >= result.run.firstSeq);

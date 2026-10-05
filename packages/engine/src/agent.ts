@@ -11,7 +11,7 @@ import type { Command, Io } from './command.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { isMissing, StoreError, type Store } from './store.js';
-import { agentExecutors, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, NON_INTERACTIVE, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
@@ -40,13 +40,11 @@ export type AgentOptions = {
   /** From --check; undefined falls back to `.gcode.json`. */
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
-  readonly approve: Approver;
+  readonly approval: Approval;
   /** Undefined runs on disk and prints to the terminal. */
   readonly surface?: Surface;
   readonly diagnostics?: Diagnostics | undefined;
 };
-
-export const denyAll: Approver = async () => false;
 
 export const askOnTerminal =
   (io: Io): Approver =>
@@ -66,7 +64,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       scope: { workspace, tempDir, home },
       check: options.check ?? (await configuredCheck(workspace)),
       checkAfterEdit: options.checkAfterEdit,
-      approve: options.approve,
+      approval: options.approval,
       diagnostics: options.diagnostics,
     });
     const repo = shadowRepoFor(store, session.workspace);
@@ -116,7 +114,7 @@ export const agent: Command = async (args, { io, store }) => {
     limits,
     check: values.check,
     checkAfterEdit: values['check-after-edit'],
-    approve: values['non-interactive'] ? denyAll : askOnTerminal(io),
+    approval: values['non-interactive'] ? NON_INTERACTIVE : { mode: 'interactive', approve: askOnTerminal(io) },
   });
   return exitCode;
 };
