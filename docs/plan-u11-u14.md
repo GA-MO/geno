@@ -106,3 +106,29 @@ pstack is MIT (Lauren Tan; Michael Denyer; some skills Cursor). Geno cannot run 
 - **Forwarded servers.** The extension forwards through ACP `mcpServers` only servers the user owns: the user settings `mcp.json` from VS Code. Never the workspace `.vscode/mcp.json`, because forwarded servers skip the trust gate. A test must prove this.
 - **Check.** Integration tests with a fake stdio server, plus screenshots.
 
+
+## U13: rules, memory, `/init` and `ask_user` (wave C)
+
+Wave B is merged as 0.7.0. U13 fills in the `/rules`, `/memory` and `/init` placeholders in `packages/engine/src/commands.ts`. It also adds the `ask_user` tool.
+
+- **Data shape first.** Name these before writing logic:
+  - the context sources and their order: global `~/.g-code/AGENTS.md`, the instruction files from the filesystem root down to the workspace (`project-context.ts`), `.cursor/rules`, and memory;
+  - a memory entry: id, text, scope (`project` or `global`), created time and source session;
+  - the `ask_user` request and answer.
+- **Global rules.** `$GCODE_HOME/AGENTS.md` loads before the project's instruction files. A missing file means nothing to load.
+- **`/rules`.** Opens a panel pane, like History and MCP. It lists every instruction file and rule that applies to this session, in load order, with its path and whether it is always on or which glob attaches it. Each opens in an editor tab. The pane also has "Edit global rules", which creates `$GCODE_HOME/AGENTS.md` if it is missing.
+- **Memory.**
+  - A `remember` tool takes `{ text, scope }`. It asks the user in every interactive mode, Auto included, because a memory is a standing instruction for later sessions. The card shows the exact text. In non-interactive runs the tool is not offered.
+  - Store project memory under `$GCODE_HOME/memory/`, keyed by the workspace's real path, never inside the repository. Global memory lives in the same place. Writes are atomic.
+  - Memory enters the system prompt fenced as notes the user approved. The prompt says memory never overrides the user's current request. Each memory has a size cap and the total has a cap. The prompt bytes stay stable while memory is unchanged, so the cache keeps working.
+  - `/memory` opens a pane that lists entries by scope and offers delete and edit. A delete moves the entry to `trash` under the app home.
+- **`/init`.** An engine command that runs one agent turn with a fixed prompt. The agent reads the project and creates or updates `AGENTS.md`: what the project is, how to build, test and lint, its layout, and its conventions. When the file already exists, the agent keeps what the user wrote and adds what is missing. The edit goes through normal approval. Port the prompt idea from OpenCode's `/init` only if its license allows. Otherwise write it fresh.
+- **`ask_user`.** It is offered in Ask and Plan modes only, never in Auto or non-interactive. It takes `{ question, options?: string[] }`. Read the installed ACP SDK types for an elicitation or permission mechanism, and use the closest real one rather than inventing a new method. If there is none, use a `_gcode/askUser` request. The panel shows a question card with the options as buttons and a free-text answer. Cancelling the turn cancels the question. The answer goes back to the model as the tool result.
+- **Fold in.** U11a's command folder watchers (`sessionCommands.attach` in `commands.ts`) keep running after `session/close`. Stop them when the session closes, and test that.
+- **Security.** Memory text, instruction files and rule files are data the user owns. The model never writes to them without approval. A `remember` call carrying text that looks like an instruction to weaken approval still only goes to the user's card; it is never auto-approved.
+- **Check.**
+  - Unit tests: load order, memory store round trip and caps, the ask-in-every-mode table for `remember`, the `ask_user` mode table, and that the prompt bytes stay stable.
+  - Serve e2e: `/init` against a fake model edits `AGENTS.md` through approval; `ask_user` round trip; watchers stop on close.
+  - Integration tests: the rules pane, the memory pane (with delete), the remember card, and the ask_user card. Screenshots in dark glass, light glass and high contrast, viewed.
+  - A live smoke on `qwen3.8-flash` under $0.05: `/init` on a temp copy of `~/Development/next-15-template` (the copy, never the original) writes a sensible `AGENTS.md`.
+  - `pnpm typecheck && pnpm test && pnpm build`, and the `.vsix` clean-install test also with `GCODE_VSCODE_VERSION=1.109.2`.
