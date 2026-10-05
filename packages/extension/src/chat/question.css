@@ -169,6 +169,10 @@
   align-items: center;
 }
 
+.question-other .question-input {
+  resize: none;
+}
+
 .question-other .question-mark,
 .question-other .question-key {
   margin-top: 0;
