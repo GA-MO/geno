@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import Anthropic, { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
-import type { Message, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { Message, MessageStreamEvent, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
   classifyModelError,
@@ -15,6 +15,7 @@ import {
   type RetryPolicy,
   type Session,
   type StoredAttachments,
+  type StreamMarks,
   type TokenUsage,
   type TurnEvent,
   type TurnResult,
@@ -33,6 +34,8 @@ export type TurnInput = {
   onText(delta: string): void;
   /** A transient failure about to be retried; the wait starts once this settles. */
   onRetry(retry: ModelRetry): void | Promise<void>;
+  /** When the attempt that produced the result reached each point of its stream; called once, before the result returns. */
+  onMarks?(marks: StreamMarks): void;
 };
 
 /** One model round trip. A wire format other than Anthropic Messages would be another implementation. */
@@ -80,6 +83,30 @@ function refusalMessage(message: Message): string {
 
 const ABORTED: TurnResult = { kind: 'error', error: 'abort', message: 'interrupted by the user' };
 
+const THINKING_BLOCKS: ReadonlySet<string> = new Set(['thinking', 'redacted_thinking']);
+
+/** Notes when one attempt's stream sent its first content, its first answer content after any thinking, and its last. */
+function streamClock() {
+  const requestAt = Date.now();
+  const thinkingBlocks = new Set<number>();
+  let firstTokenAt: number | null = null;
+  let firstAnswerAt: number | null = null;
+  let lastTokenAt: number | null = null;
+  return {
+    observe(event: MessageStreamEvent) {
+      if (event.type === 'content_block_start' && THINKING_BLOCKS.has(event.content_block.type)) thinkingBlocks.add(event.index);
+      if (event.type !== 'content_block_start' && event.type !== 'content_block_delta') return;
+      const now = Date.now();
+      firstTokenAt ??= now;
+      if (!thinkingBlocks.has(event.index)) firstAnswerAt ??= now;
+      lastTokenAt = now;
+    },
+    marks: (): StreamMarks => ({ requestAt, firstTokenAt, firstAnswerAt, lastTokenAt, endAt: Date.now() }),
+  };
+}
+
+type StreamClock = ReturnType<typeof streamClock>;
+
 // The SDK keeps the transport's own error as the cause, and that is what names a reset or a refused connection.
 export const messagesOf = (error: unknown): string[] =>
   error instanceof Error ? [error.message, ...messagesOf(error.cause)] : error === undefined ? [] : [String(error)];
@@ -117,12 +144,13 @@ export function gatewayFor(
   const provider = PROVIDER_TABLE[providerName];
   const client = clientFor(providerName, env, fetch);
 
-  async function call({ session, events, tools, system, stored, signal, onText }: TurnInput): Promise<TurnResult> {
+  async function call({ session, events, tools, system, stored, signal, onText }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
     const stream = client.messages.stream(buildRequest(session, events, tools, system, stored), {
       signal,
       headers: provider.sessionHeaders(session),
     });
+    stream.on('streamEvent', (event) => clock.observe(event));
     stream.on('text', onText);
     const message = await stream.finalMessage();
     if (message.stop_reason === 'refusal') {
@@ -146,20 +174,25 @@ export function gatewayFor(
     async turn(input) {
       const { signal } = input;
       for (let attempt = 1; ; attempt++) {
+        const clock = streamClock();
+        const settled = (result: TurnResult): TurnResult => {
+          input.onMarks?.(clock.marks());
+          return result;
+        };
         try {
-          return await call(input);
+          return settled(await call(input, clock));
         } catch (error) {
-          if (error instanceof APIUserAbortError || signal.aborted) return ABORTED;
+          if (error instanceof APIUserAbortError || signal.aborted) return settled(ABORTED);
           if (!(error instanceof AnthropicError)) throw error;
           const failure = failureOf(error);
           const kind = classifyModelError(failure);
           const delayMs = kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
-          if (delayMs === undefined) return { kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message };
+          if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message });
           await input.onRetry({ attempt, delayMs, message: failure.message });
           try {
             await sleep(delayMs, undefined, { signal });
           } catch (sleepError) {
-            if (signal.aborted) return ABORTED;
+            if (signal.aborted) return settled(ABORTED);
             throw sleepError;
           }
         }

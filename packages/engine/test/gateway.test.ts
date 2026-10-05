@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, type Session, type TurnEvent } from '@g-code/core';
+import { asSessionId, type Session, type StreamMarks, type TurnEvent } from '@g-code/core';
 import { gatewayFor } from '../src/gateway.js';
 import { answer, fakeTransport, httpError, type Reply } from './fake-transport.js';
 
@@ -182,5 +182,41 @@ describe('gatewayFor retries', () => {
     expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
     expect(requests).toBe(1);
     expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  describe('stream marks', () => {
+    const marksOf = async (reply: Reply, signal: AbortSignal) => {
+      const marks: StreamMarks[] = [];
+      const result = await gatewayFor('openrouter', env, fakeTransport([reply]).fetch).turn({
+        session,
+        events,
+        signal,
+        tools: [],
+        onText: () => {},
+        onRetry: () => {},
+        onMarks: (m) => marks.push(m),
+      });
+      return { result, marks };
+    };
+
+    it('reports once, with every mark in stream order', async () => {
+      const { result, marks } = await marksOf(answer('Hello there, friend.', usage), new AbortController().signal);
+      expect(result.kind).toBe('answer');
+      expect(marks).toHaveLength(1);
+      const [{ requestAt, firstTokenAt, firstAnswerAt, lastTokenAt, endAt }] = marks as [StreamMarks];
+      expect([firstTokenAt, firstAnswerAt, lastTokenAt].every((m) => m !== null)).toBe(true);
+      expect([requestAt, firstTokenAt!, firstAnswerAt!, lastTokenAt!, endAt]).toEqual([requestAt, firstTokenAt, firstAnswerAt, lastTokenAt, endAt].toSorted());
+    });
+
+    it('counts thinking as a token but not as an answer, so a call cut off mid-thought has no first answer', async () => {
+      const stop = new AbortController();
+      // message_start, then the thinking block's start and first delta.
+      const pending = marksOf({ ...answer('Never said.', usage), stallAfter: 3 }, stop.signal);
+      setTimeout(() => stop.abort(), 50);
+      const { result, marks } = await pending;
+      expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
+      expect(marks).toEqual([expect.objectContaining({ firstTokenAt: expect.any(Number), firstAnswerAt: null, lastTokenAt: expect.any(Number) })]);
+      expect(marks[0]!.endAt - marks[0]!.lastTokenAt!).toBeGreaterThanOrEqual(40);
+    });
   });
 });

@@ -15,7 +15,7 @@ import type { HunkStatus } from './hunks.js';
 import type { ApprovalRecord } from './classifier.js';
 import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
-import type { InterruptedTool, ModelMarks, StreamMarks, ToolMarks } from './timing.js';
+import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { Brand } from './types.js';
 
@@ -81,10 +81,9 @@ export type AssistantTurn = {
   readonly model: string;
 };
 
-/** `marks` is absent from gateways that do not stream, such as test doubles. */
 export type TurnResult =
-  | { readonly kind: 'answer'; readonly turn: AssistantTurn; readonly marks?: StreamMarks | undefined }
-  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string; readonly marks?: StreamMarks | undefined };
+  | { readonly kind: 'answer'; readonly turn: AssistantTurn }
+  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
 
 /** `denied` is a command the user, or the non-interactive policy, refused to run. */
 export const TOOL_STATUSES = ['ok', 'error', 'denied'] as const;
