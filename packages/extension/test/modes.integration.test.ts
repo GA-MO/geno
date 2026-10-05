@@ -99,7 +99,8 @@ const exists = (file: string) => access(file).then(() => true, () => false);
 
 describe('Ask and Auto in the chat panel', () => {
   it('starts in the configured mode, badges what Auto settled, asks when the classifier asks, and switches to Ask from the picker', async () => {
-    const { home, workspace, suite, launchArgs } = await setUp('modes', FILES, { 'gcode.approvalMode': 'auto' });
+    // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
+    const { home, workspace, suite, launchArgs } = await setUp('modes', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;

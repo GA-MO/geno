@@ -90,7 +90,8 @@ const image = (png: Buffer) => ({ type: 'image', source: { type: 'base64', media
 
 describe('attachments in VS Code', () => {
   it('pastes and drops files into the composer, sends the image to the model, and shows images in the transcript', async () => {
-    const { workspace, home, suite, launchArgs } = await setUp('attachments', FILES, {});
+    // The read's thumbnail is on a step of the finished turn, which full detail draws as the panel did before U17.
+    const { workspace, home, suite, launchArgs } = await setUp('attachments', FILES, { 'gcode.chat.detail': 'full' });
     for (const [name, png] of Object.entries(PNGS)) await writeFile(path.join(workspace, name), png);
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
