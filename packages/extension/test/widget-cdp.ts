@@ -20,18 +20,41 @@ async function sessionFor(window: Window, targetId: string): Promise<Session> {
   return session;
 }
 
-/** Runs `expression` in the widget frame named `name`, or returns undefined when no such frame is loaded. */
-export async function inWidget<T>(window: Window, name: string, expression: string): Promise<T | undefined> {
+/** The session of the widget frame named `name`, or undefined when no such frame is loaded. */
+async function widgetSession(window: Window, name: string): Promise<Session | undefined> {
   const { targetInfos } = await window.browser.send<{ targetInfos: TargetInfo[] }>('Target.getTargets');
   for (const target of targetInfos.filter((t) => t.type === 'iframe' && t.url === 'about:srcdoc')) {
     const session = await sessionFor(window, target.targetId);
     const named = await session.send('Runtime.evaluate', { expression: 'window.name', returnByValue: true }).catch(() => undefined);
-    if (named?.result?.value !== name) continue;
-    const { result, exceptionDetails } = await session.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-    if (exceptionDetails !== undefined) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
-    return result.value as T;
+    if (named?.result?.value === name) return session;
   }
   return undefined;
+}
+
+/** Runs `expression` in the widget frame named `name`, or returns undefined when no such frame is loaded. */
+export async function inWidget<T>(window: Window, name: string, expression: string): Promise<T | undefined> {
+  const session = await widgetSession(window, name);
+  if (session === undefined) return undefined;
+  const { result, exceptionDetails } = await session.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+  if (exceptionDetails !== undefined) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
+  return result.value as T;
+}
+
+/**
+ * Clicks the first `selector` match inside the widget frame named `name`, at its center. The events go to the frame's
+ * own target: sent to the panel, they would reach the widget's process only through the compositor's hit testing,
+ * which a window nobody sees never updates, so a click after a scroll would land where the widget used to be.
+ */
+export async function clickInWidget(window: Window, name: string, selector: string): Promise<void> {
+  const session = await widgetSession(window, name);
+  if (session === undefined) throw new Error(`no widget frame ${name}`);
+  const at = await inWidget<{ x: number; y: number } | string>(
+    window,
+    name,
+    `(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return 'no ' + ${JSON.stringify(selector)}; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+  );
+  if (typeof at !== 'object' || at === null) throw new Error(String(at));
+  for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await session.send('Input.dispatchMouseEvent', { type, ...at, button: 'left', clickCount: 1 });
 }
 
 /** The window's top-level pages: the workbench, and any window a widget managed to open. */

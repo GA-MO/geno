@@ -9,7 +9,7 @@ import { click, connectWindow, evaluate, press, typeText, webview, type Window }
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
 import { FILES, GROW, GROW_TITLE, LOADING, SPEED_TITLE } from './suite/widget-fixture.js';
-import { inWidget } from './widget-cdp.js';
+import { clickInWidget, inWidget } from './widget-cdp.js';
 
 const EXTENSION = 'g-code.g-code';
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -44,22 +44,14 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   press: async ({ key, modifiers }, w) => press(await webview(w, EXTENSION, PANEL), key, modifiers),
   widget: async ({ name, expression }, w) => inWidget(w, name, expression),
   /** Clicks inside a widget's frame at an element's center, as the user's pointer would. */
-  clickWidget: async ({ name, selector }, w) => {
-    const view = await webview(w, EXTENSION, PANEL);
-    const inner = await inWidget<{ x: number; y: number }>(w, name, `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    if (inner === undefined) throw new Error(`no widget frame ${name}`);
-    const at = await evaluate<{ x: number; y: number }>(
-      view,
-      `(() => { const a = document.getElementById('active-frame').getBoundingClientRect(); const f = doc.querySelector('iframe[name=${JSON.stringify(name)}]'); f.scrollIntoView({ block: 'nearest' }); const r = f.getBoundingClientRect(); return { x: a.x + r.x + ${inner.x}, y: a.y + r.y + ${inner.y} }; })()`,
-    );
-    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await view.send('Input.dispatchMouseEvent', { type, ...at, button: 'left', clickCount: 1 });
-  },
+  clickWidget: async ({ name, selector }, w) => clickInWidget(w, name, selector),
   workbench: async ({ expression }, w) => {
     const { result, exceptionDetails } = await w.page.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (exceptionDetails !== undefined) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
     return result.value;
   },
   release: async () => release(),
+
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
   },
