@@ -1,24 +1,42 @@
+import { realpath } from 'node:fs/promises';
+import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
   BASE_HASH_META,
+  CHECKPOINT_TEXT_METHOD,
   DIAGNOSTICS_CAPABILITY,
   DIAGNOSTICS_METHOD,
+  HUNK_STATUSES,
+  INLINE_EDIT_META,
+  nextSeq,
+  REVIEW_METHOD,
+  reviewState,
+  REWIND_METHOD,
   SEVERITIES,
   spillNotice,
   STALE_BASE_ERROR,
+  type CheckpointTextResponse,
   type DiagnosticsRequest,
   type DoneReason,
+  type HunkId,
+  type ReviewDecision,
+  type ReviewResponse,
+  type RewindResponse,
   type ToolStatus,
   type TurnEvent,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
-import { resumeSession, startSession } from './chat.js';
+import { openSessionLog, resumeSession, startSession } from './chat.js';
+import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
+import { runInlineEdit } from './inline.js';
+import { checkpointsOf, rewindTo } from './rewind.js';
+import { appendEvent, dropTornTail } from './sessions.js';
 import type { Store } from './store.js';
 import type { Approver, Diagnostics } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
@@ -180,17 +198,51 @@ const promptText = (blocks: readonly acp.ContentBlock[]): string =>
     .join('\n')
     .trim();
 
-/** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log. */
+const reviewRequest = z.object({
+  sessionId: z.string(),
+  decisions: z.array(z.object({ hunk: z.string().min(1).transform((raw) => raw as HunkId), status: z.enum(HUNK_STATUSES) })),
+});
+const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string() });
+const rewindRequest = z.object({ sessionId: z.string() });
+const inlineEditTarget = z
+  .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
+  .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
+
+async function appendDecisions(store: Store, io: Io, sessionId: string, decisions: readonly ReviewDecision[]): Promise<void> {
+  if (decisions.length === 0) return;
+  const log = await openSessionLog(store, sessionId, io);
+  await dropTornTail(log);
+  const at = new Date().toISOString();
+  let seq = nextSeq(log.events);
+  for (const { hunk, status } of decisions) await appendEvent(log.file, { kind: 'review', seq: seq++, at, hunk, status });
+}
+
+/** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
   let peer: Peer = { files: false, diagnostics: false };
   const turns = new Map<string, AbortController | undefined>();
+  // A turn and a review decision both append to the session log and number their events from what they read,
+  // so each session's writers take turns.
+  const writers = new Map<string, Promise<unknown>>();
+  const serially = <T>(sessionId: string, work: () => Promise<T>): Promise<T> => {
+    const next = (writers.get(sessionId) ?? Promise.resolve()).then(work, work);
+    writers.set(sessionId, next.catch(() => {}));
+    return next;
+  };
+  const known = (sessionId: string) => {
+    if (!turns.has(sessionId)) throw acp.RequestError.invalidParams({ sessionId }, `no session ${sessionId}`);
+  };
 
   return acp
     .agent({ name: 'gcode' })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
       const { fs, _meta } = params.clientCapabilities ?? {};
       peer = { files: fs?.readTextFile === true && fs.writeTextFile === true, diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true };
-      return { protocolVersion: acp.PROTOCOL_VERSION, agentCapabilities: { loadSession: false }, agentInfo: { name: 'gcode', version: '0.0.0' } };
+      return {
+        protocolVersion: acp.PROTOCOL_VERSION,
+        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} } },
+        agentInfo: { name: 'gcode', version: '0.0.0' },
+      };
     })
     .onRequest(acp.methods.agent.session.new, async ({ params }) => {
       const workspace = await workspaceDir(io.cwd, params.cwd);
@@ -200,34 +252,81 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       io.err(`session: ${id} log: ${opened.log.file}`);
       return { sessionId: id };
     })
+    .onRequest(acp.methods.agent.session.resume, async ({ params }) => {
+      const log = await openSessionLog(store, params.sessionId, io).catch((error: unknown) => {
+        throw acp.RequestError.resourceNotFound(`session ${params.sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      if (!turns.has(log.session.id)) turns.set(log.session.id, undefined);
+      io.err(`session: ${log.session.id} resumed, log: ${log.file}`);
+      return {};
+    })
     .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
       const { sessionId } = params;
-      if (!turns.has(sessionId)) throw acp.RequestError.invalidParams({ sessionId }, `no session ${sessionId}`);
+      known(sessionId);
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
       const text = promptText(params.prompt);
       if (text === '') throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
+      const rawTarget = params._meta?.[INLINE_EDIT_META];
+      const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
+      if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
 
       const controller = new AbortController();
       turns.set(sessionId, controller);
       const turn = editorTurn(client, sessionId, peer, io);
+      const turnIo = { ...io, interrupts: () => controller.signal };
+      const diagnostics = peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined;
       try {
-        const opened = await resumeSession(store, io, sessionId);
-        const result = await runAgent({ ...io, interrupts: () => controller.signal }, store, opened, text, {
-          limits,
-          check: undefined,
-          checkAfterEdit: true,
-          approve: turn.approve,
-          surface: turn.surface,
-          diagnostics: peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined,
+        return await serially(sessionId, async () => {
+          const opened = await resumeSession(store, io, sessionId);
+          const result =
+            target === undefined
+              ? await runAgent(turnIo, store, opened, text, {
+                  limits,
+                  check: undefined,
+                  checkAfterEdit: true,
+                  approve: turn.approve,
+                  surface: turn.surface,
+                  diagnostics,
+                })
+              : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
+          await turn.updates.flush();
+          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason] };
         });
-        await turn.updates.flush();
-        return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason] };
       } finally {
         turns.set(sessionId, undefined);
       }
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();
+    })
+    .onRequest(REVIEW_METHOD, reviewRequest, async ({ params }): Promise<ReviewResponse> => {
+      known(params.sessionId);
+      return serially(params.sessionId, async () => {
+        await appendDecisions(store, io, params.sessionId, params.decisions);
+        return { hunks: reviewState((await openSessionLog(store, params.sessionId, io)).events) };
+      });
+    })
+    .onRequest(CHECKPOINT_TEXT_METHOD, checkpointTextRequest, async ({ params }): Promise<CheckpointTextResponse> => {
+      known(params.sessionId);
+      const log = await openSessionLog(store, params.sessionId, io);
+      const first = checkpointsOf(log.events)[0];
+      const file = await realpath(params.path).catch(() => params.path);
+      const relative = path.relative(log.session.workspace, file);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) throw acp.RequestError.invalidParams({ path: params.path }, 'outside the workspace');
+      if (first === undefined) return { text: await DISK_FILES.read(file) };
+      return { text: await fileAt(shadowRepoFor(store, log.session.workspace), first.sha, relative) };
+    })
+    .onRequest(REWIND_METHOD, rewindRequest, async ({ params }): Promise<RewindResponse> => {
+      const { sessionId } = params;
+      known(sessionId);
+      if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before undoing the session');
+      return serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        const first = checkpointsOf(log.events)[0];
+        if (first === undefined) return { files: [] };
+        const { files } = await rewindTo(store, log, first.turnSeq);
+        return { files: files.map((file) => path.join(log.session.workspace, file)) };
+      });
     });
 }
 

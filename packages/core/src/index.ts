@@ -15,3 +15,4 @@ export * from './model-applier.js';
 export * from './approval.js';
 export * from './agent.js';
 export * from './acp.js';
+export * from './inline-edit.js';

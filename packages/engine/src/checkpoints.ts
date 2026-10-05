@@ -68,6 +68,12 @@ async function pruneEmpty(dir: string, root: string): Promise<void> {
   }
 }
 
+/** A workspace-relative file's text in commit `sha`, null when the commit has no such file. */
+export async function fileAt(repo: ShadowRepo, sha: string, file: string): Promise<string | null> {
+  if ((await git(repo, ['ls-tree', '--name-only', sha, '--', file])).trim() === '') return null;
+  return git(repo, ['show', `${sha}:${file}`]);
+}
+
 /**
  * Makes the work tree match commit `sha`: files changed since are checked out from it and files made since
  * are deleted. Running it again changes nothing. Returns the paths it touched.
