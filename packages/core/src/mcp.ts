@@ -236,7 +236,7 @@ const base64Bytes = (data: string): number => Buffer.byteLength(data, 'base64');
 
 const CONTENT_TEXT: { readonly [K in McpContent['type']]: (block: Extract<McpContent, { type: K }>) => string } = {
   text: ({ text }) => text,
-  // Images reach the model as text until tool results carry images.
+  // The engine attaches the images it can store; one it cannot, such as an unknown format, stays this placeholder.
   image: ({ mimeType, data }) => `[image ${mimeType}, ${base64Bytes(data)} bytes, not shown]`,
   audio: ({ mimeType, data }) => `[audio ${mimeType}, ${base64Bytes(data)} bytes, not shown]`,
   resource: ({ uri, text, mimeType }) => (text === undefined ? `[resource ${uri} (${mimeType ?? 'binary'}), not shown]` : `[resource ${uri}]\n${text}`),

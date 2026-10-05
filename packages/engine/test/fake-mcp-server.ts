@@ -4,6 +4,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
+const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
 /** A test MCP server: `echo` (read-only), `env`, `crash`, `image`, plus `extra_<n>` tools to push past the lazy threshold. */
 export function fakeMcpServer(extraTools = 0): McpServer {
   const server = new McpServer({ name: 'fake', version: '1.0.0' });
@@ -23,6 +25,9 @@ export function fakeMcpServer(extraTools = 0): McpServer {
       { type: 'text', text: 'here it is' },
       { type: 'image', data: Buffer.from('fakepng').toString('base64'), mimeType: 'image/png' },
     ],
+  }));
+  server.registerTool('screenshot', { description: 'Return a real 1x1 PNG.' }, async () => ({
+    content: [{ type: 'image', data: ONE_PIXEL_PNG, mimeType: 'image/png' }],
   }));
   server.registerTool('fail', { description: 'Report a tool error.' }, async () => ({ content: [{ type: 'text', text: 'it broke' }], isError: true }));
   for (let i = 0; i < extraTools; i++) {
