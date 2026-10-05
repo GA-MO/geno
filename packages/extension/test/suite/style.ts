@@ -34,17 +34,28 @@ const click = (selector: string, text?: string) => ui({ do: 'click', selector, .
 const count = (selector: string) => panel<number>(`doc.querySelectorAll(${JSON.stringify(selector)}).length`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** What carries the rainbow class, each as the turn its reply belongs to or `composer`. */
-const rainbows = () =>
-  panel<string[]>(`[...doc.querySelectorAll('.rainbow')].map((e) => e.closest('.turn')?.dataset.turn ?? (e.closest('.composer') ? 'composer' : e.className))`);
-const lastTurn = () => panel<string>(`[...doc.querySelectorAll('.turn')].at(-1).dataset.turn`);
+/** What carries the rainbow class, each as `composer` or the class of whatever else does. */
+const rainbows = () => panel<string[]>(`[...doc.querySelectorAll('.rainbow')].map((e) => (e.closest('.composer') ? 'composer' : e.className))`);
 
-/** The computed style of `selector` that the glass look sets: its backdrop blur and its rainbow edge. */
-const looks = (selector: string) =>
-  panel<{ blur: string; edge: string; animation: string; play: string }>(`(() => {
-    const e = doc.querySelector(${JSON.stringify(selector)});
-    const ring = getComputedStyle(e, '::before');
-    return { blur: getComputedStyle(e).backdropFilter, edge: ring.content, animation: ring.animationName, play: ring.animationPlayState };
+/** The composer's rainbow ring as drawn: whether it shows, and the state of each rainbow animation on the page. */
+const ring = () =>
+  panel<{ display: string; plays: string[] }>(`({
+    display: getComputedStyle(doc.querySelector('.ring')).display,
+    plays: doc.getAnimations().filter((a) => a.animationName === 'rainbow-run').map((a) => a.playState),
+  })`);
+const isRunning = (r: { display: string; plays: string[] }) => r.display !== 'none' && r.plays.join() === 'running';
+
+/** The primary buttons' white fill in the glass style. */
+const WHITE = 'rgb(242, 244, 247)';
+const fillOf = (selector: string) => panel<string>(`getComputedStyle(doc.querySelector(${JSON.stringify(selector)})).backgroundColor`);
+
+const blurOf = (selector: string) => panel<string>(`getComputedStyle(doc.querySelector(${JSON.stringify(selector)})).backdropFilter`);
+
+/** The rail segment leading into the step waiting on the user: its image and its animation. */
+const waitingSegment = () =>
+  panel<{ image: string; animation: string }>(`(() => {
+    const s = getComputedStyle(doc.querySelector('.turn:last-child .node-wait'), '::before');
+    return { image: s.backgroundImage, animation: s.animationName };
   })()`);
 
 async function setStyle(style: 'glass' | 'native'): Promise<void> {
@@ -85,68 +96,88 @@ export async function run(): Promise<void> {
   for (let i = 0; i < 5; i++) await vscode.commands.executeCommand('workbench.action.decreaseViewWidth');
 
   check((await panel<string>('doc.body.dataset.style')) === 'glass', 'the panel starts in glass, the default style');
-  check((await looks('.hero')).blur.includes('blur'), 'the empty state tile is frosted glass', await looks('.hero'));
-  check((await panel<string>('getComputedStyle(doc.body).backgroundImage')).includes('radial-gradient'), 'the panel paints its own glowing gradient');
+  check((await blurOf('.hero')).includes('blur'), 'the empty state tile is frosted glass', await blurOf('.hero'));
+  const surface = await panel<{ image: string; color: string }>(`({ image: getComputedStyle(doc.body).backgroundImage, color: getComputedStyle(doc.body).backgroundColor })`);
+  check(surface.image === 'none' && surface.color === 'rgb(14, 18, 24)', 'the panel is a plain dark surface, with no gradient or glow', surface);
   check((await panel<string>(`getComputedStyle(doc.querySelector('.hero .lid')).animationName`)) === 'blink-eye', 'Noodle still blinks in the empty state');
-  // The focus command may have put the cursor in the composer; a click elsewhere takes it out.
-  await click('.empty-title');
-  await waitFor('nothing to run a rainbow in an idle panel', async () => (await rainbows()).length === 0);
 
-  await click('textarea');
-  await waitFor('the focused composer to run the rainbow', async () => (await rainbows()).join() === 'composer');
-  check((await looks('.input-box')).animation === 'rainbow-run', 'the composer edge animates', await looks('.input-box'));
+  // The rainbow does not depend on focus: it runs with the composer focused and without.
   await click('.empty-title');
-  await waitFor('the rainbow to stop when the composer loses focus', async () => (await rainbows()).length === 0);
+  check((await rainbows()).join() === 'composer', 'only the composer carries the rainbow', await rainbows());
+  check(isRunning(await ring()), 'the composer rainbow runs while the composer is not focused', await ring());
+  await click('textarea');
+  check(isRunning(await ring()), 'the composer rainbow runs while the composer is focused', await ring());
   await screenshots('empty');
 
   await sendWithEnter(PROMPTS.edit);
   await waitFor('the first turn to finish', async () => (await count('.turn-footer')) === 1);
   await waitFor('the diagram to draw', async () => (await count('.diagram[data-state="rendered"]')) === 1);
-  check((await count('.reply.rainbow')) === 0, 'a finished turn has no rainbow');
+  check((await rainbows()).join() === 'composer', 'a finished turn has no rainbow; the composer keeps it', await rainbows());
   await click('.calls[data-step="read"] .step-row');
   await waitFor('the read step to open', async () => (await count('.call-list')) === 1);
-  check((await looks('.call-list')).blur.includes('blur'), 'an opened step lists its calls on glass');
-  await panel(`(doc.querySelector('.empty-title, .turn').scrollIntoView(), 1)`);
+  check((await blurOf('.call-list')).includes('blur'), 'an opened step lists its calls on glass');
+  await panel(`(doc.querySelector('.turn').scrollIntoView(), 1)`);
   await screenshots('finished');
+  await ui({ do: 'hover', selector: '.transcript' });
+  await ui({ do: 'panelshot', name: 'scrollbar-dark' });
+  await ui({ do: 'media', label: 'idle', gif: true });
   await panel(`(doc.querySelector('.diagram').previousElementSibling.scrollIntoView({ block: 'start' }), 1)`);
   await screenshots('diagram');
 
   await sendWithEnter(PROMPTS.remove);
   await waitFor('the permission card', async () => (await count('.permission-open')) === 1);
-  await waitFor('Allow to take the focus from the composer', async () => (await panel<string>('doc.activeElement?.textContent ?? ""')) === 'Allow');
-  check((await rainbows()).join() === (await lastTurn()), 'the turn waiting on the user runs the rainbow, and only it', await rainbows());
+  check((await rainbows()).join() === 'composer', 'the turn waiting on the user has no rainbow; the composer keeps it', await rainbows());
+  check(isRunning(await ring()), 'the composer rainbow runs while a turn works', await ring());
+  const allow = await panel<{ fill: string; ink: string }>(`(() => { const s = getComputedStyle(doc.querySelector('.permission-open .button')); return { fill: s.backgroundColor, ink: s.color }; })()`);
+  check(allow.fill === WHITE && allow.ink === 'rgb(14, 18, 24)', 'Allow, a primary action, is white with dark text', allow);
+  check((await fillOf('.permission-open .button.secondary')) !== WHITE, 'Deny, a secondary action, stays quiet', await fillOf('.permission-open .button.secondary'));
+  await useTheme(THEMES.light);
+  const light = await panel<{ surface: string; allow: string; ink: string }>(`(() => {
+    const allow = getComputedStyle(doc.querySelector('.permission-open .button'));
+    return { surface: getComputedStyle(doc.body).backgroundColor, allow: allow.backgroundColor, ink: allow.color };
+  })()`);
+  check(light.surface === 'rgb(243, 245, 248)', 'a light theme gets light glass on a plain light surface', light);
+  check(light.allow === 'rgb(22, 27, 35)' && light.ink === 'rgb(255, 255, 255)', 'on light glass the primary action is near-black with white text', light);
+  check((await blurOf('.permission')).includes('blur'), 'light glass is frosted too');
+  await useTheme(THEMES.dark);
+  const flowing = await waitingSegment();
+  check(flowing.animation === 'rail-flow' && flowing.image.includes('repeating-linear-gradient'), 'the rail into the waiting step is dots flowing down', flowing);
+  await ui({ do: 'motion', value: 'reduce' });
+  const held = await ring();
+  check(held.plays.join() === 'paused' && held.display !== 'none', 'the rainbow holds still, still drawn, under reduced motion', held);
+  check((await waitingSegment()).animation === 'none', 'the rail dots hold still under reduced motion', await waitingSegment());
+  await ui({ do: 'motion', value: '' });
+  check(isRunning(await ring()), 'the rainbow runs again without reduced motion', await ring());
   await screenshots('permission');
+  await ui({ do: 'panelshot', name: 'rail-hairline' });
+  // The comparison the user asked for: the whole rail as static 1px dots with 4px gaps.
+  await panel(
+    `([...doc.querySelectorAll('.rail')].forEach((r) => { r.style.setProperty('--rail-finished', 'var(--rail-dots)'); r.style.setProperty('--rail-flow', 'var(--rail-dots)'); }),
+      doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.pause()), 1)`,
+  );
+  await ui({ do: 'panelshot', name: 'rail-dotted' });
+  await panel(`([...doc.querySelectorAll('.rail')].forEach((r) => r.removeAttribute('style')), doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.play()), 1)`);
   await click('.permission-open button', 'Allow');
   await waitFor('the allowed turn to finish', async () => (await count('.turn-footer')) === 2);
-  check((await count('.reply.rainbow')) === 0, 'the rainbow stops when the turn finishes');
 
   await sendWithEnter(PROMPTS.essay);
   await waitFor('the stalled answer to stream', async () => (await panel<string | null>(`[...doc.querySelectorAll('.turn')].at(-1).querySelector('.markdown')?.textContent ?? null`))?.startsWith('Once') === true);
-  await click('textarea');
-  await waitFor('the live turn and the focused composer to run the rainbow', async () => (await rainbows()).join() === `${await lastTurn()},composer`);
-  check((await looks('.turn:last-child .reply')).play === 'running', 'the live turn edge runs', await looks('.turn:last-child .reply'));
-  await ui({ do: 'motion', value: 'reduce' });
-  check((await looks('.turn:last-child .reply')).play === 'paused', 'the rainbow holds still under reduced motion', await looks('.turn:last-child .reply'));
-  check((await looks('.input-box')).play === 'paused', 'the composer rainbow holds still under reduced motion', await looks('.input-box'));
-  check((await looks('.turn:last-child .reply')).edge !== 'none', 'a held rainbow is still drawn');
-  await ui({ do: 'motion', value: '' });
-  check((await looks('.turn:last-child .reply')).play === 'running', 'the rainbow runs again without reduced motion');
-  await ui({ do: 'media' });
+  check((await rainbows()).join() === 'composer', 'the streaming turn has no rainbow; the composer keeps it', await rainbows());
+  await ui({ do: 'media', label: 'streaming' });
   await screenshots('streaming');
 
   await setStyle('native');
-  check((await looks('.request-bubble')).blur === 'none', 'native has no blur', await looks('.request-bubble'));
-  check((await looks('.turn:last-child .reply')).edge === 'none', 'native draws no rainbow', await looks('.turn:last-child .reply'));
-  check(!(await panel<string>('getComputedStyle(doc.body).backgroundImage')).includes('gradient'), 'native leaves the side bar background to the theme');
+  check((await blurOf('.request-bubble')) === 'none', 'native has no blur', await blurOf('.request-bubble'));
+  check((await ring()).display === 'none', 'native draws no rainbow', await ring());
   await ui({ do: 'perf', label: 'native, streaming' });
   await setStyle('glass');
-  check((await looks('.request-bubble')).blur.includes('blur'), 'glass comes back without a reload');
+  check((await blurOf('.request-bubble')).includes('blur'), 'glass comes back without a reload');
 
   await useTheme(THEMES['high-contrast']);
   check(await panel<boolean>(`doc.body.classList.contains('vscode-high-contrast')`), 'the theme is high contrast');
-  check((await looks('.request-bubble')).blur === 'none', 'high contrast has no blur', await looks('.request-bubble'));
-  check((await looks('.turn:last-child .reply')).edge === 'none', 'high contrast draws no rainbow', await looks('.turn:last-child .reply'));
-  check((await looks('.input-box')).edge === 'none', 'high contrast draws no composer rainbow');
+  check((await blurOf('.request-bubble')) === 'none', 'high contrast has no blur', await blurOf('.request-bubble'));
+  check((await ring()).display === 'none', 'high contrast draws no rainbow', await ring());
+  check((await fillOf('button.send')) !== WHITE, 'high contrast keeps the native button colors', await fillOf('button.send'));
   await useTheme(THEMES.dark);
 
   await click('button.stop');

@@ -41,12 +41,12 @@ const ui: Ui = {
   },
 };
 
-const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'g-code chat', 'aria-live': 'polite', tabindex: '-1' });
+const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'Geno chat', 'aria-live': 'polite', tabindex: '-1' });
 const status = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
 const input = h('textarea', {
   rows: 1,
   placeholder: 'Ask for a change, @ to add context',
-  'aria-label': 'Ask g-code for a change',
+  'aria-label': 'Ask Geno for a change',
   'data-focus': 'composer',
   'aria-autocomplete': 'list',
   'aria-controls': 'mentions',
@@ -62,19 +62,23 @@ const modelLabel = h(
   icon('chevron-down'),
 );
 /** g-code's engine runs what its rules allow and asks about the rest; there is no other mode to pick. */
-const approval = h('span', { class: 'approval', title: 'g-code asks before running a command its rules hold back' }, icon('shield'), 'Asks before risky commands');
+const approval = h('span', { class: 'approval', title: 'Geno asks before running a command its rules hold back' }, icon('shield'), 'Asks before risky commands');
 const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
-const inputBox = h('div', { class: 'input-box' }, chips, input, h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send));
+// The composer always wears the running rainbow edge; the ring is its own element so the edge can turn on the compositor.
+const inputBox = h(
+  'div',
+  { class: 'input-box rainbow' },
+  h('span', { class: 'ring', 'aria-hidden': 'true' }),
+  chips,
+  input,
+  h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send),
+);
 const form = h('form', { class: 'composer' }, menu, inputBox);
 document.body.append(log, form, status);
 
 // The glass style floats the composer over the transcript, which keeps this much room below its last line.
 new ResizeObserver(() => document.body.style.setProperty('--composer-height', `${form.offsetHeight}px`)).observe(form);
-
-// The composer's rainbow edge runs while the focus is anywhere inside it, and stops when the focus leaves.
-form.addEventListener('focusin', () => inputBox.classList.add('rainbow'));
-form.addEventListener('focusout', (event) => inputBox.classList.toggle('rainbow', inputBox.contains(event.relatedTarget as Node | null)));
 
 /**
  * Streamed text appears a little at a time, each frame showing a sixth of what has arrived but is not yet
@@ -132,7 +136,8 @@ function turnShell(turn: Turn): HTMLElement {
     'article',
     { class: 'turn', 'data-turn': turn.id },
     userMessage(turn.prompt),
-    h('div', { class: 'reply' }, h('div', { class: 'head-slot' }), h('ol', { class: 'rail' })),
+    h('div', { class: 'head-slot' }),
+    h('ol', { class: 'rail' }),
     h('div', { class: 'footer-slot' }),
   );
 }
@@ -157,13 +162,10 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      const reply = shell.querySelector<HTMLElement>(':scope > .reply')!;
-      // The turn at work, waiting on the user included, wears the running rainbow edge; a finished one does not.
-      reply.classList.toggle('rainbow', turn.status === 'streaming');
-      reconcile(reply.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
       const steps = railOf(turn);
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
-      reconcile(reply.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
+      reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
@@ -195,12 +197,12 @@ function focusNewPermission(): void {
   }
 }
 
-const ENDED = { done: 'g-code finished', stopped: 'Stopped', failed: 'The turn failed' } as const;
+const ENDED = { done: 'Geno finished', stopped: 'Stopped', failed: 'The turn failed' } as const;
 
 /** What a screen reader hears besides the transcript itself. */
 const ANNOUNCEMENTS: { readonly [K in ToView['type']]?: (message: Extract<ToView, { type: K }>) => string } = {
-  'turn-start': () => 'g-code is working',
-  permission: ({ command }) => `g-code asks to run ${command}`,
+  'turn-start': () => 'Geno is working',
+  permission: ({ command }) => `Geno asks to run ${command}`,
   'turn-end': ({ status }) => ENDED[status],
 };
 const announcement = (message: ToView): string | undefined => (ANNOUNCEMENTS[message.type] as ((m: ToView) => string) | undefined)?.(message);

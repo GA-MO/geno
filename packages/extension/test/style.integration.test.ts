@@ -5,9 +5,9 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
-import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
+import { click, connectWindow, evaluate, hover, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
-import { panelCost, pauseRainbow, playRainbow, recordRainbow, trace, webviewPid, type PanelCost } from './media.js';
+import { capturePanel, panelCost, pauseRainbow, playRainbow, recordRainbow, trace, webviewPid, type PanelCost } from './media.js';
 import { captureWindow, freePort } from './screenshot.js';
 import { ANSWER, EDIT, FILES } from './suite/style-fixture.js';
 
@@ -70,17 +70,19 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
   },
-  /** The live turn's recordings: the rainbow GIF, and traces with the rainbow running and held. */
-  media: async (_action, w) => {
+  hover: async ({ selector }, w) => hover(await webview(w, EXTENSION, READY), selector),
+  panelshot: async ({ name }, w) => {
+    if (shots !== undefined) await capturePanel(w, path.resolve(shots, `${name}.png`));
+  },
+  /** The rainbow GIF when `gif`, and traces with the rainbow running and held, alternated so drift falls on both. */
+  media: async ({ label, gif }, w) => {
     const view = await webview(w, EXTENSION, READY);
-    if (shots !== undefined) await recordRainbow(w, view, path.resolve(shots, 'rainbow.gif'));
+    if (gif === true && shots !== undefined) await recordRainbow(w, view, path.resolve(shots, 'rainbow.gif'));
     if (!perf) return;
-    console.log(`animations: ${await evaluate<string>(view, `doc.getAnimations().map((a) => a.animationName + ' ' + a.playState).join(', ')`)}`);
-    // Alternated, so drift and warmup fall on both sides alike.
     for (let run = 0; run < RUNS; run++) {
-      await measure(w, 'glass, streaming, rainbow running');
+      await measure(w, `glass, ${label}, rainbow running`);
       await pauseRainbow(view);
-      await measure(w, 'glass, streaming, rainbow held');
+      await measure(w, `glass, ${label}, rainbow held`);
       await playRainbow(view);
     }
   },
@@ -128,7 +130,7 @@ afterAll(() => {
 });
 
 describe('the chat panel style', () => {
-  it('is glass with a rainbow on the live turn and the focused composer, native on request and in high contrast', async () => {
+  it('is glass with a rainbow on the composer, native on request and in high contrast', async () => {
     const { home, suite, launchArgs } = await setUp('style', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();

@@ -17,7 +17,6 @@
   --mark: var(--vscode-contrastActiveBorder, var(--accent));
   --ok: var(--vscode-charts-green, var(--vscode-testing-iconPassed));
   --warn: var(--vscode-charts-yellow, var(--vscode-editorWarning-foreground));
-  --line: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
   --border: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
   --surface: color-mix(in srgb, var(--vscode-foreground) 4%, var(--bg));
   --surface-2: color-mix(in srgb, var(--vscode-foreground) 8%, var(--bg));
@@ -264,6 +263,20 @@ button {
 /* The rail. Each step is a node; the connector runs through every node but the last, so the path ends where the run does. */
 
 .rail {
+  /*
+   * The rail's look, in one block, declared here so its colors resolve against the panel style's palette.
+   * Finished steps join with a hairline; the path into the step under way, or waiting on the user, is dots that
+   * flow down. For an all-dotted rail, set --rail-finished to var(--rail-dots).
+   */
+  --rail-width: 1px;
+  --rail-color: color-mix(in srgb, var(--vscode-foreground) 35%, transparent);
+  --rail-live-color: color-mix(in srgb, var(--vscode-foreground) 70%, transparent);
+  --rail-hairline: linear-gradient(var(--rail-color), var(--rail-color));
+  --rail-dots: repeating-linear-gradient(to bottom, var(--rail-color) 0 1px, transparent 1px 5px);
+  --rail-finished: var(--rail-hairline);
+  --rail-flow: repeating-linear-gradient(to bottom, var(--rail-live-color) 0 2px, transparent 2px 6px);
+  --node-size: 7px;
+
   position: relative;
   margin: 2px 0 0;
   padding: 0;
@@ -281,8 +294,31 @@ button {
   left: var(--rail-x);
   top: 0;
   bottom: 0;
-  width: 1.5px;
-  background: var(--line);
+  width: var(--rail-width);
+  background: var(--rail-finished);
+}
+
+.node-live::before,
+.node-wait::before {
+  background: var(--rail-flow);
+  animation: rail-flow 1s linear infinite;
+}
+
+.node-wait {
+  --rail-live-color: var(--warn);
+}
+
+/* High contrast draws the rail in the theme's contrast colors rather than a faint mix. */
+.vscode-high-contrast .rail,
+.vscode-high-contrast-light .rail {
+  --rail-color: var(--vscode-contrastBorder, var(--vscode-foreground));
+  --rail-live-color: var(--vscode-contrastActiveBorder, var(--vscode-foreground));
+}
+
+@keyframes rail-flow {
+  to {
+    background-position: 0 6px;
+  }
 }
 
 .step:first-child::before {
@@ -296,11 +332,11 @@ button {
 
 .node {
   position: absolute;
-  left: calc(var(--rail-x) - 3.25px);
-  top: 11px;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--muted);
+  left: calc(var(--rail-x) + var(--rail-width) / 2 - var(--node-size) / 2);
+  top: 11.5px;
+  width: var(--node-size);
+  height: var(--node-size);
+  border: 1.25px solid var(--muted);
   border-radius: 50%;
   background: var(--bg);
 }
@@ -326,17 +362,12 @@ button {
   background: var(--vscode-errorForeground);
 }
 
-/* Waiting on the user: an amber node with a halo, and the rail above it turns to dashes. */
+/* Waiting on the user: an amber node with a halo, and amber dots flowing into it. */
 .node-wait > .node {
   border-color: var(--warn);
   background: color-mix(in srgb, var(--warn) 30%, var(--bg));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 18%, transparent);
   animation: pulse 1.6s ease-in-out infinite;
-}
-
-.node-wait::before {
-  background: repeating-linear-gradient(to bottom, var(--warn) 0 3px, transparent 3px 6px);
-  opacity: 0.6;
 }
 
 .step-text {
@@ -1565,6 +1596,8 @@ body.diagram-tab {
   .shimmer,
   .node-live > .node,
   .node-wait > .node,
+  .node-live::before,
+  .node-wait::before,
   .hero .lid {
     animation: none;
   }
@@ -1582,12 +1615,56 @@ body.diagram-tab {
 }
 
 /*
- * Glass, the default look (gcode.ui.style): dark translucent panes over a gradient with soft glows, whatever the
- * theme's kind, and a rainbow edge running around the live work. High contrast themes keep the native styling
- * above. The panes stay dark by design, so this block sets the theme colors the rules above read to a dark
- * palette; the accent still comes from the theme. Colors mermaid reads stay opaque, since it does color math on
- * them; the panes take their translucency from the --glass tokens.
+ * Glass, the default look (gcode.ui.style): translucent panes with a backdrop blur on a plain surface, dark glass
+ * in dark themes and light frosted glass in light ones, and a rainbow edge running around the composer. High
+ * contrast themes keep the native styling above.
  */
+
+/* The composer's rainbow ring exists only in the glass style. */
+.ring {
+  display: none;
+}
+
+/*
+ * Slim scrollbars for every scroller: a 6px rounded thumb on a clear track, faint at rest so scrolling stays
+ * discoverable, full while the pointer is over the scroller, brighter on the thumb and while dragging.
+ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--vscode-scrollbarSlider-background) 55%, transparent);
+}
+
+:hover::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* High contrast keeps the thumb in its contrast color, at full strength. */
+.vscode-high-contrast ::-webkit-scrollbar-thumb,
+.vscode-high-contrast-light ::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, var(--vscode-contrastBorder));
+}
 
 @property --rainbow-angle {
   syntax: '<angle>';
@@ -1606,31 +1683,45 @@ body.diagram-tab {
   }
 }
 
+/*
+ * The glass palettes, one set of tokens per theme kind: dark glass for dark themes, light frosted glass for light
+ * ones. The rules after them read only these tokens. Each set also gives the theme colors the native rules above
+ * read, so code, diffs, links and diagrams match the glass; the accent still comes from the theme. Colors mermaid
+ * reads stay opaque, since it does color math on them.
+ */
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
-  --glass-base: #0c1016;
+  --glass-base: #0e1218;
   --glass-pane: rgb(255 255 255 / 4.5%);
   --glass-pane-raised: rgb(255 255 255 / 7.5%);
+  --glass-hover: rgb(255 255 255 / 14%);
   --glass-edge: rgb(255 255 255 / 9%);
   --glass-edge-hi: rgb(255 255 255 / 15%);
-  --glass-blur: blur(14px) saturate(160%);
+  --glass-header: rgb(255 255 255 / 2.5%);
+  --glass-well: rgb(0 0 0 / 28%);
+  --glass-float: rgb(22 27 36 / 85%);
   --glass-lift: inset 0 1px 0 rgb(255 255 255 / 6%), 0 12px 28px -18px rgb(0 0 0 / 80%);
-  /* Only the stops: the ring builds its gradient itself, where its own animated angle is in scope. */
+  --glass-float-shadow: 0 14px 34px -12px rgb(0 0 0 / 85%);
+  --composer-fill: rgb(24 29 38 / 55%);
+  --composer-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 16px 36px -14px rgb(0 0 0 / 85%);
+  --bubble-mix: 26%;
+  --bubble-edge: rgb(255 255 255 / 15%);
+  /* Primary actions are neutral: white on dark glass. */
+  --primary: #f2f4f7;
+  --primary-hover: #dde1e8;
+  --primary-pressed: #c8ced8;
+  --primary-ink: #0e1218;
+  --primary-disabled: rgb(255 255 255 / 14%);
+  --primary-disabled-ink: rgb(255 255 255 / 40%);
+  --primary-sheen: inset 0 1px 0 rgb(255 255 255 / 30%), 0 4px 12px -6px rgb(0 0 0 / 70%);
   --rainbow-stops: #ff7a90, #ffb36b, #f4e07a, #6fe3a5, #64c8ff, #8f86ff, #e489ff, #ff7a90;
 
-  --bg: var(--glass-base);
   --muted: #a4acbb;
-  --accent: var(--theme-accent);
   --mark: color-mix(in srgb, var(--theme-accent) 50%, white);
   --ok: #6fd39c;
   --warn: #f0c35a;
-  --line: rgb(255 255 255 / 13%);
-  --border: var(--glass-edge);
-  --surface: var(--glass-pane);
-  --surface-2: var(--glass-pane-raised);
-  --shadow: var(--glass-lift);
-  --card-border: var(--glass-edge);
   --diagram-scheme: dark;
   --diagram-surface: #171c24;
+  color-scheme: dark;
 
   --vscode-foreground: #e7eaf0;
   --vscode-editor-foreground: #e7eaf0;
@@ -1642,28 +1733,22 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --vscode-textLink-activeForeground: #a8d8ff;
   --vscode-textPreformat-foreground: #f1c98b;
   --vscode-textPreformat-background: rgb(255 255 255 / 8%);
-  --vscode-textPreformat-border: transparent;
   --vscode-textCodeBlock-background: #0f131a;
   --vscode-textBlockQuote-border: rgb(255 255 255 / 22%);
   --vscode-textBlockQuote-foreground: #c9ced8;
   --vscode-widget-border: #343a45;
   --vscode-widget-shadow: rgb(0 0 0 / 55%);
   --vscode-toolbar-hoverBackground: rgb(255 255 255 / 9%);
-  --vscode-button-border: transparent;
   --vscode-button-secondaryBackground: rgb(255 255 255 / 10%);
   --vscode-button-secondaryHoverBackground: rgb(255 255 255 / 16%);
   --vscode-button-secondaryForeground: #e7eaf0;
   --vscode-input-background: #1a2029;
   --vscode-input-foreground: #e7eaf0;
-  --vscode-input-border: var(--glass-edge-hi);
   --vscode-input-placeholderForeground: #8c94a4;
   --vscode-editorSuggestWidget-background: rgb(22 27 36 / 88%);
-  --vscode-editorSuggestWidget-border: var(--glass-edge-hi);
   --vscode-editorSuggestWidget-foreground: #e7eaf0;
   --vscode-editorSuggestWidget-selectedBackground: color-mix(in srgb, var(--theme-accent) 45%, transparent);
   --vscode-editorSuggestWidget-selectedForeground: #fff;
-  --vscode-list-focusOutline: transparent;
-  --vscode-sideBar-background: var(--glass-base);
   --vscode-editor-background: #11161e;
   --vscode-editorWidget-background: #1b212b;
   --vscode-editorHoverWidget-background: #1b212b;
@@ -1678,18 +1763,113 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --vscode-debugTokenExpression-number: #b9dca0;
   --vscode-debugTokenExpression-name: #d79be0;
   --vscode-testing-iconFailed: #ff8f86;
+  --vscode-scrollbarSlider-background: rgb(255 255 255 / 16%);
+  --vscode-scrollbarSlider-hoverBackground: rgb(255 255 255 / 28%);
+  --vscode-scrollbarSlider-activeBackground: rgb(255 255 255 / 38%);
+}
+
+body[data-style='glass'].vscode-light:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  --glass-base: #f3f5f8;
+  --glass-pane: rgb(255 255 255 / 62%);
+  --glass-pane-raised: rgb(255 255 255 / 85%);
+  --glass-hover: rgb(15 23 42 / 7%);
+  --glass-edge: rgb(15 23 42 / 10%);
+  --glass-edge-hi: rgb(15 23 42 / 16%);
+  --glass-header: rgb(15 23 42 / 3%);
+  --glass-well: rgb(15 23 42 / 5%);
+  --glass-float: rgb(255 255 255 / 88%);
+  --glass-lift: inset 0 1px 0 rgb(255 255 255 / 80%), 0 10px 24px -16px rgb(15 23 42 / 28%);
+  --glass-float-shadow: 0 14px 34px -12px rgb(15 23 42 / 30%);
+  --composer-fill: rgb(255 255 255 / 66%);
+  --composer-shadow: inset 0 1px 0 rgb(255 255 255 / 90%), 0 14px 30px -14px rgb(15 23 42 / 32%);
+  --bubble-mix: 14%;
+  --bubble-edge: rgb(255 255 255 / 70%);
+  /* A white button would vanish on light glass, so the neutral primary turns near-black. */
+  --primary: #161b23;
+  --primary-hover: #2b323d;
+  --primary-pressed: #3b4350;
+  --primary-ink: #ffffff;
+  --primary-disabled: rgb(15 23 42 / 10%);
+  --primary-disabled-ink: rgb(15 23 42 / 40%);
+  --primary-sheen: inset 0 1px 0 rgb(255 255 255 / 12%), 0 4px 12px -6px rgb(15 23 42 / 45%);
+  --rainbow-stops: #f0506e, #f7953e, #e2bd24, #34c27f, #2f9fe8, #6f62ec, #cf5fe4, #f0506e;
+
+  --muted: #566070;
+  --mark: var(--theme-accent);
+  --ok: #1f8a4c;
+  --warn: #b26a00;
+  --diagram-scheme: light;
+  --diagram-surface: #ffffff;
+  color-scheme: light;
+
+  --vscode-foreground: #1b2230;
+  --vscode-editor-foreground: #1b2230;
+  --vscode-descriptionForeground: #566070;
+  --vscode-icon-foreground: #3d4654;
+  --vscode-errorForeground: #c42b1c;
+  --vscode-focusBorder: var(--theme-focus);
+  --vscode-textLink-foreground: #0a5fc2;
+  --vscode-textLink-activeForeground: #084a99;
+  --vscode-textPreformat-foreground: #9a3d0a;
+  --vscode-textPreformat-background: rgb(15 23 42 / 6%);
+  --vscode-textCodeBlock-background: #e9edf2;
+  --vscode-textBlockQuote-border: rgb(15 23 42 / 20%);
+  --vscode-textBlockQuote-foreground: #3d4654;
+  --vscode-widget-border: #cfd6df;
+  --vscode-widget-shadow: rgb(15 23 42 / 20%);
+  --vscode-toolbar-hoverBackground: rgb(15 23 42 / 7%);
+  --vscode-button-secondaryBackground: rgb(15 23 42 / 6%);
+  --vscode-button-secondaryHoverBackground: rgb(15 23 42 / 10%);
+  --vscode-button-secondaryForeground: #1b2230;
+  --vscode-input-background: #ffffff;
+  --vscode-input-foreground: #1b2230;
+  --vscode-input-placeholderForeground: #5f6a7a;
+  --vscode-editorSuggestWidget-background: rgb(255 255 255 / 92%);
+  --vscode-editorSuggestWidget-foreground: #1b2230;
+  --vscode-editorSuggestWidget-selectedBackground: color-mix(in srgb, var(--theme-accent) 16%, white);
+  --vscode-editorSuggestWidget-selectedForeground: #1b2230;
+  --vscode-editor-background: #f8fafc;
+  --vscode-editorWidget-background: #ffffff;
+  --vscode-editorHoverWidget-background: #ffffff;
+  --vscode-editorHoverWidget-foreground: #1b2230;
+  --vscode-editorHoverWidget-border: #cfd6df;
+  --vscode-gitDecoration-addedResourceForeground: #23753b;
+  --vscode-gitDecoration-deletedResourceForeground: #bb3324;
+  --vscode-diffEditor-insertedLineBackground: rgb(46 160 67 / 14%);
+  --vscode-diffEditor-removedLineBackground: rgb(220 60 50 / 12%);
+  --vscode-debugTokenExpression-boolean: #1650b8;
+  --vscode-debugTokenExpression-string: #a31515;
+  --vscode-debugTokenExpression-number: #0b7a50;
+  --vscode-debugTokenExpression-name: #8a3fa0;
+  --vscode-testing-iconFailed: #c42b1c;
+  --vscode-scrollbarSlider-background: rgb(15 23 42 / 22%);
+  --vscode-scrollbarSlider-hoverBackground: rgb(15 23 42 / 34%);
+  --vscode-scrollbarSlider-activeBackground: rgb(15 23 42 / 44%);
+}
+
+/* The glass itself, the same rules for either kind. */
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  --glass-blur: blur(14px) saturate(160%);
+  --bg: var(--glass-base);
+  --accent: var(--theme-accent);
+  --border: var(--glass-edge);
+  --surface: var(--glass-pane);
+  --surface-2: var(--glass-pane-raised);
+  --shadow: var(--glass-lift);
+  --card-border: var(--glass-edge);
+  --vscode-textPreformat-border: transparent;
+  --vscode-button-border: transparent;
+  --vscode-input-border: var(--glass-edge-hi);
+  --vscode-editorSuggestWidget-border: var(--glass-edge-hi);
+  --vscode-list-focusOutline: transparent;
+  --vscode-sideBar-background: var(--glass-base);
 
   position: relative;
-  color-scheme: dark;
-  background:
-    radial-gradient(70% 45% at 0% 0%, rgb(95 199 154 / 15%), transparent 70%),
-    radial-gradient(60% 45% at 100% 45%, rgb(107 124 255 / 14%), transparent 70%),
-    radial-gradient(70% 40% at 20% 100%, rgb(180 107 255 / 10%), transparent 70%),
-    linear-gradient(180deg, #121722, #0a0d12) var(--glass-base);
+  background: var(--glass-base);
 
   & .request-bubble {
-    border-color: color-mix(in srgb, var(--accent) 50%, rgb(255 255 255 / 15%));
-    background: color-mix(in srgb, var(--accent) 26%, rgb(255 255 255 / 3%));
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--bubble-edge));
+    background: color-mix(in srgb, var(--accent) var(--bubble-mix), var(--glass-pane));
     box-shadow: var(--glass-lift);
     backdrop-filter: var(--glass-blur);
   }
@@ -1700,10 +1880,6 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     background: var(--glass-pane-raised);
     box-shadow: var(--glass-lift);
     backdrop-filter: var(--glass-blur);
-  }
-
-  & .hero {
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 18px 40px -16px rgb(95 199 154 / 35%);
   }
 
   & .step-target,
@@ -1734,13 +1910,13 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 
   & .code-toolbar {
     border-bottom-color: var(--glass-edge);
-    background: rgb(255 255 255 / 2.5%);
+    background: var(--glass-header);
   }
 
   & .tool-output,
   & .permission-command {
     border-color: var(--glass-edge);
-    background: rgb(0 0 0 / 28%);
+    background: var(--glass-well);
   }
 
   & .permission-open {
@@ -1749,12 +1925,60 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   }
 
   & .diagram-toolbar .icon-button {
-    background: rgb(22 27 36 / 85%);
+    background: var(--glass-float);
   }
 
+  /*
+   * Primary actions are neutral and solid: send, Allow, Keep and Keep all. Secondary ones, Deny, Undo and Stop,
+   * stay quiet glass. The focus ring sits outside the button, so it shows against the solid fill.
+   */
+  & .button:not(.secondary, .ghost),
+  & .hunk-actions .button.secondary,
+  & .round-button.send {
+    border-color: transparent;
+    background: var(--primary);
+    color: var(--primary-ink);
+    box-shadow: var(--primary-sheen);
+  }
+
+  & .button:not(.secondary, .ghost):hover,
+  & .hunk-actions .button.secondary:hover,
+  & .round-button.send:hover {
+    background: var(--primary-hover);
+  }
+
+  & .button:not(.secondary, .ghost):active,
+  & .hunk-actions .button.secondary:active,
+  & .round-button.send:active {
+    background: var(--primary-pressed);
+    box-shadow: none;
+    transform: translateY(0.5px);
+  }
+
+  & .button:not(.secondary, .ghost):disabled,
+  & .round-button.send:disabled {
+    background: var(--primary-disabled);
+    color: var(--primary-disabled-ink);
+    box-shadow: none;
+    cursor: default;
+  }
+
+  & .button.secondary:not(.hunk-actions .button),
   & .round-button.stop {
-    background: var(--vscode-foreground);
-    color: var(--glass-base);
+    border: 1px solid var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+    color: var(--vscode-foreground);
+  }
+
+  & .button.secondary:not(.hunk-actions .button):hover,
+  & .round-button.stop:hover {
+    background: var(--glass-hover);
+  }
+
+  & .button:focus-visible,
+  & .round-button:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
   }
 
   /* The composer floats over the transcript, which scrolls under it, blurred. */
@@ -1773,48 +1997,28 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 
   & .input-box {
     position: relative;
-    border-color: var(--glass-edge-hi);
-    background: rgb(24 29 38 / 55%);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 16px 36px -14px rgb(0 0 0 / 85%);
+    border-color: transparent;
+    background: var(--composer-fill);
+    box-shadow: var(--composer-shadow);
     backdrop-filter: blur(18px) saturate(170%);
-  }
-
-  & .input-box:focus-within {
-    border-color: var(--glass-edge-hi);
   }
 
   & .mentions {
     border-radius: 10px;
-    box-shadow: 0 14px 34px -12px rgb(0 0 0 / 85%);
+    box-shadow: var(--glass-float-shadow);
     backdrop-filter: var(--glass-blur);
   }
 
   /*
-   * The running rainbow: a 1.5px ring masked out of a conic gradient whose registered angle the browser animates.
-   * Only the live turn's reply and the focused composer carry it, so at most two edges move at once.
+   * The running rainbow, on the composer only: a 1.5px ring masked out of a conic gradient whose registered
+   * angle the browser animates. It runs all the time, and holds still for anyone who asks for less motion.
    */
-  & .reply {
-    position: relative;
-    isolation: isolate;
-  }
-
-  /* The live reply sits on a faint pane inside its edge, which goes when the turn ends. */
-  & .reply.rainbow::after {
-    content: '';
-    position: absolute;
-    inset: -6px -8px -4px;
-    z-index: -1;
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 1.5%));
-    pointer-events: none;
-  }
-
-  & .rainbow::before {
-    content: '';
+  & .ring {
+    display: block;
     position: absolute;
     inset: -1px;
     padding: 1.5px;
-    border-radius: inherit;
+    border-radius: 15px;
     background: conic-gradient(from var(--rainbow-angle), var(--rainbow-stops));
     mask:
       linear-gradient(#000 0 0) content-box exclude,
@@ -1823,24 +2027,8 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     animation: rainbow-run 3.2s linear infinite;
   }
 
-  & .reply.rainbow::before {
-    inset: -6px -8px -4px;
-    border-radius: 14px;
-    opacity: 0.85;
-  }
-
-  & .input-box.rainbow::before {
-    border-radius: 15px;
-  }
-
-  & .input-box.rainbow,
-  & .input-box.rainbow:focus-within {
-    border-color: transparent;
-  }
-
-  /* The rainbow holds still, still drawn, for anyone who asks for less motion. */
   @media (prefers-reduced-motion: reduce) {
-    & .rainbow::before {
+    & .ring {
       animation-play-state: paused;
     }
   }
