@@ -18,7 +18,13 @@ import {
   SEVERITIES,
   spillNotice,
   STALE_BASE_ERROR,
+  TOOL_CALL_META,
+  TURN_USAGE_META,
+  addUsage,
   type CheckpointTextResponse,
+  type PermissionInput,
+  type TokenUsage,
+  type TurnUsage,
   type DiagnosticsRequest,
   type DoneReason,
   type HunkId,
@@ -118,8 +124,8 @@ function loggedUpdate<K extends TurnEvent['kind']>(event: EventOf<K>): acp.Sessi
   return (LOGGED[event.kind] as ((e: EventOf<K>) => acp.SessionUpdate) | undefined)?.(event);
 }
 
-/** The editor's buffers, through ACP's client file system. */
-function editorFiles(client: acp.AgentContext, sessionId: string): Files {
+/** The editor's buffers, through ACP's client file system. `writer` names the tool call a write belongs to. */
+function editorFiles(client: acp.AgentContext, sessionId: string, writer: () => acp.ToolCallId): Files {
   const failure = (verb: string, file: string, error: unknown) =>
     new ToolError(`the editor could not ${verb} ${file}: ${error instanceof Error ? error.message : String(error)}`);
   return {
@@ -137,7 +143,7 @@ function editorFiles(client: acp.AgentContext, sessionId: string): Files {
           sessionId,
           path: file,
           content: text,
-          _meta: { [BASE_HASH_META]: baseHash },
+          _meta: { [BASE_HASH_META]: baseHash, [TOOL_CALL_META]: writer() },
         });
         return 'written';
       } catch (error) {
@@ -157,24 +163,58 @@ function editorDiagnostics(client: acp.AgentContext, sessionId: string): Diagnos
   };
 }
 
-type Turn = { readonly surface: Surface; readonly approve: Approver; readonly updates: Updates };
+type Turn = {
+  readonly surface: Surface;
+  readonly approve: Approver;
+  readonly updates: Updates;
+  /** What the turn's model calls used so far, for the prompt response; nothing before the first call. */
+  usage(): Pick<acp.PromptResponse, 'usage' | '_meta'>;
+};
+
+type Spent = { readonly tokens: TokenUsage; readonly model: string; readonly costUsd: number | null };
+
+function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '_meta'> {
+  if (spent === undefined) return {};
+  const { tokens, model, costUsd } = spent;
+  const usage: acp.Usage = {
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    cachedReadTokens: tokens.cacheRead,
+    cachedWriteTokens: tokens.cacheWrite,
+    totalTokens: tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite,
+  };
+  const meta: TurnUsage = { model, costUsd };
+  return { usage, _meta: { [TURN_USAGE_META]: meta } };
+}
 
 /** One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. */
 function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io): Turn {
   const sent = updates(client, sessionId, io);
-  // Tools run one at a time, so the last one started is the one asking.
+  // Tools run one at a time, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
+  let spent: Spent | undefined;
   return {
     updates: sent,
+    usage: () => usageOf(spent),
     surface: {
-      files: peer.files ? editorFiles(client, sessionId) : DISK_FILES,
+      files: peer.files ? editorFiles(client, sessionId, () => running) : DISK_FILES,
       watcher: {
         text: (delta) => sent.send(textUpdate(delta)),
         toolStart(use, title) {
           running = use.id;
           sent.send({ sessionUpdate: 'tool_call', toolCallId: use.id, title, kind: TOOL_KINDS[use.name] ?? 'other', status: 'in_progress', rawInput: use.input });
         },
+        toolEnd(use, status) {
+          sent.send({ sessionUpdate: 'tool_call_update', toolCallId: use.id, status: TOOL_STATUS[status] });
+        },
         logged(event) {
+          if (event.kind === 'assistant') {
+            spent = {
+              tokens: spent === undefined ? event.usage : addUsage(spent.tokens, event.usage),
+              model: event.model,
+              costUsd: spent?.costUsd === null || event.costUsd === null ? null : (spent?.costUsd ?? 0) + event.costUsd,
+            };
+          }
           const update = loggedUpdate(event);
           if (update !== undefined) sent.send(update);
         },
@@ -182,9 +222,10 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
     },
     async approve(denial) {
       await sent.flush();
+      const rawInput: PermissionInput = { command: denial.command, reason: denial.reason };
       const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
         sessionId,
-        toolCall: { toolCallId: running, title: `Allow \`${denial.command}\`? It uses ${denial.reason}.`, kind: 'execute', status: 'pending' },
+        toolCall: { toolCallId: running, title: `Allow \`${denial.command}\`? It uses ${denial.reason}.`, kind: 'execute', status: 'pending', rawInput },
         options: PERMISSION_OPTIONS,
       });
       return outcome.outcome === 'selected' && outcome.optionId === 'allow';
@@ -290,7 +331,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
                 })
               : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
           await turn.updates.flush();
-          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason] };
+          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...turn.usage() };
         });
       } finally {
         turns.set(sessionId, undefined);
