@@ -2181,7 +2181,7 @@ body.diagram-tab {
  * stay opaque, since it does color math on them.
  */
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
-  --glass-base: #0a0a0a;
+  --glass-base: #1e1e20;
   --glass-pane: rgb(255 255 255 / 3.5%);
   --glass-pane-raised: rgb(255 255 255 / 6%);
   --glass-hover: rgb(255 255 255 / 11%);
@@ -2189,10 +2189,10 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --glass-edge-hi: rgb(255 255 255 / 12%);
   --glass-header: rgb(255 255 255 / 2%);
   --glass-well: rgb(0 0 0 / 35%);
-  --glass-float: rgb(16 16 18 / 88%);
+  --glass-float: rgb(40 40 43 / 92%);
   --glass-lift: inset 0 1px 0 rgb(255 255 255 / 6%), 0 12px 28px -18px rgb(0 0 0 / 80%);
   --glass-float-shadow: 0 14px 34px -12px rgb(0 0 0 / 85%);
-  --composer-fill: rgb(17 17 17 / 62%);
+  --composer-fill: rgb(36 36 39 / 70%);
   --composer-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 16px 36px -14px rgb(0 0 0 / 85%);
   --dino-tile: var(--glass-pane-raised);
   --bubble-fill: rgb(255 255 255 / 7%);
@@ -2212,12 +2212,12 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --ok: #6fd39c;
   --warn: #f0c35a;
   --diagram-scheme: dark;
-  --diagram-surface: #141414;
+  --diagram-surface: #232326;
   --diagram-border: #8c8c8c;
   color-scheme: dark;
 
-  --vscode-foreground: #ececec;
-  --vscode-editor-foreground: #ececec;
+  --vscode-foreground: #dcdcdc;
+  --vscode-editor-foreground: #dcdcdc;
   --vscode-descriptionForeground: #a8a8a8;
   --vscode-icon-foreground: #cccccc;
   --vscode-errorForeground: #ff8f86;
@@ -2226,27 +2226,27 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --vscode-textLink-activeForeground: #a8d8ff;
   --vscode-textPreformat-foreground: #f1c98b;
   --vscode-textPreformat-background: rgb(255 255 255 / 8%);
-  --vscode-textCodeBlock-background: #0e0e0e;
+  --vscode-textCodeBlock-background: #18181a;
   --vscode-textBlockQuote-border: rgb(255 255 255 / 22%);
   --vscode-textBlockQuote-foreground: #cccccc;
-  --vscode-widget-border: #333333;
+  --vscode-widget-border: #3a3a3d;
   --vscode-widget-shadow: rgb(0 0 0 / 55%);
   --vscode-toolbar-hoverBackground: rgb(255 255 255 / 9%);
   --vscode-button-secondaryBackground: rgb(255 255 255 / 10%);
   --vscode-button-secondaryHoverBackground: rgb(255 255 255 / 16%);
-  --vscode-button-secondaryForeground: #ececec;
-  --vscode-input-background: #181818;
-  --vscode-input-foreground: #ececec;
+  --vscode-button-secondaryForeground: #dcdcdc;
+  --vscode-input-background: #262629;
+  --vscode-input-foreground: #dcdcdc;
   --vscode-input-placeholderForeground: #8f8f8f;
-  --vscode-editorSuggestWidget-background: rgb(18 18 18 / 90%);
-  --vscode-editorSuggestWidget-foreground: #ececec;
+  --vscode-editorSuggestWidget-background: rgb(40 40 43 / 94%);
+  --vscode-editorSuggestWidget-foreground: #dcdcdc;
   --vscode-editorSuggestWidget-selectedBackground: rgb(255 255 255 / 12%);
-  --vscode-editorSuggestWidget-selectedForeground: #ececec;
-  --vscode-editor-background: #0f0f0f;
-  --vscode-editorWidget-background: #1a1a1a;
-  --vscode-editorHoverWidget-background: #1a1a1a;
-  --vscode-editorHoverWidget-foreground: #ececec;
-  --vscode-editorHoverWidget-border: #333333;
+  --vscode-editorSuggestWidget-selectedForeground: #dcdcdc;
+  --vscode-editor-background: #18181a;
+  --vscode-editorWidget-background: #29292c;
+  --vscode-editorHoverWidget-background: #29292c;
+  --vscode-editorHoverWidget-foreground: #dcdcdc;
+  --vscode-editorHoverWidget-border: #3a3a3d;
   --vscode-gitDecoration-addedResourceForeground: #7fd99f;
   --vscode-gitDecoration-deletedResourceForeground: #ff9a8a;
   --vscode-diffEditor-insertedLineBackground: rgb(87 200 130 / 14%);
