@@ -13,6 +13,9 @@ export type Turn = {
   readonly prompt: string;
   readonly blocks: readonly Block[];
   readonly status: TurnStatus;
+  /** Milliseconds since the epoch, stamped by the extension; `endedAt` is undefined while the turn runs. */
+  readonly startedAt: number;
+  readonly endedAt: number | undefined;
   /** Undefined until the turn ends, and for a turn that failed before the model answered. */
   readonly usage: Usage | undefined;
   /** A passing status while the turn runs, such as a retry; the next output or the turn's end clears it. */
@@ -87,7 +90,7 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 export type Action =
   | { readonly type: 'reset'; readonly transcript: Transcript }
   | { readonly type: 'model'; readonly model: string }
-  | { readonly type: 'turn-start'; readonly id: string; readonly prompt: string }
+  | { readonly type: 'turn-start'; readonly id: string; readonly at: number; readonly prompt: string }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
   /** Starts a tool call or updates one; an absent field keeps its value. */
@@ -107,7 +110,7 @@ export type Action =
   | { readonly type: 'permission'; readonly id: string; readonly command: string; readonly reason: string; readonly options: readonly PermissionChoice[] }
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined }
   | { readonly type: 'error'; readonly message: string }
-  | { readonly type: 'turn-end'; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
+  | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
 
 /** What the extension tells the chat webview: transcript changes, and answers to its completion requests. */
 export type ToView = Action | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] };
@@ -121,10 +124,13 @@ export type FromView =
   | { readonly type: 'complete'; readonly id: number; readonly query: string }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
-  | { readonly type: 'keep'; readonly hunk: string }
-  | { readonly type: 'undo'; readonly hunk: string }
+  /** Keep or undo hunks, one from a hunk's buttons or every pending one of a turn from its changes card. */
+  | { readonly type: 'keep'; readonly hunks: readonly string[] }
+  | { readonly type: 'undo'; readonly hunks: readonly string[] }
   /** Opens the file a hunk is in, at the hunk. */
   | { readonly type: 'reveal'; readonly hunk: string }
   | { readonly type: 'copy'; readonly text: string }
+  /** Opens the setting that picks the model. */
+  | { readonly type: 'choose-model' }
   /** Opens a diagram full size in an editor tab. */
   | { readonly type: 'open-diagram'; readonly source: string };

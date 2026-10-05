@@ -30,6 +30,12 @@ export function mentionsIn(text: string): string[] {
   return [...new Set(found.filter((label) => label !== ''))];
 }
 
+/** `text` without its mentions of `label`, and the space after each. */
+export function withoutMention(text: string, label: string): string {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(^|\\s)@(?:"${escaped}"|${escaped})(?=[.,;:!?)]*(?:\\s|$)) ?`, 'g'), '$1');
+}
+
 const basename = (file: string): string => file.slice(file.lastIndexOf('/') + 1);
 
 function isSubsequence(query: string, text: string): boolean {

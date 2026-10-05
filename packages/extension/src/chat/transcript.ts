@@ -51,9 +51,9 @@ const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...tur
 const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, action: ActionOf<K>) => Transcript } = {
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
-  'turn-start': (transcript, { id, prompt }) => ({
+  'turn-start': (transcript, { id, at, prompt }) => ({
     ...transcript,
-    turns: [...transcript.turns, { id, prompt, blocks: [], status: 'streaming', usage: undefined }],
+    turns: [...transcript.turns, { id, prompt, blocks: [], status: 'streaming', startedAt: at, endedAt: undefined, usage: undefined }],
   }),
   text: (transcript, { text }) =>
     onLast(transcript, (raw) => {
@@ -90,12 +90,12 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       mapBlocks(turn, isOpen(id), (block) => ({ ...block, outcome: optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId } })),
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),
-  'turn-end': (transcript, { status, usage }) =>
+  'turn-end': (transcript, { at, status, usage }) =>
     onLast(transcript, (turn) => {
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
-      return { ...quiet(settled), status, usage };
+      return { ...quiet(settled), status, endedAt: at, usage };
     }),
 };
 

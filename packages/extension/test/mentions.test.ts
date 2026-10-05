@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { insertMention, mentionAtCaret, mentionsIn, rankFiles } from '../src/chat/mentions.js';
+import { insertMention, mentionAtCaret, mentionsIn, rankFiles, withoutMention } from '../src/chat/mentions.js';
 
 describe('composer mentions', () => {
   it('finds the mention being typed at the caret, and only after a space or the start', () => {
@@ -16,6 +16,13 @@ describe('composer mentions', () => {
 
   it('lists the mentions in a message once each, without trailing punctuation or email addresses', () => {
     expect(mentionsIn('Compare @a.ts with @"my b.ts", and @selection. Mail x@y.z about @a.ts')).toEqual(['a.ts', 'my b.ts', 'selection']);
+  });
+
+  it('removes every mention of one label and the space after it, leaving longer paths and email addresses alone', () => {
+    expect(withoutMention('Explain @math.ts and @selection, then @math.ts.', 'math.ts')).toBe('Explain and @selection, then .');
+    expect(withoutMention('@math.ts.bak and mail x@math.ts', 'math.ts')).toBe('@math.ts.bak and mail x@math.ts');
+    expect(withoutMention('Read @"my b.ts" now', 'my b.ts')).toBe('Read now');
+    expect(mentionsIn(withoutMention('@selection explain', 'selection'))).toEqual([]);
   });
 
   it('ranks file names that start with the query first, then names, paths and letters in order', () => {

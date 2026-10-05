@@ -2,9 +2,10 @@
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
 import { h, icon, reconcile, type Keyed } from './dom.js';
-import { insertMention, mentionAtCaret, type MentionCompletion } from './mentions.js';
-import type { Block, FromView, ToView, Transcript, Turn } from './messages.js';
-import { emptyState, errorBlock, turnNotice, permissionCard, textBlock, toolRow, turnFooter, userMessage, type Ui } from './render.js';
+import { formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
+import type { FromView, ToView, Transcript, Turn } from './messages.js';
+import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
+import { callsStep, changesCard, emptyState, errorBlock, permissionCard, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
@@ -50,15 +51,25 @@ const input = h('textarea', {
   'aria-autocomplete': 'list',
   'aria-controls': 'mentions',
 });
-const send = h('button', { type: 'submit', class: 'icon-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('send'));
-const stop = h('button', { type: 'button', class: 'icon-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('stop-circle'));
-const modelLabel = h('span', { class: 'composer-model' });
+const send = h('button', { type: 'submit', class: 'round-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('arrow-up'));
+const stop = h('button', { type: 'button', class: 'round-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('debug-stop'));
+const modelName = h('span', { class: 'model-name' });
+const modelLabel = h(
+  'button',
+  { type: 'button', class: 'composer-model', title: 'Choose the model', onclick: () => host.postMessage({ type: 'choose-model' }) },
+  icon('sparkle'),
+  modelName,
+  icon('chevron-down'),
+);
+/** g-code's engine runs what its rules allow and asks about the rest; there is no other mode to pick. */
+const approval = h('span', { class: 'approval', title: 'g-code asks before running a command its rules hold back' }, icon('shield'), 'Asks before risky commands');
+const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
 const form = h(
   'form',
   { class: 'composer' },
   menu,
-  h('div', { class: 'input-box' }, input, h('div', { class: 'input-toolbar' }, modelLabel, h('span', { class: 'spacer' }), stop, send)),
+  h('div', { class: 'input-box' }, chips, input, h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send)),
 );
 document.body.append(log, form, status);
 
@@ -78,16 +89,39 @@ function shownLength(id: string, text: string, streaming: boolean): number {
   return next;
 }
 
-function blockItem(turn: Turn, block: Block, last: boolean): Keyed {
-  if (block.kind === 'text') {
-    const streaming = turn.status === 'streaming';
-    const shown = shownLength(block.id, block.text, streaming);
-    const caret = streaming && last;
-    return { key: block.id, deps: [block.text, shown, caret], build: () => textBlock(block.text.slice(0, shown), caret, ui) };
+/** A step's content, rebuilt only when what it shows changes. */
+function stepContent(turn: Turn, step: Step, last: boolean): { readonly deps: readonly unknown[]; readonly build: () => HTMLElement } {
+  switch (step.kind) {
+    case 'text': {
+      const streaming = turn.status === 'streaming';
+      const shown = shownLength(step.block.id, step.block.text, streaming);
+      const caret = streaming && last;
+      return { deps: [step.block.text, shown, caret], build: () => textBlock(step.block.text.slice(0, shown), caret, ui) };
+    }
+    case 'calls':
+      return { deps: [...step.tools, '|', ...state.open, '|', ...state.unfolded], build: () => callsStep(step.key, step.name, step.tools, ui) };
+    case 'permission':
+      return { deps: [step.block], build: () => permissionCard(step.block, ui) };
+    case 'error':
+      return { deps: [step.block], build: () => errorBlock(step.block) };
+    case 'notice':
+      return { deps: [step.text], build: () => turnNotice(step.text) };
+    case 'thinking':
+      return { deps: [], build: thinkingRow };
+    case 'changes':
+      return { deps: [...step.edits, '|', ...state.unfolded], build: () => changesCard(step.edits, ui) };
   }
-  if (block.kind === 'tool') return { key: block.id, deps: [block, ...state.open, '|', ...state.unfolded], build: () => toolRow(block, ui) };
-  if (block.kind === 'permission') return { key: `permission:${block.id}`, deps: [block], build: () => permissionCard(block, ui) };
-  return { key: block.id, deps: [block], build: () => errorBlock(block) };
+}
+
+/** One node on the rail, its dot styled by the step's state. */
+function stepItem(turn: Turn, step: Step, last: boolean): Keyed {
+  const node = nodeOf(step);
+  const content = stepContent(turn, step, last);
+  return {
+    key: step.key,
+    deps: [node, ...content.deps],
+    build: () => h('li', { class: `step step-${step.kind} node-${node}` }, h('span', { class: 'node', 'aria-hidden': 'true' }), content.build()),
+  };
 }
 
 function turnShell(turn: Turn): HTMLElement {
@@ -95,8 +129,8 @@ function turnShell(turn: Turn): HTMLElement {
     'article',
     { class: 'turn', 'data-turn': turn.id },
     userMessage(turn.prompt),
-    h('div', { class: 'response' }),
-    h('div', { class: 'notice-slot' }),
+    h('div', { class: 'head-slot' }),
+    h('ol', { class: 'rail' }),
     h('div', { class: 'footer-slot' }),
   );
 }
@@ -121,11 +155,10 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .response')!, turn.blocks.map((block, j) => blockItem(turn, block, j === turn.blocks.length - 1)));
-      reconcile(
-        shell.querySelector<HTMLElement>(':scope > .notice-slot')!,
-        turn.notice === undefined ? [] : [{ key: 'notice', deps: [turn.notice], build: () => turnNotice(turn.notice!) }],
-      );
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
+      const steps = railOf(turn);
+      const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
+      reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
@@ -134,7 +167,8 @@ function render(): void {
   const running = isRunning(transcript);
   send.hidden = running;
   stop.hidden = !running;
-  modelLabel.textContent = transcript.model;
+  modelName.textContent = transcript.model === '' ? 'Default model' : transcript.model;
+  input.placeholder = empty ? 'Describe the change you want, @ to add context' : 'Ask a follow-up, @ to add context';
   if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
   focusNewPermission();
   if (atBottom) log.scrollTop = log.scrollHeight;
@@ -180,19 +214,54 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   schedule();
 });
 
-function resize(): void {
+/** The composer after its text changed: its height, and a chip for each `@` mention in it. */
+function redraft(): void {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, MAX_COMPOSER_PX)}px`;
   input.style.overflowY = input.scrollHeight > MAX_COMPOSER_PX ? 'auto' : 'hidden';
+  // The mention still being typed gets its chip once it is chosen or finished.
+  const typing = mentionAtCaret(input.value, input.selectionStart);
+  const settled = typing === undefined ? input.value : input.value.slice(0, typing.start) + input.value.slice(input.selectionStart);
+  chips.replaceChildren(
+    ...mentionsIn(settled).map((label) =>
+      h(
+        'span',
+        { class: 'context-chip', role: 'listitem', 'data-mention': label, title: formatMention(label) },
+        icon(label === SELECTION ? 'selection' : 'file-code'),
+        h('span', { class: 'chip-name' }, label.slice(label.lastIndexOf('/') + 1)),
+        h(
+          'button',
+          { type: 'button', class: 'chip-remove', 'aria-label': `Remove ${label}`, title: 'Remove', onclick: () => edit(withoutMention(input.value, label), undefined) },
+          icon('close'),
+        ),
+      ),
+    ),
+    h('button', { type: 'button', class: 'context-add', title: 'Add context (@)', 'aria-label': 'Add context', onclick: addContext }, icon('add')),
+  );
+}
+
+/** Replaces the draft, putting the caret at `caret` or the end, and keeps the focus in the composer. */
+function edit(text: string, caret: number | undefined): void {
+  input.value = text;
+  save({ ...state, draft: text });
+  input.focus();
+  const at = caret ?? text.length;
+  input.setSelectionRange(at, at);
+  redraft();
+}
+
+/** The add button types an `@` at the caret, which opens the completion list as typing one would. */
+function addContext(): void {
+  const caret = input.selectionStart;
+  const before = input.value.slice(0, caret);
+  const mention = before === '' || /\s$/.test(before) ? '@' : ' @';
+  edit(before + mention + input.value.slice(input.selectionEnd), caret + mention.length);
+  askCompletions();
 }
 
 function fill(text: string): void {
   closeMenu();
-  input.value = text;
-  save({ ...state, draft: text });
-  resize();
-  input.focus();
-  input.setSelectionRange(text.length, text.length);
+  edit(text, undefined);
 }
 
 /**
@@ -233,7 +302,7 @@ function accept(index: number): void {
   input.value = next.text;
   input.setSelectionRange(next.caret, next.caret);
   save({ ...state, draft: input.value });
-  resize();
+  redraft();
 }
 
 const moveActive = (by: number) => () => {
@@ -298,7 +367,7 @@ form.addEventListener('submit', (event) => {
 });
 input.addEventListener('input', () => {
   save({ ...state, draft: input.value });
-  resize();
+  redraft();
   askCompletions();
 });
 input.addEventListener('click', askCompletions);
@@ -335,7 +404,7 @@ const focusComposer = () => {
 window.addEventListener('focus', () => requestAnimationFrame(focusComposer));
 
 input.value = state.draft;
-resize();
+redraft();
 render();
 if (document.hasFocus()) focusComposer();
 host.postMessage({ type: 'ready' });

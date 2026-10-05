@@ -229,7 +229,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     attachments: () => Promise<acp.ContentBlock[]>,
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
-    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, prompt: shown });
+    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown });
     try {
       this.turn = await this.link();
       const response = await this.turn.connection.agent.request(acp.methods.agent.session.prompt, {
@@ -239,11 +239,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       });
       const ending = ENDINGS[response.stopReason];
       if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
-      this.dispatch({ type: 'turn-end', status: ending.status, usage: usageOf(response) });
+      this.dispatch({ type: 'turn-end', at: Date.now(), status: ending.status, usage: usageOf(response) });
       return response.stopReason;
     } catch (error) {
       this.dispatch({ type: 'error', message: error instanceof Error ? error.message : String(error) });
-      this.dispatch({ type: 'turn-end', status: 'failed', usage: undefined });
+      this.dispatch({ type: 'turn-end', at: Date.now(), status: 'failed', usage: undefined });
       throw error;
     } finally {
       this.turn = undefined;
@@ -324,10 +324,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         ),
       stop: () => void this.stop(),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
-      keep: ({ hunk }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunk),
-      undo: ({ hunk }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunk),
+      keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
+      undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
+      'choose-model': () => void vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model'),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
     };
   }
