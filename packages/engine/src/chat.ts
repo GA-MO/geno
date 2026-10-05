@@ -22,7 +22,7 @@ import { checkId, singleId, UsageError, type Command, type Io } from './command.
 import { gatewayFor, type Gateway } from './gateway.js';
 import { loadProjectContext } from './project-context.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
-import type { Store } from './store.js';
+import { homeOf, type Store } from './store.js';
 
 export const DEFAULT_PROVIDER: ProviderName = 'modelstudio';
 export const DEFAULT_EFFORT: Effort = 'medium';
@@ -68,7 +68,7 @@ async function newSession(
   };
   const file = sessionFile(store, session.id);
   // Loaded once and logged, so every later turn and a resumed session send the same text.
-  const start: TurnEvent = { kind: 'session-start', session, context: await loadProjectContext(workspace) };
+  const start: TurnEvent = { kind: 'session-start', session, context: await loadProjectContext(workspace, homeOf(store)) };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }

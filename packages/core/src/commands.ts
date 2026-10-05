@@ -11,7 +11,28 @@ import type { ContextItem } from './context.js';
 /** Who runs a built-in: the editor, before it ever sends a prompt, or the engine, without a model call. */
 export type BuiltinRunner = 'client' | 'engine';
 
-type BuiltinSpec = { readonly description: string; readonly hint?: string; readonly runs: BuiltinRunner };
+/** `turn` makes an engine built-in run one agent turn on that fixed prompt, instead of answering without the model. */
+type BuiltinSpec = { readonly description: string; readonly hint?: string; readonly runs: BuiltinRunner; readonly turn?: (args: string) => string };
+
+/** /init's turn. Written for Geno; the idea, an agent that surveys the project and writes AGENTS.md, is OpenCode's. */
+const initPrompt = (args: string): string =>
+  [
+    'Create or update AGENTS.md at the root of this workspace, the file coding agents read before working here.',
+    '',
+    'First read the project: its README, its package or build manifests, its CI config, its lint and format config, the layout of its top-level folders, and a few representative source and test files. Also read any CLAUDE.md, .cursor/rules or .github/copilot-instructions.md, and fold what still holds into AGENTS.md.',
+    '',
+    'Then write AGENTS.md with these sections, each short and specific to this project:',
+    '- What this project is, in two or three sentences.',
+    '- How to install, build, run, test (including a single test) and lint, as exact commands that work in this repository.',
+    '- The layout: the folders that matter and what lives in each.',
+    '- The conventions a newcomer would get wrong: code style, naming, error handling, testing patterns, and anything the config enforces.',
+    '',
+    'Write only what you checked in the files; never invent a command or a convention. Keep it under about 150 lines.',
+    'If AGENTS.md already exists, read it first and keep everything the user wrote, word for word. Only add what is missing or correct what is clearly out of date, and say what you changed.',
+    'Change no other file. End with a short summary of what AGENTS.md now covers.',
+    ...(args === '' ? [] : ['', `The user added: ${args}`]),
+  ].join('\n');
+
 
 export const BUILTIN_COMMANDS = {
   new: { description: 'Start a new chat', runs: 'client' },
@@ -19,13 +40,16 @@ export const BUILTIN_COMMANDS = {
   mode: { description: 'Switch the approval mode', hint: 'plan | ask | auto', runs: 'engine' },
   model: { description: 'Choose the model', runs: 'client' },
   clear: { description: 'Clear the chat and start fresh', runs: 'client' },
-  rules: { description: 'Show the project rules', runs: 'engine' },
-  memory: { description: 'Show what Geno remembers', runs: 'engine' },
-  init: { description: 'Create or update AGENTS.md for this project', runs: 'engine' },
+  rules: { description: 'Show the project rules', runs: 'client' },
+  memory: { description: 'Show what Geno remembers', runs: 'client' },
+  init: { description: 'Create or update AGENTS.md for this project', runs: 'engine', turn: initPrompt },
 } as const satisfies Record<string, BuiltinSpec>;
 
 export type BuiltinName = keyof typeof BUILTIN_COMMANDS;
-export type EngineBuiltin = { [K in BuiltinName]: (typeof BUILTIN_COMMANDS)[K]['runs'] extends 'engine' ? K : never }[BuiltinName];
+/** The engine built-ins that answer without the model; the others run a turn. */
+export type EngineBuiltin = {
+  [K in BuiltinName]: (typeof BUILTIN_COMMANDS)[K] extends { readonly runs: 'engine'; readonly turn: unknown } ? never : (typeof BUILTIN_COMMANDS)[K]['runs'] extends 'engine' ? K : never;
+}[BuiltinName];
 
 /** Where a file command or skill came from; a workspace one shadows a global one of the same name. */
 export type CommandSource = 'workspace' | 'global';
@@ -133,7 +157,12 @@ export type Expansion =
   | { readonly kind: 'message'; readonly content: string; readonly command: Invocation; readonly context: readonly ContextItem[] };
 
 const EXPAND: { readonly [K in SlashCommand['kind']]: (command: Extract<SlashCommand, { kind: K }>, text: string, args: string) => Expansion } = {
-  builtin: ({ name, runs }, _text, args) => ({ kind: 'builtin', name, runs, args }),
+  builtin: ({ name, runs }, _text, args) => {
+    const spec: BuiltinSpec = BUILTIN_COMMANDS[name];
+    return spec.turn === undefined
+      ? { kind: 'builtin', name, runs, args }
+      : { kind: 'message', content: spec.turn(args), command: { name, args }, context: [] };
+  },
   prompt: ({ name, template }, _text, args) => ({ kind: 'message', content: expandTemplate(template, args), command: { name, args }, context: [] }),
   skill: ({ name, path, text: skill }, text, args) => ({
     kind: 'message',

@@ -82,6 +82,9 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
   };
 }
 
+/** `~/.g-code`, or GCODE_HOME: the store keeps everything under it. */
+export const homeOf = (store: Store): string => path.dirname(store.sessionsDir);
+
 export const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
 async function parseFile<T>(file: string, schema: z.ZodType<T>): Promise<T> {

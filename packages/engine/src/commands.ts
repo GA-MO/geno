@@ -24,7 +24,6 @@ import type { Command, Io } from './command.js';
 import { workspaceDir } from './drive.js';
 import { claudeDirOf, loadPlugins, type InstalledPlugin, type PluginScan } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, SKILL_ROOTS, sortedEntries } from './project-context.js';
-import type { Store } from './store.js';
 
 type Source = { readonly kind: 'prompt' | 'skill'; readonly scope: CommandSource; readonly dir: (workspace: string, home: string) => string };
 
@@ -37,8 +36,9 @@ const SOURCES: readonly Source[] = [
   { kind: 'skill', scope: 'global', dir: (_, home) => path.join(home, 'skills') },
 ];
 
-/** `~/.g-code`, or GCODE_HOME: the store keeps everything under it. */
-export const homeOf = (store: Store): string => path.dirname(store.sessionsDir);
+import { homeOf } from './store.js';
+
+export { homeOf };
 
 const text = (value: string | readonly string[] | undefined): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -203,9 +203,6 @@ const ENGINE_ACTIONS: Readonly<Record<EngineBuiltin, (args: string, ctx: Builtin
     await ctx.setMode(args);
     return `Approval mode: ${args}.`;
   },
-  rules: async () => 'Rules are not available yet.',
-  memory: async () => 'Memory is not available yet.',
-  init: async () => 'Creating AGENTS.md is not available yet.',
 };
 
 const isEngineBuiltin = (name: string): name is EngineBuiltin => Object.hasOwn(ENGINE_ACTIONS, name);
@@ -220,6 +217,8 @@ export type SessionCommands = {
   attach(client: acp.AgentContext, sessionId: string, workspace: string): void;
   /** What the prompt becomes, read from the folders as they are now; undefined when it names no command. */
   expand(sessionId: string, text: string): Promise<Expansion | undefined>;
+  /** Stops watching the session's command folders, when it closes. */
+  detach(sessionId: string): void;
 };
 
 export function sessionCommands(home: string, io: Io): SessionCommands {
@@ -251,6 +250,10 @@ export function sessionCommands(home: string, io: Io): SessionCommands {
       const session = sessions.get(sessionId);
       if (session === undefined || !text.startsWith('/')) return undefined;
       return expandInvocation(await load(session.workspace), text);
+    },
+    detach(sessionId) {
+      sessions.get(sessionId)?.stop();
+      sessions.delete(sessionId);
     },
   };
 }

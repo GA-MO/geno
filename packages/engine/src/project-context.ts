@@ -1,6 +1,6 @@
 // Portions ported from Pi (https://github.com/earendil-works/pi) at b2b5c42, Copyright (c) 2025 Mario Zechner, MIT License.
 
-import { readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { stripHidden, type InstructionFile, type LoadedContext, type ProjectRule, type RuleTrigger, type SkillEntry } from '@g-code/core';
 
@@ -179,8 +179,38 @@ export async function loadSkills(workspace: string): Promise<SkillEntry[]> {
   return skills;
 }
 
-export async function loadProjectContext(workspace: string): Promise<LoadedContext> {
+export const globalRulesFile = (home: string): string => path.join(home, 'AGENTS.md');
+
+/** `$GCODE_HOME/AGENTS.md`, the user's rules for every project; undefined when it is missing or blank. */
+export async function loadGlobalInstructions(home: string): Promise<InstructionFile | undefined> {
+  const file = globalRulesFile(home);
+  const text = await readIfFile(file);
+  return text === undefined || text.trim() === '' ? undefined : { path: file, text };
+}
+
+/** The global rules file, created empty when missing; one that exists is left as it is. */
+export async function ensureGlobalRules(home: string): Promise<string> {
+  const file = globalRulesFile(home);
+  await mkdir(home, { recursive: true });
+  await writeFile(file, '', { flag: 'wx' }).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+  });
+  return file;
+}
+
+/** `home` is the app home, whose AGENTS.md loads first; undefined loads only the workspace's context. */
+export async function loadProjectContext(workspace: string, home?: string): Promise<LoadedContext> {
   const root = await canonical(workspace);
-  const [instructions, rules, skills] = await Promise.all([loadInstructionFiles(root), loadCursorRules(root), loadSkills(root)]);
-  return { instructions, rules, skills };
+  const [global, loaded, rules, skills] = await Promise.all([
+    home === undefined ? undefined : loadGlobalInstructions(home),
+    loadInstructionFiles(root),
+    loadCursorRules(root),
+    loadSkills(root),
+  ]);
+  if (global === undefined) return { instructions: loaded, rules, skills };
+  // A home inside the workspace's ancestry would otherwise load the same file twice.
+  const globalReal = await canonical(global.path);
+  const instructions = [];
+  for (const file of loaded) if ((await canonical(path.resolve(root, file.path))) !== globalReal) instructions.push(file);
+  return { global, instructions, rules, skills };
 }
