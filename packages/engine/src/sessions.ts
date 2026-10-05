@@ -36,6 +36,34 @@ const contentBlock = z.custom<ContentBlock>(
   'content block must be an object with a string type',
 );
 
+const loadedContextSchema = z.strictObject({
+  instructions: z.array(z.strictObject({ path: z.string().min(1), text: z.string() })),
+  rules: z.array(
+    z.strictObject({
+      path: z.string().min(1),
+      trigger: z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('always') }),
+        z.strictObject({ kind: z.literal('globs'), globs: z.array(z.string().min(1)).min(1) }),
+        z.strictObject({ kind: z.literal('requested'), description: z.string().min(1) }),
+      ]),
+      text: z.string(),
+    }),
+  ),
+  skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string().min(1), path: z.string().min(1) })),
+});
+
+const contextItemSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('file'), path: z.string().min(1), text: z.string() }),
+  z.strictObject({
+    kind: z.literal('selection'),
+    path: z.string().min(1),
+    startLine: z.number().int().positive(),
+    endLine: z.number().int().positive(),
+    text: z.string(),
+  }),
+  z.strictObject({ kind: z.literal('rule'), path: z.string().min(1), matched: z.string().min(1), text: z.string() }),
+]);
+
 const hunkId = z.string().min(1).transform((raw) => raw as HunkId);
 
 const fileChangeSchema = z.strictObject({
@@ -64,8 +92,8 @@ const toolResultFields = {
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
 const turnEventSchema = z.union([
   z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema }),
-    z.strictObject({ kind: z.literal('user'), ...seqFields, content: z.string() }),
+    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema, context: loadedContextSchema.optional() }),
+    z.strictObject({ kind: z.literal('user'), ...seqFields, content: z.string(), context: z.array(contextItemSchema).optional() }),
     z.strictObject({
       kind: z.literal('assistant'),
       ...seqFields,

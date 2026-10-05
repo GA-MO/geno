@@ -4,6 +4,7 @@ import {
   asSessionId,
   DEFAULT_MODELS,
   hasPendingPrompt,
+  isEmptyContext,
   isEffort,
   isProviderName,
   nextSeq,
@@ -18,6 +19,7 @@ import {
 } from '@g-code/core';
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { gatewayFor, type Gateway } from './gateway.js';
+import { loadProjectContext } from './project-context.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
 
@@ -64,7 +66,8 @@ async function newSession(
     effort,
   };
   const file = sessionFile(store, session.id);
-  const start: TurnEvent = { kind: 'session-start', session };
+  // Loaded once and logged, so every later turn and a resumed session send the same text.
+  const start: TurnEvent = { kind: 'session-start', session, context: await loadProjectContext(workspace) };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }
@@ -205,11 +208,19 @@ export function totalOf(events: readonly TurnEvent[]): Totals {
 }
 
 const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
-  'session-start': ({ session }) => [
+  'session-start': ({ session, context }) => [
     `session: ${session.id}`,
     `created: ${session.createdAt}  workspace: ${session.workspace}  provider: ${session.provider}  model: ${session.model}  effort: ${session.effort}`,
+    ...(context === undefined || isEmptyContext(context)
+      ? []
+      : [
+          `context: ${[...context.instructions.map((f) => f.path), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
+        ]),
   ],
-  user: ({ seq, content }) => [`#${seq} user: ${content}`],
+  user: ({ seq, content, context }) => [
+    `#${seq} user: ${content}`,
+    ...(context ?? []).map((item) => `  attached ${item.kind} ${item.path}${item.kind === 'selection' ? `:${item.startLine}-${item.endLine}` : ''}`),
+  ],
   assistant: ({ seq, content, stopReason, model, usage, costUsd, latencyMs }) => [
     `#${seq} assistant (${stopReason ?? 'no stop reason'}, ${model}): ${content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
