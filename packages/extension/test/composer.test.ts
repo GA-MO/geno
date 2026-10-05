@@ -66,7 +66,7 @@ describe('composerView, idle', () => {
     const { menu } = composerView(input({ facts: facts({ models }) }));
     expect(menu.models.map((m) => `${m.provider}/${m.model}:${m.current}`)).toEqual(['modelstudio/qwen3.8-flash:true', 'modelstudio/qwen3.7-plus:false', 'openrouter/qwen3.8-flash:false']);
     expect(menu.efforts.map((e) => `${e.value}:${e.current}`)).toEqual(['low:false', 'medium:true', 'high:false']);
-    expect(menu.note).toBe('Changing the effort mid-chat makes Model Studio rewrite its prompt cache once.');
+    expect(menu.note).toBe('A change mid-chat rewrites Model Studio’s cache once.');
     expect(composerView(input({ facts: facts({ models, provider: 'openrouter' }) })).menu.note).toBeUndefined();
   });
 });

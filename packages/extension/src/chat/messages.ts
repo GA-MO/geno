@@ -284,7 +284,10 @@ export type FromView =
   | { readonly type: 'open'; readonly target: OpenTarget }
   /** Asks what an `@` mention typed so far could be; answered by a `completions` message with the same id. */
   | { readonly type: 'complete'; readonly id: number; readonly query: string }
-  /** The `/` picker opened: the extension opens the session, if there is none yet, so the engine lists its commands. */
+  /**
+   * The `/` picker or the model menu opened: the extension opens the session, if there is none yet, so the engine
+   * lists its commands and offers its effort.
+   */
   | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }

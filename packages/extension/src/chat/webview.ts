@@ -92,7 +92,7 @@ const input = h('textarea', {
   'aria-controls': 'mentions',
 });
 const send = h('button', { type: 'submit', class: 'round-button send', title: 'Send (Enter)', 'aria-label': 'Send' }, icon('arrow-up'));
-const stop = h('button', { type: 'button', class: 'round-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('debug-stop'));
+const stop = h('button', { type: 'button', class: 'round-button stop', title: 'Stop (Escape)', 'aria-label': 'Stop' }, icon('primitive-square'));
 /** What the extension host knows for the composer, the shown session's MCP servers, and a follow-up waiting on the turn. */
 let facts: ComposerFacts = NO_FACTS;
 let mcpListing: McpListing = { kind: 'loading' };

@@ -56,6 +56,15 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
   const heading = (text: string) => h('li', { class: 'menu-heading', role: 'presentation' }, text);
 
   function open(): void {
+    // A chat with no session yet learns its effort from the session's response; asking opens one.
+    if (shown.efforts.length === 0) post({ type: 'want-commands' });
+    draw();
+    menu.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    (items().find((item) => item.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
+  }
+
+  function draw(): void {
     const { models, efforts, note } = shown;
     menu.replaceChildren(
       heading('Model'),
@@ -76,11 +85,8 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
               }),
             ),
           ]),
-      ...(note === undefined ? [] : [h('li', { class: 'menu-note', role: 'presentation' }, note)]),
+      ...(note === undefined ? [] : [h('li', { class: 'menu-note', role: 'presentation', title: note }, note)]),
     );
-    menu.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
-    (items().find((item) => item.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
   }
 
   function close(): void {
@@ -115,7 +121,13 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
     menu,
     toggle: () => (menu.hidden ? open() : close()),
     show(next: ModelMenu): void {
+      const changed = JSON.stringify(next) !== JSON.stringify(shown);
       shown = next;
+      if (!changed || menu.hidden) return;
+      const focused = (document.activeElement as HTMLElement | null)?.dataset;
+      const key = focused?.['effort'] ?? focused?.['model'];
+      draw();
+      (items().find((item) => item.dataset['effort'] === key || item.dataset['model'] === key) ?? items().find((item) => item.getAttribute('aria-checked') === 'true'))?.focus();
     },
   };
 }
