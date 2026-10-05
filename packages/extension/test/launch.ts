@@ -11,8 +11,11 @@ export const cachePath = path.resolve(root, '../../.vscode-test');
 
 const common: BuildOptions = { bundle: true, platform: 'node', format: 'cjs', target: 'node20', external: ['vscode'] };
 
-/** A workspace with the given files and settings, and a fresh GCODE_HOME. */
-export async function makeWorkspace(files: Readonly<Record<string, string>>, settings: Record<string, unknown>) {
+/**
+ * A workspace with the given files and settings, and a fresh GCODE_HOME. `user` goes in the user settings of the
+ * `ud` user data folder the launchers pass, where settings Geno reads from the user only, such as gcode.baseUrl, live.
+ */
+export async function makeWorkspace(files: Readonly<Record<string, string>>, settings: Record<string, unknown>, user: Record<string, unknown> = {}) {
   const work = await mkdtemp(path.join(tmpdir(), 'gcode-ext-'));
   const workspace = path.join(work, 'workspace');
   const home = path.join(work, 'home');
@@ -27,12 +30,14 @@ export async function makeWorkspace(files: Readonly<Record<string, string>>, set
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
   };
   await writeFile(path.join(workspace, '.vscode', 'settings.json'), JSON.stringify({ ...quiet, ...settings }));
+  await mkdir(path.join(work, 'ud', 'User'), { recursive: true });
+  if (Object.keys(user).length > 0) await writeFile(path.join(work, 'ud', 'User', 'settings.json'), JSON.stringify(user));
   return { work, workspace, home };
 }
 
 /** A workspace as makeWorkspace makes it, with the extension and the named suite built. */
-export async function setUp(suiteName: string, files: Readonly<Record<string, string>>, settings: Record<string, unknown>) {
-  const { work, workspace, home } = await makeWorkspace(files, settings);
+export async function setUp(suiteName: string, files: Readonly<Record<string, string>>, settings: Record<string, unknown>, user: Record<string, unknown> = {}) {
+  const { work, workspace, home } = await makeWorkspace(files, settings, user);
   const { buildExtension } = await import('../build.mjs');
   await buildExtension();
   const suite = await buildSuite(work, suiteName);
