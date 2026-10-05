@@ -11,6 +11,8 @@ export type Step =
   | { readonly kind: 'calls'; readonly key: string; readonly name: string; readonly tools: readonly ToolBlock[] }
   | { readonly kind: 'permission'; readonly key: string; readonly block: PermissionBlock }
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
+  /** A show_widget call: the widget itself, never folded into a run of calls. */
+  | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
   | { readonly kind: 'thinking'; readonly key: 'thinking' }
   | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
@@ -20,6 +22,7 @@ export type Step =
   | { readonly kind: 'files'; readonly key: 'files'; readonly files: readonly ChangedFile[] };
 
 export type EditTool = ToolBlock & { readonly diff: NonNullable<ToolBlock['diff']> };
+export type WidgetTool = ToolBlock & { readonly widget: NonNullable<ToolBlock['widget']> };
 
 /** How a step's node on the rail reads: done, under way, waiting on the user, failed, or text. */
 export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
@@ -36,6 +39,7 @@ export function railOf(turn: Turn): Step[] {
     if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
+    else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
     else if (last?.kind === 'calls' && last.name === block.name && FILE_TOOLS.has(block.name)) steps[steps.length - 1] = { ...last, tools: [...last.tools, block] };
     else steps.push({ kind: 'calls', key: `calls:${block.id}`, name: block.name, tools: [block] });
   }
@@ -66,6 +70,8 @@ export function nodeOf(step: Step): NodeState {
       return step.block.outcome.kind === 'open' ? 'wait' : 'done';
     case 'error':
       return 'failed';
+    case 'widget':
+      return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
     case 'notice':
     case 'thinking':
       return 'live';

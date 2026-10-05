@@ -1,0 +1,122 @@
+<style>
+  .rt { width:100%; box-sizing:border-box; font-family: system-ui, sans-serif;
+        font-size:13px; color:var(--fg); line-height:1.4; }
+  .rt h3 { margin:0 0 4px; font-size:14px; font-weight:500; }
+  .rt .sub { color:var(--muted); font-size:12px; margin:0 0 14px; }
+  .barwrap { position:relative; margin-bottom:16px; }
+  .bar { display:flex; width:100%; height:34px; border-radius:9px; overflow:hidden;
+         border:1px solid var(--border); background:var(--surface); }
+  .seg { height:100%; cursor:pointer; transition:opacity .12s; opacity:.92; }
+  .seg:hover, .seg.on { opacity:1; }
+  .tip { position:absolute; top:-40px; left:0; transform:translateX(-50%);
+         background:var(--bg); border:1px solid var(--border); border-radius:8px;
+         padding:5px 9px; font-size:11.5px; white-space:nowrap; pointer-events:none;
+         opacity:0; transition:opacity .12s; color:var(--fg); }
+  .tip b { color:var(--muted); font-weight:400; margin-right:5px; }
+  .tip.show { opacity:1; }
+  .leg { display:flex; flex-wrap:wrap; gap:10px 16px; margin-bottom:14px; font-size:11.5px; }
+  .leg span { display:inline-flex; align-items:center; gap:6px; color:var(--muted); }
+  .leg i { width:10px; height:10px; border-radius:3px; display:inline-block; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:400; font-size:11px; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .dot { width:9px; height:9px; border-radius:3px; display:inline-block; margin-right:7px;
+         vertical-align:middle; }
+  tbody tr { cursor:default; }
+  tbody tr.on { background:var(--surface); }
+  tbody tr.on td { color:var(--fg); }
+  tfoot td { color:var(--muted); font-weight:500; border-bottom:none; }
+</style>
+
+<div class="rt">
+  <h3>Agent time per run</h3>
+  <p class="sub">Total 564.5 s · hover a segment for details</p>
+
+  <div class="barwrap">
+    <div class="bar" id="bar"></div>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <div class="leg" id="leg"></div>
+
+  <table>
+    <thead>
+      <tr><th>Phase</th><th class="num">Seconds</th><th class="num">Share</th></tr>
+    </thead>
+    <tbody id="body"></tbody>
+    <tfoot>
+      <tr><td>Total</td><td class="num">564.5</td><td class="num">100%</td></tr>
+    </tfoot>
+  </table>
+</div>
+
+<script>
+  const data = [
+    {label:'First token', sec:72.9,  color:'#5fc79a'},
+    {label:'Thinking',    sec:206.5, color:'#f0c35a'},
+    {label:'Decode',      sec:143.2, color:'#ff8f86'},
+    {label:'Tools',       sec:135.1, color:'#dcdcdc'},
+    {label:'Overhead',    sec:6.8,   color:'#9a9a9a'}
+  ];
+  const total = data.reduce((s,d)=>s+d.sec,0);
+
+  const bar  = document.getElementById('bar');
+  const leg  = document.getElementById('leg');
+  const body = document.getElementById('body');
+  const tip  = document.getElementById('tip');
+
+  data.forEach((d,i)=>{
+    const pct = d.sec/total*100;
+    d.pct = pct;
+
+    const seg = document.createElement('div');
+    seg.className='seg'; seg.style.width=pct+'%'; seg.style.background=d.color;
+    seg.dataset.i=i; bar.appendChild(seg);
+
+    const l=document.createElement('span');
+    l.innerHTML='<i style="background:'+d.color+'"></i>'+d.label;
+    leg.appendChild(l);
+
+    const tr=document.createElement('tr');
+    tr.dataset.i=i;
+    tr.innerHTML='<td><span class="dot" style="background:'+d.color+'"></span>'+d.label+
+                 '</td><td class="num">'+d.sec.toFixed(1)+
+                 '</td><td class="num">'+pct.toFixed(1)+'%</td>';
+    body.appendChild(tr);
+  });
+
+  function highlight(i, show, leftPx){
+    const d=data[i];
+    document.querySelectorAll('.seg').forEach(s=>s.classList.remove('on'));
+    document.querySelectorAll('#body tr').forEach(r=>r.classList.remove('on'));
+    if(!show){ tip.classList.remove('show'); return; }
+    document.querySelector('.seg[data-i="'+i+'"]').classList.add('on');
+    document.querySelector('#body tr[data-i="'+i+'"]').classList.add('on');
+    tip.innerHTML='<b>'+d.label+'</b>'+d.sec.toFixed(1)+'s · '+d.pct.toFixed(1)+'%';
+    tip.style.left=leftPx+'px';
+    tip.classList.add('show');
+  }
+
+  function onHover(i, e){
+    const rect=bar.getBoundingClientRect();
+    const seg=e.currentTarget.getBoundingClientRect();
+    highlight(i,true, seg.left-rect.left+seg.width/2);
+  }
+
+  Array.from(bar.children).forEach((seg)=>{
+    const i=+seg.dataset.i;
+    seg.addEventListener('mousemove', e=>onHover(i,e));
+    seg.addEventListener('mouseleave', ()=>highlight(i,false));
+  });
+
+  Array.from(body.children).forEach((row)=>{
+    const i=+row.dataset.i;
+    row.addEventListener('mouseenter', ()=>{
+      const seg=bar.children[i].getBoundingClientRect();
+      const rect=bar.getBoundingClientRect();
+      highlight(i,true, seg.left-rect.left+seg.width/2);
+    });
+    row.addEventListener('mouseleave', ()=>highlight(i,false));
+  });
+</script>

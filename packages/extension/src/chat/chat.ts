@@ -73,6 +73,8 @@ import { pageHtml } from './page.js';
 import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from './slash-route.js';
 import type { CommandOption, SentCommand } from './slash.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
+import { widgetHost } from './widget-host.js';
+import { widgetOf } from './widget-model.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
@@ -193,8 +195,11 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
   },
 };
 
-const actionOf = <K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf<K>, at: number): Action | undefined =>
-  (UPDATES[update.sessionUpdate] as ((u: UpdateOf<K>, at: number) => Action | undefined) | undefined)?.(update, at);
+function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf<K>, at: number): Action | undefined {
+  const action = (UPDATES[update.sessionUpdate] as ((u: UpdateOf<K>, at: number) => Action | undefined) | undefined)?.(update, at);
+  const widget = widgetOf(update);
+  return action?.type === 'tool' && widget !== undefined ? { ...action, widget } : action;
+}
 
 /** When an update happened: now, or for a replayed tool call, when it was logged. */
 const timeOf = (update: acp.SessionUpdate): number => {
@@ -330,6 +335,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private settingsAsked = false;
   /** The composer's effort, context, running cost and model choices. */
   private readonly composer: ComposerHost;
+  private readonly widgets: ReturnType<typeof widgetHost>;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -348,6 +354,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.widgets = widgetHost(this.extensionUri, (toolId) =>
+      this.transcript.turns.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'tool' && block.id === toolId ? [block] : []))[0]?.widget,
+    );
     this.settingsPage = settingsPage((message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.composer = new ComposerHost(
       () => this.link(),
@@ -847,6 +856,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.panes.handlers,
       ...this.settingsPage.handlers,
       ...this.composer.handlers,
+      ...this.widgets.handlers,
     };
   }
 

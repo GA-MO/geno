@@ -1,0 +1,143 @@
+<style>
+  .wrap { font-family: system-ui, sans-serif; color: var(--fg); padding: 16px; max-width: 680px; }
+  .opt { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 18px; }
+  .opt-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .opt-label { font-size: 14px; font-weight: 500; color: var(--accent); }
+  .opt-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pick-btn { font-size: 12px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor: pointer; transition: background .15s; }
+  .pick-btn:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .pick-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+  /* Option A - Cards row */
+  .cards { display: flex; gap: 10px; }
+  .card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 12px; text-align: center; transition: border-color .15s; }
+  .card:hover { border-color: var(--accent); }
+  .card.feat { border-color: var(--accent); }
+  .card-name { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+  .card-price { font-size: 22px; font-weight: 500; color: var(--accent); margin: 6px 0; }
+  .card-price span { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .card-feat { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .card-badge { font-size: 10px; background: var(--accent); color: var(--bg); padding: 2px 8px; border-radius: 6px; display: inline-block; margin-bottom: 6px; }
+
+  /* Option B - Vertical stack */
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .stack-item { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; gap: 14px; transition: border-color .15s; }
+  .stack-item:hover { border-color: var(--accent); }
+  .stack-item.feat { border-color: var(--accent); }
+  .stack-name { font-size: 12px; font-weight: 500; min-width: 80px; }
+  .stack-price { font-size: 16px; font-weight: 500; color: var(--accent); min-width: 60px; }
+  .stack-feats { font-size: 11px; color: var(--muted); flex: 1; }
+
+  /* Option C - Table */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .tbl th, .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  .tbl th { font-weight: 500; color: var(--fg); background: var(--surface); }
+  .tbl th:first-child, .tbl td:first-child { text-align: left; color: var(--muted); }
+  .tbl .yes { color: var(--accent); }
+  .tbl .no { color: var(--muted); }
+  .tbl .feat-col { border-top: 2px solid var(--accent); }
+
+  .footer { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
+</style>
+
+<div class="wrap">
+  <div class="opt" id="optA">
+    <div class="opt-head">
+      <div>
+        <div class="opt-label">Option A — Card Row</div>
+        <div class="opt-desc">Three equal cards, featured one highlighted. Classic & compact.</div>
+      </div>
+      <button class="pick-btn" onclick="pick(this)">Pick</button>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-name">Starter</div>
+        <div class="card-price">$9<span>/mo</span></div>
+        <div class="card-feat">1 project</div>
+        <div class="card-feat">5 GB storage</div>
+        <div class="card-feat">Email support</div>
+      </div>
+      <div class="card feat">
+        <div class="card-badge">Popular</div>
+        <div class="card-name">Pro</div>
+        <div class="card-price">$29<span>/mo</span></div>
+        <div class="card-feat">10 projects</div>
+        <div class="card-feat">50 GB storage</div>
+        <div class="card-feat">Priority support</div>
+      </div>
+      <div class="card">
+        <div class="card-name">Enterprise</div>
+        <div class="card-price">$79<span>/mo</span></div>
+        <div class="card-feat">Unlimited projects</div>
+        <div class="card-feat">500 GB storage</div>
+        <div class="card-feat">Dedicated manager</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="opt" id="optB">
+    <div class="opt-head">
+      <div>
+        <div class="opt-label">Option B — Stacked List</div>
+        <div class="opt-desc">Vertical rows with inline features. Great for mobile-first.</div>
+      </div>
+      <button class="pick-btn" onclick="pick(this)">Pick</button>
+    </div>
+    <div class="stack">
+      <div class="stack-item">
+        <div class="stack-name">Starter</div>
+        <div class="stack-price">$9</div>
+        <div class="stack-feats">1 project · 5 GB · Email support</div>
+      </div>
+      <div class="stack-item feat">
+        <div class="stack-name">Pro ★</div>
+        <div class="stack-price">$29</div>
+        <div class="stack-feats">10 projects · 50 GB · Priority support</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-name">Enterprise</div>
+        <div class="stack-price">$79</div>
+        <div class="stack-feats">Unlimited · 500 GB · Dedicated manager</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="opt" id="optC">
+    <div class="opt-head">
+      <div>
+        <div class="opt-label">Option C — Comparison Table</div>
+        <div class="opt-desc">Features as rows, plans as columns. Best for feature-rich tiers.</div>
+      </div>
+      <button class="pick-btn" onclick="pick(this)">Pick</button>
+    </div>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Starter</th>
+          <th class="feat-col">Pro</th>
+          <th>Enterprise</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Price</td><td>$9/mo</td><td class="feat-col">$29/mo</td><td>$79/mo</td></tr>
+        <tr><td>Projects</td><td>1</td><td class="feat-col">10</td><td>Unlimited</td></tr>
+        <tr><td>Storage</td><td>5 GB</td><td class="feat-col">50 GB</td><td>500 GB</td></tr>
+        <tr><td>Team members</td><td>2</td><td class="feat-col">10</td><td>Unlimited</td></tr>
+        <tr><td>Priority support</td><td class="no">—</td><td class="yes feat-col">✓</td><td class="yes">✓</td></tr>
+        <tr><td>Custom domains</td><td class="no">—</td><td class="no feat-col">—</td><td class="yes">✓</td></tr>
+        <tr><td>SLA guarantee</td><td class="no">—</td><td class="no feat-col">—</td><td class="yes">✓</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">Click <strong>Pick</strong> on your preferred layout to confirm selection.</div>
+</div>
+
+<script>
+function pick(btn) {
+  document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  btn.textContent = 'Selected';
+}
+</script>

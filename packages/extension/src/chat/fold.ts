@@ -121,10 +121,10 @@ const RECENT = 4;
 
 type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean) => string) | undefined };
 
-/** What a compact turn keeps in view while folded, and its fold line's label; undefined when nothing folds. */
+/** What a compact turn keeps in view while folded, widgets included, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step));
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => step.kind !== 'text' || step === narration).slice(-RECENT));

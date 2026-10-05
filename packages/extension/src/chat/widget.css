@@ -1,0 +1,222 @@
+/*
+ * Widgets: a card with the widget's title, its ⋯ menu, and the sandboxed frame. The frame cannot see the panel's
+ * styles, so `--widget-*` name what it gets: widget-view.ts resolves them and hands them over as the widget's own
+ * --bg, --fg and the rest. Native and high contrast take VS Code's colors; each glass sets its own below.
+ */
+
+body {
+  --widget-bg: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --widget-surface: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+  --widget-fg: var(--vscode-foreground);
+  --widget-muted: var(--vscode-descriptionForeground);
+  --widget-border: var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 14%, transparent));
+  --widget-accent: var(--vscode-textLink-foreground);
+  --widget-warn: var(--vscode-editorWarning-foreground);
+  --widget-danger: var(--vscode-errorForeground);
+  --widget-font: var(--vscode-font-family);
+  --widget-mono: var(--vscode-editor-font-family);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  --widget-bg: #1e1e20;
+  --widget-surface: rgb(255 255 255 / 5%);
+  --widget-fg: #dcdcdc;
+  --widget-muted: #a8a8a8;
+  --widget-border: rgb(255 255 255 / 10%);
+  --widget-accent: #6fd39c;
+  --widget-warn: #f0c35a;
+  --widget-danger: #ff8f86;
+}
+
+body[data-style='glass'].vscode-light:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  --widget-bg: #f5f5f5;
+  --widget-surface: rgb(0 0 0 / 4%);
+  --widget-fg: #1c1c1c;
+  --widget-muted: #5c5c5c;
+  --widget-border: rgb(0 0 0 / 10%);
+  --widget-accent: #1f8a4c;
+  --widget-warn: #b26a00;
+  --widget-danger: #c42b1c;
+}
+
+.widget {
+  position: relative;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 2px 10px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.widget-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A short word after an action, such as "Copied". */
+.widget-head[data-flash]::after {
+  content: attr(data-flash);
+  color: var(--ok);
+}
+
+.widget-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  background: transparent;
+  color-scheme: normal;
+}
+
+.widget-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: var(--small);
+}
+
+.widget-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.widget-error {
+  color: var(--vscode-errorForeground);
+}
+
+.widget-link-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  font-size: var(--small);
+}
+
+.widget-link-text {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.widget-link-href {
+  font-size: inherit;
+  word-break: break-all;
+}
+
+.widget-actions {
+  position: relative;
+}
+
+.widget-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 10;
+  width: max-content;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, transparent));
+  border-radius: 8px;
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-quickInput-background));
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+  font-size: var(--vscode-font-size);
+}
+
+.widget-menu[hidden] {
+  display: none;
+}
+
+.widget-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.widget-menu-item:hover,
+.widget-menu-item:focus {
+  background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+  outline: 1px solid var(--vscode-list-focusOutline, transparent);
+  outline-offset: -1px;
+}
+
+.vscode-high-contrast .widget-menu-item:hover,
+.vscode-high-contrast .widget-menu-item:focus,
+.vscode-high-contrast-light .widget-menu-item:hover,
+.vscode-high-contrast-light .widget-menu-item:focus {
+  background: transparent;
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  & .widget {
+    border-color: var(--glass-edge);
+    background: var(--glass-pane);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .widget-frame,
+  & .widget-loading,
+  & .widget-note,
+  & .widget-link-ask {
+    border-top-color: var(--glass-edge);
+  }
+
+  & .widget-menu {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-float);
+    box-shadow: var(--glass-float-shadow);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+
+/* The widget editor tab */
+
+body.widget-tab {
+  background: var(--vscode-editor-background);
+}
+
+.widget-tab-top .widget-link-ask {
+  border-top: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.widget-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.widget-stage .widget-frame {
+  border: 0;
+}

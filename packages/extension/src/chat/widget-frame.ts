@@ -1,4 +1,4 @@
-import type { WidgetVariable } from '@g-code/core/widget';
+import { WIDGET_PALETTE, WIDGET_VARIABLES, type WidgetVariable } from '@g-code/core/widget';
 
 /**
  * The document a widget runs in, and the messages it may send back. Pure, so the chat panel, the widget's editor
@@ -22,6 +22,23 @@ export const frameCsp = (nonce: string): string => POLICY(`'nonce-${nonce}'`);
 
 export type WidgetTheme = { readonly scheme: 'dark' | 'light'; readonly vars: Readonly<Partial<Record<WidgetVariable, string>>> };
 
+/**
+ * The widget theme from the panel's own `--widget-*` variables, read through `read`, which gives a variable's value
+ * or undefined. The series colors default to the palette, which reads on dark and light alike.
+ */
+export function widgetTheme(read: (name: string) => string | undefined, scheme: WidgetTheme['scheme']): WidgetTheme {
+  const vars: Partial<Record<WidgetVariable, string>> = {};
+  for (const name of Object.keys(WIDGET_VARIABLES) as (keyof typeof WIDGET_VARIABLES)[]) {
+    const value = read(`--widget-${name.slice(2)}`);
+    if (value !== undefined && value !== '') vars[name] = value;
+  }
+  WIDGET_PALETTE.forEach((color, i) => {
+    const name = `--chart-${i + 1}` as WidgetVariable;
+    vars[name] = read(`--widget-${name.slice(2)}`) || color;
+  });
+  return { scheme, vars };
+}
+
 export type FrameInput = { readonly html: string; readonly nonce: string; readonly theme: WidgetTheme };
 
 export const FRAME_HEIGHT = { min: 24, max: 2400 } as const;
@@ -40,7 +57,7 @@ export function themeCss({ scheme, vars }: WidgetTheme): string {
 }
 
 const BASE_CSS =
-  '*,*::before,*::after{box-sizing:border-box}html{background:transparent}body{margin:0;color:var(--fg);font:13px/1.5 var(--font);overflow-x:auto;overflow-y:hidden}#geno-root{display:flow-root}#geno-root>*{max-width:100%}img,video{max-width:100%;height:auto}';
+  '*,*::before,*::after{box-sizing:border-box}html{background:transparent}body{margin:0;color:var(--fg);font:13px/1.5 var(--font);overflow-x:auto;overflow-y:hidden}#geno-root{display:flow-root;padding:12px}#geno-root>*{max-width:100%}img,video{max-width:100%;height:auto}';
 
 /**
  * Runs in the frame. It must hold no `<`, so it can sit inside a script element whatever it contains. SOURCE is the
@@ -172,7 +189,7 @@ export function standaloneDocument({ title, html, theme }: { readonly title: str
     `<meta http-equiv="Content-Security-Policy" content="${POLICY("'unsafe-inline'")}">`,
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<title>${escapeText(title)}</title>`,
-    `<style>${themeCss(theme)}${BASE_CSS}html{background:var(--bg)}body{padding:16px}</style>`,
+    `<style>${themeCss(theme)}${BASE_CSS}html{background:var(--bg)}body{padding:4px}</style>`,
     `</head><body><div id="geno-root">${html}</div></body></html>`,
   ].join('');
 }
@@ -190,7 +207,8 @@ const WEB = new Set(['http:', 'https:']);
 const isRecord = (raw: unknown): raw is Record<string, unknown> => typeof raw === 'object' && raw !== null;
 const clamp = (n: number, { min, max }: { readonly min: number; readonly max: number }): number => Math.min(max, Math.max(min, Math.ceil(n)));
 
-function webLink(raw: unknown): string | undefined {
+/** A web link a widget may ask to open, normalized, or undefined for anything that is not http or https. */
+export function webLink(raw: unknown): string | undefined {
   if (typeof raw !== 'string' || raw.length > LINK_MAX) return undefined;
   try {
     const url = new URL(raw);
