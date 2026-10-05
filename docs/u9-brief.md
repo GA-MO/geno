@@ -47,3 +47,18 @@ Every bash command still runs inside the sandbox in every mode. Writes stay insi
 - A `gcode.approvalMode` setting sets the default for new sessions.
 - In the rail, a step whose command was auto-approved shows a small badge with the classifier's reason. A step the classifier denied shows the denial reason.
 - Check with click tests and screenshots in dark and light glass and in high contrast.
+
+## U10: sessions and projects (with U9b, after U7 and U9a merge)
+
+Today every workspace has exactly one session, resumed automatically. There is no way to start a new chat or see old ones, and the panel never shows which project it belongs to.
+
+- **Header.** The chat header shows the project name (the workspace folder) and the current session's title.
+- **New chat.** A `+` action in the Chat view title (`gcode.chat.new`) starts a fresh session through ACP `session/new`. The previous session stays on disk.
+- **History.** A clock action (`gcode.chat.history`) opens a searchable list.
+  - By default it lists this project's sessions, newest first, each with a title, relative time, turn count and cost. A toggle shows all projects, each session labeled with its project name.
+  - Sessions whose workspace is a temp directory (eval clones and tests under `/var/folders` or `/tmp`) never appear.
+  - Choosing a session loads it. The engine replays its turns into the panel through ACP `session/load` if the installed SDK has it, and the chat continues from there.
+  - The list also has rename and delete. Delete asks for confirmation and moves the log to a `trash/` folder under the app home, not a hard delete.
+- **Titles.** A session's title is its first user message, trimmed. Rename stores a title event in the log.
+- **Engine side.** `gcode serve` lists sessions through ACP `session/list` if the SDK has it, otherwise one extension method. Filtering by workspace happens in the engine, which owns storage. A `gcode session list [--all]` CLI command uses the same code.
+- **Check.** Integration tests for new chat, history filtering by project, loading an old session with its transcript drawn, and rename and delete. Plus screenshots.
