@@ -157,3 +157,25 @@ The user showed Claude's question card on 2026-10-06. It has a tab per question,
   - serve e2e: a two-question round trip with one multi-select and one "Other", plus cancel;
   - an integration test of the card with clicks and the keyboard;
   - screenshots of a 3-question card in dark glass, light glass and high contrast, including a focused option with a preview.
+
+## U20: parallel reads and a faster check (engine, parallel with U18b)
+
+U19 measured tools at 24% of agent time. Almost all of it was `bash` (94.9 s over 33 calls) and the type check after edits (39.8 s over 18 edits). Reads, greps, globs and lists took 0.4 s in total. U21 showed that effort stepping does not pay on Model Studio. This unit attacks turns and tool time.
+
+- **Parallel read-only tools.**
+  - **Grouping.** In `drive.ts`, consecutive read-only calls in one model turn run concurrently, with a limit of 8: `read`, `grep`, `glob`, `list`, `skill`, and MCP tools with `readOnlyHint` that need no approval.
+  - **Order.** Edits, bash, and anything that may ask the user run serially in their original order. Results go back in the original order, so the transcript and the session log stay deterministic.
+  - **Same file.** An edit after a read of the same file in the same turn still sees the read's result first.
+  - **Prompt.** Add one sentence to the system prompt asking for independent reads in one turn. Keep the prompt bytes stable afterwards; this is one deliberate change.
+- **A faster check after edits.**
+  - Find what the check costs now: `npx tsc --noEmit` in the eval, and the configured check in real use.
+  - Make repeated checks cheaper without changing what they prove. Example: `tsc --incremental` with its build info kept outside the workspace, under the app home and keyed by the workspace, so the repo is never written. Another example: running the project's own typecheck script when it is already incremental.
+  - Measure cold and warm times on the eval tasks.
+  - The check must still fail on the same errors. Prove it with a planted type error.
+- **Measure.** Run `gcode eval speed` before and after, at least twice each, interleaved. Record load averages, and wait while the load is above 15. Report turns per task, tool time and wall time, with p50 and p90, and the pass rate. Spend at most $0.60. Use `--from` to re-report without spending.
+- **Check:**
+  - a fake-model e2e test with 4 reads and 1 edit in one turn, showing the reads' times overlap, the edit runs after them, and the results come back in order;
+  - a test that a read and an edit of the same file in one turn keep their order;
+  - a test that a check with the faster mode still fails on a planted type error;
+  - the speed tables in `docs/results/u20-speed.md`;
+  - `pnpm typecheck && pnpm vitest run --project unit && pnpm build`.
