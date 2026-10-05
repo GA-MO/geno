@@ -3,8 +3,9 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import type { TabEvent } from '@g-code/core/tab';
 
-export const tabEventsFile = (env: NodeJS.ProcessEnv): string =>
-  path.join(path.resolve(env['GCODE_HOME'] || path.join(homedir(), '.g-code')), 'tab-events.jsonl');
+export const gcodeHome = (env: NodeJS.ProcessEnv): string => path.resolve(env['GCODE_HOME'] || path.join(homedir(), '.g-code'));
+
+export const tabEventsFile = (env: NodeJS.ProcessEnv): string => path.join(gcodeHome(env), 'tab-events.jsonl');
 
 export type TabLog = (event: TabEvent) => void;
 

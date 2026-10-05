@@ -24,6 +24,8 @@ import { ACCEPT_COMMAND, type OutcomeTracker } from './tracker.js';
 export type TabSettings = {
   readonly enabled: boolean;
   readonly endpoint: string;
+  /** Empty means the default model file under GCODE_HOME. */
+  readonly modelPath: string;
   readonly debounceMs: number;
   readonly nextEdit: boolean;
   readonly nextEditEndpoint: string;
@@ -34,6 +36,7 @@ export const readSettings = (): TabSettings => {
   return {
     enabled: config.get('enabled', true),
     endpoint: config.get('endpoint', 'http://127.0.0.1:8012'),
+    modelPath: config.get('modelPath', ''),
     debounceMs: config.get('debounceMs', 250),
     nextEdit: config.get('nextEdit', false),
     nextEditEndpoint: config.get('nextEditEndpoint', 'http://127.0.0.1:8013'),

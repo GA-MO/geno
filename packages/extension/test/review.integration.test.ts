@@ -5,7 +5,7 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
-import { buildEngine, buildSuite, cachePath, root, setUp } from './launch.js';
+import { buildSuite, cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
 import { EDITS, FILES, INSTRUCTION } from './suite/review-fixture.js';
 
@@ -63,8 +63,7 @@ const userText = (index: number): string =>
 
 describe('review in VS Code', () => {
   it('keeps and undoes hunks that follow the text, undoes the session, lands Cmd-K as hunks, and restores review after a reload', async () => {
-    const engineCli = await buildEngine();
-    const { work, home, suite, launchArgs } = await setUp('review', FILES, { 'gcode.engine.path': engineCli });
+    const { work, home, suite, launchArgs } = await setUp('review', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;

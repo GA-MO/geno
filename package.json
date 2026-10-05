@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "package": "pnpm --filter ./packages/extension package",
     "gcode": "tsx packages/engine/src/cli.ts",
     "tab:bench": "tsx scripts/tab-bench.mjs"
   },

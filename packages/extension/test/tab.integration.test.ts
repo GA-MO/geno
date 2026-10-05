@@ -18,6 +18,8 @@ const sse = (res: Parameters<RequestListener>[1], chunks: object[]) => {
 };
 
 const promptOf = (handle: (prompt: string, res: Parameters<RequestListener>[1]) => void): RequestListener => (req, res) => {
+  // The extension asks whether a server already answers before it would start llama-server itself.
+  if (req.method === 'GET' && req.url === '/health') return void res.end('{"status":"ok"}');
   let body = '';
   req.on('data', (chunk: Buffer) => (body += chunk));
   req.on('end', () => handle((JSON.parse(body) as { prompt: string }).prompt, res));

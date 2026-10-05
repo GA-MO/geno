@@ -62,7 +62,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private nextPermission = 0;
 
   constructor(
-    private readonly settings: () => EngineSettings,
+    settings: () => Promise<EngineSettings>,
     private readonly extensionUri: vscode.Uri,
     output: vscode.OutputChannel,
     private readonly memory: SessionMemory,
@@ -79,6 +79,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   async link(): Promise<SessionLink> {
     const connection = await this.engine.connection();
     return { connection, sessionId: await this.sessionFor(connection) };
+  }
+
+  /** Restarts the engine, for a changed model, endpoint or key. */
+  resetEngine(): void {
+    this.engine.reset();
   }
 
   dispose(): void {
@@ -153,7 +158,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Resumes the stored session, or starts one when there is none or the engine no longer has it. */
   private async openSession(connection: Connection): Promise<string> {
-    const cwd = this.settings().cwd;
+    const { cwd } = connection;
     const stored = await this.storedSession();
     if (stored !== undefined) {
       try {
