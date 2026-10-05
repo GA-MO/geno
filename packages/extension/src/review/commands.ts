@@ -56,7 +56,7 @@ function registerChangesView(context: vscode.ExtensionContext, review: ReviewCon
   );
 }
 
-export function registerReview(context: vscode.ExtensionContext, chat: Chat, review: ReviewController, output: vscode.OutputChannel): void {
+export function registerReview(context: vscode.ExtensionContext, chat: Chat, review: ReviewController): void {
   const lenses = new ReviewLenses(review);
   registerChangesView(context, review);
   context.subscriptions.push(
@@ -96,8 +96,4 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
       return instruction === undefined || instruction.trim() === '' ? undefined : chat.inlineEdit(target, instruction.trim(), editor.document.uri);
     }),
   );
-  void chat
-    .storedSession()
-    .then((stored) => (stored === undefined ? undefined : review.restore()))
-    .catch((error: unknown) => output.appendLine(`review: could not restore the last session: ${String(error)}`));
 }
