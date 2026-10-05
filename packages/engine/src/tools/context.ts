@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, FileChange, TurnEvent } from '@g-code/core';
+import type { ApprovalRecord, FileChange, ImageAttachment, TurnEvent } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -10,6 +10,8 @@ export type ToolContext = {
   readonly workspace: string;
   /** This session's spill directory: the one readable root outside the workspace. */
   readonly spillDir: string;
+  /** This session's attachments folder, where an image a tool returns is stored by its hash. */
+  readonly attachmentsDir: string;
   readonly rg: string;
   readonly signal: AbortSignal;
   /** Where read and edit get file text, and the unsaved buffers grep and glob search. list sees only the disk. */
@@ -31,10 +33,15 @@ export class ToolDenied extends ToolError {
   }
 }
 
-/** What a tool tells the model, the file edit it made, and how its command was approved, if either. */
+/** What a tool tells the model, the file edit it made, how its command was approved, and images it returns, if any. */
 export type ToolReply =
   | string
-  | { readonly text: string; readonly change?: FileChange | undefined; readonly approval?: ApprovalRecord | undefined };
+  | {
+      readonly text: string;
+      readonly change?: FileChange | undefined;
+      readonly approval?: ApprovalRecord | undefined;
+      readonly images?: readonly ImageAttachment[] | undefined;
+    };
 
 /** A tool's executor, typed on its parsed input. */
 export type ToolDef<I> = {

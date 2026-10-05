@@ -14,6 +14,7 @@ import {
   type ProviderName,
   type RetryPolicy,
   type Session,
+  type StoredAttachments,
   type TokenUsage,
   type TurnEvent,
   type TurnResult,
@@ -26,6 +27,8 @@ export type TurnInput = {
   readonly tools: readonly Tool[];
   /** Replaces the agent's system prompt, for callers such as the apply harness that are not the agent. */
   readonly system?: string;
+  /** The bytes of the attachments the events reference; none when the conversation has no attachments. */
+  readonly stored?: StoredAttachments;
   readonly signal: AbortSignal;
   onText(delta: string): void;
   /** A transient failure about to be retried; the wait starts once this settles. */
@@ -114,9 +117,9 @@ export function gatewayFor(
   const provider = PROVIDER_TABLE[providerName];
   const client = clientFor(providerName, env, fetch);
 
-  async function call({ session, events, tools, system, signal, onText }: TurnInput): Promise<TurnResult> {
+  async function call({ session, events, tools, system, stored, signal, onText }: TurnInput): Promise<TurnResult> {
     const started = performance.now();
-    const stream = client.messages.stream(buildRequest(session, events, tools, system), {
+    const stream = client.messages.stream(buildRequest(session, events, tools, system, stored), {
       signal,
       headers: provider.sessionHeaders(session),
     });

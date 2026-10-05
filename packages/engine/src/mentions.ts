@@ -5,6 +5,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import { linesOf, numberedPage, SELECTION_LINES_META, type ContextItem, type Mention } from '@g-code/core';
 import type { Files } from './files.js';
+import { isAttachmentBlock } from './attachments.js';
 import type { RuleAttacher } from './tools/rules.js';
 
 /** A prompt block the engine cannot use as a mention, such as an image or a URL that is not a file. */
@@ -22,7 +23,7 @@ function filePath(uri: string): string {
 /** The `@file` and `@selection` mentions among a prompt's blocks, in order. Text blocks are the prompt itself. */
 export function mentionsOf(blocks: readonly acp.ContentBlock[]): Mention[] {
   return blocks.flatMap((block): Mention[] => {
-    if (block.type === 'text') return [];
+    if (block.type === 'text' || isAttachmentBlock(block)) return [];
     if (block.type === 'resource_link') return [{ kind: 'file', path: filePath(block.uri) }];
     if (block.type === 'resource') {
       const raw = block._meta?.[SELECTION_LINES_META];

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,6 +7,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
   APPROVAL_META,
+  ATTACHMENT_META,
   BASE_HASH_META,
   changeOf,
   CHECKPOINT_TEXT_METHOD,
@@ -39,6 +40,7 @@ import { gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, httpError, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
+import { twoColorPng } from '../../core/test/png.js';
 import { rgCommand, runCli } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -254,7 +256,7 @@ describe('gcode serve', () => {
     const refusal = (prompt: acp.ContentBlock[]) =>
       connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt }).then(() => 'answered', (error: Error) => error.message));
     expect(await refusal([{ type: 'text', text: 'Read @x' }, { type: 'resource_link', uri: 'file:///etc/hosts', name: 'hosts' }])).toMatch(/outside the workspace/);
-    expect(await refusal([{ type: 'text', text: 'See' }, { type: 'image', data: '', mimeType: 'image/png' }])).toMatch(/cannot be attached/);
+    expect(await refusal([{ type: 'text', text: 'Hear' }, { type: 'audio', data: '', mimeType: 'audio/wav' }])).toMatch(/cannot be attached/);
     expect(transport.requests).toHaveLength(0);
   });
 
@@ -482,5 +484,77 @@ describe('gcode serve', () => {
     expect(editor.diagnosticRequests).toEqual([expect.objectContaining({ paths: [file] })]);
     expect(editor.buffers.get(file)).toBe('export const a = 1;\nexport const unsaved = false;\n');
     expect(hunks).toMatchObject([{ path: file, startLine: 2, oldText: 'export const unsaved = true;\n', newText: 'export const unsaved = false;\n', status: 'pending' }]);
+  });
+
+  it('sends an attached image and file to the model, stores the image once, logs only references, and replays the same bytes after a resume', async () => {
+    const { transport, connect, env } = await setup([answer('Red and blue.', usage), answer('Still red and blue.', usage), answer('Yes.', usage)]);
+    const png = twoColorPng(8, 4, [255, 0, 0], [0, 0, 255]);
+    const blocks: acp.ContentBlock[] = [
+      { type: 'text', text: 'What colors are in this?' },
+      { type: 'image', data: png.toString('base64'), mimeType: 'image/png', _meta: { [ATTACHMENT_META]: { name: 'flag.png' } } },
+      { type: 'resource', resource: { uri: 'file:///notes/todo.md', text: 'check colors\n', mimeType: 'text/markdown' }, _meta: { [ATTACHMENT_META]: { name: 'todo.md' } } },
+    ];
+    const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png.toString('base64') } };
+    const sessionId = await connect(async (ctx, id) => {
+      expect((await ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: blocks })).stopReason).toBe('end_turn');
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text: 'Sure?' }] });
+      return id;
+    });
+    await connect((ctx, id) => ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text: 'Really?' }] }), sessionId);
+
+    const firsts = transport.requests.map((r) => r.body.messages[0].content);
+    expect(firsts[0].map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)).toEqual([
+      image,
+      { type: 'text', text: 'What colors are in this?' },
+      {
+        type: 'text',
+        text: 'The user attached these from the editor, as they were when the message was sent:\n\n<context_item kind="file" path="/notes/todo.md">\n1\tcheck colors\n</context_item>',
+      },
+    ]);
+    expect(JSON.stringify(firsts[1])).toBe(JSON.stringify(firsts[2]));
+    expect(JSON.stringify(firsts[1])).toBe(JSON.stringify(firsts[0].map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)));
+
+    const dir = path.join(env.GCODE_HOME, 'sessions', sessionId, 'attachments');
+    expect(readdirSync(dir).sort()).toHaveLength(2);
+    const log = readFileSync(path.join(env.GCODE_HOME, 'sessions', `${sessionId}.jsonl`), 'utf8');
+    expect(log).not.toContain(png.toString('base64'));
+    expect(log).not.toContain('check colors');
+    const user = log.split('\n').map((line) => (line === '' ? undefined : JSON.parse(line))).find((e) => e?.kind === 'user');
+    expect(user.attachments).toEqual([
+      { kind: 'image', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), name: 'flag.png', bytes: png.length, mediaType: 'image/png', width: 8, height: 4 },
+      { kind: 'file', sha256: expect.stringMatching(/^[0-9a-f]{64}$/), name: 'todo.md', bytes: 13, mediaType: 'text/markdown', path: '/notes/todo.md' },
+    ]);
+  });
+
+  it('returns a workspace PNG from read as an image in the tool result and a link to the file on the step', async () => {
+    const read = use('read', { path: 'shot.png' });
+    const { workspace, transport, editor, prompt } = await setup([toolCall('Looking.', [read], usage), answer('Red on the left.', usage)]);
+    const png = twoColorPng(6, 2, [255, 0, 0], [0, 255, 0]);
+    writeFileSync(path.join(workspace, 'shot.png'), png);
+
+    expect(await prompt('Look at shot.png')).toBe('end_turn');
+
+    expect(toolResultOf(transport.requests[1]!.body).content).toEqual([
+      { type: 'text', text: `shot.png is a 6x2 PNG image (${png.length} B), attached below.` },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: png.toString('base64') } },
+    ]);
+    const logged = editor.updates.find((u) => u.sessionUpdate === 'tool_call_update' && u.toolCallId === read.id && u.content != null);
+    expect(logged).toMatchObject({
+      content: [
+        { type: 'content', content: { type: 'text' } },
+        { type: 'content', content: { type: 'resource_link', uri: pathToFileURL(path.join(workspace, 'shot.png')).href, name: 'shot.png', mimeType: 'image/png', size: png.length } },
+      ],
+    });
+  });
+
+  it('refuses a ninth image or a binary file, logging nothing', async () => {
+    const { transport, connect } = await setup([]);
+    const png = twoColorPng(2, 2, [0, 0, 0], [255, 255, 255]).toString('base64');
+    const refusal = (prompt: acp.ContentBlock[]) =>
+      connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt }).then(() => 'answered', (error: Error) => error.message));
+    const nine = Array.from({ length: 9 }, (): acp.ContentBlock => ({ type: 'image', data: png, mimeType: 'image/png' }));
+    expect(await refusal([{ type: 'text', text: 'See' }, ...nine])).toMatch(/A message holds up to 8 images/);
+    expect(await refusal([{ type: 'resource', resource: { uri: 'file:///x/app.zip', blob: 'UEsDBA==' }, _meta: { [ATTACHMENT_META]: {} } }])).toMatch(/app.zip is a binary file/);
+    expect(transport.requests).toHaveLength(0);
   });
 });

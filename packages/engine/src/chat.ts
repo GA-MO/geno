@@ -223,9 +223,10 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
           `context: ${[...context.instructions.map((f) => f.path), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
         ]),
   ],
-  user: ({ seq, content, context }) => [
+  user: ({ seq, content, context, attachments }) => [
     `#${seq} user: ${content}`,
     ...(context ?? []).map((item) => `  attached ${item.kind} ${item.path}${item.kind === 'selection' ? `:${item.startLine}-${item.endLine}` : ''}`),
+    ...(attachments ?? []).map((a) => `  attached ${a.kind} ${a.name}${a.kind === 'image' ? ` ${a.width}x${a.height}` : ''} (${a.sha256.slice(0, 12)})`),
   ],
   assistant: ({ seq, content, stopReason, model, usage, costUsd, latencyMs }) => [
     `#${seq} assistant (${stopReason ?? 'no stop reason'}, ${model}): ${content

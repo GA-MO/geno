@@ -20,6 +20,7 @@ import {
   type SessionMode,
   type TurnEvent,
 } from '@g-code/core';
+import { attachmentSchema, imageAttachmentSchema } from './attachments.js';
 import { EngineError } from './errors.js';
 import { isMissing, StoreError, type Store } from './store.js';
 
@@ -108,13 +109,20 @@ const toolResultFields = {
   status: z.enum(TOOL_STATUSES),
   change: fileChangeSchema.optional(),
   approval: approvalSchema.optional(),
+  images: z.array(imageAttachmentSchema).optional(),
 };
 
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
 const turnEventSchema = z.union([
   z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('session-start'), session: sessionSchema, context: loadedContextSchema.optional() }),
-    z.strictObject({ kind: z.literal('user'), ...seqFields, content: z.string(), context: z.array(contextItemSchema).optional() }),
+    z.strictObject({
+      kind: z.literal('user'),
+      ...seqFields,
+      content: z.string(),
+      context: z.array(contextItemSchema).optional(),
+      attachments: z.array(attachmentSchema).optional(),
+    }),
     z.strictObject({
       kind: z.literal('assistant'),
       ...seqFields,

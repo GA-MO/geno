@@ -69,7 +69,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   read: {
     name: 'read',
     description:
-      `Read a text file. Returns its lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output by its absolute path.`,
+      `Read a text file, or look at an image: a PNG, JPEG, GIF or WebP file comes back as the image itself. Returns a text file's lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output by its absolute path.`,
     input_schema: {
       type: 'object',
       properties: {

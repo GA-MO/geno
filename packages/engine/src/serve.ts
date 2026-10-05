@@ -1,5 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Readable } from 'node:stream';
 import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
@@ -41,12 +42,14 @@ import {
   type ReviewResponse,
   type RewindResponse,
   type ToolStatus,
+  type Attachment,
   type ContextItem,
   type Mention,
   type TurnEvent,
   type UnsavedBuffersRequest,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
+import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments } from './attachments.js';
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
@@ -155,7 +158,13 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Pe
     sessionUpdate: 'tool_call_update',
     toolCallId: event.toolUseId,
     status: TOOL_STATUS[event.status],
-    content: [{ type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } }],
+    content: [
+      { type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } },
+      // A link rather than the bytes: the editor shows the file it already has as the step's thumbnail.
+      ...(event.images ?? []).flatMap((image): acp.ToolCallContent[] =>
+        image.path === undefined ? [] : [{ type: 'content', content: { type: 'resource_link', uri: pathToFileURL(image.path).href, name: image.name, mimeType: image.mediaType, size: image.bytes } }],
+      ),
+    ],
     ...(event.approval === undefined ? {} : { _meta: { [APPROVAL_META]: event.approval } }),
   }),
   // A failure belongs in the transcript, and a notice is live status only, so it goes as agent text.
@@ -303,6 +312,15 @@ const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
 
+function parsedAttachments(sessionId: string, blocks: readonly acp.ContentBlock[]): ReturnType<typeof incomingAttachments> {
+  try {
+    return incomingAttachments(blocks);
+  } catch (error) {
+    if (error instanceof AttachmentError) throw acp.RequestError.invalidParams({ sessionId }, error.message);
+    throw error;
+  }
+}
+
 function parsedMentions(sessionId: string, blocks: readonly acp.ContentBlock[]): Mention[] {
   try {
     return mentionsOf(blocks);
@@ -312,16 +330,29 @@ function parsedMentions(sessionId: string, blocks: readonly acp.ContentBlock[]):
   }
 }
 
-async function logPrompt(opened: OpenSession, content: string, mentions: readonly Mention[], files: Files, sessionId: string): Promise<OpenSession> {
+type Attached = { readonly mentions: readonly Mention[]; readonly attachments: ReturnType<typeof incomingAttachments> };
+
+const hasAttached = ({ mentions, attachments }: Attached): boolean => mentions.length > 0 || attachments.length > 0;
+
+async function logPrompt(store: Store, opened: OpenSession, content: string, attached: Attached, files: Files, sessionId: string): Promise<OpenSession> {
   const { log } = opened;
   let context: ContextItem[];
+  let attachments: Attachment[];
   try {
-    context = await contextItems(mentions, await workspaceDir(log.session.workspace, '.'), files, ruleAttacher(log.events));
+    context = await contextItems(attached.mentions, await workspaceDir(log.session.workspace, '.'), files, ruleAttacher(log.events));
+    attachments = await storeAttachments(attachmentsDir(store, log.session.id), attached.attachments);
   } catch (error) {
-    if (error instanceof MentionError || error instanceof ToolError) throw acp.RequestError.invalidParams({ sessionId }, error.message);
+    if (error instanceof MentionError || error instanceof ToolError || error instanceof AttachmentError) throw acp.RequestError.invalidParams({ sessionId }, error.message);
     throw error;
   }
-  const event: TurnEvent = { kind: 'user', seq: nextSeq(log.events), at: new Date().toISOString(), content, context };
+  const event: TurnEvent = {
+    kind: 'user',
+    seq: nextSeq(log.events),
+    at: new Date().toISOString(),
+    content,
+    context,
+    ...(attachments.length === 0 ? {} : { attachments }),
+  };
   await appendEvent(log.file, event);
   return { ...opened, log: { ...log, events: [...log.events, event] } };
 }
@@ -365,7 +396,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} }, promptCapabilities: { embeddedContext: true } },
+        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} }, promptCapabilities: { embeddedContext: true, image: true } },
         agentInfo: { name: 'gcode', version: '0.0.0' },
       };
     })
@@ -407,8 +438,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       known(sessionId);
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
       const text = promptText(params.prompt);
-      if (text === '') throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
-      const mentions = parsedMentions(sessionId, params.prompt);
+      const attached: Attached = { mentions: parsedMentions(sessionId, params.prompt), attachments: parsedAttachments(sessionId, params.prompt) };
+      if (text === '' && attached.attachments.length === 0) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
       const rawTarget = params._meta?.[INLINE_EDIT_META];
       const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
       if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
@@ -421,8 +452,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       try {
         return await serially(sessionId, async () => {
           const resumed = await resumeSession(store, io, sessionId);
-          // A prompt with mentions is logged here, with what they showed, and the loop answers it as a pending prompt.
-          const opened = target === undefined && mentions.length > 0 ? await logPrompt(resumed, text, mentions, turn.surface.files, sessionId) : resumed;
+          // A prompt with mentions or attachments is logged here, with what they showed, and the loop answers it as a pending prompt.
+          const opened = target === undefined && hasAttached(attached) ? await logPrompt(store, resumed, text, attached, turn.surface.files, sessionId) : resumed;
           const prompt = opened === resumed ? text : '';
           const result =
             target === undefined
