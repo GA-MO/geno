@@ -48,5 +48,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // The marker proves the process ran, which an untrusted server must never do.
   const marker = process.env['MARKER'];
   if (marker !== undefined) writeFileSync(marker, String(process.pid));
+  // A server that is slow to answer, as a cold `npx` download is.
+  const delay = Number(process.env['DELAY_MS'] ?? '0');
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
   await fakeMcpServer(Number(process.env['TOOL_COUNT'] ?? '0')).connect(new StdioServerTransport());
 }

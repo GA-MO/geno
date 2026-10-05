@@ -59,6 +59,8 @@ export type Store = {
   readonly mcpConfigFile: string;
   /** The workspace MCP servers the user approved. */
   readonly mcpTrustFile: string;
+  /** The MCP servers the user turned off, per workspace. */
+  readonly mcpDisabledFile: string;
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
@@ -74,6 +76,7 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
     tabEvents: path.join(root, 'tab-events.jsonl'),
     mcpConfigFile: path.join(root, 'mcp.json'),
     mcpTrustFile: path.join(root, 'mcp-trust.json'),
+    mcpDisabledFile: path.join(root, 'mcp-disabled.json'),
     tasksDir: path.join(evalsDir, 'tasks'),
     triplesDir: path.join(evalsDir, 'apply'),
   };

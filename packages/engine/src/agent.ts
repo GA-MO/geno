@@ -150,6 +150,8 @@ export const agent: Command = async (args, { io, store }) => {
   if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
   const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });
   try {
+    // A one-shot run has only this turn, so it waits for its servers.
+    await hub.start();
     const mcp = await hub.toolset(approval);
     for (const problem of hub.problems) io.err(`mcp: ${problem}`);
     for (const view of hub.views()) if (view.state.status === 'untrusted' || view.state.status === 'failed') io.err(`mcp: ${view.name} is ${describeServerState(view.state)}`);

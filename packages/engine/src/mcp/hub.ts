@@ -7,6 +7,7 @@ import {
   describeMcpTool,
   isTrusted,
   MCP_CALL_TOOL,
+  mcpDefinitionView,
   MCP_DESCRIBE_TOOL,
   MCP_LAZY_THRESHOLD,
   mcpCatalog,
@@ -29,19 +30,29 @@ import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
-import { approveServer, readTrust } from './trust.js';
+import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js';
 
 /** What a turn adds to the agent's tools: definitions for the request, sorted, and their executors. */
 export type McpToolset = { readonly tools: readonly Tool[]; readonly executors: Readonly<Record<string, Executor>> };
 
 export const NO_MCP_TOOLS: McpToolset = { tools: [], executors: {} };
 
-/** A session's MCP servers. Nothing starts until the session first asks for tools. */
+/**
+ * A session's MCP servers. `start` starts them; `toolset` offers the tools of the servers ready at that moment and
+ * never waits for one still starting, so a cold server joins a later turn instead of holding up this one.
+ */
 export type McpHub = {
   readonly problems: readonly string[];
   views(): McpServerView[];
-  /** Approves a workspace server's current definition; it starts at the next need. */
-  trust(name: string): Promise<void>;
+  /** Starts every trusted, enabled server not yet started, and resolves once each is ready or failed. */
+  start(): Promise<void>;
+  /**
+   * Approves a workspace server's definition, which must be the one with `hash` when given; the next start starts it.
+   * The hash binds the approval to the definition the user was shown.
+   */
+  trust(name: string, hash?: string): Promise<void>;
+  /** Turns a server off for this workspace, stopping it, or back on; the next start starts it. */
+  setEnabled(name: string, enabled: boolean): Promise<void>;
   toolset(approval: Approval): Promise<McpToolset>;
   prompts(): Promise<McpPromptInfo[]>;
   resources(): Promise<McpResourceInfo[]>;
@@ -91,7 +102,17 @@ const unknownTool = (name: string, catalog: McpCatalog) =>
 export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions): Promise<McpHub> {
   const { servers, problems } = await loadMcpConfig(store, env, workspace, acp);
   const trust = await readTrust(store);
-  const handles = new Map(servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), env, workspace)]));
+  const disabled = await readDisabled(store, workspace);
+  const handles = new Map(
+    servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), disabled.has(config.name), env, workspace)]),
+  );
+  const handleOf = (name: string): McpServerHandle => {
+    const handle = handles.get(name);
+    if (handle === undefined) throw new EngineError(`no MCP server ${name}; the servers are ${[...handles.keys()].join(', ') || 'none'}`);
+    return handle;
+  };
+  // Once the session's servers are stopped, a start still on its way must not bring them back.
+  let stopped = false;
   // Tools the user allowed for the rest of the session, by model-facing name.
   const allowed = new Set<string>();
 
@@ -141,20 +162,34 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
         name: config.name,
         source: config.source,
         hash: definitionHash(config),
+        definition: mcpDefinitionView(config.transport),
         state,
         tools: [...mcpCatalog(tools).keys()],
       })),
-    async trust(name) {
-      const handle = handles.get(name);
-      if (handle === undefined) throw new EngineError(`no MCP server ${name}; the servers are ${[...handles.keys()].join(', ') || 'none'}`);
-      if (handle.state.status !== 'untrusted') return;
+    async start() {
+      if (stopped) return;
+      await refreshTrust();
+      if (stopped) return;
+      await Promise.all([...handles.values()].map((handle) => handle.ready()));
+    },
+    async trust(name, hash) {
+      const handle = handleOf(name);
+      if (hash !== undefined && hash !== definitionHash(handle.config)) {
+        throw new EngineError(`the definition of ${name} changed since it was shown; look at it again before allowing it`);
+      }
+      const { status } = handle.state;
+      if (status !== 'untrusted' && !(status === 'disabled' && !handle.state.trusted)) return;
       await approveServer(store, workspace, handle.config);
       handle.trust();
     },
+    async setEnabled(name, enabled) {
+      const handle = handleOf(name);
+      await setDisabled(store, workspace, name, !enabled);
+      if (enabled) handle.enable();
+      else await handle.disable();
+    },
     async toolset(approval) {
       if (approval.kind === 'non-interactive' && approval.mcp !== true) return NO_MCP_TOOLS;
-      await refreshTrust();
-      await Promise.all([...handles.values()].map((handle) => handle.ready()));
       const catalog = mcpCatalog(ready().flatMap((handle) => handle.tools));
       const executors: Record<string, Executor> = {};
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
@@ -182,6 +217,7 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
     prompts: async () => (await Promise.all(ready().map((handle) => handle.connection?.prompts() ?? []))).flat(),
     resources: async () => (await Promise.all(ready().map((handle) => handle.connection?.resources() ?? []))).flat(),
     async stop() {
+      stopped = true;
       await Promise.all([...handles.values()].map((handle) => handle.stop()));
     },
   };

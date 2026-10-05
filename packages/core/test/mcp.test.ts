@@ -15,6 +15,7 @@ import {
   mcpResultText,
   mcpToolDefinitions,
   mcpToolName,
+  mcpDefinitionView,
   nextServerState,
   type McpServerConfig,
   type McpServerEvent,
@@ -49,6 +50,14 @@ describe('the server state machine', () => {
     [{ status: 'ready', restarts: 2 }, { type: 'stop' }, { status: 'stopped' }],
     [{ status: 'ready', restarts: 2 }, { type: 'start' }, { status: 'ready', restarts: 2 }],
     [{ status: 'failed', reason: 'x', needsSignIn: false }, { type: 'start' }, { status: 'failed', reason: 'x', needsSignIn: false }],
+    [{ status: 'ready', restarts: 1 }, { type: 'disable' }, { status: 'disabled', trusted: true }],
+    [{ status: 'starting', restarts: 0 }, { type: 'disable' }, { status: 'disabled', trusted: true }],
+    [{ status: 'untrusted' }, { type: 'disable' }, { status: 'disabled', trusted: false }],
+    [{ status: 'disabled', trusted: true }, { type: 'start' }, { status: 'disabled', trusted: true }],
+    [{ status: 'disabled', trusted: true }, { type: 'crashed', reason: 'exit 1' }, { status: 'disabled', trusted: true }],
+    [{ status: 'disabled', trusted: false }, { type: 'trusted' }, { status: 'disabled', trusted: true }],
+    [{ status: 'disabled', trusted: true }, { type: 'enable' }, { status: 'stopped' }],
+    [{ status: 'disabled', trusted: false }, { type: 'enable' }, { status: 'untrusted' }],
   ];
   it.each(cases)('%j on %j goes to %j', (state, event, next) => {
     expect(nextServerState(state, event)).toEqual(next);
@@ -70,6 +79,26 @@ describe('trust', () => {
     expect(isTrusted(stdio({ transport: { kind: 'http', url: 'https://x', headers: {} } }), '/ws', [entry])).toBe(false);
     expect(isTrusted(stdio({ source: 'global' }), '/other', [])).toBe(true);
     expect(isTrusted(stdio({ source: 'acp' }), '/other', [])).toBe(true);
+  });
+});
+
+describe('what the trust card shows', () => {
+  it('shows a stdio server as the exact command line, with its working folder and every env value it sets', () => {
+    const config = stdio({ transport: { kind: 'stdio', command: '/usr/bin/node', args: ['server.js', '--name', "it's here", ''], env: { NODE_OPTIONS: '--require ./x.js' }, cwd: '/ws/tools' } });
+    expect(mcpDefinitionView(config.transport)).toEqual({
+      kind: 'stdio',
+      commandLine: `/usr/bin/node server.js --name 'it'\\''s here' ''`,
+      cwd: '/ws/tools',
+      env: [['NODE_OPTIONS', '--require ./x.js']],
+    });
+  });
+
+  it('shows a remote server as its URL and the names of the headers it sends', () => {
+    expect(mcpDefinitionView({ kind: 'http', url: 'https://mcp.example.com/mcp', headers: { Authorization: 'Bearer secret', 'X-Team': 'a' } })).toEqual({
+      kind: 'http',
+      url: 'https://mcp.example.com/mcp',
+      headers: ['Authorization', 'X-Team'],
+    });
   });
 });
 
