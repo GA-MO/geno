@@ -14,10 +14,11 @@ export class McpServerHandle {
   constructor(
     readonly config: McpServerConfig,
     trusted: boolean,
+    disabled: boolean,
     private readonly env: Env,
     private readonly workspace: string,
   ) {
-    this.#state = trusted ? { status: 'stopped' } : { status: 'untrusted' };
+    this.#state = disabled ? { status: 'disabled', trusted } : trusted ? { status: 'stopped' } : { status: 'untrusted' };
   }
 
   get state(): McpServerState {
@@ -40,7 +41,19 @@ export class McpServerHandle {
     this.#apply({ type: 'trusted' });
   }
 
-  /** Starts a stopped server and waits for a start in flight. An untrusted server never gets here past `stopped`. */
+  enable(): void {
+    this.#apply({ type: 'enable' });
+  }
+
+  /** Stops the server, if it runs, and keeps it from starting until enabled. */
+  async disable(): Promise<void> {
+    const connection = this.#connection;
+    this.#connection = undefined;
+    this.#apply({ type: 'disable' });
+    await connection?.close();
+  }
+
+  /** Starts a stopped server and waits for a start in flight. An untrusted or disabled server never gets past here. */
   ready(): Promise<void> {
     if (this.#state.status === 'stopped') {
       this.#apply({ type: 'start' });

@@ -37,6 +37,7 @@ import {
   DEFAULT_SESSION_MODE,
   isMcpRule,
   isSessionMode,
+  MCP_ENABLE_METHOD,
   MCP_SERVERS_METHOD,
   MCP_TRUST_METHOD,
   type McpServersResponse,
@@ -318,7 +319,8 @@ const reviewRequest = z.object({
 const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string() });
 const rewindRequest = z.object({ sessionId: z.string() });
 const mcpServersRequest = z.object({ sessionId: z.string() });
-const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1) });
+const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
+const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
 const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
@@ -435,7 +437,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: {
           loadSession: true,
-          sessionCapabilities: { resume: {}, list: {}, delete: {} },
+          sessionCapabilities: { resume: {}, list: {}, delete: {}, close: {} },
           promptCapabilities: { embeddedContext: true, image: true },
           mcpCapabilities: { http: true, sse: true },
         },
@@ -493,6 +495,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       turns.delete(sessionId);
       modes.delete(sessionId);
       io.err(`session: ${sessionId} moved to ${trashed}`);
+      return {};
+    })
+    .onRequest(acp.methods.agent.session.close, async ({ params }) => {
+      // Closing frees what the session holds open, its MCP servers; its log stays, and resume or load opens it again.
+      const { sessionId } = params;
+      turns.get(sessionId)?.abort();
+      turns.delete(sessionId);
+      await mcp.close(sessionId);
       return {};
     })
     .onRequest(RENAME_SESSION_METHOD, renameRequest, async ({ params, client }) => {
@@ -566,7 +576,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...turn.usage() };
         });
       } finally {
-        turns.set(sessionId, undefined);
+        // A session closed during its turn stays closed.
+        if (turns.has(sessionId)) turns.set(sessionId, undefined);
       }
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
@@ -607,7 +618,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onRequest(MCP_TRUST_METHOD, mcpTrustRequest, async ({ params }): Promise<McpServersResponse> => {
       known(params.sessionId);
-      return mcp.trust(params.sessionId, params.name).catch((error: unknown) => {
+      return mcp.trust(params.sessionId, params.name, params.hash).catch((error: unknown) => {
+        throw acp.RequestError.invalidParams({ name: params.name }, error instanceof Error ? error.message : String(error));
+      });
+    })
+    .onRequest(MCP_ENABLE_METHOD, mcpEnableRequest, async ({ params }): Promise<McpServersResponse> => {
+      known(params.sessionId);
+      return mcp.setEnabled(params.sessionId, params.name, params.enabled).catch((error: unknown) => {
         throw acp.RequestError.invalidParams({ name: params.name }, error instanceof Error ? error.message : String(error));
       });
     });
@@ -619,7 +636,7 @@ export const serve: Command = async (args, { io, store }) => {
   // stdout carries the protocol, so everything the engine prints goes to stderr, and so does anything a dependency prints.
   const quiet: Io = { ...io, out: io.err, write: () => {} };
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
-  const mcp = mcpSessions(store, io.env);
+  const mcp = mcpSessions(store, io.env, quiet.err);
   const connection = gcodeAgent(quiet, store, limitsOf(values), mcp).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
   await connection.closed;

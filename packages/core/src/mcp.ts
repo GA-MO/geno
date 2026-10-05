@@ -36,9 +36,13 @@ export type McpTransport =
 
 export type McpServerConfig = { readonly name: string; readonly source: McpSource; readonly transport: McpTransport };
 
-/** A server's lifecycle. `stopped` is also where a trusted server waits for a session's first need. */
+/**
+ * A server's lifecycle. `stopped` is also where a trusted server waits to start. `disabled` is the user turning a
+ * server off for the workspace; it keeps whether the server is trusted, which decides where enabling returns it.
+ */
 export type McpServerState =
   | { readonly status: 'untrusted' }
+  | { readonly status: 'disabled'; readonly trusted: boolean }
   | { readonly status: 'stopped' }
   /** `restarts` counts the crashes this start follows. */
   | { readonly status: 'starting'; readonly restarts: number }
@@ -52,7 +56,9 @@ export type McpServerEvent =
   | { readonly type: 'connected' }
   | { readonly type: 'connect-failed'; readonly reason: string; readonly needsSignIn: boolean }
   | { readonly type: 'crashed'; readonly reason: string }
-  | { readonly type: 'stop' };
+  | { readonly type: 'stop' }
+  | { readonly type: 'disable' }
+  | { readonly type: 'enable' };
 
 /** A crashed server restarts at most this many times in a session, then stays failed. */
 export const MCP_MAX_RESTARTS = 3;
@@ -68,14 +74,20 @@ type Transitions = {
 };
 
 const toStopped = (): McpServerState => ({ status: 'stopped' });
+const toDisabled = (): McpServerState => ({ status: 'disabled', trusted: true });
 
 const TRANSITIONS: Transitions = {
-  untrusted: { trusted: toStopped },
-  stopped: { start: () => ({ status: 'starting', restarts: 0 }) },
+  untrusted: { trusted: toStopped, disable: () => ({ status: 'disabled', trusted: false }) },
+  disabled: {
+    trusted: toDisabled,
+    enable: ({ trusted }) => (trusted ? { status: 'stopped' } : { status: 'untrusted' }),
+  },
+  stopped: { start: () => ({ status: 'starting', restarts: 0 }), disable: toDisabled },
   starting: {
     connected: ({ restarts }) => ({ status: 'ready', restarts }),
     'connect-failed': (_state, { reason, needsSignIn }) => ({ status: 'failed', reason, needsSignIn }),
     stop: toStopped,
+    disable: toDisabled,
   },
   ready: {
     crashed: ({ restarts }, { reason }) =>
@@ -83,8 +95,9 @@ const TRANSITIONS: Transitions = {
         ? { status: 'starting', restarts: restarts + 1 }
         : { status: 'failed', reason: `crashed ${restarts + 1} times; last: ${reason}`, needsSignIn: false },
     stop: toStopped,
+    disable: toDisabled,
   },
-  failed: { stop: toStopped },
+  failed: { stop: toStopped, disable: toDisabled },
 };
 
 /** The state after `event`. An event the state does not take, such as `start` on a ready server, leaves it as it is. */
@@ -109,6 +122,19 @@ function canonical(value: unknown): string {
 /** What a trust approval is keyed on: the server's name and everything that decides what runs. The source is left out. */
 export const definitionHash = ({ name, transport }: McpServerConfig): string =>
   `sha256:${createHash('sha256').update(canonical({ name, transport })).digest('hex')}`;
+
+/** What the user approves of a definition, as the trust card shows it. Header values are left out, since they are often credentials. */
+export type McpDefinitionView =
+  | { readonly kind: 'stdio'; readonly commandLine: string; readonly cwd: string | undefined; readonly env: readonly (readonly [string, string])[] }
+  | { readonly kind: 'http' | 'sse'; readonly url: string; readonly headers: readonly string[] };
+
+/** A word as a POSIX shell reads it back: bare when it is plain, else single-quoted. */
+const shellWord = (word: string): string => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`);
+
+export const mcpDefinitionView = (transport: McpTransport): McpDefinitionView =>
+  transport.kind === 'stdio'
+    ? { kind: 'stdio', commandLine: [transport.command, ...transport.args].map(shellWord).join(' '), cwd: transport.cwd, env: Object.entries(transport.env) }
+    : { kind: transport.kind, url: transport.url, headers: Object.keys(transport.headers) };
 
 /** One approval in the trust store. */
 export type McpTrustEntry = { readonly workspace: string; readonly name: string; readonly hash: string; readonly approvedAt: string };
@@ -255,16 +281,23 @@ export type McpResourceInfo = { readonly server: string; readonly uri: string; r
 
 /** Extension method, sent by the editor: every MCP server of a session with its source and state. */
 export const MCP_SERVERS_METHOD = '_gcode/mcpServers';
-/** Extension method, sent by the editor: approves one workspace server's current definition, then returns the servers. */
+/**
+ * Extension method, sent by the editor: approves one workspace server's definition, then returns the servers. The
+ * request names the hash of the definition the user was shown, and a server whose definition is not that one is refused.
+ */
 export const MCP_TRUST_METHOD = '_gcode/mcpTrust';
+/** Extension method, sent by the editor: turns a server off or on for the workspace, then returns the servers. */
+export const MCP_ENABLE_METHOD = '_gcode/mcpEnable';
 
 export type McpServerView = {
   readonly name: string;
   readonly source: McpSource;
   readonly hash: string;
+  readonly definition: McpDefinitionView;
   readonly state: McpServerState;
   readonly tools: readonly string[];
 };
 export type McpServersRequest = { readonly sessionId: string };
-export type McpTrustRequest = { readonly sessionId: string; readonly name: string };
+export type McpTrustRequest = { readonly sessionId: string; readonly name: string; readonly hash: string };
+export type McpEnableRequest = { readonly sessionId: string; readonly name: string; readonly enabled: boolean };
 export type McpServersResponse = { readonly servers: readonly McpServerView[]; readonly problems: readonly string[] };
