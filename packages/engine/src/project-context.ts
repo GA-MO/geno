@@ -93,7 +93,12 @@ export async function loadInstructionFiles(workspace: string): Promise<Instructi
 
 export type Frontmatter = { readonly fields: Readonly<Record<string, string | readonly string[]>>; readonly body: string };
 
-const unquote = (value: string): string => value.trim().replace(/^(["'])(.*)\1$/, '$2');
+/** A double-quoted value keeps YAML's escaped quotes and backslashes, as pstack's descriptions use them. */
+const unquote = (value: string): string => {
+  const quoted = /^(["'])(.*)\1$/.exec(value.trim());
+  if (quoted === null) return value.trim();
+  return quoted[1] === '"' ? quoted[2]!.replace(/\\(["\\])/g, '$1') : quoted[2]!;
+};
 
 /**
  * The `key: value` header between `---` lines. Not full YAML on purpose: Cursor writes `globs: *.ts`, which YAML

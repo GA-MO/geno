@@ -30,14 +30,20 @@ export type EngineBuiltin = { [K in BuiltinName]: (typeof BUILTIN_COMMANDS)[K]['
 /** Where a file command or skill came from; a workspace one shadows a global one of the same name. */
 export type CommandSource = 'workspace' | 'global';
 
+/** Skills also come from installed Claude Code plugins, read in place and named `<plugin>:<skill>`. */
+export type SkillSource = CommandSource | 'plugin';
+
 type Listed = { readonly name: string; readonly description: string; readonly hint: string | undefined };
 
 export type SlashCommand =
   | (Listed & { readonly kind: 'builtin'; readonly name: BuiltinName; readonly runs: BuiltinRunner })
   /** `path` is relative to the workspace for a workspace file, else absolute. */
   | (Listed & { readonly kind: 'prompt'; readonly scope: CommandSource; readonly path: string; readonly template: string })
-  /** `text` is the whole SKILL.md, frontmatter included. */
-  | (Listed & { readonly kind: 'skill'; readonly scope: CommandSource; readonly path: string; readonly text: string });
+  /**
+   * `text` is the whole SKILL.md, frontmatter included. `userInvocable` is false for a skill whose frontmatter says
+   * `user-invocable: false`: the model may load it, but the slash list does not offer it.
+   */
+  | (Listed & { readonly kind: 'skill'; readonly scope: SkillSource; readonly path: string; readonly text: string; readonly userInvocable: boolean });
 
 /** Key in an ACP available command's `_meta`: `{ kind, runs? }`, so the editor knows which built-ins it runs itself. */
 export const COMMAND_META = 'gcode/command';
@@ -55,6 +61,9 @@ export const builtinCommands = (): SlashCommand[] =>
     hint: spec.hint,
     runs: spec.runs,
   }));
+
+/** What the slash list offers the user: everything but the skills only the model loads. */
+export const listedCommands = (commands: readonly SlashCommand[]): SlashCommand[] => commands.filter((c) => c.kind !== 'skill' || c.userInvocable);
 
 /** Groups in precedence order; the first command of each name wins. */
 export function mergeCommands(groups: readonly (readonly SlashCommand[])[]): SlashCommand[] {
