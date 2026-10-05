@@ -105,7 +105,6 @@ export async function run(): Promise<void> {
   await ui({ do: 'press', key: 'selectAll', modifiers: ['meta'] });
   await ui({ do: 'press', key: 'Backspace' });
 
-  // Turn 1, sent with the Send button: three tool rows, three edit cards, streamed markdown and a footer.
   await ui({ do: 'type', text: PROMPTS.edit });
   await click('button.send');
   await waitFor('the first turn to finish', async () => (await footers()) === 1);
@@ -127,7 +126,6 @@ export async function run(): Promise<void> {
   await click(`[data-tool="${TOOL_IDS.read}"] .tool-row`);
   await waitFor('the read row to expand', async () => (await textOf(`[data-tool="${TOOL_IDS.read}"] .tool-output`))?.includes('export function add') === true);
 
-  // Turn 2, sent with Enter: the engine asks before rm -rf; Deny keeps the folder.
   await sendWithEnter(PROMPTS.remove);
   await waitFor('the permission card', async () => (await count('.permission-open')) === 1);
   check((await textOf('.permission-open .permission-command')) === 'rm -rf build', 'the card shows the full command', await textOf('.permission-open .permission-command'));
@@ -142,14 +140,12 @@ export async function run(): Promise<void> {
   check(await exists('build/out.js'), 'Deny keeps the build folder');
   check((await textOf('.permission-outcome')) === 'Denied', 'the card records the denial', await textOf('.permission-outcome'));
 
-  // Turn 3: Allow lets the command run.
   await sendWithEnter(PROMPTS.removeAgain);
   await waitFor('the second permission card', async () => (await count('.permission-open')) === 1);
   await click('.permission-open button', 'Allow');
   await waitFor('the allowed turn to finish', async () => (await footers()) === 3);
   check(!(await exists('build')), 'Allow lets rm -rf build run');
 
-  // Turns 4 and 5 stall mid-answer: Stop, then Escape, end them.
   await sendWithEnter(PROMPTS.stopByButton);
   await waitFor('the stalled answer to start streaming', async () => (await textOf('.turn:last-child .markdown'))?.startsWith('Once') === true);
   await click('button.stop');
@@ -159,7 +155,6 @@ export async function run(): Promise<void> {
   await ui({ do: 'press', key: 'Escape' });
   await waitFor('Escape to end the turn', async () => (await textOf('.turn:last-child .turn-footer'))?.includes('Stopped') === true);
 
-  // Review: Keep and Undo in the panel drive the CodeLens state, and a CodeLens decision shows in the panel.
   const [a] = await lenses('a.ts');
   const [b] = await lenses('b.ts');
   const [c] = await lenses('c.ts');
