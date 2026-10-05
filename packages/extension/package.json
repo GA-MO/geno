@@ -1,7 +1,7 @@
 {
   "name": "g-code",
   "displayName": "g-code",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "publisher": "g-code",
   "engines": {
