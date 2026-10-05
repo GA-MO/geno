@@ -30,8 +30,12 @@ The user wants the dino to move: to change pose with the work (a notebook when r
 
 ## Start page A: Horizon
 
-- A dashed pixel ground line across the panel, a cactus or two, and a slow cloud.
-- The dino wanders: it runs, jumps any cactus in front of it, turns with a small hop at the edges, and flexes now and then. Clicking it makes it jump or flex.
+- **Not Chrome's dino game.** The user chose A on 2026-10-05 but worried it copies Google's offline dinosaur game. Keep the scene clearly Geno's own:
+  - no cacti, no grey desert dashes, no score, and no endless-runner framing;
+  - the ground is a pixel git commit graph: a main line with commit dots, plus two short branches below that fork and merge back in blue and violet;
+  - the obstacles are dev things: a red pixel bug, a violet `{ }` and a coffee cup with steam;
+  - the sky has slow drifting pixel specks, not clouds.
+- The dino wanders: it runs, jumps any obstacle in front of it, turns with a small hop at the edges, and now and then sits down to code on its laptop (the geek pose) or flexes. Clicking it makes it jump or flex.
 - Below the scene: `geno` in the monospace font with a blinking cursor, then the project name and the git branch.
 - A "Continue" list of this project's three most recent sessions, each with its relative time; a click loads that session.
 - A hint row: `@` files, `/` commands, the new-chat shortcut.
