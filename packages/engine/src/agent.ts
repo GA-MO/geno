@@ -9,6 +9,7 @@ import {
   approvalQuestion,
   describeServerState,
   isSessionMode,
+  pstackNote,
   sessionModeOf,
   type SessionMode,
   type TurnEvent,
@@ -16,8 +17,10 @@ import {
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { childEnv } from './child-env.js';
+import { homeOf, loadCommands, pluginLoader } from './commands.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
+import { writeGenoTools } from './geno-tools.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
@@ -78,6 +81,10 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const home = io.env['HOME'] || homedir();
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir }));
   try {
+    const { plugins } = await pluginLoader(io)(workspace);
+    const commands = () => loadCommands(workspace, homeOf(store), plugins);
+    const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
+    const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
     const executors = agentExecutors({
       sandbox,
       env: childEnv(io.env),
@@ -87,6 +94,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       approval: options.approval,
       diagnostics: options.diagnostics,
       rules: ruleAttacher(opened.log.events),
+      commands,
     });
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
@@ -97,7 +105,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const mode = {
       tools: mcp === undefined ? own : [...own, ...mcp.tools],
       executors: mcp === undefined ? executors : { ...mcp.executors, ...executors },
-      system: AGENT_MODE_SYSTEM_PROMPTS[startMode],
+      system: genoTools === undefined ? AGENT_MODE_SYSTEM_PROMPTS[startMode] : `${AGENT_MODE_SYSTEM_PROMPTS[startMode]}\n\n${pstackNote(genoTools)}`,
+      readRoots: [...plugins.map((plugin) => plugin.root), ...(genoTools === undefined ? [] : [genoTools])],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
