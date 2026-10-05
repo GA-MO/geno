@@ -61,6 +61,18 @@ On 2026-10-05 the user went through Horizon, a commit-graph ground, a desk scene
 - Only the dino of the running turn animates. Finished turns are still.
 - Measure: a CPU profile of 10 seconds of start-page animation and of a running turn. Report the main-thread busy percentage, and keep it low enough not to be noticed, with a target under 2%.
 
+## Split, so work runs in parallel
+
+- **U18a starts now**, alongside U13 and U17. It covers:
+  - the sprite module and the full pose table (every pose, including the working ones, unit-tested);
+  - the renderer;
+  - the dino-only start page;
+  - removing every dino frame;
+  - the peek over the composer.
+
+  It does not touch the rendering of turns.
+- **U18b starts after U17 merges.** It covers the 48 px working dino beside U17's current-step line and the turn-end moves.
+
 ## Coexist
 
 U17 (folding finished turns) changes the same rendering in `render.ts`. U18 starts after U17 merges and builds on its view model: the working dino sits beside U17's "current step" line.
