@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { executor, optional } from './context.js';
+import { ALWAYS, executor, optional } from './context.js';
 import { searchRoot, searchWorkspace } from './ripgrep.js';
 
 export const glob = executor({
+  concurrent: ALWAYS,
   input: z.strictObject({ pattern: z.string().min(1), directory: optional(z.string().min(1)) }),
   describe: ({ pattern, directory }) => [`glob ${JSON.stringify(pattern)}`, ...(directory === undefined ? [] : [directory])].join(' '),
   async run({ pattern, directory }, ctx) {

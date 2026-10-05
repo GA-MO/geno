@@ -34,7 +34,7 @@ import type { Env } from '../child-env.js';
 import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
 import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
-import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { ALWAYS, executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { browserExecutor, browserServerConfig, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
@@ -174,6 +174,8 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       return browserExecutor(name, info, { handle, approval, state: browserState, allowed, call: (args, ctx) => callTool(handle, name, info, args, ctx) });
     }
     return executor({
+      // Asked as its batch forms: a read-only tool runs beside others only while its rules let it run without asking.
+      concurrent: () => info.readOnly && mcpDenialFor({ name, readOnly: true }, modeOf(approval), allowed.has(name)) === undefined,
       input: argumentsSchema,
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
@@ -239,6 +241,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
       if (catalog.size > MCP_LAZY_THRESHOLD) {
         executors[MCP_DESCRIBE_TOOL] = executor({
+          concurrent: ALWAYS,
           input: nameSchema,
           describe: ({ name }) => `${MCP_DESCRIBE_TOOL} ${name}`,
           async run({ name }) {

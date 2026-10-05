@@ -294,7 +294,7 @@ function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '
  */
 function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io, session: () => Session | undefined): Turn {
   const sent = updates(client, sessionId, io);
-  // Tools run one at a time, so the last one started is the one asking or writing.
+  // Only a tool that runs alone in its batch asks or writes, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
   let spent: Spent | undefined;
   return {

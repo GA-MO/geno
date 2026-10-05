@@ -35,7 +35,7 @@ beforeAll(async () => {
   await writeFile(path.join(ws, 'src', 'b.tsx'), 'export const B = 1;\n');
   await writeFile(path.join(ws, 'src', 'plain.ts'), 'export const plain = 1;\n');
   await writeFile(path.join(ws, 'big', 'long.txt'), `${'x'.repeat(100)}\n`.repeat(3000));
-  ctx = { workspace: ws, spillDir: path.join(ws, '..', 'spill'), readRoots: [], attachmentsDir: path.join(ws, '..', 'spill', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [] };
+  ctx = { workspace: ws, spillDir: path.join(ws, '..', 'spill'), readRoots: [], attachmentsDir: path.join(ws, '..', 'spill', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {} };
 });
 
 describe('glob rules on read', () => {

@@ -149,6 +149,7 @@ describe('a plugin root as a read-only root', () => {
       signal: new AbortController().signal,
       files: DISK_FILES,
       events: () => [],
+      earlierCalls: async () => {},
     };
     return { ...fixture, ctx };
   };

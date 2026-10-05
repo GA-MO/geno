@@ -20,6 +20,11 @@ export type ToolContext = {
   readonly files: Files;
   /** The session so far, read when a tool needs the conversation, such as the request a command serves. */
   readonly events: () => readonly TurnEvent[];
+  /**
+   * Settles once every earlier call of this tool's batch has finished. A tool that ran beside others awaits it before
+   * it touches state they share, so that state changes in the turn's order.
+   */
+  readonly earlierCalls: () => Promise<void>;
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
@@ -48,6 +53,8 @@ export type ToolReply =
 /** A tool's executor, typed on its parsed input. */
 export type ToolDef<I> = {
   readonly input: z.ZodType<I>;
+  /** Whether a call may run beside others of its turn: it changes nothing and asks nobody. Absent means never. */
+  readonly concurrent?: () => boolean;
   /** The one-line form printed when the model calls the tool. */
   describe(input: I): string;
   run(input: I, ctx: ToolContext): Promise<ToolReply>;
@@ -56,6 +63,7 @@ export type ToolDef<I> = {
 /** An executor that takes the model's raw input. */
 export type Executor = {
   readonly input: z.ZodType;
+  readonly concurrent?: () => boolean;
   describe(raw: unknown): string;
   run(raw: unknown, ctx: ToolContext): Promise<ToolReply>;
 };
@@ -63,6 +71,7 @@ export type Executor = {
 export function executor<I>(def: ToolDef<I>): Executor {
   return {
     input: def.input,
+    ...(def.concurrent === undefined ? {} : { concurrent: def.concurrent }),
     describe(raw) {
       const parsed = def.input.safeParse(raw);
       return parsed.success ? def.describe(parsed.data) : JSON.stringify(raw);
@@ -124,6 +133,9 @@ export function displayPath(ctx: ToolContext, real: string): string {
   if (relative === '') return '.';
   return relative === '..' || relative.startsWith(`..${path.sep}`) ? real : relative;
 }
+
+/** For a tool that only reads, so may always run beside others. */
+export const ALWAYS = (): boolean => true;
 
 export const optional = <T extends z.ZodType>(schema: T) =>
   // A model may send null for an argument it means to leave out.

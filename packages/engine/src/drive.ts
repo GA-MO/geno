@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, withTurnEffort, type ApprovalRecord, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, withTurnEffort, type ApprovalRecord, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -173,33 +173,58 @@ export async function drive(
     signal,
     files: surface.files,
     events: () => events,
+    earlierCalls: async () => {},
   };
 
-  // One at a time: two edits to one file in a turn must see each other's result.
+  const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.() === true;
+
+  // Batch by batch (see ToolBatch): an edit or command runs alone, after every call before it and before every call after.
   // Returns the tools of a batch the user interrupted, timed up to the interruption, or undefined when all ran.
   const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<InterruptedTool[] | undefined> => {
     const firstSeq = nextSeq(events);
-    const ran: InterruptedTool[] = [];
-    let running: Omit<InterruptedTool, 'endAt'> | undefined;
+    const ran = new Map<number, InterruptedTool>();
+    const running = new Map<number, Omit<InterruptedTool, 'endAt'>>();
+    const results: ToolResultEvent[] = [];
+    const runOne = async (i: number, toolCtx: ToolContext) => {
+      const use = toolUses[i]!;
+      const seq = firstSeq + i;
+      const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
+      running.set(i, started);
+      watcher.toolStart(use, describeCall(use, mode.executors));
+      const { status, text, change, approval, images } = await runTool(use, toolCtx, mode.executors);
+      watcher.toolEnd(use, status);
+      const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
+      const timing = { startAt: started.startAt, endAt: Date.now() };
+      ran.set(i, { ...started, ...timing });
+      running.delete(i);
+      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output, timing };
+    };
     const work = (async () => {
-      const results: ToolResultEvent[] = [];
-      for (const [i, use] of toolUses.entries()) {
-        const seq = firstSeq + i;
-        running = { toolUseId: use.id, name: use.name, startAt: Date.now() };
-        watcher.toolStart(use, describeCall(use, mode.executors));
-        const { status, text, change, approval, images } = await runTool(use, ctx, mode.executors);
-        watcher.toolEnd(use, status);
-        const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
-        const timing = { startAt: running.startAt, endAt: Date.now() };
-        ran.push({ ...running, ...timing });
-        running = undefined;
-        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output, timing });
+      for (let start = 0; start < toolUses.length; ) {
+        const batch = nextToolBatch(toolUses.length, start, (i) => concurrent(toolUses[i]!));
+        const calls: Promise<void>[] = [];
+        let earlier: Promise<void> = Promise.resolve();
+        for (let i = batch.start; i < batch.end; i++) {
+          const before = earlier;
+          const call = runOne(i, { ...ctx, earlierCalls: () => before });
+          calls.push(call);
+          earlier = call.then(
+            () => before,
+            () => before,
+          );
+        }
+        await Promise.all(calls);
+        start = batch.end;
       }
       return results;
     })();
-    const results = await unlessAborted(work, signal);
-    if (results === ABORTED) return [...ran, ...(running === undefined ? [] : [{ ...running, endAt: Date.now() }])];
-    for (const result of results) await record(result);
+    const outcome = await unlessAborted(work, signal);
+    if (outcome === ABORTED) {
+      const now = Date.now();
+      const cut = [...running].map(([i, tool]): [number, InterruptedTool] => [i, { ...tool, endAt: now }]);
+      return [...ran, ...cut].sort(([a], [b]) => a - b).map(([, tool]) => tool);
+    }
+    for (const result of outcome) await record(result);
     return undefined;
   };
 

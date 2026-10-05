@@ -3,7 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { BINARY_SNIFF, formatBytes, linesOf, MAX_MESSAGE_BYTES, numberedPage } from '@g-code/core';
 import { AttachmentError, describeImage, storeImage } from '../attachments.js';
-import { displayPath, executor, optional, resolveInside, ToolError, type ToolContext, type ToolReply } from './context.js';
+import { ALWAYS, displayPath, executor, optional, resolveInside, ToolError, type ToolContext, type ToolReply } from './context.js';
 
 const lineNumber = z.number().int().positive();
 
@@ -21,6 +21,7 @@ async function readImage(ctx: ToolContext, shown: string, real: string, size: nu
 }
 
 export const read = executor({
+  concurrent: ALWAYS,
   input: z.strictObject({
     path: z.string().min(1),
     start_line: optional(lineNumber),

@@ -283,11 +283,12 @@ describe('gcode serve', () => {
   });
 
   it('ends each tool call as it finishes and answers the prompt with the turn\'s tokens, model and cost', async () => {
+    // A read, then a check, which runs alone after it: two reads would run at the same time.
     const first = use('read', { path: 'a.ts' });
-    const second = use('read', { path: 'a.ts' });
+    const second = use('check', {});
     const { editor, connect } = await setup([toolCall('Reading.', [first, second], usage), answer('Done.', usage)]);
 
-    const response = await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Read twice' }] }));
+    const response = await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Read, then check' }] }));
 
     const steps = editor.updates.flatMap((u) =>
       u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update' ? [`${u.sessionUpdate} ${u.toolCallId} ${u.status}`] : [],
