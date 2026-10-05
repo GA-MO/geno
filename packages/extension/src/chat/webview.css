@@ -427,6 +427,126 @@ button {
   color: var(--vscode-editor-foreground);
 }
 
+/* Diagrams */
+
+.markdown .diagram {
+  margin: 0 0 10px;
+}
+
+.diagram {
+  position: relative;
+  margin: 0;
+}
+
+.diagram[data-state='rendered'] {
+  padding: 10px;
+  border: 1px solid var(--vscode-input-border, var(--card-border));
+  border-radius: 4px;
+}
+
+.diagram-canvas {
+  display: flex;
+  justify-content: center;
+}
+
+/* Mermaid gives the drawing its natural width as a max-width; narrower panels scale it down. */
+.diagram-canvas svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram-toolbar {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.diagram:hover .diagram-toolbar,
+.diagram-toolbar:focus-within {
+  opacity: 1;
+}
+
+.diagram-toolbar .icon-button {
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+.diagram-toolbar .icon-button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.diagram-note {
+  margin-top: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: var(--small);
+}
+
+.diagram .code-block {
+  margin: 0;
+}
+
+.diagram-probe {
+  position: absolute;
+  visibility: hidden;
+}
+
+/* The diagram editor tab */
+
+body.diagram-tab {
+  background: var(--vscode-editor-background);
+}
+
+.diagram-tab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, var(--card-border));
+}
+
+.zoom-level {
+  min-width: 44px;
+  font-size: var(--small);
+  text-align: center;
+}
+
+.diagram-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.diagram-stage .diagram[data-state='rendered'] {
+  border: none;
+  padding: 0;
+}
+
+.diagram-stage[data-zoom='fit'] .diagram,
+.diagram-stage[data-zoom='fit'] .diagram-canvas {
+  height: 100%;
+}
+
+.diagram-stage[data-zoom='fit'] .diagram-canvas svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* The tab sizes the drawing itself, past the natural width mermaid sets inline. */
+.diagram-stage .diagram-canvas svg {
+  max-width: none !important;
+}
+
+.diagram-stage:not([data-zoom='fit']) .diagram-canvas {
+  justify-content: safe center;
+}
+
 /* Streaming caret */
 
 .caret {
