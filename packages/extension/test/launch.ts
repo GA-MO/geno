@@ -17,7 +17,10 @@ export async function makeWorkspace(files: Readonly<Record<string, string>>, set
   const workspace = path.join(work, 'workspace');
   const home = path.join(work, 'home');
   await mkdir(path.join(workspace, '.vscode'), { recursive: true });
-  for (const [file, text] of Object.entries(files)) await writeFile(path.join(workspace, file), text);
+  for (const [file, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(workspace, file)), { recursive: true });
+    await writeFile(path.join(workspace, file), text);
+  }
   const quiet = {
     // VS Code's chat panel otherwise opens at startup and takes keyboard focus from the editor under test.
     'chat.disableAIFeatures': true,
