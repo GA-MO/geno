@@ -1,5 +1,6 @@
 import type { HunkStatus } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
+import type { McpFromView, McpToView } from './mcp-model.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
 
@@ -201,7 +202,8 @@ export type ToView =
   /** Closes the list, after a session was chosen or a new chat started. */
   | { readonly type: 'hide-history' }
   | { readonly type: 'history'; readonly scope: HistoryScope; readonly rows: readonly HistoryRow[] }
-  | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string };
+  | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
+  | McpToView;
 
 /** A folder the webview may load images from: its absolute path and the address of that folder inside the webview. */
 export type WebviewRoot = { readonly path: string; readonly uri: string };
@@ -242,4 +244,5 @@ export type FromView =
   | { readonly type: 'open-session'; readonly id: string; readonly workspace: string }
   /** The list is answered again once the change is made. */
   | { readonly type: 'rename-session'; readonly id: string; readonly title: string; readonly scope: HistoryScope }
-  | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope };
+  | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
+  | McpFromView;

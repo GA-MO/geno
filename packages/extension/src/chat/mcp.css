@@ -1,0 +1,278 @@
+/* The MCP servers panel, in the transcript's place while open, and the notice in the chat when one waits on the user. */
+
+.mcp {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px var(--gap) 12px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.mcp[hidden],
+.mcp-notice[hidden],
+.mcp-problems[hidden],
+.mcp-note[hidden] {
+  display: none;
+}
+
+.mcp-list,
+.mcp-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcp-server {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.mcp-server-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.mcp-server-head .kind {
+  color: var(--muted);
+}
+
+.mcp-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mcp-source {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.mcp-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: calc(var(--small) - 1px);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.mcp-state .codicon {
+  font-size: 11px;
+}
+
+.tone-ok {
+  color: var(--ok);
+}
+
+.tone-wait {
+  color: var(--warn);
+}
+
+.tone-failed {
+  color: var(--vscode-errorForeground);
+}
+
+.tone-busy,
+.tone-quiet {
+  color: var(--muted);
+}
+
+.mcp-detail {
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.mcp-tools {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 0.5px);
+  overflow-wrap: anywhere;
+}
+
+/* An on and off switch: the knob slides right when the server is on. */
+.mcp-switch {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--vscode-checkbox-border, var(--border));
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.mcp-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.mcp-switch[aria-checked='true'] {
+  border-color: var(--mark);
+  background: var(--accent);
+}
+
+.mcp-switch[aria-checked='true'] .mcp-switch-knob {
+  background: var(--vscode-button-foreground, #fff);
+  transform: translateX(12px);
+}
+
+.mcp-switch:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-switch-knob {
+    transition: none;
+  }
+}
+
+/* The trust card: the permission card's look, with the definition the user approves. */
+.mcp-trust-command {
+  margin: 8px 0 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: var(--vscode-textCodeBlock-background, var(--surface-2));
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--code-size);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mcp-trust-command:not(.mcp-trust-url)::before {
+  content: '$ ';
+  color: var(--muted);
+}
+
+.mcp-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin: 0 0 6px;
+  font-size: var(--small);
+}
+
+.mcp-field-label {
+  color: var(--muted);
+}
+
+.mcp-field-value {
+  overflow-wrap: anywhere;
+}
+
+.mcp-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.mcp-problem .codicon {
+  color: var(--warn);
+}
+
+.mcp-notice {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--gap) 6px calc(var(--gap) + 2px);
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, var(--bg));
+  font-size: var(--small);
+}
+
+.mcp-notice > .codicon {
+  color: var(--warn);
+}
+
+.mcp-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* An MCP call on the rail names its server. */
+.mcp-call-server {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  line-height: 16px;
+}
+
+.mcp-call-server .codicon {
+  font-size: 11px;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  & .mcp-server {
+    border-color: var(--glass-edge);
+    background: var(--glass-pane);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .mcp-trust-command {
+    border: 1px solid var(--glass-edge);
+    background: var(--glass-well);
+  }
+
+  & .mcp-state,
+  & .mcp-call-server {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  & .mcp-switch {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  /* On reads as the neutral primary: a white track on dark glass, near-black on light. */
+  & .mcp-switch[aria-checked='true'] {
+    border-color: transparent;
+    background: var(--primary);
+  }
+
+  & .mcp-switch[aria-checked='true'] .mcp-switch-knob {
+    background: var(--primary-ink);
+  }
+
+  & .mcp-notice {
+    border-bottom-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    background: color-mix(in srgb, var(--warn) 7%, var(--glass-header));
+  }
+}

@@ -46,6 +46,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "gcode.chat.mcp",
+        "title": "MCP Servers",
+        "category": "Geno",
+        "icon": "$(server-process)"
+      },
+      {
         "command": "gcode.setApiKey",
         "title": "Geno: Set API Key"
       },
@@ -222,6 +228,11 @@
           "command": "gcode.chat.history",
           "when": "view == gcode.chat",
           "group": "navigation@2"
+        },
+        {
+          "command": "gcode.chat.mcp",
+          "when": "view == gcode.chat",
+          "group": "navigation@3"
         },
         {
           "command": "gcode.review.undoSession",
