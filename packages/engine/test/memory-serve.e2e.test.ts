@@ -31,10 +31,11 @@ type Editor = {
   writes: acp.WriteTextFileRequest[];
   permissions: acp.RequestPermissionRequest[];
   elicitations: acp.CreateElicitationRequest[];
+  updates: acp.SessionUpdate[];
   /** What the editor answers a remember question with. */
   remember: string;
-  /** What the editor answers an elicitation with; `wait` holds it until the request is cancelled. */
-  elicit: acp.CreateElicitationResponse | 'wait';
+  /** What the editor answers an elicitation with; `wait` holds it until the request is cancelled, and `fail` errors. */
+  elicit: acp.CreateElicitationResponse | 'wait' | 'fail';
   cancelled: number;
 };
 
@@ -54,7 +55,7 @@ async function setup(replies: readonly Reply[], capable = true) {
     confirm: async () => false,
     fetch: transport.fetch,
   };
-  const editor: Editor = { writes: [], permissions: [], elicitations: [], remember: 'allow', elicit: { action: 'decline' }, cancelled: 0 };
+  const editor: Editor = { writes: [], permissions: [], elicitations: [], updates: [], remember: 'allow', elicit: { action: 'decline' }, cancelled: 0 };
   const client = acp
     .client({ name: 'test-editor' })
     .onRequest(acp.methods.client.fs.readTextFile, ({ params }) => ({ content: readFileSync(params.path, 'utf8') }))
@@ -69,6 +70,7 @@ async function setup(replies: readonly Reply[], capable = true) {
     })
     .onRequest(acp.methods.client.elicitation.create, ({ params, signal }) => {
       editor.elicitations.push(params);
+      if (editor.elicit === 'fail') throw new Error('this editor cannot show that form');
       if (editor.elicit !== 'wait') return editor.elicit;
       return new Promise<acp.CreateElicitationResponse>((resolve) =>
         signal.addEventListener('abort', () => {
@@ -76,6 +78,9 @@ async function setup(replies: readonly Reply[], capable = true) {
           resolve({ action: 'cancel' });
         }),
       );
+    })
+    .onNotification(acp.methods.client.session.update, ({ params }) => {
+      editor.updates.push(params.update);
     });
   const connect = <T>(work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>) =>
     client.connectWith(gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
@@ -202,6 +207,103 @@ describe('gcode serve: ask_user', () => {
     expect(stop).toBe('cancelled');
     expect(editor.cancelled, 'the editor heard the question was cancelled').toBe(1);
     expect((await events(sessionId)).at(-1)).toEqual(expect.objectContaining({ kind: 'error', error: 'abort' }));
+  });
+});
+
+const TWO_QUESTIONS = {
+  questions: [
+    {
+      id: 'button',
+      header: 'Button',
+      question: 'Which button style?',
+      options: [
+        { label: 'Solid', description: 'A filled button.', recommended: true, preview: '```css\n.button { background: black; }\n```' },
+        { label: 'Ghost', description: 'Text only until hovered.' },
+      ],
+    },
+    {
+      id: 'targets',
+      header: 'Targets',
+      question: 'Which platforms?',
+      multiSelect: true,
+      options: [
+        { label: 'Web', description: 'The browser build.' },
+        { label: 'Desktop', description: 'The Electron build.' },
+        { label: 'Mobile', description: 'The React Native build.' },
+      ],
+    },
+  ],
+};
+
+describe('gcode serve: ask_user with several questions', () => {
+  it('asks two questions in one form, one multi-select and one answered under Other, and returns both answers', async () => {
+    const { transport, editor, connect, say, workspace } = await setup([
+      toolCall('Two questions.', [{ id: 'tu_q2', name: 'ask_user', input: TWO_QUESTIONS }], usage),
+      answer('Pill buttons on the web and mobile.', usage),
+    ]);
+    editor.elicit = { action: 'accept', content: { 'button.other': 'Pill shaped', targets: ['Web', 'Mobile'] } };
+    const sessionId = await connect(async (ctx, sessionId) => (await say(ctx, sessionId, 'style the buttons'), sessionId));
+
+    const [asked] = editor.elicitations;
+    expect(asked).toMatchObject({ mode: 'form', toolCallId: 'tu_q2', message: 'Geno has 2 questions: Button, Targets' });
+    const schema = (asked as { requestedSchema: { properties: Record<string, Record<string, unknown>> } }).requestedSchema;
+    expect(Object.keys(schema.properties), 'each question, then its Other field').toEqual(['button', 'button.other', 'targets', 'targets.other']);
+    expect(schema.properties['button']).toMatchObject({ type: 'string', title: 'Button', oneOf: [{ const: 'Solid', title: 'Solid (Recommended)', description: 'A filled button.' }, { const: 'Ghost' }] });
+    expect(schema.properties['targets']).toMatchObject({ type: 'array', items: { anyOf: [{ const: 'Web' }, { const: 'Desktop' }, { const: 'Mobile' }] } });
+    expect(asked!._meta?.['gcode/ask_user'], 'the request rides along, previews and all, for an editor that shows the card').toEqual({
+      questions: [
+        { ...TWO_QUESTIONS.questions[0], multiSelect: false },
+        TWO_QUESTIONS.questions[1],
+      ],
+    });
+    expect(toolResults(transport.requests[1]!.body)).toContain(
+      JSON.stringify(['The user answered:', '- Button (Which button style?): "Pill shaped" (in their own words)', '- Targets (Which platforms?): Web, Mobile'].join('\n')).slice(1, -1),
+    );
+
+    editor.updates.length = 0;
+    await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] }));
+    expect(editor.updates.filter((u) => u.sessionUpdate === 'tool_call').map((u) => (u as { title: string }).title)).toEqual(['ask_user Button, Targets']);
+  });
+
+  it('declines when the user cancels the card', async () => {
+    const { transport, editor, connect, say } = await setup([toolCall('Asking.', [{ id: 'tu_q2', name: 'ask_user', input: TWO_QUESTIONS }], usage), answer('I will pick.', usage)]);
+    editor.elicit = { action: 'cancel' };
+    await connect((ctx, sessionId) => say(ctx, sessionId, 'style the buttons'));
+    expect(toolResults(transport.requests[1]!.body)).toContain('The user declined to answer. Go on with your best judgment');
+  });
+
+  it('gives the model the questions as plain text when the editor cannot show the form', async () => {
+    const { transport, editor, connect, say } = await setup([toolCall('Asking.', [{ id: 'tu_q2', name: 'ask_user', input: TWO_QUESTIONS }], usage), answer('Two questions for you.', usage)]);
+    editor.elicit = 'fail';
+    await connect((ctx, sessionId) => say(ctx, sessionId, 'style the buttons'));
+    const result = toolResults(transport.requests[1]!.body);
+    expect(result).toContain('The editor cannot show the question card. End your turn now with these questions as plain text');
+    expect(result).toContain('1. Button: Which button style?');
+    expect(result).toContain('3. Mobile: The React Native build.');
+  });
+
+  it('refuses a request that lists Other, without asking the user', async () => {
+    const listed = { questions: [{ ...TWO_QUESTIONS.questions[0], options: [...TWO_QUESTIONS.questions[0]!.options, { label: 'Other', description: 'Anything else.' }] }] };
+    const { transport, editor, connect, say } = await setup([toolCall('Asking.', [{ id: 'tu_q', name: 'ask_user', input: listed }], usage), answer('Fixed.', usage)]);
+    await connect((ctx, sessionId) => say(ctx, sessionId, 'style the buttons'));
+    expect(editor.elicitations).toEqual([]);
+    expect(toolResults(transport.requests[1]!.body)).toContain(JSON.stringify('invalid input: ✖ question 1, option 3 is "Other". Do not list Other: the card always offers it').slice(1, -1));
+  });
+
+  it('replays an old single-question call under its question', async () => {
+    const { editor, connect, say, workspace } = await setup([
+      toolCall('Asking.', [{ id: 'tu_q', name: 'ask_user', input: { question: 'Which database?', options: ['Postgres', 'SQLite'] } }], usage),
+      answer('SQLite it is.', usage),
+    ]);
+    editor.elicit = { action: 'accept', content: { choice: 'SQLite' } };
+    const sessionId = await connect(async (ctx, sessionId) => (await say(ctx, sessionId, 'set up a database'), sessionId));
+    editor.updates.length = 0;
+    await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] }));
+    const updates = editor.updates.filter((u) => u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update');
+    expect(updates.map((u) => (u.sessionUpdate === 'tool_call' ? u.title : JSON.stringify(u.content)))).toEqual([
+      'ask_user Which database?',
+      expect.stringContaining('The user answered: SQLite'),
+    ]);
   });
 });
 

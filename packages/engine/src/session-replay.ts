@@ -2,7 +2,9 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  askUserTitle,
   DEFAULT_SESSION_MODE,
+  parseAskUser,
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
@@ -50,6 +52,10 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
   edit: ({ path }) => `edit ${String(path)}`,
   bash: ({ command }) => `bash ${String(command)}`,
   check: () => 'check',
+  ask_user: (input) => {
+    const parsed = parseAskUser(input);
+    return parsed.ok ? `ask_user ${askUserTitle(parsed.value)}` : 'ask_user';
+  },
 };
 
 const titleOf = (use: ToolUseBlock): string => {
