@@ -1,0 +1,38 @@
+/* The `/` picker shares the `@` list's look (.mentions); these are only what commands add to it. */
+
+.command-option .mention-label {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+}
+
+.command-hint {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+  opacity: 0.8;
+}
+
+/* A sent command in the user's bubble: a chip with its name, then the arguments as typed. */
+.command-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  padding: 0 7px 0 5px;
+  border: 1px solid var(--glass-edge-hi, var(--border));
+  border-radius: 6px;
+  background: var(--glass-pane-raised, var(--surface-2));
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+  line-height: 19px;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.command-chip .codicon {
+  font-size: 12px;
+  color: var(--muted);
+}

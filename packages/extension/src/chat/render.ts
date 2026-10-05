@@ -7,6 +7,8 @@ import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, Permission
 import { headerOf, type EditTool } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
+import { commandContent } from './slash-view.js';
+import type { SentCommand } from './slash.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -390,12 +392,12 @@ export function turnFooter(turn: Turn): HTMLElement {
 /** A passing status in a running turn, such as a retry. */
 export const turnNotice = (text: string): HTMLElement => h('div', { class: 'turn-notice', role: 'status' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, text));
 
-export const userMessage = (prompt: string, attachments: readonly AttachmentView[] = [], ui?: Ui): HTMLElement =>
+export const userMessage = (prompt: string, attachments: readonly AttachmentView[] = [], ui?: Ui, command?: SentCommand): HTMLElement =>
   h(
     'div',
     { class: 'request' },
     ui !== undefined && sentAttachments(attachments, (target) => ui.post({ type: 'open', target })),
-    prompt !== '' && h('div', { class: 'request-bubble' }, prompt),
+    prompt !== '' && h('div', { class: 'request-bubble' }, ...(command === undefined ? [prompt] : commandContent(command))),
   );
 
 /** What a new panel suggests: each fills the composer for the user to edit or send. */

@@ -1,6 +1,7 @@
 import type { HunkStatus } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { MentionCompletion } from './mentions.js';
+import type { CommandOption, SentCommand } from './slash.js';
 
 /**
  * The chat transcript, the one model the panel renders. The extension owns it and sends every change as an
@@ -25,6 +26,8 @@ export type Turn = {
   readonly attachments?: readonly AttachmentView[] | undefined;
   /** The session's approval mode when the prompt was sent; undefined for a turn replayed from an older log. */
   readonly mode?: string | undefined;
+  /** The `/` command the prompt invoked, which the bubble shows as a chip and its arguments. */
+  readonly command?: SentCommand | undefined;
 };
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -113,6 +116,7 @@ export type Action =
       readonly prompt: string;
       readonly attachments?: readonly AttachmentView[] | undefined;
       readonly mode?: string | undefined;
+      readonly command?: SentCommand | undefined;
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
@@ -190,6 +194,8 @@ export type ToView =
   | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] }
   | { readonly type: 'header'; readonly header: Header }
   | { readonly type: 'modes'; readonly modes: Modes }
+  /** The `/` commands the session offers, for the composer's picker. */
+  | { readonly type: 'commands'; readonly commands: readonly CommandOption[] }
   /** The History action: open the list. */
   | { readonly type: 'show-history' }
   /** Closes the list, after a session was chosen or a new chat started. */
@@ -213,6 +219,8 @@ export type FromView =
   | { readonly type: 'open'; readonly target: OpenTarget }
   /** Asks what an `@` mention typed so far could be; answered by a `completions` message with the same id. */
   | { readonly type: 'complete'; readonly id: number; readonly query: string }
+  /** The `/` picker opened: the extension opens the session, if there is none yet, so the engine lists its commands. */
+  | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
   /** Keep or undo hunks, one from a hunk's buttons or every pending one of a turn from its changes card. */

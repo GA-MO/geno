@@ -51,6 +51,8 @@ import {
   type Usage,
 } from './messages.js';
 import { pageHtml } from './page.js';
+import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from './slash-route.js';
+import type { CommandOption, SentCommand } from './slash.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
 
 export const CHAT_VIEW = 'gcode.chat';
@@ -92,6 +94,7 @@ const replayedTurn = z.object({
   endedAt: z.number(),
   status: z.enum(['done', 'stopped', 'failed']),
   usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).nullable(),
+  command: z.object({ name: z.string(), args: z.string() }).optional(),
 });
 const replayedChange = z.object({
   id: z.string(),
@@ -280,6 +283,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private replay: Replay | undefined;
   /** The shown session's approval modes; before it exists, the mode it will start in. */
   private modes: Modes;
+  /** The `/` commands the engine lists; until it does, the built-ins every session has. */
+  private commands: readonly CommandOption[] = BUILTIN_OPTIONS;
   private readonly switched = new vscode.EventEmitter<void>();
   /** Fires when the panel moves to another session: at startup, for a new chat, or one loaded from the history. */
   readonly onDidSwitch = this.switched.event;
@@ -350,6 +355,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private updated(sessionId: string, update: acp.SessionUpdate): void {
+    // Every session of this window shares its workspace, so any session's list is the panel's.
+    if (update.sessionUpdate === 'available_commands_update') return this.recommand(commandOptions(update.availableCommands));
     if (update.sessionUpdate === 'current_mode_update') {
       if (sessionId === this.shown) this.remode({ ...this.modes, current: update.currentModeId });
       return;
@@ -372,6 +379,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         at: start.success ? start.data.startedAt : Date.now(),
         prompt: update.content.text,
         mode: start.success ? start.data.mode : undefined,
+        command: start.success ? this.sentCommand(start.data.command) : undefined,
       });
       this.replay.end = replayedEnd(update);
       return;
@@ -386,9 +394,33 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions and its attachments go along as context. */
-  send(text: string, attachments: readonly OutgoingAttachment[] = []): Promise<acp.StopReason> {
+  async send(text: string, attachments: readonly OutgoingAttachment[] = []): Promise<acp.StopReason> {
+    const routed = routeText(this.commands, text);
+    if (routed.kind === 'editor') {
+      await this.editorActions[routed.action]();
+      return 'end_turn';
+    }
     for (const a of attachments) if (a.path !== undefined) this.attachedPaths.add(a.path);
-    return this.prompt(text, text, undefined, async () => [...(await this.mentions.blocks(text)), ...promptBlocks(attachments)], viewsOf(attachments));
+    const blocks = async () => [...(await this.mentions.blocks(text)), ...promptBlocks(attachments)];
+    return this.prompt(text, text, undefined, blocks, viewsOf(attachments), routed.command);
+  }
+
+  /** What the editor's own `/` built-ins do: the same as the view's New Chat and History actions and the model button. */
+  private readonly editorActions: Readonly<Record<EditorAction, () => Promise<void>>> = {
+    'new-chat': () => this.newChat(),
+    history: async () => this.showHistory(),
+    model: async () => void (await vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model')),
+  };
+
+  /** A logged command as its chip shows it; a command no longer listed shows as a prompt template. */
+  private sentCommand(command: { readonly name: string; readonly args: string } | undefined): SentCommand | undefined {
+    if (command === undefined) return undefined;
+    return { ...command, route: this.commands.find((c) => c.name === command.name)?.route ?? 'prompt' };
+  }
+
+  private recommand(commands: readonly CommandOption[]): void {
+    this.commands = commands;
+    void this.view?.webview.postMessage({ type: 'commands', commands } satisfies ToView);
   }
 
   /** Cmd-K: a one-shot edit of a selection, shown in the panel like a turn. */
@@ -404,9 +436,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     meta: Record<string, unknown> | undefined,
     attachments: () => Promise<acp.ContentBlock[]>,
     attached: readonly AttachmentView[] = [],
+    command?: SentCommand,
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
-    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current });
+    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current, command });
     try {
       this.turn = await this.link();
       this.lastSession = this.turn.sessionId;
@@ -656,6 +689,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'reset', transcript: this.transcript } satisfies Action);
         void view.webview.postMessage({ type: 'header', header: { project: projectName(), title: this.title } } satisfies ToView);
         void view.webview.postMessage({ type: 'modes', modes: this.modes } satisfies ToView);
+        void view.webview.postMessage({ type: 'commands', commands: this.commands } satisfies ToView);
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -668,13 +702,14 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
           (items) => view.webview.postMessage({ type: 'completions', id, items } satisfies ToView),
           () => view.webview.postMessage({ type: 'completions', id, items: [] } satisfies ToView),
         ),
+      'want-commands': () => void this.link().catch(() => {}),
       stop: () => void this.stop(),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
-      'choose-model': () => void vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model'),
+      'choose-model': () => void this.editorActions.model(),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'start-building': () => void this.startBuilding().catch(warn),
