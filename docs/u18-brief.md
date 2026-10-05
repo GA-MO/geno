@@ -43,16 +43,16 @@ The user confirmed on 2026-10-05 that the props and the other moves belong in th
 ## The peek, upgraded (user request, 2026-10-06)
 
 U18a's peek shows only the head over the composer's top edge. The user wants Noodle to grip the edge with both hands and do things, not just pop up and vanish. A prototype was shown and is the reference.
-- **Hands.** Two small 3×2 hands sit on the composer's top edge, drawn over the rainbow border, with knuckle pixels in a darker green (`#4fae86`). The head sits behind the edge, between them.
+- **Body, not a floating head.** The user said the first prototype looked like a severed head with loose hands. The peek therefore shows one connected body: the head, the neck running all the way down to the edge, the top of the chest with its white belly above the edge, and two arms running from the chest's sides down to the hands. The hands are 3×2, with knuckle pixels in a darker green (`#4fae86`), and grip the composer's top edge over the rainbow border. Everything below the edge is clipped by the composer, so climbing and ducking slide the whole body, never the head alone. The second prototype is the reference.
 - **Moves.** Each is a row in the pose table:
 
   | Move | Frames |
   |---|---|
   | Climb up | head rises, hands land on the edge, blink |
   | Look around | eyes left, right, then up toward the pointer |
-  | Wave | one hand leaves the edge and waves with happy eyes |
+  | Wave | one arm leaves the edge and waves above it, with happy eyes |
   | Drum fingers | hands tap the edge in turn |
-  | Chin rest | head lowers onto the hands, slow blinks |
+  | Sink down, sleepy | the body sinks a little lower behind the edge, slow blinks |
   | Yawn | mouth open, eyes closed, a small "z" |
   | Wink | one eye closes |
   | Duck down | hands let go and it slides behind the composer |
