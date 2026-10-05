@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createVSIX } from '@vscode/vsce';
@@ -64,11 +64,21 @@ const BUNDLES: readonly BuildOptions[] = [
   },
 ];
 
+/**
+ * Chunk names change with their content, so a build deletes the chunks it no longer writes, or they would pile up
+ * in the package. Only those: tests build in parallel and package or load the current ones meanwhile.
+ */
+async function pruneChunks(outputs: readonly string[]): Promise<void> {
+  const chunks = path.join(dist, 'diagram/chunks');
+  const written = new Set(outputs.map((file) => path.resolve(file)));
+  const present = await readdir(chunks).catch(() => []);
+  await Promise.all(present.map((name) => path.join(chunks, name)).filter((file) => !written.has(file)).map((file) => rm(file, { force: true })));
+}
+
 /** Builds the extension host bundle, the chat webview and the engine the extension spawns. */
 export async function buildExtension(): Promise<void> {
-  // Chunk names change with their content, so old ones would pile up in the package.
-  await rm(path.join(dist, 'diagram'), { recursive: true, force: true });
-  await Promise.all(BUNDLES.map((options) => build({ bundle: true, logLevel: 'warning', ...options })));
+  const results = await Promise.all(BUNDLES.map((options) => build({ bundle: true, logLevel: 'warning', metafile: true, ...options })));
+  await pruneChunks(results.flatMap((result) => Object.keys(result.metafile?.outputs ?? {})));
   await mkdir(path.join(dist, 'engine'), { recursive: true });
   await writeFile(path.join(dist, 'engine/package.json'), '{ "type": "module" }\n');
 }
