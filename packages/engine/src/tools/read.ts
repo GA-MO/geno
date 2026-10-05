@@ -1,5 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { z } from 'zod';
+import { linesOf, numberedPage } from '@g-code/core';
 import { executor, optional, resolveInside, ToolError } from './context.js';
 
 const lineNumber = z.number().int().positive();
@@ -22,19 +23,12 @@ export const read = executor({
     if (text === null) throw new ToolError(`no such file or directory: ${path}`);
     if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new ToolError(`${path} is a binary file`);
     if (text === '') return `${path} is empty`;
-    const lines = text.split('\n');
-    if (text.endsWith('\n')) lines.pop();
+    const lines = linesOf(text);
     const total = lines.length;
     const first = start_line ?? 1;
     const last = Math.min(end_line ?? total, total);
     if (first > total) throw new ToolError(`start_line ${first} is past the end of ${path}, which has ${total} lines`);
     if (last < first) throw new ToolError(`end_line ${last} is before start_line ${first}`);
-
-    const width = String(last).length;
-    const numbered = lines
-      .slice(first - 1, last)
-      .map((line, i) => `${String(first + i).padStart(width)}\t${line}`)
-      .join('\n');
-    return first === 1 && last === total ? numbered : `${numbered}\n[lines ${first}-${last} of ${total}]`;
+    return numberedPage(lines, first, last);
   },
 });

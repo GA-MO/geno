@@ -1,5 +1,19 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 
+/** Results longer than this many characters go to a spill file instead of the conversation. */
+export const SPILL_THRESHOLD = 24_000;
+
+/** The most lines one read returns. */
+export const PAGE_MAX_LINES = 2000;
+
+/**
+ * The most characters of numbered text one read returns. Pi pages at 50 KB; here a page must stay under the spill
+ * threshold every tool result shares, or the page itself would be spilled, with room left for a notice and a rule.
+ */
+export const PAGE_MAX_CHARS = SPILL_THRESHOLD - 4_000;
+
+const formatCount = (n: number): string => n.toLocaleString('en-US');
+
 export const TOOL_NAMES = ['glob', 'grep', 'list', 'read'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 export const isToolName = (raw: string): raw is ToolName => (TOOL_NAMES as readonly string[]).includes(raw);
@@ -55,7 +69,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   read: {
     name: 'read',
     description:
-      'Read a text file. Returns its lines numbered from 1. Pass start_line and end_line (inclusive) to read part of a long file. Also reads spilled tool output by its absolute path.',
+      `Read a text file. Returns its lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output by its absolute path.`,
     input_schema: {
       type: 'object',
       properties: {
@@ -82,8 +96,6 @@ export const TOOL_DEFINITIONS: readonly ToolSpec[] = deepFreeze(
   TOOL_NAMES.toSorted().map((name) => TOOL_SPECS[name]),
 );
 
-/** Results longer than this many characters go to a spill file instead of the conversation. */
-export const SPILL_THRESHOLD = 24_000;
 /** How many characters of a spilled result's start and end the model still sees. */
 export const SPILL_EDGE = 2_000;
 
