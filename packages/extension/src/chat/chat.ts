@@ -9,7 +9,10 @@ import {
   HUNK_STATUSES,
   hunkIdOf,
   APPROVAL_META,
-  ASK_USER_FIELDS,
+  askUserContent,
+  ASK_USER_META,
+  askUserTitle,
+  parseAskUser,
   BROWSER_SERVER,
   INLINE_EDIT_META,
   MEMORY_SCOPES,
@@ -22,6 +25,7 @@ import {
   TOOL_CALL_META,
   TURN_USAGE_META,
   UNSAVED_BUFFERS_METHOD,
+  type AskUserAnswer,
   type FileChange,
   type HunkId,
   type HunkStatus,
@@ -108,14 +112,6 @@ const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
 const permissionInput = z.object({ command: z.string(), reason: z.string() });
 const rememberInput = z.object({ text: z.string(), scope: z.enum(MEMORY_SCOPES) });
-/** An ask_user question, as the engine sends it in `elicitation/create`: its options are the choice field's. */
-const questionForm = z.object({
-  mode: z.literal('form'),
-  message: z.string(),
-  requestedSchema: z.object({
-    properties: z.record(z.string(), z.object({ oneOf: z.array(z.object({ const: z.string(), title: z.string() })).optional() }).loose()).optional(),
-  }).loose(),
-}).loose();
 const replayedTurn = z.object({
   mode: z.string().optional(),
   startedAt: z.number(),
@@ -302,8 +298,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly sessions = new WeakMap<Connection, Promise<string>>();
   private turn: SessionLink | undefined;
   private readonly permissions = new Map<string, (optionId: string | undefined) => void>();
-  /** Open questions, each answered with the user's words, empty to decline, or undefined when cancelled. */
-  private readonly questions = new Map<string, (answer: string | undefined) => void>();
+  /** Open question cards, each settled with the user's answers or refusal, or undefined when cancelled. */
+  private readonly questions = new Map<string, (answer: AskUserAnswer | undefined) => void>();
   private nextPermission = 0;
   private readonly mentions = new Mentions();
   /** The session of the latest turn, whose attachments folder a pasted image opens from. */
@@ -748,33 +744,26 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   /**
-   * An ask_user question: a card with its options and a free-text answer, the same card path as a permission. The
-   * engine cancels it when the turn stops, which takes the card down.
+   * An ask_user card: the request rides in the elicitation's `_meta`, and goes through the same parser as the model's
+   * input, so the card shows exactly what the engine asked. The engine cancels it when the turn stops, which takes
+   * the card down.
    */
   private async askQuestion(params: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {
-    const form = questionForm.safeParse(params);
-    if (!form.success) return { action: 'decline' };
-    const choices = form.data.requestedSchema.properties?.[ASK_USER_FIELDS.choice]?.oneOf ?? [];
+    const parsed = parseAskUser(params._meta?.[ASK_USER_META]);
+    if (params.mode !== 'form' || !parsed.ok) return { action: 'decline' };
+    const request = parsed.value;
     const id = String(this.nextPermission++);
-    const answer = await new Promise<string | undefined>((resolve) => {
+    const answer = await new Promise<AskUserAnswer | undefined>((resolve) => {
       this.questions.set(id, resolve);
       signal.addEventListener('abort', () => resolve(undefined), { once: true });
-      this.dispatch({
-        type: 'permission',
-        id,
-        command: form.data.message,
-        reason: '',
-        options: choices.map((choice) => ({ optionId: choice.const, name: choice.title, kind: 'answer' })),
-        ask: { kind: 'question', question: form.data.message },
-      });
+      this.dispatch({ type: 'permission', id, command: askUserTitle(request), reason: '', options: [], ask: { kind: 'question', request } });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.questions.delete(id);
     this.dispatch({ type: 'permission-done', id, optionId: undefined, ...(answer === undefined ? {} : { answer }) });
     if (answer === undefined) return { action: 'cancel' };
-    if (answer === '') return { action: 'decline' };
-    const field = choices.some((choice) => choice.const === answer) ? ASK_USER_FIELDS.choice : ASK_USER_FIELDS.answer;
-    return { action: 'accept', content: { [field]: answer } };
+    if (answer.kind === 'declined') return { action: 'decline' };
+    return { action: 'accept', content: askUserContent(request, answer.answers) };
   }
 
   /** Applies a change to the transcript and sends it to the webview, which applies the same change. */
@@ -820,7 +809,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'want-commands': () => void this.link().catch(() => {}),
       stop: () => void this.stop(),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
-      answer: ({ id, text }) => this.questions.get(id)?.(text.trim()),
+      answer: ({ id, answer }) => this.questions.get(id)?.(answer),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),

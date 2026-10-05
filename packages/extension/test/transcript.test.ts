@@ -98,18 +98,28 @@ describe('the transcript reducer', () => {
       { type: 'turn-start', id: 't1', at: 0, prompt: 'p' },
       { type: 'permission', id: '0', command: 'Use pnpm.', reason: '', options: [], ask: { kind: 'memory', text: 'Use pnpm.', scope: 'project' } },
       { type: 'permission-done', id: '0', optionId: 'allow' },
-      { type: 'permission', id: '1', command: 'Which?', reason: '', options: [{ optionId: 'a', name: 'a', kind: 'answer' }], ask: { kind: 'question', question: 'Which?' } },
-      { type: 'permission-done', id: '1', optionId: undefined, answer: 'b' },
-      { type: 'permission', id: '2', command: 'Why?', reason: '', options: [], ask: { kind: 'question', question: 'Why?' } },
+      { type: 'permission', id: '1', command: 'Which?', reason: '', options: [], ask: { kind: 'question', request: { questions: [{ id: 'choice', header: 'Question', question: 'Which?', multiSelect: false, options: [{ label: 'a' }, { label: 'b' }] }] } } },
+      { type: 'permission-done', id: '1', optionId: undefined, answer: { kind: 'answered', answers: { choice: { picked: ['b'] } } } },
+      { type: 'permission', id: '2', command: 'Why?', reason: '', options: [], ask: { kind: 'question', request: { questions: [{ id: 'choice', header: 'Question', question: 'Why?', multiSelect: false, options: [] }] } } },
     ]);
     const blocks = t.turns[0]!.blocks;
     expect(blocks.map((b) => (b.kind === 'permission' ? [b.ask?.kind, b.outcome] : b.kind))).toEqual([
       ['memory', { kind: 'chosen', optionId: 'allow' }],
-      ['question', { kind: 'answered', text: 'b' }],
+      ['question', { kind: 'answered', answers: { choice: { picked: ['b'] } } }],
       ['question', { kind: 'open' }],
     ]);
     const ended = reduce(t, { type: 'turn-end', at: 1, status: 'stopped', usage: undefined });
     expect(ended.turns[0]!.blocks.at(-1)).toMatchObject({ outcome: { kind: 'cancelled' } });
+  });
+
+  it('settles a declined question card as skipped', () => {
+    const request = { questions: [{ id: 'choice', header: 'Question', question: 'Why?', multiSelect: false, options: [] }] };
+    const t = run([
+      { type: 'turn-start', id: 't1', at: 0, prompt: 'p' },
+      { type: 'permission', id: '0', command: 'Why?', reason: '', options: [], ask: { kind: 'question', request } },
+      { type: 'permission-done', id: '0', optionId: undefined, answer: { kind: 'declined' } },
+    ]);
+    expect(t.turns[0]!.blocks[0]).toMatchObject({ outcome: { kind: 'skipped' } });
   });
 
   it('replays to the same transcript a reset carries, so a reloaded view matches the extension', () => {
