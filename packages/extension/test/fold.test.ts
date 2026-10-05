@@ -156,6 +156,18 @@ describe('the steps the rail shows', () => {
     expect(turnView(asking).attention.map((s) => s.kind)).toEqual(['permission']);
   });
 
+  it('keeps a remember card and a question card in view while the rest folds', () => {
+    const asking = (ask: Extract<Action, { type: 'permission' }>['ask']) =>
+      turnOf([
+        ...Array.from({ length: 6 }, (_, i) => call(`g${i}`, 'grep', `p${i}`)),
+        { type: 'permission', id: 'p1', command: '', reason: '', options: [], ask },
+        ...Array.from({ length: 4 }, (_, i) => call(`h${i}`, 'grep', `q${i}`)),
+      ]);
+    for (const ask of [{ kind: 'memory', text: 'Use pnpm', scope: 'project' }, { kind: 'question', question: 'Which file?' }] as const) {
+      expect(shownSteps(asking(ask), 'compact', false).map(name)).toEqual(['fold:+6 earlier steps', 'permission', 'calls:grep', 'calls:grep', 'calls:grep', 'calls:grep']);
+    }
+  });
+
   it('gathers a turn’s edits into one chip per file, in the changes card’s place', () => {
     const turn = turnOf([
       call('e1', 'edit', 'a.ts'),
