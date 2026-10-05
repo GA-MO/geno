@@ -30,6 +30,7 @@ import {
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
+import { currentBranch } from '../git-branch.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
 import { droppedUris, imagesOf, openTarget, pickFiles, promptBlocks, readForComposer, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
@@ -47,6 +48,7 @@ import {
   type Action,
   type FileDiff,
   type FromView,
+  type Header,
   type HistoryRow,
   type HistoryScope,
   type Modes,
@@ -228,7 +230,10 @@ function diffOf(file: vscode.Uri, change: FileChange): FileDiff {
   };
 }
 
-const projectName = (): string => vscode.workspace.workspaceFolders?.[0]?.name ?? 'No folder';
+async function headerOf(title: string | undefined): Promise<Header> {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  return { project: folder?.name ?? 'No folder', title, branch: folder === undefined ? undefined : await currentBranch(folder.uri.fsPath) };
+}
 
 /** A replayed turn's end, which ACP has no update for: the engine sends it with the prompt that starts the turn. */
 function replayedEnd(update: acp.SessionUpdate): Action | undefined {
@@ -597,7 +602,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   private retitle(title: string | undefined): void {
     this.title = title;
-    void this.view?.webview.postMessage({ type: 'header', header: { project: projectName(), title } } satisfies ToView);
+    void headerOf(title).then((header) => this.view?.webview.postMessage({ type: 'header', header } satisfies ToView));
   }
 
   private remode(modes: Modes): void {
@@ -776,7 +781,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ready: () => {
         void view.webview.postMessage({ type: 'roots', roots: webviewRoots(view.webview) } satisfies ToView);
         void view.webview.postMessage({ type: 'reset', transcript: this.transcript } satisfies Action);
-        void view.webview.postMessage({ type: 'header', header: { project: projectName(), title: this.title } } satisfies ToView);
+        void headerOf(this.title).then((header) => view.webview.postMessage({ type: 'header', header } satisfies ToView));
+        void view.webview.postMessage({ type: 'window-focus', focused: vscode.window.state.focused } satisfies ToView);
         void view.webview.postMessage({ type: 'modes', modes: this.modes } satisfies ToView);
         void view.webview.postMessage({ type: 'commands', commands: this.commands } satisfies ToView);
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
@@ -834,7 +840,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.look());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
+    const focus = vscode.window.onDidChangeWindowState(({ focused }) => void view.webview.postMessage({ type: 'window-focus', focused } satisfies ToView));
     view.onDidDispose(() => {
+      focus.dispose();
       if (this.view === view) this.view = undefined;
     });
   }

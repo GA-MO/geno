@@ -12,8 +12,12 @@ import { historyPanel } from './history.js';
 import { mcpPanel } from './mcp-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, type Step } from './rail.js';
-import { callsStep, changesCard, emptyState, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { motionGate } from './motion.js';
+import { peek as peekOver } from './peek.js';
+import type { PeekInput } from './peek-model.js';
 import { slashPicker } from './slash-view.js';
+import { startPage } from './start-page.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
@@ -118,7 +122,19 @@ const slash = slashPicker(input, {
   wanted: () => host.postMessage({ type: 'want-commands' }),
   submit,
 });
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, inputBox);
+const peek = peekOver();
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, peek.element, inputBox);
+const start = startPage((message) => host.postMessage(message));
+const peekInput = (): PeekInput => ({
+  turns: transcript.turns.length,
+  running: isRunning(transcript),
+  composerFocused: document.activeElement === input,
+  draft: input.value,
+});
+const gate = motionGate((motion) => {
+  start.setMotion(motion);
+  peek.setTracking(motion !== 'still', peekInput());
+});
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -131,9 +147,11 @@ const header = h(
   h('button', { type: 'button', class: 'header-session', title: 'Show the chat history', onclick: () => history.open() }, titleLabel, icon('chevron-down')),
 );
 
-function showHeader({ project, title }: Header): void {
+function showHeader(next: Header): void {
+  const { project, title } = next;
   projectLabel.textContent = project;
   titleLabel.textContent = title ?? 'New chat';
+  start.header(next);
   header.title = `${project} / ${title ?? 'New chat'}`;
 }
 
@@ -147,6 +165,7 @@ const showPane = (name: string, open: boolean): void => {
   log.hidden = shown !== 'chat';
   form.hidden = shown !== 'chat';
   if (shown === 'chat') input.focus();
+  schedule();
 };
 const post = (message: FromView) => host.postMessage(message);
 const history = historyPanel(post, (open) => showPane('history', open));
@@ -232,6 +251,8 @@ function turnShell(turn: Turn): HTMLElement {
 const pendingText = (turn: Turn): boolean =>
   turn.blocks.some((b) => b.kind === 'text' && (revealed.get(b.id) ?? b.text.length) < b.text.length);
 
+let wasEmpty = false;
+
 function render(): void {
   frame = undefined;
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
@@ -241,7 +262,7 @@ function render(): void {
   const shells = reconcile(
     log,
     empty
-      ? [{ key: 'empty', deps: [transcript.model], build: () => emptyState(transcript.model, fill) }]
+      ? [{ key: 'empty', deps: [], build: () => start.element }]
       : transcript.turns.map((turn) => ({ key: turn.id, deps: [turn.id], build: () => turnShell(turn) })),
   );
   let animating = false;
@@ -266,6 +287,10 @@ function render(): void {
   }
 
   const running = isRunning(transcript);
+  if (empty && !wasEmpty) start.refresh();
+  wasEmpty = empty;
+  gate.set('shown', empty && document.body.dataset['view'] === 'chat');
+  peek.update(peekInput());
   send.hidden = running;
   stop.hidden = !running;
   modelName.textContent = transcript.model === '' ? 'Default model' : transcript.model;
@@ -326,7 +351,11 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'commands') return slash.setCommands(message.commands);
   if (message.type === 'show-history') return history.open();
   if (message.type === 'hide-history') return history.close();
-  if (message.type === 'history') return history.listed(message.scope, message.rows);
+  if (message.type === 'window-focus') return gate.set('focused', message.focused);
+  if (message.type === 'history') {
+    if (message.scope === 'project') start.listed(message.rows);
+    return history.listed(message.scope, message.rows);
+  }
   if (message.type === 'history-failed') return history.failed(message.scope, message.message);
   if (message.type === 'mcp') return mcp.listed(message.listing);
   if (message.type === 'show-mcp') return mcp.open();
@@ -344,6 +373,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
 
 /** The composer after its text changed: its height, and a chip for each `@` mention in it. */
 function redraft(): void {
+  peek.update(peekInput());
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, MAX_COMPOSER_PX)}px`;
   input.style.overflowY = input.scrollHeight > MAX_COMPOSER_PX ? 'auto' : 'hidden';
@@ -510,6 +540,7 @@ input.addEventListener('input', () => {
   askCompletions();
   slash.refresh();
 });
+for (const type of ['focus', 'blur'] as const) input.addEventListener(type, () => peek.update(peekInput()));
 input.addEventListener('click', () => {
   askCompletions();
   slash.refresh();

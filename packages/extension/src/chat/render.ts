@@ -548,28 +548,3 @@ export const userMessage = (prompt: string, attachments: readonly AttachmentView
     ui !== undefined && sentAttachments(attachments, (target) => ui.post({ type: 'open', target })),
     prompt !== '' && h('div', { class: 'request-bubble' }, ...(command === undefined ? [prompt] : commandContent(command))),
   );
-
-/** What a new panel suggests: each fills the composer for the user to edit or send. */
-export const EXAMPLE_PROMPTS: readonly { readonly icon: string; readonly text: string }[] = [
-  { icon: 'book', text: 'Explain how this project is organized' },
-  { icon: 'checklist', text: 'Find the TODO comments and fix the simplest one' },
-  { icon: 'beaker', text: 'Run the tests and fix whatever fails' },
-];
-
-export function emptyState(model: string, fill: (text: string) => void): HTMLElement {
-  const who = model === '' ? 'Geno' : model;
-  return h(
-    'div',
-    { class: 'empty-state' },
-    dino('hero'),
-    h('h2', { class: 'empty-title' }, 'Ask for a change'),
-    h('p', { class: 'empty-model' }, `${who} reads your files, asks before risky commands, and keeps every edit reviewable.`),
-    h(
-      'div',
-      { class: 'examples' },
-      ...EXAMPLE_PROMPTS.map((example) =>
-        h('button', { class: 'example', 'data-focus': `example:${example.text}`, onclick: () => fill(example.text) }, icon(example.icon), h('span', {}, example.text)),
-      ),
-    ),
-  );
-}
