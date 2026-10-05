@@ -3,8 +3,11 @@
 import { createHash } from 'node:crypto';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 
-/** Where a server definition came from. The order is precedence: a later source's server replaces an earlier one's of the same name. */
-export const MCP_SOURCES = ['global', 'vscode-mcp-json', 'mcp-json', 'acp'] as const;
+/**
+ * Where a server definition came from. The order is precedence: a later source's server replaces an earlier one's of
+ * the same name. `builtin` is Geno's own browser, whose name no other source may take.
+ */
+export const MCP_SOURCES = ['global', 'vscode-mcp-json', 'mcp-json', 'acp', 'builtin'] as const;
 export type McpSource = (typeof MCP_SOURCES)[number];
 
 /** A workspace file is written by whoever wrote the repository, so its servers wait for the user's approval. */
@@ -13,6 +16,7 @@ export const MCP_SOURCE_TRUST: Readonly<Record<McpSource, 'needs-approval' | 'tr
   'vscode-mcp-json': 'needs-approval',
   'mcp-json': 'needs-approval',
   acp: 'trusted',
+  builtin: 'trusted',
 };
 
 /** The file each source is read from, relative to the workspace or the app home; ACP has none. */
@@ -21,6 +25,7 @@ export const MCP_SOURCE_LABELS: Readonly<Record<McpSource, string>> = {
   'vscode-mcp-json': '.vscode/mcp.json',
   'mcp-json': '.mcp.json',
   acp: 'the editor',
+  builtin: 'Geno',
 };
 
 /** `http` is streamable HTTP, falling back to legacy SSE; `sse` is legacy SSE only. */
@@ -292,6 +297,8 @@ export const MCP_ENABLE_METHOD = '_gcode/mcpEnable';
 export type McpServerView = {
   readonly name: string;
   readonly source: McpSource;
+  /** `first-use` waits stopped for the first call of one of its tools, as the browser does, since Chrome is heavy. */
+  readonly startsOn: 'session' | 'first-use';
   readonly hash: string;
   readonly definition: McpDefinitionView;
   readonly state: McpServerState;

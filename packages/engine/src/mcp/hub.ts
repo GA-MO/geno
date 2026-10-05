@@ -1,7 +1,12 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import {
+  attachmentFileName,
+  BROWSER_SERVER,
+  BROWSER_TOOLS,
   classifierInputOf,
   definitionHash,
   describeMcpTool,
@@ -10,10 +15,12 @@ import {
   mcpDefinitionView,
   MCP_DESCRIBE_TOOL,
   MCP_LAZY_THRESHOLD,
+  MCP_SOURCE_LABELS,
   mcpCatalog,
   mcpDenialFor,
   mcpResultText,
   mcpToolDefinitions,
+  MAX_MESSAGE_BYTES,
   type ImageAttachment,
   type McpCatalog,
   type McpContent,
@@ -28,6 +35,7 @@ import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
 import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { browserExecutor, browserServerConfig, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
 import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js';
@@ -65,6 +73,8 @@ export type McpHubOptions = {
   readonly workspace: string;
   /** The servers the editor passed in session/new. */
   readonly acp: readonly acp.McpServer[];
+  /** The built-in browser; without it the session has none. */
+  readonly browser?: BrowserOptions | undefined;
 };
 
 const argumentsSchema = z.record(z.string(), z.unknown());
@@ -73,7 +83,8 @@ const callSchema = z.strictObject({ name: z.string().min(1), arguments: argument
 
 /**
  * Stores each image of a result as an attachment, which the next request shows the model, and puts a line naming it
- * where it was. An image the attachment path refuses, such as an unknown format, stays a text placeholder.
+ * where it was. An image the attachment path refuses, such as an unknown format or one larger than `read` returns,
+ * stays a text placeholder. The stored file is the image's path, which the editor shows as a thumbnail on the step.
  */
 async function withImages(name: string, content: readonly McpContent[], ctx: ToolContext): Promise<{ content: McpContent[]; images: ImageAttachment[] }> {
   const images: ImageAttachment[] = [];
@@ -84,8 +95,14 @@ async function withImages(name: string, content: readonly McpContent[], ctx: Too
       continue;
     }
     const label = `${name} image ${images.length + 1}`;
+    const bytes = Buffer.from(block.data, 'base64');
+    if (bytes.length > MAX_MESSAGE_BYTES) {
+      shown.push(block);
+      continue;
+    }
     try {
-      const image = await storeImage(ctx.attachmentsDir, Buffer.from(block.data, 'base64'), { name: label });
+      const stored = await storeImage(ctx.attachmentsDir, bytes, { name: label });
+      const image = { ...stored, path: path.join(ctx.attachmentsDir, attachmentFileName(stored)) };
       images.push(image);
       shown.push({ type: 'text', text: describeImage(label, image) });
     } catch (error) {
@@ -99,13 +116,25 @@ async function withImages(name: string, content: readonly McpContent[], ctx: Too
 const unknownTool = (name: string, catalog: McpCatalog) =>
   new ToolError(`no MCP tool ${name}; the tools are listed in the ${MCP_DESCRIBE_TOOL} description${catalog.size === 0 ? ', and there are none now' : ''}`);
 
-export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions): Promise<McpHub> {
-  const { servers, problems } = await loadMcpConfig(store, env, workspace, acp);
+export async function openMcpHub({ store, env, workspace, acp, browser }: McpHubOptions): Promise<McpHub> {
+  const loaded = await loadMcpConfig(store, env, workspace, acp);
+  const problems = [...loaded.problems];
+  const servers = loaded.servers.filter((config) => {
+    if (config.name !== BROWSER_SERVER) return true;
+    problems.push(`${config.name} from ${MCP_SOURCE_LABELS[config.source]} is left out: the name belongs to Geno's built-in browser`);
+    return false;
+  });
   const trust = await readTrust(store);
   const disabled = await readDisabled(store, workspace);
   const handles = new Map(
     servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), disabled.has(config.name), env, workspace)]),
   );
+  // Its on and off live in the editor's settings, not the disabled file.
+  if (browser !== undefined) {
+    handles.set(BROWSER_SERVER, new McpServerHandle(browserServerConfig(browser, workspace), true, !browser.settings.enabled, env, workspace));
+  }
+  const browserState = newBrowserState();
+  const isBuiltin = (handle: McpServerHandle): boolean => handle.config.source === 'builtin';
   const handleOf = (name: string): McpServerHandle => {
     const handle = handles.get(name);
     if (handle === undefined) throw new EngineError(`no MCP server ${name}; the servers are ${[...handles.keys()].join(', ') || 'none'}`);
@@ -117,6 +146,17 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
   const allowed = new Set<string>();
 
   const ready = () => [...handles.values()].filter((handle) => handle.state.status === 'ready');
+  // A built-in server offers the tools of its pinned version until it is off, and starts at the first call of one.
+  const offered = (handle: McpServerHandle): readonly McpToolInfo[] =>
+    isBuiltin(handle) ? (handle.state.status === 'disabled' ? [] : BROWSER_TOOLS) : handle.tools;
+
+  /** Runs one call on the server and turns its result into the model's text and stored images. */
+  const callTool = async (handle: McpServerHandle, name: string, info: McpToolInfo, args: Record<string, unknown>, ctx: ToolContext) => {
+    const result = await handle.call(info.tool, args, ctx.signal);
+    if (result.isError) throw new ToolError(mcpResultText(result.content, result.structured));
+    const { content, images } = await withImages(name, result.content, ctx);
+    return { text: mcpResultText(content, result.structured), images };
+  };
 
   // A server approved elsewhere, such as by `gcode mcp trust`, is picked up at the next need.
   const refreshTrust = async () => {
@@ -126,12 +166,15 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
     for (const handle of waiting) if (isTrusted(handle.config, workspace, entries)) handle.trust();
   };
 
-  const toolExecutor = (name: string, info: McpToolInfo, approval: Approval): Executor =>
-    executor({
+  const toolExecutor = (name: string, info: McpToolInfo, approval: Approval): Executor => {
+    const handle = handles.get(info.server)!;
+    if (isBuiltin(handle)) {
+      return browserExecutor(name, info, { handle, approval, state: browserState, allowed, call: (args, ctx) => callTool(handle, name, info, args, ctx) });
+    }
+    return executor({
       input: argumentsSchema,
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
-        const handle = handles.get(info.server)!;
         const mode = modeOf(approval);
         const denial = mcpDenialFor({ name, readOnly: info.readOnly }, mode, allowed.has(name));
         const record =
@@ -146,31 +189,30 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
                 () => allowed.add(name),
               );
         if (record?.verdict === 'deny') throw new ToolDenied(denialText(record), record);
-        const result = await handle.call(info.tool, args, ctx.signal);
-        if (result.isError) throw new ToolError(mcpResultText(result.content, result.structured));
-        const { content, images } = await withImages(name, result.content, ctx);
-        const text = mcpResultText(content, result.structured);
+        const { text, images } = await callTool(handle, name, info, args, ctx);
         if (record === undefined && images.length === 0) return text;
         return { text, ...(record === undefined ? {} : { approval: record }), ...(images.length === 0 ? {} : { images }) };
       },
     });
+  };
 
   return {
     problems,
     views: () =>
-      [...handles.values()].map(({ config, state, tools }) => ({
-        name: config.name,
-        source: config.source,
-        hash: definitionHash(config),
-        definition: mcpDefinitionView(config.transport),
-        state,
-        tools: [...mcpCatalog(tools).keys()],
+      [...handles.values()].map((handle) => ({
+        name: handle.config.name,
+        source: handle.config.source,
+        startsOn: isBuiltin(handle) ? ('first-use' as const) : ('session' as const),
+        hash: definitionHash(handle.config),
+        definition: mcpDefinitionView(handle.config.transport),
+        state: handle.state,
+        tools: [...mcpCatalog(offered(handle)).keys()],
       })),
     async start() {
       if (stopped) return;
       await refreshTrust();
       if (stopped) return;
-      await Promise.all([...handles.values()].map((handle) => handle.ready()));
+      await Promise.all([...handles.values()].filter((handle) => !isBuiltin(handle)).map((handle) => handle.ready()));
     },
     async trust(name, hash) {
       const handle = handleOf(name);
@@ -184,13 +226,13 @@ export async function openMcpHub({ store, env, workspace, acp }: McpHubOptions):
     },
     async setEnabled(name, enabled) {
       const handle = handleOf(name);
-      await setDisabled(store, workspace, name, !enabled);
+      if (!isBuiltin(handle)) await setDisabled(store, workspace, name, !enabled);
       if (enabled) handle.enable();
       else await handle.disable();
     },
     async toolset(approval) {
       if (approval.kind === 'non-interactive' && approval.mcp !== true) return NO_MCP_TOOLS;
-      const catalog = mcpCatalog(ready().flatMap((handle) => handle.tools));
+      const catalog = mcpCatalog([...handles.values()].flatMap(offered));
       const executors: Record<string, Executor> = {};
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
       if (catalog.size > MCP_LAZY_THRESHOLD) {

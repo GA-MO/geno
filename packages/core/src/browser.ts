@@ -33,6 +33,12 @@ export const browserServerArgs = ({ headless }: Pick<BrowserSettings, 'headless'
   `--filesystemRoot=${workspace}`,
 ];
 
+/** Turns off the server's own calls home: the usage statistics and the npm check for a newer version. */
+export const BROWSER_SERVER_ENV: Readonly<Record<string, string>> = {
+  CHROME_DEVTOOLS_MCP_NO_USAGE_STATISTICS: '1',
+  CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS: '1',
+};
+
 /** Hosts that name this machine. `*.localhost` resolves to loopback by standard; `.test` is reserved for local use. */
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 const LOCAL_SUFFIXES = ['.localhost', '.test'];
