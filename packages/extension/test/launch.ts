@@ -57,7 +57,8 @@ export async function installClean(work: string) {
   const { packageExtension } = await import('../build.mjs');
   const vsix = path.join(work, 'g-code.vsix');
   await packageExtension(vsix);
-  const executable = await downloadAndUnzipVSCode({ cachePath });
+  // GCODE_VSCODE_VERSION pins the editor build, for checking the version the user actually runs.
+  const executable = await downloadAndUnzipVSCode({ cachePath, ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}) });
   const extensionsDir = path.join(work, 'extensions');
   const profile = [`--extensions-dir=${extensionsDir}`, `--user-data-dir=${work}/ud`];
   const cli = resolveCliPathFromVSCodeExecutablePath(executable);
