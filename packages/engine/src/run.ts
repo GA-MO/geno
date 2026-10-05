@@ -16,6 +16,7 @@ import { evalSpeedCommand } from './eval-speed.js';
 import { mcpCommands } from './mcp/cli.js';
 import { listSessionsCommand } from './history.js';
 import { mine } from './mine.js';
+import { providerCommands } from './providers.js';
 import { rewind } from './rewind.js';
 import { serve } from './serve.js';
 import { tabCommands } from './tab.js';
@@ -32,6 +33,9 @@ export const USAGE = `usage:
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
   gcode mcp list [--workspace <dir>]
   gcode mcp trust <name> [--workspace <dir>]
+  gcode providers list
+  gcode providers models <provider> [--json]
+  gcode providers test <provider> [--model <id>] [--json]
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier <name>] [--model <id>]
@@ -172,6 +176,7 @@ const commands: Record<string, Command> = {
   commands: group({ list: commandsList }),
   eval: group(evalCommands),
   mcp: group(mcpCommands),
+  providers: group(providerCommands),
   rewind,
   serve,
   session: group({ show: showSession, list: listSessionsCommand }),
