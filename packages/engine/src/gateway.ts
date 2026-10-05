@@ -30,21 +30,18 @@ type Env = Readonly<Record<string, string | undefined>>;
 /** Providers that speak the Anthropic Messages wire format. */
 type Provider = {
   readonly baseUrl: (env: Env) => string;
-  readonly defaultModel: string;
   readonly sessionHeaders: (session: Session) => Record<string, string>;
 };
 
 export const PROVIDER_TABLE: Readonly<Record<ProviderName, Provider>> = {
   openrouter: {
     baseUrl: () => 'https://openrouter.ai/api',
-    defaultModel: 'anthropic/claude-opus-5.5',
     // OpenRouter routes requests with the same session id to the same provider, so the cache it wrote is hit.
     sessionHeaders: (session) => ({ 'x-session-id': session.id }),
   },
   modelstudio: {
     // The URL embeds the workspace id and region, and keys only work in their own region.
     baseUrl: (env) => required(env, PROVIDER_ENV.modelstudio.baseUrl, 'your Model Studio Anthropic endpoint'),
-    defaultModel: 'qwen3.8-flash',
     sessionHeaders: () => ({}),
   },
 };

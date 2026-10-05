@@ -29,6 +29,12 @@ export const PROVIDER_ENV = {
   modelstudio: { key: 'DASHSCOPE_API_KEY', baseUrl: 'DASHSCOPE_BASE_URL' },
 } as const satisfies Record<ProviderName, { readonly key: string; readonly baseUrl: string | undefined }>;
 
+/** The model a session uses when neither a flag, GCODE_MODEL nor the editor names one. */
+export const DEFAULT_MODELS: Readonly<Record<ProviderName, string>> = {
+  openrouter: 'anthropic/claude-opus-5.5',
+  modelstudio: 'qwen3.8-flash',
+};
+
 export type Session = {
   readonly id: SessionId;
   readonly createdAt: string;
