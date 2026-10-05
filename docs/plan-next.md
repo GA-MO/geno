@@ -4,9 +4,10 @@ Phases 0 to 8 work inside test harnesses. This plan makes g-code something the u
 
 ## Order
 
-1. U1 and U3 in parallel. They touch disjoint files.
-2. U4 after U1 merges, because it styles the panel U1 ships.
-3. U5 after U4, because @-mentions live in the polished input.
+1. U1 and U3 in parallel. They touch disjoint files. Done.
+2. U4 after U1 merges, because it styles the panel U1 ships. Done.
+3. P1 and U5 in parallel. P1 touches the gateway, loop and drive; U5 touches the request builder, tools, serve and the extension composer.
+4. P2, then P3, then P4.
 
 A sandbox for eval `verify` is already running as a separate task. It touches `eval-run.ts`, `check-task.ts` and `sandbox.ts`; no unit below edits those files.
 
@@ -45,6 +46,21 @@ The deny list now allows `rm -rf` of paths inside the workspace, which suits thr
 - `@file` and `@selection` mentions in the composer with completion.
 - `grep` and `glob` also search unsaved buffers through the bridge, closing the Phase 5 gap.
 - Check: an eval run on the 20 tasks shows no pass-rate drop, and integration tests cover each mention kind.
+
+## Borrowed from Pi
+
+Pi (github.com/earendil-works/pi, MIT, Copyright (c) 2025 Mario Zechner) is a terminal coding agent whose engine overlaps g-code's phases 1 to 4. A source read at commit `b2b5c42f6138b73ec4b2f49ec0ca468800f88586` found the parts below worth taking. Ported code keeps Pi's copyright notice in a file header naming the commit, and `NOTICE` lists every ported file. We port snippets; we never depend on Pi's packages, which move fast and carry their own types.
+
+- P1, now. Retry transient model errors with exponential backoff, and recognize context-overflow errors, from Pi's `ai/src/utils/retry.ts` and `overflow.ts`, cut to the Anthropic, OpenRouter and DashScope patterns. Today one 529 or dropped connection ends a g-code run. Check: a table test of real error strings, and a fake server that returns 529 then 200 completes the turn.
+- In U5. Project instructions: Pi's walk from the workspace up to the filesystem root taking `AGENTS.override.md`, `AGENTS.md` or `CLAUDE.md` per directory, root first, with a nested worktree's copy shadowing the main repo's, rendered as `<project_instructions path=...>`. g-code adds `.cursor/rules/*.mdc` globs itself.
+- In U5. Paged reads: a `read` past about 2,000 lines returns the first page and ends with the line to continue from, instead of spilling to a file.
+- In U5. Skills: list each `SKILL.md` under `.agents/skills` and `.claude/skills` by name and description in the cached prompt, and let the model read one when it needs it.
+- In U5. A stdout guard in `gcode serve`, so a stray `console.log` cannot corrupt the ACP stream.
+- P2, after U5. Several edits in one `edit` call matched against the original file, plus Pi's Unicode-aware fuzzy match (NFKC, smart quotes and dashes, trailing whitespace), keeping the exactly-one-match rule after normalizing. Check: the E3 apply harness and the 20-task eval's turns and cost.
+- P3, after P2. Steering: a message sent while a turn runs is queued and seen after the current tool batch, instead of being refused.
+- P4, later. Context compaction with Pi's cut-at-a-turn-boundary rule and its Goal, Progress, Decisions, Next steps summary.
+
+Not taken: Pi's multi-provider package, its extensions API, TUI, themes and RPC mode (VS Code and ACP fill those roles), its session tree (checkpoints and rewind cover the need), parallel tool runs (approvals and review assume order), and its lack of permission prompts.
 
 ## Later, only if wanted
 
