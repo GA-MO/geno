@@ -16,11 +16,12 @@ type BuiltinSpec = { readonly description: string; readonly hint?: string; reado
 export const BUILTIN_COMMANDS = {
   new: { description: 'Start a new chat', runs: 'client' },
   history: { description: 'Open a past chat', runs: 'client' },
-  mode: { description: 'Switch the approval mode', hint: 'ask | auto', runs: 'engine' },
+  mode: { description: 'Switch the approval mode', hint: 'plan | ask | auto', runs: 'engine' },
   model: { description: 'Choose the model', runs: 'client' },
   clear: { description: 'Clear the chat and start fresh', runs: 'client' },
   rules: { description: 'Show the project rules', runs: 'engine' },
   memory: { description: 'Show what Geno remembers', runs: 'engine' },
+  init: { description: 'Create or update AGENTS.md for this project', runs: 'engine' },
 } as const satisfies Record<string, BuiltinSpec>;
 
 export type BuiltinName = keyof typeof BUILTIN_COMMANDS;
