@@ -8,4 +8,4 @@ todo.md
 !.env.example
 .claude/worktrees/
 decisions.tsv
-.vscode-test/
+.vscode-test
