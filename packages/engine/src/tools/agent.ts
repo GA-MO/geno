@@ -27,6 +27,7 @@ import {
   type ToolContext,
 } from './context.js';
 import { EXECUTORS } from './index.js';
+import { withRuleAttachments, type RuleAttacher } from './rules.js';
 
 /** Asked before a command on the deny list runs; true lets it run. */
 export type Approver = (denial: Denial) => Promise<boolean>;
@@ -53,6 +54,7 @@ export type AgentToolEnv = {
   readonly approval: Approval;
   /** Stands in for the check command when the workspace has none and an editor is attached. */
   readonly diagnostics: Diagnostics | undefined;
+  readonly rules: RuleAttacher;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -155,5 +157,5 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   });
 
-  return { ...EXECUTORS, read, edit, bash, check };
+  return { ...EXECUTORS, read: withRuleAttachments(read, tools.rules), edit, bash, check };
 }

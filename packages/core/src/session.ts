@@ -6,6 +6,7 @@ import type {
   ToolResultBlockParam,
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
+import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
 import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
@@ -108,7 +109,8 @@ export type Checkpoint = {
 };
 
 export type TurnEvent =
-  | { readonly kind: 'session-start'; readonly session: Session }
+  /** `context` is absent in logs written before sessions loaded any. */
+  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined }
   | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
   | {
       readonly kind: 'restored';
@@ -119,7 +121,15 @@ export type TurnEvent =
       /** Paths rewritten or deleted to match the checkpoint. */
       readonly files: readonly string[];
     }
-  | { readonly kind: 'user'; readonly seq: number; readonly at: string; readonly content: string }
+  | {
+      readonly kind: 'user';
+      readonly seq: number;
+      readonly at: string;
+      /** What the user typed: the one trusted text in the conversation. */
+      readonly content: string;
+      /** What the user attached to the prompt, rendered after it. */
+      readonly context?: readonly ContextItem[] | undefined;
+    }
   | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string } & AssistantTurn)
   | {
       readonly kind: 'error';
@@ -180,24 +190,39 @@ const toolResultBlock = (event: ToolResultEvent): ToolResultBlockParam => ({
   ...(event.status === 'ok' ? {} : { is_error: true }),
 });
 
+const userBlocks = (event: Extract<TurnEvent, { kind: 'user' }>): TextBlockParam[] => [
+  { type: 'text', text: event.content },
+  ...(event.context === undefined || event.context.length === 0 ? [] : [{ type: 'text' as const, text: renderContextItems(event.context) }]),
+];
+
 /**
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
- * results in the order the model asked for them, then any unanswered prompts.
+ * results in the order the model asked for them, then any unanswered prompts. The session's loaded context opens
+ * the first user message, after the system prompt, so it is cached with the prefix but never part of it.
  */
 export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
   const messages: MessageParam[] = [];
   let toolUses: readonly ToolUseBlock[] = [];
   let results = new Map<string, ToolResultBlockParam>();
   let prompts: TextBlockParam[] = [];
+  // Kept apart from the prompts, so a refused first prompt does not take the loaded context with it.
+  let opening: TextBlockParam[] = [];
   const flush = () => {
     const content = [...toolUses.flatMap((use) => results.get(use.id) ?? []), ...prompts];
-    if (content.length > 0) messages.push({ role: 'user', content });
+    if (content.length > 0) {
+      messages.push({ role: 'user', content: [...opening, ...content] });
+      opening = [];
+    }
     toolUses = [];
     results = new Map();
     prompts = [];
   };
   for (const event of events) {
-    if (event.kind === 'user') prompts.push({ type: 'text', text: event.content });
+    if (event.kind === 'session-start') {
+      const loaded = event.context === undefined ? undefined : renderLoadedContext(event.context);
+      if (loaded !== undefined) opening = [{ type: 'text', text: loaded }];
+    }
+    if (event.kind === 'user') prompts.push(...userBlocks(event));
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event));

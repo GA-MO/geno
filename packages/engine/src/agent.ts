@@ -11,6 +11,7 @@ import type { Command, Io } from './command.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { isMissing, StoreError, type Store } from './store.js';
+import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, NON_INTERACTIVE, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
@@ -66,6 +67,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       checkAfterEdit: options.checkAfterEdit,
       approval: options.approval,
       diagnostics: options.diagnostics,
+      rules: ruleAttacher(opened.log.events),
     });
     const repo = shadowRepoFor(store, session.workspace);
     const mode = {
