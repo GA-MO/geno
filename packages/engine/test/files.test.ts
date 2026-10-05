@@ -16,16 +16,18 @@ const bump = { path: 'a.ts', format: 'str_replace', raw: { path: 'a.ts', old_str
 describe('applyEditToFile', () => {
   it('writes nothing when the file changed since the model read it', async () => {
     const file = await fileWith('const a = 1;\n');
-    const change = await applyEditToFile(DISK_FILES, file, { ...bump, base: baseOf('const a = 0;\n', null) }, null);
-    expect(change.result).toMatchObject({ kind: 'failed', reason: 'stale-base' });
+    const { proposed, change } = await applyEditToFile(DISK_FILES, file, { ...bump, base: baseOf('const a = 0;\n', null) }, null);
+    expect(proposed.result).toMatchObject({ kind: 'failed', reason: 'stale-base' });
     expect(await readFile(file, 'utf8')).toBe('const a = 1;\n');
+    expect(change).toBeUndefined();
   });
 
   it('writes the edited text when the base still matches', async () => {
     const file = await fileWith('const a = 1;\n');
-    const change = await applyEditToFile(DISK_FILES, file, { ...bump, base: baseOf('const a = 1;\n', null) }, null);
-    expect(change.result).toEqual({ kind: 'applied' });
+    const { proposed, change } = await applyEditToFile(DISK_FILES, file, { ...bump, base: baseOf('const a = 1;\n', null) }, null);
+    expect(proposed.result).toEqual({ kind: 'applied' });
     expect(await readFile(file, 'utf8')).toBe('const a = 2;\n');
+    expect(change).toEqual({ id: expect.stringMatching(/^[0-9a-f]{16}$/), path: file, hunks: [{ startLine: 1, lineCount: 1, oldText: 'const a = 1;\n', newText: 'const a = 2;\n', status: 'pending' }] });
   });
 
   it('fails as stale-base, keeping the newer text, when the file changes between resolving the edit and writing it', async () => {
@@ -38,9 +40,10 @@ describe('applyEditToFile', () => {
       },
       write: DISK_FILES.write,
     };
-    const change = await applyEditToFile(racing, file, { ...bump, base: baseOf('const a = 1;\n', null) }, null);
-    expect(change.result).toEqual({ kind: 'failed', reason: 'stale-base', detail: 'a.ts changed since it was last read; read it again before editing' });
-    expect(change.hunks).toEqual([]);
+    const { proposed, change } = await applyEditToFile(racing, file, { ...bump, base: baseOf('const a = 1;\n', null) }, null);
+    expect(proposed.result).toEqual({ kind: 'failed', reason: 'stale-base', detail: 'a.ts changed since it was last read; read it again before editing' });
+    expect(proposed.hunks).toEqual([]);
+    expect(change).toBeUndefined();
     expect(await readFile(file, 'utf8')).toBe('const a = 1; // typed meanwhile\n');
   });
 });

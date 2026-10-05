@@ -6,6 +6,8 @@ import type {
   ToolResultBlockParam,
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { HunkStatus } from './hunks.js';
+import type { FileChange, HunkId } from './review.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { Brand } from './types.js';
 
@@ -77,6 +79,8 @@ export type ToolResultEvent = {
   /** As the model sent it, so a call to an unknown tool is still logged. */
   readonly name: string;
   readonly status: ToolStatus;
+  /** The file edit this tool made, for review. */
+  readonly change?: FileChange | undefined;
 } & ToolOutput;
 
 /** The workspace as it was before model turn `turnSeq`, committed to the workspace's shadow repo. */
@@ -110,11 +114,12 @@ export type TurnEvent =
       readonly error: TurnErrorKind;
       readonly message: string;
     }
+  | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints and restores record what happened to the workspace; the loop steps over them. */
+/** Checkpoints, restores and review decisions record what happened to the workspace; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -123,6 +128,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'tool-result': true,
   checkpoint: false,
   restored: false,
+  review: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

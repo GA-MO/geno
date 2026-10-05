@@ -168,9 +168,9 @@ export async function drive(
       for (const [i, use] of toolUses.entries()) {
         const seq = firstSeq + i;
         watcher.toolStart(use, describeCall(use, mode.executors));
-        const { status, text } = await runTool(use, ctx, mode.executors);
+        const { status, text, change } = await runTool(use, ctx, mode.executors);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
-        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, ...output });
+        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, ...output });
       }
       return results;
     })();
