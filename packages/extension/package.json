@@ -154,6 +154,19 @@
           "default": "glass",
           "description": "How the chat panel looks. High contrast themes always use the native style."
         },
+        "gcode.chat.detail": {
+          "type": "string",
+          "enum": [
+            "compact",
+            "full"
+          ],
+          "enumDescriptions": [
+            "Fold each finished turn's work into one summary line, and show only a running turn's last four steps. Click the line to see every step.",
+            "Show every step of every turn, with tool arguments, timings and each turn's model, tokens and cost."
+          ],
+          "default": "compact",
+          "description": "How much of each turn the chat shows. The answer, the files a turn changed, and anything waiting on you show either way."
+        },
         "gcode.ui.showChanges": {
           "type": "boolean",
           "default": false,

@@ -4,7 +4,8 @@ import { h, icon, type Child } from './dom.js';
 import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
 import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
-import { headerOf, type EditTool } from './rail.js';
+import type { ChangedFile } from './fold.js';
+import { headerOf, type EditTool, type Step } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
@@ -138,9 +139,10 @@ function fileChip(tool: ToolBlock): HTMLElement {
   );
 }
 
-const AUTO_BADGES: Readonly<Record<AutoDecision['verdict'], { readonly label: string; readonly icon: string }>> = {
-  allow: { label: 'Auto-approved', icon: 'zap' },
-  deny: { label: 'Auto-denied', icon: 'circle-slash' },
+/** `quiet` badges show only with every step drawn, not on a compact turn's recent steps. */
+const AUTO_BADGES: Readonly<Record<AutoDecision['verdict'], { readonly label: string; readonly icon: string; readonly quiet: boolean }>> = {
+  allow: { label: 'Auto-approved', icon: 'zap', quiet: true },
+  deny: { label: 'Auto-denied', icon: 'circle-slash', quiet: false },
 };
 
 /** What Auto decided about a command without asking, and the classifier's reason, shown on the step even while it is folded. */
@@ -161,10 +163,12 @@ const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
 
 /**
  * A run of calls as one step on the rail: reads and edits as file chips, any other call with its target.
- * Opening the step lists each call with its duration, and each call opens to its output.
+ * Opening the step lists each call with its duration, and each call opens to its output. A `quiet` step, one of a
+ * compact turn's recent steps, leaves out an MCP call's arguments and the quiet Auto badges.
  */
-export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui): HTMLElement {
+export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui, quiet = false): HTMLElement {
   const first = tools[0]!;
+  const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
   const failed = tools.filter((t) => t.status === 'failed').length;
   const open = ui.isOpen(key);
@@ -177,13 +181,13 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       icon(KIND_ICONS[first.toolKind], 'kind'),
       mcpServerChip(name),
       h('span', { class: 'step-verb' }, verbOf(name, running)),
-      FILE_TOOLS.has(name) ? h('span', { class: 'chips' }, ...tools.map(fileChip)) : first.target !== '' && h('code', { class: 'step-target' }, first.target),
+      FILE_TOOLS.has(name) ? h('span', { class: 'chips' }, ...tools.map(fileChip)) : target && h('code', { class: 'step-target' }, first.target),
       h('span', { class: 'spacer' }),
       running && icon('loading', 'codicon-modifier-spin step-status'),
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),
       icon(open ? 'chevron-down' : 'chevron-right', 'chevron'),
     ),
-    ...tools.filter(isAuto).map(autoNote),
+    ...tools.filter(isAuto).filter((tool) => !(quiet && AUTO_BADGES[tool.auto.verdict].quiet)).map(autoNote),
     toolImages(tools, (target) => ui.post({ type: 'open', target })),
     open && h('div', { class: 'call-list' }, ...tools.map((tool) => toolRow(tool, ui))),
   );
@@ -272,6 +276,43 @@ export function changesCard(edits: readonly EditTool[], ui: Ui): HTMLElement {
         ),
     ),
     ...edits.map((tool) => editCard(tool, ui)),
+  );
+}
+
+/** The fold state's id for a turn, in the same list as the steps the user opened. */
+export const foldId = (turn: string): string => `turn:${turn}`;
+
+/** The line a compact turn's work folds behind: the summary of a finished turn, or a running turn's earlier steps. */
+export const foldRow = (step: Extract<Step, { readonly kind: 'fold' }>, ui: Ui): HTMLElement =>
+  h(
+    'button',
+    { type: 'button', class: 'turn-fold', 'aria-expanded': String(step.open), 'data-focus': `fold:${step.turn}`, onclick: () => ui.toggle(foldId(step.turn)) },
+    h('span', { class: 'fold-label' }, step.label),
+    icon(step.open ? 'chevron-down' : 'chevron-right', 'chevron'),
+  );
+
+/** The files a turn changed, one chip each that opens the file at its first hunk, with Keep all and Undo all while any hunk waits. */
+export function filesRow(files: readonly ChangedFile[], ui: Ui): HTMLElement {
+  const pending = files.flatMap((file) => file.pending);
+  return h(
+    'div',
+    { class: 'changed-files', role: 'group', 'aria-label': 'Files changed in this turn' },
+    ...files.map((file) =>
+      h(
+        'button',
+        { type: 'button', class: 'file-chip changed-file', title: `Open ${file.path}`, 'data-focus': `file:${file.first}`, onclick: () => ui.post({ type: 'reveal', hunk: file.first }) },
+        icon('file-code'),
+        h('span', { class: 'chip-name' }, basename(file.path)),
+        lineCounts(file),
+      ),
+    ),
+    pending.length > 0 &&
+      h(
+        'span',
+        { class: 'changes-actions' },
+        h('button', { class: 'button ghost small', 'data-focus': 'undo-all', onclick: () => ui.post({ type: 'undo', hunks: pending }) }, 'Undo all'),
+        h('button', { class: 'button small', 'data-focus': 'keep-all', onclick: () => ui.post({ type: 'keep', hunks: pending }) }, 'Keep all'),
+      ),
   );
 }
 
@@ -445,14 +486,22 @@ export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
 /** The model is working out its next move: a running turn with nothing else under way. */
 export const thinkingRow = (): HTMLElement => h('div', { class: 'thinking', role: 'status' }, icon('lightbulb'), h('span', { class: 'shimmer' }, 'Thinking'));
 
-/** The avatar, the name, and what the turn is doing or how long it worked. */
+/** A turn's model, tokens and cost, as one line. */
+const usageLine = ({ model, inputTokens, outputTokens, costUsd }: NonNullable<Turn['usage']>): string =>
+  [model, `${formatTokens(inputTokens)} in`, `${formatTokens(outputTokens)} out`, ...(costUsd === null ? [] : [formatCost(costUsd)])].join(' · ');
+
+/** The avatar, the name, and what the turn is doing or how long it worked, with its model, tokens and cost as the tooltip. */
 export function turnHead(turn: Turn): HTMLElement {
   return h(
     'div',
     { class: 'turn-head' },
     dino('avatar'),
     h('span', { class: 'turn-name' }, 'Geno'),
-    h('span', { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta' }, headerOf(turn, formatDuration)),
+    h(
+      'span',
+      { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta', title: turn.usage === undefined ? undefined : usageLine(turn.usage) },
+      headerOf(turn, formatDuration),
+    ),
     turn.mode === 'plan' && h('span', { class: 'turn-mode', title: 'This turn ran in Plan mode, which changes nothing' }, icon('checklist'), 'Plan'),
   );
 }
@@ -470,13 +519,14 @@ const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { read
   failed: { icon: 'error', label: 'Failed' },
 };
 
-export function turnFooter(turn: Turn): HTMLElement {
+/** How the turn ended, if not as it should, then its model, tokens and cost when `usage`. */
+export function turnFooter(turn: Turn, usage: boolean): HTMLElement {
   const parts: Child[] = [];
   if (turn.status === 'stopped' || turn.status === 'failed') {
     const ending = ENDINGS[turn.status];
     parts.push(h('span', { class: `ending ending-${turn.status}` }, icon(ending.icon), ending.label));
   }
-  if (turn.usage !== undefined) {
+  if (usage && turn.usage !== undefined) {
     const { model, inputTokens, outputTokens, costUsd } = turn.usage;
     parts.push(
       h('span', { class: 'model' }, model),

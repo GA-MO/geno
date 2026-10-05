@@ -5,13 +5,14 @@ import { composerAttachments } from './composer-attachments.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { setRoots } from './images.js';
 import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
-import type { FromView, Header, Modes, ToView, Transcript, Turn } from './messages.js';
+import { shownSteps } from './fold.js';
+import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } from './messages.js';
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { mcpPanel } from './mcp-panel.js';
 import { modePicker } from './modes.js';
-import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
-import { callsStep, changesCard, emptyState, errorBlock, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { isWaiting, nodeOf, type Step } from './rail.js';
+import { callsStep, changesCard, emptyState, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { slashPicker } from './slash-view.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
@@ -34,10 +35,33 @@ function save(next: ViewState): void {
 
 const toggled = (list: readonly string[], id: string): string[] => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
+/**
+ * The control the user just opened or closed something with, and where it stood in the transcript. The next render
+ * puts it back there, so what opens or closes below it never moves what the user is reading.
+ */
+let anchor: { readonly focus: string; readonly top: number } | undefined;
+
+function holdPlace(): void {
+  const control = document.activeElement as HTMLElement | null;
+  const focus = control?.dataset['focus'];
+  anchor = focus === undefined || !log.contains(control) ? undefined : { focus, top: control!.getBoundingClientRect().top };
+}
+
+function keepPlace(): boolean {
+  if (anchor === undefined) return false;
+  const control = log.querySelector<HTMLElement>(`[data-focus="${CSS.escape(anchor.focus)}"]`);
+  if (control !== null) log.scrollTop += control.getBoundingClientRect().top - anchor.top;
+  anchor = undefined;
+  return control !== null;
+}
+
+const detail = (): ChatDetail => (document.body.dataset['detail'] === 'full' ? 'full' : 'compact');
+
 const ui: Ui = {
   post: (message) => host.postMessage(message),
   isOpen: (id) => state.open.includes(id),
   toggle: (id) => {
+    holdPlace();
     save({ ...state, open: toggled(state.open, id) });
     schedule();
   },
@@ -155,8 +179,8 @@ function shownLength(id: string, text: string, streaming: boolean): number {
   return next;
 }
 
-/** A step's content, rebuilt only when what it shows changes. */
-function stepContent(turn: Turn, step: Step, last: boolean): { readonly deps: readonly unknown[]; readonly build: () => HTMLElement } {
+/** A step's content, rebuilt only when what it shows changes. A `quiet` step is one of a compact turn's recent steps. */
+function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { readonly deps: readonly unknown[]; readonly build: () => HTMLElement } {
   switch (step.kind) {
     case 'text': {
       const streaming = turn.status === 'streaming';
@@ -165,7 +189,7 @@ function stepContent(turn: Turn, step: Step, last: boolean): { readonly deps: re
       return { deps: [step.block.text, shown, caret], build: () => textBlock(step.block.text.slice(0, shown), caret, ui) };
     }
     case 'calls':
-      return { deps: [...step.tools, '|', ...state.open, '|', ...state.unfolded], build: () => callsStep(step.key, step.name, step.tools, ui) };
+      return { deps: [quiet, ...step.tools, '|', ...state.open, '|', ...state.unfolded], build: () => callsStep(step.key, step.name, step.tools, ui, quiet) };
     case 'permission':
       return { deps: [step.block], build: () => permissionCard(step.block, ui) };
     case 'error':
@@ -176,13 +200,17 @@ function stepContent(turn: Turn, step: Step, last: boolean): { readonly deps: re
       return { deps: [], build: thinkingRow };
     case 'changes':
       return { deps: [...step.edits, '|', ...state.unfolded], build: () => changesCard(step.edits, ui) };
+    case 'fold':
+      return { deps: [step.label, step.open], build: () => foldRow(step, ui) };
+    case 'files':
+      return { deps: [JSON.stringify(step.files)], build: () => filesRow(step.files, ui) };
   }
 }
 
 /** One node on the rail, its dot styled by the step's state. */
-function stepItem(turn: Turn, step: Step, last: boolean): Keyed {
+function stepItem(turn: Turn, step: Step, last: boolean, quiet: boolean): Keyed {
   const node = nodeOf(step);
-  const content = stepContent(turn, step, last);
+  const content = stepContent(turn, step, last, quiet);
   return {
     key: step.key,
     deps: [node, ...content.deps],
@@ -221,13 +249,16 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.mode], build: () => turnHead(turn) }]);
-      const steps = railOf(turn);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.mode, turn.usage], build: () => turnHead(turn) }]);
+      // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
+      const open = ui.isOpen(foldId(turn.id));
+      const whole = detail() === 'full' || open;
+      const steps = shownSteps(turn, detail(), open);
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
-      reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
+      reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText, !whole)));
       const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && i === transcript.turns.length - 1;
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
-        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]),
+        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole], build: () => turnFooter(turn, whole) }]),
         ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),
       ]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
@@ -241,7 +272,7 @@ function render(): void {
   input.placeholder = empty ? 'Describe the change you want, @ to add context, / for commands' : 'Ask a follow-up, @ to add context, / for commands';
   if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
   focusNewPermission();
-  if (atBottom) log.scrollTop = log.scrollHeight;
+  if (!keepPlace() && atBottom) log.scrollTop = log.scrollHeight;
   if (animating) schedule();
 }
 
@@ -276,8 +307,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     showCompletions(message.id, message.items);
     return;
   }
-  if (message.type === 'style') {
-    document.body.dataset['style'] = message.style;
+  if (message.type === 'look') {
+    document.body.dataset['style'] = message.look.style;
+    document.body.dataset['detail'] = message.look.detail;
+    schedule();
     return;
   }
   if (message.type === 'picked') {

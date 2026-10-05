@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
+import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
@@ -86,7 +86,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     memory,
     (document, change) => review.track(document, change),
     () => modelLabel(vscode.workspace.getConfiguration('gcode'), process.env),
-    () => uiStyleOf(vscode.workspace.getConfiguration('gcode')),
+    () => lookOf(vscode.workspace.getConfiguration('gcode')),
     (workspace, sessionId) => openElsewhere(context, workspace, sessionId),
     () => approvalModeOf(vscode.workspace.getConfiguration('gcode')),
     async () => {
@@ -109,7 +109,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     context.secrets.onDidChange(() => chat.resetEngine()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
-      if (event.affectsConfiguration(STYLE_SETTING)) chat.restyle();
+      if (LOOK_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.restyle();
     }),
     vscode.window.registerWebviewViewProvider(CHAT_VIEW, chat),
     vscode.commands.registerCommand(SEND_COMMAND, async (prompt?: string) => {
