@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -89,6 +90,29 @@ describe('command discovery', () => {
       await mkdir(path.join(home, 'skills', 'tidy'), { recursive: true });
       await writeFile(path.join(home, 'skills', 'tidy', 'SKILL.md'), skill('tidy', 'Tidy'));
       await until(() => calls > seen);
+    } finally {
+      stop();
+    }
+  });
+
+  it('sees a change made the moment it calls back, in a folder it was already watching', async () => {
+    const { workspace, home } = await tree({});
+    await mkdir(path.join(home, 'commands'), { recursive: true });
+    let calls = 0;
+    const stop = watchCommands(
+      workspace,
+      home,
+      () => {
+        // A client re-lists on the callback and the user adds the next command at once.
+        if (++calls === 1) writeFileSync(path.join(home, 'commands', 'two.md'), 'Two.');
+      },
+      50,
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    try {
+      await mkdir(path.join(workspace, '.claude', 'commands'), { recursive: true });
+      await writeFile(path.join(workspace, '.claude', 'commands', 'one.md'), 'One.');
+      await until(() => calls >= 2);
     } finally {
       stop();
     }

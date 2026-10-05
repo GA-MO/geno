@@ -135,17 +135,22 @@ export const availableCommands = (commands: readonly SlashCommand[]): acp.Availa
 /**
  * Calls `onChange` after each burst of changes to any source folder. A folder that does not exist yet is caught by
  * watching its nearest existing parent inside the workspace or home, and the watch moves down once it appears.
+ *
+ * On macOS libuv watches a directory with an FSEvents stream, which misses changes made in its first moments. So a
+ * watch that still covers the same folder is kept, never reopened, and a burst that opens a new watch is followed by
+ * one more scan for changes made while it started.
  */
 export function watchCommands(workspace: string, home: string, onChange: () => void, debounceMs = 200): () => void {
-  let watchers: FSWatcher[] = [];
+  const watchers = new Map<string, FSWatcher>();
   let timer: NodeJS.Timeout | undefined;
   let closed = false;
   const fired = () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (closed) return;
-      arm();
+      const opened = arm();
       onChange();
+      if (opened) fired();
     }, debounceMs).unref();
   };
   const targets = () => {
@@ -159,23 +164,33 @@ export function watchCommands(workspace: string, home: string, onChange: () => v
       const deep = dir === source.dir(workspace, home);
       found.set(dir, (found.get(dir) ?? false) || deep);
     }
-    return found;
+    return new Set([...found].map(([dir, recursive]) => `${recursive ? 'deep' : 'flat'}:${dir}`));
   };
-  const arm = () => {
-    for (const watcher of watchers) watcher.close();
-    watchers = [...targets()].flatMap(([dir, recursive]) => {
+  /** Whether it opened a watch. */
+  const arm = (): boolean => {
+    const wanted = targets();
+    for (const [key, watcher] of watchers) {
+      if (wanted.has(key)) continue;
+      watcher.close();
+      watchers.delete(key);
+    }
+    let opened = false;
+    for (const key of wanted) {
+      if (watchers.has(key)) continue;
       try {
-        return [watch(dir, { persistent: false, recursive }, fired).on('error', fired)];
+        watchers.set(key, watch(key.slice(key.indexOf(':') + 1), { persistent: false, recursive: key.startsWith('deep:') }, fired).on('error', fired));
+        opened = true;
       } catch {
-        return [];
+        // A folder removed between the scan and the watch is caught by its parent's watch.
       }
-    });
+    }
+    return opened;
   };
   arm();
   return () => {
     closed = true;
     clearTimeout(timer);
-    for (const watcher of watchers) watcher.close();
+    for (const watcher of watchers.values()) watcher.close();
   };
 }
 
