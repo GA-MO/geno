@@ -44,7 +44,8 @@ import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
 import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
-import type { SettingsPage } from './settings-host.js';
+import { setRole, type SettingsPage } from './settings-host.js';
+import { ComposerHost } from './composer-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
 import {
@@ -327,6 +328,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly settingsPage: SettingsPage;
   /** The settings action ran before the webview was ready; it opens the page once it is. */
   private settingsAsked = false;
+  /** The composer's effort, context, running cost and model choices. */
+  private readonly composer: ComposerHost;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -346,6 +349,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.settingsPage = settingsPage((message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.composer = new ComposerHost(
+      () => this.link(),
+      (message) => void this.view?.webview.postMessage(message satisfies ToView),
+      () => this.settingsPage.listing(),
+      modelName,
+      (provider, model) => setRole('chat', provider, model),
+    );
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -364,6 +374,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   resetEngine(): void {
     this.engine.reset();
     this.dispatch({ type: 'model', model: this.modelName() });
+    this.composer.refreshModels();
   }
 
   /** Tells a shown panel the look the settings now ask for; a panel created later reads it itself. */
@@ -384,6 +395,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   dispose(): void {
     this.mcp.dispose();
     this.settingsPage.dispose();
+    this.composer.dispose();
     this.switched.dispose();
     this.engine.dispose();
   }
@@ -408,6 +420,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private updated(sessionId: string, update: acp.SessionUpdate): void {
+    if (this.composer.updated(sessionId, update)) return;
     // Every session of this window shares its workspace, so any session's list is the panel's.
     if (update.sessionUpdate === 'available_commands_update') return this.recommand(commandOptions(update.availableCommands));
     if (update.sessionUpdate === 'current_mode_update') {
@@ -462,7 +475,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly editorActions: Readonly<Record<EditorAction, () => Promise<void>>> = {
     'new-chat': () => this.newChat(),
     history: async () => this.showHistory(),
-    model: async () => void (await vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model')),
+    model: async () => this.showSettings(),
     rules: async () => void this.view?.webview.postMessage({ type: 'show-rules' } satisfies ToView),
     memory: async () => void this.view?.webview.postMessage({ type: 'show-memory' } satisfies ToView),
   };
@@ -495,6 +508,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
     this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current, command });
+    this.composer.turnStarted();
     try {
       this.turn = await this.link();
       this.lastSession = this.turn.sessionId;
@@ -544,8 +558,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const { cwd } = connection;
     if (this.shown !== undefined) {
       try {
-        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+        const { modes, configOptions } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
         this.remode(modesOf(modes) ?? this.modes);
+        this.composer.switched(this.shown, configOptions);
         return this.shown;
       } catch {
         // The log went away while the engine restarted; start over.
@@ -567,13 +582,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Starts a session in `mode`, by default the one the settings give new sessions. */
   private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode()): Promise<string> {
-    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+    const { sessionId, modes, configOptions } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
     let state = modesOf(modes) ?? { current: mode, available: MODE_FALLBACK };
     if (state.current !== mode && state.available.some((m) => m.id === mode)) {
       await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
       state = { ...state, current: mode };
     }
-    await this.show(sessionId, transcript, undefined, state);
+    await this.show(sessionId, transcript, undefined, state, configOptions);
     return sessionId;
   }
 
@@ -584,19 +599,23 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const replay: Replay = { id: sessionId, transcript: emptyTranscript(this.modelName()), end: undefined, title: undefined, finished };
     this.replay = replay;
     let modes: Modes | undefined;
+    let options: acp.LoadSessionResponse['configOptions'];
     try {
-      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() })).modes);
+      const loaded = await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+      modes = modesOf(loaded.modes);
+      options = loaded.configOptions;
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
     }
     const transcript = replay.end === undefined ? replay.transcript : reduce(replay.transcript, replay.end);
-    await this.show(sessionId, transcript, replay.title, modes ?? { current: 'ask', available: MODE_FALLBACK });
+    await this.show(sessionId, transcript, replay.title, modes ?? { current: 'ask', available: MODE_FALLBACK }, options);
   }
 
   /** Makes the session the panel's: remembered for the next window, its transcript and title shown. */
-  private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes): Promise<void> {
+  private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes, options: acp.NewSessionResponse['configOptions']): Promise<void> {
     this.shown = sessionId;
+    this.composer.switched(sessionId, options);
     this.dispatch({ type: 'reset', transcript });
     this.retitle(title);
     this.remode(modes);
@@ -790,6 +809,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'modes', modes: this.modes } satisfies ToView);
         void view.webview.postMessage({ type: 'commands', commands: this.commands } satisfies ToView);
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
+        void view.webview.postMessage({ type: 'composer', facts: this.composer.current() } satisfies ToView);
+        this.composer.refreshModels();
         if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
         this.mcpAsked = false;
         if (this.settingsAsked) void view.webview.postMessage({ type: 'show-settings' } satisfies ToView);
@@ -814,7 +835,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
-      'choose-model': () => void this.editorActions.model(),
+      'choose-model': () => this.showSettings(),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'start-building': () => void this.startBuilding().catch(warn),
@@ -825,6 +846,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.mcp.handlers,
       ...this.panes.handlers,
       ...this.settingsPage.handlers,
+      ...this.composer.handlers,
     };
   }
 

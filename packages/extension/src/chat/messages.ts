@@ -1,5 +1,6 @@
 import type { AppliedRule, AskUserAnswer, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
+import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { MentionCompletion } from './mentions.js';
@@ -240,7 +241,8 @@ export type ToView =
   | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
   | McpToView
   | SettingsToView
-  | ContextToView;
+  | ContextToView
+  | ComposerToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -294,7 +296,7 @@ export type FromView =
   /** Opens the file a hunk is in, at the hunk. */
   | { readonly type: 'reveal'; readonly hunk: string }
   | { readonly type: 'copy'; readonly text: string }
-  /** Opens the setting that picks the model. */
+  /** Opens the Models and Keys page. */
   | { readonly type: 'choose-model' }
   /** Opens a diagram full size in an editor tab. */
   | { readonly type: 'open-diagram'; readonly source: string }
@@ -310,4 +312,5 @@ export type FromView =
   | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
   | McpFromView
   | SettingsFromView
-  | ContextFromView;
+  | ContextFromView
+  | ComposerFromView;

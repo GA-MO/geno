@@ -30,6 +30,12 @@ export type ComposerFacts = {
   readonly bahtPerUsd: number;
 };
 
+/** What the extension tells the webview about the composer, and what the webview asks of it. */
+export type ComposerToView = { readonly type: 'composer'; readonly facts: ComposerFacts };
+export type ComposerFromView =
+  | { readonly type: 'set-effort'; readonly value: string }
+  | { readonly type: 'set-model'; readonly provider: string; readonly model: string };
+
 export const NO_FACTS: ComposerFacts = { provider: '', effort: undefined, models: [], context: undefined, turnCostUsd: undefined, bahtPerUsd: 0 };
 
 export type ComposerInput = {
