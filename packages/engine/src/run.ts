@@ -8,6 +8,7 @@ import { chat, showSession } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
 import { classifierEvalCommand } from './classifier-eval.js';
 import { childEnv } from './child-env.js';
+import { commandsList } from './commands.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { evalRunCommand } from './eval-run.js';
@@ -22,6 +23,7 @@ export const USAGE = `usage:
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
+  gcode commands list [--workspace <dir>]
   gcode rewind --session <id> --to <turn>
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
   gcode eval list
@@ -159,6 +161,7 @@ const commands: Record<string, Command> = {
   agent,
   ask,
   chat,
+  commands: group({ list: commandsList }),
   eval: group(evalCommands),
   rewind,
   serve,
