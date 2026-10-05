@@ -481,7 +481,7 @@ export function denialFor(command: string, scope: CommandScope, mode: ApprovalMo
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
   const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
-  let ask: Denial | undefined;
+  const asks: Denial[] = [];
   for (const words of commands) {
     for (const variant of variants(words, vars)) {
       const simple = simpleCommand(variant, cwd);
@@ -491,9 +491,13 @@ export function denialFor(command: string, scope: CommandScope, mode: ApprovalMo
         if (verdict === 'allow' || !matches(simple, scope)) continue;
         const denial = { rule, reason, command: words.join(' '), verdict };
         if (verdict === 'deny') return denial;
-        ask ??= denial;
+        asks.push(denial);
       }
     }
   }
-  return ask;
+  const [first] = asks;
+  if (first === undefined) return undefined;
+  // One yes runs the whole line, so a question about several flagged commands must show all of them.
+  if (new Set(asks.map((a) => a.command)).size === 1) return first;
+  return { ...first, command: command.trim(), reason: [...new Set(asks.map((a) => a.reason))].join('; ') };
 }

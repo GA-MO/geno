@@ -236,6 +236,18 @@ describe('the deny-to-approve list', () => {
     expect(new Set<DenyRuleId>([...DENIED.map(([, rule]) => rule), 'rm-rf-in-workspace'])).toEqual(new Set(DENY_RULE_IDS));
   });
 
+  it('names every flagged command when one interactive line holds several, so a yes cannot hide one', () => {
+    const denial = denialFor('rm -rf src; rm -rf ~', scope, 'interactive');
+    expect(denial).toMatchObject({ verdict: 'ask', command: 'rm -rf src; rm -rf ~' });
+    expect(denial?.reason).toContain('inside the workspace');
+    expect(denial?.reason).toContain('outside it');
+    expect(denialFor('git push; rm -rf ~', scope, 'interactive')?.command).toBe('git push; rm -rf ~');
+  });
+
+  it('keeps naming just the flagged part when only one command in the line is flagged', () => {
+    expect(denialFor('npm ci; rm -rf src', scope, 'interactive')).toMatchObject({ command: 'rm -rf src', verdict: 'ask' });
+  });
+
   it('names the part of a compound command that was denied', () => {
     expect(denialFor('npm ci; git push --force', scope, 'non-interactive')).toEqual({
       rule: 'git-push',
