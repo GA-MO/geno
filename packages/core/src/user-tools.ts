@@ -1,5 +1,6 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
+import { ASK_USER_INPUT_SCHEMA } from './ask-user.js';
 import { MEMORY_SCOPES, MEMORY_TEXT_MAX } from './memory.js';
 
 /**
@@ -24,16 +25,8 @@ export const USER_TOOL_SPECS: Readonly<Record<UserToolName, Tool>> = {
   ask_user: {
     name: 'ask_user',
     description:
-      'Ask the user a question and wait for the answer, when you cannot go on without a decision only they can make. Offer the likely answers as options; the user can also answer in their own words, or decline. Do not ask what you can find out by reading the code or running a command.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        question: { type: 'string', description: 'The question, in one or two plain sentences.' },
-        options: { type: 'array', items: { type: 'string' }, maxItems: 6, description: 'Short answers the user can pick with one click.' },
-      },
-      required: ['question'],
-      additionalProperties: false,
-    },
+      'Ask the user one to four questions in one card and wait for the answers, when you cannot go on without decisions only they can make. Each question is a tab with 2 to 4 options; give each option a short label and a one-sentence description, mark the one you recommend, and add a preview (a short markdown or code block) when seeing the option helps. The card always adds Other for an answer in the user\'s own words, so never list it. The user can also decline. Do not ask what you can find out by reading the code or running a command.',
+    input_schema: ASK_USER_INPUT_SCHEMA as unknown as Tool['input_schema'],
   },
   remember: {
     name: 'remember',
@@ -53,26 +46,3 @@ export const USER_TOOL_SPECS: Readonly<Record<UserToolName, Tool>> = {
 /** The user tools a run offers: those its mode allows that the client can show. Sorted, for a stable prefix. */
 export const userToolDefinitions = (mode: ApprovalMode, shown: ReadonlySet<UserToolName>): readonly Tool[] =>
   USER_TOOL_NAMES.filter((name) => USER_TOOL_MODES[name][mode] && shown.has(name)).map((name) => USER_TOOL_SPECS[name]);
-
-export type AskUserRequest = { readonly question: string; readonly options: readonly string[] };
-
-/** The user's reply to `ask_user`: an answer, or a refusal to answer. */
-export type AskUserAnswer = { readonly kind: 'answered'; readonly text: string } | { readonly kind: 'declined' };
-
-/**
- * The form an `ask_user` question becomes in ACP's `elicitation/create`: a pick among the options when there are
- * any, and a free-text answer. The client sends back one of them.
- */
-export const ASK_USER_FIELDS = { choice: 'choice', answer: 'answer' } as const;
-
-export const askUserSchema = ({ options }: AskUserRequest) => ({
-  type: 'object' as const,
-  properties: {
-    ...(options.length === 0 ? {} : { [ASK_USER_FIELDS.choice]: { type: 'string' as const, title: 'Pick an answer', oneOf: options.map((option) => ({ const: option, title: option })) } }),
-    [ASK_USER_FIELDS.answer]: { type: 'string' as const, title: 'Or answer in your own words' },
-  },
-});
-
-/** What the user's reply tells the model. */
-export const askUserResult = (answer: AskUserAnswer): string =>
-  answer.kind === 'answered' ? `The user answered: ${answer.text}` : 'The user declined to answer. Go on with your best judgment and say what you assumed.';

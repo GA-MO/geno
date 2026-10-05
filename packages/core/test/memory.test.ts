@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   APPROVAL_MODES,
   appliedRules,
+  askUserForm,
   askUserResult,
-  askUserSchema,
+  parseAskUser,
   MEMORY_TEXT_MAX,
   MEMORY_TOTAL_MAX,
   memoryProblem,
@@ -110,15 +111,18 @@ describe('the user tools', () => {
   });
 
   it('asks a question as a form with the options to pick and a free-text answer', () => {
-    expect(askUserSchema({ question: 'Which?', options: ['a', 'b'] })).toEqual({
+    const which = parseAskUser({ question: 'Which?', options: ['a', 'b'] });
+    const why = parseAskUser({ question: 'Why?', options: [] });
+    if (!which.ok || !why.ok) throw new Error('the U13 shape parses');
+    expect(askUserForm(which.value)).toEqual({
       type: 'object',
       properties: {
-        choice: { type: 'string', title: 'Pick an answer', oneOf: [{ const: 'a', title: 'a' }, { const: 'b', title: 'b' }] },
-        answer: { type: 'string', title: 'Or answer in your own words' },
+        choice: { type: 'string', title: 'Question', description: 'Which?', oneOf: [{ const: 'a', title: 'a' }, { const: 'b', title: 'b' }] },
+        'choice.other': { type: 'string', title: 'Other', description: 'Your own answer to: Which?' },
       },
     });
-    expect(askUserSchema({ question: 'Why?', options: [] }).properties).toEqual({ answer: { type: 'string', title: 'Or answer in your own words' } });
-    expect(askUserResult({ kind: 'answered', text: 'b' })).toBe('The user answered: b');
-    expect(askUserResult({ kind: 'declined' })).toMatch(/^The user declined to answer/);
+    expect(askUserForm(why.value).properties).toEqual({ 'choice.other': { type: 'string', title: 'Question', description: 'Why?' } });
+    expect(askUserResult(which.value, { kind: 'answered', answers: { choice: { picked: ['b'] } } })).toBe('The user answered: b');
+    expect(askUserResult(which.value, { kind: 'declined' })).toMatch(/^The user declined to answer/);
   });
 });
