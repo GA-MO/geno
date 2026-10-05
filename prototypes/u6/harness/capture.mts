@@ -30,21 +30,34 @@ const states = (process.env['U6_STATES'] ?? 'full,permission,streaming,empty').s
 const themes = (process.env['U6_THEMES'] ?? 'dark,light').split(',');
 const fileName = (d: string, state: string, theme: string) => `${d}${state === 'full' ? '' : `-${state}`}-${theme}.png`;
 
-/** Drags the sidebar's sash so the chat panel is as wide as in the U4 screenshots. */
+/** Drags the sidebar's sash until the chat panel is as wide as in the U4 screenshots. */
 async function widen(width: number) {
   const window = await connectWindow(port);
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   try {
-    const { result } = await window.page.send('Runtime.evaluate', {
-      expression: `(() => { const r = document.querySelector('.part.sidebar').getBoundingClientRect(); return { x: r.right, y: r.top + r.height / 2, left: r.left }; })()`,
-      returnByValue: true,
-    });
-    const { x, y, left } = result.value as { x: number; y: number; left: number };
-    const mouse = (type: string, at: number) => window.page.send('Input.dispatchMouseEvent', { type, x: at, y, button: 'left', clickCount: 1 });
-    await mouse('mouseMoved', x);
-    await mouse('mousePressed', x);
-    for (let step = 1; step <= 10; step++) await mouse('mouseMoved', x + ((left + width - x) * step) / 10);
-    await mouse('mouseReleased', left + width);
-    await window.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: left + width + 400, y });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { result } = await window.page.send('Runtime.evaluate', {
+        expression: `(() => { const r = document.querySelector('.part.sidebar').getBoundingClientRect(); return { x: r.right, y: r.top + r.height / 2, left: r.left, now: r.width }; })()`,
+        returnByValue: true,
+      });
+      const { x, y, left, now } = result.value as { x: number; y: number; left: number; now: number };
+      if (Math.abs(now - width) < 8) return;
+      // A window nobody sees never updates its hit testing, so the drag is dispatched to the sash element itself.
+      await window.page.send('Runtime.evaluate', {
+        expression: `(() => {
+          const sash = [...document.querySelectorAll('.monaco-sash.vertical')].find((s) => { const r = s.getBoundingClientRect(); return r.height > 100 && Math.abs(r.left + r.width / 2 - ${x}) < 4; });
+          const at = (clientX, buttons) => ({ clientX, clientY: ${y}, screenX: clientX, screenY: ${y}, bubbles: true, cancelable: true, button: 0, buttons, pointerId: 1, pointerType: 'mouse', isPrimary: true });
+          for (const type of ['pointerdown', 'mousedown']) sash.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, at(${x}, 1)));
+          for (let step = 1; step <= 10; step++) {
+            const cx = ${x} + (${left + width - x} * step) / 10;
+            for (const type of ['pointermove', 'mousemove']) sash.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, at(cx, 1)));
+          }
+          for (const type of ['pointerup', 'mouseup']) sash.dispatchEvent(new (type.startsWith('pointer') ? PointerEvent : MouseEvent)(type, at(${left + width}, 0)));
+        })()`,
+      });
+      await pause(300);
+    }
+    throw new Error('the sidebar did not widen');
   } finally {
     window.browser.close();
   }

@@ -1,0 +1,487 @@
+/* Blocks: the panel as a modern terminal. Full-width blocks, aligned log lines, keys for every action,
+   and stepped pixel corners that match the dinosaur. */
+:root {
+  --fg: var(--vscode-foreground);
+  --muted: var(--vscode-descriptionForeground);
+  --bg: var(--vscode-sideBar-background);
+  --tint: color-mix(in srgb, var(--fg) 5%, var(--bg));
+  --tint-2: color-mix(in srgb, var(--fg) 9%, var(--bg));
+  --hair: color-mix(in srgb, var(--fg) 10%, transparent);
+  --accent: var(--vscode-focusBorder);
+  --ok: var(--vscode-charts-green);
+  --warn: var(--vscode-charts-yellow);
+  --mono: var(--vscode-editor-font-family);
+  --px: 2px;
+  --chamfer: polygon(
+    0 calc(var(--px) * 2), var(--px) calc(var(--px) * 2), var(--px) var(--px), calc(var(--px) * 2) var(--px), calc(var(--px) * 2) 0,
+    calc(100% - var(--px) * 2) 0, calc(100% - var(--px) * 2) var(--px), calc(100% - var(--px)) var(--px), calc(100% - var(--px)) calc(var(--px) * 2), 100% calc(var(--px) * 2),
+    100% calc(100% - var(--px) * 2), calc(100% - var(--px)) calc(100% - var(--px) * 2), calc(100% - var(--px)) calc(100% - var(--px)), calc(100% - var(--px) * 2) calc(100% - var(--px)), calc(100% - var(--px) * 2) 100%,
+    calc(var(--px) * 2) 100%, calc(var(--px) * 2) calc(100% - var(--px)), var(--px) calc(100% - var(--px)), var(--px) calc(100% - var(--px) * 2), 0 calc(100% - var(--px) * 2)
+  );
+}
+
+.transcript {
+  padding: 0 0 8px;
+}
+
+.px {
+  clip-path: var(--chamfer);
+}
+
+.blk {
+  position: relative;
+  padding: 12px 16px 12px 18px;
+  border-bottom: 1px solid var(--hair);
+}
+.blk::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.you {
+  display: flex;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--tint);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.you::before {
+  background: var(--accent);
+}
+.you .prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+.you code {
+  color: var(--vscode-textPreformat-foreground);
+}
+
+.agent.waiting::before {
+  background: var(--warn);
+}
+.agent.live::before {
+  background: linear-gradient(var(--accent), transparent);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.head .dino {
+  width: 18px;
+  height: 18px;
+}
+.head .who {
+  font-weight: 700;
+}
+.head .state {
+  margin-left: auto;
+  color: var(--muted);
+}
+.live .head .state::after {
+  content: '▌';
+  margin-left: 4px;
+  color: var(--accent);
+  animation: caret 1s steps(1) infinite;
+}
+
+.log {
+  margin: 0 -8px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.line {
+  display: grid;
+  grid-template-columns: 16px 44px minmax(0, 1fr) auto 44px;
+  gap: 8px;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+}
+.line:hover {
+  background: var(--tint);
+}
+.glyph {
+  text-align: center;
+  font-weight: 700;
+}
+.done .glyph {
+  color: var(--ok);
+}
+.waiting .glyph {
+  color: var(--bg);
+  background: var(--warn);
+  line-height: 16px;
+  clip-path: var(--chamfer);
+  --px: 1px;
+}
+.thought .glyph,
+.thought .arg {
+  color: var(--muted);
+}
+.thought .arg {
+  font-family: var(--vscode-font-family);
+  font-style: italic;
+}
+.tool {
+  color: var(--muted);
+}
+.arg {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.detail {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ms {
+  color: var(--muted);
+  opacity: 0.7;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.add {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+.del {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.prose {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.prose p {
+  margin: 0 0 10px;
+}
+.prose ul {
+  margin: 0 0 4px;
+  padding-left: 0;
+  list-style: none;
+}
+.prose li::before {
+  content: '▪';
+  color: var(--accent);
+  margin-right: 8px;
+}
+.prose :not(pre) > code,
+.prose li code {
+  font-size: 12px;
+  color: var(--vscode-textPreformat-foreground);
+  background: var(--tint-2);
+  padding: 0 4px;
+}
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--accent);
+  animation: caret 1s steps(1) infinite;
+}
+
+figure {
+  margin: 0 0 12px;
+}
+figcaption,
+.patch header,
+.file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+figcaption {
+  padding: 6px 12px;
+}
+.keys {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--fg);
+  background: var(--tint-2);
+  box-shadow: inset 0 -1px color-mix(in srgb, var(--fg) 25%, transparent);
+}
+.code {
+  background: var(--tint);
+}
+.code figcaption {
+  background: var(--tint-2);
+}
+.code pre {
+  margin: 0;
+  padding: 10px 12px 12px;
+  font-size: var(--vscode-editor-font-size);
+  line-height: 1.6;
+}
+.diagram {
+  background: var(--tint);
+  padding-top: 14px;
+}
+.diagram .dg {
+  margin: 0 auto;
+}
+.diagram figcaption {
+  margin-top: 10px;
+  background: var(--tint-2);
+}
+.dg-node rect {
+  rx: 0;
+  fill: var(--bg);
+  stroke: color-mix(in srgb, var(--fg) 35%, transparent);
+  stroke-width: 2;
+}
+.dg-node text {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.dg-hot rect {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+.dg-hot text {
+  fill: var(--vscode-button-foreground);
+}
+.dg-edge path {
+  stroke-dasharray: 4 3;
+}
+
+.patch {
+  margin: 4px 0 12px;
+  background: var(--tint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.patch header {
+  padding: 6px 8px 6px 12px;
+  background: var(--tint-2);
+}
+.patch header .label {
+  color: var(--fg);
+  font-weight: 700;
+}
+.file {
+  padding: 8px 12px 4px;
+}
+.file .name {
+  color: var(--fg);
+}
+.ln {
+  display: grid;
+  grid-template-columns: 28px 14px 1fr;
+  padding-right: 12px;
+  white-space: pre;
+  line-height: 1.65;
+}
+.ln .n {
+  text-align: right;
+  padding-right: 6px;
+  color: var(--muted);
+  opacity: 0.6;
+}
+.ln .k {
+  color: var(--muted);
+}
+.ln.ins {
+  background: var(--vscode-diffEditor-insertedLineBackground);
+}
+.ln.rem {
+  background: var(--vscode-diffEditor-removedLineBackground);
+}
+.ln.ins .k {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+.ln.rem .k {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+.patch > :last-child {
+  margin-bottom: 8px;
+}
+
+button.key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  border: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fg);
+  background: var(--tint-2);
+  clip-path: var(--chamfer);
+  cursor: pointer;
+}
+button.key.go {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+button.key.go kbd {
+  color: var(--vscode-button-foreground);
+  background: color-mix(in srgb, var(--vscode-button-foreground) 18%, transparent);
+}
+
+.ask {
+  margin: 0 0 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg));
+}
+.ask .q {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.ask .mark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--warn);
+  clip-path: var(--chamfer);
+}
+.ask b {
+  color: var(--vscode-textPreformat-foreground);
+}
+.ask p {
+  margin: 8px 0 12px 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ask .keys {
+  margin-left: 30px;
+  flex-wrap: wrap;
+}
+
+.strip {
+  display: flex;
+  gap: 2px;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.strip span {
+  padding: 2px 8px;
+  background: var(--tint);
+}
+.strip span:first-child {
+  color: var(--fg);
+  background: var(--tint-2);
+}
+.strip span:last-child {
+  margin-left: auto;
+}
+
+.composer {
+  border-top: 1px solid var(--hair);
+  background: var(--tint);
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.line-in {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 10px 18px;
+  min-height: 56px;
+}
+.line-in .prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+.line-in .ph {
+  color: var(--vscode-input-placeholderForeground);
+}
+.cursor {
+  width: 8px;
+  height: 16px;
+  margin-left: -6px;
+  background: var(--fg);
+  animation: caret 1s steps(1) infinite;
+}
+.status {
+  display: flex;
+  gap: 2px;
+  padding: 0 0 0 18px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--hair);
+}
+.status span {
+  padding: 4px 8px;
+}
+.status span:first-child {
+  padding-left: 0;
+  color: var(--fg);
+}
+.status .hint {
+  margin-left: auto;
+  padding-right: 16px;
+}
+
+.empty {
+  padding: 28px 18px;
+}
+.big {
+  width: 64px;
+  height: 64px;
+}
+.empty h1 {
+  margin: 16px 0 4px;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+}
+.empty p {
+  margin: 0 0 18px;
+  color: var(--muted);
+}
+.starts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.starts li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+}
+.starts li:first-child {
+  background: var(--tint);
+  clip-path: var(--chamfer);
+}

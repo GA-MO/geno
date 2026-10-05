@@ -565,3 +565,18 @@ summary .file {
 .suggest .codicon {
   color: var(--muted);
 }
+
+/* High contrast themes make the button color transparent; their contrast border keeps shapes visible. */
+.bubble,
+.send,
+.box,
+.code,
+.diagram,
+.diff,
+.permission {
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+.dg-hot rect {
+  stroke: var(--vscode-contrastActiveBorder, var(--accent));
+}
