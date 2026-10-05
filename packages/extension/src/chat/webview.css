@@ -1372,6 +1372,7 @@ body.diagram-tab {
   width: 96px;
   height: 96px;
   cursor: pointer;
+  will-change: transform;
 }
 
 .start-shadow {
@@ -1383,6 +1384,7 @@ body.diagram-tab {
   border-radius: 50%;
   background: radial-gradient(closest-side, rgb(0 0 0 / 38%), transparent);
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .vscode-light .start-shadow {
