@@ -85,6 +85,16 @@ All three are original and drawn on a 24x24 grid. They are not traced from any e
 
 Files: `prototypes/u6/dinos/{noodle,plato,frill}-mono.svg`, `-avatar.svg` and `-128.png`.
 
+### Boxy Noodle
+
+After the user picked Noodle, they asked for a blockier version. Three variants keep Noodle's palette, eye and blush, and drop every diagonal step. They get more boxy from A to C. The same script builds them, and `docs/media/u6-proposals/noodle-boxy.png` compares them against the original Noodle.
+
+- **Box A** is Noodle with straight edges: a rectangular head on a long neck, a long flat body, a straight tail and thick square legs.
+- **Box B** is chunky: a near-cube body, a big square head on a short thick neck, a stub tail and stubby block legs.
+- **Box C** is almost a box: a plain box body with a small box head on a thin neck, a nub tail and one-row feet.
+
+Files: `prototypes/u6/dinos/noodle-box-{a,b,c}-mono.svg`, `-avatar.svg` and `-128.png`.
+
 ## Recommendation
 
 Use Trail with Noodle. Trail answers the original request most directly, because a run reads as a process in a single glance. It also keeps VS Code's own conventions, so it fits the editor in every theme with the fewest special cases. Noodle is the only dinosaur that stays recognizable as a mono 16px mask.
