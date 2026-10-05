@@ -62,6 +62,7 @@ export const AGENT_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
 You are running as an agent that changes the code itself. How to work in this mode:
 - Your tools are read, grep, glob and list to look around, edit to change files, bash to run commands, check to run the project's check command, and skill to load a skill's instructions by name.
+- When you need several reads, searches or listings that do not depend on each other, ask for all of them in one turn; they run at the same time.
 - Read a file before you edit it. edit refuses a file you have not read in this session, or one that changed since you last read it; read it again and retry.
 - edit replaces one exact piece of text that appears once in the file. Copy old_str from what read showed you, without the line numbers and the tab after them. To make a new file, pass create: true with the whole content as new_str. Several separate changes to one file are several edit calls.
 - When the project has a check command, it runs after every successful edit and its result is appended to the edit's result. If it fails because of your change, fix that before moving on. Failures that were there before your change are not yours to fix unless the task asks.
