@@ -22,6 +22,7 @@ const done = (reason: DoneReason): LoopStep => ({ kind: 'done', reason });
 const ERROR_REASON: Record<TurnErrorKind, DoneReason> = {
   refusal: 'refusal',
   transport: 'error',
+  overflow: 'error',
   abort: 'error',
   'max-turns': 'max-turns',
   budget: 'budget',
@@ -38,7 +39,7 @@ const AFTER_STOP: Record<StopReason, LoopStep> = {
   model_context_window_exceeded: done('error'),
 };
 
-type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' }>;
+type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' }>;
 type EventOf<K extends ConversationEvent['kind']> = Extract<ConversationEvent, { kind: K }>;
 
 const isConversation = (event: TurnEvent): event is ConversationEvent => IN_CONVERSATION[event.kind];

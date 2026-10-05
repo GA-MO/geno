@@ -1,6 +1,8 @@
 // Portions ported from Pi (https://github.com/earendil-works/pi) at b2b5c42, Copyright (c) 2025 Mario Zechner, MIT License.
 // The patterns come from packages/ai/src/utils/retry.ts and overflow.ts, cut to Anthropic, OpenRouter and DashScope.
 
+import type { TurnErrorKind } from './session.js';
+
 /** What to do about a failed model call: try it again, shrink the context, tell the user to pay, or stop. */
 export const MODEL_ERROR_KINDS = ['transient', 'overflow', 'quota', 'fatal'] as const;
 export type ModelErrorKind = (typeof MODEL_ERROR_KINDS)[number];
@@ -90,6 +92,14 @@ const matches = (match: Match, { status, message }: ModelFailure): boolean =>
 export function classifyModelError(failure: ModelFailure): ModelErrorKind {
   return RULES.find(([, match]) => matches(match, failure))?.[0] ?? 'fatal';
 }
+
+/** How a call that will not be retried is logged. Only an overflow gets its own kind, for compaction to act on. */
+export const TURN_ERROR_OF: Readonly<Record<ModelErrorKind, TurnErrorKind>> = {
+  transient: 'transport',
+  overflow: 'overflow',
+  quota: 'transport',
+  fatal: 'transport',
+};
 
 export type RetryPolicy = {
   /** Calls after the first; 0 turns retries off. */

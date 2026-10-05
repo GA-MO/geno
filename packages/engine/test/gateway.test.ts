@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { asSessionId, type Session, type TurnEvent } from '@g-code/core';
 import { gatewayFor } from '../src/gateway.js';
-import { answer, fakeTransport } from './fake-transport.js';
+import { answer, fakeTransport, httpError, type Reply } from './fake-transport.js';
 
 const session: Session = {
   id: asSessionId('sess-1'),
@@ -27,6 +27,7 @@ describe('gatewayFor', () => {
       signal: new AbortController().signal,
       tools: [],
       onText: (d) => deltas.push(d),
+      onRetry: () => {},
     });
 
     expect(deltas.join('')).toBe('Hello there, friend.');
@@ -61,6 +62,7 @@ describe('gatewayFor', () => {
       signal: new AbortController().signal,
       tools: [],
       onText: () => {},
+      onRetry: () => {},
     });
     expect(result).toEqual({ kind: 'error', error: 'refusal', message: 'the model refused' });
   });
@@ -83,6 +85,7 @@ describe('gatewayFor', () => {
       signal: new AbortController().signal,
       tools: [],
       onText: () => {},
+      onRetry: () => {},
     });
 
     expect(result).toMatchObject({ kind: 'answer', turn: { costUsd: (3 * 0.15 + 42 * 0.47) / 1e6 } });
@@ -95,5 +98,89 @@ describe('gatewayFor', () => {
 
   it('names the missing Model Studio endpoint variable', () => {
     expect(() => gatewayFor('modelstudio', { DASHSCOPE_API_KEY: 'sk-test' })).toThrow('DASHSCOPE_BASE_URL is not set');
+  });
+});
+
+const overloaded = httpError(529, { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } });
+const fast = { maxRetries: 3, baseDelayMs: 1, maxDelayMs: 20_000 };
+const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
+
+async function turnOver(replies: readonly Reply[], opts: { retry?: typeof fast; signal?: AbortSignal; onRetry?: () => void } = {}) {
+  const transport = fakeTransport(replies);
+  const retries: unknown[] = [];
+  const result = await gatewayFor('openrouter', env, transport.fetch, opts.retry ?? fast).turn({
+    session,
+    events,
+    signal: opts.signal ?? new AbortController().signal,
+    tools: [],
+    onText: () => {},
+    onRetry: (retry) => {
+      retries.push(retry);
+      opts.onRetry?.();
+    },
+  });
+  return { result, retries, requests: transport.requests.length };
+}
+
+describe('gatewayFor retries', () => {
+  it('retries an overloaded provider and answers with the next call', async () => {
+    const { result, retries, requests } = await turnOver([overloaded, answer('Back.', usage)]);
+    expect(result).toMatchObject({ kind: 'answer', turn: { content: [{ type: 'thinking' }, { type: 'text', text: 'Back.' }] } });
+    expect(requests).toBe(2);
+    expect(retries).toEqual([{ attempt: 1, delayMs: 1, message: expect.stringContaining('overloaded_error') }]);
+  });
+
+  it('retries a connection dropped mid-stream', async () => {
+    const { result, retries } = await turnOver([{ ...answer('Lost half.', usage), dropAfter: 6 }, answer('Whole.', usage)]);
+    expect(result).toMatchObject({ kind: 'answer' });
+    expect(retries).toEqual([{ attempt: 1, delayMs: 1, message: expect.stringContaining('terminated') }]);
+  });
+
+  it('backs off exponentially and reports a transport error once the retries run out', async () => {
+    const { result, retries, requests } = await turnOver([overloaded, overloaded, overloaded, overloaded]);
+    expect(result).toEqual({ kind: 'error', error: 'transport', message: expect.stringContaining('529') });
+    expect(requests).toBe(4);
+    expect(retries.map((r) => (r as { delayMs: number }).delayMs)).toEqual([1, 2, 4]);
+  });
+
+  it('waits as long as retry-after asks', async () => {
+    const limited = httpError(429, { type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }, { 'retry-after': '0.05' });
+    const { result, retries } = await turnOver([limited, answer('Ok.', usage)]);
+    expect(result).toMatchObject({ kind: 'answer' });
+    expect(retries).toEqual([{ attempt: 1, delayMs: 50, message: expect.stringContaining('429') }]);
+  });
+
+  it('does not retry an exhausted quota', async () => {
+    const quota = httpError(402, { error: { message: 'Insufficient credits. Add more using https://openrouter.ai/settings/credits', code: 402 } });
+    const { result, retries, requests } = await turnOver([quota, answer('Never.', usage)]);
+    expect(result).toEqual({ kind: 'error', error: 'transport', message: expect.stringContaining('Insufficient credits') });
+    expect(requests).toBe(1);
+    expect(retries).toEqual([]);
+  });
+
+  it('reports a context overflow as its own error without retrying', async () => {
+    const tooLong = httpError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'prompt is too long: 213462 tokens > 200000 maximum' } });
+    const { result, requests } = await turnOver([tooLong, answer('Never.', usage)]);
+    expect(result).toEqual({ kind: 'error', error: 'overflow', message: expect.stringContaining('prompt is too long') });
+    expect(requests).toBe(1);
+  });
+
+  it('leaves no retries to the SDK, so a disabled policy makes exactly one call', async () => {
+    const { result, requests } = await turnOver([overloaded, answer('Never.', usage)], { retry: { ...fast, maxRetries: 0 } });
+    expect(result).toMatchObject({ kind: 'error', error: 'transport' });
+    expect(requests).toBe(1);
+  });
+
+  it('ends as an abort when stopped during the backoff wait', async () => {
+    const stop = new AbortController();
+    const started = performance.now();
+    const { result, requests } = await turnOver([overloaded, answer('Never.', usage)], {
+      retry: { ...fast, baseDelayMs: 10_000 },
+      signal: stop.signal,
+      onRetry: () => stop.abort(),
+    });
+    expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
+    expect(requests).toBe(1);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 });

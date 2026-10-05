@@ -36,7 +36,7 @@ const assistant = (seq: number, text: string): TurnEvent => ({
   latencyMs: 100,
   model: session.model,
 });
-const error = (seq: number, kind: 'refusal' | 'transport' | 'abort'): TurnEvent => ({
+const error = (seq: number, kind: 'refusal' | 'transport' | 'overflow' | 'abort'): TurnEvent => ({
   kind: 'error',
   seq,
   at,
@@ -61,7 +61,7 @@ describe('replayMessages', () => {
   });
 
   it('keeps a prompt interrupted by an abort or transport error and merges the next one into it', () => {
-    for (const kind of ['abort', 'transport'] as const) {
+    for (const kind of ['abort', 'transport', 'overflow'] as const) {
       const events = [start, user(1, 'first'), error(2, kind), user(3, 'second')];
       expect(replayMessages(events)).toEqual([
         {
