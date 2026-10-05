@@ -35,6 +35,8 @@ const textOf = (selector: string) => panel<string | null>(`doc.querySelector(${J
 const count = (selector: string) => panel<number>(`doc.querySelectorAll(${JSON.stringify(selector)}).length`);
 const motion = () => panel<string>(`doc.querySelector('.start-page').dataset.motion`);
 const peekState = () => panel<string>(`doc.querySelector('.peek').dataset.state`);
+/** Moves the focus from the composer to the transcript; a window regaining the focus can hand the composer the focus again, so callers repeat it. */
+const leaveComposer = () => panel(`(doc.activeElement.blur(), doc.querySelector('.transcript').focus(), 1)`);
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** What the start page shows of Noodle: its picture and where it stands. */
@@ -162,8 +164,7 @@ export async function run(): Promise<void> {
   await click(`.start-recent[data-session="${SESSIONS.at(-1)!.id}"]`);
   await waitFor('the recent session to load', async () => (await textOf('.request-bubble')) === SESSIONS.at(-1)!.prompt);
   check((await count('.start-page')) === 0, 'the start page leaves once a session shows');
-  await panel(`(doc.activeElement.blur(), doc.querySelector('.transcript').focus(), 1)`);
-  await waitFor('the peek', async () => (await peekState()) === 'up');
+  await waitFor('the peek', async () => (await leaveComposer(), await peekState()) === 'up');
   check((await framed()).length === 0, 'the avatar and the peek have no background, border or shadow', await framed());
   const head = await panel<{ width: number; height: number; cols: number; rows: number; rendering: string }>(
     `(() => { const c = doc.querySelector('.peek-head'); const r = c.getBoundingClientRect(); return { width: r.width, height: r.height, cols: c.width, rows: c.height, rendering: getComputedStyle(c).imageRendering }; })()`,
@@ -194,7 +195,7 @@ export async function run(): Promise<void> {
   await click('textarea');
   await waitFor('the head to duck while the composer has focus', async () => (await peekState()) === 'ducked');
   await ui({ do: 'type', text: FOLLOW_UP });
-  await panel(`(doc.activeElement.blur(), doc.querySelector('.transcript').focus(), 1)`);
+  await leaveComposer();
   check((await peekState()) === 'ducked', 'the head stays down while the composer holds text', await peekState());
   await ui({ do: 'pointerAway' });
   await ui({ do: 'panelshot', name: 'peek-ducked-dark-panel' });
@@ -205,6 +206,5 @@ export async function run(): Promise<void> {
   await ui({ do: 'release' });
   await waitFor('the turn to end', async () => (await count('.turn[aria-busy="true"]')) === 0 && (await count('.turn-footer')) === 2);
   check((await textOf('.turn:last-child .markdown'))?.includes(ANSWER) === true, 'the answer shows');
-  await panel(`(doc.activeElement.blur(), doc.querySelector('.transcript').focus(), 1)`);
-  await waitFor('the head to peek again after the turn', async () => (await peekState()) === 'up');
+  await waitFor('the head to peek again after the turn', async () => (await leaveComposer(), await peekState()) === 'up');
 }
