@@ -12,7 +12,7 @@ const dist = path.join(root, 'dist');
 /** The still chat avatar goes into the webview bundle as markup, so the panel's CSP needs no image source. */
 const avatar = svgOf(compose(STAND));
 
-const BUNDLES: readonly BuildOptions[] = [
+export const BUNDLES: readonly BuildOptions[] = [
   {
     entryPoints: [path.join(root, 'src/extension.ts')],
     outfile: path.join(dist, 'extension.js'),
