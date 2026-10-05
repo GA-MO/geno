@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,11 +6,24 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
   BASE_HASH_META,
+  changeOf,
+  CHECKPOINT_TEXT_METHOD,
   DIAGNOSTICS_CAPABILITY,
   DIAGNOSTICS_METHOD,
   hashText,
+  hunkIdOf,
+  INLINE_EDIT_META,
+  REVIEW_METHOD,
+  REWIND_METHOD,
   STALE_BASE_ERROR,
+  type CheckpointTextRequest,
+  type CheckpointTextResponse,
   type DiagnosticsResponse,
+  type ReviewDecision,
+  type ReviewRequest,
+  type ReviewResponse,
+  type RewindRequest,
+  type RewindResponse,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -20,6 +33,14 @@ import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
+
+function diskText(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
 const DISK = 'export const a = 1;\n';
 const BUFFER = 'export const a = 1;\nexport const unsaved = true;\n';
 
@@ -80,11 +101,13 @@ async function setup(replies: readonly Reply[]) {
     })
     .onRequest(acp.methods.client.fs.writeTextFile, ({ params }) => {
       editor.writes.push(params);
-      const current = editor.buffers.get(params.path) ?? null;
+      const buffered = editor.buffers.has(params.path);
+      const current = buffered ? editor.buffers.get(params.path)! : diskText(params.path);
       if (editor.rejectWrites || hashText(current) !== params._meta?.[BASE_HASH_META]) {
         throw new acp.RequestError(STALE_BASE_ERROR.code, 'stale', { reason: STALE_BASE_ERROR.reason });
       }
-      editor.buffers.set(params.path, params.content);
+      if (buffered) editor.buffers.set(params.path, params.content);
+      else writeFileSync(params.path, params.content);
       return {};
     })
     .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
@@ -98,21 +121,29 @@ async function setup(replies: readonly Reply[]) {
     .onNotification(acp.methods.client.session.update, ({ params }) => {
       editor.updates.push(params.update);
     });
-  const agentApp = gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 });
-
-  /** Starts a session, sends one prompt, and returns its stop reason. `during` runs while the turn is in flight. */
-  const prompt = (text: string, during?: (ctx: acp.ClientContext, sessionId: string) => Promise<void>) =>
-    client.connectWith(agentApp, async (ctx) => {
+  /** Connects a fresh engine, starts a session, or resumes `resume`, and runs `work` on it. */
+  const connect = <T>(work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>, resume?: string) =>
+    client.connectWith(gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
       await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true } },
       });
+      if (resume !== undefined) {
+        await ctx.request(acp.methods.agent.session.resume, { sessionId: resume, cwd: workspace });
+        return work(ctx, resume);
+      }
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      return work(ctx, sessionId);
+    });
+
+  /** Starts a session, sends one prompt, and returns its stop reason. `during` runs while the turn is in flight. */
+  const prompt = (text: string, during?: (ctx: acp.ClientContext, sessionId: string) => Promise<void>) =>
+    connect(async (ctx, sessionId) => {
       const turn = ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
       await during?.(ctx, sessionId);
       return (await turn).stopReason;
     });
-  return { workspace, file, editor, transport, prompt, stderr };
+  return { workspace, file, editor, transport, prompt, connect, stderr };
 }
 
 const toolResultOf = (body: { messages: { content: unknown }[] }, index = -1): { content: string; is_error?: boolean } => {
@@ -218,5 +249,66 @@ describe('gcode serve', () => {
     });
 
     expect(stop).toBe('cancelled');
+  });
+
+  it('logs the hunks an edit made, keeps review decisions across engines, serves the checkpoint text, and rewinds', async () => {
+    const { file, editor, connect } = await setup([
+      toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
+      answer('Done.', usage),
+    ]);
+    editor.buffers.delete(file);
+    const edited = 'export const a = 2;\n';
+    const [hunk] = [hunkIdOf(changeOf(file, DISK, edited), 0)];
+    const review = (ctx: acp.ClientContext, sessionId: string, decisions: ReviewDecision[] = []) =>
+      ctx.request<ReviewResponse, ReviewRequest>(REVIEW_METHOD, { sessionId, decisions });
+
+    const sessionId = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Set a to 2' }] });
+      expect(readFileSync(file, 'utf8')).toBe(edited);
+      expect((await review(ctx, sessionId)).hunks).toEqual([
+        { id: hunk, path: file, startLine: 1, lineCount: 1, oldText: DISK, newText: edited, status: 'pending', afterLine: 1 },
+      ]);
+      expect((await review(ctx, sessionId, [{ hunk: hunk!, status: 'kept' }])).hunks).toMatchObject([{ id: hunk, status: 'kept' }]);
+      const checkpoint = await ctx.request<CheckpointTextResponse, CheckpointTextRequest>(CHECKPOINT_TEXT_METHOD, { sessionId, path: file });
+      expect(checkpoint).toEqual({ text: DISK });
+      return sessionId;
+    });
+
+    await connect(async (ctx) => {
+      expect((await review(ctx, sessionId)).hunks).toMatchObject([{ id: hunk, status: 'kept' }]);
+      expect(await ctx.request<RewindResponse, RewindRequest>(REWIND_METHOD, { sessionId })).toEqual({ files: [file] });
+      expect(readFileSync(file, 'utf8')).toBe(DISK);
+      expect((await review(ctx, sessionId)).hunks).toMatchObject([{ id: hunk, status: 'undone' }]);
+    }, sessionId);
+  });
+
+  it('runs an inline edit of a selection as one edit call with the file and its problems in the prompt', async () => {
+    const { file, editor, transport, connect } = await setup([
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'unsaved = true', new_str: 'unsaved = false' })], usage),
+      answer('Done.', usage),
+    ]);
+
+    const { stop, hunks } = await connect(async (ctx, sessionId) => {
+      const { stopReason } = await ctx.request(acp.methods.agent.session.prompt, {
+        sessionId,
+        prompt: [{ type: 'text', text: 'Flip the flag' }],
+        _meta: { [INLINE_EDIT_META]: { path: file, startLine: 2, endLine: 2 } },
+      });
+      return { stop: stopReason, hunks: (await ctx.request<ReviewResponse, ReviewRequest>(REVIEW_METHOD, { sessionId, decisions: [] })).hunks };
+    });
+
+    expect(stop).toBe('end_turn');
+    const first = transport.requests[0]!.body;
+    expect(first.tools.map((tool: { name: string }) => tool.name)).toEqual(['edit']);
+    expect(JSON.stringify(first.system)).toContain("You are g-code's edit applier.");
+    const message = JSON.stringify(first.messages[0].content);
+    expect(message).toContain('Change line 2 of a.ts');
+    expect(message).toContain('Flip the flag');
+    expect(message).toContain('2\\texport const unsaved = true;');
+    expect(message).toContain("a.ts:2:14 error: Cannot find name 'nope'.");
+    expect(editor.diagnosticRequests).toEqual([expect.objectContaining({ paths: [file] })]);
+    expect(editor.buffers.get(file)).toBe('export const a = 1;\nexport const unsaved = false;\n');
+    expect(hunks).toMatchObject([{ path: file, startLine: 2, oldText: 'export const unsaved = true;\n', newText: 'export const unsaved = false;\n', status: 'pending' }]);
   });
 });

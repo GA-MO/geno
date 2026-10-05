@@ -1,5 +1,8 @@
 /** g-code's additions to the Agent Client Protocol, shared by the engine and the extension. docs/e12.md maps every flow. */
 
+import type { HunkStatus } from './hunks.js';
+import type { HunkId, ReviewHunk } from './review.js';
+
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
 export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
 
@@ -28,6 +31,31 @@ export type EditorDiagnostic = {
 };
 
 export type DiagnosticsResponse = { readonly diagnostics: readonly EditorDiagnostic[] };
+
+/** Extension method, sent by the editor: records review decisions, then returns every hunk of the session with its status. */
+export const REVIEW_METHOD = '_gcode/review';
+
+export type ReviewDecision = { readonly hunk: HunkId; readonly status: HunkStatus };
+export type ReviewRequest = { readonly sessionId: string; readonly decisions: readonly ReviewDecision[] };
+export type ReviewResponse = { readonly hunks: readonly ReviewHunk[] };
+
+/** Extension method, sent by the editor: a file's text at the session's first checkpoint, null when it did not exist then. */
+export const CHECKPOINT_TEXT_METHOD = '_gcode/checkpointText';
+
+export type CheckpointTextRequest = { readonly sessionId: string; readonly path: string };
+export type CheckpointTextResponse = { readonly text: string | null };
+
+/** Extension method, sent by the editor: restores the session's first checkpoint, as `gcode rewind` does, and returns the absolute paths it rewrote or deleted. */
+export const REWIND_METHOD = '_gcode/rewind';
+
+export type RewindRequest = { readonly sessionId: string };
+export type RewindResponse = { readonly files: readonly string[] };
+
+/** Key in session/prompt's `_meta`: run the prompt as a one-shot edit of a selection instead of an agent turn. */
+export const INLINE_EDIT_META = 'gcode/inlineEdit';
+
+/** `path` is absolute; lines count from 1 and include both ends. */
+export type InlineEditTarget = { readonly path: string; readonly startLine: number; readonly endLine: number };
 
 export function formatDiagnostics(diagnostics: readonly EditorDiagnostic[], show: (path: string) => string): string {
   if (diagnostics.length === 0) return 'The editor reports no problems in the files you read or edited.';
