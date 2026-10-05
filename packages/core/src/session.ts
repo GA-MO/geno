@@ -9,6 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/messages';
 import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
 import { fileItem, imageBlock, NO_ATTACHMENTS, type Attachment, type FileAttachment, type ImageAttachment, type StoredAttachments } from './attachments.js';
+import type { Invocation } from './commands.js';
 import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
 import type { ApprovalRecord } from './classifier.js';
@@ -139,6 +140,8 @@ export type TurnEvent =
       readonly context?: readonly ContextItem[] | undefined;
       /** Images and files the user sent with the prompt, as references into the session's attachments folder. */
       readonly attachments?: readonly Attachment[] | undefined;
+      /** The slash command `content` was expanded from. */
+      readonly command?: Invocation | undefined;
     }
   | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string } & AssistantTurn)
   | {
