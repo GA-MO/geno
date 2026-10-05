@@ -27,7 +27,9 @@ const OFF_HOST = 'offhost.example';
 
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+  const errors: unknown[] = [];
+  for (const cleanup of cleanups.splice(0).reverse()) await Promise.resolve().then(cleanup).catch((error: unknown) => errors.push(error));
+  if (errors.length > 0) throw errors[0];
 });
 
 /** A local site: a page with a heading and a button, and a redirect to a host that is not this machine. */
@@ -102,16 +104,32 @@ async function setup(replies: readonly Reply[]) {
   const connect = <T>(work: (ctx: acp.ClientContext, sessionId: string, mcp: McpSessions) => Promise<T>) => {
     const mcp = mcpSessions(store, env, () => {}, launcher(marker));
     cleanups.push(() => mcp.stopAll());
-    return client.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }, mcp), async (ctx) => {
-      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
-      const { sessionId } = await ctx.request(acp.methods.agent.session.new, {
-        cwd: workspace,
-        mcpServers: [],
-        _meta: { [BROWSER_META]: { enabled: true, headless: true } },
-      });
-      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
-      return work(ctx, sessionId, mcp);
+    let cancel: (() => Promise<void>) | undefined;
+    let ended = false;
+    const done = client
+      .connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }, mcp), async (ctx) => {
+        await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
+        const { sessionId } = await ctx.request(acp.methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [],
+          _meta: { [BROWSER_META]: { enabled: true, headless: true } },
+        });
+        await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+        cancel = () => ctx.notify(acp.methods.agent.session.cancel, { sessionId });
+        return work(ctx, sessionId, mcp);
+      })
+      .finally(() => (ended = true));
+    // A test that times out leaves its turn running, and the turn holds this process's one sandbox; the next test's
+    // turn would fail on it. So the turn is cancelled, and its end awaited, before the next test starts.
+    cleanups.push(async () => {
+      if (ended) return;
+      const finished = new Set(updates.flatMap((u) => (u.sessionUpdate === 'tool_call_update' && (u.status === 'completed' || u.status === 'failed') ? [u.toolCallId] : [])));
+      const running = updates.flatMap((u) => (u.sessionUpdate === 'tool_call' && !finished.has(u.toolCallId) ? [u.title] : []));
+      await cancel?.();
+      await done.catch(() => {});
+      throw new Error(`the turn was still running when the test ended, in: ${running.join(', ') || 'no tool call'}`);
     });
+    return done;
   };
   return { workspace, home, marker, transport, permissions, updates, connect, setAnswer: (id: string) => (optionId = id) };
 }
