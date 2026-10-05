@@ -1,13 +1,13 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import Anthropic, { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
+import { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { Message, MessageStreamEvent, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
   classifyModelError,
   costOf,
-  PROVIDER_ENV,
   RETRY_POLICY,
   retryDelayMs,
+  specOf,
   TURN_ERROR_OF,
   type ModelFailure,
   type ModelRetry,
@@ -20,7 +20,7 @@ import {
   type TurnEvent,
   type TurnResult,
 } from '@g-code/core';
-import { EngineError } from './errors.js';
+import { wireFor } from './wire.js';
 
 export type TurnInput = {
   readonly session: Session;
@@ -38,35 +38,10 @@ export type TurnInput = {
   onMarks?(marks: StreamMarks): void;
 };
 
-/** One model round trip. A wire format other than Anthropic Messages would be another implementation. */
+/** One model round trip, through the provider's adapter. */
 export type Gateway = { turn(input: TurnInput): Promise<TurnResult> };
 
 type Env = Readonly<Record<string, string | undefined>>;
-
-/** Providers that speak the Anthropic Messages wire format. */
-type Provider = {
-  readonly baseUrl: (env: Env) => string;
-  readonly sessionHeaders: (session: Session) => Record<string, string>;
-};
-
-export const PROVIDER_TABLE: Readonly<Record<ProviderName, Provider>> = {
-  openrouter: {
-    baseUrl: () => 'https://openrouter.ai/api',
-    // OpenRouter routes requests with the same session id to the same provider, so the cache it wrote is hit.
-    sessionHeaders: (session) => ({ 'x-session-id': session.id }),
-  },
-  modelstudio: {
-    // The URL embeds the workspace id and region, and keys only work in their own region.
-    baseUrl: (env) => required(env, PROVIDER_ENV.modelstudio.baseUrl, 'your Model Studio Anthropic endpoint'),
-    sessionHeaders: () => ({}),
-  },
-};
-
-function required(env: Env, variable: string, what: string): string {
-  const value = env[variable];
-  if (!value) throw new EngineError(`${variable} is not set; put ${what} in it`);
-  return value;
-}
 
 export const usageOf = ({ usage }: Message): TokenUsage => ({
   input: usage.input_tokens,
@@ -111,9 +86,9 @@ type StreamClock = ReturnType<typeof streamClock>;
 export const messagesOf = (error: unknown): string[] =>
   error instanceof Error ? [error.message, ...messagesOf(error.cause)] : error === undefined ? [] : [String(error)];
 
-const failureOf = (error: AnthropicError): ModelFailure => ({
+const failureOf = (error: AnthropicError, redact: (text: string) => string): ModelFailure => ({
   status: error instanceof APIError ? error.status : undefined,
-  message: messagesOf(error).join(': '),
+  message: redact(messagesOf(error).join(': ')),
 });
 
 function retryAfterMs(error: AnthropicError): number | undefined {
@@ -127,32 +102,25 @@ function retryAfterMs(error: AnthropicError): number | undefined {
   return Number.isNaN(wait) ? undefined : Math.max(0, Math.round(wait));
 }
 
-/** A Messages client for the provider. Throws an EngineError when its key or endpoint is not set. */
-export function clientFor(providerName: ProviderName, env: Env, fetch?: typeof globalThis.fetch): Anthropic {
-  const key = required(env, PROVIDER_ENV[providerName].key, `your ${providerName} API key`);
-  // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment. Retries are
-  // ours: the SDK's would retry an exhausted quota, unseen, and never a stream that fails after its headers.
-  return new Anthropic({ baseURL: PROVIDER_TABLE[providerName].baseUrl(env), authToken: key, apiKey: null, maxRetries: 0, fetch });
-}
-
 export function gatewayFor(
   providerName: ProviderName,
   env: Env,
   fetch?: typeof globalThis.fetch,
   retry: RetryPolicy = RETRY_POLICY,
 ): Gateway {
-  const provider = PROVIDER_TABLE[providerName];
-  const client = clientFor(providerName, env, fetch);
+  const wire = wireFor(providerName, env, fetch);
+  const sessionHeader = specOf(providerName).sessionHeader;
 
   async function call({ session, events, tools, system, stored, signal, onText }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
-    const stream = client.messages.stream(buildRequest(session, events, tools, system, stored), {
+    const message = await wire.stream(buildRequest(session, events, tools, system, stored), {
       signal,
-      headers: provider.sessionHeaders(session),
+      headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
+      onEvent: (event) => {
+        clock.observe(event);
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
+      },
     });
-    stream.on('streamEvent', (event) => clock.observe(event));
-    stream.on('text', onText);
-    const message = await stream.finalMessage();
     if (message.stop_reason === 'refusal') {
       return { kind: 'error', error: 'refusal', message: refusalMessage(message) };
     }
@@ -163,7 +131,7 @@ export function gatewayFor(
         content: message.content,
         stopReason: message.stop_reason,
         usage,
-        costUsd: costOf(session.model, usage),
+        costUsd: costOf(session.provider, session.model, usage),
         latencyMs: Math.round(performance.now() - started),
         model: message.model,
       },
@@ -184,7 +152,7 @@ export function gatewayFor(
         } catch (error) {
           if (error instanceof APIUserAbortError || signal.aborted) return settled(ABORTED);
           if (!(error instanceof AnthropicError)) throw error;
-          const failure = failureOf(error);
+          const failure = failureOf(error, wire.redact);
           const kind = classifyModelError(failure);
           const delayMs = kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
           if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message });

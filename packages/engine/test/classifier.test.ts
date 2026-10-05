@@ -66,7 +66,7 @@ describe('the command classifier', () => {
   it('returns the model verdict with its model, latency and cost', async () => {
     const { run, transport } = await classify([verdict({ verdict: 'allow', reason: 'only build output' })]);
     expect(run).toMatchObject({ verdict: 'allow', reason: 'only build output', model: 'qwen3.8-flash' });
-    expect(run.costUsd).toBeCloseTo(costOf('qwen3.8-flash', { ...usage, output: 30 })!, 12);
+    expect(run.costUsd).toBeCloseTo(costOf('modelstudio', 'qwen3.8-flash', { ...usage, output: 30 })!, 12);
     expect(run.latencyMs).toBeGreaterThanOrEqual(0);
     expect(transport.requests).toHaveLength(1);
     expect(transport.requests[0]!.body).toMatchObject({ model: 'qwen3.8-flash', tool_choice: { type: 'tool', name: CLASSIFIER_TOOL.name } });

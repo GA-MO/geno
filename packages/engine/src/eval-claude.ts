@@ -7,6 +7,9 @@ import { EngineError } from './errors.js';
 import type { AgentAdapter, AgentRunResult } from './eval-run.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 
+/** Claude Code reaches qwen through Model Studio's Anthropic endpoint, so its turns bill at Model Studio's prices. */
+const CLAUDE_CODE_PROVIDER = 'modelstudio';
+
 export const CLAUDE_TIMEOUT_MS = 30 * 60 * 1000;
 
 const count = z.number().int().nonnegative();
@@ -139,7 +142,7 @@ export const claudeCodeAdapter: AgentAdapter = {
       if (assistant.success) {
         const { message } = assistant.data;
         seen.set(message.id, usageOf(message.usage));
-        const spent = costOf(input.model, [...seen.values()].reduce(addUsage, ZERO_USAGE)) ?? 0;
+        const spent = costOf(CLAUDE_CODE_PROVIDER, input.model, [...seen.values()].reduce(addUsage, ZERO_USAGE)) ?? 0;
         if (spent > input.maxCostUsd && !overBudget) {
           overBudget = true;
           stop.abort();
@@ -191,7 +194,7 @@ export const claudeCodeAdapter: AgentAdapter = {
       stop: stopReason,
       turns: result?.num_turns ?? seen.size,
       usage,
-      costUsd: costOf(input.model, usage),
+      costUsd: costOf(CLAUDE_CODE_PROVIDER, input.model, usage),
       reportedCostUsd: result?.total_cost_usd ?? null,
       denials: result?.permission_denials?.length ?? 0,
       finalMessage: result?.result ?? '',

@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import {
   asSessionId,
-  DEFAULT_MODELS,
   hasPendingPrompt,
   isEmptyContext,
   isEffort,
   isProviderName,
+  specOf,
   nextSeq,
   toolUsesOf,
   type ApprovalRecord,
@@ -89,7 +89,9 @@ export function chooseModel(
 ): { readonly provider: ProviderName; readonly model: string } {
   const provider = choice.provider ?? (io.env['GCODE_PROVIDER'] || DEFAULT_PROVIDER);
   if (!isProviderName(provider)) throw new UsageError(`unknown provider: ${provider}`);
-  return { provider, model: choice.model ?? (io.env['GCODE_MODEL'] || DEFAULT_MODELS[provider]) };
+  const model = choice.model ?? (io.env['GCODE_MODEL'] || specOf(provider).defaultModel);
+  if (model === undefined) throw new UsageError(`${specOf(provider).label} has no default model; pass --model or set GCODE_MODEL`);
+  return { provider, model };
 }
 
 // The gateway is built before anything is written, so a missing key leaves no stray session behind.
