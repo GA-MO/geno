@@ -17,7 +17,7 @@ A Q4_K_M file was also tried. No base Q4_K_M exists from Qwen or ggml-org, so it
 
 ## Server
 
-`scripts/tab-server.sh` starts `llama-server` with these flags. Set `GCODE_TAB_MODEL` to serve another file and `GCODE_TAB_PORT` to move it off 8012.
+`scripts/tab-server.sh` starts `llama-server` with these flags. Set `GCODE_TAB_MODEL` to serve another file and `GCODE_TAB_PORT` to move it off 8012. The extension starts the same server itself when nothing answers at `gcode.tab.endpoint` (`docs/install.md`), with the flags from `llamaServerArgs` in `packages/core/src/tab/server.ts`, which a test keeps equal to the script's.
 
 - `--alias <file name>` makes the server report the model file's name, which the extension logs as the model.
 - `--host 127.0.0.1 --port 8012` keeps the server local and matches the `gcode.tab.endpoint` default.
