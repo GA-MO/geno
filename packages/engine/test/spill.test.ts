@@ -18,7 +18,7 @@ describe('output spill', () => {
     await mkdir(ws);
     const lines = Array.from({ length: 2000 }, (_, i) => `const NEEDLE_${String(i).padStart(4, '0')} = 'padding padding padding';`);
     await writeFile(path.join(ws, 'big.ts'), `${lines.join('\n')}\n`);
-    const ctx: ToolContext = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [] };
+    const ctx: ToolContext = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [] };
 
     const result = await runTool(use('grep', { pattern: 'NEEDLE_' }), ctx, EXECUTORS);
     expect(result.status).toBe('ok');

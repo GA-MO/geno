@@ -17,6 +17,8 @@ export type Mode = {
   readonly executors: Executors;
   /** Undefined keeps the gateway's default prompt. */
   readonly system?: string;
+  /** Real paths the read tools may see outside the workspace, read-only. */
+  readonly readRoots?: readonly string[];
   /** An event to log before each model call, such as a checkpoint. */
   readonly beforeCall?: (events: readonly TurnEvent[]) => Promise<TurnEvent>;
 };
@@ -163,6 +165,7 @@ export async function drive(
   const ctx: ToolContext = {
     workspace: await workspaceDir(io.cwd, session.workspace),
     spillDir: path.join(store.spillDir, session.id),
+    readRoots: mode.readRoots ?? [],
     attachmentsDir: attachmentsDir(store, session.id),
     rg: io.env['GCODE_RG'] || 'rg',
     signal,

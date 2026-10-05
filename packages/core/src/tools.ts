@@ -30,6 +30,10 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
       type: 'object',
       properties: {
         pattern: { type: 'string', description: 'Glob such as **/*.ts, src/**/config.*, or package.json.' },
+        directory: {
+          type: 'string',
+          description: "Directory to search instead of the workspace root: relative to it, or the absolute path of a skill's folder. Paths outside the workspace come back absolute.",
+        },
       },
       required: ['pattern'],
       additionalProperties: false,
@@ -45,9 +49,13 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
         pattern: { type: 'string', description: 'Regular expression in Rust regex syntax.' },
         path: {
           type: 'string',
-          description: 'Optional glob limiting which files are searched, relative to the workspace root, such as src/** or **/*.ts.',
+          description: 'Optional glob limiting which files are searched, relative to the directory searched, such as src/** or **/*.ts.',
         },
         ignore_case: { type: 'boolean', description: 'Match case-insensitively. Defaults to false.' },
+        directory: {
+          type: 'string',
+          description: "Directory to search instead of the workspace root: relative to it, or the absolute path of a skill's folder. Paths outside the workspace come back absolute.",
+        },
       },
       required: ['pattern'],
       additionalProperties: false,
@@ -60,7 +68,7 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
     input_schema: {
       type: 'object',
       properties: {
-        directory: { type: 'string', description: 'Directory relative to the workspace root. Defaults to the root.' },
+        directory: { type: 'string', description: "Directory relative to the workspace root, or the absolute path of a skill's folder. Defaults to the root." },
         depth: { type: 'integer', minimum: 1, description: 'How many levels to show. Defaults to 2.' },
       },
       additionalProperties: false,
@@ -69,11 +77,11 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   read: {
     name: 'read',
     description:
-      `Read a text file, or look at an image: a PNG, JPEG, GIF or WebP file comes back as the image itself. Returns a text file's lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output by its absolute path.`,
+      `Read a text file, or look at an image: a PNG, JPEG, GIF or WebP file comes back as the image itself. Returns a text file's lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output and the files in a skill's folder by their absolute paths.`,
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'File path relative to the workspace root, or a spill file path.' },
+        path: { type: 'string', description: "File path relative to the workspace root, or the absolute path of a spill file or a file in a skill's folder." },
         start_line: { type: 'integer', minimum: 1, description: 'First line to return, from 1.' },
         end_line: { type: 'integer', minimum: 1, description: 'Last line to return, inclusive.' },
       },

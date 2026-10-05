@@ -1,16 +1,18 @@
 import { z } from 'zod';
 import { executor, optional } from './context.js';
-import { searchWorkspace } from './ripgrep.js';
+import { searchRoot, searchWorkspace } from './ripgrep.js';
 
 export const grep = executor({
   input: z.strictObject({
     pattern: z.string().min(1),
     path: optional(z.string().min(1)),
     ignore_case: optional(z.boolean()),
+    directory: optional(z.string().min(1)),
   }),
-  describe: ({ pattern, path, ignore_case }) =>
-    [`grep ${JSON.stringify(pattern)}`, ...(path === undefined ? [] : [path]), ...(ignore_case ? ['-i'] : [])].join(' '),
-  async run({ pattern, path, ignore_case }, ctx) {
+  describe: ({ pattern, path, ignore_case, directory }) =>
+    [`grep ${JSON.stringify(pattern)}`, ...(directory === undefined ? [] : [directory]), ...(path === undefined ? [] : [path]), ...(ignore_case ? ['-i'] : [])].join(' '),
+  async run({ pattern, path, ignore_case, directory }, ctx) {
+    const dir = await searchRoot(ctx, directory);
     const lines = await searchWorkspace(ctx, [
       '--line-number',
       '--no-heading',
@@ -23,7 +25,7 @@ export const grep = executor({
       ...(path === undefined ? [] : ['--glob', path]),
       '--regexp',
       pattern,
-    ], 'matches');
+    ], 'matches', dir);
     return lines.length === 0 ? 'no matches' : lines.join('\n');
   },
 });
