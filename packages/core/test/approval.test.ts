@@ -271,15 +271,15 @@ type Expected = Readonly<Record<ApprovalMode, RuleVerdict | undefined>>;
 
 // Written out by hand rather than read from DENY_RULES, so a changed column fails here. Undefined runs the command.
 const MODE_TABLE: readonly [DenyRuleId, string, Expected][] = [
-  ['rm-rf-outside-workspace', 'rm -rf .git', { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
-  ['rm-rf-in-workspace', 'rm -rf node_modules', { ask: 'ask', auto: 'classify', 'non-interactive': undefined }],
-  ['git-push', 'git push origin main', { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
-  ['git-reset-hard', 'git reset --hard HEAD~1', { ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
-  ['path-outside-workspace', 'cat /etc/passwd', { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
-  ['network-download', 'curl https://example.com', { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
-  ['cloud-cli', 'aws s3 ls', { ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
-  ['database-cli', 'psql -c "select 1"', { ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
-  ['unlisted', 'python3 build.py', { ask: undefined, auto: 'classify', 'non-interactive': undefined }],
+  ['rm-rf-outside-workspace', 'rm -rf .git', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['rm-rf-in-workspace', 'rm -rf node_modules', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': undefined }],
+  ['git-push', 'git push origin main', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['git-reset-hard', 'git reset --hard HEAD~1', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['path-outside-workspace', 'cat /etc/passwd', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['network-download', 'curl https://example.com', { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' }],
+  ['cloud-cli', 'aws s3 ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['database-cli', 'psql -c "select 1"', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['unlisted', 'python3 build.py', { plan: 'deny', ask: undefined, auto: 'classify', 'non-interactive': undefined }],
 ];
 
 // Clearly safe: Auto runs these without asking anyone.
@@ -375,6 +375,14 @@ describe('auto mode', () => {
 
   it.each(SAFE)('runs %s without asking anyone', (command) => {
     expect(denialFor(command, scope, 'auto')).toBeUndefined();
+  });
+
+  it.each(SAFE)('runs %s in plan mode too', (command) => {
+    expect(denialFor(command, scope, 'plan')).toBeUndefined();
+  });
+
+  it.each(GRAY)('denies %s in plan mode without asking or classifying', (command) => {
+    expect(denialFor(command, scope, 'plan')?.verdict).toBe('deny');
   });
 
   it.each(GRAY)('sends %s to the classifier', (command) => {

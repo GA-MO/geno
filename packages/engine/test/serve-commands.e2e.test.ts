@@ -150,7 +150,7 @@ describe('gcode serve slash commands', () => {
     const replies = updates.flatMap((u) => (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text' ? [u.content.text] : []));
     expect(replies.slice(0, 4)).toEqual([
       'Approval mode: auto.',
-      'Usage: /mode ask | auto',
+      'Usage: /mode plan | ask | auto',
       '/new runs in the editor, and this client does not offer it.',
       'Creating AGENTS.md is not available yet.',
     ]);

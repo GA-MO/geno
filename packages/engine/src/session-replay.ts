@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  DEFAULT_SESSION_MODE,
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
@@ -11,6 +12,7 @@ import {
   type HunkId,
   type HunkStatus,
   type ReplayedTurn,
+  type SessionMode,
   type ToolResultEvent,
   type ToolStatus,
   type TurnErrorKind,
@@ -79,23 +81,26 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
 
 const ms = (iso: string): number => Date.parse(iso);
 
-/** One prompt and everything logged until the next. */
-type Run = { readonly prompt: EventOf<'user'>; readonly events: readonly TurnEvent[] };
+/** One prompt, the mode the session was in when it was sent, and everything logged until the next. */
+type Run = { readonly prompt: EventOf<'user'>; readonly mode: SessionMode; readonly events: readonly TurnEvent[] };
 
 function runsOf(events: readonly TurnEvent[]): Run[] {
-  const runs: { prompt: EventOf<'user'>; events: TurnEvent[] }[] = [];
+  const runs: { prompt: EventOf<'user'>; mode: SessionMode; events: TurnEvent[] }[] = [];
+  let mode = DEFAULT_SESSION_MODE;
   for (const event of events) {
-    if (event.kind === 'user') runs.push({ prompt: event, events: [] });
+    if (event.kind === 'mode') mode = event.mode;
+    if (event.kind === 'user') runs.push({ prompt: event, mode, events: [] });
     else runs.at(-1)?.events.push(event);
   }
   return runs;
 }
 
-function turnOf({ prompt, events }: Run): ReplayedTurn {
+function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
   const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
   const error = events.findLast((e) => e.kind === 'error');
   const last = events.at(-1);
   return {
+    mode,
     startedAt: ms(prompt.at),
     endedAt: ms(last === undefined || last.kind === 'session-start' ? prompt.at : last.at),
     status: error === undefined ? 'done' : ERROR_STATUS[error.error],

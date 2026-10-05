@@ -115,6 +115,8 @@ describe('MCP tool names and definitions', () => {
 
 describe('MCP approval rules', () => {
   const table: readonly (readonly [ApprovalMode, boolean, string | undefined])[] = [
+    ['plan', true, undefined],
+    ['plan', false, 'deny'],
     ['ask', true, 'ask'],
     ['ask', false, 'ask'],
     ['auto', true, undefined],
@@ -128,6 +130,11 @@ describe('MCP approval rules', () => {
 
   it('lets a tool the user allowed for the session run in every mode', () => {
     for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(mcpDenialFor({ name: 'mcp__s__t', readOnly: false }, mode, true)).toBeUndefined();
+  });
+
+  it('still denies a write tool in plan mode when the user allowed it for the session', () => {
+    expect(mcpDenialFor({ name: 'mcp__s__t', readOnly: false }, 'plan', true)?.verdict).toBe('deny');
+    expect(mcpDenialFor({ name: 'mcp__s__t', readOnly: true }, 'plan', true)).toBeUndefined();
   });
 
   it('names the rule and the tool in a denial', () => {

@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_MODE_SYSTEM_PROMPTS,
+  AGENT_MODE_TOOL_DEFINITIONS,
   APPROVAL_META,
   ATTACHMENT_META,
   asSessionId,
@@ -386,7 +388,7 @@ describe('gcode serve', () => {
 
     expect(created?.modes).toEqual({
       currentModeId: 'ask',
-      availableModes: [expect.objectContaining({ id: 'ask', name: 'Ask' }), expect.objectContaining({ id: 'auto', name: 'Auto' })],
+      availableModes: [expect.objectContaining({ id: 'plan', name: 'Plan' }), expect.objectContaining({ id: 'ask', name: 'Ask' }), expect.objectContaining({ id: 'auto', name: 'Auto' })],
     });
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'auto' });
     expect(editor.permissions).toEqual([]);
@@ -405,6 +407,31 @@ describe('gcode serve', () => {
       return response.modes?.currentModeId;
     });
     expect(resumed).toBe('auto');
+  });
+
+  it('switches to plan with session/set_mode, offers no edit there, keeps plan on resume, and replays the mode of each turn', async () => {
+    const { workspace, editor, transport, connect } = await setup([answer('1. Change a.ts.', usage), answer('Building.', usage)]);
+    const id = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Plan it' }] });
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Go ahead with the plan.' }] });
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' });
+      return sessionId;
+    });
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
+    expect(transport.requests[0]!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.plan);
+    expect(transport.requests[0]!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
+    expect(transport.requests[1]!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.ask);
+
+    editor.updates.length = 0;
+    const resumed = await connect(async (ctx) => {
+      const response = await ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] });
+      return response.modes?.currentModeId;
+    });
+    expect(resumed).toBe('plan');
+    const turns = editor.updates.flatMap((u) => (u.sessionUpdate === 'user_message_chunk' ? [(u._meta?.[REPLAYED_TURN_META] as { mode: string }).mode] : []));
+    expect(turns).toEqual(['plan', 'ask']);
   });
 
   it('answers check with the editor diagnostics for the files the model read when there is no check command', async () => {
@@ -620,7 +647,7 @@ describe('gcode serve', () => {
     expect(first).toEqual({
       sessionUpdate: 'user_message_chunk',
       content: { type: 'text', text: 'Flip   the flag\nplease' },
-      _meta: { [REPLAYED_TURN_META]: { startedAt: expect.any(Number), endedAt: expect.any(Number), status: 'done', usage: expect.objectContaining({ inputTokens: 3000, costUsd: expect.any(Number) }) } },
+      _meta: { [REPLAYED_TURN_META]: { mode: 'ask', startedAt: expect.any(Number), endedAt: expect.any(Number), status: 'done', usage: expect.objectContaining({ inputTokens: 3000, costUsd: expect.any(Number) }) } },
     });
     expect(rest.map((u) => u.sessionUpdate)).toEqual([
       ...['agent_message_chunk', 'tool_call', 'tool_call_update'],

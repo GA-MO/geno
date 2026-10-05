@@ -1,4 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { ApprovalMode } from './approval.js';
 import { EDIT_FORMAT_SPECS } from './edit.js';
 import { SYSTEM_PROMPT } from './request.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
@@ -56,3 +57,41 @@ You are running as an agent that changes the code itself. How to work in this mo
 - bash runs in a sandbox with no network and writes only inside the workspace. Dependencies are already installed; do not try to install packages. If a command is denied, do not retry it; find another way or explain what you could not do.
 - Before you finish, run the relevant tests or type checker with bash or check and read the result.
 - Work until the task is done without stopping to ask questions; when something is ambiguous, choose the reading that best fits the codebase and say which you chose. End your turn with a short report of what you changed and how you checked it.`;
+
+/** What a mode lets the agent change: everything, or in Plan nothing, with bash held to the safe list by the rules. */
+export const AGENT_MODE_TOOLS: Readonly<Record<ApprovalMode, readonly AgentToolName[]>> = {
+  plan: AGENT_TOOL_NAMES.filter((name) => name !== 'edit'),
+  ask: AGENT_TOOL_NAMES,
+  auto: AGENT_TOOL_NAMES,
+  'non-interactive': AGENT_TOOL_NAMES,
+};
+
+const definitionsFor = (mode: ApprovalMode): readonly Tool[] => {
+  const allowed = new Set<string>(AGENT_MODE_TOOLS[mode]);
+  const tools = AGENT_TOOL_DEFINITIONS.filter((tool) => allowed.has(tool.name));
+  return tools.length === AGENT_TOOL_DEFINITIONS.length ? AGENT_TOOL_DEFINITIONS : Object.freeze(tools);
+};
+
+// Built once per mode, so each mode's cached prefix stays byte-stable from call to call.
+export const AGENT_MODE_TOOL_DEFINITIONS: Readonly<Record<ApprovalMode, readonly Tool[]>> = {
+  plan: definitionsFor('plan'),
+  ask: definitionsFor('ask'),
+  auto: definitionsFor('auto'),
+  'non-interactive': definitionsFor('non-interactive'),
+};
+
+const PLAN_PROMPT = `
+
+You are in Plan mode, which is read-only. You cannot change anything: there is no edit tool, and bash runs only read-only commands from the safe list; anything else is denied. This overrides what is said above about changing code. Investigate with read, grep, glob, list, check and safe bash commands, then answer with:
+- a concrete, numbered step-by-step plan for the change;
+- the files you would change or create, and what changes in each;
+- the risks and open questions, and how you would check the result.
+Do not ask to switch modes; the user starts building when the plan looks right.`;
+
+/** The system prompt in each mode, fixed per mode so its cached prefix stays byte-stable. */
+export const AGENT_MODE_SYSTEM_PROMPTS: Readonly<Record<ApprovalMode, string>> = {
+  plan: `${AGENT_SYSTEM_PROMPT}${PLAN_PROMPT}`,
+  ask: AGENT_SYSTEM_PROMPT,
+  auto: AGENT_SYSTEM_PROMPT,
+  'non-interactive': AGENT_SYSTEM_PROMPT,
+};

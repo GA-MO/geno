@@ -107,6 +107,8 @@ export type RenameSessionRequest = { readonly sessionId: string; readonly title:
 export const REPLAYED_TURN_META = 'gcode/turn';
 
 export type ReplayedTurn = {
+  /** The session's mode when the prompt was sent. */
+  readonly mode: string;
   readonly startedAt: number;
   readonly endedAt: number;
   readonly status: 'done' | 'stopped' | 'failed';

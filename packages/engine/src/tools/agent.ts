@@ -7,6 +7,9 @@ import {
   denialFor,
   formatDiagnostics,
   MAX_BASH_TIMEOUT_SECONDS,
+  AGENT_MODE_TOOLS,
+  AGENT_TOOL_NAMES,
+  MODE_REFUSALS,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
@@ -80,10 +83,31 @@ export async function settle(
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
 }
 
-export const denialText = ({ command, reason, classifier, decidedBy }: ApprovalRecord): string =>
+export const denialText = ({ mode, command, reason, classifier, decidedBy }: ApprovalRecord): string =>
   `denied: \`${command}\` ${
-    decidedBy === 'classifier' ? `was refused by the safety classifier: ${classifier?.reason}` : `uses ${reason}, which needs the user's approval`
+    decidedBy === 'classifier'
+      ? `was refused by the safety classifier: ${classifier?.reason}`
+      : MODE_REFUSALS[mode] === undefined
+        ? `uses ${reason}, which needs the user's approval`
+        : `uses ${reason}. ${MODE_REFUSALS[mode]}`
   }. Do not retry it; find another way.`;
+
+/**
+ * The tool, refused while the session's mode leaves it out. A run offers only its starting mode's tools, so this
+ * holds when the user switches modes mid-turn, say to Plan after an edit was offered.
+ */
+function inMode(name: AgentToolName, tool: Executor, approval: Approval): Executor {
+  return {
+    ...tool,
+    async run(raw, ctx) {
+      const mode = modeOf(approval);
+      if (!AGENT_MODE_TOOLS[mode].includes(name)) {
+        throw new ToolError(`${name} is not available: ${MODE_REFUSALS[mode] ?? `${mode} mode does not offer it`}. Do not retry it.`);
+      }
+      return tool.run(raw, ctx);
+    },
+  };
+}
 
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
@@ -202,5 +226,6 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   });
 
-  return { ...EXECUTORS, read: withRuleAttachments(read, tools.rules), edit, bash, check };
+  const all: Readonly<Record<AgentToolName, Executor>> = { ...EXECUTORS, read: withRuleAttachments(read, tools.rules), edit, bash, check };
+  return Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
 }

@@ -4,7 +4,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
+import { AGENT_MODE_SYSTEM_PROMPTS, AGENT_MODE_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -379,5 +379,45 @@ describe('gcode agent --mode auto', () => {
     const result = await runCli(['agent', '--workspace', workspace, '--mode', 'yolo', 'Hi'], env, { fetch: fakeTransport([]).fetch });
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('--mode must be ask or auto');
+  });
+});
+
+describe('gcode agent --mode plan', () => {
+  it('offers no edit tool, runs only safe commands, refuses writes without asking, and plans under its own prompt', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'build/out.js': 'console.log(1);\n' });
+    const asked: string[] = [];
+    const edit = use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' });
+    const transport = fakeTransport([
+      toolCall('Looking.', [bash('ls'), bash('rm -rf build'), bash(`node -e "require('fs').writeFileSync('x', '1')"`), edit], usage),
+      answer('1. Change a.ts. Risks: none.', usage),
+    ]);
+    const result = await runCli(['agent', '--workspace', workspace, '--mode', 'plan', 'Plan the change'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return true;
+      },
+    });
+    expect(result.code).toBe(0);
+
+    const [first] = transport.requests;
+    expect(first!.body.tools.map((t: { name: string }) => t.name)).toEqual(['bash', 'check', 'glob', 'grep', 'list', 'read']);
+    expect(first!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.plan);
+    expect(first!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
+    expect(first!.body.system[0].text).toContain('You are in Plan mode, which is read-only.');
+    expect(asked).toEqual([]);
+    expect(transport.requests.filter(isClassifierCall)).toEqual([]);
+    expect(existsSync(path.join(workspace, 'build/out.js'))).toBe(true);
+    expect(existsSync(path.join(workspace, 'x'))).toBe(false);
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(ofKind(log.events, 'mode').map((e) => e.mode)).toEqual(['plan']);
+    const results = ofKind(log.events, 'tool-result');
+    expect(results.map((r) => r.status)).toEqual(['ok', 'denied', 'denied', 'error']);
+    expect('output' in results[1]! && results[1].output).toContain('Plan mode is read-only; switch to Ask or Auto to make changes');
+    expect(results[1]!.approval).toMatchObject({ mode: 'plan', rule: 'rm-rf-in-workspace', decidedBy: 'rule', verdict: 'deny' });
+    expect(results[2]!.approval).toMatchObject({ mode: 'plan', rule: 'unlisted', decidedBy: 'rule', verdict: 'deny' });
+    expect('output' in results[3]! && results[3].output).toContain('edit is not available: Plan mode is read-only');
   });
 });
