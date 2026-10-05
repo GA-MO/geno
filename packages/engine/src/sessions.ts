@@ -69,6 +69,7 @@ const contextItemSchema = z.discriminatedUnion('kind', [
     text: z.string(),
   }),
   z.strictObject({ kind: z.literal('rule'), path: z.string().min(1), matched: z.string().min(1), text: z.string() }),
+  z.strictObject({ kind: z.literal('skill'), name: z.string().min(1), path: z.string().min(1), text: z.string() }),
 ]);
 
 const hunkId = z.string().min(1).transform((raw) => raw as HunkId);
@@ -122,6 +123,7 @@ const turnEventSchema = z.union([
       content: z.string(),
       context: z.array(contextItemSchema).optional(),
       attachments: z.array(attachmentSchema).optional(),
+      command: z.strictObject({ name: z.string().min(1), args: z.string() }).optional(),
     }),
     z.strictObject({
       kind: z.literal('assistant'),

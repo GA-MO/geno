@@ -61,7 +61,9 @@ export type ContextItem =
   | { readonly kind: 'file'; readonly path: string; readonly text: string }
   | { readonly kind: 'selection'; readonly path: string; readonly startLine: number; readonly endLine: number; readonly text: string }
   /** A `globs` rule that a mentioned file matched. */
-  | { readonly kind: 'rule'; readonly path: string; readonly matched: string; readonly text: string };
+  | { readonly kind: 'rule'; readonly path: string; readonly matched: string; readonly text: string }
+  /** The SKILL.md of a skill the user invoked as a slash command. */
+  | { readonly kind: 'skill'; readonly name: string; readonly path: string; readonly text: string };
 
 // Zero-width and bidirectional controls, the BOM and Unicode tag characters: invisible text that can hide instructions.
 const HIDDEN = /[­​-‏‪-‮⁠-⁤⁦-⁩﻿\u{E0000}-\u{E007F}]/gu;
@@ -161,6 +163,7 @@ const ITEM_RENDER: { readonly [K in ContextItem['kind']]: (item: Extract<Context
   selection: ({ path, startLine, endLine, text }) =>
     `<context_item kind="selection" path="${escapeXml(path)}" lines="${startLine}-${endLine}">\n${text}\n</context_item>`,
   rule: (item) => ruleAttachment(item, item.matched),
+  skill: ({ name, path, text }) => `<context_item kind="skill" name="${escapeXml(name)}" path="${escapeXml(path)}">\n${text}\n</context_item>`,
 };
 
 const renderItem = <K extends ContextItem['kind']>(item: Extract<ContextItem, { kind: K }>): string =>
