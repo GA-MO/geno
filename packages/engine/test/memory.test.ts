@@ -112,14 +112,26 @@ describe('ask_user', () => {
     const { home, workspace } = await dirs();
     let mode: SessionMode = 'ask';
     const asked: AskUserRequest[] = [];
-    const channel: UserChannel = { ask_user: async (request) => (asked.push(request), { kind: 'answered', text: 'Postgres' }) };
+    const channel: UserChannel = { ask_user: async (request) => (asked.push(request), { kind: 'answered', answers: { choice: { picked: ['Postgres'] } } }) };
     const ask = userExecutors({ channel, mode: () => mode, memory: memoryStore(home, workspace), sessionId: 's1' })['ask_user']!;
 
     expect(await ask.run({ question: 'Which database?', options: ['Postgres', 'SQLite'] }, ctx())).toBe('The user answered: Postgres');
-    expect(asked).toEqual([{ question: 'Which database?', options: ['Postgres', 'SQLite'] }]);
+    expect(asked).toEqual([{ questions: [{ id: 'choice', header: 'Question', question: 'Which database?', multiSelect: false, options: [{ label: 'Postgres' }, { label: 'SQLite' }] }] }]);
     mode = 'auto';
     await expect(ask.run({ question: 'Again?' }, ctx())).rejects.toThrow('ask_user is not available in auto mode. Do not retry it.');
     expect(asked).toHaveLength(1);
     expect(existsSync(path.join(home, 'memory'))).toBe(false);
+  });
+
+  it('refuses a listed Other before asking, with a message the model can act on', async () => {
+    const { home, workspace } = await dirs();
+    let asked = 0;
+    const channel: UserChannel = { ask_user: async () => (asked++, { kind: 'declined' }) };
+    const ask = userExecutors({ channel, mode: () => 'ask', memory: memoryStore(home, workspace), sessionId: 's1' })['ask_user']!;
+    const options = [{ label: 'Grid', description: 'Cards in a grid.' }, { label: 'Other', description: 'Something else.' }];
+    await expect(ask.run({ questions: [{ id: 'layout', header: 'Layout', question: 'Which layout?', options }] }, ctx())).rejects.toThrow(
+      'question 1, option 2 is "Other". Do not list Other: the card always offers it',
+    );
+    expect(asked).toBe(0);
   });
 });

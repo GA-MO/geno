@@ -63,8 +63,10 @@ import {
   type TurnEvent,
   type UnsavedBuffersRequest,
   appliedRules,
-  askUserSchema,
-  ASK_USER_FIELDS,
+  askUserAnswerOf,
+  askUserForm,
+  askUserMessage,
+  ASK_USER_META,
   GLOBAL_RULES_METHOD,
   MEMORY_CAPABILITY,
   MEMORY_DELETE_METHOD,
@@ -72,7 +74,8 @@ import {
   MEMORY_METHOD,
   REMEMBER_META,
   RULES_METHOD,
-  type AskUserAnswer,
+  type AskUserReply,
+  type AskUserRequest,
   type GlobalRulesResponse,
   type MemoryResponse,
   type RulesResponse,
@@ -337,13 +340,11 @@ const SCOPE_WORDS = { project: 'in this project', global: 'in every project' } a
 
 const elicitationAnswer = z.looseObject({ action: z.string(), content: z.record(z.string(), z.unknown()).nullish() });
 
-/** The user's reply to an ask_user form: the option picked or the words typed; anything else declines. */
-function askUserAnswerOf(raw: unknown): AskUserAnswer {
+/** The user's reply to an ask_user form: the answers it holds; anything but an accept with an answer declines. */
+function askUserReplyOf(request: AskUserRequest, raw: unknown): AskUserReply {
   const parsed = elicitationAnswer.safeParse(raw);
   if (!parsed.success || parsed.data.action !== 'accept') return { kind: 'declined' };
-  const content = parsed.data.content ?? {};
-  const picked = [content[ASK_USER_FIELDS.choice], content[ASK_USER_FIELDS.answer]].find((value): value is string => typeof value === 'string' && value.trim() !== '');
-  return picked === undefined ? { kind: 'declined' } : { kind: 'answered', text: picked.trim() };
+  return askUserAnswerOf(request, parsed.data.content ?? {});
 }
 
 /** The cards this editor can show: a remember question with its exact text, and an ask_user question as a form. */
@@ -370,12 +371,21 @@ function editorUser(client: acp.AgentContext, sessionId: string, peer: Peer, flu
       ? {
           async ask_user(request, signal) {
             await flush();
-            const raw: unknown = await client.request(
-              acp.methods.client.elicitation.create,
-              { mode: 'form', sessionId, toolCallId: running(), message: request.question, requestedSchema: askUserSchema(request) },
-              { cancellationSignal: signal },
-            );
-            return askUserAnswerOf(raw);
+            const elicitation = {
+              mode: 'form' as const,
+              sessionId,
+              toolCallId: running(),
+              message: askUserMessage(request),
+              requestedSchema: askUserForm(request),
+              _meta: { [ASK_USER_META]: request },
+            };
+            try {
+              return askUserReplyOf(request, await client.request(acp.methods.client.elicitation.create, elicitation, { cancellationSignal: signal }));
+            } catch (error) {
+              // An editor that advertised forms but cannot show this one: the model asks in plain words instead.
+              if (signal.aborted) throw error;
+              return { kind: 'unshown' };
+            }
           },
         }
       : {}),

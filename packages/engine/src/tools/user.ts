@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import {
   askUserResult,
+  askUserTitle,
   MEMORY_SCOPES,
+  parseAskUser,
   memoryProblem,
   USER_TOOL_MODES,
   USER_TOOL_NAMES,
   type ApprovalMode,
-  type AskUserAnswer,
+  type AskUserReply,
   type AskUserRequest,
   type RememberInput,
   type UserToolName,
@@ -21,7 +23,7 @@ import { executor, ToolError, type Executor } from './context.js';
 export type UserChannel = {
   /** Shows the exact note and resolves true only when the user approves it. */
   readonly remember?: (input: RememberInput, signal: AbortSignal) => Promise<boolean>;
-  readonly ask_user?: (request: AskUserRequest, signal: AbortSignal) => Promise<AskUserAnswer>;
+  readonly ask_user?: (request: AskUserRequest, signal: AbortSignal) => Promise<AskUserReply>;
 };
 
 export const shownUserTools = (channel: UserChannel): ReadonlySet<UserToolName> => new Set(USER_TOOL_NAMES.filter((name) => channel[name] !== undefined));
@@ -36,6 +38,14 @@ function inMode(name: UserToolName, mode: () => ApprovalMode, tool: Executor): E
     },
   };
 }
+
+/** The questions, parsed by core's rules, so the model reads the same message whichever limit it broke. */
+const askUserInput = z.unknown().transform((raw, ctx) => {
+  const parsed = parseAskUser(raw);
+  if (parsed.ok) return parsed.value;
+  ctx.addIssue({ code: 'custom', message: parsed.problem });
+  return z.NEVER;
+});
 
 type UserToolEnv = { readonly channel: UserChannel; readonly mode: () => ApprovalMode; readonly memory: MemoryStore; readonly sessionId: string };
 
@@ -55,9 +65,9 @@ const BUILD: { readonly [K in UserToolName]: (env: UserToolEnv, show: NonNullabl
     }),
   ask_user: (_env, show) =>
     executor({
-      input: z.strictObject({ question: z.string().min(1), options: z.array(z.string().min(1)).max(6).optional() }),
-      describe: ({ question }) => `ask_user ${question}`,
-      run: async ({ question, options = [] }, ctx) => askUserResult(await show({ question, options }, ctx.signal)),
+      input: askUserInput,
+      describe: (request) => `ask_user ${askUserTitle(request)}`,
+      run: async (request, ctx) => askUserResult(request, await show(request, ctx.signal)),
     }),
 };
 
