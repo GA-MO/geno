@@ -23,3 +23,4 @@ export * from './agent.js';
 export * from './acp.js';
 export * from './inline-edit.js';
 export * from './mcp.js';
+export * from './history.js';

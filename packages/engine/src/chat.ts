@@ -254,6 +254,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
   mode: ({ seq, mode }) => [`#${seq} mode: ${mode}`],
+  title: ({ seq, title }) => [`#${seq} renamed: ${title}`],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,6 +8,13 @@ import { describe, expect, it } from 'vitest';
 import {
   APPROVAL_META,
   ATTACHMENT_META,
+  asSessionId,
+  RENAME_SESSION_METHOD,
+  REPLAYED_AT_META,
+  REPLAYED_CHANGE_META,
+  REPLAYED_TURN_META,
+  SESSION_SUMMARY_META,
+  type RenameSessionRequest,
   BASE_HASH_META,
   changeOf,
   CHECKPOINT_TEXT_METHOD,
@@ -37,6 +44,7 @@ import {
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
+import { appendEvent } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, httpError, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
@@ -556,5 +564,87 @@ describe('gcode serve', () => {
     expect(await refusal([{ type: 'text', text: 'See' }, ...nine])).toMatch(/A message holds up to 8 images/);
     expect(await refusal([{ type: 'resource', resource: { uri: 'file:///x/app.zip', blob: 'UEsDBA==' }, _meta: { [ATTACHMENT_META]: {} } }])).toMatch(/app.zip is a binary file/);
     expect(transport.requests).toHaveLength(0);
+  });
+
+  it('lists this project\'s sessions and every other non-temporary one, titles, renames, loads with the transcript replayed, and trashes', async () => {
+    const read = use('read', { path: 'a.ts' });
+    const edit = use('edit', { path: 'a.ts', old_str: 'unsaved = true', new_str: 'unsaved = false' });
+    const { workspace, editor, connect, env } = await setup([
+      toolCall('Reading.', [read], usage),
+      toolCall('Editing.', [edit], usage),
+      answer('Done.', usage),
+      answer('Still done.', usage),
+    ]);
+    const store = openStore(env);
+    const logged = async (id: string, dir: string, prompt: string) => {
+      const file = path.join(store.sessionsDir, `${id}.jsonl`);
+      const session = { id: asSessionId(id), createdAt: '2026-10-01T00:00:00.000Z', workspace: dir, provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' } as const;
+      await appendEvent(file, { kind: 'session-start', session });
+      await appendEvent(file, { kind: 'user', seq: 1, at: '2026-10-01T00:00:05.000Z', content: prompt });
+    };
+    await logged('elsewhere', '/Users/someone/projects/elsewhere', 'Tidy the README');
+    await logged('scratch', path.join(tmpdir(), 'gcode-eval-clone'), 'An eval task');
+
+    const id = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: '  Flip   the flag\nplease ' }] });
+      return sessionId;
+    });
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'session_info_update', title: 'Flip the flag please' });
+
+    const listed = await connect(async (ctx, empty) => {
+      const mine = await ctx.request(acp.methods.agent.session.list, { cwd: workspace });
+      const all = await ctx.request(acp.methods.agent.session.list, {});
+      await ctx.request(RENAME_SESSION_METHOD, { sessionId: id, title: 'Flag flip' } satisfies RenameSessionRequest);
+      await expect(ctx.request(RENAME_SESSION_METHOD, { sessionId: id, title: '  ' } satisfies RenameSessionRequest)).rejects.toThrow(/title/);
+      const renamed = await ctx.request(acp.methods.agent.session.list, { cwd: workspace });
+      return { mine, all, renamed, empty };
+    });
+    expect(listed.mine.sessions).toEqual([
+      { sessionId: id, cwd: workspace, title: 'Flip the flag please', updatedAt: expect.any(String), _meta: { [SESSION_SUMMARY_META]: { turns: 1, costUsd: expect.any(Number), createdAt: expect.any(String) } } },
+    ]);
+    expect(listed.all.sessions.map((s) => s.sessionId)).toEqual(['elsewhere']);
+    expect(listed.renamed.sessions.map((s) => s.title)).toEqual(['Flag flip']);
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'session_info_update', title: 'Flag flip' });
+
+    editor.updates.length = 0;
+    const loaded = await connect(async (ctx) => {
+      await expect(ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: '/', mcpServers: [] })).rejects.toThrow(/belongs to/);
+      const response = await ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] });
+      const replayed = editor.updates.filter((u) => u.sessionUpdate !== 'available_commands_update');
+      const turn = await ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text: 'Again' }] });
+      return { response, replayed, stopReason: turn.stopReason };
+    });
+    expect(loaded.response.modes?.currentModeId).toBe('ask');
+    expect(loaded.stopReason).toBe('end_turn');
+    const [first, ...rest] = loaded.replayed;
+    expect(first).toEqual({
+      sessionUpdate: 'user_message_chunk',
+      content: { type: 'text', text: 'Flip   the flag\nplease' },
+      _meta: { [REPLAYED_TURN_META]: { startedAt: expect.any(Number), endedAt: expect.any(Number), status: 'done', usage: expect.objectContaining({ inputTokens: 3000, costUsd: expect.any(Number) }) } },
+    });
+    expect(rest.map((u) => u.sessionUpdate)).toEqual([
+      ...['agent_message_chunk', 'tool_call', 'tool_call_update'],
+      ...['agent_message_chunk', 'tool_call', 'tool_call_update'],
+      ...['agent_message_chunk', 'session_info_update'],
+    ]);
+    expect(rest[1]).toMatchObject({ toolCallId: read.id, title: 'read a.ts', kind: 'read' });
+    expect(rest[4]).toMatchObject({ toolCallId: edit.id, title: 'edit a.ts', kind: 'edit' });
+    expect(rest[5]).toMatchObject({
+      toolCallId: edit.id,
+      status: 'completed',
+      _meta: { [REPLAYED_AT_META]: expect.any(Number), [REPLAYED_CHANGE_META]: { hunks: [expect.objectContaining({ newText: 'export const unsaved = false;\n', status: 'pending' })] } },
+    });
+    expect(rest.at(-1)).toMatchObject({ title: 'Flag flip' });
+
+    mkdirSync(path.join(store.sessionsDir, id, 'attachments'), { recursive: true });
+    writeFileSync(path.join(store.sessionsDir, id, 'attachments', 'image.png'), 'png');
+    await connect(async (ctx) => {
+      await ctx.request(acp.methods.agent.session.delete, { sessionId: id });
+      expect((await ctx.request(acp.methods.agent.session.list, { cwd: workspace })).sessions).toEqual([]);
+      await expect(ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] })).rejects.toThrow(/no session log/);
+    });
+    expect(readdirSync(store.trashDir).sort()).toEqual([id, `${id}.jsonl`]);
+    expect(readdirSync(path.join(store.trashDir, id, 'attachments'))).toEqual(['image.png']);
+    expect(existsSync(path.join(store.sessionsDir, id))).toBe(false);
   });
 });

@@ -155,6 +155,7 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
     z.strictObject({ kind: z.literal('mode'), ...seqFields, mode: z.enum(SESSION_MODES) }),
+    z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({

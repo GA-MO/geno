@@ -50,6 +50,8 @@ export type Store = {
   readonly tasksDir: string;
   readonly triplesDir: string;
   readonly sessionsDir: string;
+  /** Deleted session logs, kept rather than erased. */
+  readonly trashDir: string;
   readonly spillDir: string;
   readonly checkpointsDir: string;
   readonly tabEvents: string;
@@ -66,6 +68,7 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
   return {
     evalsDir,
     sessionsDir: path.join(root, 'sessions'),
+    trashDir: path.join(root, 'trash'),
     spillDir: path.join(root, 'spill'),
     checkpointsDir: path.join(root, 'checkpoints'),
     tabEvents: path.join(root, 'tab-events.jsonl'),

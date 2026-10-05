@@ -13,6 +13,7 @@ import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { evalRunCommand } from './eval-run.js';
 import { mcpCommands } from './mcp/cli.js';
+import { listSessionsCommand } from './history.js';
 import { mine } from './mine.js';
 import { rewind } from './rewind.js';
 import { serve } from './serve.js';
@@ -25,6 +26,7 @@ export const USAGE = `usage:
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
   gcode commands list [--workspace <dir>]
+  gcode session list [--all]
   gcode rewind --session <id> --to <turn>
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
   gcode mcp list [--workspace <dir>]
@@ -169,7 +171,7 @@ const commands: Record<string, Command> = {
   mcp: group(mcpCommands),
   rewind,
   serve,
-  session: group({ show: showSession }),
+  session: group({ show: showSession, list: listSessionsCommand }),
   tab: group(tabCommands),
 };
 
