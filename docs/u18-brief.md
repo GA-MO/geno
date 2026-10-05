@@ -28,19 +28,19 @@ The user wants the dino to move: to change pose with the work (a notebook when r
 - Pixels stay crisp. Draw only at integer scales: 1× (24 px) for the still avatar in finished turns, 2× (48 px) for the working dino next to the current step, and 4× on the start page.
 - **No frame.** The dino has no tile, background or border anywhere. Remove `.avatar` and `.hero` backgrounds and outlines. High contrast keeps a plain outline only if the shape would otherwise disappear.
 
-## Start page A: Horizon
+## Start page: just the dino
 
-- **Not Chrome's dino game.** The user chose A on 2026-10-05 but worried it copies Google's offline dinosaur game. Keep the scene clearly Geno's own:
-  - no cacti, no grey desert dashes, no score, and no endless-runner framing;
-  - the ground is a pixel git commit graph: a main line with commit dots, plus two short branches below that fork and merge back in blue and violet;
-  - the obstacles are dev things: a red pixel bug, a violet `{ }` and a coffee cup with steam;
-  - the sky has slow drifting pixel specks, not clouds.
-- The dino wanders: it runs, jumps any obstacle in front of it, turns with a small hop at the edges, and now and then sits down to code on its laptop (the geek pose) or flexes. Clicking it makes it jump or flex.
-- Below the scene: `geno` in the monospace font with a blinking cursor, then the project name and the git branch.
-- A "Continue" list of this project's three most recent sessions, each with its relative time; a click loads that session.
-- A hint row: `@` files, `/` commands, the new-chat shortcut.
-- The composer stays where it is, with its rainbow edge.
-- It uses the glass tokens, light and dark. In high contrast it is native, with no animation.
+On 2026-10-05 the user went through Horizon, a commit-graph ground, a desk scene and a terminal card, then chose the simplest one: the dino alone, with no other objects.
+
+- **No objects.** No ground line, obstacles, desk, clouds or props. The only extra is a soft shadow under the dino that shrinks while it is in the air.
+- **Moves.** The dino wanders on its own. It walks (most of the time), runs, turns with a small hop at an edge, jumps, does a somersault (the sprite rotates in 90° steps, so the pixels stay crisp), sits (blinking and flicking its tail), waves and flexes. A weighted random pick chooses the next move.
+- **Click.** Clicking the dino makes it somersault.
+- **Below the dino:**
+  - `geno` in the monospace font with a blinking cursor;
+  - the project name and the git branch;
+  - a "Continue" list of this project's three most recent sessions, with relative times; a click loads that session.
+- **Prototype.** The interactive prototype shown to the user is the reference for the moves and their timing.
+- **Themes.** It uses the glass tokens, light and dark. In high contrast it is native and still.
 
 ## Motion budget
 
