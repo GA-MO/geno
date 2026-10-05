@@ -36,3 +36,4 @@ Ported files:
 - packages/engine/src/stdout-guard.ts (from packages/coding-agent/src/core/output-guard.ts)
 - packages/core/src/commands.ts (from packages/coding-agent/src/core/prompt-templates.ts)
 - packages/engine/src/commands.ts (from packages/coding-agent/src/core/prompt-templates.ts)
+- packages/core/src/mcp.ts (mcpToolName from packages/coding-agent/src/extensions/mcp/tools.ts createMcpToolName; the size-budgeted lazy catalog adapted from extensions/mcp/index.ts renderServersSection)
