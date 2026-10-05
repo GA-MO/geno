@@ -57,14 +57,14 @@ U18a's peek shows only the head over the composer's top edge. The user wants Noo
   | Wink | one eye closes |
   | Duck down | hands let go and it slides behind the composer |
 
-- **When each plays:**
-  - Climb up plays when the chat becomes idle.
-  - While idle, a weighted random move plays every 6 to 12 s, mostly look around and drum fingers.
-  - Chin rest and yawn come only after 60 s or more of idle.
-  - Wave plays once when the user returns to the window after being away for a while.
-  - Duck down plays the moment the composer gets focus or text, and while a turn runs.
-  - The eyes still follow the pointer between moves.
+- **When it shows (the user's choice, 2026-10-06: only while typing, not too often).**
+  - It climbs up once the composer holds a few characters, once per message, not per keystroke.
+  - While the user types, its eyes look down toward the text, with an occasional blink.
+  - After a pause of 3 s or more without typing, it plays one move (drum fingers or look around), then waits again.
+  - It ducks the moment the message is sent or the composer is emptied. It stays hidden while a turn runs and while the chat is idle.
+  - There are no idle random moves and no yawn or chin rest. Wave plays at most once per session, on its first appearance.
 - **Motion budget.** Same as U18a: it pauses when the window is unfocused or the view is hidden. Under reduced motion or high contrast it shows only the still head and hands, with no moves and no tracking.
+- **Size.** 2×, chosen by the user after seeing 1×, 2× and 3×.
 - **Owner.** U18b builds this, together with the working dino.
 
 ## Start page: just the dino
