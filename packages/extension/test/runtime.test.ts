@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { describeRuntime, engineEnv, readModelRuntime, setupProblem } from '../src/runtime.js';
+import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, secretName, settingKey, setupProblem } from '../src/runtime.js';
 
-const settingsOf = (values: Record<string, unknown>) => ({ get: <T>(key: string, fallback: T): T => (values[key] as T | undefined) ?? fallback });
+/** Settings as the user set them; `workspace` holds what a workspace's settings.json says, which may differ. */
+const settingsOf = (values: Record<string, unknown>, workspace: Record<string, unknown> = {}) => ({
+  get: <T>(key: string, fallback: T): T => ((workspace[key] ?? values[key]) as T | undefined) ?? fallback,
+  inspect: <T>(key: string) => ({ globalValue: values[key] as T | undefined, workspaceValue: workspace[key] as T | undefined }),
+});
 const secretsOf = (values: Record<string, string>) => ({ get: async (key: string) => values[key] });
 
 const STORED = 'sk-stored-in-secret-storage';
@@ -59,5 +63,85 @@ describe('the model runtime', () => {
 
   it('refuses a provider it does not know', async () => {
     await expect(readModelRuntime(settingsOf({ provider: 'nope' }), secretsOf({}), {})).rejects.toThrow('gcode.provider is nope');
+  });
+});
+
+describe('every provider’s runtime', () => {
+  it('keeps the existing secret names, and names one per extra secret field', () => {
+    expect(secretName('modelstudio')).toBe('gcode.apiKey.modelstudio');
+    expect(secretName('openai', 'apiKey')).toBe('gcode.apiKey.openai');
+    expect(secretName('bedrock', 'secretAccessKey')).toBe('gcode.apiKey.bedrock.secretAccessKey');
+    expect(settingKey('modelstudio', 'baseUrl')).toBe('gcode.baseUrl');
+    expect(settingKey('bedrock', 'region')).toBe('gcode.providers');
+  });
+
+  it('hands the engine Bedrock’s keys from SecretStorage and its region from the user settings', async () => {
+    const runtime = await readModelRuntime(
+      settingsOf({ provider: 'bedrock', providers: { bedrock: { region: 'eu-west-1' } } }),
+      secretsOf({ 'gcode.apiKey.bedrock.accessKeyId': 'AKIA-STORED', 'gcode.apiKey.bedrock.secretAccessKey': 'aws-secret-stored' }),
+      { AWS_REGION: 'us-east-1' },
+    );
+    expect(setupProblem(runtime)).toBeUndefined();
+    expect(engineEnv(runtime)).toEqual({
+      GCODE_PROVIDER: 'bedrock',
+      AWS_REGION: 'eu-west-1',
+      AWS_ACCESS_KEY_ID: 'AKIA-STORED',
+      AWS_SECRET_ACCESS_KEY: 'aws-secret-stored',
+    });
+    expect(describeRuntime(runtime)).not.toContain('aws-secret-stored');
+
+    const regionless = await readModelRuntime(settingsOf({ provider: 'bedrock' }), secretsOf({}), {});
+    expect(setupProblem(regionless)).toEqual({
+      message: 'Geno needs your Amazon Bedrock region. Set it in Geno’s settings.',
+      fix: { label: 'Open Geno Settings', command: 'gcode.chat.settings', args: [] },
+    });
+  });
+
+  it('never takes a base URL from the workspace’s settings, which whoever wrote the repository chose', async () => {
+    const runtime = await readModelRuntime(
+      settingsOf(
+        { provider: 'openai', providers: { openai: { baseUrl: 'https://mine.example.com/v1' } } },
+        { providers: { openai: { baseUrl: 'https://attacker.example.com/v1' } }, baseUrl: 'https://attacker.example.com' },
+      ),
+      secretsOf({ 'gcode.apiKey.openai': 'sk-openai' }),
+      {},
+    );
+    expect(engineEnv(runtime)).toEqual({ GCODE_PROVIDER: 'openai', OPENAI_API_KEY: 'sk-openai', GCODE_OPENAI_BASE_URL: 'https://mine.example.com/v1' });
+
+    const modelstudio = await readModelRuntime(settingsOf({}, { baseUrl: 'https://attacker.example.com' }), secretsOf({ 'gcode.apiKey.modelstudio': STORED }), {});
+    expect(modelstudio.baseUrl).toBeUndefined();
+    expect(JSON.stringify(engineEnv(modelstudio))).not.toContain('attacker');
+  });
+
+  it('passes nothing new when no role is set, so today’s engine starts exactly as before', async () => {
+    const settings = settingsOf({ baseUrl: URL });
+    const secrets = secretsOf({ 'gcode.apiKey.modelstudio': STORED, 'gcode.apiKey.openai': 'sk-openai' });
+    const engine = await readEngineRuntime(settings, secrets, {});
+    expect(engineEnvOf(engine)).toEqual(engineEnv(await readModelRuntime(settings, secrets, {})));
+  });
+
+  it('maps the classifier and explore roles to their own provider and model, with that provider’s key', async () => {
+    const engine = await readEngineRuntime(
+      settingsOf({ baseUrl: URL, roles: { classifier: { provider: 'openai', model: 'gpt-judge' }, explore: { provider: 'modelstudio', model: 'qwen3.7-plus' } } }),
+      secretsOf({ 'gcode.apiKey.modelstudio': STORED, 'gcode.apiKey.openai': 'sk-openai-stored' }),
+      {},
+    );
+    expect(engineEnvOf(engine)).toEqual({
+      GCODE_PROVIDER: 'modelstudio',
+      DASHSCOPE_API_KEY: STORED,
+      DASHSCOPE_BASE_URL: URL,
+      GCODE_CLASSIFIER_PROVIDER: 'openai',
+      GCODE_CLASSIFIER_MODEL: 'gpt-judge',
+      OPENAI_API_KEY: 'sk-openai-stored',
+      GCODE_EXPLORE_PROVIDER: 'modelstudio',
+      GCODE_EXPLORE_MODEL: 'qwen3.7-plus',
+    });
+    const described = describeEngineRuntime(engine);
+    expect(described).toBe('modelstudio, model default, key from secret-storage; classifier: openai, model gpt-judge, key from secret-storage; explore: modelstudio, model qwen3.7-plus, key from secret-storage');
+    expect(described).not.toContain('sk-openai-stored');
+  });
+
+  it('refuses a role on a provider it does not know', async () => {
+    await expect(readEngineRuntime(settingsOf({ roles: { classifier: { provider: 'nope' } } }), secretsOf({}), {})).rejects.toThrow('gcode.roles.classifier names nope');
   });
 });
