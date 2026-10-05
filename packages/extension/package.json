@@ -27,6 +27,52 @@
       {
         "command": "gcode.chat.stop",
         "title": "g-code: Stop the Chat Turn"
+      },
+      {
+        "command": "gcode.review.keep",
+        "title": "Keep",
+        "category": "g-code",
+        "icon": "$(check)"
+      },
+      {
+        "command": "gcode.review.undo",
+        "title": "Undo",
+        "category": "g-code",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gcode.review.keepFile",
+        "title": "Keep All Changes in File",
+        "category": "g-code",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "gcode.review.undoFile",
+        "title": "Undo All Changes in File",
+        "category": "g-code",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gcode.review.undoSession",
+        "title": "Undo All Changes of the Session",
+        "category": "g-code",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gcode.review.openDiff",
+        "title": "Open Diff Against Checkpoint",
+        "category": "g-code",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "gcode.review.reveal",
+        "title": "Show Change",
+        "category": "g-code"
+      },
+      {
+        "command": "gcode.inlineEdit",
+        "title": "Edit Selection (Cmd-K)",
+        "category": "g-code"
       }
     ],
     "configuration": {
@@ -80,9 +126,71 @@
           "type": "webview",
           "id": "gcode.chat",
           "name": "Chat"
+        },
+        {
+          "id": "gcode.changes",
+          "name": "Changes"
         }
       ]
-    }
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "gcode.review.undoSession",
+          "when": "view == gcode.changes",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gcode.review.openDiff",
+          "when": "view == gcode.changes && viewItem =~ /^file/",
+          "group": "inline@1"
+        },
+        {
+          "command": "gcode.review.keepFile",
+          "when": "view == gcode.changes && viewItem == file-pending",
+          "group": "inline@2"
+        },
+        {
+          "command": "gcode.review.undoFile",
+          "when": "view == gcode.changes && viewItem == file-pending",
+          "group": "inline@3"
+        },
+        {
+          "command": "gcode.review.keep",
+          "when": "view == gcode.changes && viewItem == hunk-pending",
+          "group": "inline@1"
+        },
+        {
+          "command": "gcode.review.undo",
+          "when": "view == gcode.changes && viewItem == hunk-pending",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gcode.review.keep",
+          "when": "false"
+        },
+        {
+          "command": "gcode.review.undo",
+          "when": "false"
+        },
+        {
+          "command": "gcode.review.reveal",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "gcode.inlineEdit",
+        "key": "ctrl+k ctrl+i",
+        "mac": "cmd+k cmd+i",
+        "when": "editorTextFocus && resourceScheme == file"
+      }
+    ]
   },
   "scripts": {
     "typecheck": "tsc -p .",
