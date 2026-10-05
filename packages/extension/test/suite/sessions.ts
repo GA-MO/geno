@@ -93,6 +93,7 @@ export async function run(): Promise<void> {
   check(/^(\d+d ago|[A-Z][a-z]{2} \d+) · 1 turn · \$0\.0008$/.test(meta ?? ''), 'a row gives the time, the turn count and the cost', meta);
   await screenshots('history');
 
+  await click('.history-search-input');
   await ui({ do: 'type', text: 'parser' });
   await waitFor('the search to narrow the list', async () => (await titles()).join() === OLDER.prompt);
   await click('.history-search-input');
