@@ -1,12 +1,12 @@
 # U18 brief: Noodle moves, and a Horizon start page
 
-The user wants the dino to move: to change pose with the work (a notebook when reading, a pencil when editing), and to run, jump, turn around and flex. They also want a cooler start page with no frame around the dino. They saw two prototypes on 2026-10-05. Start page A, "Horizon", is the default unless the user picks B.
+The user wants the dino to move: to change pose with the work (a notebook when reading, a pencil when editing), and to run, jump, turn around and flex. They also want a cooler start page with no frame around the dino. They saw prototypes on 2026-10-05 and asked for a geek pose that pulls out a laptop to code. Start page A, "Horizon", is the default unless the user picks B.
 
 ## Sprites
 
 - **Data shape first.** The dino is a 24×24 pixel grid, as in `packages/extension/media/noodle-box-a-avatar.svg`: green `#5fc79a`, white `#ffffff` and dark `#14231f`.
   - A pose is a list of frames.
-  - A frame is the base body plus overlays: eye (open, blink, look left, look down, happy), tail (down, up), legs (stand, step a, step b, tucked), arms (none, half, flex), a held prop (notebook, notebook and pencil, clipboard), and floating marks (thought dots, "?", sweat drop, sparkle, dust).
+  - A frame is the base body plus overlays: eye (open, blink, look left, look down, happy), tail (down, up), legs (stand, step a, step b, tucked), arms (none, half, flex), a held prop (notebook, notebook and pencil, laptop with a lid height and code lines, clipboard), glasses, and floating marks (thought dots, "?", sweat drop, sparkle, dust).
   - Write it as a pure table in core or the extension, and have a renderer draw it to a canvas or to SVG rects. A new pose is a new row.
 - **Poses and when they show:**
 
@@ -15,7 +15,8 @@ The user wants the dino to move: to change pose with the work (a notebook when r
 | idle (blinks, tail flicks) | empty chat; a still frame in finished turns |
 | thinking (dots over the head) | waiting on the model with no tool running |
 | reading (open notebook, eyes scan, pages turn) | read, grep, glob, list, skill |
-| writing (notebook and a moving pencil) | edit or create |
+| coding, the geek pose (pulls a laptop up from below, opens the lid, puts on glasses, then types while colored code lines fill the screen) | edit or create of a code file; the pull-out plays once per turn, then typing loops |
+| writing (paper notebook and a moving pencil) | edit or create of a non-code file such as Markdown, JSON or a config |
 | running in place (legs, bob, dust) | bash, check, MCP calls |
 | planning (clipboard, ticks appear) | Plan mode turns |
 | asking ("?" bobbing over the head) | a pending approval, remember or ask_user card |
