@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { asSessionId, COMMAND_META, type TurnEvent } from '@g-code/core';
+import { asSessionId, COMMAND_META, REPLAYED_TURN_META, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
@@ -158,5 +158,23 @@ describe('gcode serve slash commands', () => {
     expect(firstMessage(transport.requests[0]!.body)).toEqual([{ type: 'text', text: '/usr/bin what is this' }]);
     expect((await events(sessionId)).map((e) => e.kind)).toEqual(['session-start', 'mode', 'user', 'checkpoint', 'assistant']);
     expect((await userEvents(sessionId))[0]).not.toHaveProperty('command');
+  });
+
+  it('replays a command turn with its name and arguments beside the expanded text', async () => {
+    const { workspace, updates, connect, say } = await setup([answer('Looks fine.', usage)]);
+
+    const sessionId = await connect(async (ctx, sessionId) => {
+      await say(ctx, sessionId, '/review src/app.ts');
+      return sessionId;
+    });
+    updates.length = 0;
+    await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] }));
+
+    expect(updates.filter((u) => u.sessionUpdate === 'user_message_chunk')).toEqual([
+      expect.objectContaining({
+        content: { type: 'text', text: 'Review src/app.ts for bugs.' },
+        _meta: { [REPLAYED_TURN_META]: expect.objectContaining({ command: { name: 'review', args: 'src/app.ts' } }) },
+      }),
+    ]);
   });
 });
