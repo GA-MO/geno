@@ -2,6 +2,7 @@
 
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
+import { realpath } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
 import {
@@ -25,18 +26,58 @@ import { workspaceDir } from './drive.js';
 import { claudeDirOf, loadPlugins, type InstalledPlugin, type PluginScan } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, SKILL_ROOTS, sortedEntries } from './project-context.js';
 
-type Source = { readonly kind: 'prompt' | 'skill'; readonly scope: CommandSource; readonly dir: (workspace: string, home: string) => string };
+/** Where commands and skills live outside the workspace: Geno's home, and the user's home if the environment names one. */
+export type Homes = { readonly app: string; readonly user: string | undefined };
+
+/** The user's home as the environment names it; never guessed, so a sealed environment reads nothing from it. */
+export const homesOf = (store: Store, env: Readonly<Record<string, string | undefined>>): Homes => ({ app: homeOf(store), user: env['HOME'] || undefined });
+
+/** `base` is the folder a source lives under, and the watch never climbs above it; undefined leaves the source out. */
+type Source = {
+  readonly kind: 'prompt' | 'skill';
+  readonly scope: CommandSource;
+  readonly base: (workspace: string, homes: Homes) => string | undefined;
+  readonly sub: string;
+};
 
 /** In precedence order: the first command of a name wins, after the built-ins, which nothing shadows. */
 const SOURCES: readonly Source[] = [
-  { kind: 'prompt', scope: 'workspace', dir: (workspace) => path.join(workspace, '.agents', 'commands') },
-  { kind: 'prompt', scope: 'workspace', dir: (workspace) => path.join(workspace, '.claude', 'commands') },
-  ...SKILL_ROOTS.map((root): Source => ({ kind: 'skill', scope: 'workspace', dir: (workspace) => path.join(workspace, root) })),
-  { kind: 'prompt', scope: 'global', dir: (_, home) => path.join(home, 'commands') },
-  { kind: 'skill', scope: 'global', dir: (_, home) => path.join(home, 'skills') },
+  { kind: 'prompt', scope: 'workspace', base: (workspace) => workspace, sub: path.join('.agents', 'commands') },
+  { kind: 'prompt', scope: 'workspace', base: (workspace) => workspace, sub: path.join('.claude', 'commands') },
+  ...SKILL_ROOTS.map((root): Source => ({ kind: 'skill', scope: 'workspace', base: (workspace) => workspace, sub: root })),
+  { kind: 'prompt', scope: 'global', base: (_, homes) => homes.app, sub: 'commands' },
+  { kind: 'skill', scope: 'global', base: (_, homes) => homes.app, sub: 'skills' },
+  { kind: 'skill', scope: 'global', base: (_, homes) => homes.user, sub: path.join('.agents', 'skills') },
 ];
 
-import { homeOf } from './store.js';
+/**
+ * The global skill folders that exist, as real paths, for the read tools to open read-only so a skill can point at its
+ * own files. A folder that resolves to one holding the user's home or the Claude config dir is left out.
+ */
+export async function globalSkillRoots(homes: Homes, claudeDir: string | undefined): Promise<string[]> {
+  const holds = (root: string, inner: string | undefined) => {
+    if (inner === undefined) return false;
+    const rel = path.relative(root, inner);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  const forbidden = await Promise.all([homes.user, claudeDir].map((dir) => (dir === undefined ? undefined : realpath(dir).catch(() => dir))));
+  const roots: string[] = [];
+  for (const source of SOURCES) {
+    if (source.kind !== 'skill' || source.scope !== 'global') continue;
+    const dir = dirOf(source, '', homes);
+    const real = dir === undefined ? undefined : await realpath(dir).catch(() => undefined);
+    if (real === undefined || forbidden.some((inner) => holds(real, inner))) continue;
+    roots.push(real);
+  }
+  return roots;
+}
+
+const dirOf = (source: Source, workspace: string, homes: Homes): string | undefined => {
+  const base = source.base(workspace, homes);
+  return base === undefined ? undefined : path.join(base, source.sub);
+};
+
+import { homeOf, type Store } from './store.js';
 
 export { homeOf };
 
@@ -101,10 +142,13 @@ const LOADERS: Readonly<Record<Source['kind'], Loader>> = {
 };
 
 /** The built-ins, then the workspace's commands and skills, then the global ones, then each plugin's skills. */
-export async function loadCommands(workspace: string, home: string, plugins: readonly InstalledPlugin[]): Promise<SlashCommand[]> {
+export async function loadCommands(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[]): Promise<SlashCommand[]> {
   const show = (file: string) => shownPath(workspace, file);
   const groups = await Promise.all([
-    ...SOURCES.map((source) => LOADERS[source.kind](source.dir(workspace, home), source.scope, show)),
+    ...SOURCES.flatMap((source) => {
+      const dir = dirOf(source, workspace, homes);
+      return dir === undefined ? [] : [LOADERS[source.kind](dir, source.scope, show)];
+    }),
     ...plugins.map((plugin) => loadSkillDir(path.join(plugin.root, 'skills'), 'plugin', show, `${plugin.name}:`)),
   ]);
   return mergeCommands([builtinCommands(), ...groups]);
@@ -140,7 +184,7 @@ export const availableCommands = (commands: readonly SlashCommand[]): acp.Availa
  * watch that still covers the same folder is kept, never reopened, and a burst that opens a new watch is followed by
  * one more scan for changes made while it started.
  */
-export function watchCommands(workspace: string, home: string, onChange: () => void, debounceMs = 200): () => void {
+export function watchCommands(workspace: string, homes: Homes, onChange: () => void, debounceMs = 200): () => void {
   const watchers = new Map<string, FSWatcher>();
   let timer: NodeJS.Timeout | undefined;
   let closed = false;
@@ -156,12 +200,14 @@ export function watchCommands(workspace: string, home: string, onChange: () => v
   const targets = () => {
     const found = new Map<string, boolean>();
     for (const source of SOURCES) {
-      const root = source.scope === 'workspace' ? workspace : home;
-      let dir = source.dir(workspace, home);
+      const root = source.base(workspace, homes);
+      if (root === undefined) continue;
+      const own = path.join(root, source.sub);
+      let dir = own;
       while (!existsSync(dir) && dir !== root && dir.startsWith(root)) dir = path.dirname(dir);
       if (!existsSync(dir)) continue;
       // The source folder itself is watched deep, for edits to a skill's SKILL.md; a parent only for the folder appearing.
-      const deep = dir === source.dir(workspace, home);
+      const deep = dir === own;
       found.set(dir, (found.get(dir) ?? false) || deep);
     }
     return new Set([...found].map(([dir, recursive]) => `${recursive ? 'deep' : 'flat'}:${dir}`));
@@ -221,9 +267,9 @@ export type SessionCommands = {
   detach(sessionId: string): void;
 };
 
-export function sessionCommands(home: string, io: Io): SessionCommands {
+export function sessionCommands(homes: Homes, io: Io): SessionCommands {
   const plugins = pluginLoader(io);
-  const load = async (workspace: string) => loadCommands(workspace, home, (await plugins(workspace)).plugins);
+  const load = async (workspace: string) => loadCommands(workspace, homes, (await plugins(workspace)).plugins);
   const sessions = new Map<string, { readonly workspace: string; readonly stop: () => void }>();
   return {
     attach(client, sessionId, workspace) {
@@ -241,7 +287,7 @@ export function sessionCommands(home: string, io: Io): SessionCommands {
       const send = () => {
         publishing = publishing.then(publish).catch((error: unknown) => io.err(`could not publish the commands of ${sessionId}: ${String(error)}`));
       };
-      const stop = watchCommands(workspace, home, send);
+      const stop = watchCommands(workspace, homes, send);
       sessions.set(sessionId, { workspace, stop });
       // After the response that names the session, so the editor knows which session the list is for.
       setImmediate(send);
@@ -269,7 +315,7 @@ const originOf = (command: SlashCommand): string => (ORIGIN[command.kind] as (c:
 export const commandsList: Command = async (args, { io, store }) => {
   const { values } = parseArgs({ args, strict: true, options: { workspace: { type: 'string', default: '.' } } });
   const workspace = await workspaceDir(io.cwd, values.workspace);
-  const commands = await loadCommands(workspace, homeOf(store), (await pluginLoader(io)(workspace)).plugins);
+  const commands = await loadCommands(workspace, homesOf(store, io.env), (await pluginLoader(io)(workspace)).plugins);
   for (const command of listedCommands(commands)) {
     const usage = command.hint === undefined ? `/${command.name}` : `/${command.name} ${command.hint}`;
     io.out(`${usage.padEnd(20)} ${originOf(command)}    ${command.description}`);

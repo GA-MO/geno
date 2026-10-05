@@ -81,7 +81,7 @@ import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments,
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
-import { homeOf, runBuiltin, sessionCommands } from './commands.js';
+import { homeOf, homesOf, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Command, type Io } from './command.js';
@@ -489,7 +489,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     writers.set(sessionId, next.catch(() => {}));
     return next;
   };
-  const commands = sessionCommands(homeOf(store), io);
+  const commands = sessionCommands(homesOf(store, io.env), io);
   const switchMode = async (client: acp.AgentContext, sessionId: string, mode: SessionMode) => {
     modes.set(sessionId, mode);
     await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } });
