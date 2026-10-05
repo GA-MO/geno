@@ -830,6 +830,52 @@ body.diagram-tab {
   color: var(--vscode-foreground);
 }
 
+/* Compact detail: the line a turn's work folds behind, quiet secondary text, and the changed files as one row of chips. */
+
+.turn-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 1px 6px 1px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--small);
+  text-align: left;
+}
+
+.turn-fold:hover,
+.turn-fold:focus-visible {
+  color: var(--vscode-foreground);
+}
+
+.turn-fold .chevron {
+  flex: none;
+  font-size: 12px;
+}
+
+.changed-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.changed-files .changes-actions {
+  margin-left: auto;
+}
+
+.changed-file:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.step-files > .node {
+  top: 10px;
+}
+
 .step-target {
   min-width: 0;
   max-width: 100%;

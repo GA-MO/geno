@@ -40,6 +40,7 @@ import { McpServers } from './mcp-host.js';
 import { Mentions } from './context.js';
 import {
   TOOL_KINDS,
+  CHAT_DETAILS,
   UI_STYLES,
   type Action,
   type FileDiff,
@@ -52,6 +53,8 @@ import {
   type ToolStatus,
   type Transcript,
   type TurnStatus,
+  type ChatDetail,
+  type Look,
   type UiStyle,
   type Usage,
 } from './messages.js';
@@ -66,7 +69,8 @@ export const STOP_COMMAND = 'gcode.chat.stop';
 export const NEW_CHAT_COMMAND = 'gcode.chat.new';
 export const HISTORY_COMMAND = 'gcode.chat.history';
 export const MCP_COMMAND = 'gcode.chat.mcp';
-export const STYLE_SETTING = 'gcode.ui.style';
+/** The settings the panel's look comes from. */
+export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail'] as const;
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
 
 /** What Start building sends once the session has left Plan. */
@@ -84,11 +88,14 @@ export function approvalModeOf(configuration: vscode.WorkspaceConfiguration): 'a
   return configuration.get<string>('approvalMode') === 'auto' ? 'auto' : 'ask';
 }
 
-/** The panel's look from settings; anything but a known style falls back to glass, the default. */
-export function uiStyleOf(configuration: vscode.WorkspaceConfiguration): UiStyle {
-  const value = configuration.get<string>('ui.style');
-  return (UI_STYLES as readonly (string | undefined)[]).includes(value) ? (value as UiStyle) : 'glass';
-}
+const known = <T extends string>(values: readonly T[], value: string | undefined, fallback: T): T =>
+  (values as readonly (string | undefined)[]).includes(value) ? (value as T) : fallback;
+
+/** The panel's look from settings; an unknown value falls back to the default, glass and compact. */
+export const lookOf = (configuration: vscode.WorkspaceConfiguration): Look => ({
+  style: known<UiStyle>(UI_STYLES, configuration.get<string>('ui.style'), 'glass'),
+  detail: known<ChatDetail>(CHAT_DETAILS, configuration.get<string>('chat.detail'), 'compact'),
+});
 
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
@@ -319,7 +326,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly memory: SessionMemory,
     private readonly onWrite: WriteListener,
     private readonly modelName: () => string,
-    private readonly uiStyle: () => UiStyle,
+    private readonly look: () => Look,
     private readonly openElsewhere: (workspace: string, sessionId: string) => Promise<void>,
     private readonly defaultMode: () => 'ask' | 'auto',
     /** The MCP servers the user owns, from VS Code's user mcp.json; never the workspace's, which skip no approval this way. */
@@ -348,9 +355,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.dispatch({ type: 'model', model: this.modelName() });
   }
 
-  /** Tells a shown panel the look the setting now asks for; a panel created later reads it itself. */
+  /** Tells a shown panel the look the settings now ask for; a panel created later reads it itself. */
   restyle(): void {
-    void this.view?.webview.postMessage({ type: 'style', style: this.uiStyle() } satisfies ToView);
+    void this.view?.webview.postMessage({ type: 'look', look: this.look() } satisfies ToView);
   }
 
   /** Mirrors review decisions made anywhere, the editor's CodeLens included, onto the diff cards. */
@@ -816,7 +823,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
     view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri)] };
-    view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.uiStyle());
+    view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.look());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
     view.onDidDispose(() => {
