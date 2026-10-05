@@ -27,8 +27,9 @@ const luminance = (hex: string): number => {
 
 /**
  * The avatar with a closed eyelid drawn over its eye, in a `lid` group the panel shows for a blink frame. The
- * eye is the white shine and the darkest color, the pupil; the lid paints those cells in the body color, the
- * most common one, and draws the closed eye as a line of the pupil color along the eye's bottom row.
+ * eye is the darkest color, the pupil, and the white shine touching it; a white belly elsewhere is not the eye.
+ * The lid paints those cells in the body color, the most common one, and draws the closed eye as a line of the
+ * pupil color along the eye's bottom row.
  */
 export function withEyelid(svg: string): string {
   const pixels = pixelsOf(svg);
@@ -36,7 +37,9 @@ export function withEyelid(svg: string): string {
   for (const p of pixels) counts.set(p.fill, (counts.get(p.fill) ?? 0) + 1);
   const body = [...counts].sort((a, b) => b[1] - a[1])[0]![0];
   const pupil = [...counts.keys()].sort((a, b) => luminance(a) - luminance(b))[0]!;
-  const eye = pixels.filter((p) => p.fill === '#ffffff' || p.fill === pupil);
+  const pupils = pixels.filter((p) => p.fill === pupil);
+  const touchesPupil = (p: Pixel) => pupils.some((q) => Math.abs(q.x - p.x) <= 1 && Math.abs(q.y - p.y) <= 1);
+  const eye = pixels.filter((p) => p.fill === pupil || (p.fill === '#ffffff' && touchesPupil(p)));
   if (eye.length === 0) throw new Error('the avatar has no eye to blink');
   const bottom = Math.max(...eye.map((p) => p.y));
   const lid = eye.map((p) => `<rect x="${p.x}" y="${p.y}" width="1" height="1" fill="${p.y === bottom ? pupil : body}"/>`).join('');

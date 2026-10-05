@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -111,36 +111,38 @@ DINOS = {
     },
 }
 
-# Boxy Noodle variants, in increasing boxiness. They share Noodle's palette and tile.
+# Boxy Noodle variants, in increasing boxiness. B and C share Noodle's palette and tile; Box A, the one g-code
+# wears, is green and white only and sits on a dark glass tile like the chat panel's.
 NOODLE = DINOS['noodle']
 BOXY = {
     'noodle-box-a': {
         'title': 'Box A',
-        'tile': NOODLE['tile'],
-        'palette': NOODLE['palette'],
+        # Green and white only: no spots, no blush, one dark eye with its shine.
+        'tile': 'glass',
+        'palette': {'B': NOODLE['palette']['B'], 'L': '#ffffff', 'E': NOODLE['palette']['E'], 'W': '#ffffff'},
         'grid': [
             '........................',
             '.............BBBBBBBBB..',
             '.............BBBBBBBBB..',
             '.............BBBBWEBBB..',
-            '.............BBBBEEBBB..',
             '.............BBBBBBBBB..',
-            '.............BBBBAABBB..',
+            '.............BBBBBBBBB..',
+            '.............BBBBBBBBB..',
             '.............BBBB.......',
             '.............BBBB.......',
             '.............BBBB.......',
             '.............BBBB.......',
             '.............BBBB.......',
             '...BBBBBBBBBBBBBBB......',
-            '...BBBBBSBBBBSBBBB......',
+            '...BBBBBBBBBBBBBBB......',
             'BBBBBBBBBBBBBBBBBB......',
-            'BBBBBBSBBBBBSBBBBB......',
+            'BBBBBBBBBBBBBBBBBB......',
             '...BBBBBBBBBBBBBBB......',
             '...BBLLLLLLLLLLLBB......',
             '...BBLLLLLLLLLLLBB......',
-            '....SBB......SBB........',
-            '....SBB......SBB........',
-            '....SBB......SBB........',
+            '....BBB......BBB........',
+            '....BBB......BBB........',
+            '....BBB......BBB........',
             '........................',
             '........................',
         ],
@@ -267,15 +269,50 @@ def grid_image(grid, palette, scale, color=None):
     return img
 
 
-def icon_png(dino):
-    """128x128: a 32-cell pixel tile with stepped corners, the 24-cell dino centered on it, 4px per cell."""
+def stepped_tile(color):
+    """A 32-cell pixel tile with stepped corners, 4px per cell."""
     cell = 4
     img = Image.new('RGBA', (128, 128), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     inset = [3, 1, 1]  # cells cut from each corner row, top to bottom, for a pixel-rounded square
     for y in range(32):
         cut = inset[y] if y < 3 else inset[31 - y] if y > 28 else 0
-        draw.rectangle([cut * cell, y * cell, (32 - cut) * cell - 1, (y + 1) * cell - 1], fill=dino['tile'])
+        draw.rectangle([cut * cell, y * cell, (32 - cut) * cell - 1, (y + 1) * cell - 1], fill=color)
+    return img
+
+
+def glass_tile():
+    """A dark glass square: a deep blue-black gradient, a soft green glow behind the dino, a light top edge."""
+    k = 4  # drawn at 4x and scaled down, for smooth corners
+    size, radius = 128 * k, 30 * k
+    shape = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(shape).rounded_rectangle([0, 0, size - 1, size - 1], radius, fill=255)
+    fill = Image.new('RGBA', (size, size))
+    top, bottom = (31, 38, 50), (10, 13, 19)
+    for y in range(size):
+        t = y / (size - 1)
+        ImageDraw.Draw(fill).line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+    glow = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse([size * 0.12, size * 0.16, size * 0.88, size * 0.92], fill=(95, 199, 154, 70))
+    glow = glow.filter(ImageFilter.GaussianBlur(size * 0.12))
+    fill.alpha_composite(glow)
+    edge = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(edge)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius, outline=(255, 255, 255, 34), width=k)
+    sheen = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(sheen).rounded_rectangle([0, 0, size - 1, size - 1], radius, outline=255, width=2 * k)
+    fade = Image.linear_gradient('L').resize((size, size)).point(lambda v: max(0, 110 - v * 2))
+    edge.alpha_composite(Image.merge('RGBA', (*Image.new('RGB', (size, size), (255, 255, 255)).split(), Image.composite(fade, Image.new('L', (size, size), 0), sheen))))
+    fill.alpha_composite(edge)
+    tile = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    tile.paste(fill, (0, 0), shape)
+    return tile.resize((128, 128), Image.Resampling.LANCZOS)
+
+
+def icon_png(dino):
+    """128x128: the 24-cell dino, 4px per cell, centered on its tile."""
+    cell = 4
+    img = glass_tile() if dino['tile'] == 'glass' else stepped_tile(dino['tile'])
     body = grid_image(dino['grid'], dino['palette'], cell)
     bbox = body.getbbox()
     w, h = (bbox[2] - bbox[0]) // cell, (bbox[3] - bbox[1]) // cell
