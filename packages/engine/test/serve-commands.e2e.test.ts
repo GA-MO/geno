@@ -81,7 +81,7 @@ describe('gcode serve slash commands', () => {
       await until(() => listings(updates).length === 3);
     });
 
-    const builtins = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory'];
+    const builtins = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init'];
     expect(listings(updates)).toEqual([
       [...builtins, 'review', 'add-i18n'],
       [...builtins, 'ship', 'review', 'add-i18n'],
@@ -141,13 +141,19 @@ describe('gcode serve slash commands', () => {
       expect((await say(ctx, sessionId, '/mode auto')).stopReason).toBe('end_turn');
       expect((await say(ctx, sessionId, '/mode yolo')).stopReason).toBe('end_turn');
       expect((await say(ctx, sessionId, '/new')).stopReason).toBe('end_turn');
+      expect((await say(ctx, sessionId, '/init')).stopReason).toBe('end_turn');
       await say(ctx, sessionId, '/usr/bin what is this');
       return sessionId;
     });
 
     expect(updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'auto' });
     const replies = updates.flatMap((u) => (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text' ? [u.content.text] : []));
-    expect(replies.slice(0, 3)).toEqual(['Approval mode: auto.', 'Usage: /mode ask | auto', '/new runs in the editor, and this client does not offer it.']);
+    expect(replies.slice(0, 4)).toEqual([
+      'Approval mode: auto.',
+      'Usage: /mode ask | auto',
+      '/new runs in the editor, and this client does not offer it.',
+      'Creating AGENTS.md is not available yet.',
+    ]);
     expect(transport.requests).toHaveLength(1);
     expect(firstMessage(transport.requests[0]!.body)).toEqual([{ type: 'text', text: '/usr/bin what is this' }]);
     expect((await events(sessionId)).map((e) => e.kind)).toEqual(['session-start', 'mode', 'user', 'checkpoint', 'assistant']);

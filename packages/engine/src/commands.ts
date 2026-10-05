@@ -160,6 +160,7 @@ const ENGINE_ACTIONS: Readonly<Record<EngineBuiltin, (args: string, ctx: Builtin
   },
   rules: async () => 'Rules are not available yet.',
   memory: async () => 'Memory is not available yet.',
+  init: async () => 'Creating AGENTS.md is not available yet.',
 };
 
 const isEngineBuiltin = (name: string): name is EngineBuiltin => Object.hasOwn(ENGINE_ACTIONS, name);

@@ -38,7 +38,7 @@ describe('command discovery', () => {
 
     const commands = await loadCommands(workspace, home);
 
-    expect(commands.slice(0, 7).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory']);
+    expect(commands.slice(0, 8).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init']);
     expect(summary(commands)).toEqual([
       'prompt ship workspace: Ship it now, carefully and with a changelog entry for every ...',
       'prompt review workspace: Review a file',
@@ -63,7 +63,7 @@ describe('command discovery', () => {
     expect(listed.find((c) => c.name === 'mode')).toEqual({
       name: 'mode',
       description: 'Switch the approval mode',
-      input: { hint: 'ask | auto' },
+      input: { hint: 'plan | ask | auto' },
       _meta: { [COMMAND_META]: { kind: 'builtin', runs: 'engine' } },
     });
     expect(listed.find((c) => c.name === 'review')).toEqual({ name: 'review', description: 'Review a file', input: { hint: '<file>' }, _meta: { [COMMAND_META]: { kind: 'prompt' } } });
@@ -113,11 +113,12 @@ describe('gcode commands list', () => {
     expect(stdout.split('\n')).toEqual([
       '/new                 built-in, editor    Start a new chat',
       '/history             built-in, editor    Open a past chat',
-      '/mode ask | auto     built-in, engine    Switch the approval mode',
+      '/mode plan | ask | auto built-in, engine    Switch the approval mode',
       '/model               built-in, editor    Choose the model',
       '/clear               built-in, editor    Clear the chat and start fresh',
       '/rules               built-in, engine    Show the project rules',
       '/memory              built-in, engine    Show what Geno remembers',
+      '/init                built-in, engine    Create or update AGENTS.md for this project',
       '/review <file>       .claude/commands/review.md    Review a file',
       `/tidy                ${path.join(home, 'skills', 'tidy', 'SKILL.md')}    Tidy the repo`,
     ]);

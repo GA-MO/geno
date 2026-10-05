@@ -95,7 +95,7 @@ describe('invocations', () => {
 
 describe('the command table', () => {
   it('holds the built-ins, each marked as a client or an engine action', () => {
-    expect(Object.keys(BUILTIN_COMMANDS)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory']);
+    expect(Object.keys(BUILTIN_COMMANDS)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init']);
     expect(Object.fromEntries(Object.entries(BUILTIN_COMMANDS).map(([name, spec]) => [name, spec.runs]))).toEqual({
       new: 'client',
       history: 'client',
@@ -104,7 +104,10 @@ describe('the command table', () => {
       clear: 'client',
       rules: 'engine',
       memory: 'engine',
+      init: 'engine',
     });
+    expect(BUILTIN_COMMANDS.init.description).toBe('Create or update AGENTS.md for this project');
+    expect(BUILTIN_COMMANDS.mode.hint).toBe('plan | ask | auto');
   });
 
   it('keeps the first command of a name, so earlier groups win', () => {
