@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DINO_FILES } from '../src/dino.js';
-import { compose, crop, flip, framesOf, PALETTE, POSE_NAMES, POSES, rotate, SIZE, svgOf, type Frame, type Grid } from '../src/chat/sprite.js';
+import { compose, composePeek, crop, flip, framesOf, PALETTE, PEEK_MOVES, POSE_NAMES, POSES, rotate, SIZE, svgOf, type Frame, type Grid, type PeekFrame } from '../src/chat/sprite.js';
 
 const STAND: Frame = { eye: 'open', tail: 'down', legs: 'stand', arms: 'none' };
 
@@ -25,7 +25,7 @@ describe('the sprite', () => {
   });
 
   it('has every pose the brief names, each with frames', () => {
-    expect([...POSE_NAMES].sort()).toEqual(['asking', 'coding', 'face', 'flex', 'hop', 'idle', 'planning', 'reading', 'running', 'sweat', 'thinking', 'writing']);
+    expect([...POSE_NAMES].sort()).toEqual(['asking', 'coding', 'face', 'flex', 'hop', 'idle', 'planning', 'reading', 'running', 'somersault', 'sweat', 'thinking', 'writing']);
     for (const name of POSE_NAMES) expect(POSES[name].loop.length, name).toBeGreaterThan(0);
   });
 
@@ -99,6 +99,15 @@ describe('the sprite', () => {
     expect([POSES.flex.once, POSES.hop.once, POSES.face.once, POSES.idle.once]).toEqual([true, true, true, undefined]);
   });
 
+  it('somersaults once, in the air, through every quarter turn, and lands upright', () => {
+    const { loop, once } = POSES.somersault;
+    expect(once).toBe(true);
+    expect(new Set(loop.map((f) => f.quarter ?? 0))).toEqual(new Set([0, 1, 2, 3]));
+    expect(loop.filter((f) => (f.quarter ?? 0) > 0).every((f) => f.dy === -1 && f.legs === 'tucked')).toBe(true);
+    expect(loop.at(-1)!.quarter ?? 0).toBe(0);
+    expect(compose(loop.at(-1)!)).toEqual(compose(STAND));
+  });
+
   it('turns in whole quarter turns and mirrors without losing or blending a pixel', () => {
     const grid = compose(STAND);
     expect(rotate(rotate(rotate(rotate(grid))))).toEqual(grid);
@@ -124,5 +133,92 @@ describe('the sprite', () => {
       Array.from({ length: Number(w) }, (_, i) => `${Number(x) + i},${y} ${fill}`),
     );
     expect(cells.sort()).toEqual((await avatarPixels()).sort());
+  });
+});
+
+const GRIP: PeekFrame = { eye: 'open', left: 'grip', right: 'grip' };
+
+/** The grid's coloured pixels, grouped by touching sides: one group is one connected body. */
+function bodies(grid: Grid): number {
+  const seen = new Set<string>();
+  let groups = 0;
+  grid.forEach((row, y) =>
+    [...row].forEach((ink, x) => {
+      if (ink === '.' || seen.has(`${x},${y}`)) return;
+      groups++;
+      const stack = [[x, y]];
+      while (stack.length > 0) {
+        const [cx, cy] = stack.pop()!;
+        const key = `${cx},${cy}`;
+        if (seen.has(key) || grid[cy!]?.[cx!] === undefined || grid[cy!]![cx!] === '.') continue;
+        seen.add(key);
+        stack.push([cx! + 1, cy!], [cx! - 1, cy!], [cx!, cy! + 1], [cx!, cy! - 1]);
+      }
+    }),
+  );
+  return groups;
+}
+
+describe('the peek over the composer', () => {
+  it('is one connected body: head, neck, chest with a white belly, arms, and two 3 by 2 hands with darker knuckles on the edge', () => {
+    const grid = composePeek(GRIP);
+    expect(grid).toHaveLength(SIZE);
+    expect(bodies(grid)).toBe(1);
+    expect(PALETTE.d).toBe('#4fae86');
+    // The hands sit on the bottom two rows, the composer's edge, one each side of the chest.
+    const hands = grid.slice(SIZE - 2).map((row) => [...row.matchAll(/[gd]{3}/g)].map((m) => `${m.index}:${m[0]}`));
+    expect(hands).toEqual([
+      ['6:dgd', '21:dgd'],
+      ['6:ggg', '21:ggg'],
+    ]);
+    expect(grid[SIZE - 3]!.slice(10, 20)).toBe('ggwwwwwwgg');
+    expect(grid[3]!.slice(17, 19)).toBe('wk');
+    // Outside the chest, only the hands reach the edge.
+    expect([grid[SIZE - 1]!.slice(0, 10), grid[SIZE - 1]!.slice(20)]).toEqual(['......ggg.', '.ggg']);
+  });
+
+  it('has the moves the brief keeps: climb, typing, look around, drum, wave and duck', () => {
+    expect(Object.keys(PEEK_MOVES).sort()).toEqual(['climb', 'drum', 'duck', 'lookAround', 'typing', 'wave']);
+    expect('once' in PEEK_MOVES.typing).toBe(false);
+    for (const name of ['climb', 'drum', 'duck', 'lookAround', 'wave'] as const) expect(PEEK_MOVES[name].once, name).toBe(true);
+  });
+
+  it('draws every frame of every move inside the grid, in the palette, as one body', () => {
+    for (const [name, move] of Object.entries(PEEK_MOVES))
+      for (const frame of framesOf(move)) {
+        const grid = composePeek(frame);
+        expect(grid.every((row) => row.length === SIZE), name).toBe(true);
+        for (const ink of inks(grid)) expect(Object.keys(PALETTE), `${name} uses ${ink}`).toContain(ink);
+        expect(bodies(grid), `${name} ${JSON.stringify(frame)}`).toBe(1);
+      }
+  });
+
+  it('climbs: the body rises from below the edge, the hands land on it, then it blinks', () => {
+    const sinks = PEEK_MOVES.climb.loop.map((f) => f.sink ?? 0);
+    expect(sinks[0]).toBeGreaterThanOrEqual(SIZE - 1);
+    expect(sinks).toEqual([...sinks].sort((a, b) => b - a));
+    const landed = PEEK_MOVES.climb.loop.findIndex((f) => f.left === 'grip' && f.right === 'grip');
+    expect(PEEK_MOVES.climb.loop.slice(0, landed).every((f) => f.left === 'off' && f.right === 'off')).toBe(true);
+    expect(PEEK_MOVES.climb.loop.slice(landed).every((f) => (f.sink ?? 0) === 0)).toBe(true);
+    expect(PEEK_MOVES.climb.loop.slice(landed).some((f) => f.eye === 'blink')).toBe(true);
+  });
+
+  it('ducks: the hands let go first, then the whole body slides below the edge', () => {
+    const { loop } = PEEK_MOVES.duck;
+    expect([loop[0]!.left, loop[0]!.right, loop[0]!.sink ?? 0]).toEqual(['off', 'off', 0]);
+    expect(loop.at(-1)!.sink).toBeGreaterThanOrEqual(SIZE);
+    expect(loop.every((f) => f.left === 'off' && f.right === 'off')).toBe(true);
+  });
+
+  it('looks down toward the text while typing, with a blink; waves one hand with happy eyes; drums each hand in turn', () => {
+    expect(new Set(PEEK_MOVES.typing.loop.map((f) => f.eye))).toEqual(new Set(['downLeft', 'blink']));
+    const waving = PEEK_MOVES.wave.loop.filter((f) => f.right.startsWith('wave'));
+    expect(new Set(waving.map((f) => f.right)).size).toBe(2);
+    expect(waving.every((f) => f.eye === 'happy' && f.left === 'grip')).toBe(true);
+    expect(PEEK_MOVES.drum.loop.some((f) => f.left === 'lift' && f.right === 'grip')).toBe(true);
+    expect(PEEK_MOVES.drum.loop.some((f) => f.left === 'grip' && f.right === 'lift')).toBe(true);
+    expect(PEEK_MOVES.lookAround.loop.map((f) => f.eye).slice(0, 2)).toEqual(['left', 'open']);
+    expect(PEEK_MOVES.lookAround.loop.at(-1)!.toPointer).toBe(true);
+    for (const name of ['wave', 'drum', 'lookAround'] as const) expect(PEEK_MOVES[name].loop.at(-1)!.sink ?? 0, name).toBe(0);
   });
 });
