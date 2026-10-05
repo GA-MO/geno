@@ -167,3 +167,18 @@ Decision. Keep the check after every edit as the default. Rerun E5 and E14 twice
 | Total recorded | $4.5365 |
 
 The first smoke run is also why tokens come from `modelUsage`. Its result line's `usage` showed 148,766 tokens and $0.0244, while `modelUsage` showed 989,545 tokens and $0.1591, because an Explore subagent's calls are only in `modelUsage`. Commit `c7c5f1f` switched to `modelUsage` before E0 started.
+
+## Correction: payload-page-metadata-helper's check was too strict
+
+Both agents failed `payload-page-metadata-helper` because they returned the share image as an absolute URL on the site's own origin (`https://example.test/images/contact.jpg`), and the hidden check expected the path `/images/contact.jpg`. The prompt asks to build URLs from `siteUrl()` and never asks for a relative image, and Next resolves a relative image against `metadataBase`, so both answers are correct. The check broke the rule in `docs/eval-tasks.md` that a correct solution unlike the reference must pass.
+
+The check now maps a same-origin absolute URL to its path before comparing; an image on any other origin still fails. `gcode eval check-task payload-page-metadata-helper` prints `valid` after the change.
+
+Rerunning only that task on `qwen3.8-flash`:
+
+| Agent | Result | Turns | Cost | Agent time |
+|---|---|---|---|---|
+| g-code | pass | 30 | $0.0789 | 300.5 s |
+| Claude Code | pass | 44 | $0.2208 | 1398.0 s |
+
+With that task scored from the rerun, both agents pass 18/20. The two remaining shared failures, `next-base-path` and `payload-site-url-runtime`, are model mistakes as described above. Results files for the reruns are in `~/.g-code/evals/runs/` (the two newest `payload-page-metadata-helper` runs).
