@@ -98,8 +98,9 @@ function changedFiles(edits: readonly EditTool[]): ChangedFile[] {
  */
 const needsUser = (step: Step): boolean => nodeOf(step) === 'wait' || step.kind === 'error';
 
-/** An answered question stays in view as one line: what the user decided shapes the answer below it. */
-const decided = (step: Step): boolean => step.kind === 'permission' && step.block.ask?.kind === 'question' && step.block.outcome.kind === 'answered';
+/** An answered or skipped question stays in view as one line: what the user decided shapes the answer below it. */
+const decided = (step: Step): boolean =>
+  step.kind === 'permission' && step.block.ask?.kind === 'question' && (step.block.outcome.kind === 'answered' || step.block.outcome.kind === 'skipped');
 
 export function turnView(turn: Turn): TurnView {
   const trail = railOf(turn);
