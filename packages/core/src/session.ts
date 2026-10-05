@@ -19,6 +19,7 @@ import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { ProviderName } from './providers.js';
 import type { Brand } from './types.js';
+import type { WidgetRef } from './widget.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
 export const asSessionId = (raw: string): SessionId => raw as SessionId;
@@ -90,6 +91,8 @@ export type ToolResultEvent = {
   readonly approval?: ApprovalRecord | undefined;
   /** Images the tool returned beside its text, such as a read of a PNG. */
   readonly images?: readonly ImageAttachment[] | undefined;
+  /** The widget a show_widget call drew, stored by its hash. */
+  readonly widget?: WidgetRef | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;

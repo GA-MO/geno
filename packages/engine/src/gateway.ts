@@ -32,11 +32,16 @@ export type TurnInput = {
   readonly stored?: StoredAttachments;
   readonly signal: AbortSignal;
   onText(delta: string): void;
+  /** A tool call as the model writes it, once when it starts and again with each piece of its input. */
+  onToolInput?(draft: ToolInputDraft): void;
   /** A transient failure about to be retried; the wait starts once this settles. */
   onRetry(retry: ModelRetry): void | Promise<void>;
   /** When the attempt that produced the result reached each point of its stream; called once, before the result returns. */
   onMarks?(marks: StreamMarks): void;
 };
+
+/** A tool call still streaming: its id, its name and its input JSON so far. */
+export type ToolInputDraft = { readonly id: string; readonly name: string; readonly json: string };
 
 /** One model round trip, through the provider's adapter. */
 export type Gateway = { turn(input: TurnInput): Promise<TurnResult> };
@@ -111,14 +116,24 @@ export function gatewayFor(
   const wire = wireFor(providerName, env, fetch);
   const sessionHeader = specOf(providerName).sessionHeader;
 
-  async function call({ session, events, tools, system, stored, signal, onText }: TurnInput, clock: StreamClock): Promise<TurnResult> {
+  async function call({ session, events, tools, system, stored, signal, onText, onToolInput }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
+    const drafts = new Map<number, ToolInputDraft>();
+    const draft = (index: number, next: ToolInputDraft) => {
+      drafts.set(index, next);
+      onToolInput?.(next);
+    };
     const message = await wire.stream(buildRequest(session, events, tools, system, stored), {
       signal,
       headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
       onEvent: (event) => {
         clock.observe(event);
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
+        if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') draft(event.index, { id: event.content_block.id, name: event.content_block.name, json: '' });
+        if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
+          const was = drafts.get(event.index);
+          if (was !== undefined) draft(event.index, { ...was, json: was.json + event.delta.partial_json });
+        }
       },
     });
     if (message.stop_reason === 'refusal') {

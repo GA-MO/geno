@@ -21,6 +21,8 @@ import {
   type SessionId,
   type StoredAttachments,
   type TurnEvent,
+  type WidgetRef,
+  widgetFileName,
 } from '@g-code/core';
 import { isMissing, type Store } from './store.js';
 
@@ -42,6 +44,8 @@ export const imageAttachmentSchema = z.strictObject({
   height: z.number().int().positive(),
 });
 
+export const widgetRefSchema = z.strictObject({ sha256: storedFields.sha256, title: z.string().min(1), bytes: storedFields.bytes });
+
 export const attachmentSchema = z.discriminatedUnion('kind', [imageAttachmentSchema, z.strictObject({ kind: z.literal('file'), ...storedFields, mediaType: z.string().min(1) })]);
 
 /** Where a session's attachments live: `$GCODE_HOME/sessions/<id>/attachments`, beside its log. */
@@ -49,8 +53,8 @@ export const attachmentsDir = (store: Store, id: SessionId): string => path.join
 
 const sha256Of = (bytes: Uint8Array): Sha256 => asSha256(createHash('sha256').update(bytes).digest('hex'));
 
-async function writeOnce(dir: string, attachment: Attachment, bytes: Uint8Array): Promise<void> {
-  const file = path.join(dir, attachmentFileName(attachment));
+async function writeOnce(dir: string, name: string, bytes: Uint8Array): Promise<void> {
+  const file = path.join(dir, name);
   const exists = await access(file).then(
     () => true,
     (error: unknown) => {
@@ -75,7 +79,7 @@ export async function storeImage(dir: string, bytes: Uint8Array, source: Origin)
     throw new AttachmentError(`${source.name} is ${info.width}x${info.height} pixels; images can be at most ${MAX_IMAGE_SIDE} pixels on a side`);
   }
   const image: ImageAttachment = { kind: 'image', sha256: sha256Of(bytes), name: source.name, bytes: bytes.length, ...info, ...(source.path === undefined ? {} : { path: source.path }) };
-  await writeOnce(dir, image, bytes);
+  await writeOnce(dir, attachmentFileName(image), bytes);
   return image;
 }
 
@@ -89,8 +93,40 @@ export async function storeFile(dir: string, text: string, source: Origin & { re
     mediaType: source.mediaType,
     ...(source.path === undefined ? {} : { path: source.path }),
   };
-  await writeOnce(dir, file, bytes);
+  await writeOnce(dir, attachmentFileName(file), bytes);
   return file;
+}
+
+/** Stores the html of a widget the model drew. */
+export async function storeWidget(dir: string, html: string, title: string): Promise<WidgetRef> {
+  const bytes = new TextEncoder().encode(html);
+  const widget: WidgetRef = { sha256: sha256Of(bytes), title, bytes: bytes.length };
+  await writeOnce(dir, widgetFileName(widget.sha256), bytes);
+  return widget;
+}
+
+/** Where a widget's html is stored. */
+export const widgetFile = (dir: string, widget: WidgetRef): string => path.join(dir, widgetFileName(widget.sha256));
+
+/** A stored widget's html, or undefined when the file is gone. */
+export async function readWidget(dir: string, widget: WidgetRef): Promise<string | undefined> {
+  try {
+    return await readFile(widgetFile(dir, widget), 'utf8');
+  } catch (error) {
+    if (isMissing(error)) return undefined;
+    throw error;
+  }
+}
+
+/** The html of every widget `events` drew, by hash, for replaying a session; a widget whose file is gone is left out. */
+export async function loadWidgets(dir: string, events: readonly TurnEvent[]): Promise<ReadonlyMap<Sha256, string>> {
+  const html = new Map<Sha256, string>();
+  for (const event of events) {
+    if (event.kind !== 'tool-result' || event.widget === undefined || html.has(event.widget.sha256)) continue;
+    const text = await readWidget(dir, event.widget);
+    if (text !== undefined) html.set(event.widget.sha256, text);
+  }
+  return html;
 }
 
 const referenced = (events: readonly TurnEvent[]): Attachment[] =>

@@ -13,6 +13,8 @@ import {
   renderMemory,
   sessionModeOf,
   userToolDefinitions,
+  WIDGET_TOOL,
+  widgetToolDefinitions,
   type EffortPolicy,
   type SessionMode,
   type TurnEvent,
@@ -35,6 +37,7 @@ import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
+import { showWidget } from './tools/widget.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
@@ -71,6 +74,8 @@ export type AgentOptions = {
   readonly mcp?: McpToolset | undefined;
   /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
   readonly user?: UserChannel | undefined;
+  /** Whether the editor draws widgets; a non-interactive run ignores it, having nobody to show them to. */
+  readonly widgets?: boolean | undefined;
   /** Undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy | undefined;
 };
@@ -117,11 +122,12 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const memory = memoryStore(homeOf(store), workspace);
     const channel = options.approval.kind === 'interactive' ? (options.user ?? {}) : {};
     const user = userExecutors({ channel, mode: () => modeOf(options.approval), memory, sessionId: session.id });
-    const own = [...AGENT_MODE_TOOL_DEFINITIONS[startMode], ...userToolDefinitions(startMode, shownUserTools(channel))];
+    const widgets = options.approval.kind === 'interactive' && options.widgets === true;
+    const own = [...AGENT_MODE_TOOL_DEFINITIONS[startMode], ...userToolDefinitions(startMode, shownUserTools(channel)), ...widgetToolDefinitions(startMode, widgets)];
     const notes = renderMemory(await memory.list());
     const mode = {
       tools: mcp === undefined ? own : [...own, ...mcp.tools],
-      executors: { ...mcp?.executors, ...user, ...executors },
+      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...executors },
       system: [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n'),
       readRoots: [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),

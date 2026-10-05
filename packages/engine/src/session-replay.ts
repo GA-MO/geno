@@ -19,6 +19,10 @@ import {
   type ToolStatus,
   type TurnErrorKind,
   type TurnEvent,
+  parseShowWidget,
+  WIDGET_META,
+  WIDGET_TOOL,
+  type WidgetRef,
 } from '@g-code/core';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { EXECUTORS } from './tools/index.js';
@@ -52,6 +56,10 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
   edit: ({ path }) => `edit ${String(path)}`,
   bash: ({ command }) => `bash ${String(command)}`,
   check: () => 'check',
+  [WIDGET_TOOL]: (input) => {
+    const parsed = parseShowWidget(input);
+    return parsed.ok ? `${WIDGET_TOOL} ${parsed.value.title}` : WIDGET_TOOL;
+  },
   ask_user: (input) => {
     const parsed = parseAskUser(input);
     return parsed.ok ? `ask_user ${askUserTitle(parsed.value)}` : 'ask_user';
@@ -68,9 +76,22 @@ export const textUpdate = (text: string): acp.SessionUpdate => ({ sessionUpdate:
 /** A failure belongs in the transcript, and a notice is live status only, so it goes as agent text, live and replayed. */
 export const errorText = (event: EventOf<'error'>): string => `\n\n[${event.error}] ${event.message}`;
 
-/** A tool's result as its closing update, live and replayed; `meta` adds to the approval record a flagged command carries. */
-export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, unknown> = {}): acp.SessionUpdate => {
-  const all = { ...(event.approval === undefined ? {} : { [APPROVAL_META]: event.approval }), ...meta };
+/** A stored widget as the editor gets it: the file's address, and its html unless the file is gone. */
+export type ShownWidget = { readonly uri: string; readonly html: string | undefined };
+
+/** No widget files at hand, as for a log replayed without its attachments folder. */
+const NO_WIDGETS = (): ShownWidget => ({ uri: '', html: undefined });
+
+/**
+ * A tool's result as its closing update, live and replayed; `meta` adds to the approval record a flagged command
+ * carries. A widget's html goes along as an embedded resource, its reference under WIDGET_META.
+ */
+export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, unknown> = {}, widget?: ShownWidget): acp.SessionUpdate => {
+  const all = {
+    ...(event.approval === undefined ? {} : { [APPROVAL_META]: event.approval }),
+    ...(event.widget === undefined ? {} : { [WIDGET_META]: event.widget }),
+    ...meta,
+  };
   return {
     sessionUpdate: 'tool_call_update',
     toolCallId: event.toolUseId,
@@ -80,6 +101,7 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
       ...(event.images ?? []).flatMap((image): acp.ToolCallContent[] =>
         image.path === undefined ? [] : [{ type: 'content', content: { type: 'resource_link', uri: pathToFileURL(image.path).href, name: image.name, mimeType: image.mediaType, size: image.bytes } }],
       ),
+      ...(widget?.html === undefined ? [] : [{ type: 'content' as const, content: { type: 'resource' as const, resource: { uri: widget.uri, mimeType: 'text/html', text: widget.html } } }]),
     ],
     ...(Object.keys(all).length === 0 ? {} : { _meta: all }),
   };
@@ -132,9 +154,9 @@ const reviewed = (change: FileChange, status: ReadonlyMap<HunkId, HunkStatus>): 
 /**
  * The session as ACP updates, for session/load: each prompt as a user message carrying how its turn went, then
  * the model's text and tool calls with their results, as the client saw them live. Thinking, retries and the
- * bookkeeping events are left out.
+ * bookkeeping events are left out. `widgetOf` gives each widget the stored html the live update carried.
  */
-export function replayUpdates(events: readonly TurnEvent[]): acp.SessionUpdate[] {
+export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: WidgetRef) => ShownWidget = NO_WIDGETS): acp.SessionUpdate[] {
   const status = new Map(reviewState(events).map((hunk) => [hunk.id, hunk.status]));
   return runsOf(events).flatMap((run) => {
     const meta: ReplayedTurn = turnOf(run);
@@ -160,10 +182,14 @@ export function replayUpdates(events: readonly TurnEvent[]): acp.SessionUpdate[]
       }
       if (event.kind === 'tool-result') {
         updates.push(
-          toolResultUpdate(event, {
-            [REPLAYED_AT_META]: ms(event.at),
-            ...(event.change === undefined ? {} : { [REPLAYED_CHANGE_META]: reviewed(event.change, status) }),
-          }),
+          toolResultUpdate(
+            event,
+            {
+              [REPLAYED_AT_META]: ms(event.at),
+              ...(event.change === undefined ? {} : { [REPLAYED_CHANGE_META]: reviewed(event.change, status) }),
+            },
+            event.widget === undefined ? undefined : widgetOf(event.widget),
+          ),
         );
       }
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
