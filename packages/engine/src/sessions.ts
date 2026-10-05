@@ -27,6 +27,17 @@ import { isMissing, StoreError, type Store } from './store.js';
 const count = z.number().int().nonnegative();
 const seqFields = { seq: z.number().int().positive(), at: z.iso.datetime() };
 
+const epochMs = z.number().nonnegative();
+const toolMarks = { startAt: epochMs, endAt: epochMs };
+const modelMarksSchema = z.strictObject({
+  startAt: epochMs,
+  requestAt: epochMs,
+  firstTokenAt: epochMs.nullable(),
+  firstAnswerAt: epochMs.nullable(),
+  lastTokenAt: epochMs.nullable(),
+  endAt: epochMs,
+});
+
 const sessionSchema = z.strictObject({
   id: z.string().min(1).transform(asSessionId),
   createdAt: z.iso.datetime(),
@@ -114,6 +125,7 @@ const toolResultFields = {
   change: fileChangeSchema.optional(),
   approval: approvalSchema.optional(),
   images: z.array(imageAttachmentSchema).optional(),
+  timing: z.strictObject(toolMarks).optional(),
 };
 
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
@@ -137,8 +149,16 @@ const turnEventSchema = z.union([
       costUsd: z.number().nonnegative().nullable(),
       latencyMs: count,
       model: z.string().min(1),
+      timing: modelMarksSchema.optional(),
     }),
-    z.strictObject({ kind: z.literal('error'), ...seqFields, error: z.enum(TURN_ERROR_KINDS), message: z.string() }),
+    z.strictObject({
+      kind: z.literal('error'),
+      ...seqFields,
+      error: z.enum(TURN_ERROR_KINDS),
+      message: z.string(),
+      timing: modelMarksSchema.optional(),
+      tools: z.array(z.strictObject({ toolUseId: z.string().min(1), name: z.string(), ...toolMarks })).optional(),
+    }),
     z.strictObject({
       kind: z.literal('checkpoint'),
       ...seqFields,

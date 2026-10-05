@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { asSessionId, TOOL_DEFINITIONS, type Session, type TurnEvent } from '@g-code/core';
+import { asSessionId, TOOL_DEFINITIONS, turnTimings, type Session, type TurnEvent } from '@g-code/core';
 import { appendEvent, readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, httpError, toolCall } from './fake-transport.js';
@@ -156,6 +156,52 @@ describe('gcode ask', () => {
         cache_control: ephemeral,
       },
     ]);
+  });
+
+  it('logs when each model call and tool started and ended, without sending the marks to the model', async () => {
+    const { workspace, env, store } = await setup();
+    const transport = fakeTransport([
+      toolCall('Searching.', [{ id: 'tu_1', name: 'grep', input: { pattern: 'SERVER_URL', path: 'src/**' } }], usage),
+      answer('In src/config.ts.', usage),
+    ]);
+    const before = Date.now();
+    const result = await runCli(['ask', '--workspace', workspace, 'Where is SERVER_URL read?'], env, { fetch: transport.fetch });
+    expect(result.code).toBe(0);
+    const { events } = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+
+    const [call, tool, last] = [events[2]!, events[3]!, events[4]!];
+    expect(call).toMatchObject({ kind: 'assistant', timing: { startAt: expect.any(Number), firstTokenAt: expect.any(Number), firstAnswerAt: expect.any(Number) } });
+    expect(tool).toMatchObject({ kind: 'tool-result', timing: { startAt: expect.any(Number), endAt: expect.any(Number) } });
+    const moments = [
+      call.kind === 'assistant' ? call.timing!.startAt : 0,
+      call.kind === 'assistant' ? call.timing!.endAt : 0,
+      tool.kind === 'tool-result' ? tool.timing!.startAt : 0,
+      tool.kind === 'tool-result' ? tool.timing!.endAt : 0,
+      last.kind === 'assistant' ? last.timing!.startAt : 0,
+    ];
+    expect(moments[0]).toBeGreaterThanOrEqual(before);
+    expect(moments).toEqual(moments.toSorted((a, b) => a - b));
+
+    expect(turnTimings(events).map((t) => [t.seq, t.outcome, t.tools.map((u) => u.name)])).toEqual([
+      [2, 'answer', ['grep']],
+      [4, 'answer', []],
+    ]);
+    expect(JSON.stringify(transport.requests.map((r) => r.body))).not.toMatch(/startAt|requestAt|firstTokenAt/);
+  });
+
+  it('keeps the timing of a tool batch the user interrupted on the abort error', async () => {
+    const { workspace, env, store } = await setup();
+    const transport = fakeTransport([toolCall('Searching.', [{ id: 'tu_1', name: 'glob', input: { pattern: '**/*.ts' } }], usage)]);
+    const interrupted = await runCli(['ask', '--workspace', workspace, 'Which files?'], env, {
+      fetch: transport.fetch,
+      onWrite: (text, interrupt) => {
+        if (text === '\n') interrupt.abort();
+      },
+    });
+    expect(interrupted.code).toBe(130);
+    const { events } = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(interrupted.stdout))));
+    expect(events.at(-1)).toMatchObject({ kind: 'error', error: 'abort', tools: [{ toolUseId: 'tu_1', name: 'glob', startAt: expect.any(Number), endAt: expect.any(Number) }] });
+    expect(turnTimings(events)).toEqual([expect.objectContaining({ seq: 2, outcome: 'aborted', tools: [expect.objectContaining({ toolUseId: 'tu_1', name: 'glob' })] })]);
   });
 
   it('logs an interrupt during tool execution as an abort, exits 130, and runs those tools on resume', async () => {

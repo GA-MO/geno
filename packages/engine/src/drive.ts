@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type Run, type Sha256, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -174,28 +174,37 @@ export async function drive(
   };
 
   // One at a time: two edits to one file in a turn must see each other's result.
-  const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<boolean> => {
+  // Returns the tools of a batch the user interrupted, timed up to the interruption, or undefined when all ran.
+  const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<InterruptedTool[] | undefined> => {
     const firstSeq = nextSeq(events);
+    const ran: InterruptedTool[] = [];
+    let running: Omit<InterruptedTool, 'endAt'> | undefined;
     const work = (async () => {
       const results: ToolResultEvent[] = [];
       for (const [i, use] of toolUses.entries()) {
         const seq = firstSeq + i;
+        running = { toolUseId: use.id, name: use.name, startAt: Date.now() };
         watcher.toolStart(use, describeCall(use, mode.executors));
         const { status, text, change, approval, images } = await runTool(use, ctx, mode.executors);
         watcher.toolEnd(use, status);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
-        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output });
+        const timing = { startAt: running.startAt, endAt: Date.now() };
+        ran.push({ ...running, ...timing });
+        running = undefined;
+        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output, timing });
       }
       return results;
     })();
     const results = await unlessAborted(work, signal);
-    if (results === ABORTED) return false;
+    if (results === ABORTED) return [...ran, ...(running === undefined ? [] : [{ ...running, endAt: Date.now() }])];
     for (const result of results) await record(result);
-    return true;
+    return undefined;
   };
 
   const loaded = new Map<Sha256, string>();
   const callModel = async (): Promise<void> => {
+    const startAt = Date.now();
+    let marks: StreamMarks | undefined;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
       session,
@@ -205,18 +214,22 @@ export async function drive(
       ...(mode.system === undefined ? {} : { system: mode.system }),
       signal,
       onText: (delta) => watcher.text(delta),
+      onMarks: (streamed) => {
+        marks = streamed;
+      },
       onRetry: async (retry) => {
         await record({ kind: 'retry', seq: nextSeq(events), at: new Date().toISOString(), ...retry });
         io.err(formatRetry(retry));
       },
     });
     const at = new Date().toISOString();
+    const timing = marks === undefined ? {} : { timing: { startAt, ...marks } };
     if (result.kind === 'error') {
-      await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message });
+      await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message, ...timing });
       io.err(`${result.error}: ${result.message}`);
       return;
     }
-    await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn });
+    await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn, ...timing });
   };
 
   for (;;) {
@@ -226,9 +239,12 @@ export async function drive(
       return { reason: step.reason, exitCode, events, run };
     }
     if (step.kind === 'call-model') await callModel();
-    else if (!(await runTools(step.toolUses))) {
-      await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user' });
-      io.err('abort: interrupted by the user');
+    else {
+      const interrupted = await runTools(step.toolUses);
+      if (interrupted !== undefined) {
+        await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user', tools: interrupted });
+        io.err('abort: interrupted by the user');
+      }
     }
   }
 }
