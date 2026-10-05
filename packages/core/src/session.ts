@@ -209,7 +209,6 @@ const toolResultBlock = (event: ToolResultEvent, stored: StoredAttachments): Too
   ...(event.status === 'ok' ? {} : { is_error: true }),
 });
 
-/** A file the user attached as the model sees it named: relative inside the workspace, else absolute, else its name. */
 const shownPath = (file: FileAttachment, workspace: string): string => {
   if (file.path === undefined) return file.name;
   const root = workspace.endsWith('/') ? workspace : `${workspace}/`;

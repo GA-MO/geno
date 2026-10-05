@@ -3,12 +3,6 @@ import type { ContextItem } from './context.js';
 import { linesOf, numberedPage } from './page.js';
 import type { Brand } from './types.js';
 
-/**
- * Images and files the user sends with a prompt, and images the read tool returns. The bytes live once in the
- * session's attachments folder, named by their SHA-256; the session log keeps only an Attachment, the reference.
- * Nothing here touches the disk, so the webview shares the sizing and limit rules.
- */
-
 export type Sha256 = Brand<string, 'Sha256'>;
 export const asSha256 = (raw: string): Sha256 => raw as Sha256;
 
@@ -27,7 +21,6 @@ const EXTENSIONS: Readonly<Record<ImageMediaType, string>> = { 'image/png': 'png
 
 type Stored = {
   readonly sha256: Sha256;
-  /** The file name the user saw, such as `screenshot.png`. */
   readonly name: string;
   readonly bytes: number;
   /** Where it came from, absolute, when that was a file on disk; a pasted image has none. */
@@ -41,7 +34,6 @@ export type FileAttachment = Stored & { readonly kind: 'file'; readonly mediaTyp
 
 export type Attachment = ImageAttachment | FileAttachment;
 
-/** The file an attachment is stored in, inside the session's attachments folder. */
 export const attachmentFileName = (attachment: Attachment): string =>
   `${attachment.sha256}.${attachment.kind === 'image' ? EXTENSIONS[attachment.mediaType] : 'txt'}`;
 
@@ -76,7 +68,6 @@ export const MAX_MESSAGE_BYTES = 5 * 1024 * 1024;
 /** Past this either way the model refuses an image, so the read tool does too. */
 export const MAX_IMAGE_SIDE = 8000;
 
-/** The size an image is drawn at so its long side is at most `max`, keeping its aspect ratio. */
 export function fitWithin(width: number, height: number, max: number = MAX_LONG_SIDE): { readonly width: number; readonly height: number } {
   const long = Math.max(width, height);
   if (long <= max) return { width, height };
@@ -99,14 +90,15 @@ export function overLimit(current: readonly Pick<Attachment, 'kind' | 'bytes'>[]
   return undefined;
 }
 
-/** Why a file that is neither an image nor text is refused. */
 export const refusalOf = (name: string, mediaType: string): string =>
   mediaType === 'application/pdf' || name.toLowerCase().endsWith('.pdf')
     ? `${name} is a PDF, which Geno cannot read yet.`
     : `${name} is a binary file; attach an image or a text file.`;
 
-// Git's heuristic, as the read tool uses it: a NUL byte in the first 8000 bytes means binary.
-export const looksBinary = (head: Uint8Array): boolean => head.subarray(0, 8000).includes(0);
+/** Git's heuristic, which the read tool shares: a NUL byte in the first this many bytes means binary. */
+export const BINARY_SNIFF = 8000;
+
+export const looksBinary = (head: Uint8Array): boolean => head.subarray(0, BINARY_SNIFF).includes(0);
 
 const u16be = (b: Uint8Array, i: number) => (b[i]! << 8) | b[i + 1]!;
 const u16le = (b: Uint8Array, i: number) => b[i]! | (b[i + 1]! << 8);

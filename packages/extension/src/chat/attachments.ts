@@ -8,9 +8,6 @@ import { gcodeHome } from '../tab/log.js';
 import { viewOf, type AttachmentView, type OpenTarget, type OutgoingAttachment, type PickedFile, type Refused } from './attachment-model.js';
 import type { ToolImage, WebviewRoot } from './messages.js';
 
-/** The editor's side of attachments: what goes to the engine, what the picker and the explorer hand the composer, and what a click opens. */
-
-/** Larger files are refused before they are read; an image this big would not fit a message even downscaled. */
 const MAX_READ_BYTES = 64 * 1024 * 1024;
 
 const fileUri = (file: string): string => vscode.Uri.file(file).toString();
@@ -24,7 +21,6 @@ export function promptBlocks(attachments: readonly OutgoingAttachment[]): acp.Co
   });
 }
 
-/** Where the engine stores an attachment that has no file of its own, named by its hash as the engine names it. */
 function storedName(attachment: OutgoingAttachment): string {
   const bytes = attachment.kind === 'image' ? Buffer.from(attachment.data, 'base64') : Buffer.from(attachment.text);
   const sha256 = asSha256(createHash('sha256').update(bytes).digest('hex'));
@@ -77,7 +73,6 @@ function folderPaths(): { readonly folder: vscode.Uri; readonly paths: readonly 
     try {
       real = realpathSync(uri.fsPath);
     } catch {
-      // A folder that is gone shows no images.
     }
     return { folder: uri, paths: real === uri.fsPath ? [uri.fsPath] : [uri.fsPath, real] };
   });

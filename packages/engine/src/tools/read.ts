@@ -1,19 +1,14 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { formatBytes, linesOf, MAX_MESSAGE_BYTES, numberedPage } from '@g-code/core';
+import { BINARY_SNIFF, formatBytes, linesOf, MAX_MESSAGE_BYTES, numberedPage } from '@g-code/core';
 import { AttachmentError, describeImage, storeImage } from '../attachments.js';
 import { displayPath, executor, optional, resolveInside, ToolError, type ToolContext, type ToolReply } from './context.js';
 
 const lineNumber = z.number().int().positive();
 
-// Git's heuristic: a NUL byte in the first 8000 bytes means binary.
-const BINARY_SNIFF = 8000;
-
-/** Files the read tool returns to the model as images rather than text. */
 const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
-/** An image file as the model sees it: a line saying what it is, and the image itself, stored by its hash for replay. */
 async function readImage(ctx: ToolContext, shown: string, real: string, size: number): Promise<ToolReply> {
   if (size > MAX_MESSAGE_BYTES) throw new ToolError(`${shown} is a ${formatBytes(size)} image; read returns images up to ${formatBytes(MAX_MESSAGE_BYTES)}`);
   try {

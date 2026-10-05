@@ -8,11 +8,6 @@ import {
   type ImageMediaType,
 } from '@g-code/core/attachments';
 
-/**
- * Attachments as the panel handles them, shared by the webview, which reads, sizes and shows them, and the
- * extension, which sends them to the engine. Nothing here touches the DOM or VS Code.
- */
-
 /** An attachment ready to send: an image as base64 after downscaling, or a text file's content. */
 export type OutgoingAttachment =
   | {
@@ -47,7 +42,6 @@ export type AttachmentView = {
 /** A file the extension read for the composer, from the file picker or a drop from the explorer. */
 export type PickedFile = { readonly name: string; readonly path: string; readonly data: string };
 
-/** A file the extension would not read for the composer, and why. */
 export type Refused = { readonly name: string; readonly reason: string };
 
 /** One attachment in the composer, from the moment it is added until the message is sent or it is removed. */
@@ -73,7 +67,6 @@ export function classify(name: string, mediaType: string, bytes: Uint8Array): Cl
 /** An image smaller than this, and within the size the model reads, goes as it is. */
 export const KEEP_BYTES = 1024 * 1024;
 
-/** Whether an image must be drawn again: it is too big to send as it is. */
 export const needsRedraw = (info: ImageInfo, bytes: number): boolean => Math.max(info.width, info.height) > MAX_LONG_SIDE || bytes > KEEP_BYTES;
 
 /**

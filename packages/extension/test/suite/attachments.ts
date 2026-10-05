@@ -41,7 +41,6 @@ const chips = () =>
     `[...doc.querySelectorAll('.attachment-chip')].map((e) => e.dataset.attachment + ':' + e.className.match(/attachment-(reading|ready|rejected)/)[1] + ':' + e.querySelector('.attachment-detail').textContent)`,
   );
 
-/** Pastes a file into the composer the way the clipboard hands one to the webview: a paste event carrying a DataTransfer file. */
 const paste = (name: string, base64: string, type: string) =>
   panel(`(() => {
     const w = doc.defaultView;
@@ -52,7 +51,6 @@ const paste = (name: string, base64: string, type: string) =>
     return 1;
   })()`);
 
-/** Drops files on the composer the way the explorer does: a drop whose DataTransfer holds a `text/uri-list`. */
 const dropUris = (uris: readonly string[]) =>
   panel(`(() => {
     const w = doc.defaultView;

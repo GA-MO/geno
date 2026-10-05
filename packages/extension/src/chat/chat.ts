@@ -361,7 +361,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     };
   }
 
-  /** Reads files the user picked or dropped from the explorer and hands them to the composer. */
   private async attach(view: vscode.WebviewView, uris: readonly vscode.Uri[]): Promise<void> {
     if (uris.length === 0) return;
     const { files, refused } = await readForComposer(uris);
@@ -370,7 +369,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
-    // Workspace folders too, so the panel can show images from them: a read's thumbnail, or one the answer links.
     view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri)] };
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.uiStyle());
     const handlers = this.handlers(view);

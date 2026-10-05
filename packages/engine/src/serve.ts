@@ -160,7 +160,6 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Pe
     status: TOOL_STATUS[event.status],
     content: [
       { type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } },
-      // A link rather than the bytes: the editor shows the file it already has as the step's thumbnail.
       ...(event.images ?? []).flatMap((image): acp.ToolCallContent[] =>
         image.path === undefined ? [] : [{ type: 'content', content: { type: 'resource_link', uri: pathToFileURL(image.path).href, name: image.name, mimeType: image.mediaType, size: image.bytes } }],
       ),
@@ -452,7 +451,6 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       try {
         return await serially(sessionId, async () => {
           const resumed = await resumeSession(store, io, sessionId);
-          // A prompt with mentions or attachments is logged here, with what they showed, and the loop answers it as a pending prompt.
           const opened = target === undefined && hasAttached(attached) ? await logPrompt(store, resumed, text, attached, turn.surface.files, sessionId) : resumed;
           const prompt = opened === resumed ? text : '';
           const result =

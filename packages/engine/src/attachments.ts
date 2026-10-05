@@ -11,7 +11,7 @@ import {
   formatBytes,
   imageInfo,
   IMAGE_MEDIA_TYPES,
-  looksBinary,
+  BINARY_SNIFF,
   MAX_IMAGE_SIDE,
   overLimit,
   type Attachment,
@@ -49,11 +49,6 @@ export const attachmentsDir = (store: Store, id: SessionId): string => path.join
 
 const sha256Of = (bytes: Uint8Array): Sha256 => asSha256(createHash('sha256').update(bytes).digest('hex'));
 
-/**
- * Writes the bytes under their hash unless that file is there already, so storing the same image again, or
- * rerunning after a crash, changes nothing. A temporary file renamed into place means a crash never leaves a torn
- * file under the final name.
- */
 async function writeOnce(dir: string, attachment: Attachment, bytes: Uint8Array): Promise<void> {
   const file = path.join(dir, attachmentFileName(attachment));
   const exists = await access(file).then(
@@ -70,7 +65,6 @@ async function writeOnce(dir: string, attachment: Attachment, bytes: Uint8Array)
   await rename(temporary, file);
 }
 
-/** What an attachment is called and, when it was a file on disk, its absolute path. */
 export type Origin = { readonly name: string; readonly path?: string | undefined };
 
 /** Stores an image the read tool or the user sent. Its type and size come from its bytes. */
@@ -158,7 +152,7 @@ export function incomingAttachments(blocks: readonly acp.ContentBlock[]): Incomi
       const source = sourceOf(block.resource.uri, block._meta[ATTACHMENT_META], `file-${i + 1}`);
       if (!('text' in block.resource)) throw new AttachmentError(`${source.name} is a binary file; attach an image or a text file`);
       const { text } = block.resource;
-      if (looksBinary(new TextEncoder().encode(text.slice(0, 8000)))) throw new AttachmentError(`${source.name} is a binary file; attach an image or a text file`);
+      if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new AttachmentError(`${source.name} is a binary file; attach an image or a text file`);
       add({ kind: 'file', text, source: { ...source, mediaType: block.resource.mimeType ?? 'text/plain' } }, Buffer.byteLength(text));
     }
   });
