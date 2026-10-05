@@ -65,6 +65,29 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
 
+/**
+ * The edit tool. `reads` holds what the model last saw of each file, the base an edit must still match;
+ * `afterEdit` returns text to append to a successful edit's result, such as a check run.
+ */
+export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: ToolContext) => Promise<string | undefined>): Executor {
+  return executor({
+    input: z.looseObject({ path: z.string().min(1) }),
+    describe: ({ path }) => `edit ${path}`,
+    async run(input, ctx) {
+      const file = await resolveWritable(ctx, input.path);
+      const current = await currentBase(ctx, file);
+      const base = current.hash === null ? current : reads.get(file);
+      if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);
+      const { proposed, change } = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw: input, base }, null);
+      if (proposed.result.kind === 'failed') throw new ToolError(proposed.result.detail);
+      reads.set(file, await currentBase(ctx, file));
+      const after = await afterEdit(ctx);
+      const text = after === undefined ? `Edited ${input.path}.` : `Edited ${input.path}.\n\n${after}`;
+      return change === undefined ? text : { text, change };
+    },
+  });
+}
+
 export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolName, Executor>> {
   // What the model last saw of each file: the base an edit must still match.
   const reads = new Map<string, BaseRead>();
@@ -82,22 +105,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   };
 
-  const edit = executor({
-    input: z.looseObject({ path: z.string().min(1) }),
-    describe: ({ path }) => `edit ${path}`,
-    async run(input, ctx) {
-      const file = await resolveWritable(ctx, input.path);
-      const current = await currentBase(ctx, file);
-      const base = current.hash === null ? current : reads.get(file);
-      if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);
-      const change = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw: input, base }, null);
-      if (change.result.kind === 'failed') throw new ToolError(change.result.detail);
-      reads.set(file, await currentBase(ctx, file));
-      if (!tools.checkAfterEdit) return `Edited ${input.path}.`;
-      const check = await runCheck(tools, ctx);
-      return check === undefined ? `Edited ${input.path}.` : `Edited ${input.path}.\n\n${check.text}`;
-    },
-  });
+  const edit = editExecutor(reads, async (ctx) => (tools.checkAfterEdit ? (await runCheck(tools, ctx))?.text : undefined));
 
   const bash = executor({
     input: z.strictObject({

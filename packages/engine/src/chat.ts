@@ -218,7 +218,9 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
         ? `spilled ${event.spill.bytes} bytes to ${event.spill.path}`
         : event.output.replace(/\s+/g, ' ').trim().slice(0, 120)
     }`,
+    ...(event.change === undefined ? [] : [`  changed ${event.change.path}: ${event.change.hunks.length} hunks (${event.change.id})`]),
   ],
+  review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

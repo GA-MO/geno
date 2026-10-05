@@ -1,18 +1,18 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import type { ToolName, ToolStatus } from '@g-code/core';
+import type { FileChange, ToolName, ToolStatus } from '@g-code/core';
 import { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
 import { list } from './list.js';
 import { read } from './read.js';
 
-export { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
+export { ToolDenied, ToolError, type Executor, type ToolContext, type ToolReply } from './context.js';
 
 export type Executors = Readonly<Record<string, Executor>>;
 
 export const EXECUTORS: Readonly<Record<ToolName, Executor>> = { glob, grep, list, read };
 
-export type ToolRun = { readonly status: ToolStatus; readonly text: string };
+export type ToolRun = { readonly status: ToolStatus; readonly text: string; readonly change?: FileChange | undefined };
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
@@ -26,7 +26,8 @@ export async function runTool(use: ToolUseBlock, ctx: ToolContext, executors: Ex
     return { status: 'error', text: `unknown tool ${use.name}; the tools are ${Object.keys(executors).sort().join(', ')}` };
   }
   try {
-    return { status: 'ok', text: await executors[use.name]!.run(use.input, ctx) };
+    const reply = await executors[use.name]!.run(use.input, ctx);
+    return typeof reply === 'string' ? { status: 'ok', text: reply } : { status: 'ok', ...reply };
   } catch (error) {
     if (ctx.signal.aborted) throw error;
     if (error instanceof ToolDenied) return { status: 'denied', text: error.message };

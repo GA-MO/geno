@@ -5,9 +5,11 @@ import type { ContentBlock, StopReason } from '@anthropic-ai/sdk/resources/messa
 import {
   asSessionId,
   EFFORTS,
+  HUNK_STATUSES,
   PROVIDERS,
   TOOL_STATUSES,
   TURN_ERROR_KINDS,
+  type HunkId,
   type Session,
   type SessionId,
   type TurnEvent,
@@ -34,12 +36,29 @@ const contentBlock = z.custom<ContentBlock>(
   'content block must be an object with a string type',
 );
 
+const hunkId = z.string().min(1).transform((raw) => raw as HunkId);
+
+const fileChangeSchema = z.strictObject({
+  id: z.string().min(1),
+  path: z.string().refine(path.isAbsolute, 'must be an absolute path'),
+  hunks: z.array(
+    z.strictObject({
+      startLine: z.number().int().positive(),
+      lineCount: count,
+      oldText: z.string(),
+      newText: z.string(),
+      status: z.enum(HUNK_STATUSES),
+    }),
+  ),
+});
+
 const toolResultFields = {
   kind: z.literal('tool-result'),
   ...seqFields,
   toolUseId: z.string().min(1),
   name: z.string(),
   status: z.enum(TOOL_STATUSES),
+  change: fileChangeSchema.optional(),
 };
 
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
@@ -74,6 +93,7 @@ const turnEventSchema = z.union([
       sha: z.string().min(1),
       files: z.array(z.string()),
     }),
+    z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({

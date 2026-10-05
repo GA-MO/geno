@@ -1,6 +1,15 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { hashText, proposeChange, staleBaseDetail, type BaseRead, type EditFormat, type ProposedChange } from '@g-code/core';
+import {
+  changeOf,
+  hashText,
+  proposeChange,
+  staleBaseDetail,
+  type BaseRead,
+  type EditFormat,
+  type FileChange,
+  type ProposedChange,
+} from '@g-code/core';
 import { isMissing } from './store.js';
 
 export type WriteResult = 'written' | 'stale-base';
@@ -35,6 +44,9 @@ export const DISK_FILES: Files = {
   },
 };
 
+/** The edit record, and the change as it landed when the file was written. */
+export type AppliedEdit = { readonly proposed: ProposedChange; readonly change: FileChange | undefined };
+
 /**
  * Applies a model's edit to a file. Nothing is written unless the file still hashes to `base` and the edit
  * applies, and the write fails as stale-base when the file changes while the edit is resolved.
@@ -44,9 +56,13 @@ export async function applyEditToFile(
   file: string,
   edit: { readonly path: string; readonly format: EditFormat; readonly raw: unknown; readonly base: BaseRead },
   turn: ProposedChange['turn'],
-): Promise<ProposedChange> {
+): Promise<AppliedEdit> {
   const current = await files.read(file);
-  const { change, after } = proposeChange({ ...edit, current, turn });
-  if (after === null || (await files.write(file, after, hashText(current))) === 'written') return change;
-  return { ...change, hunks: [], result: { kind: 'failed', reason: 'stale-base', detail: staleBaseDetail(edit.path) } };
+  const { change: proposed, after } = proposeChange({ ...edit, current, turn });
+  if (after === null) return { proposed, change: undefined };
+  if ((await files.write(file, after, hashText(current))) === 'written') {
+    return { proposed, change: changeOf(file, current ?? '', after) };
+  }
+  const stale: ProposedChange = { ...proposed, hunks: [], result: { kind: 'failed', reason: 'stale-base', detail: staleBaseDetail(edit.path) } };
+  return { proposed: stale, change: undefined };
 }

@@ -7,6 +7,7 @@ export * from './cost.js';
 export * from './tools.js';
 export * from './loop.js';
 export * from './hunks.js';
+export * from './review.js';
 export * from './str-replace.js';
 export * from './patch.js';
 export * from './edit.js';

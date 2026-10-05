@@ -1,6 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import type { FileChange } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -21,19 +22,22 @@ export class ToolError extends Error {}
 /** A command that was refused before it ran. It becomes a `denied` tool result. */
 export class ToolDenied extends ToolError {}
 
+/** What a tool tells the model, and the file edit it made, if any. */
+export type ToolReply = string | { readonly text: string; readonly change: FileChange };
+
 /** A tool's executor, typed on its parsed input. */
 export type ToolDef<I> = {
   readonly input: z.ZodType<I>;
   /** The one-line form printed when the model calls the tool. */
   describe(input: I): string;
-  run(input: I, ctx: ToolContext): Promise<string>;
+  run(input: I, ctx: ToolContext): Promise<ToolReply>;
 };
 
 /** An executor that takes the model's raw input. */
 export type Executor = {
   readonly input: z.ZodType;
   describe(raw: unknown): string;
-  run(raw: unknown, ctx: ToolContext): Promise<string>;
+  run(raw: unknown, ctx: ToolContext): Promise<ToolReply>;
 };
 
 export function executor<I>(def: ToolDef<I>): Executor {
