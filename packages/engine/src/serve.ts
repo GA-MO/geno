@@ -27,7 +27,11 @@ import {
   APPROVAL_META,
   approvalQuestion,
   DEFAULT_SESSION_MODE,
+  isMcpRule,
   isSessionMode,
+  MCP_SERVERS_METHOD,
+  MCP_TRUST_METHOD,
+  type McpServersResponse,
   SESSION_MODES,
   sessionModeOf,
   type SessionMode,
@@ -61,10 +65,11 @@ import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
+import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logMode } from './sessions.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
-import type { Approver, Diagnostics } from './tools/agent.js';
+import type { Approval, Approver, Diagnostics, PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import { ruleAttacher } from './tools/rules.js';
 
@@ -95,6 +100,14 @@ const PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow', name: 'Allow once', kind: 'allow_once' },
   { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
 ];
+
+// An MCP tool can also be allowed for the rest of the session.
+const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
+  PERMISSION_OPTIONS[0]!,
+  { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' },
+  PERMISSION_OPTIONS[1]!,
+];
+const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session' };
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   ask: { name: 'Ask', description: 'Ask before risky commands.' },
@@ -289,10 +302,10 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
       const rawInput: PermissionInput = { command: denial.command, reason: denial.reason };
       const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
         sessionId,
-        toolCall: { toolCallId: running, title: approvalQuestion(denial, classifier), kind: 'execute', status: 'pending', rawInput },
-        options: PERMISSION_OPTIONS,
+        toolCall: { toolCallId: running, title: approvalQuestion(denial, classifier), kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+        options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
       });
-      return outcome.outcome === 'selected' && outcome.optionId === 'allow';
+      return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
     },
   };
 }
@@ -309,6 +322,8 @@ const reviewRequest = z.object({
 });
 const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string() });
 const rewindRequest = z.object({ sessionId: z.string() });
+const mcpServersRequest = z.object({ sessionId: z.string() });
+const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1) });
 const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
@@ -379,7 +394,7 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 }
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
-export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
+export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env)): acp.AgentApp {
   let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false };
   const turns = new Map<string, AbortController | undefined>();
   // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
@@ -419,7 +434,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} }, promptCapabilities: { embeddedContext: true, image: true } },
+        agentCapabilities: {
+          loadSession: false,
+          sessionCapabilities: { resume: {} },
+          promptCapabilities: { embeddedContext: true, image: true },
+          mcpCapabilities: { http: true, sse: true },
+        },
         agentInfo: { name: 'gcode', version: '0.0.0' },
       };
     })
@@ -430,6 +450,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       turns.set(id, undefined);
       modes.set(id, DEFAULT_SESSION_MODE);
       commands.attach(client, id, workspace);
+      mcp.register(id, workspace, params.mcpServers);
       io.err(`session: ${id} log: ${opened.log.file}`);
       return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
     })
@@ -441,6 +462,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
+      mcp.register(id, log.session.workspace, params.mcpServers ?? []);
       io.err(`session: ${id} resumed, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!) };
     })
@@ -482,20 +504,22 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
               ? await logPrompt(store, resumed, slash?.content ?? text, attached, turn.surface.files, sessionId, slash)
               : resumed;
           const prompt = opened === resumed ? text : '';
+          const approval: Approval = {
+            kind: 'interactive',
+            mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
+            approve: turn.approve,
+            classify: commandClassifier(io.env, io.fetch),
+          };
           const result =
             target === undefined
               ? await runAgent(turnIo, store, opened, prompt, {
                   limits,
                   check: undefined,
                   checkAfterEdit: true,
-                  approval: {
-                    kind: 'interactive',
-                    mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
-                    approve: turn.approve,
-                    classify: commandClassifier(io.env, io.fetch),
-                  },
+                  approval,
                   surface: turn.surface,
                   diagnostics,
+                  mcp: await mcp.toolset(sessionId, approval),
                 })
               : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
           await turn.updates.flush();
@@ -536,6 +560,16 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
         const { files } = await rewindTo(store, log, first.turnSeq);
         return { files: files.map((file) => path.join(log.session.workspace, file)) };
       });
+    })
+    .onRequest(MCP_SERVERS_METHOD, mcpServersRequest, async ({ params }): Promise<McpServersResponse> => {
+      known(params.sessionId);
+      return mcp.servers(params.sessionId);
+    })
+    .onRequest(MCP_TRUST_METHOD, mcpTrustRequest, async ({ params }): Promise<McpServersResponse> => {
+      known(params.sessionId);
+      return mcp.trust(params.sessionId, params.name).catch((error: unknown) => {
+        throw acp.RequestError.invalidParams({ name: params.name }, error instanceof Error ? error.message : String(error));
+      });
     });
 }
 
@@ -545,8 +579,10 @@ export const serve: Command = async (args, { io, store }) => {
   // stdout carries the protocol, so everything the engine prints goes to stderr, and so does anything a dependency prints.
   const quiet: Io = { ...io, out: io.err, write: () => {} };
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
-  const connection = gcodeAgent(quiet, store, limitsOf(values)).connect(stream);
+  const mcp = mcpSessions(store, io.env);
+  const connection = gcodeAgent(quiet, store, limitsOf(values), mcp).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
   await connection.closed;
+  await mcp.stopAll();
   return 0;
 };

@@ -5,7 +5,7 @@ import type { ContentBlock, StopReason } from '@anthropic-ai/sdk/resources/messa
 import {
   APPROVAL_MODES,
   asSessionId,
-  DENY_RULE_IDS,
+  APPROVAL_RULE_IDS,
   EFFORTS,
   HUNK_STATUSES,
   nextSeq,
@@ -92,7 +92,7 @@ const verdict = z.enum(['allow', 'ask', 'deny']);
 
 const approvalSchema = z.strictObject({
   mode: z.enum(APPROVAL_MODES),
-  rule: z.enum(DENY_RULE_IDS),
+  rule: z.enum(APPROVAL_RULE_IDS),
   reason: z.string(),
   command: z.string(),
   classifier: z

@@ -1,0 +1,364 @@
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { MCP_CALL_TOOL, MCP_DESCRIBE_TOOL, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
+import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
+import { openStore } from '../src/store.js';
+import type { Approval, PermissionAnswer } from '../src/tools/agent.js';
+import type { ToolContext } from '../src/tools/context.js';
+import { fakeMcpServer } from './fake-mcp-server.js';
+import { runCli } from './helpers.js';
+
+const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
+const TSX = import.meta.resolve('tsx');
+const FAKE_KEY = 'sk-geno-fake-parent-key-0123456789';
+
+/** How a config file starts the fake server over stdio. */
+const stdioServer = (env: Record<string, string> = {}) => ({ command: process.execPath, args: ['--import', TSX, FIXTURE], env });
+
+const hubs: McpHub[] = [];
+const servers: Server[] = [];
+afterEach(async () => {
+  await Promise.all(hubs.splice(0).map((hub) => hub.stop()));
+  await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
+});
+
+async function setup(files: { readonly mcpJson?: unknown; readonly vscode?: unknown; readonly global?: unknown } = {}) {
+  const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-ws-')));
+  const home = await mkdtemp(path.join(tmpdir(), 'gcode-mcp-home-'));
+  const env = {
+    GCODE_HOME: home,
+    HOME: home,
+    PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    LANG: 'en_US.UTF-8',
+    DASHSCOPE_API_KEY: FAKE_KEY,
+    ANTHROPIC_API_KEY: FAKE_KEY,
+  };
+  const store = openStore(env);
+  if (files.mcpJson !== undefined) await writeFile(path.join(workspace, '.mcp.json'), JSON.stringify(files.mcpJson));
+  if (files.vscode !== undefined) {
+    await mkdir(path.join(workspace, '.vscode'));
+    await writeFile(path.join(workspace, '.vscode', 'mcp.json'), JSON.stringify(files.vscode));
+  }
+  if (files.global !== undefined) await writeFile(store.mcpConfigFile, JSON.stringify(files.global));
+  const open = async (acp: Parameters<typeof openMcpHub>[0]['acp'] = []) => {
+    const hub = await openMcpHub({ store, env, workspace, acp });
+    hubs.push(hub);
+    return hub;
+  };
+  return { workspace, home, env, store, open };
+}
+
+type Asked = { readonly denial: Denial; readonly classifier: ClassifierRun | undefined };
+
+function approval(mode: SessionMode, answer: PermissionAnswer, verdict: ClassifierRun['verdict'] = 'allow') {
+  const asked: Asked[] = [];
+  const classified: ClassifierInput[] = [];
+  const value: Approval = {
+    kind: 'interactive',
+    mode: () => mode,
+    approve: async (denial, classifier) => {
+      asked.push({ denial, classifier });
+      return answer;
+    },
+    classify: async (input) => {
+      classified.push(input);
+      return { verdict, reason: `classifier said ${verdict}`, model: 'fake', latencyMs: 1, costUsd: 0 };
+    },
+  };
+  return { value, asked, classified };
+}
+
+const ctx = (workspace: string): ToolContext => ({
+  workspace,
+  spillDir: path.join(workspace, '.spill'),
+  rg: 'rg',
+  signal: new AbortController().signal,
+  files: { read: async () => null, write: async () => 'written', unsaved: async () => [] },
+  events: () => [{ kind: 'user', seq: 1, at: '2026-01-01T00:00:00.000Z', content: 'use the fake server' }],
+});
+
+const textOf = (reply: Awaited<ReturnType<import('../src/tools/context.js').Executor['run']>>): string =>
+  typeof reply === 'string' ? reply : reply.text;
+
+async function waitFor(check: () => boolean, ms = 10_000): Promise<void> {
+  const until = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > until) throw new Error('timed out waiting');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+describe('MCP trust', () => {
+  it('never spawns a workspace server the user has not approved', async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'spawned');
+    const { open } = await setup({ mcpJson: { mcpServers: { fake: stdioServer({ MARKER: marker }) } } });
+    const hub = await open();
+
+    const toolset = await hub.toolset(approval('ask', 'allow').value);
+
+    expect(toolset.tools).toEqual([]);
+    expect(hub.views()).toEqual([expect.objectContaining({ name: 'fake', source: 'mcp-json', state: { status: 'untrusted' } })]);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(existsSync(marker), 'an untrusted workspace server never spawns').toBe(false);
+  });
+
+  it('never spawns an untrusted .vscode/mcp.json server either', async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'spawned');
+    const { open } = await setup({ vscode: { servers: { fake: { type: 'stdio', ...stdioServer({ MARKER: marker }) } } } });
+    const hub = await open();
+    await hub.toolset(approval('ask', 'allow').value);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(existsSync(marker)).toBe(false);
+    expect(hub.views()[0]).toMatchObject({ source: 'vscode-mcp-json', state: { status: 'untrusted' } });
+  });
+
+  it('starts a workspace server once approved, and asks again when its definition changes', async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'spawned');
+    const { open, workspace, store } = await setup({ mcpJson: { mcpServers: { fake: stdioServer({ MARKER: marker }) } } });
+    const hub = await open();
+    await hub.trust('fake');
+
+    const toolset = await hub.toolset(approval('auto', 'allow').value);
+    expect(existsSync(marker), 'a trusted server starts on first need').toBe(true);
+    expect(toolset.tools.map((tool) => tool.name)).toContain('mcp__fake__echo');
+
+    const stored = JSON.parse(await readFile(store.mcpTrustFile, 'utf8'));
+    expect(stored).toEqual({
+      version: 1,
+      servers: [{ workspace, name: 'fake', hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/), approvedAt: expect.any(String) }],
+    });
+
+    await writeFile(path.join(workspace, '.mcp.json'), JSON.stringify({ mcpServers: { fake: stdioServer({ MARKER: marker, CHANGED: '1' }) } }));
+    const reopened = await open();
+    expect(reopened.views()[0]!.state).toEqual({ status: 'untrusted' });
+  });
+
+  it('trusts global and editor-provided servers without asking', async () => {
+    const { open } = await setup({ global: { mcpServers: { globalfake: stdioServer() } } });
+    const hub = await open([{ name: 'editorfake', ...stdioServer(), args: stdioServer().args, env: [] }]);
+    expect(hub.views().map((view) => [view.name, view.source, view.state.status])).toEqual([
+      ['editorfake', 'acp', 'stopped'],
+      ['globalfake', 'global', 'stopped'],
+    ]);
+  });
+});
+
+describe('MCP stdio servers', () => {
+  it('cannot see the API keys in the parent environment, only PATH, HOME, LANG, TMPDIR and its own env', async () => {
+    process.env['DASHSCOPE_API_KEY'] = FAKE_KEY;
+    try {
+      const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer({ DECLARED: 'yes' }) } } });
+      const hub = await open();
+      const { executors } = await hub.toolset(approval('ask', 'allow').value);
+
+      const text = textOf(await executors['mcp__fake__env']!.run({}, ctx(workspace)));
+      const seen = JSON.parse(text) as Record<string, string>;
+
+      expect(text).not.toContain(FAKE_KEY);
+      expect(Object.keys(seen)).not.toContain('DASHSCOPE_API_KEY');
+      expect(Object.keys(seen)).not.toContain('ANTHROPIC_API_KEY');
+      expect(Object.keys(seen)).not.toContain('GCODE_HOME');
+      expect(seen['DECLARED']).toBe('yes');
+      expect(seen['PATH']).toBe(process.env['PATH']);
+    } finally {
+      delete process.env['DASHSCOPE_API_KEY'];
+    }
+  });
+
+  it('lists tools sorted under mcp__<server>__<tool>, calls one, and shows images as text', async () => {
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    const { tools, executors } = await hub.toolset(approval('auto', 'allow').value);
+
+    expect(tools.map((tool) => tool.name)).toEqual(['mcp__fake__crash', 'mcp__fake__echo', 'mcp__fake__env', 'mcp__fake__fail', 'mcp__fake__image']);
+    expect(tools.find((tool) => tool.name === 'mcp__fake__echo')!.input_schema).toMatchObject({ properties: { text: { type: 'string' } } });
+    expect(textOf(await executors['mcp__fake__echo']!.run({ text: 'hi' }, ctx(workspace)))).toBe('echo: hi');
+    expect(textOf(await executors['mcp__fake__image']!.run({}, ctx(workspace)))).toBe('here it is\n[image image/png, 7 bytes, not shown]');
+    await expect(executors['mcp__fake__fail']!.run({}, ctx(workspace))).rejects.toThrow('it broke');
+    expect(hub.views()[0]).toMatchObject({ state: { status: 'ready', restarts: 0 }, tools: expect.arrayContaining(['mcp__fake__echo']) });
+  });
+
+  it('lists prompts and resources as data', async () => {
+    const { open } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    await hub.toolset(approval('auto', 'allow').value);
+    expect(await hub.prompts()).toEqual([{ server: 'fake', name: 'greet', description: 'Say hello.', arguments: ['who'] }]);
+    expect(await hub.resources()).toEqual([{ server: 'fake', uri: 'fake://readme', name: 'readme', mimeType: 'text/plain' }]);
+  });
+
+  it('restarts a server that crashed, and the next call reaches the new process', async () => {
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    const { executors } = await hub.toolset(approval('auto', 'allow').value);
+    await expect(executors['mcp__fake__crash']!.run({}, ctx(workspace))).rejects.toThrow(/fake/);
+    await waitFor(() => hub.views()[0]!.state.status === 'ready' && (hub.views()[0]!.state as { restarts: number }).restarts === 1);
+
+    expect(textOf(await executors['mcp__fake__echo']!.run({ text: 'again' }, ctx(workspace)))).toBe('echo: again');
+  });
+
+  it('stops its servers with the session', async () => {
+    const { open } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    await hub.toolset(approval('auto', 'allow').value);
+    await hub.stop();
+    expect(hub.views()[0]!.state).toEqual({ status: 'stopped' });
+  });
+
+  it('reports a server that cannot start as failed with its reason', async () => {
+    const { open } = await setup({ global: { mcpServers: { broken: { command: '/nonexistent/mcp-server', args: [] } } } });
+    const hub = await open();
+    expect((await hub.toolset(approval('auto', 'allow').value)).tools).toEqual([]);
+    expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: false, reason: expect.stringContaining('ENOENT') });
+  });
+
+  it('switches to lazy listing past 40 tools, with mcp_describe returning one schema before mcp_call', async () => {
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer({ TOOL_COUNT: '40' }) } } });
+    const hub = await open();
+    const { tools, executors } = await hub.toolset(approval('auto', 'allow').value);
+
+    expect(tools.map((tool) => tool.name)).toEqual([MCP_CALL_TOOL, MCP_DESCRIBE_TOOL]);
+    expect(tools[1]!.description).toContain('- fake: mcp__fake__crash, mcp__fake__echo');
+    expect(tools[1]!.description).toContain('mcp__fake__extra_39');
+    const described = JSON.parse(textOf(await executors[MCP_DESCRIBE_TOOL]!.run({ name: 'mcp__fake__extra_07' }, ctx(workspace))));
+    expect(described).toMatchObject({ name: 'mcp__fake__extra_07', input_schema: { properties: { n: { type: 'number' } } } });
+    expect(textOf(await executors[MCP_CALL_TOOL]!.run({ name: 'mcp__fake__extra_07', arguments: { n: 3 } }, ctx(workspace)))).toBe('extra 7 got 3');
+    await expect(executors[MCP_DESCRIBE_TOOL]!.run({ name: 'mcp__fake__nope' }, ctx(workspace))).rejects.toThrow(/no MCP tool mcp__fake__nope/);
+  });
+});
+
+describe('MCP approval', () => {
+  it('asks in Ask mode until the user allows the tool for the session', async () => {
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    const once = approval('ask', 'allow');
+    const { executors } = await hub.toolset(once.value);
+    const reply = await executors['mcp__fake__echo']!.run({ text: 'a' }, ctx(workspace));
+    expect(reply).toMatchObject({ text: 'echo: a', approval: { rule: 'mcp-read-only', decidedBy: 'user', verdict: 'allow' } });
+    await executors['mcp__fake__echo']!.run({ text: 'b' }, ctx(workspace));
+    expect(once.asked).toHaveLength(2);
+
+    const session = approval('ask', 'allow-session');
+    const again = await hub.toolset(session.value);
+    await again.executors['mcp__fake__echo']!.run({ text: 'c' }, ctx(workspace));
+    expect(await again.executors['mcp__fake__echo']!.run({ text: 'd' }, ctx(workspace))).toBe('echo: d');
+    expect(session.asked.map(({ denial }) => denial.command)).toEqual(['mcp__fake__echo']);
+    await again.executors['mcp__fake__env']!.run({}, ctx(workspace));
+    expect(session.asked.map(({ denial }) => denial.command), 'the allowance is per tool').toEqual(['mcp__fake__echo', 'mcp__fake__env']);
+  });
+
+  it('refuses a call the user rejects, without calling the server', async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'crashed');
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer({ MARKER: marker }) } } });
+    const hub = await open();
+    const { executors } = await hub.toolset(approval('ask', 'reject').value);
+    await expect(executors['mcp__fake__crash']!.run({}, ctx(workspace))).rejects.toThrow(/denied/);
+    expect(hub.views()[0]!.state).toEqual({ status: 'ready', restarts: 0 });
+  });
+
+  it('runs read-only tools in Auto and sends the others to the classifier as a fenced MCP call', async () => {
+    const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    const auto = approval('auto', 'reject', 'deny');
+    const { executors } = await hub.toolset(auto.value);
+
+    expect(await executors['mcp__fake__echo']!.run({ text: 'x' }, ctx(workspace))).toBe('echo: x');
+    expect(auto.classified).toEqual([]);
+
+    await expect(executors['mcp__fake__env']!.run({}, ctx(workspace))).rejects.toThrow(/refused by the safety classifier/);
+    expect(auto.classified).toEqual([
+      expect.objectContaining({ request: 'use the fake server', flagged: expect.objectContaining({ rule: 'mcp-tool' }), mcp: { server: 'fake', tool: 'env', arguments: '{}' } }),
+    ]);
+    expect(auto.asked).toEqual([]);
+  });
+
+  it('offers no MCP tools to a non-interactive run unless it turns them on', async () => {
+    const { open } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
+    const hub = await open();
+    expect((await hub.toolset({ kind: 'non-interactive' })).tools).toEqual([]);
+    expect(hub.views()[0]!.state, 'nothing started').toEqual({ status: 'stopped' });
+    expect((await hub.toolset({ kind: 'non-interactive', mcp: true })).tools.length).toBeGreaterThan(0);
+  });
+});
+
+async function listen(handler: Parameters<typeof createServer>[1]): Promise<string> {
+  const server = createServer(handler);
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+describe('MCP HTTP servers', () => {
+  it('lists and calls a streamable HTTP server', async () => {
+    const url = await listen(async (req, res) => {
+      const transport = new StreamableHTTPServerTransport({});
+      await fakeMcpServer().connect(transport as Transport);
+      await transport.handleRequest(req, res);
+    });
+    const { open, workspace } = await setup({ global: { mcpServers: { web: { type: 'http', url: `${url}/mcp` } } } });
+    const hub = await open();
+    const { executors } = await hub.toolset(approval('auto', 'allow').value);
+    expect(textOf(await executors['mcp__web__echo']!.run({ text: 'over http' }, ctx(workspace)))).toBe('echo: over http');
+  });
+
+  it('falls back to legacy SSE when streamable HTTP is refused', async () => {
+    const transports = new Map<string, SSEServerTransport>();
+    const url = await listen(async (req, res) => {
+      const { pathname, searchParams } = new URL(req.url ?? '/', 'http://localhost');
+      if (req.method === 'GET' && pathname === '/sse') {
+        const transport = new SSEServerTransport('/messages', res);
+        transports.set(transport.sessionId, transport);
+        await fakeMcpServer().connect(transport);
+      } else if (req.method === 'POST' && pathname === '/messages') {
+        await transports.get(searchParams.get('sessionId') ?? '')?.handlePostMessage(req, res);
+      } else {
+        res.writeHead(405).end();
+      }
+    });
+    const { open, workspace } = await setup({ global: { mcpServers: { legacy: { type: 'http', url: `${url}/sse` } } } });
+    const hub = await open();
+    const { executors } = await hub.toolset(approval('auto', 'allow').value);
+    expect(textOf(await executors['mcp__legacy__echo']!.run({ text: 'over sse' }, ctx(workspace)))).toBe('echo: over sse');
+  });
+
+  it('reports a server that wants OAuth as needing sign-in', async () => {
+    const url = await listen((_req, res) => {
+      res.writeHead(401, { 'www-authenticate': 'Bearer resource_metadata="http://127.0.0.1/.well-known/oauth-protected-resource"' }).end();
+    });
+    const { open } = await setup({ global: { mcpServers: { private: { type: 'http', url: `${url}/mcp` } } } });
+    const hub = await open();
+    await hub.toolset(approval('auto', 'allow').value);
+    expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: true });
+  });
+});
+
+describe('gcode mcp', () => {
+  it('lists the servers with their state, and trusts one by name', async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'spawned');
+    const { env, workspace, store } = await setup({ mcpJson: { mcpServers: { fake: stdioServer({ MARKER: marker }) } } });
+
+    const listed = await runCli(['mcp', 'list'], env, { cwd: workspace });
+    expect(listed.code).toBe(0);
+    expect(listed.stdout).toMatch(/fake\s+\.mcp\.json\s+untrusted/);
+
+    const trusted = await runCli(['mcp', 'trust', 'fake'], env, { cwd: workspace });
+    expect(trusted.code).toBe(0);
+    expect(JSON.parse(await readFile(store.mcpTrustFile, 'utf8')).servers).toEqual([expect.objectContaining({ workspace, name: 'fake' })]);
+    expect(existsSync(marker), 'trusting does not start the server').toBe(false);
+
+    const after = await runCli(['mcp', 'list'], env, { cwd: workspace });
+    expect(after.stdout).toMatch(/fake\s+\.mcp\.json\s+stopped/);
+
+    const unknown = await runCli(['mcp', 'trust', 'nope'], env, { cwd: workspace });
+    expect(unknown.code).toBe(1);
+  });
+});
+

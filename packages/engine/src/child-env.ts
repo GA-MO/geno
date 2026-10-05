@@ -12,3 +12,11 @@ export function childEnv(env: Env, extra: Readonly<Record<string, string>> = {})
   const picked = CHILD_ENV_KEYS.flatMap((key) => (env[key] === undefined ? [] : [[key, env[key]] as const]));
   return { ...Object.fromEntries(picked), ...extra };
 }
+
+export const MCP_SERVER_ENV_KEYS = ['PATH', 'HOME', 'LANG', 'TMPDIR'] as const;
+
+/** What a stdio MCP server sees: a few basics from the engine and the env its config declares, never an API key. */
+export function mcpServerEnv(env: Env, declared: Readonly<Record<string, string>>): Record<string, string> {
+  const picked = MCP_SERVER_ENV_KEYS.flatMap((key) => (env[key] === undefined ? [] : [[key, env[key]] as const]));
+  return { ...Object.fromEntries(picked), ...declared };
+}

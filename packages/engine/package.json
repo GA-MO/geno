@@ -15,6 +15,7 @@
     "@anthropic-ai/sandbox-runtime": "^0.0.78",
     "@anthropic-ai/sdk": "^0.131.0",
     "@g-code/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

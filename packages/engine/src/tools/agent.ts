@@ -36,12 +36,16 @@ import {
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 
-/** Asked before a flagged command runs, with the classifier's answer when it sent the question on; true lets it run. */
-export type Approver = (denial: Denial, classifier: ClassifierRun | undefined) => Promise<boolean>;
+/** The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session. */
+export type PermissionAnswer = 'allow' | 'allow-session' | 'reject';
+
+/** Asked before a flagged command runs, with the classifier's answer when it sent the question on. */
+export type Approver = (denial: Denial, classifier: ClassifierRun | undefined) => Promise<PermissionAnswer>;
 
 /** Only an interactive run has someone to ask, and a classifier to ask first in Auto. */
 export type Approval =
-  | { readonly kind: 'non-interactive' }
+  /** `mcp` turns MCP tools on, which a non-interactive run never has otherwise. */
+  | { readonly kind: 'non-interactive'; readonly mcp?: boolean }
   | {
       readonly kind: 'interactive';
       /** Read before each command, so a switch during a turn applies from the next command on. */
@@ -52,19 +56,31 @@ export type Approval =
 
 export const NON_INTERACTIVE: Approval = { kind: 'non-interactive' };
 
-const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
+export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
-/** Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question. */
-async function settle(approval: Approval, mode: ApprovalMode, denial: Denial, input: () => ClassifierInput, signal: AbortSignal): Promise<ApprovalRecord> {
+/**
+ * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
+ * `forSession` runs when the user allows it for the rest of the session.
+ */
+export async function settle(
+  approval: Approval,
+  mode: ApprovalMode,
+  denial: Denial,
+  input: () => ClassifierInput,
+  signal: AbortSignal,
+  forSession: () => void = () => {},
+): Promise<ApprovalRecord> {
   const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return { ...record, decidedBy: 'rule', verdict: 'deny' };
   const classifier = denial.verdict === 'classify' ? await approval.classify(input(), signal) : undefined;
   if (classifier !== undefined && classifier.verdict !== 'ask') return { ...record, classifier, decidedBy: 'classifier', verdict: classifier.verdict };
-  const allowed = await approval.approve(denial, classifier);
+  const answer = await approval.approve(denial, classifier);
+  if (answer === 'allow-session') forSession();
+  const allowed = answer !== 'reject';
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
 }
 
-const denialText = ({ command, reason, classifier, decidedBy }: ApprovalRecord): string =>
+export const denialText = ({ command, reason, classifier, decidedBy }: ApprovalRecord): string =>
   `denied: \`${command}\` ${
     decidedBy === 'classifier' ? `was refused by the safety classifier: ${classifier?.reason}` : `uses ${reason}, which needs the user's approval`
   }. Do not retry it; find another way.`;
