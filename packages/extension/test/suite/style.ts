@@ -46,7 +46,7 @@ const ring = () =>
 const isRunning = (r: { display: string; plays: string[] }) => r.display !== 'none' && r.plays.join() === 'running';
 
 /** The primary buttons' white fill in the glass style. */
-const WHITE = 'rgb(242, 244, 247)';
+const WHITE = 'rgb(242, 242, 242)';
 const fillOf = (selector: string) => panel<string>(`getComputedStyle(doc.querySelector(${JSON.stringify(selector)})).backgroundColor`);
 
 const blurOf = (selector: string) => panel<string>(`getComputedStyle(doc.querySelector(${JSON.stringify(selector)})).backdropFilter`);
@@ -72,6 +72,7 @@ async function useTheme(theme: string): Promise<void> {
 
 /** Glass in Dark Modern and Light Modern, native in Dark High Contrast, which keeps it whatever the setting says. */
 async function screenshots(name: string): Promise<void> {
+  await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);
     await ui({ do: 'screenshot', name: `${name}-${slug}` });
@@ -95,10 +96,12 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('gcode.chat.focus');
   for (let i = 0; i < 5; i++) await vscode.commands.executeCommand('workbench.action.decreaseViewWidth');
 
+  const views = await ui<string[]>({ do: 'evalPage', expression: `[...document.querySelectorAll('.sidebar .pane-header .title')].map((t) => t.textContent)` });
+  check(views.includes('Chat') && !views.includes('Changes'), 'the Changes view is hidden by default, so the chat fills the side bar', views);
   check((await panel<string>('doc.body.dataset.style')) === 'glass', 'the panel starts in glass, the default style');
   check((await blurOf('.hero')).includes('blur'), 'the empty state tile is frosted glass', await blurOf('.hero'));
   const surface = await panel<{ image: string; color: string }>(`({ image: getComputedStyle(doc.body).backgroundImage, color: getComputedStyle(doc.body).backgroundColor })`);
-  check(surface.image === 'none' && surface.color === 'rgb(14, 18, 24)', 'the panel is a plain dark surface, with no gradient or glow', surface);
+  check(surface.image === 'none' && surface.color === 'rgb(10, 10, 10)', 'the panel is a plain dark surface, with no gradient or glow', surface);
   check((await panel<string>(`getComputedStyle(doc.querySelector('.hero .lid')).animationName`)) === 'blink-eye', 'Noodle still blinks in the empty state');
 
   // The rainbow does not depend on focus: it runs with the composer focused and without.
@@ -116,6 +119,8 @@ export async function run(): Promise<void> {
   await click('.calls[data-step="read"] .step-row');
   await waitFor('the read step to open', async () => (await count('.call-list')) === 1);
   check((await blurOf('.call-list')).includes('blur'), 'an opened step lists its calls on glass');
+  const bubble = await panel<{ fill: string; blur: string }>(`(() => { const s = getComputedStyle(doc.querySelector('.request-bubble')); return { fill: s.backgroundColor, blur: s.backdropFilter }; })()`);
+  check(bubble.fill === 'rgba(255, 255, 255, 0.07)' && bubble.blur.includes('blur'), 'the user message is neutral glass, with no accent tint', bubble);
   await panel(`(doc.querySelector('.turn').scrollIntoView(), 1)`);
   await screenshots('finished');
   await ui({ do: 'hover', selector: '.transcript' });
@@ -129,15 +134,15 @@ export async function run(): Promise<void> {
   check((await rainbows()).join() === 'composer', 'the turn waiting on the user has no rainbow; the composer keeps it', await rainbows());
   check(isRunning(await ring()), 'the composer rainbow runs while a turn works', await ring());
   const allow = await panel<{ fill: string; ink: string }>(`(() => { const s = getComputedStyle(doc.querySelector('.permission-open .button')); return { fill: s.backgroundColor, ink: s.color }; })()`);
-  check(allow.fill === WHITE && allow.ink === 'rgb(14, 18, 24)', 'Allow, a primary action, is white with dark text', allow);
+  check(allow.fill === WHITE && allow.ink === 'rgb(10, 10, 10)', 'Allow, a primary action, is white with dark text', allow);
   check((await fillOf('.permission-open .button.secondary')) !== WHITE, 'Deny, a secondary action, stays quiet', await fillOf('.permission-open .button.secondary'));
   await useTheme(THEMES.light);
   const light = await panel<{ surface: string; allow: string; ink: string }>(`(() => {
     const allow = getComputedStyle(doc.querySelector('.permission-open .button'));
     return { surface: getComputedStyle(doc.body).backgroundColor, allow: allow.backgroundColor, ink: allow.color };
   })()`);
-  check(light.surface === 'rgb(243, 245, 248)', 'a light theme gets light glass on a plain light surface', light);
-  check(light.allow === 'rgb(22, 27, 35)' && light.ink === 'rgb(255, 255, 255)', 'on light glass the primary action is near-black with white text', light);
+  check(light.surface === 'rgb(245, 245, 245)', 'a light theme gets light glass on a plain light surface', light);
+  check(light.allow === 'rgb(23, 23, 23)' && light.ink === 'rgb(255, 255, 255)', 'on light glass the primary action is near-black with white text', light);
   check((await blurOf('.permission')).includes('blur'), 'light glass is frosted too');
   await useTheme(THEMES.dark);
   const flowing = await waitingSegment();
@@ -149,14 +154,20 @@ export async function run(): Promise<void> {
   await ui({ do: 'motion', value: '' });
   check(isRunning(await ring()), 'the rainbow runs again without reduced motion', await ring());
   await screenshots('permission');
-  await ui({ do: 'panelshot', name: 'rail-hairline' });
-  // The comparison the user asked for: the whole rail as static 1px dots with 4px gaps.
-  await panel(
-    `([...doc.querySelectorAll('.rail')].forEach((r) => { r.style.setProperty('--rail-finished', 'var(--rail-dots)'); r.style.setProperty('--rail-flow', 'var(--rail-dots)'); }),
-      doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.pause()), 1)`,
-  );
-  await ui({ do: 'panelshot', name: 'rail-dotted' });
-  await panel(`([...doc.querySelectorAll('.rail')].forEach((r) => r.removeAttribute('style')), doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.play()), 1)`);
+  // The rail comparison, in dark and light glass: the shipped hairline, then the whole rail as static 1px dots with 4px gaps.
+  for (const [suffix, theme] of [['', THEMES.dark], ['-light', THEMES.light]] as const) {
+    await useTheme(theme);
+    await ui({ do: 'panelshot', name: `rail-hairline${suffix}` });
+    await panel(
+      `([...doc.querySelectorAll('.rail')].forEach((r) => { r.style.setProperty('--rail-finished', 'var(--rail-dots)'); r.style.setProperty('--rail-flow', 'var(--rail-dots)'); }),
+        doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.pause()), 1)`,
+    );
+    await ui({ do: 'panelshot', name: `rail-dotted${suffix}` });
+    await panel(`([...doc.querySelectorAll('.rail')].forEach((r) => r.removeAttribute('style')), doc.getAnimations().filter((a) => a.animationName === 'rail-flow').forEach((a) => a.play()), 1)`);
+  }
+  await ui({ do: 'hover', selector: '.transcript' });
+  await ui({ do: 'panelshot', name: 'scrollbar-light' });
+  await useTheme(THEMES.dark);
   await click('.permission-open button', 'Allow');
   await waitFor('the allowed turn to finish', async () => (await count('.turn-footer')) === 2);
 

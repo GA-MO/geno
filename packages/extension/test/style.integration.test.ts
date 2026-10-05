@@ -70,7 +70,10 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
   },
+  evalPage: async ({ expression }, w) => (await w.page.send('Runtime.evaluate', { expression, returnByValue: true })).result.value,
   hover: async ({ selector }, w) => hover(await webview(w, EXTENSION, READY), selector),
+  /** Rests the pointer over the empty editor, so no hover from earlier lingers in a window capture. */
+  pointerAway: async (_action, w) => w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 300 }),
   panelshot: async ({ name }, w) => {
     if (shots !== undefined) await capturePanel(w, path.resolve(shots, `${name}.png`));
   },

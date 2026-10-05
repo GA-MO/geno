@@ -12,6 +12,7 @@ export const UNDO_FILE_COMMAND = 'gcode.review.undoFile';
 export const UNDO_SESSION_COMMAND = 'gcode.review.undoSession';
 export const OPEN_DIFF_COMMAND = 'gcode.review.openDiff';
 export const INLINE_EDIT_COMMAND = 'gcode.inlineEdit';
+export const SHOW_CHANGES_SETTING = 'gcode.ui.showChanges';
 
 /** The CodeLens and the Changes view pass one hunk; the chat panel passes a list. */
 const idsOf = (node: HunkId | Tracked | readonly HunkId[]): HunkId[] => (typeof node === 'string' ? [node] : Array.isArray(node) ? [...node] : [(node as Tracked).id]);
@@ -29,17 +30,40 @@ function fileOf(uri: vscode.Uri | undefined): vscode.Uri {
   return file;
 }
 
-/** The review surfaces over the chat's session: hunk controls in the editor, the changed-files view, diffs against the checkpoint, and Cmd-K. */
+/** The review surfaces over the chat's session: hunk controls in the editor, the changed-files view when shown, diffs against the checkpoint, and Cmd-K. */
+/**
+ * The Changes view, kept for later behind `gcode.ui.showChanges`: Source Control already lists changed files.
+ * It exists only while the setting is on, and comes and goes as the setting changes.
+ */
+function registerChangesView(context: vscode.ExtensionContext, review: ReviewController): void {
+  let shown: vscode.Disposable | undefined;
+  const sync = () => {
+    const on = vscode.workspace.getConfiguration('gcode').get<boolean>('ui.showChanges') === true;
+    if (on && shown === undefined) {
+      const view = new ChangesView(review);
+      shown = vscode.Disposable.from(view, vscode.window.createTreeView(CHANGES_VIEW, { treeDataProvider: view, showCollapseAll: true }));
+    } else if (!on && shown !== undefined) {
+      shown.dispose();
+      shown = undefined;
+    }
+  };
+  sync();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(SHOW_CHANGES_SETTING)) sync();
+    }),
+    { dispose: () => shown?.dispose() },
+  );
+}
+
 export function registerReview(context: vscode.ExtensionContext, chat: Chat, review: ReviewController, output: vscode.OutputChannel): void {
-  const view = new ChangesView(review);
   const lenses = new ReviewLenses(review);
+  registerChangesView(context, review);
   context.subscriptions.push(
     review,
-    view,
     lenses,
     new ReviewDecorations(review, context.extensionUri),
     vscode.languages.registerCodeLensProvider(REVIEW_DOCUMENTS, lenses),
-    vscode.window.createTreeView(CHANGES_VIEW, { treeDataProvider: view, showCollapseAll: true }),
     vscode.workspace.registerTextDocumentContentProvider(CHECKPOINT_SCHEME, new CheckpointDocuments(() => chat.link())),
     vscode.commands.registerCommand(KEEP_COMMAND, (node: HunkId | Tracked | readonly HunkId[]) => review.keep(idsOf(node))),
     vscode.commands.registerCommand(UNDO_COMMAND, (node: HunkId | Tracked | readonly HunkId[]) => review.undo(idsOf(node))),
