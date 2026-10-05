@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type * as vscode from 'vscode';
-import { DIAGNOSTICS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY } from '@g-code/core';
+import { DIAGNOSTICS_CAPABILITY, MEMORY_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY } from '@g-code/core';
 
 const RESTART_DELAY_MS = 1000;
 
@@ -64,7 +64,9 @@ export class Engine implements vscode.Disposable {
       clientCapabilities: {
         fs: { readTextFile: true, writeTextFile: true },
         session: { notices: {} },
-        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true },
+        // ask_user's questions arrive as form elicitations, and remember's as permission requests shown as memory cards.
+        elicitation: { form: {} },
+        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true },
       },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });
