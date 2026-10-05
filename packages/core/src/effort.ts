@@ -23,6 +23,10 @@ export const EFFORT_POLICIES = {
 export type EffortPolicyName = keyof typeof EFFORT_POLICIES;
 export const isEffortPolicyName = (raw: string): raw is EffortPolicyName => Object.hasOwn(EFFORT_POLICIES, raw);
 
+/**
+ * Flat, by measurement (docs/results/u21-effort.md): on Model Studio a change of effort between calls misses the
+ * prompt cache, so `stepped` wrote twice the cache, cost more and ran slower per turn.
+ */
 export const DEFAULT_EFFORT_POLICY: EffortPolicyName = 'flat';
 
 export const effortFor = (base: Effort, step: EffortStep): Effort => EFFORTS[Math.max(0, EFFORTS.indexOf(base) + step)]!;
