@@ -1,4 +1,5 @@
 @import '@vscode/codicons/dist/codicon.css';
+@import './attachments.css';
 
 /*
  * Trail: a run is a path. In the native style every color comes from the theme's variables, mixed with color-mix

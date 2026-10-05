@@ -1,4 +1,5 @@
 import type { HunkStatus } from '@g-code/core';
+import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { MentionCompletion } from './mentions.js';
 
 /**
@@ -20,6 +21,8 @@ export type Turn = {
   readonly usage: Usage | undefined;
   /** A passing status while the turn runs, such as a retry; the next output or the turn's end clears it. */
   readonly notice?: string | undefined;
+  /** Images and files the user sent with the prompt. */
+  readonly attachments?: readonly AttachmentView[] | undefined;
 };
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -53,7 +56,12 @@ export type ToolBlock = {
   readonly endedAt: number | undefined;
   readonly output: string | undefined;
   readonly diff: FileDiff | undefined;
+  /** Images the tool returned, such as a read of a PNG, shown as thumbnails on the step. */
+  readonly images?: readonly ToolImage[] | undefined;
 };
+
+/** An image file a tool returned; `path` is absolute. */
+export type ToolImage = { readonly path: string; readonly name: string };
 
 /** A file an edit changed, as hunks the review controller tracks by the same ids. */
 export type FileDiff = { readonly path: string; readonly hunks: readonly DiffHunk[] };
@@ -90,7 +98,7 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 export type Action =
   | { readonly type: 'reset'; readonly transcript: Transcript }
   | { readonly type: 'model'; readonly model: string }
-  | { readonly type: 'turn-start'; readonly id: string; readonly at: number; readonly prompt: string }
+  | { readonly type: 'turn-start'; readonly id: string; readonly at: number; readonly prompt: string; readonly attachments?: readonly AttachmentView[] | undefined }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
   /** Starts a tool call or updates one; an absent field keeps its value. */
@@ -103,6 +111,7 @@ export type Action =
       readonly toolKind?: ToolKind;
       readonly status?: ToolStatus;
       readonly output?: string;
+      readonly images?: readonly ToolImage[];
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
@@ -120,13 +129,26 @@ export type UiStyle = (typeof UI_STYLES)[number];
 export type ToView =
   | Action
   | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] }
-  | { readonly type: 'style'; readonly style: UiStyle };
+  | { readonly type: 'style'; readonly style: UiStyle }
+  /** Files the user picked or dropped from the explorer, read by the extension, for the composer to attach. */
+  | { readonly type: 'picked'; readonly files: readonly PickedFile[]; readonly refused: readonly Refused[] }
+  /** The workspace folders and the webview addresses they are served at, for images in the transcript. */
+  | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] };
+
+/** A folder the webview may load images from: its absolute path and the address of that folder inside the webview. */
+export type WebviewRoot = { readonly path: string; readonly uri: string };
 
 /** What the webview asks of the extension. */
 export type FromView =
   | { readonly type: 'ready' }
   /** `@` mentions in the text are resolved by the extension when it sends. */
-  | { readonly type: 'send'; readonly text: string }
+  | { readonly type: 'send'; readonly text: string; readonly attachments?: readonly OutgoingAttachment[] }
+  /** Files dropped from the explorer, as `file:` URIs, for the extension to read. */
+  | { readonly type: 'attach-uris'; readonly uris: readonly string[] }
+  /** Opens the native file picker to attach files. */
+  | { readonly type: 'pick-files' }
+  /** Opens an image or file the transcript shows in an editor tab. */
+  | { readonly type: 'open'; readonly target: OpenTarget }
   /** Asks what an `@` mention typed so far could be; answered by a `completions` message with the same id. */
   | { readonly type: 'complete'; readonly id: number; readonly query: string }
   | { readonly type: 'stop' }

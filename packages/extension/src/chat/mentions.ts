@@ -6,8 +6,11 @@
 
 export const SELECTION = 'selection';
 
-/** One row of the completion list. `label` is what goes after the `@`. */
-export type MentionCompletion = { readonly kind: 'file' | 'selection'; readonly label: string; readonly detail: string };
+/** One row of the completion list. `label` is what goes after the `@`; the `attach` row opens the file picker instead. */
+export type MentionCompletion = { readonly kind: 'file' | 'selection' | 'attach'; readonly label: string; readonly detail: string };
+
+/** The row the `+` menu, an `@` with nothing after it yet, offers before the mentions. */
+export const ATTACH_ROW: MentionCompletion = { kind: 'attach', label: 'Attach file…', detail: 'Images or text files' };
 
 /** The mention being typed just before `caret`: where its `@` is and what follows it so far. */
 export function mentionAtCaret(text: string, caret: number): { readonly start: number; readonly query: string } | undefined {

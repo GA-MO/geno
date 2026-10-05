@@ -16,6 +16,8 @@ import {
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
+import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
+import { droppedUris, imagesOf, openTarget, pickFiles, promptBlocks, readForComposer, viewsOf, webviewRoots } from './attachments.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
@@ -71,6 +73,7 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
   }),
   tool_call_update: ({ toolCallId, title, status, content }, at) => {
     const output = outputOf(content);
+    const images = imagesOf(content);
     return {
       type: 'tool',
       id: toolCallId,
@@ -78,6 +81,7 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
       ...(title == null ? {} : callOf(title)),
       ...(status == null ? {} : { status: TOOL_STATUSES[status] }),
       ...(output === undefined ? {} : { output }),
+      ...(images.length === 0 ? {} : { images }),
     };
   },
 };
@@ -158,6 +162,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly permissions = new Map<string, (optionId: string | undefined) => void>();
   private nextPermission = 0;
   private readonly mentions = new Mentions();
+  /** The session of the latest turn, whose attachments folder a pasted image opens from. */
+  private lastSession: string | undefined;
+  /** Files outside the workspace the user attached, which their chips may open. */
+  private readonly attachedPaths = new Set<string>();
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -223,9 +231,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       });
   }
 
-  /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions go along as context. */
-  send(text: string): Promise<acp.StopReason> {
-    return this.prompt(text, text, undefined, () => this.mentions.blocks(text));
+  /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions and its attachments go along as context. */
+  send(text: string, attachments: readonly OutgoingAttachment[] = []): Promise<acp.StopReason> {
+    for (const a of attachments) if (a.path !== undefined) this.attachedPaths.add(a.path);
+    return this.prompt(text, text, undefined, async () => [...(await this.mentions.blocks(text)), ...promptBlocks(attachments)], viewsOf(attachments));
   }
 
   /** Cmd-K: a one-shot edit of a selection, shown in the panel like a turn. */
@@ -240,11 +249,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     text: string,
     meta: Record<string, unknown> | undefined,
     attachments: () => Promise<acp.ContentBlock[]>,
+    attached: readonly AttachmentView[] = [],
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
-    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown });
+    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached });
     try {
       this.turn = await this.link();
+      this.lastSession = this.turn.sessionId;
       const response = await this.turn.connection.agent.request(acp.methods.agent.session.prompt, {
         sessionId: this.turn.sessionId,
         prompt: [{ type: 'text', text }, ...(await attachments())],
@@ -325,11 +336,15 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     return {
       // Live messages start only once the replay is sent, so the webview sees each message once and in order.
       ready: () => {
+        void view.webview.postMessage({ type: 'roots', roots: webviewRoots(view.webview) } satisfies ToView);
         void view.webview.postMessage({ type: 'reset', transcript: this.transcript } satisfies Action);
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
-      send: ({ text }) => void this.send(text).catch(() => {}),
+      send: ({ text, attachments }) => void this.send(text, attachments).catch(() => {}),
+      'attach-uris': ({ uris }) => void this.attach(view, droppedUris(uris)),
+      'pick-files': () => void pickFiles().then((uris) => this.attach(view, uris)),
+      open: ({ target }) => void openTarget(target, this.lastSession, this.attachedPaths),
       complete: ({ id, query }) =>
         void this.mentions.completions(query).then(
           (items) => view.webview.postMessage({ type: 'completions', id, items } satisfies ToView),
@@ -346,9 +361,17 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     };
   }
 
+  /** Reads files the user picked or dropped from the explorer and hands them to the composer. */
+  private async attach(view: vscode.WebviewView, uris: readonly vscode.Uri[]): Promise<void> {
+    if (uris.length === 0) return;
+    const { files, refused } = await readForComposer(uris);
+    await view.webview.postMessage({ type: 'picked', files, refused } satisfies ToView);
+  }
+
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist] };
+    // Workspace folders too, so the panel can show images from them: a read's thumbnail, or one the answer links.
+    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri)] };
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.uiStyle());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));

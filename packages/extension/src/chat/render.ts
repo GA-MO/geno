@@ -5,6 +5,8 @@ import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
 import type { DiffHunk, ErrorBlock, FileDiff, FromView, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { headerOf, type EditTool } from './rail.js';
+import type { AttachmentView } from './attachment-model.js';
+import { markdownImage, sentAttachments, toolImages } from './images.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -153,6 +155,7 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),
       icon(open ? 'chevron-down' : 'chevron-right', 'chevron'),
     ),
+    toolImages(tools, (target) => ui.post({ type: 'open', target })),
     open && h('div', { class: 'call-list' }, ...tools.map((tool) => toolRow(tool, ui))),
   );
 }
@@ -302,7 +305,13 @@ export const errorBlock = (block: ErrorBlock): HTMLElement =>
 export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
   const element = h('div', { class: 'markdown' });
   const actions = { copy: (code: string) => ui.post({ type: 'copy', text: code }), open: (source: string) => ui.post({ type: 'open-diagram', source }) };
-  element.append(renderMarkdown(text, { copy: actions.copy, diagram: (diagram) => diagramBlock(diagram, actions) }));
+  element.append(
+    renderMarkdown(text, {
+      copy: actions.copy,
+      diagram: (diagram) => diagramBlock(diagram, actions),
+      image: (href, alt) => markdownImage(href, alt, (target) => ui.post({ type: 'open', target })),
+    }),
+  );
   if (caret) {
     const last = element.lastElementChild;
     // The caret follows the last word, inside the paragraph or list item it ends.
@@ -352,7 +361,13 @@ export function turnFooter(turn: Turn): HTMLElement {
 /** A passing status in a running turn, such as a retry. */
 export const turnNotice = (text: string): HTMLElement => h('div', { class: 'turn-notice', role: 'status' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, text));
 
-export const userMessage = (prompt: string): HTMLElement => h('div', { class: 'request' }, h('div', { class: 'request-bubble' }, prompt));
+export const userMessage = (prompt: string, attachments: readonly AttachmentView[] = [], ui?: Ui): HTMLElement =>
+  h(
+    'div',
+    { class: 'request' },
+    ui !== undefined && sentAttachments(attachments, (target) => ui.post({ type: 'open', target })),
+    prompt !== '' && h('div', { class: 'request-bubble' }, prompt),
+  );
 
 /** What a new panel suggests: each fills the composer for the user to edit or send. */
 export const EXAMPLE_PROMPTS: readonly { readonly icon: string; readonly text: string }[] = [

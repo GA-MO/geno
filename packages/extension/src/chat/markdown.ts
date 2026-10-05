@@ -9,7 +9,12 @@ import { highlight } from './highlight.js';
  * HTML from the model is shown as the text it is, so the model can never inject markup or script.
  */
 
-export type MarkdownContext = { readonly copy: (text: string) => void; readonly diagram: (diagram: Diagram) => Child };
+export type MarkdownContext = {
+  readonly copy: (text: string) => void;
+  readonly diagram: (diagram: Diagram) => Child;
+  /** Draws an image the text links; without it, an image shows as a link to its address. */
+  readonly image?: (href: string, alt: string) => Child;
+};
 
 type Kind = MarkedToken['type'];
 /** A renderer per token type; a type missing from a table is shown as its source text. */
@@ -35,7 +40,7 @@ const INLINE: Renderers = {
   br: () => h('br'),
   link: (t, ctx) =>
     SAFE_LINK.test(t.href) ? h('a', { href: t.href, title: t.title ?? t.href }, ...inline(t.tokens, ctx)) : h('span', {}, ...inline(t.tokens, ctx)),
-  image: (t) => (SAFE_LINK.test(t.href) ? h('a', { href: t.href, title: t.href }, t.text || t.href) : t.text),
+  image: (t, ctx) => ctx.image?.(t.href, t.text) ?? (SAFE_LINK.test(t.href) ? h('a', { href: t.href, title: t.href }, t.text || t.href) : t.text),
   html: (t) => t.raw,
   checkbox: (t) => icon(t.checked ? 'pass-filled' : 'circle-large-outline', 'task'),
 };
