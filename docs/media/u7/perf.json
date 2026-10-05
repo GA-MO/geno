@@ -1,0 +1,202 @@
+[
+  {
+    "label": "glass, idle, rainbow running",
+    "seconds": 3.001388,
+    "busyMs": 3.647,
+    "busyPercent": 0.1215104478328027,
+    "frames": 180,
+    "fps": 59.9722528376871
+  },
+  {
+    "label": "glass, idle, rainbow held",
+    "seconds": 3.001734,
+    "busyMs": 1.919,
+    "busyPercent": 0.06392971529122833,
+    "frames": 1,
+    "fps": 0.33314077796367036
+  },
+  {
+    "label": "glass, idle, rainbow running",
+    "seconds": 3.002246,
+    "busyMs": 4.645,
+    "busyPercent": 0.15471750149721242,
+    "frames": 179,
+    "fps": 59.62202964047583
+  },
+  {
+    "label": "glass, idle, rainbow held",
+    "seconds": 3.002775,
+    "busyMs": 27.604,
+    "busyPercent": 0.9192829965615139,
+    "frames": 1,
+    "fps": 0.3330252849447594
+  },
+  {
+    "label": "glass, idle, rainbow running",
+    "seconds": 3.002527,
+    "busyMs": 9.275,
+    "busyPercent": 0.30890646445477427,
+    "frames": 179,
+    "fps": 59.61644974383244
+  },
+  {
+    "label": "glass, idle, rainbow held",
+    "seconds": 3.003035,
+    "busyMs": 3.404,
+    "busyPercent": 0.11335199223452273,
+    "frames": 1,
+    "fps": 0.33299645192280475
+  },
+  {
+    "label": "glass, idle, rainbow running",
+    "seconds": 3.003175,
+    "busyMs": 9.064,
+    "busyPercent": 0.30181391360809806,
+    "frames": 180,
+    "fps": 59.93656713311745
+  },
+  {
+    "label": "glass, idle, rainbow held",
+    "seconds": 3.003451,
+    "busyMs": 3.371,
+    "busyPercent": 0.1122375560646736,
+    "frames": 1,
+    "fps": 0.3329503294709985
+  },
+  {
+    "label": "glass, idle, rainbow running",
+    "seconds": 3.002527,
+    "busyMs": 9.152,
+    "busyPercent": 0.3048099151148349,
+    "frames": 180,
+    "fps": 59.94950253569743
+  },
+  {
+    "label": "glass, idle, rainbow held",
+    "seconds": 3.002742,
+    "busyMs": 3.192,
+    "busyPercent": 0.10630283920496665,
+    "frames": 1,
+    "fps": 0.3330289448777151
+  },
+  {
+    "label": "glass, streaming, rainbow running",
+    "seconds": 3.002169,
+    "busyMs": 251.663,
+    "busyPercent": 8.382705970250177,
+    "frames": 180,
+    "fps": 59.9566513410804
+  },
+  {
+    "label": "glass, streaming, rainbow held",
+    "seconds": 3.021376,
+    "busyMs": 248.041,
+    "busyPercent": 8.209537641127751,
+    "frames": 180,
+    "fps": 59.57550467071957
+  },
+  {
+    "label": "glass, streaming, rainbow running",
+    "seconds": 3.00251,
+    "busyMs": 238.148,
+    "busyPercent": 7.93163053578506,
+    "frames": 180,
+    "fps": 59.949841965555486
+  },
+  {
+    "label": "glass, streaming, rainbow held",
+    "seconds": 3.003574,
+    "busyMs": 251.64,
+    "busyPercent": 8.37801898671383,
+    "frames": 180,
+    "fps": 59.9286050551776
+  },
+  {
+    "label": "glass, streaming, rainbow running",
+    "seconds": 3.003344,
+    "busyMs": 236.32,
+    "busyPercent": 7.86856250898998,
+    "frames": 180,
+    "fps": 59.93319446590201
+  },
+  {
+    "label": "glass, streaming, rainbow held",
+    "seconds": 3.003301,
+    "busyMs": 242.895,
+    "busyPercent": 8.087600943095614,
+    "frames": 180,
+    "fps": 59.9340525641619
+  },
+  {
+    "label": "glass, streaming, rainbow running",
+    "seconds": 3.009087,
+    "busyMs": 221.863,
+    "busyPercent": 7.3731002127887955,
+    "frames": 181,
+    "fps": 60.15113554377125
+  },
+  {
+    "label": "glass, streaming, rainbow held",
+    "seconds": 3.00351,
+    "busyMs": 211.839,
+    "busyPercent": 7.053047933917317,
+    "frames": 180,
+    "fps": 59.92988203801552
+  },
+  {
+    "label": "glass, streaming, rainbow running",
+    "seconds": 3.002166,
+    "busyMs": 166.294,
+    "busyPercent": 5.539134078528636,
+    "frames": 180,
+    "fps": 59.95671125447427
+  },
+  {
+    "label": "glass, streaming, rainbow held",
+    "seconds": 3.002406,
+    "busyMs": 142.77,
+    "busyPercent": 4.755186340554874,
+    "frames": 180,
+    "fps": 59.951918561313825
+  },
+  {
+    "label": "native, streaming",
+    "seconds": 3.001107,
+    "busyMs": 249.311,
+    "busyPercent": 8.307301272497115,
+    "frames": 180,
+    "fps": 59.9778681666465
+  },
+  {
+    "label": "native, streaming",
+    "seconds": 3.003681,
+    "busyMs": 266.307,
+    "busyPercent": 8.866021391752321,
+    "frames": 180,
+    "fps": 59.92647022103879
+  },
+  {
+    "label": "native, streaming",
+    "seconds": 3.00629,
+    "busyMs": 250.549,
+    "busyPercent": 8.334159379168344,
+    "frames": 180,
+    "fps": 59.87446320880554
+  },
+  {
+    "label": "native, streaming",
+    "seconds": 3.002784,
+    "busyMs": 240.515,
+    "busyPercent": 8.00973363385445,
+    "frames": 180,
+    "fps": 59.944371623133726
+  },
+  {
+    "label": "native, streaming",
+    "seconds": 3.003492,
+    "busyMs": 267.113,
+    "busyPercent": 8.893414731918714,
+    "frames": 180,
+    "fps": 59.93024119924408
+  }
+]
