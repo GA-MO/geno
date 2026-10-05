@@ -242,6 +242,9 @@ const moveActive = (by: number) => () => {
   renderMenu();
 };
 
+/** Keys that move the caret without typing, into or out of a mention. */
+const CARET_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End']);
+
 const MENU_KEYS: Readonly<Record<string, () => void>> = {
   ArrowDown: moveActive(1),
   ArrowUp: moveActive(-1),
@@ -298,7 +301,9 @@ input.addEventListener('input', () => {
   askCompletions();
 });
 input.addEventListener('click', askCompletions);
-input.addEventListener('blur', closeMenu);
+input.addEventListener('keyup', (event) => {
+  if (CARET_KEYS.has(event.key)) askCompletions();
+});
 input.addEventListener('keydown', (event) => {
   if (completing !== undefined && completing.items.length > 0 && !event.isComposing) {
     const move = MENU_KEYS[event.key];
