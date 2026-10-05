@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {
+  BROWSER_SERVER,
   MCP_ENABLE_METHOD,
   MCP_SERVERS_METHOD,
   MCP_TRUST_METHOD,
@@ -8,6 +9,7 @@ import {
   type McpServersResponse,
   type McpTrustRequest,
 } from '@g-code/core';
+import { setBrowserEnabled } from './browser.js';
 import type { Connection } from './engine.js';
 import { isSettling, type McpFromView, type McpListing, type McpToView } from './mcp-model.js';
 
@@ -45,9 +47,13 @@ export class McpServers implements vscode.Disposable {
     'mcp-list': () => this.refresh(),
     'mcp-trust': ({ name, hash }) =>
       void this.ask((link) => link.connection.agent.request<McpServersResponse, McpTrustRequest>(MCP_TRUST_METHOD, { sessionId: link.sessionId, name, hash }), true),
-    'mcp-enable': ({ name, enabled }) =>
-      void this.ask((link) => link.connection.agent.request<McpServersResponse, McpEnableRequest>(MCP_ENABLE_METHOD, { sessionId: link.sessionId, name, enabled }), true),
+    // The browser's switch is the gcode.browser.enabled setting, whose change comes back through setEnabled.
+    'mcp-enable': ({ name, enabled }) => (name === BROWSER_SERVER ? void setBrowserEnabled(enabled) : this.setEnabled(name, enabled)),
   };
+
+  setEnabled(name: string, enabled: boolean): void {
+    void this.ask((link) => link.connection.agent.request<McpServersResponse, McpEnableRequest>(MCP_ENABLE_METHOD, { sessionId: link.sessionId, name, enabled }), true);
+  }
 
   private async ask(request: (link: Link) => Promise<McpServersResponse>, warnOnFailure = false): Promise<void> {
     const generation = ++this.generation;

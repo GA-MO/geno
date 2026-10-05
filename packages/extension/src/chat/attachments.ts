@@ -95,14 +95,21 @@ export async function openTarget(target: OpenTarget, sessionId: string | undefin
     if (sessionId !== undefined && STORED.test(target.file)) file = path.join(gcodeHome(process.env), 'sessions', sessionId, 'attachments', target.file);
   } else {
     const folders = folderPaths().flatMap((f) => f.paths);
-    if (folders.some((root) => inside(root, target.path)) || sent.has(target.path)) file = target.path;
+    const stored = sessionId !== undefined && path.dirname(target.path) === storedDir(sessionId) && STORED.test(path.basename(target.path));
+    if (stored || folders.some((root) => inside(root, target.path)) || sent.has(target.path)) file = target.path;
   }
   if (file !== undefined) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
 }
 
-/** The workspace folders as the webview reaches them, for read thumbnails and markdown images. */
-export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] =>
-  folderPaths().flatMap(({ folder, paths }) => paths.map((root) => ({ path: root, uri: webview.asWebviewUri(folder).toString() })));
+/** Where the engine keeps the sessions' stored attachments, such as the screenshots a browser tool returned. */
+export const sessionsDir = (): string => path.join(gcodeHome(process.env), 'sessions');
+const storedDir = (sessionId: string): string => path.join(sessionsDir(), sessionId, 'attachments');
+
+/** The workspace folders and the stored attachments as the webview reaches them, for tool thumbnails and markdown images. */
+export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] => [
+  ...folderPaths().flatMap(({ folder, paths }) => paths.map((root) => ({ path: root, uri: webview.asWebviewUri(folder).toString() }))),
+  { path: sessionsDir(), uri: webview.asWebviewUri(vscode.Uri.file(sessionsDir())).toString() },
+];
 
 /** The image files a tool call's content links to, as the engine sends a read of an image. */
 export function imagesOf(content: readonly acp.ToolCallContent[] | null | undefined): ToolImage[] {

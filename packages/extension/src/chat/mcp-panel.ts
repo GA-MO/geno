@@ -48,6 +48,8 @@ function trustCard(server: McpServerView, post: (message: McpFromView) => void):
   );
 }
 
+const BUILTIN_NOTE = 'Chrome with a fresh profile that is thrown away after each chat, never yours. Pages on this machine open without asking; any other site asks first.';
+
 const shortTool = (server: string, tool: string): string => tool.replace(new RegExp(`^mcp__${server.replace(/[^A-Za-z0-9_]/g, '_')}__`), '');
 
 function serverRow(server: McpServerView, post: (message: McpFromView) => void): HTMLElement {
@@ -72,7 +74,7 @@ function serverRow(server: McpServerView, post: (message: McpFromView) => void):
           role: 'switch',
           'aria-checked': String(on),
           'aria-label': `${server.name} on`,
-          title: on ? `Turn ${server.name} off for this workspace` : `Turn ${server.name} on`,
+          title: server.source === 'builtin' ? `Turn the ${server.name} ${on ? 'off' : 'on'} (the gcode.browser.enabled setting)` : on ? `Turn ${server.name} off for this workspace` : `Turn ${server.name} on`,
           'data-focus': `switch:${server.name}`,
           onclick: () => post({ type: 'mcp-enable', name: server.name, enabled: !on }),
         },
@@ -80,6 +82,7 @@ function serverRow(server: McpServerView, post: (message: McpFromView) => void):
       ),
     ),
     badge.detail !== undefined && h('p', { class: `mcp-detail tone-${badge.tone}` }, badge.detail),
+    server.source === 'builtin' && h('p', { class: 'mcp-detail tone-quiet' }, BUILTIN_NOTE),
     awaitsApproval(server) && trustCard(server, post),
     server.tools.length > 0 && h('p', { class: 'mcp-tools' }, server.tools.map((tool) => shortTool(server.name, tool)).join(', ')),
   );

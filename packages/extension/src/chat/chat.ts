@@ -10,6 +10,7 @@ import {
   hunkIdOf,
   APPROVAL_META,
   ASK_USER_FIELDS,
+  BROWSER_SERVER,
   INLINE_EDIT_META,
   MEMORY_SCOPES,
   REMEMBER_META,
@@ -30,12 +31,13 @@ import {
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
-import { droppedUris, imagesOf, openTarget, pickFiles, promptBlocks, readForComposer, viewsOf, webviewRoots } from './attachments.js';
+import { droppedUris, imagesOf, openTarget, pickFiles, promptBlocks, readForComposer, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
+import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { Mentions } from './context.js';
 import {
@@ -365,6 +367,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.dispatch({ type: 'review', hunks: Object.fromEntries(hunks.map((h) => [h.id, h.status])) });
   }
 
+  /** Turns the open chat's browser on or off as the setting now says; a new chat reads the setting itself. */
+  syncBrowser(): void {
+    this.mcp.setEnabled(BROWSER_SERVER, browserSettings().enabled);
+  }
+
   dispose(): void {
     this.mcp.dispose();
     this.switched.dispose();
@@ -527,7 +534,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const { cwd } = connection;
     if (this.shown !== undefined) {
       try {
-        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers() });
+        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
         this.remode(modesOf(modes) ?? this.modes);
         return this.shown;
       } catch {
@@ -550,7 +557,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Starts a session in `mode`, by default the one the settings give new sessions. */
   private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode()): Promise<string> {
-    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers() });
+    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
     let state = modesOf(modes) ?? { current: mode, available: MODE_FALLBACK };
     if (state.current !== mode && state.available.some((m) => m.id === mode)) {
       await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
@@ -568,7 +575,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.replay = replay;
     let modes: Modes | undefined;
     try {
-      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers() })).modes);
+      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() })).modes);
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
@@ -823,7 +830,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri)] };
+    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri), vscode.Uri.file(sessionsDir())] };
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.look());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));

@@ -90,7 +90,7 @@ import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
-import { browserSettingsOf } from './mcp/browser.js';
+import { browserLauncherOf, browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logMode } from './sessions.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
@@ -754,7 +754,7 @@ export const serve: Command = async (args, { io, store }) => {
   // stdout carries the protocol, so everything the engine prints goes to stderr, and so does anything a dependency prints.
   const quiet: Io = { ...io, out: io.err, write: () => {} };
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
-  const mcp = mcpSessions(store, io.env, quiet.err);
+  const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env));
   const connection = gcodeAgent(quiet, store, limitsOf(values), mcp).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
   await connection.closed;

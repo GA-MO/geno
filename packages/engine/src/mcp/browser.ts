@@ -30,10 +30,21 @@ import { executor, resolveInside, resolveWritable, ToolDenied, ToolError, type E
 import type { McpServerHandle } from './server.js';
 
 /** How the server process is started; the flags that matter for safety are added after it by browserServerConfig. */
-export type BrowserLauncher = { readonly command: string; readonly args: readonly string[] };
+export type BrowserLauncher = { readonly command: string; readonly args: readonly string[]; readonly env?: Readonly<Record<string, string>> };
 
 /** The exact version through npx; never `@latest`. */
 export const NPX_LAUNCHER: BrowserLauncher = { command: 'npx', args: ['-y', `${BROWSER_PACKAGE}@${BROWSER_SERVER_VERSION}`] };
+
+/**
+ * The launcher for this engine: npx, or a server script already on disk named by GCODE_BROWSER_SERVER_BIN, run with
+ * this node, for tests and offline machines. Geno's flags follow either way.
+ */
+export const browserLauncherOf = (env: Readonly<Record<string, string | undefined>>): BrowserLauncher => {
+  const bin = env['GCODE_BROWSER_SERVER_BIN'];
+  if (bin === undefined || bin === '') return NPX_LAUNCHER;
+  // Inside VS Code this node is Electron, which opens a window unless told to run as node.
+  return { command: process.execPath, args: [bin], ...(process.versions.electron === undefined ? {} : { env: { ELECTRON_RUN_AS_NODE: '1' } }) };
+};
 
 /** A session's browser: the editor's settings and how to start the server. */
 export type BrowserOptions = { readonly settings: BrowserSettings; readonly launcher: BrowserLauncher; readonly home: string };
@@ -58,7 +69,13 @@ export function browserSettingsOf(meta: Readonly<Record<string, unknown>> | null
 export const browserServerConfig = ({ settings, launcher, home }: BrowserOptions, workspace: string): McpServerConfig => ({
   name: BROWSER_SERVER,
   source: 'builtin',
-  transport: { kind: 'stdio', command: launcher.command, args: [...launcher.args, ...browserServerArgs(settings, workspace)], env: BROWSER_SERVER_ENV, cwd: home },
+  transport: {
+    kind: 'stdio',
+    command: launcher.command,
+    args: [...launcher.args, ...browserServerArgs(settings, workspace)],
+    env: { ...launcher.env, ...BROWSER_SERVER_ENV },
+    cwd: home,
+  },
 });
 
 /** Where the browser's pages are, by the server's page id, as its last listing said. */
