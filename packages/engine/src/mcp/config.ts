@@ -137,6 +137,8 @@ export async function loadMcpConfig(store: Store, env: Env, workspace: string, e
     'vscode-mcp-json': await readSource(path.join(workspace, '.vscode', 'mcp.json'), 'vscode-mcp-json', env, workspace, problems),
     'mcp-json': await readSource(path.join(workspace, '.mcp.json'), 'mcp-json', env, workspace, problems),
     acp: fromAcp(editor, problems),
+    // The built-in browser is added by the hub, from the editor's settings, never from a file.
+    builtin: [],
   };
   const merged = new Map<string, McpServerConfig>();
   for (const source of MCP_SOURCES) {
