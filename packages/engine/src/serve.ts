@@ -61,6 +61,20 @@ import {
   type Mention,
   type TurnEvent,
   type UnsavedBuffersRequest,
+  appliedRules,
+  askUserSchema,
+  ASK_USER_FIELDS,
+  GLOBAL_RULES_METHOD,
+  MEMORY_CAPABILITY,
+  MEMORY_DELETE_METHOD,
+  MEMORY_EDIT_METHOD,
+  MEMORY_METHOD,
+  REMEMBER_META,
+  RULES_METHOD,
+  type AskUserAnswer,
+  type GlobalRulesResponse,
+  type MemoryResponse,
+  type RulesResponse,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
 import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments, type Incoming } from './attachments.js';
@@ -68,6 +82,8 @@ import { openSessionLog, resumeSession, startSession, type OpenSession } from '.
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
 import { homeOf, runBuiltin, sessionCommands } from './commands.js';
+import { MemoryError, memoryStore } from './memory.js';
+import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
@@ -83,6 +99,7 @@ import type { Store } from './store.js';
 import type { Approval, Approver, Diagnostics, PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import { ruleAttacher } from './tools/rules.js';
+import type { UserChannel } from './tools/user.js';
 
 const RESOURCE_NOT_FOUND = -32002;
 
@@ -137,7 +154,16 @@ const diagnosticsResponse = z.object({
   ),
 });
 
-type Peer = { readonly files: boolean; readonly diagnostics: boolean; readonly unsaved: boolean; readonly notices: boolean };
+type Peer = {
+  readonly files: boolean;
+  readonly diagnostics: boolean;
+  readonly unsaved: boolean;
+  readonly notices: boolean;
+  /** It answers ACP form elicitations, which carry ask_user's questions. */
+  readonly elicitation: boolean;
+  /** It shows a remember question as a memory card with the exact text. */
+  readonly memory: boolean;
+};
 
 type Updates = { send(update: acp.SessionUpdate): void; flush(): Promise<void> };
 
@@ -230,6 +256,7 @@ function editorDiagnostics(client: acp.AgentContext, sessionId: string): Diagnos
 type Turn = {
   readonly surface: Surface;
   readonly approve: Approver;
+  readonly user: UserChannel;
   readonly updates: Updates;
   /** What the turn's model calls used so far, for the prompt response; nothing before the first call. */
   usage(): Pick<acp.PromptResponse, 'usage' | '_meta'>;
@@ -259,6 +286,7 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
   let spent: Spent | undefined;
   return {
     updates: sent,
+    user: editorUser(client, sessionId, peer, () => sent.flush(), () => running),
     usage: () => usageOf(spent),
     surface: {
       files: peer.files ? editorFiles(client, sessionId, peer, () => running) : DISK_FILES,
@@ -297,6 +325,60 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
   };
 }
 
+const REMEMBER_OPTIONS: acp.PermissionOption[] = [
+  { optionId: 'allow', name: 'Remember', kind: 'allow_once' },
+  { optionId: 'reject', name: "Don't remember", kind: 'reject_once' },
+];
+
+const SCOPE_WORDS = { project: 'in this project', global: 'in every project' } as const;
+
+const elicitationAnswer = z.looseObject({ action: z.string(), content: z.record(z.string(), z.unknown()).nullish() });
+
+/** The user's reply to an ask_user form: the option picked or the words typed; anything else declines. */
+function askUserAnswerOf(raw: unknown): AskUserAnswer {
+  const parsed = elicitationAnswer.safeParse(raw);
+  if (!parsed.success || parsed.data.action !== 'accept') return { kind: 'declined' };
+  const content = parsed.data.content ?? {};
+  const picked = [content[ASK_USER_FIELDS.choice], content[ASK_USER_FIELDS.answer]].find((value): value is string => typeof value === 'string' && value.trim() !== '');
+  return picked === undefined ? { kind: 'declined' } : { kind: 'answered', text: picked.trim() };
+}
+
+/** The cards this editor can show: a remember question with its exact text, and an ask_user question as a form. */
+function editorUser(client: acp.AgentContext, sessionId: string, peer: Peer, flush: () => Promise<void>, running: () => acp.ToolCallId): UserChannel {
+  return {
+    ...(peer.memory
+      ? {
+          async remember(input, signal) {
+            await flush();
+            const { outcome } = await client.request(
+              acp.methods.client.session.requestPermission,
+              {
+                sessionId,
+                toolCall: { toolCallId: running(), title: `Remember this ${SCOPE_WORDS[input.scope]}?`, kind: 'other', status: 'pending', rawInput: input, _meta: { [REMEMBER_META]: input } },
+                options: REMEMBER_OPTIONS,
+              },
+              { cancellationSignal: signal },
+            );
+            return outcome.outcome === 'selected' && outcome.optionId === 'allow';
+          },
+        }
+      : {}),
+    ...(peer.elicitation
+      ? {
+          async ask_user(request, signal) {
+            await flush();
+            const raw: unknown = await client.request(
+              acp.methods.client.elicitation.create,
+              { mode: 'form', sessionId, toolCallId: running(), message: request.question, requestedSchema: askUserSchema(request) },
+              { cancellationSignal: signal },
+            );
+            return askUserAnswerOf(raw);
+          },
+        }
+      : {}),
+  };
+}
+
 const sessionInfo = (summary: SessionSummary): acp.SessionUpdate => ({ sessionUpdate: 'session_info_update', title: summary.title, updatedAt: summary.updatedAt });
 
 function sessionInfoOf(summary: SessionSummary): acp.SessionInfo {
@@ -321,6 +403,9 @@ const rewindRequest = z.object({ sessionId: z.string() });
 const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
+const sessionRequest = z.object({ sessionId: z.string() });
+const memoryEditRequest = z.object({ sessionId: z.string(), id: z.string().min(1), text: z.string() });
+const memoryDeleteRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
 const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
@@ -392,7 +477,7 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env)): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false };
+  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false };
   const turns = new Map<string, AbortController | undefined>();
   // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
   const modes = new Map<string, SessionMode>();
@@ -422,16 +507,28 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const known = (sessionId: string) => {
     if (!turns.has(sessionId)) throw acp.RequestError.invalidParams({ sessionId }, `no session ${sessionId}`);
   };
+  const memoryOf = async (sessionId: string) => {
+    known(sessionId);
+    return memoryStore(homeOf(store), (await existing(sessionId)).session.workspace);
+  };
+  const refusedMemory =
+    (id: string) =>
+    (error: unknown): never => {
+      if (error instanceof MemoryError) throw acp.RequestError.invalidParams({ id }, error.message);
+      throw error;
+    };
 
   return acp
     .agent({ name: 'gcode' })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
-      const { fs, _meta, session } = params.clientCapabilities ?? {};
+      const { fs, _meta, session, elicitation } = params.clientCapabilities ?? {};
       peer = {
         files: fs?.readTextFile === true && fs.writeTextFile === true,
         diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true,
         unsaved: _meta?.[UNSAVED_BUFFERS_CAPABILITY] === true,
         notices: session?.notices != null,
+        elicitation: elicitation?.form != null,
+        memory: _meta?.[MEMORY_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -502,6 +599,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { sessionId } = params;
       turns.get(sessionId)?.abort();
       turns.delete(sessionId);
+      commands.detach(sessionId);
       await mcp.close(sessionId);
       return {};
     })
@@ -570,6 +668,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                   surface: turn.surface,
                   diagnostics,
                   mcp: await mcp.toolset(sessionId, approval),
+                  user: turn.user,
                 })
               : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
           await turn.updates.flush();
@@ -612,6 +711,24 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         return { files: files.map((file) => path.join(log.session.workspace, file)) };
       });
     })
+    .onRequest(RULES_METHOD, sessionRequest, async ({ params }): Promise<RulesResponse> => {
+      known(params.sessionId);
+      const log = await existing(params.sessionId);
+      const start = log.events[0];
+      const context = start?.kind === 'session-start' ? start.context : undefined;
+      return { rules: context === undefined ? [] : appliedRules(context, log.session.workspace), globalFile: globalRulesFile(homeOf(store)) };
+    })
+    .onRequest(GLOBAL_RULES_METHOD, sessionRequest, async ({ params }): Promise<GlobalRulesResponse> => {
+      known(params.sessionId);
+      return { file: await ensureGlobalRules(homeOf(store)) };
+    })
+    .onRequest(MEMORY_METHOD, sessionRequest, async ({ params }): Promise<MemoryResponse> => ({ entries: await (await memoryOf(params.sessionId)).list() }))
+    .onRequest(MEMORY_EDIT_METHOD, memoryEditRequest, async ({ params }): Promise<MemoryResponse> => ({
+      entries: await (await memoryOf(params.sessionId)).edit(params.id, params.text).catch(refusedMemory(params.id)),
+    }))
+    .onRequest(MEMORY_DELETE_METHOD, memoryDeleteRequest, async ({ params }): Promise<MemoryResponse> => ({
+      entries: await (await memoryOf(params.sessionId)).remove(params.id).catch(refusedMemory(params.id)),
+    }))
     .onRequest(MCP_SERVERS_METHOD, mcpServersRequest, async ({ params }): Promise<McpServersResponse> => {
       known(params.sessionId);
       return mcp.servers(params.sessionId);

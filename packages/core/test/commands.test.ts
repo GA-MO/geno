@@ -103,8 +103,8 @@ describe('the command table', () => {
       mode: 'engine',
       model: 'client',
       clear: 'client',
-      rules: 'engine',
-      memory: 'engine',
+      rules: 'client',
+      memory: 'client',
       init: 'engine',
     });
     expect(BUILTIN_COMMANDS.init.description).toBe('Create or update AGENTS.md for this project');

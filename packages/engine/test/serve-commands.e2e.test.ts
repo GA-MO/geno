@@ -141,7 +141,7 @@ describe('gcode serve slash commands', () => {
       expect((await say(ctx, sessionId, '/mode auto')).stopReason).toBe('end_turn');
       expect((await say(ctx, sessionId, '/mode yolo')).stopReason).toBe('end_turn');
       expect((await say(ctx, sessionId, '/new')).stopReason).toBe('end_turn');
-      expect((await say(ctx, sessionId, '/init')).stopReason).toBe('end_turn');
+      expect((await say(ctx, sessionId, '/rules')).stopReason).toBe('end_turn');
       await say(ctx, sessionId, '/usr/bin what is this');
       return sessionId;
     });
@@ -152,7 +152,7 @@ describe('gcode serve slash commands', () => {
       'Approval mode: auto.',
       'Usage: /mode plan | ask | auto',
       '/new runs in the editor, and this client does not offer it.',
-      'Creating AGENTS.md is not available yet.',
+      '/rules runs in the editor, and this client does not offer it.',
     ]);
     expect(transport.requests).toHaveLength(1);
     expect(firstMessage(transport.requests[0]!.body)).toEqual([{ type: 'text', text: '/usr/bin what is this' }]);

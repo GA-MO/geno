@@ -10,7 +10,9 @@ import {
   describeServerState,
   isSessionMode,
   pstackNote,
+  renderMemory,
   sessionModeOf,
+  userToolDefinitions,
   type SessionMode,
   type TurnEvent,
 } from '@g-code/core';
@@ -24,10 +26,12 @@ import { writeGenoTools } from './geno-tools.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
+import { memoryStore } from './memory.js';
 import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
-import { agentExecutors, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
@@ -62,6 +66,8 @@ export type AgentOptions = {
   readonly diagnostics?: Diagnostics | undefined;
   /** The session's MCP tools for this turn, after the built-in ones. */
   readonly mcp?: McpToolset | undefined;
+  /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
+  readonly user?: UserChannel | undefined;
 };
 
 export const askOnTerminal =
@@ -101,11 +107,15 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // The run offers the tools and prompt of the mode it starts in; a switch mid-run applies from the next run.
     // MCP tools are offered in every mode, and their rules decide what each mode lets them do.
     const startMode = options.approval.kind === 'interactive' ? options.approval.mode() : 'non-interactive';
-    const own = AGENT_MODE_TOOL_DEFINITIONS[startMode];
+    const memory = memoryStore(homeOf(store), workspace);
+    const channel = options.approval.kind === 'interactive' ? (options.user ?? {}) : {};
+    const user = userExecutors({ channel, mode: () => modeOf(options.approval), memory, sessionId: session.id });
+    const own = [...AGENT_MODE_TOOL_DEFINITIONS[startMode], ...userToolDefinitions(startMode, shownUserTools(channel))];
+    const notes = renderMemory(await memory.list());
     const mode = {
       tools: mcp === undefined ? own : [...own, ...mcp.tools],
-      executors: mcp === undefined ? executors : { ...mcp.executors, ...executors },
-      system: genoTools === undefined ? AGENT_MODE_SYSTEM_PROMPTS[startMode] : `${AGENT_MODE_SYSTEM_PROMPTS[startMode]}\n\n${pstackNote(genoTools)}`,
+      executors: { ...mcp?.executors, ...user, ...executors },
+      system: [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n'),
       readRoots: [...plugins.map((plugin) => plugin.root), ...(genoTools === undefined ? [] : [genoTools])],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
     };
