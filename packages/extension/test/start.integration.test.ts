@@ -156,7 +156,7 @@ async function logSession(home: string, workspace: string, { id, prompt, at }: (
 }
 
 describe('the start page and the peek in VS Code', () => {
-  it('shows Noodle alone with geno, the branch and recent sessions; loads one; peeks over the composer after a turn', async () => {
+  it('shows Noodle alone with geno, the branch and recent sessions; loads one; peeks over the composer while the user types', async () => {
     const { home, workspace, suite, launchArgs } = await setUp('start', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const git = spawnSync('git', ['init', '-q', '-b', BRANCH, workspace], { encoding: 'utf8' });

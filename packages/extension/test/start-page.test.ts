@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { branchOfHead } from '../src/git-branch.js';
 import type { HistoryRow } from '../src/chat/messages.js';
 import { motionOf } from '../src/chat/motion.js';
-import { gazeOf, peekState } from '../src/chat/peek-model.js';
+import { gazeOf, HIDDEN, peekNext, type Peek, type PeekEvent } from '../src/chat/peek-model.js';
 import { recentSessions } from '../src/chat/recents.js';
 
 const row = (id: string, updatedAt: number, over: Partial<HistoryRow> = {}): HistoryRow => ({
@@ -41,19 +41,45 @@ describe('the start page', () => {
 });
 
 describe('the peek over the composer', () => {
-  const idle = { turns: 1, running: false, composerFocused: false, draft: '' };
+  const run = (events: readonly PeekEvent[], from: Peek = HIDDEN): Peek => events.reduce(peekNext, from);
+  const typed = (draft: string): PeekEvent => ({ kind: 'typed', draft });
+  const up: Peek = { act: 'typing', waved: true, blocked: false };
 
-  it('peeks once the chat is idle after a turn', () => {
-    expect(peekState(idle)).toBe('up');
+  it('climbs once the composer holds a few typed characters, and waves the first time only', () => {
+    expect(run([typed('f'), typed('fi')]).act).toBe('away');
+    expect(run([typed('fix')]).act).toBe('climb');
+    expect(run([typed('fix'), { kind: 'played' }])).toEqual({ act: 'wave', waved: true, blocked: false });
+    expect(run([typed('fix'), { kind: 'played' }, { kind: 'played' }]).act).toBe('typing');
+    expect(run([typed('fix'), { kind: 'played' }], { ...HIDDEN, waved: true }).act).toBe('typing');
   });
 
-  it('ducks while the composer has focus or holds text, and hides while a turn runs or before any turn', () => {
-    expect(peekState({ ...idle, composerFocused: true })).toBe('ducked');
-    expect(peekState({ ...idle, draft: 'fix it' })).toBe('ducked');
-    expect(peekState({ ...idle, draft: '   ' })).toBe('up');
-    expect(peekState({ ...idle, running: true })).toBe('away');
-    expect(peekState({ ...idle, running: true, composerFocused: true })).toBe('away');
-    expect(peekState({ ...idle, turns: 0 })).toBe('away');
+  it('climbs once per message, not per keystroke', () => {
+    expect(run([typed('fix'), typed('fix '), typed('fix i')]).act).toBe('climb');
+    expect(run([typed('fix it'), typed('fix it now')], up).act).toBe('typing');
+  });
+
+  it('plays one move after a pause in typing, then waits again; typing cuts a move short', () => {
+    expect(run([{ kind: 'quiet', random: 0 }], up).act).toBe('drum');
+    expect(run([{ kind: 'quiet', random: 0.9 }], up).act).toBe('lookAround');
+    expect(run([{ kind: 'quiet', random: 0 }, { kind: 'played' }], up).act).toBe('typing');
+    expect(run([{ kind: 'quiet', random: 0 }, typed('fix it!')], up).act).toBe('typing');
+    expect(run([{ kind: 'quiet', random: 0 }], { ...up, act: 'climb' }).act).toBe('climb');
+  });
+
+  it('ducks the moment the message is sent or the composer is emptied, then is away', () => {
+    expect(run([{ kind: 'sent' }], up).act).toBe('duck');
+    expect(run([typed('')], up).act).toBe('duck');
+    expect(run([typed('   ')], up).act).toBe('duck');
+    expect(run([{ kind: 'sent' }, { kind: 'played' }], up).act).toBe('away');
+    expect(run([{ kind: 'sent' }]).act).toBe('away');
+  });
+
+  it('stays hidden while a turn runs, even while the user types a follow-up, and while the chat is idle', () => {
+    expect(run([{ kind: 'blocked', on: true }], up).act).toBe('duck');
+    expect(run([{ kind: 'blocked', on: true }, typed('and then this')]).act).toBe('away');
+    expect(run([{ kind: 'blocked', on: true }, { kind: 'blocked', on: false }]).act).toBe('away');
+    expect(run([{ kind: 'quiet', random: 0 }]).act).toBe('away');
+    expect(run([{ kind: 'blocked', on: true }, { kind: 'blocked', on: false }, typed('next one')]).act).toBe('climb');
   });
 
   it('looks left or right toward the pointer, and up when the pointer is well above the eye', () => {

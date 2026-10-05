@@ -1,71 +1,100 @@
 /// <reference lib="dom" />
 import { h } from './dom.js';
-import { gazeOf, peekState, type PeekInput, type PeekState } from './peek-model.js';
+import type { Motion } from './motion.js';
+import { gazeOf, HIDDEN, peekNext, QUIET_MS, type Peek, type PeekEvent } from './peek-model.js';
 import { spriteCanvas } from './sprite-canvas.js';
-import { STAND, type Eye } from './sprite.js';
+import { composePeek, PEEK_MOVES, playhead, SIZE, type PeekFrame } from './sprite.js';
+import { TICK_MS } from './wander.js';
 
-/** Noodle's head, rows 0 to 11, and the columns around it. */
-const HEAD = { x: 12, y: 0, width: 12, height: 12 } as const;
-/** The peek draws the head at 2×. */
+/** The peek draws Noodle at 2×. */
 const SCALE = 2;
-/** The eye's middle inside the head, in page pixels. */
-const EYE = { x: (17 - HEAD.x + 1) * SCALE, y: (3 + 0.5) * SCALE } as const;
-const BLINK_EVERY_MS = 4000;
-const BLINK_MS = 140;
+/** The eye's middle inside the canvas, in page pixels. */
+const EYE = { x: (17 + 1) * SCALE, y: (3 + 0.5) * SCALE } as const;
+/** Gripping the edge, looking ahead: all the peek shows when frames do not play. */
+const STILL: PeekFrame = { eye: 'open', left: 'grip', right: 'grip' };
 
 /**
- * Noodle's head peeking over the composer's top edge while the chat is idle after a turn. Its eyes follow the
- * pointer unless `tracking` is off; it ducks behind the composer while the user is typing, and is away during a turn.
+ * Noodle leaning on the composer's top edge while the user types: it climbs up once per message, watches the text,
+ * plays one move after a pause, and ducks behind the composer on send. The composer's edge clips the body, so
+ * climbing and ducking slide all of it. Under reduced motion or high contrast it is still: no moves, no gaze.
  */
-export function peek() {
-  const head = spriteCanvas('peek-head', HEAD);
-  const element = h('div', { class: 'peek', 'aria-hidden': 'true', 'data-state': 'away' }, head.element);
-  let state: PeekState = 'away';
-  let eye: Eye = 'open';
-  let tracking = true;
-  let blink: ReturnType<typeof setInterval> | undefined;
+export function peek(onShown: (shown: boolean) => void) {
+  const body = spriteCanvas('peek-body');
+  const element = h('div', { class: 'peek', 'aria-hidden': 'true', 'data-state': 'away' }, body.element);
+  let state: Peek = HIDDEN;
+  let t = 0;
+  let motion: Motion = 'paused';
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let quiet: ReturnType<typeof setTimeout> | undefined;
+  let pointer: { readonly x: number; readonly y: number } | undefined;
+  let sunk = '';
 
-  const draw = (shown: Eye) => head.draw({ ...STAND, eye: shown });
-
-  function look(next: Eye): void {
-    eye = next;
-    draw(eye);
+  function frameNow(): PeekFrame | undefined {
+    if (state.act === 'away') return undefined;
+    if (motion === 'still') return state.act === 'duck' ? undefined : STILL;
+    return playhead(PEEK_MOVES[state.act], t, true).frame;
   }
 
-  function update(input: PeekInput): void {
-    state = peekState(input);
-    element.dataset['state'] = state;
-    const blinking = state === 'up' && tracking;
-    if (blinking) blink ??= setInterval(() => (draw('blink'), setTimeout(() => draw(eye), BLINK_MS)), BLINK_EVERY_MS);
+  function draw(): void {
+    element.dataset['state'] = state.act;
+    const frame = frameNow();
+    if (frame === undefined) return;
+    let eye = frame.eye;
+    if (frame.toPointer === true && pointer !== undefined) {
+      const box = body.element.getBoundingClientRect();
+      eye = gazeOf(pointer.x - (box.left + EYE.x), pointer.y - (box.top + EYE.y));
+    }
+    body.paint(composePeek({ ...frame, eye }));
+    const transform = `translateY(${Math.min(SIZE, frame.sink ?? 0) * SCALE}px)`;
+    if (transform !== sunk) body.element.style.transform = sunk = transform;
+  }
+
+  function dispatch(event: PeekEvent): void {
+    const was = state.act;
+    state = peekNext(state, event);
+    if (state.act !== was) t = 0;
+    run();
+  }
+
+  function tick(): void {
+    t++;
+    if (state.act !== 'away' && playhead(PEEK_MOVES[state.act], t, true).ended) return dispatch({ kind: 'played' });
+    draw();
+  }
+
+  function run(): void {
+    // Without frames, a move is over as soon as it starts.
+    while (motion === 'still' && state.act !== 'away' && state.act !== 'typing') state = peekNext(state, { kind: 'played' });
+    onShown(state.act !== 'away');
+    draw();
+    if (motion === 'moving' && state.act !== 'away') timer ??= setInterval(tick, TICK_MS);
     else {
-      clearInterval(blink);
-      blink = undefined;
+      clearInterval(timer);
+      timer = undefined;
     }
   }
 
-  let pending: { readonly x: number; readonly y: number } | undefined;
-  document.addEventListener('mousemove', (event) => {
-    if (!tracking || state !== 'up') return;
-    const first = pending === undefined;
-    pending = { x: event.clientX, y: event.clientY };
-    if (!first) return;
-    requestAnimationFrame(() => {
-      const box = head.element.getBoundingClientRect();
-      look(gazeOf(pending!.x - (box.left + EYE.x), pending!.y - (box.top + EYE.y)));
-      pending = undefined;
-    });
-  });
-  document.documentElement.addEventListener('mouseleave', () => look('open'));
+  document.addEventListener('mousemove', (event) => (pointer = { x: event.clientX, y: event.clientY }), { passive: true });
 
-  look('open');
   return {
     element,
-    update,
-    /** Off under reduced motion and in high contrast: the head looks ahead and does not blink. */
-    setTracking: (on: boolean, input: PeekInput) => {
-      tracking = on;
-      if (!on) look('open');
-      update(input);
+    /** A keystroke changed the draft; a pause after it may bring a move. */
+    typed(draft: string): void {
+      clearTimeout(quiet);
+      dispatch({ kind: 'typed', draft });
+      if (motion !== 'still') quiet = setTimeout(() => dispatch({ kind: 'quiet', random: Math.random() }), QUIET_MS);
+    },
+    sent(): void {
+      clearTimeout(quiet);
+      dispatch({ kind: 'sent' });
+    },
+    /** A turn runs, or the chat is not on screen. */
+    blocked(on: boolean): void {
+      if (on !== state.blocked) dispatch({ kind: 'blocked', on });
+    },
+    setMotion(now: Motion): void {
+      motion = now;
+      run();
     },
   };
 }

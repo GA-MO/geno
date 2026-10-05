@@ -52,14 +52,19 @@ function kindOfCall(tool: ToolBlock): WorkKind {
   return CODE_EXTENSIONS.has(extensionOf(tool.diff?.path ?? tool.target)) ? 'code' : 'write';
 }
 
+/** What the turn is doing now, and its latest call, which a fast call may already have finished. */
+export type Work = { readonly kind: WorkKind; readonly latest?: { readonly id: string; readonly kind: WorkKind } };
+
 /** A card waiting on the user comes first, then a failed step, then Plan mode, then the call under way. */
-export function workOf(turn: Turn): WorkKind {
-  if (isWaiting(turn)) return 'ask';
+export function workOf(turn: Turn): Work {
   const calls = turn.blocks.filter((block): block is ToolBlock => block.kind === 'tool');
+  const last = calls.at(-1);
+  const latest = last === undefined ? {} : { latest: { id: last.id, kind: turn.mode === 'plan' ? 'plan' : kindOfCall(last) } as const };
+  if (isWaiting(turn)) return { kind: 'ask', ...latest };
   const running = calls.findLast((tool) => tool.status === 'running');
-  if (running === undefined && calls.at(-1)?.status === 'failed') return 'failed';
-  if (turn.mode === 'plan') return 'plan';
-  return running === undefined ? 'thinking' : kindOfCall(running);
+  if (running === undefined && last?.status === 'failed') return { kind: 'failed', ...latest };
+  if (turn.mode === 'plan') return { kind: 'plan', ...latest };
+  return { kind: running === undefined ? 'thinking' : kindOfCall(running), ...latest };
 }
 
 /** How a check's result reads, from `check` and from the check an edit runs after itself. */
@@ -94,6 +99,8 @@ export function endingOf(turn: Turn, random: () => number): 'flex' | 'hop' | 'so
  */
 export type Working = {
   readonly turn: string;
+  /** The latest call the dino has shown. */
+  readonly call: string | undefined;
   readonly pose: PoseName;
   readonly t: number;
   readonly intro: boolean;
@@ -104,9 +111,9 @@ export type Working = {
 /** A pose shows at least this many ticks, about 1.4 s, before thinking takes over, however short its frames. */
 export const HOLD_TICKS = 20;
 
-function switchTo(was: Working | undefined, turn: string, pose: PoseName, ending: boolean): Working {
+function switchTo(was: Working | undefined, turn: string, call: string | undefined, pose: PoseName, ending: boolean): Working {
   const coded = was?.turn === turn && was.coded;
-  return { turn, pose, t: 0, intro: !(pose === 'coding' && coded), coded: coded || pose === 'coding', ending };
+  return { turn, call, pose, t: 0, intro: !(pose === 'coding' && coded), coded: coded || pose === 'coding', ending };
 }
 
 /**
@@ -121,15 +128,17 @@ export function steer(was: Working | undefined, turn: Turn | undefined, still: b
     if (ours === undefined || still) return undefined;
     if (!ours.ending) {
       const ending = endingOf(turn, random);
-      return ending === undefined ? undefined : switchTo(ours, turn.id, ending, true);
+      return ending === undefined ? undefined : switchTo(ours, turn.id, ours.call, ending, true);
     }
     return playhead(POSES[ours.pose], ours.t, ours.intro).ended ? undefined : ours;
   }
-  const pose = WORK_POSES[workOf(turn)];
-  if (ours === undefined) return switchTo(undefined, turn.id, pose, false);
-  if (pose === ours.pose) return ours;
+  const { kind, latest } = workOf(turn);
+  // A call that started and finished between two renders still shows, before the thinking that follows it.
+  const pose = WORK_POSES[kind === 'thinking' && latest !== undefined && latest.id !== ours?.call ? latest.kind : kind];
+  if (ours === undefined) return switchTo(undefined, turn.id, latest?.id, pose, false);
+  if (pose === ours.pose) return latest?.id === ours.call ? ours : { ...ours, call: latest?.id };
   if (pose === 'thinking' && !still && (ours.t < HOLD_TICKS || !playhead(POSES[ours.pose], ours.t, ours.intro).cycled)) return ours;
-  return switchTo(ours, turn.id, pose, false);
+  return switchTo(ours, turn.id, latest?.id, pose, false);
 }
 
 /** What the dino shows now; when frames do not play, each pose's first loop frame. */
