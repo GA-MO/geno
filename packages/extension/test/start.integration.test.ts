@@ -22,9 +22,11 @@ const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 /** GCODE_SCREENSHOTS names a folder for the screenshots, the start page GIF and the CPU profile's numbers. */
 const shots = process.env['GCODE_SCREENSHOTS'];
 const PROFILE_MS = 10_000;
-const GIF_FRAMES = 90;
+/** About 8 s of the start page, one still per 70 ms tick, paced to the clock so the GIF plays at the page's speed. */
+const GIF_FRAMES = 115;
+const GIF_MS = 70;
 /** Partway through the GIF, a click on Noodle for a somersault. */
-const GIF_CLICK_AT = 40;
+const GIF_CLICK_AT = 50;
 let debugPort = 0;
 let window: Window | undefined;
 const requests: unknown[] = [];
@@ -43,7 +45,7 @@ async function bodyOf(req: IncomingMessage): Promise<string> {
 
 const READY = '.transcript';
 
-/** The panel as stills taken back to back, stitched at their measured pace into a looping GIF. */
+/** The panel as a still each tick, stitched into a looping GIF. */
 async function recordPanel(w: Window, file: string): Promise<void> {
   const clip = await panelClip(w);
   const dir = await mkdtemp(path.join(tmpdir(), 'gcode-start-'));
@@ -51,13 +53,15 @@ async function recordPanel(w: Window, file: string): Promise<void> {
   const started = Date.now();
   for (let i = 0; i < GIF_FRAMES; i++) {
     if (i === GIF_CLICK_AT) await click(await webview(w, EXTENSION, READY), '.start-dino');
+    // The real window can lose the focus mid-recording, which rests Noodle; the recording keeps it awake.
+    await evaluate(await webview(w, EXTENSION, READY), `(doc.defaultView.postMessage({ type: 'window-focus', focused: true }, '*'), 1)`);
+    await new Promise((r) => setTimeout(r, Math.max(0, started + i * GIF_MS - Date.now())));
     const { data } = await w.page.send<{ data: string }>('Page.captureScreenshot', { format: 'png', clip: { ...clip, height: Math.min(clip.height, 420), scale: 1 } });
-    const still = path.join(dir, `${String(i).padStart(2, '0')}.png`);
+    const still = path.join(dir, `${String(i).padStart(3, '0')}.png`);
     await writeFile(still, Buffer.from(data, 'base64'));
     stills.push(still);
   }
-  const ms = Math.round((Date.now() - started) / GIF_FRAMES);
-  const gif = spawnSync('python3', [path.resolve('scripts/frames-to-gif.py'), file, String(ms), ...stills], { encoding: 'utf8' });
+  const gif = spawnSync('python3', [path.resolve('scripts/frames-to-gif.py'), file, String(GIF_MS), ...stills], { encoding: 'utf8' });
   if (gif.status !== 0) throw new Error(`frames-to-gif failed: ${gif.stderr}`);
 }
 
