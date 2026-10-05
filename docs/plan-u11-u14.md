@@ -71,6 +71,21 @@ Both edit the composer, `chat.ts` and `serve.ts`.
 - A Plan mode, read-only and answering with a plan, borrowed from OpenCode. It goes in U9b, next to Ask and Auto.
 - `/init` creates or updates `AGENTS.md` by having the agent read the project, borrowed from OpenCode. Its command entry lands in U11a, and U13 implements it.
 
+## pstack support (study on 2026-10-05)
+
+pstack is MIT (Lauren Tan; Michael Denyer; some skills Cursor). Geno cannot run any of its 56 skills today: skills are read only from the workspace, and `read` refuses paths outside it. pstack already ships runtime adaptations (`skills/poteto-mode/references/pi-tools.md`, `codex-tools.md`), with degraded fallbacks: `todo.md` instead of a task tool, plain-text questions, and a single sequential pass instead of subagents.
+
+- U11c, after U11a. This unit has four parts:
+  - Discover installed Claude Code plugin skills read-only from `~/.claude/plugins/installed_plugins.json`, namespaced as `pstack:how` and so on. Workspace skills win a name clash.
+  - Allow `read` on those plugin roots, read-only.
+  - Add a model-callable `skill` tool that returns a `SKILL.md` and its folder path.
+  - Write `references/geno-tools.md`, which maps pstack's Claude Code actions to Geno in the style of `pi-tools.md`. The system prompt points at it when pstack is present.
+
+  Read the plugin files in place and do not copy them. Plugin content is data, and plugin scripts still pass through the sandbox and the classifier. Check: one eval task with and without poteto-mode on `qwen3.8-flash` before claiming support.
+- U13 adds an `ask_user` tool over ACP, allowed in Ask and Plan modes only.
+- U16, later and only if wanted, adds a subagent tool. It runs a child session with its own context, a model, a per-child and per-parent cost cap, and an optional worktree. swarm, arena, architect, interrogate and reflect need it.
+- Out of reach by design: skills that need `gh`, the network, or Claude Code's own transcripts (babysit, fix-ci, get-pr-comments, recall).
+
 ## U11b, U12b, U13, U14
 
 Briefs for these are written when their wave starts, from what the A-wave reports actually built.
