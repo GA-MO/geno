@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, withTurnEffort, type ApprovalRecord, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -21,6 +21,8 @@ export type Mode = {
   readonly readRoots?: readonly string[];
   /** An event to log before each model call, such as a checkpoint. */
   readonly beforeCall?: (events: readonly TurnEvent[]) => Promise<TurnEvent>;
+  /** How each call's effort follows from the session's; undefined uses the default policy. */
+  readonly effortPolicy?: EffortPolicy;
 };
 
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number };
@@ -207,7 +209,7 @@ export async function drive(
     let marks: StreamMarks | undefined;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
-      session,
+      session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
       events,
       tools: mode.tools,
       stored: await loadAttachments(ctx.attachmentsDir, events, loaded),
