@@ -1,4 +1,5 @@
 import type { MessageParam, MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import { NO_ATTACHMENTS, type StoredAttachments } from './attachments.js';
 import { replayMessages, type Session, type TurnEvent } from './session.js';
 
 // Byte-stable on purpose: it is the cached prefix of every request, so any volatile text here busts the cache.
@@ -55,13 +56,14 @@ export function buildRequest(
   events: readonly TurnEvent[],
   tools: readonly Tool[] = [],
   system: string = SYSTEM_PROMPT,
+  stored: StoredAttachments = NO_ATTACHMENTS,
 ): MessageStreamParams {
   return {
     model: session.model,
     max_tokens: MAX_TOKENS,
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
     system: [{ type: 'text', text: system, cache_control: EPHEMERAL }],
-    messages: withNewestUserBreakpoint(replayMessages(events)),
+    messages: withNewestUserBreakpoint(replayMessages(events, stored)),
     output_config: { effort: session.effort },
   };
 }
