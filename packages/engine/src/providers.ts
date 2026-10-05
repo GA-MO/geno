@@ -3,7 +3,8 @@ import { costOf, isProviderName, missingField, PROVIDERS, providerValues, specOf
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { messagesOf, usageOf } from './gateway.js';
-import { wireFor, type Wire } from './wire.js';
+import { wireFor } from './wire.js';
+import type { Wire } from './wire-shape.js';
 
 /** Long enough for a cold model, short enough that the settings page's button does not hang. */
 const TEST_TIMEOUT_MS = 30_000;

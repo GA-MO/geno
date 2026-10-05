@@ -40,7 +40,7 @@ describe('no provider key leaks', () => {
       PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     };
     const outputs: Record<string, string> = {};
-    const record = (name: string, result: { stdout: string; stderr: string }) => {
+    const record = <R extends { stdout: string; stderr: string }>(name: string, result: R): R => {
       outputs[`${name} stdout`] = result.stdout;
       outputs[`${name} stderr`] = result.stderr;
       return result;
