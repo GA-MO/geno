@@ -9,6 +9,7 @@ import {
   nextSeq,
   toolUsesOf,
   type Effort,
+  type ModelRetry,
   type ProviderName,
   type Session,
   type TokenUsage,
@@ -26,10 +27,14 @@ export const DEFAULT_EFFORT: Effort = 'medium';
 export const EXIT_CODES: Record<TurnErrorKind, number> = {
   refusal: 1,
   transport: 1,
+  overflow: 1,
   abort: 130,
   'max-turns': 3,
   budget: 3,
 };
+
+export const formatRetry = ({ attempt, delayMs, message }: ModelRetry): string =>
+  `retry ${attempt} in ${(delayMs / 1000).toFixed(1)}s: ${message}`;
 
 export const formatCost = (costUsd: number | null): string =>
   costUsd === null ? 'cost=unknown' : `cost=$${costUsd.toFixed(6)}`;
@@ -153,6 +158,12 @@ export const chat: Command = async (args, { io, store }) => {
       streamed = true;
       io.write(delta);
     },
+    onRetry: async (retry) => {
+      if (streamed) io.write('\n');
+      streamed = false;
+      await record({ kind: 'retry', seq: nextSeq(events), at: new Date().toISOString(), ...retry });
+      io.err(formatRetry(retry));
+    },
   });
   if (streamed) io.write('\n');
 
@@ -222,6 +233,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...(event.change === undefined ? [] : [`  changed ${event.change.path}: ${event.change.hunks.length} hunks (${event.change.id})`]),
   ],
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
+  retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

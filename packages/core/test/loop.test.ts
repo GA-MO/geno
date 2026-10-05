@@ -63,6 +63,9 @@ const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][]
   ['a logged refusal is a refusal', [start, user(1), error(2, 'refusal')], done('refusal')],
   ['an abort in this run ends it', [start, user(1), error(2, 'abort')], done('error')],
   ['a transport error in this run ends it', [start, user(1), error(2, 'transport')], done('error')],
+  ['a context overflow in this run ends it', [start, user(1), error(2, 'overflow')], done('error')],
+  ['a later run answers a prompt that overflowed', [start, user(1), error(2, 'overflow')], CALL, { ...run, firstSeq: 3 }],
+  ['a retry is not a turn of the conversation', [start, user(1), { kind: 'retry', seq: 2, at, attempt: 1, delayMs: 1000, message: '529' }], CALL],
   ['a logged max-turns stop ends the run', [start, user(1), error(2, 'max-turns')], done('max-turns')],
   ['a logged budget stop ends the run', [start, user(1), error(2, 'budget')], done('budget')],
   [

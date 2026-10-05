@@ -94,6 +94,7 @@ const turnEventSchema = z.union([
       files: z.array(z.string()),
     }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
+    z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({

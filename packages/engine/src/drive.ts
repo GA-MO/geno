@@ -2,7 +2,7 @@ import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { loopStep, nextSeq, type DoneReason, type Run, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
-import { EXIT_CODES, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
+import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
@@ -193,6 +193,10 @@ export async function drive(
       ...(mode.system === undefined ? {} : { system: mode.system }),
       signal,
       onText: (delta) => watcher.text(delta),
+      onRetry: async (retry) => {
+        await record({ kind: 'retry', seq: nextSeq(events), at: new Date().toISOString(), ...retry });
+        io.err(formatRetry(retry));
+      },
     });
     const at = new Date().toISOString();
     if (result.kind === 'error') {

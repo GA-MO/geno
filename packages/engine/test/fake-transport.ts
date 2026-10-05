@@ -4,7 +4,17 @@ export type Reply = {
   readonly events: readonly SseEvent[];
   /** Emit this many events, then stall until the request is aborted. */
   readonly stallAfter?: number;
+  /** Emit this many events, then drop the connection the way undici reports a peer reset. */
+  readonly dropAfter?: number;
+  /** Answer with this HTTP error instead of a stream. */
+  readonly failure?: { readonly status: number; readonly body: unknown; readonly headers?: Record<string, string> };
 };
+
+/** An HTTP error response, such as a 529 overload, with the provider's JSON error body. */
+export const httpError = (status: number, body: unknown, headers: Record<string, string> = {}): Reply => ({
+  events: [],
+  failure: { status, body, headers },
+});
 
 export type RecordedRequest = { readonly url: string; readonly headers: Headers; readonly body: any };
 
@@ -116,12 +126,13 @@ const encode = (event: SseEvent) => new TextEncoder().encode(sseEvent(event));
 export const sseBody = (reply: Reply): string => reply.events.map(sseEvent).join('');
 
 function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStream<Uint8Array> {
-  const events = reply.stallAfter === undefined ? reply.events : reply.events.slice(0, reply.stallAfter);
+  const events = reply.events.slice(0, reply.stallAfter ?? reply.dropAfter);
   let next = 0;
   return new ReadableStream({
     pull(controller) {
       const event = events[next++];
       if (event !== undefined) return controller.enqueue(encode(event));
+      if (reply.dropAfter !== undefined) return controller.error(new TypeError('terminated', { cause: new Error('other side closed') }));
       if (reply.stallAfter === undefined) return controller.close();
       return new Promise<void>((resolve) => {
         const fail = () => {
@@ -146,6 +157,10 @@ export function fakeTransport(replies: readonly Reply[]) {
       body: JSON.parse(String(init?.body)),
     });
     if (reply === undefined) throw new Error(`fake transport has no reply for request ${requests.length}`);
+    if (reply.failure !== undefined) {
+      const { status, body: json, headers } = reply.failure;
+      return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json', ...headers } });
+    }
     return new Response(body(reply, init?.signal), {
       status: 200,
       headers: { 'content-type': 'text/event-stream' },

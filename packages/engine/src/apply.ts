@@ -42,7 +42,7 @@ function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal):
     name: model,
     call: (events, tools, system) => {
       gateway ??= gatewayFor(provider, io.env, io.fetch);
-      return gateway.turn({ session, events, tools, system, signal, onText: () => {} });
+      return gateway.turn({ session, events, tools, system, signal, onText: () => {}, onRetry: () => {} });
     },
   };
 }

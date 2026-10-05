@@ -1,10 +1,18 @@
-import Anthropic, { AnthropicError, APIUserAbortError } from '@anthropic-ai/sdk';
+import { setTimeout as sleep } from 'node:timers/promises';
+import Anthropic, { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { Message, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
+  classifyModelError,
   costOf,
   PROVIDER_ENV,
+  RETRY_POLICY,
+  retryDelayMs,
+  TURN_ERROR_OF,
+  type ModelFailure,
+  type ModelRetry,
   type ProviderName,
+  type RetryPolicy,
   type Session,
   type TokenUsage,
   type TurnEvent,
@@ -20,6 +28,8 @@ export type TurnInput = {
   readonly system?: string;
   readonly signal: AbortSignal;
   onText(delta: string): void;
+  /** A transient failure about to be retried; the wait starts once this settles. */
+  onRetry(retry: ModelRetry): void | Promise<void>;
 };
 
 /** One model round trip. A wire format other than Anthropic Messages would be another implementation. */
@@ -65,43 +75,86 @@ function refusalMessage(message: Message): string {
   return details?.explanation ?? (text || `the model refused${details?.category ? ` (${details.category})` : ''}`);
 }
 
-export function gatewayFor(providerName: ProviderName, env: Env, fetch?: typeof globalThis.fetch): Gateway {
+const ABORTED: TurnResult = { kind: 'error', error: 'abort', message: 'interrupted by the user' };
+
+// The SDK keeps the transport's own error as the cause, and that is what names a reset or a refused connection.
+const messagesOf = (error: unknown): string[] =>
+  error instanceof Error ? [error.message, ...messagesOf(error.cause)] : error === undefined ? [] : [String(error)];
+
+const failureOf = (error: AnthropicError): ModelFailure => ({
+  status: error instanceof APIError ? error.status : undefined,
+  message: messagesOf(error).join(': '),
+});
+
+function retryAfterMs(error: AnthropicError): number | undefined {
+  const headers = error instanceof APIError ? error.headers : undefined;
+  const ms = Number.parseFloat(headers?.get('retry-after-ms') ?? '');
+  if (ms >= 0) return ms;
+  const raw = headers?.get('retry-after');
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  const wait = Number.isNaN(seconds) ? Date.parse(raw) - Date.now() : seconds * 1000;
+  return Number.isNaN(wait) ? undefined : Math.max(0, Math.round(wait));
+}
+
+export function gatewayFor(
+  providerName: ProviderName,
+  env: Env,
+  fetch?: typeof globalThis.fetch,
+  retry: RetryPolicy = RETRY_POLICY,
+): Gateway {
   const provider = PROVIDER_TABLE[providerName];
   const key = required(env, PROVIDER_ENV[providerName].key, `your ${providerName} API key`);
-  // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment.
-  const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, fetch });
+  // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment. Retries are
+  // ours: the SDK's would retry an exhausted quota, unseen, and never a stream that fails after its headers.
+  const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, maxRetries: 0, fetch });
+
+  async function call({ session, events, tools, system, signal, onText }: TurnInput): Promise<TurnResult> {
+    const started = performance.now();
+    const stream = client.messages.stream(buildRequest(session, events, tools, system), {
+      signal,
+      headers: provider.sessionHeaders(session),
+    });
+    stream.on('text', onText);
+    const message = await stream.finalMessage();
+    if (message.stop_reason === 'refusal') {
+      return { kind: 'error', error: 'refusal', message: refusalMessage(message) };
+    }
+    const usage = usageOf(message);
+    return {
+      kind: 'answer',
+      turn: {
+        content: message.content,
+        stopReason: message.stop_reason,
+        usage,
+        costUsd: costOf(session.model, usage),
+        latencyMs: Math.round(performance.now() - started),
+        model: message.model,
+      },
+    };
+  }
 
   return {
-    async turn({ session, events, tools, system, signal, onText }) {
-      const started = performance.now();
-      try {
-        const stream = client.messages.stream(buildRequest(session, events, tools, system), {
-          signal,
-          headers: provider.sessionHeaders(session),
-        });
-        stream.on('text', onText);
-        const message = await stream.finalMessage();
-        if (message.stop_reason === 'refusal') {
-          return { kind: 'error', error: 'refusal', message: refusalMessage(message) };
+    async turn(input) {
+      const { signal } = input;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return await call(input);
+        } catch (error) {
+          if (error instanceof APIUserAbortError || signal.aborted) return ABORTED;
+          if (!(error instanceof AnthropicError)) throw error;
+          const failure = failureOf(error);
+          const kind = classifyModelError(failure);
+          const delayMs = kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
+          if (delayMs === undefined) return { kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message };
+          await input.onRetry({ attempt, delayMs, message: failure.message });
+          try {
+            await sleep(delayMs, undefined, { signal });
+          } catch (sleepError) {
+            if (signal.aborted) return ABORTED;
+            throw sleepError;
+          }
         }
-        const usage = usageOf(message);
-        return {
-          kind: 'answer',
-          turn: {
-            content: message.content,
-            stopReason: message.stop_reason,
-            usage,
-            costUsd: costOf(session.model, usage),
-            latencyMs: Math.round(performance.now() - started),
-            model: message.model,
-          },
-        };
-      } catch (error) {
-        if (error instanceof APIUserAbortError || signal.aborted) {
-          return { kind: 'error', error: 'abort', message: 'interrupted by the user' };
-        }
-        if (error instanceof AnthropicError) return { kind: 'error', error: 'transport', message: error.message };
-        throw error;
       }
     },
   };

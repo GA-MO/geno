@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { asSessionId, TOOL_DEFINITIONS, type Session, type TurnEvent } from '@g-code/core';
 import { appendEvent, readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall } from './fake-transport.js';
+import { answer, fakeTransport, httpError, toolCall } from './fake-transport.js';
 import { rgCommand, runCli } from './helpers.js';
 
 async function setup() {
@@ -188,6 +188,40 @@ describe('gcode ask', () => {
       'tool-result',
       'assistant',
     ]);
+  });
+
+  it('retries an overloaded provider, logs the retry, and finishes the turn', async () => {
+    const { workspace, env, store } = await setup();
+    const overloaded = httpError(529, { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, { 'retry-after-ms': '20' });
+    const transport = fakeTransport([overloaded, answer('Still here.', usage)]);
+
+    const result = await runCli(['ask', '--workspace', workspace, 'Are you there?'], env, { fetch: transport.fetch });
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Still here.');
+    expect(result.stderr).toMatch(/^retry 1 in 0\.0s: 529 .*overloaded_error/m);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(kinds(log.events)).toEqual(['session-start', 'user', 'retry', 'assistant']);
+    expect(log.events[2]).toMatchObject({ kind: 'retry', seq: 2, attempt: 1, delayMs: 20 });
+  });
+
+  it('ends the run as an abort when stopped while waiting to retry', async () => {
+    const { workspace, env, store } = await setup();
+    const overloaded = httpError(529, { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, { 'retry-after': '15' });
+    const transport = fakeTransport([overloaded, answer('Never.', usage)]);
+
+    const started = performance.now();
+    const result = await runCli(['ask', '--workspace', workspace, 'Are you there?'], env, {
+      fetch: transport.fetch,
+      onErr: (line, interrupt) => {
+        if (line.startsWith('retry ')) interrupt.abort();
+      },
+    });
+    expect(performance.now() - started).toBeLessThan(5000);
+    expect(result.code).toBe(130);
+    expect(result.stderr).toContain('abort: interrupted by the user');
+    expect(transport.requests).toHaveLength(1);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(kinds(log.events)).toEqual(['session-start', 'user', 'retry', 'error:abort']);
   });
 
   it('refuses to resume a finished session without a new question', async () => {

@@ -7,6 +7,7 @@ import type {
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { HunkStatus } from './hunks.js';
+import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { Brand } from './types.js';
@@ -60,7 +61,8 @@ export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   output: a.output + b.output,
 });
 
-export const TURN_ERROR_KINDS = ['refusal', 'transport', 'abort', 'max-turns', 'budget'] as const;
+/** `overflow` is a request too long for the model's context window; `transport` is any other failed call. */
+export const TURN_ERROR_KINDS = ['refusal', 'transport', 'overflow', 'abort', 'max-turns', 'budget'] as const;
 export type TurnErrorKind = (typeof TURN_ERROR_KINDS)[number];
 
 export type AssistantTurn = {
@@ -127,11 +129,12 @@ export type TurnEvent =
       readonly message: string;
     }
   | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }
+  | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints, restores and review decisions record what happened to the workspace; the loop steps over them. */
+/** Checkpoints, restores, review decisions and retries record what happened around the conversation; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -141,6 +144,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   checkpoint: false,
   restored: false,
   review: false,
+  retry: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
@@ -157,6 +161,7 @@ export const nextSeq = (events: readonly TurnEvent[]): number => {
 export const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
   refusal: false,
   transport: true,
+  overflow: true,
   abort: true,
   'max-turns': true,
   budget: true,
