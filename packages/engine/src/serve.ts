@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { Readable, Writable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
@@ -43,6 +43,7 @@ import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { appendEvent, dropTornTail } from './sessions.js';
+import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 import type { Approver, Diagnostics } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
@@ -374,12 +375,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
 export const serve: Command = async (args, { io, store }) => {
   const { values } = parseArgs({ args, strict: true, options: { stdio: { type: 'boolean', default: false }, ...LIMIT_FLAGS } });
   if (!values.stdio) throw new UsageError('serve needs --stdio, the only transport');
-  // stdout carries the protocol, so everything the engine prints goes to stderr.
+  // stdout carries the protocol, so everything the engine prints goes to stderr, and so does anything a dependency prints.
   const quiet: Io = { ...io, out: io.err, write: () => {} };
-  const stream = acp.ndJsonStream(
-    Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
-    Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,
-  );
+  const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
   const connection = gcodeAgent(quiet, store, limitsOf(values)).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
   await connection.closed;

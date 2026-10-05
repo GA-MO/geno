@@ -32,3 +32,5 @@ Ported files:
 - packages/core/src/model-error.ts (from packages/ai/src/utils/retry.ts and overflow.ts)
 - packages/core/src/context.ts (from packages/coding-agent/src/core/system-prompt.ts and skills.ts)
 - packages/engine/src/project-context.ts (from packages/coding-agent/src/core/resource-loader.ts and footer-data-provider.ts)
+- packages/core/src/page.ts (from packages/coding-agent/src/core/tools/truncate.ts and tools/read.ts)
+- packages/engine/src/stdout-guard.ts (from packages/coding-agent/src/core/output-guard.ts)
