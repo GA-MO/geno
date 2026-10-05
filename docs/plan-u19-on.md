@@ -122,3 +122,38 @@ The user saw Claude's `show_widget` (an HTML, CSS and JS fragment drawn inline i
   - An integration test that a fake model's widget renders, resizes to its content, and survives a reload.
   - A live smoke on `qwen3.8-flash` under $0.03 with two of the probe prompts.
   - Screenshots in dark glass, light glass and high contrast.
+
+## U38: ask_user v2, several questions in one card (parallel with U21 and U35)
+
+The user showed Claude's question card on 2026-10-06. It has a tab per question, options with a title and a description, a "(Recommended)" marker on the first option, an "Other" free-text choice for each question, and one "Submit answers" for all of them, with Esc to cancel. U13's `ask_user` covers one question with label-only options, one free-text answer and Skip.
+
+- **Data shape, in core.** `AskUserRequest` grows to `{ questions: Question[] }` with 1 to 4 questions. Each question has:
+  - `{ id, header (12 chars or fewer, the tab label), question, multiSelect, options }`;
+  - 2 to 4 options, each `{ label, description, recommended?, preview? }`, where `preview` is a short markdown or code block.
+
+  The answer is per question: chosen labels, plus `other` text if given. The tool's input schema rejects anything else, and the model gets the validation message.
+  - The old single-question shape keeps working. Parse it as one question, so existing sessions replay.
+  - "Other" is always offered and the model never lists it.
+- **ACP.** Keep U13's channel, ACP `elicitation/create` in form mode. Read the installed SDK types for what a form schema can express (several properties, enums with titles or `oneOf` with descriptions, arrays for multi-select). Map the questions onto it as far as it allows, and carry the rest (descriptions, recommended, previews) in `_meta`. Explain the mapping. A client that cannot show a form still gets a plain-text fallback: the questions and options as text, answered in the next prompt.
+- **The card.**
+  - A tab row of question headers, with a dot on each answered tab.
+  - The question text; options as rows with a radio or checkbox, title, description, and "Recommended" as a quiet tag.
+  - An "Other" row that opens a text field.
+  - A focused option's preview shows beside the list (or below it in a narrow panel), as rendered markdown or code, through the existing safe markdown renderer.
+  - One "Submit answers" button, enabled when every question has an answer, and Esc or Skip to cancel.
+- **Keyboard:**
+  - up and down move between options;
+  - 1 to 4 pick an option;
+  - Space toggles in multi-select;
+  - Tab and Shift-Tab, or left and right, change question;
+  - Enter on the last question submits;
+  - Esc cancels.
+
+  Focus lands on the first option when the card opens, keeping the focus fix from `bb922dd` (a waiting card keeps the keyboard).
+- **Folded turns.** The card is still a permission-style attention item, so U17 keeps it visible while pending. Answered, it folds into one line, for example "Answered 2 questions: Button, Layout", and the full answers show when the turn is opened.
+- **Modes.** Unchanged: Ask and Plan only.
+- **Check:**
+  - unit tests for the schema (limits, the old shape, rejecting a listed "Other") and the answer mapping;
+  - serve e2e: a two-question round trip with one multi-select and one "Other", plus cancel;
+  - an integration test of the card with clicks and the keyboard;
+  - screenshots of a 3-question card in dark glass, light glass and high contrast, including a focused option with a preview.
