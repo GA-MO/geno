@@ -96,6 +96,23 @@ describe('gcode serve slash commands', () => {
     });
   });
 
+  it('stops watching the command folders when the session closes', async () => {
+    const { workspace, write, updates, connect } = await setup([]);
+
+    await connect(async (ctx, sessionId) => {
+      await until(() => listings(updates).length === 1);
+      await new Promise((r) => setTimeout(r, 150));
+      await write(path.join(workspace, '.agents', 'commands', 'ship.md'), 'Ship it.');
+      await until(() => listings(updates).length === 2);
+      await ctx.request(acp.methods.agent.session.close, { sessionId });
+      await write(path.join(workspace, '.agents', 'commands', 'land.md'), 'Land it.');
+      // Well past the 200 ms debounce a live watch would publish after.
+      await new Promise((r) => setTimeout(r, 1500));
+    });
+
+    expect(listings(updates), 'a closed session publishes no more lists').toHaveLength(2);
+  });
+
   it('sends a command invocation to the model expanded, and logs the command name and its arguments', async () => {
     const { transport, connect, say, userEvents } = await setup([answer('Looks fine.', usage)]);
 

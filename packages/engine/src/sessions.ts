@@ -43,8 +43,11 @@ const contentBlock = z.custom<ContentBlock>(
   'content block must be an object with a string type',
 );
 
+const instructionFileSchema = z.strictObject({ path: z.string().min(1), text: z.string() });
+
 const loadedContextSchema = z.strictObject({
-  instructions: z.array(z.strictObject({ path: z.string().min(1), text: z.string() })),
+  global: instructionFileSchema.optional(),
+  instructions: z.array(instructionFileSchema),
   rules: z.array(
     z.strictObject({
       path: z.string().min(1),
