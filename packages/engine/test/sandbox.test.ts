@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { childEnv } from '../src/child-env.js';
+import { EngineError } from '../src/errors.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
@@ -66,5 +67,56 @@ describe('the bash sandbox', () => {
       `node -e "fetch('https://example.com').then(() => process.exit(0), () => process.exit(7))" && curl -sS -m 5 https://example.com`,
     );
     expect(result.code).not.toBe(0);
+  });
+});
+
+describe('two sandboxes open at once', () => {
+  async function chat(name: string) {
+    const dir = path.join(root, name);
+    const ws = path.join(dir, 'ws');
+    const tempDir = path.join(dir, 'tmp');
+    await mkdir(ws, { recursive: true });
+    await mkdir(tempDir);
+    const home = path.join(dir, 'home');
+    const opened = await openSandbox(await sandboxPolicy({ store: openStore({ GCODE_HOME: home }), home, workspace: ws, tempDir }));
+    return { ws, sandbox: opened, run: (command: string) => opened.run(command, { cwd: ws, env: childEnv(process.env), timeoutMs: 30_000 }) };
+  }
+
+  it("each writes its own workspace and never the other's", async () => {
+    const a = await chat('chat-a');
+    const b = await chat('chat-b');
+    try {
+      expect((await a.run('echo a > own.txt')).code).toBe(0);
+      expect((await b.run('echo b > own.txt')).code).toBe(0);
+      const intoB = await a.run(`echo from-a > '${path.join(b.ws, 'from-a.txt')}'`);
+      const intoA = await b.run(`echo from-b > '${path.join(a.ws, 'from-b.txt')}'`);
+      expect(intoB.output).toContain('Operation not permitted');
+      expect(intoA.output).toContain('Operation not permitted');
+      await expect(readFile(path.join(b.ws, 'from-a.txt'), 'utf8')).rejects.toThrow(/ENOENT/);
+      await expect(readFile(path.join(a.ws, 'from-b.txt'), 'utf8')).rejects.toThrow(/ENOENT/);
+      expect(await readFile(path.join(a.ws, 'own.txt'), 'utf8')).toBe('a\n');
+      expect(await readFile(path.join(b.ws, 'own.txt'), 'utf8')).toBe('b\n');
+    } finally {
+      await a.sandbox.close();
+      await b.sandbox.close();
+    }
+  });
+
+  it('keeps the network off for one while another closes and a sandbox that allows a host tries to open', async () => {
+    const a = await chat('chat-c');
+    const b = await chat('chat-d');
+    await a.sandbox.close();
+    const tempDir = path.join(root, 'tmp-allow');
+    await mkdir(tempDir);
+    const home = path.join(root, 'home-allow');
+    const policy = await sandboxPolicy({ store: openStore({ GCODE_HOME: home }), home, workspace, tempDir, allowedDomains: ['example.com'] });
+    const allowing = await openSandbox(policy).catch((error: unknown) => error);
+    try {
+      expect((await b.run('curl -sS -m 5 -o /dev/null https://example.com')).code, 'no network for the sandbox that allows none').not.toBe(0);
+      expect(allowing).toEqual(new EngineError('a sandbox that allows the network hosts [] is open, and this one allows ["example.com"]'));
+    } finally {
+      if (!(allowing instanceof Error)) await (allowing as Sandbox).close();
+      await b.sandbox.close();
+    }
   });
 });

@@ -6,8 +6,7 @@ const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
 
 export default defineConfig({
   test: {
-    // Engine e2e tests open the sandbox, which allows one per process; a test abandoned at a short timeout
-    // under machine load leaves it open and fails every later test in the file.
+    // Engine e2e tests run sandboxed commands, which are slow under machine load.
     testTimeout: 30_000,
     projects: [
       {
