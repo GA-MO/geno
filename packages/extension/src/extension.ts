@@ -18,37 +18,59 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { registerTabServer } from './tab/status.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
-import { describeRuntime, engineEnv, modelLabel, PROVIDER_LABELS, providerOf, readModelRuntime, secretName, SET_KEY_COMMAND, setupProblem } from './runtime.js';
+import { describeEngineRuntime, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, setupProblem } from './runtime.js';
+import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
-const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model'];
+const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles'];
 
 async function engineSettings(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<EngineSettings> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (folder === undefined) throw new Error('Geno chat needs an open folder');
-  const runtime = await readModelRuntime(vscode.workspace.getConfiguration('gcode'), context.secrets, process.env);
-  const problem = setupProblem(runtime);
+  const runtime = await readEngineRuntime(vscode.workspace.getConfiguration('gcode'), context.secrets, process.env);
+  const problem = setupProblem(runtime.chat);
   if (problem !== undefined) {
     void vscode.window.showWarningMessage(problem.message, problem.fix.label).then((choice) => {
       if (choice !== undefined) void vscode.commands.executeCommand(problem.fix.command, ...problem.fix.args);
     });
     throw new Error(problem.message);
   }
-  output.appendLine(`engine: ${describeRuntime(runtime)}`);
+  output.appendLine(`engine: ${describeEngineRuntime(runtime)}`);
   const rg = process.env['GCODE_RG'] ? undefined : await findExecutable('rg', process.env);
   return {
     cliPath: path.join(context.extensionPath, 'dist', 'engine', 'cli.js'),
     cwd: folder.uri.fsPath,
-    env: { ...engineEnv(runtime), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
+    env: { ...engineEnvOf(runtime), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
   };
 }
 
-/** Stores the key for the configured provider; the argument lets a test set it without the input box. */
-async function setApiKey(secrets: vscode.SecretStorage, given?: string): Promise<void> {
-  const provider = providerOf(vscode.workspace.getConfiguration('gcode'));
-  const prompt = `Your ${PROVIDER_LABELS[provider]} API key`;
-  const key = given ?? (await vscode.window.showInputBox({ prompt, password: true, ignoreFocusOut: true }));
+type SecretChoice = { readonly provider: ProviderName; readonly field: FieldId };
+
+/** Every secret any provider takes, the chat provider's key first. */
+async function pickSecret(): Promise<SecretChoice | undefined> {
+  const chat = providerOf(vscode.workspace.getConfiguration('gcode'));
+  const order = [chat, ...PROVIDERS.filter((p) => p !== chat)];
+  const items = order.flatMap((provider) =>
+    specOf(provider).fields.filter((f) => f.secret).map((f) => ({ label: `${specOf(provider).label}: ${f.label}`, ...(provider === chat ? { description: 'chat' } : {}), choice: { provider, field: f.id } })),
+  );
+  return (await vscode.window.showQuickPick(items, { title: 'Set a Geno key', placeHolder: 'Which key?' }))?.choice;
+}
+
+/**
+ * Stores a provider's key in SecretStorage. With no arguments it asks which key, then for the key in a password
+ * box; a test passes the key, and the settings page the provider and field.
+ */
+async function setApiKey(secrets: vscode.SecretStorage, given?: string, provider?: string, field?: FieldId): Promise<void> {
+  const choice: SecretChoice | undefined =
+    provider !== undefined && isProviderName(provider)
+      ? { provider, field: field ?? 'apiKey' }
+      : given !== undefined
+        ? { provider: providerOf(vscode.workspace.getConfiguration('gcode')), field: 'apiKey' }
+        : await pickSecret();
+  if (choice === undefined || !specOf(choice.provider).fields.some((f) => f.id === choice.field && f.secret)) return;
+  const label = specOf(choice.provider).fields.find((f) => f.id === choice.field)!.label;
+  const key = given ?? (await vscode.window.showInputBox({ prompt: `Your ${specOf(choice.provider).label} ${label}`, password: true, ignoreFocusOut: true }));
   if (key === undefined || key.trim() === '') return;
-  await secrets.store(secretName(provider), key.trim());
+  await secrets.store(secretName(choice.provider, choice.field), key.trim());
 }
 
 /**
@@ -106,7 +128,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     output,
     chat,
     review.onDidChange(() => chat.reviewed(review.all())),
-    vscode.commands.registerCommand(SET_KEY_COMMAND, (key?: string) => setApiKey(context.secrets, key)),
+    vscode.commands.registerCommand(SET_KEY_COMMAND, (key?: string, provider?: string, field?: FieldId) => setApiKey(context.secrets, key, provider, field)),
     context.secrets.onDidChange(() => chat.resetEngine()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
