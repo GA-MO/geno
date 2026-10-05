@@ -12,7 +12,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: ['packages/*/test/**/*.test.ts'], exclude: [VSCODE_TESTS], sequence: { groupOrder: 0 } },
+        test: { name: 'unit', include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'], exclude: [VSCODE_TESTS], sequence: { groupOrder: 0 } },
       },
       {
         // Each file launches a whole VS Code; several at once starve the machine and time out, so they run one at a time after the rest.
