@@ -9,7 +9,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MCP_CALL_TOOL, MCP_DESCRIBE_TOOL, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
+import { attachmentFileName, MCP_CALL_TOOL, MCP_DESCRIBE_TOOL, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
 import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
 import { openStore } from '../src/store.js';
 import type { Approval, PermissionAnswer } from '../src/tools/agent.js';
@@ -80,6 +80,7 @@ function approval(mode: SessionMode, answer: PermissionAnswer, verdict: Classifi
 const ctx = (workspace: string): ToolContext => ({
   workspace,
   spillDir: path.join(workspace, '.spill'),
+  attachmentsDir: path.join(workspace, '.attachments'),
   rg: 'rg',
   signal: new AbortController().signal,
   files: { read: async () => null, write: async () => 'written', unsaved: async () => [] },
@@ -179,11 +180,19 @@ describe('MCP stdio servers', () => {
     const hub = await open();
     const { tools, executors } = await hub.toolset(approval('auto', 'allow').value);
 
-    expect(tools.map((tool) => tool.name)).toEqual(['mcp__fake__crash', 'mcp__fake__echo', 'mcp__fake__env', 'mcp__fake__fail', 'mcp__fake__image']);
+    expect(tools.map((tool) => tool.name)).toEqual(['mcp__fake__crash', 'mcp__fake__echo', 'mcp__fake__env', 'mcp__fake__fail', 'mcp__fake__image', 'mcp__fake__screenshot']);
     expect(tools.find((tool) => tool.name === 'mcp__fake__echo')!.input_schema).toMatchObject({ properties: { text: { type: 'string' } } });
     expect(textOf(await executors['mcp__fake__echo']!.run({ text: 'hi' }, ctx(workspace)))).toBe('echo: hi');
     expect(textOf(await executors['mcp__fake__image']!.run({}, ctx(workspace)))).toBe('here it is\n[image image/png, 7 bytes, not shown]');
     await expect(executors['mcp__fake__fail']!.run({}, ctx(workspace))).rejects.toThrow('it broke');
+
+    const shot = await executors['mcp__fake__screenshot']!.run({}, ctx(workspace));
+    expect(shot).toMatchObject({
+      text: 'mcp__fake__screenshot image 1 is a 1x1 PNG image (70 B), attached below.',
+      images: [expect.objectContaining({ kind: 'image', mediaType: 'image/png', width: 1, height: 1, name: 'mcp__fake__screenshot image 1' })],
+    });
+    const [image] = (shot as unknown as { images: ImageAttachment[] }).images;
+    expect(existsSync(path.join(workspace, '.attachments', attachmentFileName(image!))), 'the image is stored where the next request reads it').toBe(true);
     expect(hub.views()[0]).toMatchObject({ state: { status: 'ready', restarts: 0 }, tools: expect.arrayContaining(['mcp__fake__echo']) });
   });
 
