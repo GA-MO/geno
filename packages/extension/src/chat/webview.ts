@@ -65,13 +65,16 @@ const modelLabel = h(
 const approval = h('span', { class: 'approval', title: 'g-code asks before running a command its rules hold back' }, icon('shield'), 'Asks before risky commands');
 const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
-const form = h(
-  'form',
-  { class: 'composer' },
-  menu,
-  h('div', { class: 'input-box' }, chips, input, h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send)),
-);
+const inputBox = h('div', { class: 'input-box' }, chips, input, h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send));
+const form = h('form', { class: 'composer' }, menu, inputBox);
 document.body.append(log, form, status);
+
+// The glass style floats the composer over the transcript, which keeps this much room below its last line.
+new ResizeObserver(() => document.body.style.setProperty('--composer-height', `${form.offsetHeight}px`)).observe(form);
+
+// The composer's rainbow edge runs while the focus is anywhere inside it, and stops when the focus leaves.
+form.addEventListener('focusin', () => inputBox.classList.add('rainbow'));
+form.addEventListener('focusout', (event) => inputBox.classList.toggle('rainbow', inputBox.contains(event.relatedTarget as Node | null)));
 
 /**
  * Streamed text appears a little at a time, each frame showing a sixth of what has arrived but is not yet
@@ -129,8 +132,7 @@ function turnShell(turn: Turn): HTMLElement {
     'article',
     { class: 'turn', 'data-turn': turn.id },
     userMessage(turn.prompt),
-    h('div', { class: 'head-slot' }),
-    h('ol', { class: 'rail' }),
+    h('div', { class: 'reply' }, h('div', { class: 'head-slot' }), h('ol', { class: 'rail' })),
     h('div', { class: 'footer-slot' }),
   );
 }
@@ -155,10 +157,13 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
+      const reply = shell.querySelector<HTMLElement>(':scope > .reply')!;
+      // The turn at work, waiting on the user included, wears the running rainbow edge; a finished one does not.
+      reply.classList.toggle('rainbow', turn.status === 'streaming');
+      reconcile(reply.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
       const steps = railOf(turn);
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
-      reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
+      reconcile(reply.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
@@ -204,6 +209,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   const message = event.data;
   if (message.type === 'completions') {
     showCompletions(message.id, message.items);
+    return;
+  }
+  if (message.type === 'style') {
+    document.body.dataset['style'] = message.style;
     return;
   }
   transcript = reduce(transcript, message);

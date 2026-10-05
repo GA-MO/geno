@@ -34,7 +34,8 @@ let probe: HTMLElement | undefined;
 
 /** A color variable as an `rgb()` value mermaid's color math can read, or undefined when the theme lacks it. */
 function resolveColor(name: string): string | undefined {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // Read from the body, where a panel style may set its own colors over the theme's.
+  const raw = getComputedStyle(document.body).getPropertyValue(name).trim();
   if (raw === '') return undefined;
   probe ??= document.body.appendChild(h('span', { class: 'diagram-probe', 'aria-hidden': 'true' }));
   probe.style.color = '';
@@ -42,10 +43,15 @@ function resolveColor(name: string): string | undefined {
   return probe.style.color === '' ? undefined : getComputedStyle(probe).color;
 }
 
+/**
+ * The theme diagrams are drawn in. A panel style that paints its own surfaces names them in `--diagram-scheme`
+ * and `--diagram-surface`; otherwise the theme's kind and the page's background decide.
+ */
 function readTheme(): DiagramTheme {
   const body = getComputedStyle(document.body);
-  const light = document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light');
-  const surface = body.backgroundColor === 'rgba(0, 0, 0, 0)' ? undefined : body.backgroundColor;
+  const scheme = body.getPropertyValue('--diagram-scheme').trim();
+  const light = scheme === '' ? document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') : scheme === 'light';
+  const surface = resolveColor('--diagram-surface') ?? (body.backgroundColor === 'rgba(0, 0, 0, 0)' ? undefined : body.backgroundColor);
   return themeOf(resolveColor, { family: body.fontFamily, size: body.fontSize }, !light, surface);
 }
 
@@ -154,7 +160,7 @@ function watch(): void {
     panel = undefined;
     redrawShown();
   });
-  themeChanged.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-vscode-theme-id'] });
+  themeChanged.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-vscode-theme-id', 'data-style'] });
   themeChanged.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   new ResizeObserver(() => {
     clearTimeout(resizeTimer);

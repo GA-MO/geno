@@ -1,6 +1,6 @@
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { Chat, CHAT_VIEW, SEND_COMMAND, sessionMemory, STOP_COMMAND } from './chat/chat.js';
+import { Chat, CHAT_VIEW, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
 import { registerReview } from './review/commands.js';
@@ -56,6 +56,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     sessionMemory(context.storageUri),
     (document, change) => review.track(document, change),
     () => modelLabel(vscode.workspace.getConfiguration('gcode'), process.env),
+    () => uiStyleOf(vscode.workspace.getConfiguration('gcode')),
   );
   registerReview(context, chat, review, output);
   context.subscriptions.push(
@@ -66,6 +67,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     context.secrets.onDidChange(() => chat.resetEngine()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
+      if (event.affectsConfiguration(STYLE_SETTING)) chat.restyle();
     }),
     vscode.window.registerWebviewViewProvider(CHAT_VIEW, chat),
     vscode.commands.registerCommand(SEND_COMMAND, async (prompt?: string) => {

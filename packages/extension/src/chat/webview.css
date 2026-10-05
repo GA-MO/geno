@@ -1,8 +1,9 @@
 @import '@vscode/codicons/dist/codicon.css';
 
 /*
- * Trail: a run is a path. Every color comes from the theme's variables, mixed with color-mix where a tint is
- * needed, so dark, light and high contrast themes all hold; every glyph is a codicon.
+ * Trail: a run is a path. In the native style every color comes from the theme's variables, mixed with color-mix
+ * where a tint is needed, so dark, light and high contrast themes all hold; every glyph is a codicon. The glass
+ * style, at the end of this file, layers its own dark palette over these rules.
  */
 
 :root {
@@ -1577,5 +1578,270 @@ body.diagram-tab {
 @media (prefers-reduced-motion: reduce) {
   .diagram-toolbar {
     transition: none;
+  }
+}
+
+/*
+ * Glass, the default look (gcode.ui.style): dark translucent panes over a gradient with soft glows, whatever the
+ * theme's kind, and a rainbow edge running around the live work. High contrast themes keep the native styling
+ * above. The panes stay dark by design, so this block sets the theme colors the rules above read to a dark
+ * palette; the accent still comes from the theme. Colors mermaid reads stay opaque, since it does color math on
+ * them; the panes take their translucency from the --glass tokens.
+ */
+
+@property --rainbow-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+:root {
+  --theme-accent: var(--vscode-button-background);
+  --theme-focus: var(--vscode-focusBorder);
+}
+
+@keyframes rainbow-run {
+  to {
+    --rainbow-angle: 360deg;
+  }
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  --glass-base: #0c1016;
+  --glass-pane: rgb(255 255 255 / 4.5%);
+  --glass-pane-raised: rgb(255 255 255 / 7.5%);
+  --glass-edge: rgb(255 255 255 / 9%);
+  --glass-edge-hi: rgb(255 255 255 / 15%);
+  --glass-blur: blur(14px) saturate(160%);
+  --glass-lift: inset 0 1px 0 rgb(255 255 255 / 6%), 0 12px 28px -18px rgb(0 0 0 / 80%);
+  /* Only the stops: the ring builds its gradient itself, where its own animated angle is in scope. */
+  --rainbow-stops: #ff7a90, #ffb36b, #f4e07a, #6fe3a5, #64c8ff, #8f86ff, #e489ff, #ff7a90;
+
+  --bg: var(--glass-base);
+  --muted: #a4acbb;
+  --accent: var(--theme-accent);
+  --mark: color-mix(in srgb, var(--theme-accent) 50%, white);
+  --ok: #6fd39c;
+  --warn: #f0c35a;
+  --line: rgb(255 255 255 / 13%);
+  --border: var(--glass-edge);
+  --surface: var(--glass-pane);
+  --surface-2: var(--glass-pane-raised);
+  --shadow: var(--glass-lift);
+  --card-border: var(--glass-edge);
+  --diagram-scheme: dark;
+  --diagram-surface: #171c24;
+
+  --vscode-foreground: #e7eaf0;
+  --vscode-editor-foreground: #e7eaf0;
+  --vscode-descriptionForeground: #a4acbb;
+  --vscode-icon-foreground: #c9ced8;
+  --vscode-errorForeground: #ff8f86;
+  --vscode-focusBorder: color-mix(in srgb, var(--theme-focus) 55%, white);
+  --vscode-textLink-foreground: #7cc4ff;
+  --vscode-textLink-activeForeground: #a8d8ff;
+  --vscode-textPreformat-foreground: #f1c98b;
+  --vscode-textPreformat-background: rgb(255 255 255 / 8%);
+  --vscode-textPreformat-border: transparent;
+  --vscode-textCodeBlock-background: #0f131a;
+  --vscode-textBlockQuote-border: rgb(255 255 255 / 22%);
+  --vscode-textBlockQuote-foreground: #c9ced8;
+  --vscode-widget-border: #343a45;
+  --vscode-widget-shadow: rgb(0 0 0 / 55%);
+  --vscode-toolbar-hoverBackground: rgb(255 255 255 / 9%);
+  --vscode-button-border: transparent;
+  --vscode-button-secondaryBackground: rgb(255 255 255 / 10%);
+  --vscode-button-secondaryHoverBackground: rgb(255 255 255 / 16%);
+  --vscode-button-secondaryForeground: #e7eaf0;
+  --vscode-input-background: #1a2029;
+  --vscode-input-foreground: #e7eaf0;
+  --vscode-input-border: var(--glass-edge-hi);
+  --vscode-input-placeholderForeground: #8c94a4;
+  --vscode-editorSuggestWidget-background: rgb(22 27 36 / 88%);
+  --vscode-editorSuggestWidget-border: var(--glass-edge-hi);
+  --vscode-editorSuggestWidget-foreground: #e7eaf0;
+  --vscode-editorSuggestWidget-selectedBackground: color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  --vscode-editorSuggestWidget-selectedForeground: #fff;
+  --vscode-list-focusOutline: transparent;
+  --vscode-sideBar-background: var(--glass-base);
+  --vscode-editor-background: #11161e;
+  --vscode-editorWidget-background: #1b212b;
+  --vscode-editorHoverWidget-background: #1b212b;
+  --vscode-editorHoverWidget-foreground: #e7eaf0;
+  --vscode-editorHoverWidget-border: #343a45;
+  --vscode-gitDecoration-addedResourceForeground: #7fd99f;
+  --vscode-gitDecoration-deletedResourceForeground: #ff9a8a;
+  --vscode-diffEditor-insertedLineBackground: rgb(87 200 130 / 14%);
+  --vscode-diffEditor-removedLineBackground: rgb(255 110 100 / 14%);
+  --vscode-debugTokenExpression-boolean: #6fb3ff;
+  --vscode-debugTokenExpression-string: #e9a37f;
+  --vscode-debugTokenExpression-number: #b9dca0;
+  --vscode-debugTokenExpression-name: #d79be0;
+  --vscode-testing-iconFailed: #ff8f86;
+
+  position: relative;
+  color-scheme: dark;
+  background:
+    radial-gradient(70% 45% at 0% 0%, rgb(95 199 154 / 15%), transparent 70%),
+    radial-gradient(60% 45% at 100% 45%, rgb(107 124 255 / 14%), transparent 70%),
+    radial-gradient(70% 40% at 20% 100%, rgb(180 107 255 / 10%), transparent 70%),
+    linear-gradient(180deg, #121722, #0a0d12) var(--glass-base);
+
+  & .request-bubble {
+    border-color: color-mix(in srgb, var(--accent) 50%, rgb(255 255 255 / 15%));
+    background: color-mix(in srgb, var(--accent) 26%, rgb(255 255 255 / 3%));
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .avatar,
+  & .hero {
+    border: 1px solid var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .hero {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 18px 40px -16px rgb(95 199 154 / 35%);
+  }
+
+  & .step-target,
+  & .file-chip,
+  & .context-chip,
+  & .context-add {
+    border: 1px solid var(--glass-edge);
+    background: var(--glass-pane-raised);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .call-list,
+  & .code-block,
+  & .diagram[data-state='rendered'],
+  & .changes,
+  & .permission,
+  & .example {
+    border-color: var(--glass-edge);
+    background: var(--glass-pane);
+    box-shadow: var(--glass-lift);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .example:hover {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  & .code-toolbar {
+    border-bottom-color: var(--glass-edge);
+    background: rgb(255 255 255 / 2.5%);
+  }
+
+  & .tool-output,
+  & .permission-command {
+    border-color: var(--glass-edge);
+    background: rgb(0 0 0 / 28%);
+  }
+
+  & .permission-open {
+    border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+    background: color-mix(in srgb, var(--warn) 7%, var(--glass-pane));
+  }
+
+  & .diagram-toolbar .icon-button {
+    background: rgb(22 27 36 / 85%);
+  }
+
+  & .round-button.stop {
+    background: var(--vscode-foreground);
+    color: var(--glass-base);
+  }
+
+  /* The composer floats over the transcript, which scrolls under it, blurred. */
+  & .transcript {
+    padding-bottom: calc(var(--composer-height, 0px) + 8px);
+    /* Whatever scrolls into view, by focus or by script, stops above the composer rather than under it. */
+    scroll-padding-bottom: calc(var(--composer-height, 0px) + 8px);
+  }
+
+  & .composer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  & .input-box {
+    position: relative;
+    border-color: var(--glass-edge-hi);
+    background: rgb(24 29 38 / 55%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 16px 36px -14px rgb(0 0 0 / 85%);
+    backdrop-filter: blur(18px) saturate(170%);
+  }
+
+  & .input-box:focus-within {
+    border-color: var(--glass-edge-hi);
+  }
+
+  & .mentions {
+    border-radius: 10px;
+    box-shadow: 0 14px 34px -12px rgb(0 0 0 / 85%);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  /*
+   * The running rainbow: a 1.5px ring masked out of a conic gradient whose registered angle the browser animates.
+   * Only the live turn's reply and the focused composer carry it, so at most two edges move at once.
+   */
+  & .reply {
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* The live reply sits on a faint pane inside its edge, which goes when the turn ends. */
+  & .reply.rainbow::after {
+    content: '';
+    position: absolute;
+    inset: -6px -8px -4px;
+    z-index: -1;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 1.5%));
+    pointer-events: none;
+  }
+
+  & .rainbow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: conic-gradient(from var(--rainbow-angle), var(--rainbow-stops));
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
+    animation: rainbow-run 3.2s linear infinite;
+  }
+
+  & .reply.rainbow::before {
+    inset: -6px -8px -4px;
+    border-radius: 14px;
+    opacity: 0.85;
+  }
+
+  & .input-box.rainbow::before {
+    border-radius: 15px;
+  }
+
+  & .input-box.rainbow,
+  & .input-box.rainbow:focus-within {
+    border-color: transparent;
+  }
+
+  /* The rainbow holds still, still drawn, for anyone who asks for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    & .rainbow::before {
+      animation-play-state: paused;
+    }
   }
 }
