@@ -24,10 +24,10 @@ import {
 } from '@g-code/core';
 import { isMissing, type Store } from './store.js';
 
-/** A prompt block the engine refuses as an attachment, such as a PDF or a tenth image. */
+/** A prompt block the engine refuses as an attachment, such as a binary file or a ninth image. */
 export class AttachmentError extends Error {}
 
-const stored = {
+const storedFields = {
   sha256: z.string().regex(/^[0-9a-f]{64}$/).transform(asSha256),
   name: z.string().min(1),
   bytes: z.number().int().nonnegative(),
@@ -36,13 +36,13 @@ const stored = {
 
 export const imageAttachmentSchema = z.strictObject({
   kind: z.literal('image'),
-  ...stored,
+  ...storedFields,
   mediaType: z.enum(IMAGE_MEDIA_TYPES),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
 });
 
-export const attachmentSchema = z.discriminatedUnion('kind', [imageAttachmentSchema, z.strictObject({ kind: z.literal('file'), ...stored, mediaType: z.string().min(1) })]);
+export const attachmentSchema = z.discriminatedUnion('kind', [imageAttachmentSchema, z.strictObject({ kind: z.literal('file'), ...storedFields, mediaType: z.string().min(1) })]);
 
 /** Where a session's attachments live: `$GCODE_HOME/sessions/<id>/attachments`, beside its log. */
 export const attachmentsDir = (store: Store, id: SessionId): string => path.join(store.sessionsDir, id, 'attachments');
@@ -70,10 +70,11 @@ async function writeOnce(dir: string, attachment: Attachment, bytes: Uint8Array)
   await rename(temporary, file);
 }
 
-export type ImageSource = { readonly name: string; readonly path?: string | undefined };
+/** What an attachment is called and, when it was a file on disk, its absolute path. */
+export type Origin = { readonly name: string; readonly path?: string | undefined };
 
 /** Stores an image the read tool or the user sent. Its type and size come from its bytes. */
-export async function storeImage(dir: string, bytes: Uint8Array, source: ImageSource): Promise<ImageAttachment> {
+export async function storeImage(dir: string, bytes: Uint8Array, source: Origin): Promise<ImageAttachment> {
   const info = imageInfo(bytes);
   if (info === undefined) throw new AttachmentError(`${source.name} is not a PNG, JPEG, GIF or WebP image`);
   if (Math.max(info.width, info.height) > MAX_IMAGE_SIDE) {
@@ -84,7 +85,7 @@ export async function storeImage(dir: string, bytes: Uint8Array, source: ImageSo
   return image;
 }
 
-export async function storeFile(dir: string, text: string, source: ImageSource & { readonly mediaType: string }): Promise<FileAttachment> {
+export async function storeFile(dir: string, text: string, source: Origin & { readonly mediaType: string }): Promise<FileAttachment> {
   const bytes = new TextEncoder().encode(text);
   const file: FileAttachment = {
     kind: 'file',
@@ -125,16 +126,16 @@ const attachmentMeta = z.object({ name: z.string().min(1).optional() }).loose();
 export const isAttachmentBlock = (block: acp.ContentBlock): boolean =>
   block.type === 'image' || (block.type === 'resource' && block._meta?.[ATTACHMENT_META] !== undefined);
 
-function sourceOf(uri: string | null | undefined, meta: unknown, fallback: string): ImageSource {
+function sourceOf(uri: string | null | undefined, meta: unknown, fallback: string): Origin {
   const parsed = attachmentMeta.safeParse(meta ?? {});
   const file = uri?.startsWith('file:') ? fileURLToPath(uri) : undefined;
   const name = (parsed.success ? parsed.data.name : undefined) ?? (file === undefined ? fallback : path.basename(file));
   return { name, path: file };
 }
 
-type Incoming =
-  | { readonly kind: 'image'; readonly bytes: Uint8Array; readonly source: ImageSource }
-  | { readonly kind: 'file'; readonly text: string; readonly source: ImageSource & { readonly mediaType: string } };
+export type Incoming =
+  | { readonly kind: 'image'; readonly bytes: Uint8Array; readonly source: Origin }
+  | { readonly kind: 'file'; readonly text: string; readonly source: Origin & { readonly mediaType: string } };
 
 /**
  * The images and files among a prompt's blocks, checked against the per-message limits before anything is
