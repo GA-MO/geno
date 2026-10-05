@@ -23,6 +23,12 @@ export type ProviderName = (typeof PROVIDERS)[number];
 export const isProviderName = (raw: string): raw is ProviderName =>
   (PROVIDERS as readonly string[]).includes(raw);
 
+/** The environment variables the engine reads each provider's key and, where it varies, endpoint from. */
+export const PROVIDER_ENV = {
+  openrouter: { key: 'OPENROUTER_API_KEY', baseUrl: undefined },
+  modelstudio: { key: 'DASHSCOPE_API_KEY', baseUrl: 'DASHSCOPE_BASE_URL' },
+} as const satisfies Record<ProviderName, { readonly key: string; readonly baseUrl: string | undefined }>;
+
 export type Session = {
   readonly id: SessionId;
   readonly createdAt: string;

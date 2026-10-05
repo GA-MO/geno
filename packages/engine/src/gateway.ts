@@ -3,6 +3,7 @@ import type { Message, Tool } from '@anthropic-ai/sdk/resources/messages/message
 import {
   buildRequest,
   costOf,
+  PROVIDER_ENV,
   type ProviderName,
   type Session,
   type TokenUsage,
@@ -28,7 +29,6 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 /** Providers that speak the Anthropic Messages wire format. */
 type Provider = {
-  readonly keyVariable: string;
   readonly baseUrl: (env: Env) => string;
   readonly defaultModel: string;
   readonly sessionHeaders: (session: Session) => Record<string, string>;
@@ -36,16 +36,14 @@ type Provider = {
 
 export const PROVIDER_TABLE: Readonly<Record<ProviderName, Provider>> = {
   openrouter: {
-    keyVariable: 'OPENROUTER_API_KEY',
     baseUrl: () => 'https://openrouter.ai/api',
     defaultModel: 'anthropic/claude-opus-5.5',
     // OpenRouter routes requests with the same session id to the same provider, so the cache it wrote is hit.
     sessionHeaders: (session) => ({ 'x-session-id': session.id }),
   },
   modelstudio: {
-    keyVariable: 'DASHSCOPE_API_KEY',
     // The URL embeds the workspace id and region, and keys only work in their own region.
-    baseUrl: (env) => required(env, 'DASHSCOPE_BASE_URL', 'your Model Studio Anthropic endpoint'),
+    baseUrl: (env) => required(env, PROVIDER_ENV.modelstudio.baseUrl, 'your Model Studio Anthropic endpoint'),
     defaultModel: 'qwen3.8-flash',
     sessionHeaders: () => ({}),
   },
@@ -72,7 +70,7 @@ function refusalMessage(message: Message): string {
 
 export function gatewayFor(providerName: ProviderName, env: Env, fetch?: typeof globalThis.fetch): Gateway {
   const provider = PROVIDER_TABLE[providerName];
-  const key = required(env, provider.keyVariable, `your ${providerName} API key`);
+  const key = required(env, PROVIDER_ENV[providerName].key, `your ${providerName} API key`);
   // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment.
   const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, fetch });
 
