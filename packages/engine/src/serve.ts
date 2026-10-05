@@ -49,7 +49,7 @@ import {
   type UnsavedBuffersRequest,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
-import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments } from './attachments.js';
+import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments, type Incoming } from './attachments.js';
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
@@ -312,7 +312,7 @@ const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
 
-function parsedAttachments(sessionId: string, blocks: readonly acp.ContentBlock[]): ReturnType<typeof incomingAttachments> {
+function parsedAttachments(sessionId: string, blocks: readonly acp.ContentBlock[]): Incoming[] {
   try {
     return incomingAttachments(blocks);
   } catch (error) {
@@ -330,7 +330,7 @@ function parsedMentions(sessionId: string, blocks: readonly acp.ContentBlock[]):
   }
 }
 
-type Attached = { readonly mentions: readonly Mention[]; readonly attachments: ReturnType<typeof incomingAttachments> };
+type Attached = { readonly mentions: readonly Mention[]; readonly attachments: readonly Incoming[] };
 
 const hasAttached = ({ mentions, attachments }: Attached): boolean => mentions.length > 0 || attachments.length > 0;
 
