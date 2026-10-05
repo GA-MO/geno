@@ -30,7 +30,6 @@ async function ui<T = unknown>(action: Record<string, unknown>): Promise<T> {
 
 const panel = <T>(expression: string): Promise<T> => ui<T>({ do: 'eval', expression });
 const click = (selector: string) => ui({ do: 'click', selector });
-const hover = (selector: string) => ui({ do: 'hover', selector });
 const textOf = (selector: string) => panel<string | null>(`doc.querySelector(${JSON.stringify(selector)})?.textContent ?? null`);
 const count = (selector: string) => panel<number>(`doc.querySelectorAll(${JSON.stringify(selector)}).length`);
 const motion = () => panel<string>(`doc.querySelector('.start-page').dataset.motion`);
@@ -48,16 +47,25 @@ async function movesWithin(ms: number): Promise<boolean> {
   return (await pose()) !== before;
 }
 
-/** The peeking head's eye, read from its two eye cells: level or up a row, the pupil to the right or the left. */
+/** The peek's eye, read from its two eye cells: level, up or down a row, the pupil to the right or the left. */
 async function peekEye(): Promise<string> {
-  const rows = (await panel<string>(`doc.querySelector('.peek-head').dataset.frame`)).match(/.{12}/g)!;
-  const EYES: Record<string, string> = { '2:wk': 'up', '2:kw': 'upLeft', '3:wk': 'open', '3:kw': 'left', '3:kk': 'blink' };
-  for (const row of [2, 3]) {
-    const eye = EYES[`${row}:${rows[row]!.slice(5, 7)}`];
+  const rows = (await panel<string>(`doc.querySelector('.peek-body').dataset.frame`)).match(/.{24}/g)!;
+  const EYES: Record<string, string> = { '2:wk': 'up', '2:kw': 'upLeft', '3:wk': 'open', '3:kw': 'left', '3:kk': 'blink', '4:wk': 'down', '4:kw': 'downLeft' };
+  for (const row of [2, 3, 4]) {
+    const eye = EYES[`${row}:${rows[row]!.slice(17, 19)}`];
     if (eye !== undefined) return eye;
   }
-  return `unknown ${rows.slice(2, 4).join('/')}`;
+  return `unknown ${rows.slice(2, 5).join('/')}`;
 }
+
+/** Every state the peek has been in since `watchPeek`, in order. */
+const watchPeek = () =>
+  panel(
+    `(() => { const w = doc.defaultView; w.peekSeen = [doc.querySelector('.peek').dataset.state]; w.peekWatch?.disconnect(); w.peekWatch = new MutationObserver(() => { const now = doc.querySelector('.peek').dataset.state; if (w.peekSeen.at(-1) !== now) w.peekSeen.push(now); }); w.peekWatch.observe(doc.querySelector('.peek'), { attributes: true, attributeFilter: ['data-state'] }); return 1; })()`,
+  );
+const peekSeen = () => panel<string[]>(`doc.defaultView.peekSeen`);
+const setDraft = (text: string) =>
+  panel(`(() => { const t = doc.querySelector('textarea'); t.value = ${JSON.stringify(text)}; t.focus(); t.dispatchEvent(new Event('input', { bubbles: true })); return ${JSON.stringify(text)}; })()`);
 
 async function theme(name: keyof typeof THEMES): Promise<void> {
   await vscode.workspace.getConfiguration('workbench').update('colorTheme', THEMES[name], vscode.ConfigurationTarget.Global);
@@ -160,51 +168,76 @@ export async function run(): Promise<void> {
   await ui({ do: 'pointerAway' });
   await screenshots('start');
 
-  // A recent session loads on click; the panel is then idle after a turn, and Noodle's head peeks over the composer.
+  // A recent session loads on click. The chat is then idle, and the peek stays behind the composer until the user types.
   await click(`.start-recent[data-session="${SESSIONS.at(-1)!.id}"]`);
   await waitFor('the recent session to load', async () => (await textOf('.request-bubble')) === SESSIONS.at(-1)!.prompt);
   check((await count('.start-page')) === 0, 'the start page leaves once a session shows');
-  await waitFor('the peek', async () => (await leaveComposer(), await peekState()) === 'up');
+  await focus(true);
+  await leaveComposer();
+  await pause(800);
+  check((await peekState()) === 'away', 'the peek stays hidden while the chat is idle', await peekState());
+
+  // Typing a few characters brings Noodle up once, with a wave the first time; then it watches the text.
+  await watchPeek();
+  await click('textarea');
+  await ui({ do: 'type', text: 'fi' });
+  await pause(400);
+  check((await peekState()) === 'away', 'two characters are not enough to climb', await peekSeen());
+  await ui({ do: 'type', text: 'x the' });
+  await waitFor('the peek to climb, wave and watch the text', async () => (await peekState()) === 'typing', 10_000);
+  check((await peekSeen()).join(' ') === 'away climb wave typing', 'the peek climbs once, waves on its first appearance, then watches', await peekSeen());
+  await ui({ do: 'type', text: ' bug' });
+  check((await peekSeen()).filter((state) => state === 'climb').length === 1, 'more keystrokes do not climb again', await peekSeen());
+  await waitFor('the eyes to look down toward the text', async () => (await peekEye()) === 'downLeft');
   check((await framed()).length === 0, 'the avatar and the peek have no background, border or shadow', await framed());
-  const head = await panel<{ width: number; height: number; cols: number; rows: number; rendering: string }>(
-    `(() => { const c = doc.querySelector('.peek-head'); const r = c.getBoundingClientRect(); return { width: r.width, height: r.height, cols: c.width, rows: c.height, rendering: getComputedStyle(c).imageRendering }; })()`,
+  const body = await panel<{ width: number; height: number; cols: number; rows: number; rendering: string }>(
+    `(() => { const c = doc.querySelector('.peek-body'); const r = c.getBoundingClientRect(); return { width: r.width, height: r.height, cols: c.width, rows: c.height, rendering: getComputedStyle(c).imageRendering }; })()`,
   );
-  check(head.width === 24 && head.height === 24 && head.cols === 12 && head.rows === 12 && head.rendering === 'pixelated', 'the peek is the head, rows 0 to 11, at 2×', head);
-  const sits = await panel<{ peek: number; box: number; right: number; boxRight: number }>(
-    `(() => { const p = doc.querySelector('.peek').getBoundingClientRect(); const b = doc.querySelector('.input-box').getBoundingClientRect(); return { peek: p.bottom, box: b.top, right: p.right, boxRight: b.right }; })()`,
+  check(body.width === 48 && body.height === 48 && body.cols === 24 && body.rows === 24 && body.rendering === 'pixelated', 'the peek is the whole 24 by 24 body at 2×, pixelated', body);
+  const sits = await panel<{ peek: number; box: number; right: number; boxRight: number; tray: number; hands: string }>(
+    `(() => { const p = doc.querySelector('.peek').getBoundingClientRect(); const b = doc.querySelector('.input-box').getBoundingClientRect(); const rows = doc.querySelector('.peek-body').dataset.frame.match(/.{24}/g); return { peek: p.bottom, box: b.top, right: p.right, boxRight: b.right, tray: doc.querySelector('.tray').hidden ? b.top : doc.querySelector('.tray').getBoundingClientRect().top, hands: rows.slice(22).join('/') }; })()`,
   );
-  check(Math.abs(sits.peek - sits.box) <= 1 && sits.right > sits.boxRight - 80, 'the head sits on the composer\'s top edge, on the right', sits);
+  check(Math.abs(sits.peek - sits.box) <= 2 && sits.right > sits.boxRight - 100 && sits.peek <= sits.tray + 2, 'Noodle leans on the composer\'s top edge, on the right, above the tray', sits);
+  check(/dgd.*dgd/.test(sits.hands.split('/')[0]!), 'both hands grip the edge, knuckles up', sits.hands);
 
-  await hover('.chat-header');
-  await waitFor('the eyes to look up and left at the pointer', async () => (await peekEye()) === 'upLeft');
-  await hover('.composer-model');
-  await waitFor('the eyes to look left at the pointer', async () => (await peekEye()) === 'left');
-  await hover('button.send');
-  await waitFor('the eyes to look right at the pointer', async () => (await peekEye()) === 'open');
-  await hover('.chat-header');
-  await waitFor('the eyes to look up again', async () => (await peekEye()) === 'upLeft');
+  // A pause in typing brings one move, then Noodle watches again.
+  await waitFor('one move after a pause', async () => (await peekSeen()).some((state) => state === 'drum' || state === 'lookAround'), 10_000);
+  await waitFor('the move to end', async () => (await peekState()) === 'typing', 10_000);
+  await focus(false);
+  await ui({ do: 'pointerAway' });
   await screenshots('peek');
+  await focus(true);
 
+  // Under reduced motion Noodle holds still: both hands on the edge, eyes ahead, no move after a pause.
   await ui({ do: 'motion', value: 'reduce' });
-  await waitFor('the peek to stop tracking', async () => (await peekEye()) === 'open');
-  await hover('.composer-model');
-  await pause(300);
-  check((await peekEye()) === 'open', 'under reduced motion the peek does not follow the pointer', await peekEye());
+  await waitFor('the peek to hold still', async () => (await peekEye()) === 'open');
+  await watchPeek();
+  await ui({ do: 'type', text: '!' });
+  await pause(3800);
+  check((await peekSeen()).join(' ') === 'typing', 'under reduced motion the peek plays no move', await peekSeen());
   await ui({ do: 'motion', value: '' });
 
-  await click('textarea');
-  await waitFor('the head to duck while the composer has focus', async () => (await peekState()) === 'ducked');
+  // Emptying the composer ducks it; typing again climbs, with no second wave.
+  await setDraft('');
+  await waitFor('the peek to duck when the composer is emptied', async () => (await peekState()) === 'away');
+  check((await peekSeen()).includes('duck'), 'the peek ducks rather than vanishing', await peekSeen());
+  await watchPeek();
   await ui({ do: 'type', text: FOLLOW_UP });
-  await leaveComposer();
-  check((await peekState()) === 'ducked', 'the head stays down while the composer holds text', await peekState());
-  await ui({ do: 'pointerAway' });
-  await ui({ do: 'panelshot', name: 'peek-ducked-dark-panel' });
-  await click('textarea');
+  await waitFor('the peek to climb again', async () => (await peekState()) === 'typing', 10_000);
+  check(!(await peekSeen()).includes('wave'), 'the wave plays once a session', await peekSeen());
+
+  // Sending ducks it, and it stays down while the turn runs, even while the user types a follow-up.
   await ui({ do: 'press', key: 'Enter' });
   await waitFor('the turn to run', async () => (await count('.turn[aria-busy="true"]')) === 1);
-  check((await peekState()) === 'away', 'the head hides while a turn runs', await peekState());
+  await waitFor('the peek to duck on send', async () => (await peekState()) === 'away');
+  check((await peekSeen()).at(-2) === 'duck', 'the peek ducks on send', await peekSeen());
+  await ui({ do: 'type', text: 'and then this' });
+  await pause(500);
+  check((await peekState()) === 'away', 'the peek hides while a turn runs', await peekState());
+  await setDraft('');
   await ui({ do: 'release' });
   await waitFor('the turn to end', async () => (await count('.turn[aria-busy="true"]')) === 0 && (await count('.turn-footer')) === 2);
   check((await textOf('.turn:last-child .markdown'))?.includes(ANSWER) === true, 'the answer shows');
-  await waitFor('the head to peek again after the turn', async () => (await leaveComposer(), await peekState()) === 'up');
+  await pause(800);
+  check((await peekState()) === 'away', 'the peek stays hidden after the turn while the chat is idle', await peekState());
 }

@@ -20,10 +20,10 @@ import { isWaiting, nodeOf, type Step } from './rail.js';
 import { callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
-import type { PeekInput } from './peek-model.js';
 import { slashPicker } from './slash-view.js';
 import { startPage } from './start-page.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
+import { workingDino } from './working-dino.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -139,19 +139,15 @@ const slash = slashPicker(input, {
   wanted: () => host.postMessage({ type: 'want-commands' }),
   submit,
 });
-const peek = peekOver();
+const peek = peekOver((shown) => peekGate.set('shown', shown));
+const peekGate = motionGate((motion) => peek.setMotion(motion));
+peek.setMotion(peekGate.motion());
 const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, peek.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
-const peekInput = (): PeekInput => ({
-  turns: transcript.turns.length,
-  running: isRunning(transcript),
-  composerFocused: document.activeElement === input,
-  draft: input.value,
-});
-const gate = motionGate((motion) => {
-  start.setMotion(motion);
-  peek.setTracking(motion !== 'still', peekInput());
-});
+const gate = motionGate((motion) => start.setMotion(motion));
+const working = workingDino();
+const workGate = motionGate((motion) => working.setMotion(motion));
+working.setMotion(workGate.motion());
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -314,7 +310,10 @@ function render(): void {
   if (empty && !wasEmpty) start.refresh();
   wasEmpty = empty;
   gate.set('shown', empty && document.body.dataset['view'] === 'chat');
-  peek.update(peekInput());
+  working.show(transcript.turns.at(-1), empty ? undefined : shells.at(-1));
+  workGate.set('shown', working.active());
+  // One Noodle at a time: the start page has its own, and the working dino has the stage while a turn runs.
+  peek.blocked(empty || running || document.body.dataset['view'] !== 'chat');
   const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now() });
   controls.show(view);
   showTray();
@@ -391,7 +390,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'commands') return slash.setCommands(message.commands);
   if (message.type === 'show-history') return history.open();
   if (message.type === 'hide-history') return history.close();
-  if (message.type === 'window-focus') return gate.set('focused', message.focused);
+  if (message.type === 'window-focus') {
+    for (const each of [gate, workGate, peekGate]) each.set('focused', message.focused);
+    return;
+  }
   if (message.type === 'history') {
     if (message.scope === 'project') start.listed(message.rows);
     return history.listed(message.scope, message.rows);
@@ -440,7 +442,6 @@ function sendQueued(ended: 'done' | 'stopped' | 'failed'): void {
 
 /** The composer after its text changed: its height, and a chip for each `@` mention in it. */
 function redraft(): void {
-  peek.update(peekInput());
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, MAX_COMPOSER_PX)}px`;
   input.style.overflowY = input.scrollHeight > MAX_COMPOSER_PX ? 'auto' : 'hidden';
@@ -605,6 +606,7 @@ function submit(): void {
     queued = { text, attachments: attached };
     schedule();
   } else host.postMessage({ type: 'send', text, ...(attached.length === 0 ? {} : { attachments: attached }) });
+  peek.sent();
   attachments.clear();
   fill('');
 }
@@ -625,10 +627,10 @@ form.addEventListener('submit', (event) => {
 input.addEventListener('input', () => {
   save({ ...state, draft: input.value });
   redraft();
+  peek.typed(input.value);
   askCompletions();
   slash.refresh();
 });
-for (const type of ['focus', 'blur'] as const) input.addEventListener(type, () => peek.update(peekInput()));
 input.addEventListener('click', () => {
   askCompletions();
   slash.refresh();

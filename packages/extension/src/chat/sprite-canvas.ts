@@ -29,5 +29,5 @@ export function spriteCanvas(className: string, area: Area = WHOLE) {
     element.dataset['frame'] = key;
   }
 
-  return { element, draw: (frame: Frame) => paint(crop(compose(frame), area)) };
+  return { element, draw: (frame: Frame) => paint(crop(compose(frame), area)), paint };
 }

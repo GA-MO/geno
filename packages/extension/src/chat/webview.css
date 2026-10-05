@@ -245,6 +245,25 @@ canvas.dino {
   height: 24px;
 }
 
+/* The working dino: Noodle at 2× beside the running turn's current step, while the turn's avatar steps aside. */
+.step:has(> .working-dino) {
+  min-height: 48px;
+  padding-right: 56px;
+}
+
+.working-dino {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+}
+
+.turn[data-working] > .head-slot .avatar {
+  visibility: hidden;
+}
+
 .turn-name {
   font-weight: 600;
 }
@@ -1484,26 +1503,29 @@ body.diagram-tab {
   font-size: calc(var(--vscode-font-size) - 1px);
 }
 
-/* The peek: Noodle's head at 2× over the composer's top edge, clipped there so ducking hides it behind the box. */
+/*
+ * The peek: Noodle at 2× leaning on the composer's top edge, its hands over the rainbow border. The box ends 1px
+ * below the edge, so the composer clips the body as it climbs and ducks.
+ */
 .peek {
   position: absolute;
-  top: -16px;
+  z-index: 1;
+  top: -39px;
   right: 30px;
-  width: 24px;
-  height: 24px;
+  width: 48px;
+  height: 48px;
   overflow: hidden;
   pointer-events: none;
 }
 
-.peek-head {
-  display: block;
-  width: 24px;
-  height: 24px;
-  transition: transform 160ms steps(4);
+.peek[data-state='away'] {
+  visibility: hidden;
 }
 
-.peek:not([data-state='up']) .peek-head {
-  transform: translateY(100%);
+.peek-body {
+  display: block;
+  width: 48px;
+  height: 48px;
 }
 
 /* Composer */
@@ -1718,10 +1740,6 @@ body.diagram-tab {
   .node-wait::before,
   .start-cursor {
     animation: none;
-  }
-
-  .peek-head {
-    transition: none;
   }
 
   .shimmer {
