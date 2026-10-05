@@ -51,7 +51,7 @@ const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...tur
 const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, action: ActionOf<K>) => Transcript } = {
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
-  'turn-start': (transcript, { id, at, prompt, attachments, mode }) => ({
+  'turn-start': (transcript, { id, at, prompt, attachments, mode, command }) => ({
     ...transcript,
     turns: [
       ...transcript.turns,
@@ -65,6 +65,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
         usage: undefined,
         mode,
         ...(attachments === undefined || attachments.length === 0 ? {} : { attachments }),
+        ...(command === undefined ? {} : { command }),
       },
     ],
   }),

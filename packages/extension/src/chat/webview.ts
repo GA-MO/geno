@@ -10,6 +10,7 @@ import { historyPanel } from './history.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { callsStep, changesCard, emptyState, errorBlock, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { slashPicker } from './slash-view.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
@@ -49,7 +50,7 @@ const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'Geno cha
 const status = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
 const input = h('textarea', {
   rows: 1,
-  placeholder: 'Ask for a change, @ to add context',
+  placeholder: 'Ask for a change, @ to add context, / for commands',
   'aria-label': 'Ask Geno for a change',
   'data-focus': 'composer',
   'aria-autocomplete': 'list',
@@ -83,7 +84,15 @@ const inputBox = h(
   input,
   h('div', { class: 'input-toolbar' }, modelLabel, picker.element, h('span', { class: 'spacer' }), stop, send),
 );
-const form = h('form', { class: 'composer' }, menu, picker.menu, inputBox);
+const slash = slashPicker(
+  input,
+  () => {
+    save({ ...state, draft: input.value });
+    redraft();
+  },
+  () => host.postMessage({ type: 'want-commands' }),
+);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, inputBox);
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -175,7 +184,7 @@ function turnShell(turn: Turn): HTMLElement {
   return h(
     'article',
     { class: 'turn', 'data-turn': turn.id },
-    userMessage(turn.prompt, turn.attachments, ui),
+    userMessage(turn.prompt, turn.attachments, ui, turn.command),
     h('div', { class: 'head-slot' }),
     h('ol', { class: 'rail' }),
     h('div', { class: 'footer-slot' }),
@@ -219,7 +228,7 @@ function render(): void {
   send.hidden = running;
   stop.hidden = !running;
   modelName.textContent = transcript.model === '' ? 'Default model' : transcript.model;
-  input.placeholder = empty ? 'Describe the change you want, @ to add context' : 'Ask a follow-up, @ to add context';
+  input.placeholder = empty ? 'Describe the change you want, @ to add context, / for commands' : 'Ask a follow-up, @ to add context, / for commands';
   if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
   focusNewPermission();
   if (atBottom) log.scrollTop = log.scrollHeight;
@@ -271,6 +280,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   }
   if (message.type === 'header') return showHeader(message.header);
   if (message.type === 'modes') return picker.show(message.modes);
+  if (message.type === 'commands') return slash.setCommands(message.commands);
   if (message.type === 'show-history') return history.open();
   if (message.type === 'hide-history') return history.close();
   if (message.type === 'history') return history.listed(message.scope, message.rows);
@@ -330,6 +340,7 @@ function addContext(): void {
 
 function fill(text: string): void {
   closeMenu();
+  slash.close();
   edit(text, undefined);
 }
 
@@ -448,12 +459,19 @@ input.addEventListener('input', () => {
   save({ ...state, draft: input.value });
   redraft();
   askCompletions();
+  slash.refresh();
 });
-input.addEventListener('click', askCompletions);
+input.addEventListener('click', () => {
+  askCompletions();
+  slash.refresh();
+});
 input.addEventListener('keyup', (event) => {
-  if (CARET_KEYS.has(event.key)) askCompletions();
+  if (!CARET_KEYS.has(event.key)) return;
+  askCompletions();
+  slash.refresh();
 });
 input.addEventListener('keydown', (event) => {
+  if (slash.keydown(event)) return;
   if (completing !== undefined && completing.items.length > 0 && !event.isComposing) {
     const move = MENU_KEYS[event.key];
     if (move !== undefined) {
