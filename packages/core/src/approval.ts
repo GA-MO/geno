@@ -2,13 +2,12 @@ import path from 'node:path';
 
 export type CommandScope = {
   readonly workspace: string;
-  /** The one directory `rm -rf` may target. */
   readonly tempDir: string;
   readonly home: string;
 };
 
 export const DENY_RULE_IDS = [
-  'rm-rf-outside-temp',
+  'rm-rf-outside-workspace',
   'git-push',
   'git-reset-hard',
   'path-outside-workspace',
@@ -18,8 +17,16 @@ export const DENY_RULE_IDS = [
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
 
-/** One simple command: its program (a basename, wrappers such as sudo or npx removed) and every word. */
-export type SimpleCommand = { readonly program: string; readonly args: readonly string[]; readonly words: readonly string[] };
+/**
+ * One simple command after variable expansion: its program (a basename, wrappers such as sudo or npx removed), every
+ * word, and the directory it runs in, or undefined once the command line changes directory.
+ */
+export type SimpleCommand = {
+  readonly program: string;
+  readonly args: readonly string[];
+  readonly words: readonly string[];
+  readonly cwd: string | undefined;
+};
 
 type DenyRule = {
   readonly reason: string;
@@ -36,10 +43,13 @@ const DATABASE_CLIS = new Set([
   'clickhouse-client', 'cockroach', 'cqlsh', 'mongo', 'mongodump', 'mongorestore', 'mongosh', 'mysql',
   'mysqldump', 'pg_dump', 'pg_restore', 'psql', 'redis-cli', 'sqlcmd',
 ]);
+
 const DOWNLOADERS = new Set(['curl', 'wget']);
 
 // Read-only system locations a build or test command legitimately names by absolute path.
 const SYSTEM_PREFIXES = ['/dev', '/usr', '/bin', '/sbin', '/opt/homebrew', '/tmp', '/private/tmp'];
+// Shared temp dirs: what is strictly inside them is scratch, the dirs themselves are not.
+const TEMP_ROOTS = ['/tmp', '/private/tmp'];
 // An absolute word counts as a path only under a real top-level directory, so `/api/users` in a grep is not one.
 const FILESYSTEM_ROOTS = new Set([
   'Applications', 'Library', 'System', 'Users', 'Volumes', 'bin', 'dev', 'etc', 'home', 'mnt', 'nix', 'opt',
@@ -47,6 +57,7 @@ const FILESYSTEM_ROOTS = new Set([
 ]);
 
 const within = (root: string, target: string): boolean => target === root || target.startsWith(root + path.sep);
+const strictlyWithin = (root: string, target: string): boolean => target !== root && within(root, target);
 
 function pathOf(word: string, scope: CommandScope): string | undefined {
   const value = word.includes('=') && !word.startsWith('=') ? word.slice(word.indexOf('=') + 1) : word;
@@ -59,6 +70,22 @@ function pathOf(word: string, scope: CommandScope): string | undefined {
 function isOutside(target: string, scope: CommandScope): boolean {
   const allowed = [scope.workspace, scope.tempDir, ...SYSTEM_PREFIXES];
   return !allowed.some((root) => within(root, target));
+}
+
+/** Whether `rm -rf` of this operand can only remove scratch: something strictly inside the workspace but not its .git, or strictly inside a temp dir. */
+function removable(operand: string, cwd: string | undefined, scope: CommandScope): boolean {
+  // An unset variable expands to nothing, which removes nothing.
+  if (operand === '') return true;
+  if (/[$`]/.test(operand) || /^~[^/]/.test(operand)) return false;
+  const parts = operand.split('/');
+  const glob = parts.findIndex((part) => /[*?[{]/.test(part));
+  // A glob removes only what is below its literal prefix, so that prefix must itself be removable.
+  const literal = glob === -1 ? operand : parts.slice(0, glob).join('/') || (operand.startsWith('/') ? '/' : '.');
+  const expanded = literal === '~' || literal.startsWith('~/') ? path.join(scope.home, literal.slice(1)) : literal;
+  if (!path.isAbsolute(expanded) && cwd === undefined) return false;
+  const target = path.resolve(cwd ?? '/', expanded);
+  const inWorkspace = strictlyWithin(scope.workspace, target) && !within(path.join(scope.workspace, '.git'), target);
+  return inWorkspace || [scope.tempDir, ...TEMP_ROOTS].some((root) => strictlyWithin(root, target));
 }
 
 const flags = (args: readonly string[]) => args.filter((arg) => arg.startsWith('-'));
@@ -82,12 +109,10 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 }
 
 export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
-  'rm-rf-outside-temp': {
-    reason: 'rm -rf outside the temp dir',
-    denies: ({ program, args }, scope) =>
-      program === 'rm' &&
-      isRecursiveForce(args) &&
-      operands(args).some((target) => !within(scope.tempDir, path.resolve(scope.workspace, target.replace(/^~(?=\/|$)/, scope.home)))),
+  'rm-rf-outside-workspace': {
+    reason: 'rm -rf of the workspace, its .git or a path outside it',
+    denies: ({ program, args, cwd }, scope) =>
+      program === 'rm' && isRecursiveForce(args) && operands(args).some((target) => !removable(target, cwd, scope)),
   },
   'git-push': {
     reason: 'git push',
@@ -299,23 +324,77 @@ const WRAPPERS = new Set([
   'sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice',
   'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{',
 ]);
+const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd']);
 const isAssignment = (word: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
 
-export function simpleCommand(words: readonly string[]): SimpleCommand {
+export function simpleCommand(words: readonly string[], cwd: string | undefined): SimpleCommand {
   let i = 0;
   for (;;) {
     while (i < words.length && (isAssignment(words[i]!) || words[i]!.startsWith('-'))) i++;
     if (i < words.length && WRAPPERS.has(path.basename(words[i]!))) i++;
     else break;
   }
-  return { program: path.basename(words[i] ?? ''), args: words.slice(i + 1), words };
+  return { program: path.basename(words[i] ?? ''), args: words.slice(i + 1), words, cwd };
+}
+
+/** The values each variable may hold anywhere in the command line; a variable missing here could hold anything. */
+type Bindings = ReadonlyMap<string, readonly string[]>;
+
+// Names the environment or the shell may set, so an assignment here is not their only possible value.
+const INHERITED = new Set(['PATH', 'LANG', 'TERM', 'TMPDIR', 'PWD', 'OLDPWD', 'IFS', 'CDPATH']);
+const MKTEMP_DIR = /^\$\(mktemp(?:\s+-[dqu]+)*\s*\)$/;
+const VARIABLE = /\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g;
+const MAX_VARIANTS = 256;
+
+// Order and control flow are ignored: a variable may hold any value assigned to it anywhere in the line, or nothing,
+// which stays sound across loops, conditionals and subshells.
+function bindings(commands: readonly (readonly string[])[], scope: CommandScope): Bindings {
+  const values = new Map<string, string[]>([['HOME', [scope.home]]]);
+  const unknown = new Set(INHERITED);
+  const bind = (name: string, value: string) => {
+    if (value.includes('`') || (value.includes('$') && !MKTEMP_DIR.test(value))) unknown.add(name);
+    // mktemp makes a new directory that nothing else owns, so it stands in as a child of the temp dir.
+    const resolved = MKTEMP_DIR.test(value) ? path.join(scope.tempDir, 'mktemp') : value;
+    values.set(name, [...(values.get(name) ?? ['']), resolved]);
+  };
+  for (const words of commands) {
+    for (const word of words.filter(isAssignment)) bind(word.slice(0, word.indexOf('=')), word.slice(word.indexOf('=') + 1));
+    const { program, args } = simpleCommand(words, undefined);
+    if (program === 'for' && args[1] === 'in') for (const value of args.slice(2)) bind(args[0]!, value);
+  }
+  return new Map([...values].filter(([name]) => !unknown.has(name)));
+}
+
+function expand(word: string, vars: Bindings): string[] {
+  let results = [''];
+  let last = 0;
+  for (const match of word.matchAll(VARIABLE)) {
+    const text = word.slice(last, match.index);
+    const values = vars.get(match[1] ?? match[2]!);
+    results = values === undefined ? results.map((r) => r + text + match[0]) : results.flatMap((r) => values.map((v) => r + text + v));
+    last = match.index + match[0].length;
+  }
+  return results.map((r) => r + word.slice(last));
+}
+
+// Every combination of the words' possible values; past the cap the words stay unexpanded, which rules treat as unknown.
+function variants(words: readonly string[], vars: Bindings): readonly (readonly string[])[] {
+  const expanded = words.map((word) => expand(word, vars));
+  if (expanded.reduce((count, values) => count * values.length, 1) > MAX_VARIANTS) return [words];
+  return expanded.reduce<string[][]>((combos, values) => combos.flatMap((combo) => values.map((v) => [...combo, v])), [[]]);
 }
 
 export function denialFor(command: string, scope: CommandScope): Denial | undefined {
-  for (const words of splitCommand(command)) {
-    const simple = simpleCommand(words);
-    for (const rule of DENY_RULE_IDS) {
-      if (DENY_RULES[rule].denies(simple, scope)) return { rule, reason: DENY_RULES[rule].reason, command: words.join(' ') };
+  const commands = splitCommand(command);
+  const vars = bindings(commands, scope);
+  // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
+  const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
+  for (const words of commands) {
+    for (const variant of variants(words, vars)) {
+      const simple = simpleCommand(variant, cwd);
+      for (const rule of DENY_RULE_IDS) {
+        if (DENY_RULES[rule].denies(simple, scope)) return { rule, reason: DENY_RULES[rule].reason, command: words.join(' ') };
+      }
     }
   }
   return undefined;
