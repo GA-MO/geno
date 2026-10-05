@@ -75,8 +75,9 @@ const test: Command = async (args, { io }) => {
     );
     const latencyMs = Math.round(performance.now() - started);
     const reply = message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('').trim().slice(0, 80);
-    const costUsd = costOf(provider, model, usageOf(message));
-    return emit(io, values.json, { ok: true, provider, model, latencyMs, reply, costUsd }, `ok: ${provider} ${model} answered in ${latencyMs}ms: ${reply}`);
+    const usage = usageOf(message);
+    const costUsd = costOf(provider, model, usage);
+    return emit(io, values.json, { ok: true, provider, model, latencyMs, reply, usage, costUsd }, `ok: ${provider} ${model} answered in ${latencyMs}ms: ${reply}`);
   } catch (error) {
     const message = failureText(error, wire);
     return emit(io, values.json, { ok: false, provider, error: message }, `error: ${message}`);
