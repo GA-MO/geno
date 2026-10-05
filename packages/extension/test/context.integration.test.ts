@@ -84,7 +84,7 @@ describe('rules, memory and questions in the chat panel', () => {
     const { home, suite, launchArgs } = await setUp(
       'context',
       { 'AGENTS.md': 'Use pnpm.\n', '.cursor/rules/react.mdc': '---\nglobs: *.tsx\n---\nFunction components.\n', 'a.ts': 'export const a = 1;\n' },
-      { 'gcode.approvalMode': 'ask' },
+      { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full' },
     );
     await mkdir(home, { recursive: true });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
