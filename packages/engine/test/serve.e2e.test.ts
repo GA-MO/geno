@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
@@ -15,6 +16,7 @@ import {
   INLINE_EDIT_META,
   REVIEW_METHOD,
   REWIND_METHOD,
+  SELECTION_LINES_META,
   STALE_BASE_ERROR,
   TOOL_CALL_META,
   TURN_USAGE_META,
@@ -35,7 +37,7 @@ import { gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
-import { rgCommand } from './helpers.js';
+import { rgCommand, runCli } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 
@@ -151,7 +153,7 @@ async function setup(replies: readonly Reply[]) {
       await during?.(ctx, sessionId);
       return (await turn).stopReason;
     });
-  return { workspace, file, editor, transport, prompt, connect, stderr };
+  return { workspace, file, editor, transport, prompt, connect, stderr, env };
 }
 
 const toolResultOf = (body: { messages: { content: unknown }[] }, index = -1): { content: string; is_error?: boolean } => {
@@ -197,6 +199,51 @@ describe('gcode serve', () => {
       'a.ts:1:export const a = 1;\na.ts:2:export const unsaved = true;\ndraft.ts:1:export const unsaved = "new file";',
       'a.ts\ndraft.ts',
     ]);
+  });
+
+  it('renders @file from the buffer and @selection as sent, logs them, and replays the same bytes on the next turn', async () => {
+    const { workspace, file, transport, connect, env } = await setup([answer('It flags unsaved code.', usage), answer('Yes.', usage)]);
+    const other = path.join(workspace, 'b.ts');
+    writeFileSync(other, 'line one\nline two\nline three\n');
+    const blocks: acp.ContentBlock[] = [
+      { type: 'text', text: 'Explain @a.ts and @selection' },
+      { type: 'resource_link', uri: pathToFileURL(file).href, name: 'a.ts' },
+      { type: 'resource', resource: { uri: pathToFileURL(other).href, text: 'line two\nline three' }, _meta: { [SELECTION_LINES_META]: { startLine: 2, endLine: 3 } } },
+    ];
+    const attached = [
+      { type: 'text', text: 'Explain @a.ts and @selection' },
+      {
+        type: 'text',
+        text: [
+          'The user attached these from the editor, as they were when the message was sent:',
+          '<context_item kind="file" path="a.ts">\n1\texport const a = 1;\n2\texport const unsaved = true;\n</context_item>',
+          '<context_item kind="selection" path="b.ts" lines="2-3">\n2\tline two\n3\tline three\n</context_item>',
+        ].join('\n\n'),
+      },
+    ];
+
+    const sessionId = await connect(async (ctx, id) => {
+      const init = await ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: blocks });
+      expect(init.stopReason).toBe('end_turn');
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId: id, prompt: [{ type: 'text', text: 'Sure?' }] });
+      return id;
+    });
+
+    const [first, second] = transport.requests.map((r) => r.body.messages);
+    expect(first[0].content.map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)).toEqual(attached);
+    expect(JSON.stringify(second[0].content)).toBe(JSON.stringify(attached));
+    const shown = (await runCli(['session', 'show', sessionId], env)).stdout;
+    expect(shown).toContain('  attached file a.ts');
+    expect(shown).toContain('  attached selection b.ts:2-3');
+  });
+
+  it('refuses a mention outside the workspace and a block it cannot attach, logging nothing', async () => {
+    const { transport, connect } = await setup([]);
+    const refusal = (prompt: acp.ContentBlock[]) =>
+      connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt }).then(() => 'answered', (error: Error) => error.message));
+    expect(await refusal([{ type: 'text', text: 'Read @x' }, { type: 'resource_link', uri: 'file:///etc/hosts', name: 'hosts' }])).toMatch(/outside the workspace/);
+    expect(await refusal([{ type: 'text', text: 'See' }, { type: 'image', data: '', mimeType: 'image/png' }])).toMatch(/cannot be attached/);
+    expect(transport.requests).toHaveLength(0);
   });
 
   it('ends each tool call as it finishes and answers the prompt with the turn\'s tokens, model and cost', async () => {

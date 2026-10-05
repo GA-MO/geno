@@ -20,7 +20,8 @@ import { REVEAL_COMMAND } from '../review/tree.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
-import { TOOL_KINDS, type Action, type FileDiff, type FromView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type Usage } from './messages.js';
+import { Mentions } from './context.js';
+import { TOOL_KINDS, type Action, type FileDiff, type FromView, type ToView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type Usage } from './messages.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
 
 export const CHAT_VIEW = 'gcode.chat';
@@ -147,6 +148,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private turn: SessionLink | undefined;
   private readonly permissions = new Map<string, (optionId: string | undefined) => void>();
   private nextPermission = 0;
+  private readonly mentions = new Mentions();
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -206,26 +208,31 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       });
   }
 
-  /** Runs one agent turn and resolves with its stop reason. */
+  /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions go along as context. */
   send(text: string): Promise<acp.StopReason> {
-    return this.prompt(text, text, undefined);
+    return this.prompt(text, text, undefined, () => this.mentions.blocks(text));
   }
 
   /** Cmd-K: a one-shot edit of a selection, shown in the panel like a turn. */
   inlineEdit(target: InlineEditTarget, instruction: string, file: vscode.Uri): Promise<acp.StopReason> {
     const lines = target.startLine === target.endLine ? `line ${target.startLine}` : `lines ${target.startLine}-${target.endLine}`;
     const shown = `Edit ${lines} of ${vscode.workspace.asRelativePath(file)}: ${instruction}`;
-    return this.prompt(shown, instruction, { [INLINE_EDIT_META]: target });
+    return this.prompt(shown, instruction, { [INLINE_EDIT_META]: target }, async () => []);
   }
 
-  private async prompt(shown: string, text: string, meta: Record<string, unknown> | undefined): Promise<acp.StopReason> {
+  private async prompt(
+    shown: string,
+    text: string,
+    meta: Record<string, unknown> | undefined,
+    attachments: () => Promise<acp.ContentBlock[]>,
+  ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
     this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, prompt: shown });
     try {
       this.turn = await this.link();
       const response = await this.turn.connection.agent.request(acp.methods.agent.session.prompt, {
         sessionId: this.turn.sessionId,
-        prompt: [{ type: 'text', text }],
+        prompt: [{ type: 'text', text }, ...(await attachments())],
         ...(meta === undefined ? {} : { _meta: meta }),
       });
       const ending = ENDINGS[response.stopReason];
@@ -308,6 +315,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         this.view = view;
       },
       send: ({ text }) => void this.send(text).catch(() => {}),
+      complete: ({ id, query }) =>
+        void this.mentions.completions(query).then(
+          (items) => view.webview.postMessage({ type: 'completions', id, items } satisfies ToView),
+          () => view.webview.postMessage({ type: 'completions', id, items: [] } satisfies ToView),
+        ),
       stop: () => void this.stop(),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       keep: ({ hunk }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunk),

@@ -79,6 +79,22 @@ export const INLINE_EDIT_META = 'gcode/inlineEdit';
 /** `path` is absolute; lines count from 1 and include both ends. */
 export type InlineEditTarget = { readonly path: string; readonly startLine: number; readonly endLine: number };
 
+/**
+ * Key in an embedded `resource` prompt block's `_meta`: `{ startLine, endLine }`, counted from 1 and inclusive, which
+ * makes the block an `@selection` of those lines. A `resource_link`, or a `resource` without the key, is an `@file`.
+ */
+export const SELECTION_LINES_META = 'gcode/lines';
+
+export type SelectionLines = { readonly startLine: number; readonly endLine: number };
+
+/**
+ * What the user pointed at from the composer, parsed from session/prompt's blocks. `path` is absolute. A file is
+ * read through the buffer bridge when the prompt is logged; a selection carries the text the user saw.
+ */
+export type Mention =
+  | { readonly kind: 'file'; readonly path: string }
+  | ({ readonly kind: 'selection'; readonly path: string; readonly text: string } & SelectionLines);
+
 export function formatDiagnostics(diagnostics: readonly EditorDiagnostic[], show: (path: string) => string): string {
   if (diagnostics.length === 0) return 'The editor reports no problems in the files you read or edited.';
   const lines = diagnostics.map(

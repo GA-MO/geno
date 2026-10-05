@@ -34,22 +34,26 @@ import {
   type ReviewResponse,
   type RewindResponse,
   type ToolStatus,
+  type ContextItem,
+  type Mention,
   type TurnEvent,
   type UnsavedBuffersRequest,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
-import { openSessionLog, resumeSession, startSession } from './chat.js';
+import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
+import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { appendEvent, dropTornTail } from './sessions.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 import type { Approver, Diagnostics } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
+import { ruleAttacher } from './tools/rules.js';
 
 const RESOURCE_NOT_FOUND = -32002;
 
@@ -262,6 +266,29 @@ const inlineEditTarget = z
   .object({ path: z.string().min(1), startLine: z.number().int().positive(), endLine: z.number().int().positive() })
   .refine((t) => t.startLine <= t.endLine, 'startLine must not be after endLine');
 
+function parsedMentions(sessionId: string, blocks: readonly acp.ContentBlock[]): Mention[] {
+  try {
+    return mentionsOf(blocks);
+  } catch (error) {
+    if (error instanceof MentionError) throw acp.RequestError.invalidParams({ sessionId }, error.message);
+    throw error;
+  }
+}
+
+async function logPrompt(opened: OpenSession, content: string, mentions: readonly Mention[], files: Files, sessionId: string): Promise<OpenSession> {
+  const { log } = opened;
+  let context: ContextItem[];
+  try {
+    context = await contextItems(mentions, await workspaceDir(log.session.workspace, '.'), files, ruleAttacher(log.events));
+  } catch (error) {
+    if (error instanceof MentionError || error instanceof ToolError) throw acp.RequestError.invalidParams({ sessionId }, error.message);
+    throw error;
+  }
+  const event: TurnEvent = { kind: 'user', seq: nextSeq(log.events), at: new Date().toISOString(), content, context };
+  await appendEvent(log.file, event);
+  return { ...opened, log: { ...log, events: [...log.events, event] } };
+}
+
 async function appendDecisions(store: Store, io: Io, sessionId: string, decisions: readonly ReviewDecision[]): Promise<void> {
   if (decisions.length === 0) return;
   const log = await openSessionLog(store, sessionId, io);
@@ -298,7 +325,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} } },
+        agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} }, promptCapabilities: { embeddedContext: true } },
         agentInfo: { name: 'gcode', version: '0.0.0' },
       };
     })
@@ -324,6 +351,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
       const text = promptText(params.prompt);
       if (text === '') throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
+      const mentions = parsedMentions(sessionId, params.prompt);
       const rawTarget = params._meta?.[INLINE_EDIT_META];
       const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
       if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
@@ -335,10 +363,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       const diagnostics = peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined;
       try {
         return await serially(sessionId, async () => {
-          const opened = await resumeSession(store, io, sessionId);
+          const resumed = await resumeSession(store, io, sessionId);
+          // A prompt with mentions is logged here, with what they showed, and the loop answers it as a pending prompt.
+          const opened = target === undefined && mentions.length > 0 ? await logPrompt(resumed, text, mentions, turn.surface.files, sessionId) : resumed;
+          const prompt = opened === resumed ? text : '';
           const result =
             target === undefined
-              ? await runAgent(turnIo, store, opened, text, {
+              ? await runAgent(turnIo, store, opened, prompt, {
                   limits,
                   check: undefined,
                   checkAfterEdit: true,
