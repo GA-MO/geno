@@ -85,6 +85,11 @@ export async function run(): Promise<void> {
 
   check((await textOf('.empty-model'))?.includes('qwen3.8-flash') === true, 'the empty state names the model', await textOf('.empty-model'));
   check((await count('.example')) === 3, 'the empty state offers three example prompts');
+  const blink = () => panel<string>(`getComputedStyle(doc.querySelector('.empty-state .hero svg .lid')).animationName`);
+  check((await blink()) === 'blink-eye', 'Noodle blinks in the empty state', await blink());
+  await ui({ do: 'motion', value: 'reduce' });
+  check((await blink()) === 'none', 'the blink stops when the user asks for reduced motion', await blink());
+  await ui({ do: 'motion', value: '' });
   await screenshots('empty');
 
   const example = (await panel<string[]>(`[...doc.querySelectorAll('.example')].map((e) => e.textContent)`))[1]!;
@@ -110,9 +115,28 @@ export async function run(): Promise<void> {
   await waitFor('the first turn to finish', async () => (await footers()) === 1);
   check((await disk('a.ts')) === replaced(FILES['a.ts'], EDITS.addOrder), 'the edit to a.ts is on disk', await disk('a.ts'));
   check((await textOf('.request-bubble')) === PROMPTS.edit, 'the user message shows', await textOf('.request-bubble'));
-  check((await count('.tool-row')) === 4 && (await count('.edit-card')) === 3, 'four tool rows and three edit cards', [await count('.tool-row'), await count('.edit-card')]);
+  const rail = await panel<string[]>(`[...doc.querySelectorAll('.turn .rail > .step')].map((s) => s.className.match(/step-(\\w+)/)[1] + (s.querySelector('.calls')?.dataset.step ?? ''))`);
+  check(rail.join() === 'text,callsgrep,callsread,text,callsedit,text,changes', 'the rail runs from the search through the reads and edits to the answer and the changes', rail);
+  const chips = (step: string) => panel<string[]>(`[...doc.querySelectorAll('.calls[data-step="${step}"] .file-chip')].map((c) => c.textContent)`);
+  check((await chips('read')).join() === 'a.ts,b.ts,c.ts', 'the three reads fold into one row of file chips', await chips('read'));
+  check((await chips('edit')).join() === 'a.ts+1−1,b.ts+1−1,c.ts+1−1', 'the three edits fold into chips with their line counts', await chips('edit'));
+  check((await count('.changes .edit-card')) === 3, 'the changes card at the end of the rail holds the three edits', await count('.changes .edit-card'));
+  check((await count('.tool-row')) === 0, 'steps start folded, without their calls');
+  const meta = await textOf('.turn-head .turn-meta');
+  check(/^worked for \d+(ms|\.\ds|s)$/.test(meta ?? ''), 'the turn header says how long g-code worked', meta);
+  check((await panel<string>(`getComputedStyle(doc.querySelector('.turn-head .avatar .lid')).animationName`)) === 'none', 'the avatar beside a turn holds still');
+
+  await click('.calls[data-step="read"] .step-row');
+  await waitFor('the read step to open', async () => (await count('.calls[data-step="read"] .tool-row')) === 3);
+  check((await count('.tool-row')) === 3, 'only the opened step lists its calls');
   check((await textOf(`[data-tool="${TOOL_IDS.read}"] .tool-label`)) === 'Read', 'a finished read row says Read');
-  check((await textOf(`[data-tool="${TOOL_IDS.read}"] .tool-duration`))?.match(/^\d+(ms|\.\ds|s)$/) !== null, 'a finished row shows its duration', await textOf(`[data-tool="${TOOL_IDS.read}"] .tool-duration`));
+  const durations = await panel<{ text: string; right: number }[]>(
+    `[...doc.querySelectorAll('.calls[data-step="read"] .tool-duration')].map((d) => ({ text: d.textContent, right: Math.round(d.getBoundingClientRect().right) }))`,
+  );
+  check(durations.length === 3 && durations.every((d) => /^\d+(ms|\.\ds|s)$/.test(d.text)), 'every call in the opened step shows its duration', durations);
+  check(new Set(durations.map((d) => d.right)).size === 1, 'the durations line up in one column', durations);
+  await panel(`(doc.querySelector('.turn').scrollIntoView(), 1)`);
+  await screenshots('steps');
   check((await count('.code-block .token.keyword')) > 0, 'the code block is highlighted');
   check((await count('.markdown li strong')) === 3, 'the list renders as markdown');
   const footer = await textOf('.turn-footer');
@@ -132,6 +156,8 @@ export async function run(): Promise<void> {
   check((await textOf('.permission-open .permission-reason'))?.includes('inside the workspace') === true, 'the card gives the reason');
   check((await panel<string>('doc.activeElement?.textContent ?? ""')) === 'Allow', 'Allow takes keyboard focus', await panel('doc.activeElement?.textContent'));
   check(await panel<boolean>('doc.querySelector("button.send").hidden && !doc.querySelector("button.stop").hidden'), 'Stop replaces Send while the turn runs');
+  check((await count('.turn:last-child .step-permission.node-wait')) === 1, 'the open question is a waiting node on the rail');
+  check((await textOf('.turn:last-child .turn-meta')) === 'waiting for you', 'the turn header says g-code waits', await textOf('.turn:last-child .turn-meta'));
   await screenshots('transcript');
   await panel(`(doc.querySelector('.turn').scrollIntoView(), 1)`);
   await screenshots('transcript-top');
@@ -148,6 +174,8 @@ export async function run(): Promise<void> {
 
   await sendWithEnter(PROMPTS.stopByButton);
   await waitFor('the stalled answer to start streaming', async () => (await textOf('.turn:last-child .markdown'))?.startsWith('Once') === true);
+  check((await textOf('.turn:last-child .turn-meta')) === 'working', 'a running turn says it is working', await textOf('.turn:last-child .turn-meta'));
+  await screenshots('streaming');
   await click('button.stop');
   await waitFor('Stop to end the turn', async () => (await textOf('.turn:last-child .turn-footer'))?.includes('Stopped') === true);
   await sendWithEnter(PROMPTS.stopByEscape);

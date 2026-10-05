@@ -1,16 +1,30 @@
 @import '@vscode/codicons/dist/codicon.css';
 
 /*
- * Every color, font and radius here is VS Code's: theme variables, the workbench's font settings, and the
- * radii and spacing of its own chat view (4px controls, 8px request bubbles, 16px side padding).
+ * Trail: a run is a path. Every color comes from the theme's variables, mixed with color-mix where a tint is
+ * needed, so dark, light and high contrast themes all hold; every glyph is a codicon.
  */
 
 :root {
   --gap: 16px;
-  --small: calc(var(--vscode-font-size) - 1px);
+  --small: calc(var(--vscode-font-size) - 1.5px);
   --code-size: var(--vscode-editor-font-size);
-  --row-hover: var(--vscode-list-hoverBackground);
-  --card-border: var(--vscode-chat-requestBorder, var(--vscode-widget-border, transparent));
+  --bg: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --muted: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-button-background);
+  /* High contrast themes make buttons transparent; their active border marks what the accent would. */
+  --mark: var(--vscode-contrastActiveBorder, var(--accent));
+  --ok: var(--vscode-charts-green, var(--vscode-testing-iconPassed));
+  --warn: var(--vscode-charts-yellow, var(--vscode-editorWarning-foreground));
+  --line: color-mix(in srgb, var(--vscode-foreground) 14%, transparent);
+  --border: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+  --surface: color-mix(in srgb, var(--vscode-foreground) 4%, var(--bg));
+  --surface-2: color-mix(in srgb, var(--vscode-foreground) 8%, var(--bg));
+  --shadow: 0 1px 2px color-mix(in srgb, var(--vscode-widget-shadow, transparent) 50%, transparent), 0 10px 28px -14px var(--vscode-widget-shadow, transparent);
+  /* Where the rail runs, and how far each step's content sits from the panel edge. */
+  --rail-x: 11px;
+  --rail-indent: 30px;
+  --card-border: var(--border);
 }
 
 * {
@@ -86,10 +100,22 @@ button {
   gap: 4px;
   padding: 4px 12px;
   border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
+  border-radius: 6px;
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);
   line-height: 18px;
+}
+
+/* A quiet action beside a primary one: text only until hovered. */
+.button.ghost {
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+}
+
+.button.ghost:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
 }
 
 .button:hover {
@@ -147,13 +173,13 @@ button {
   text-decoration: underline;
 }
 
-/* The transcript */
+/* The transcript: each turn is a request bubble, then a rail of steps from the prompt to the answer. */
 
 .transcript {
   flex: 1;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0 var(--gap);
+  padding: 6px var(--gap) 8px;
   scrollbar-gutter: stable;
 }
 
@@ -162,27 +188,186 @@ button {
 }
 
 .turn + .turn {
-  border-top: 1px solid var(--vscode-chat-requestBorder, transparent);
+  margin-top: 16px;
 }
 
 .request {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 
 .request-bubble {
-  max-width: 90%;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: var(--vscode-chat-requestBubbleBackground, var(--vscode-input-background));
+  max-width: 85%;
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 16px 16px 4px 16px;
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg));
   outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.response > * + * {
-  margin-top: 6px;
+.turn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+}
+
+.dino {
+  display: inline-flex;
+  flex: none;
+}
+
+.dino svg {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.avatar {
+  width: 22px;
+  height: 22px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.turn-name {
+  font-weight: 600;
+}
+
+.turn-meta {
+  color: var(--muted);
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A running turn's label sweeps from muted to full color, the way VS Code's own chat says it is working. */
+.shimmer {
+  background: linear-gradient(90deg, var(--muted) 30%, var(--vscode-foreground) 50%, var(--muted) 70%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* The rail. Each step is a node; the connector runs through every node but the last, so the path ends where the run does. */
+
+.rail {
+  position: relative;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  padding: 3px 0 3px var(--rail-indent);
+}
+
+.step::before {
+  content: '';
+  position: absolute;
+  left: var(--rail-x);
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--line);
+}
+
+.step:first-child::before {
+  top: -4px;
+}
+
+.step:last-child::before {
+  bottom: auto;
+  height: 12px;
+}
+
+.node {
+  position: absolute;
+  left: calc(var(--rail-x) - 3.25px);
+  top: 11px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.node-done > .node {
+  border-color: var(--ok);
+  background: var(--ok);
+  transform: scale(0.85);
+}
+
+.node-text > .node {
+  border-color: var(--mark);
+  background: var(--mark);
+}
+
+.node-live > .node {
+  border-style: dashed;
+  animation: spin 3s linear infinite;
+}
+
+.node-failed > .node {
+  border-color: var(--vscode-errorForeground);
+  background: var(--vscode-errorForeground);
+}
+
+/* Waiting on the user: an amber node with a halo, and the rail above it turns to dashes. */
+.node-wait > .node {
+  border-color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 30%, var(--bg));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 18%, transparent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.node-wait::before {
+  background: repeating-linear-gradient(to bottom, var(--warn) 0 3px, transparent 3px 6px);
+  opacity: 0.6;
+}
+
+.step-text {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.step-text > .node {
+  top: 13px;
+}
+
+.step-permission > .node,
+.step-changes > .node {
+  top: 18px;
+}
+
+.step-permission,
+.step-changes {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 8%, transparent);
+  }
 }
 
 /* Markdown */
@@ -314,19 +499,21 @@ button {
 /* Code blocks */
 
 .code-block {
-  position: relative;
-  border: 1px solid var(--vscode-input-border, var(--card-border));
-  border-radius: 4px;
-  background: var(--vscode-textCodeBlock-background);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
 }
 
 .code-block pre {
   margin: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   overflow-x: auto;
   font-family: var(--vscode-editor-font-family);
   font-size: var(--code-size);
-  line-height: 1.45;
+  line-height: 1.6;
   tab-size: 2;
 }
 
@@ -338,33 +525,23 @@ button {
   font-size: inherit;
 }
 
+/* A caption bar names the language and holds the copy button, always in reach. */
 .code-toolbar {
-  position: absolute;
-  top: 3px;
-  right: 3px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.code-block:hover .code-toolbar,
-.code-toolbar:focus-within {
-  opacity: 1;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 6px 2px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .code-lang {
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
   font-size: var(--small);
 }
 
-.code-toolbar .icon-button {
-  background: var(--vscode-textCodeBlock-background);
-}
-
-.code-toolbar .icon-button:hover {
-  background: var(--vscode-toolbar-hoverBackground);
+.code-toolbar .copy {
+  margin-left: auto;
 }
 
 /*
@@ -439,9 +616,12 @@ button {
 }
 
 .diagram[data-state='rendered'] {
-  padding: 10px;
-  border: 1px solid var(--vscode-input-border, var(--card-border));
-  border-radius: 4px;
+  padding: 14px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
 }
 
 .diagram-canvas {
@@ -557,11 +737,12 @@ body.diagram-tab {
 
 .caret {
   display: inline-block;
-  width: 2px;
-  height: 1.1em;
+  width: 7px;
+  height: 1.05em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--vscode-editorCursor-foreground, var(--vscode-foreground));
+  border-radius: 2px;
+  background: var(--mark);
   animation: blink 1s steps(1) infinite;
 }
 
@@ -571,25 +752,160 @@ body.diagram-tab {
   }
 }
 
-/* Tool rows */
+/* Steps of calls: one row of chips, which opens to every call with its duration in one aligned column. */
+
+.step-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  width: 100%;
+  min-height: 24px;
+  padding: 1px 6px 1px 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
+.step-row:hover {
+  color: var(--vscode-foreground);
+}
+
+.step-row .codicon {
+  flex: none;
+  font-size: 14px;
+}
+
+.step-row .chevron {
+  font-size: 12px;
+  opacity: 0;
+}
+
+.step-row:hover .chevron,
+.step-row:focus-visible .chevron,
+.step-row[aria-expanded='true'] .chevron {
+  opacity: 0.8;
+}
+
+.step-verb {
+  color: var(--vscode-foreground);
+}
+
+.step-target {
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 6px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--vscode-errorForeground);
+  font-size: var(--small);
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.file-chip,
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 21px;
+  padding: 0 7px 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--vscode-foreground);
+  font-size: var(--small);
+  white-space: nowrap;
+}
+
+.file-chip .codicon,
+.context-chip .codicon {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-failed,
+.chip-cancelled {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.chip-running {
+  border-style: dashed;
+}
+
+.line-counts {
+  display: inline-flex;
+  gap: 4px;
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+.lines-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.lines-removed {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+/* An opened step lists its calls on one grid, so status, verb, target and duration line up from row to row. */
+.call-list {
+  display: grid;
+  grid-template-columns: 14px max-content minmax(0, 1fr) max-content 12px;
+  column-gap: 8px;
+  margin: 4px 0 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.call-list .tool {
+  display: contents;
+}
 
 .tool-row {
-  display: flex;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 6px;
-  width: 100%;
   min-height: 22px;
-  padding: 1px 4px 1px 2px;
+  padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
   font-size: var(--small);
   text-align: left;
 }
 
 .tool-row:hover {
-  background: var(--row-hover);
   color: var(--vscode-foreground);
 }
 
@@ -598,13 +914,11 @@ body.diagram-tab {
 }
 
 .tool-row[aria-disabled='true']:hover {
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
 }
 
 .tool-row .codicon {
-  flex: none;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .chevron.hidden {
@@ -612,11 +926,14 @@ body.diagram-tab {
 }
 
 .tool-label {
-  flex: none;
+  color: var(--vscode-foreground);
 }
 
 .tool-target {
   min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -626,12 +943,12 @@ body.diagram-tab {
 }
 
 .tool-duration {
-  flex: none;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .status-completed {
-  color: var(--vscode-testing-iconPassed);
+  color: var(--ok);
 }
 
 .status-failed {
@@ -640,13 +957,14 @@ body.diagram-tab {
 
 .status-running,
 .status-cancelled {
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
 }
 
 .tool-output {
-  margin: 2px 0 6px 22px;
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
+  grid-column: 1 / -1;
+  margin: 2px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--vscode-textCodeBlock-background);
 }
 
@@ -666,82 +984,89 @@ body.diagram-tab {
 }
 
 .show-all {
-  display: block;
   margin-top: 4px;
-  font-family: var(--vscode-font-family);
   font-size: var(--small);
 }
 
-/* Edit cards */
+/* The thinking step and a passing status such as a retry */
 
-.edit-card {
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
+.thinking,
+.turn-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.thinking .codicon {
+  font-size: 14px;
+}
+
+/* The changes card: every edit of the turn, at the end of its rail */
+
+.changes,
+.permission {
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   outline: 1px solid var(--vscode-contrastBorder, transparent);
   outline-offset: -1px;
 }
 
-.edit-head {
+.changes-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 4px 8px;
+  padding: 7px 10px 7px 12px;
+}
+
+.changes-title {
+  font-weight: 600;
+}
+
+.changes-actions,
+.hunk-actions {
+  display: inline-flex;
   gap: 6px;
-  min-height: 26px;
-  padding: 2px 8px;
-  background: var(--vscode-sideBarSectionHeader-background, transparent);
+}
+
+.edit-card {
+  border-top: 1px solid var(--border);
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px 12px;
   font-size: var(--small);
 }
 
-.edit-head .kind {
-  color: var(--vscode-descriptionForeground);
-}
-
 .file-name {
-  font-weight: 600;
+  flex: none;
+  font-size: var(--vscode-font-size);
 }
 
 .file-dir {
   min-width: 0;
   overflow: hidden;
+  color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--vscode-descriptionForeground);
-}
-
-.line-counts {
-  display: inline-flex;
-  gap: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.lines-added {
-  color: var(--vscode-chat-linesAddedForeground, var(--vscode-gitDecoration-addedResourceForeground));
-}
-
-.lines-removed {
-  color: var(--vscode-chat-linesRemovedForeground, var(--vscode-gitDecoration-deletedResourceForeground));
-}
-
-.hunk + .hunk {
-  border-top: 1px solid var(--card-border);
 }
 
 .hunk-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  min-height: 26px;
-  padding: 2px 6px 2px 8px;
-  border-top: 1px solid var(--card-border);
-  color: var(--vscode-descriptionForeground);
+  padding: 2px 10px 4px 12px;
+  color: var(--muted);
   font-size: var(--small);
-}
-
-.hunk-actions {
-  display: inline-flex;
-  gap: 4px;
 }
 
 .decision {
@@ -751,38 +1076,36 @@ body.diagram-tab {
 }
 
 .decision-kept {
-  color: var(--vscode-testing-iconPassed);
+  color: var(--ok);
 }
 
 .hunk-lines {
-  padding: 2px 0;
-  background: var(--vscode-editor-background);
+  padding: 2px 0 6px;
   font-family: var(--vscode-editor-font-family);
-  font-size: var(--small);
-  line-height: 1.5;
-  overflow-x: auto;
+  font-size: var(--code-size);
+  line-height: 1.6;
 }
 
 .hunk-lines .show-all {
-  margin: 2px 8px 4px;
+  margin-left: 12px;
+  font-family: var(--vscode-font-family);
 }
 
 .diff-line {
   display: flex;
-  min-width: max-content;
-  white-space: pre;
+  padding-right: 12px;
 }
 
 .diff-line .sign {
   flex: none;
-  width: 20px;
-  text-align: center;
-  user-select: none;
+  width: 28px;
+  padding-right: 8px;
+  text-align: right;
+  color: var(--muted);
 }
 
 .diff-line .code {
-  padding-right: 8px;
-  color: var(--vscode-editor-foreground);
+  white-space: pre;
 }
 
 .diff-line.added {
@@ -790,7 +1113,7 @@ body.diagram-tab {
 }
 
 .diff-line.added .sign {
-  color: var(--vscode-chat-linesAddedForeground, var(--vscode-gitDecoration-addedResourceForeground));
+  color: var(--vscode-gitDecoration-addedResourceForeground);
 }
 
 .diff-line.removed {
@@ -798,78 +1121,77 @@ body.diagram-tab {
 }
 
 .diff-line.removed .sign {
-  color: var(--vscode-chat-linesRemovedForeground, var(--vscode-gitDecoration-deletedResourceForeground));
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
 }
 
-.vscode-high-contrast .diff-line.added,
+/* High contrast light themes have no line backgrounds, so the changed lines get a border instead. */
 .vscode-high-contrast-light .diff-line.added {
-  outline: 1px dashed var(--vscode-diffEditor-insertedTextBorder, transparent);
+  outline: 1px dashed var(--vscode-diffEditor-insertedTextBorder, var(--vscode-contrastBorder));
   outline-offset: -1px;
 }
 
-.vscode-high-contrast .diff-line.removed,
 .vscode-high-contrast-light .diff-line.removed {
-  outline: 1px dashed var(--vscode-diffEditor-removedTextBorder, transparent);
+  outline: 1px dashed var(--vscode-diffEditor-removedTextBorder, var(--vscode-contrastBorder));
   outline-offset: -1px;
 }
 
 .hunk-undone .hunk-lines {
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
 .hunk-undone .diff-line .code {
   text-decoration: line-through;
 }
 
-/* Permission prompts */
+/* Permission prompts: amber while they wait on the user */
 
 .permission {
-  padding: 8px 10px 10px;
-  border: 1px solid var(--vscode-focusBorder);
-  border-radius: 4px;
-  background: var(--vscode-editorWidget-background);
+  padding: 10px 12px 12px;
+}
+
+.permission-open {
+  border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+  box-shadow: var(--shadow);
 }
 
 .permission-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-weight: 600;
 }
 
 .permission-title .codicon {
-  color: var(--vscode-editorWarning-foreground);
+  color: var(--warn);
 }
 
 .permission-command {
   margin: 8px 0 6px;
-  padding: 6px 8px;
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  background: var(--vscode-textCodeBlock-background);
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: var(--vscode-textCodeBlock-background, var(--surface-2));
   font-family: var(--vscode-editor-font-family);
   font-size: var(--code-size);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.permission-command::before {
+  content: '$ ';
+  color: var(--muted);
+}
+
 .permission-reason {
   margin: 0 0 10px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
   font-size: var(--small);
 }
 
 .permission-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.permission-closed,
-.permission-chosen,
-.permission-cancelled {
-  border-color: var(--card-border);
-  background: transparent;
+  gap: 6px;
 }
 
 .permission-chosen .permission-reason,
@@ -877,16 +1199,21 @@ body.diagram-tab {
   margin-bottom: 6px;
 }
 
+.permission-chosen .permission-title .codicon,
+.permission-cancelled .permission-title .codicon {
+  color: var(--muted);
+}
+
 .permission-outcome {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--muted);
   font-size: var(--small);
 }
 
 .permission-outcome.allowed .codicon {
-  color: var(--vscode-testing-iconPassed);
+  color: var(--ok);
 }
 
 /* Errors and the turn footer */
@@ -906,15 +1233,20 @@ body.diagram-tab {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 6px;
-  margin-top: 8px;
-  color: var(--vscode-descriptionForeground);
+  gap: 2px 12px;
+  margin: 8px 0 0 var(--rail-indent);
+  color: var(--muted);
   font-size: var(--small);
   font-variant-numeric: tabular-nums;
 }
 
 .turn-footer:empty {
   display: none;
+}
+
+.turn-footer .model {
+  color: var(--vscode-foreground);
+  opacity: 0.8;
 }
 
 .turn-footer .ending {
@@ -927,7 +1259,7 @@ body.diagram-tab {
   color: var(--vscode-errorForeground);
 }
 
-/* Empty state */
+/* Empty state: Noodle, what g-code does, and three prompts to start from */
 
 .empty-state {
   display: flex;
@@ -939,60 +1271,73 @@ body.diagram-tab {
   text-align: center;
 }
 
-.empty-icon .codicon {
-  font-size: 32px;
-  color: var(--vscode-descriptionForeground);
+.hero {
+  width: 72px;
+  height: 72px;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.dino .lid {
+  visibility: hidden;
+}
+
+/* An idle blink: the lid shows for two frames of every four seconds. */
+.hero .lid {
+  animation: blink-eye 4s steps(1) infinite;
+}
+
+@keyframes blink-eye {
+  0%,
+  94% {
+    visibility: hidden;
+  }
+  95%,
+  98% {
+    visibility: visible;
+  }
 }
 
 .empty-title {
-  margin: 10px 0 4px;
-  font-size: 1.3em;
+  margin: 18px 0 4px;
+  font-size: calc(var(--vscode-font-size) + 4px);
   font-weight: 600;
 }
 
 .empty-model {
-  max-width: 280px;
-  margin: 0 0 20px;
-  color: var(--vscode-descriptionForeground);
+  max-width: 34ch;
+  margin: 0 0 22px;
+  color: var(--muted);
 }
 
 .examples {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 6px;
   width: 100%;
-  max-width: 320px;
+  max-width: 340px;
 }
 
 .example {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--card-border);
-  border-radius: 4px;
-  background: transparent;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
   text-align: left;
 }
 
 .example:hover {
-  background: var(--row-hover);
+  background: var(--surface-2);
 }
 
 .example .codicon {
   flex: none;
-  color: var(--vscode-descriptionForeground);
-}
-
-/* A passing status, such as a retry, in a running turn */
-
-.turn-notice {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  color: var(--vscode-descriptionForeground);
-  font-size: var(--small);
+  color: var(--muted);
 }
 
 /* Composer */
@@ -1000,7 +1345,7 @@ body.diagram-tab {
 .composer {
   position: relative;
   flex: none;
-  padding: 8px var(--gap) 12px;
+  padding: 8px 12px 12px;
 }
 
 /* The @ completion list, above the composer like VS Code's suggest widget. */
@@ -1054,13 +1399,18 @@ body.diagram-tab {
   font-size: var(--small);
 }
 
+/* The composer floats as a raised card: context chips, the message, then the model, the approval mode and send. */
 .input-box {
   display: flex;
   flex-direction: column;
-  padding: 6px 6px 4px 8px;
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 4px;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 14px;
   background: var(--vscode-input-background);
+  box-shadow: var(--shadow);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
   cursor: text;
 }
 
@@ -1068,10 +1418,55 @@ body.diagram-tab {
   border-color: var(--vscode-focusBorder);
 }
 
+.context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.context-chip {
+  height: 20px;
+  padding: 0 2px 0 4px;
+  border: none;
+  background: var(--surface-2);
+}
+
+.chip-remove,
+.context-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.context-add {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.chip-remove:hover,
+.context-add:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.chip-remove .codicon,
+.context-add .codicon {
+  font-size: 12px;
+}
+
 .input-box textarea {
   width: 100%;
   min-height: 20px;
-  padding: 0;
+  padding: 2px 0;
   border: none;
   outline: none;
   resize: none;
@@ -1089,22 +1484,97 @@ body.diagram-tab {
 .input-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-top: 4px;
+  gap: 12px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.composer-model,
+.approval {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .composer-model {
-  color: var(--vscode-descriptionForeground);
+  padding: 1px 4px;
+  margin-left: -4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
   font-size: var(--small);
+}
+
+.composer-model:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.model-name,
+.approval {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-toolbar .codicon {
+  flex: none;
+  font-size: 12px;
+}
+
+.round-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--vscode-button-foreground);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.round-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.round-button.stop {
+  background: var(--vscode-foreground);
+  color: var(--bg);
+}
+
+.round-button[hidden] {
+  display: none;
+}
+
+.round-button .codicon {
+  font-size: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .caret,
-  .codicon-modifier-spin {
+  .codicon-modifier-spin,
+  .shimmer,
+  .node-live > .node,
+  .node-wait > .node,
+  .hero .lid {
     animation: none;
   }
 
-  .code-toolbar {
+  .shimmer {
+    background: none;
+    color: var(--muted);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-toolbar {
     transition: none;
   }
 }

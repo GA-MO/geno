@@ -30,6 +30,7 @@ async function ui<T = unknown>(action: Record<string, unknown>): Promise<T> {
 
 const panel = <T>(expression: string): Promise<T> => ui<T>({ do: 'eval', expression });
 const composer = () => panel<string>('doc.querySelector("textarea").value');
+const chips = () => panel<string[]>(`[...doc.querySelectorAll('.context-chip')].map((e) => e.dataset.mention)`);
 const options = () => panel<string[]>(`[...doc.querySelectorAll('.mention')].map((e) => e.dataset.mention)`);
 const uriOf = (name: keyof typeof FILES) => vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0]!.uri, name);
 
@@ -62,6 +63,18 @@ export async function run(): Promise<void> {
   check(detail === `notes/selected.ts:${SELECTED.startLine}-${SELECTED.endLine}`, 'the selection row names the file and lines', detail);
   await ui({ do: 'click', selector: '.mention', text: `selection${detail}` });
   check((await composer()) === `${PROMPT} `, 'a click puts the selection in the composer', await composer());
+  check((await chips()).join() === 'math.ts,selection', 'each mention shows as a context chip', await chips());
+
+  await ui({ do: 'click', selector: '.context-add' });
+  check((await composer()) === `${PROMPT} @`, 'the add button types an @ at the caret', await composer());
+  await waitFor('the add button to open the completions', async () => (await options()).includes('notes/selected.ts'));
+  await ui({ do: 'click', selector: '.mention[data-mention="notes/selected.ts"]' });
+  check((await composer()) === `${PROMPT} @notes/selected.ts `, 'the chosen file follows the @', await composer());
+  check((await chips()).join() === 'math.ts,selection,notes/selected.ts', 'the added file gets a chip', await chips());
+  await ui({ do: 'click', selector: '.context-chip[data-mention="notes/selected.ts"] .chip-remove' });
+  check((await composer()) === `${PROMPT} `, 'removing a chip takes its mention out of the composer', await composer());
+  check((await chips()).join() === 'math.ts,selection', 'and takes the chip away', await chips());
+  check(await panel<boolean>(`doc.activeElement === doc.querySelector('textarea')`), 'the composer keeps the focus after a chip is removed');
 
   await ui({ do: 'press', key: 'Enter' });
   await waitFor('the turn to finish', async () => (await panel<number>(`doc.querySelectorAll('.turn-footer').length`)) === 1);

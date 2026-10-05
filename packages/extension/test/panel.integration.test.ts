@@ -66,6 +66,8 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   click: async ({ selector, text }, w) => click(await webview(w, EXTENSION, READY), selector, text),
   type: async ({ text }, w) => typeText(await webview(w, EXTENSION, READY), text),
   press: async ({ key, modifiers }, w) => press(await webview(w, EXTENSION, READY), key, modifiers),
+  motion: async ({ value }, w) =>
+    (await webview(w, EXTENSION, READY)).send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] }),
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
   },

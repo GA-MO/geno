@@ -13,7 +13,8 @@ export const UNDO_SESSION_COMMAND = 'gcode.review.undoSession';
 export const OPEN_DIFF_COMMAND = 'gcode.review.openDiff';
 export const INLINE_EDIT_COMMAND = 'gcode.inlineEdit';
 
-const idOf = (node: HunkId | Tracked): HunkId => (typeof node === 'string' ? node : node.id);
+/** The CodeLens and the Changes view pass one hunk; the chat panel passes a list. */
+const idsOf = (node: HunkId | Tracked | readonly HunkId[]): HunkId[] => (typeof node === 'string' ? [node] : Array.isArray(node) ? [...node] : [(node as Tracked).id]);
 
 /** Whole lines, counted from 1: a selection that ends at the start of a line does not take that line. */
 export async function selectionTarget(editor: vscode.TextEditor): Promise<InlineEditTarget> {
@@ -40,8 +41,8 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
     vscode.languages.registerCodeLensProvider(REVIEW_DOCUMENTS, lenses),
     vscode.window.createTreeView(CHANGES_VIEW, { treeDataProvider: view, showCollapseAll: true }),
     vscode.workspace.registerTextDocumentContentProvider(CHECKPOINT_SCHEME, new CheckpointDocuments(() => chat.link())),
-    vscode.commands.registerCommand(KEEP_COMMAND, (node: HunkId | Tracked) => review.keep([idOf(node)])),
-    vscode.commands.registerCommand(UNDO_COMMAND, (node: HunkId | Tracked) => review.undo([idOf(node)])),
+    vscode.commands.registerCommand(KEEP_COMMAND, (node: HunkId | Tracked | readonly HunkId[]) => review.keep(idsOf(node))),
+    vscode.commands.registerCommand(UNDO_COMMAND, (node: HunkId | Tracked | readonly HunkId[]) => review.undo(idsOf(node))),
     vscode.commands.registerCommand(KEEP_FILE_COMMAND, (uri?: vscode.Uri) => review.keep(review.pendingIn(fileOf(uri)).map((h) => h.id))),
     vscode.commands.registerCommand(UNDO_FILE_COMMAND, (uri?: vscode.Uri) => review.undo(review.pendingIn(fileOf(uri)).map((h) => h.id))),
     vscode.commands.registerCommand(UNDO_SESSION_COMMAND, async (confirmed?: boolean) => {
