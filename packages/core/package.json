@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./tab": "./src/tab/index.ts",
-    "./attachments": "./src/attachments.ts"
+    "./attachments": "./src/attachments.ts",
+    "./widget": "./src/widget.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

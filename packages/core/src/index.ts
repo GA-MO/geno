@@ -36,3 +36,4 @@ export * from './memory.js';
 export * from './user-tools.js';
 export * from './ask-user.js';
 export * from './check.js';
+export * from './widget.js';
