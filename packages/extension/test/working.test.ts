@@ -21,7 +21,7 @@ const turn = (blocks: readonly Block[], over: Partial<Turn> = {}): Turn => ({
   ...over,
 });
 
-const poseOf = (blocks: readonly Block[], over: Partial<Turn> = {}): PoseName => WORK_POSES[workOf(turn(blocks, over))];
+const poseOf = (blocks: readonly Block[], over: Partial<Turn> = {}): PoseName => WORK_POSES[workOf(turn(blocks, over)).kind];
 
 describe('the working dino: which pose the running turn shows', () => {
   it('maps every kind of work to the brief’s pose, one row each', () => {
@@ -131,6 +131,17 @@ describe('the working dino over a turn', () => {
     expect(steer(ticks(reading, 3), after, false, never)!.pose).toBe('reading');
     expect(steer(ticks(reading, lengthOf('reading')), after, false, never)!.pose).toBe('thinking');
     expect(steer(ticks(reading, 3), at([tool('a', 'read', 'a.ts', 'completed'), tool('b', 'bash', 'ls', 'running')]), false, never)!.pose).toBe('running');
+  });
+
+  it('shows a call that started and finished between two looks, then thinks', () => {
+    const thinking = steer(undefined, at([]), false, never)!;
+    const read = at([tool('a', 'read', 'a.ts', 'completed')]);
+    const reading = steer(ticks(thinking, 100), read, false, never)!;
+    expect(reading.pose).toBe('reading');
+    expect(steer(ticks(reading, lengthOf('reading')), read, false, never)!.pose).toBe('thinking');
+    const coding = steer(ticks(reading, 3), at([tool('a', 'read', 'a.ts', 'completed'), tool('b', 'edit', 'a.ts', 'completed')]), false, never)!;
+    expect(coding.pose).toBe('coding');
+    expect(steer(reading, at([tool('a', 'read', 'a.ts', 'completed'), tool('b', 'read', 'b.ts', 'completed')]), false, never)!.t).toBe(reading.t);
   });
 
   it('holds a short pose, such as running in place, long enough to see before thinking', () => {
