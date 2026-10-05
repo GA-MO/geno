@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { evaluate, type Webview, type Window } from './cdp.js';
 
@@ -42,8 +43,7 @@ export const playRainbow = (view: Webview) => evaluate<number>(view, `${RAINBOW}
  */
 export async function recordRainbow(window: Window, view: Webview, file: string, frames = 12): Promise<string[]> {
   const clip = await panelClip(window);
-  const dir = path.join(path.dirname(file), `${path.basename(file, '.gif')}-frames`);
-  await mkdir(dir, { recursive: true });
+  const dir = await mkdtemp(path.join(tmpdir(), 'gcode-rainbow-'));
   const stills: string[] = [];
   const duration = await evaluate<number>(view, `${RAINBOW}[0]?.effect.getTiming().duration ?? 0`);
   if (duration === 0) throw new Error('no running rainbow to record');
@@ -94,10 +94,12 @@ export async function trace(window: Window, ms: number): Promise<TraceEvent[]> {
 export function panelCost(events: readonly TraceEvent[], pid: number): PanelCost {
   const main = events.find((e) => e.ph === 'M' && e.name === 'thread_name' && e.pid === pid && e.args?.name === 'CrRendererMain')?.tid;
   if (main === undefined) throw new Error(`the trace has no main thread for renderer ${pid}`);
-  const timed = events.filter((e) => e.ph !== 'M' && e.ts > 0);
-  const seconds = (Math.max(...timed.map((e) => e.ts + (e.dur ?? 0))) - Math.min(...timed.map((e) => e.ts))) / 1e6;
-  const busyUs = events.filter((e) => e.pid === pid && e.tid === main && e.ph === 'X' && e.name === 'RunTask').reduce((sum, e) => sum + (e.dur ?? 0), 0);
-  const drawn = events.filter((e) => e.pid === pid && e.name === 'DrawFrame').length;
+  // The span runs from the trace's start; a few events carry older timestamps, from work begun before it.
+  const start = events.find((e) => e.name === 'TracingStartedInBrowser')?.ts ?? Math.min(...events.filter((e) => e.ph !== 'M' && e.ts > 0).map((e) => e.ts));
+  const timed = events.filter((e) => e.ph !== 'M' && e.ts >= start);
+  const seconds = (Math.max(...timed.map((e) => e.ts + (e.dur ?? 0))) - start) / 1e6;
+  const busyUs = timed.filter((e) => e.pid === pid && e.tid === main && e.ph === 'X' && e.name === 'RunTask').reduce((sum, e) => sum + (e.dur ?? 0), 0);
+  const drawn = timed.filter((e) => e.pid === pid && e.name === 'DrawFrame').length;
   return { seconds, busyMs: busyUs / 1000, busyPercent: busyUs / 1e4 / seconds, frames: drawn, fps: drawn / seconds };
 }
 
