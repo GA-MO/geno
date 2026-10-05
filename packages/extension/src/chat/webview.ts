@@ -305,6 +305,9 @@ function schedule(): void {
   frame ??= requestAnimationFrame(render);
 }
 
+/** A waiting card's control that takes the keyboard: its answer field, or else its first button. */
+const answerControl = (card: Element): HTMLElement | null => card.querySelector<HTMLElement>('textarea, button');
+
 /** A question from the engine takes the keyboard once, on its default button. */
 const asked = new Set<string>();
 function focusNewPermission(): void {
@@ -312,7 +315,7 @@ function focusNewPermission(): void {
     const id = card.dataset['permission']!;
     if (asked.has(id)) continue;
     asked.add(id);
-    card.querySelector<HTMLElement>('textarea, button')?.focus();
+    answerControl(card)?.focus();
   }
 }
 
@@ -573,15 +576,18 @@ document.addEventListener('keydown', (event) => {
     host.postMessage({ type: 'stop' });
   }
 });
-// The view's focus command focuses the webview itself; the composer is what the user means to type into.
-// A webview created by that command can receive the focus before this script runs, hence the check at start.
-const focusComposer = () => {
-  if (document.activeElement === document.body || document.activeElement === null) input.focus();
+// The view's focus command focuses the webview itself; what the user means to type into is a question waiting for
+// them, or else the composer. The host runs that command as a question arrives, so it can land after the card took
+// the keyboard. A webview created by that command can receive the focus before this script runs, hence the check at start.
+const focusView = () => {
+  if (document.activeElement !== document.body && document.activeElement !== null) return;
+  const waiting = document.querySelector('.permission-open[data-permission]');
+  ((waiting && answerControl(waiting)) ?? input).focus();
 };
-window.addEventListener('focus', () => requestAnimationFrame(focusComposer));
+window.addEventListener('focus', () => requestAnimationFrame(focusView));
 
 input.value = state.draft;
 redraft();
 render();
-if (document.hasFocus()) focusComposer();
+if (document.hasFocus()) focusView();
 host.postMessage({ type: 'ready' });
