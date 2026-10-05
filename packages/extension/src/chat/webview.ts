@@ -67,7 +67,8 @@ const RENDER: { readonly [K in ToView['type']]: (message: Extract<ToView, { type
     tool.element.classList.toggle('failed', status === 'failed');
   },
   permission({ id, title, options }) {
-    const element = append('permission', title);
+    const element = append('permission', '');
+    element.append(Object.assign(document.createElement('div'), { textContent: title }));
     for (const option of options) {
       const button = document.createElement('button');
       button.textContent = option.name;
