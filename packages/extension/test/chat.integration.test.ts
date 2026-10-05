@@ -1,11 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
-import { build } from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
-import { cachePath, root, setUp } from './launch.js';
+import { buildEngine, cachePath, root, setUp } from './launch.js';
 import { ORIGINAL } from './suite/chat-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -66,16 +64,7 @@ const toolResult = (index: number): { content: string; is_error?: boolean } =>
 
 describe('chat in VS Code', () => {
   it('edits the unsaved buffer, not the disk, and refuses an edit whose buffer changed after the read', async () => {
-    const engineCli = path.resolve(root, '../engine/dist/cli.js');
-    await build({
-      bundle: true,
-      platform: 'node',
-      format: 'esm',
-      target: 'node22',
-      entryPoints: [path.resolve(root, '../engine/src/cli.ts')],
-      outfile: engineCli,
-      external: ['@anthropic-ai/sandbox-runtime'],
-    });
+    const engineCli = await buildEngine();
     const { home, suite, launchArgs } = await setUp('chat', { 'math.ts': ORIGINAL }, { 'gcode.engine.path': engineCli });
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
 
