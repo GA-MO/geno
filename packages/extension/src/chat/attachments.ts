@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
@@ -66,6 +67,22 @@ export const droppedUris = (raw: readonly string[]): vscode.Uri[] =>
     }
   });
 
+/**
+ * Each workspace folder's path, and its real path when a symlink leads to it, as on macOS, where /var is
+ * /private/var: the engine names files by their real paths.
+ */
+function folderPaths(): { readonly folder: vscode.Uri; readonly paths: readonly string[] }[] {
+  return (vscode.workspace.workspaceFolders ?? []).map(({ uri }) => {
+    let real = uri.fsPath;
+    try {
+      real = realpathSync(uri.fsPath);
+    } catch {
+      // A folder that is gone shows no images.
+    }
+    return { folder: uri, paths: real === uri.fsPath ? [uri.fsPath] : [uri.fsPath, real] };
+  });
+}
+
 const inside = (root: string, file: string): boolean => {
   const relative = path.relative(root, file);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
@@ -82,7 +99,7 @@ export async function openTarget(target: OpenTarget, sessionId: string | undefin
   if (target.kind === 'stored') {
     if (sessionId !== undefined && STORED.test(target.file)) file = path.join(gcodeHome(process.env), 'sessions', sessionId, 'attachments', target.file);
   } else {
-    const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+    const folders = folderPaths().flatMap((f) => f.paths);
     if (folders.some((root) => inside(root, target.path)) || sent.has(target.path)) file = target.path;
   }
   if (file !== undefined) await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
@@ -90,7 +107,7 @@ export async function openTarget(target: OpenTarget, sessionId: string | undefin
 
 /** The workspace folders as the webview reaches them, for read thumbnails and markdown images. */
 export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] =>
-  (vscode.workspace.workspaceFolders ?? []).map((folder) => ({ path: folder.uri.fsPath, uri: webview.asWebviewUri(folder.uri).toString() }));
+  folderPaths().flatMap(({ folder, paths }) => paths.map((root) => ({ path: root, uri: webview.asWebviewUri(folder).toString() })));
 
 /** The image files a tool call's content links to, as the engine sends a read of an image. */
 export function imagesOf(content: readonly acp.ToolCallContent[] | null | undefined): ToolImage[] {

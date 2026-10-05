@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
@@ -164,10 +164,19 @@ export function incomingAttachments(blocks: readonly acp.ContentBlock[]): Incomi
   return incoming;
 }
 
-/** Stores a prompt's attachments and returns their references, in the order the user attached them. */
+/**
+ * Stores a prompt's attachments and returns their references, in the order the user attached them. A path is
+ * resolved through symlinks, as the workspace is, so a file inside it is named relative to it.
+ */
 export async function storeAttachments(dir: string, incoming: readonly Incoming[]): Promise<Attachment[]> {
   const attachments: Attachment[] = [];
-  for (const item of incoming) attachments.push(item.kind === 'image' ? await storeImage(dir, item.bytes, item.source) : await storeFile(dir, item.text, item.source));
+  for (const item of incoming) {
+    const file = item.source.path;
+    const real = file === undefined ? undefined : await realpath(file).catch(() => file);
+    attachments.push(
+      item.kind === 'image' ? await storeImage(dir, item.bytes, { ...item.source, path: real }) : await storeFile(dir, item.text, { ...item.source, path: real }),
+    );
+  }
   return attachments;
 }
 
