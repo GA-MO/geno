@@ -51,6 +51,15 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ["cat > a.ts <<'EOF'\nexport {};\nEOF\ncat ../secret", 'path-outside-workspace'],
   ['curl https://example.com', 'network-download'],
   ['wget https://example.com/x.tgz', 'network-download'],
+  ['wget -qO- https://example.com', 'network-download'],
+  ['curl http://localhost.example.com', 'network-download'],
+  ['curl http://127.0.0.1:3000@example.com', 'network-download'],
+  ['curl http://127.0.0.1:3000$UNSET_ELSEWHERE', 'network-download'],
+  ['curl -x http://proxy.example.com http://localhost:3000', 'network-download'],
+  ['curl --resolve=localhost:3000:93.184.216.34 http://localhost:3000', 'network-download'],
+  ['curl --proxy=http://proxy.example.com http://localhost:3000', 'network-download'],
+  ['curl -K curl.cfg http://localhost:3000', 'network-download'],
+  ['curl http://localhost:3000 https://example.com', 'network-download'],
   ['echo "$(curl -s https://example.com)"', 'network-download'],
   ['cat <<EOF\n$(curl -s https://example.com)\nEOF', 'network-download'],
   ['aws s3 ls', 'cloud-cli'],
@@ -94,6 +103,11 @@ const ALLOWED = [
   'cat > a.ts <<-EOF\n\timport { x } from "../src/x";\n\tEOF',
   'cat <<EOF\nsee ../README.md\nEOF',
   '/opt/homebrew/bin/rg TODO src',
+  'curl localhost:3000',
+  'curl -s http://localhost:3000/api',
+  'curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:3100/',
+  'curl http://[::1]:8080/health',
+  'wget -qO- http://localhost:5173',
 ];
 
 // Every command the Phase 4 evals (E5 and E14 on qwen3.8-flash) denied, verbatim from the session logs.
@@ -104,6 +118,7 @@ printf "\nexport async function up({ db }: any) {\n  await db.execute('CREATE IN
 cp scripts/check-migrations.ts $S/scripts/
 cd $S && ln -sf "$(cd - >/dev/null; pwd)" 2>/dev/null; true`],
   ['payload-site-url-runtime', String.raw`node --import tsx scripts/check-migrations.ts 2>&1 | head -5; echo ===; d=$(mktemp -d); mkdir -p $d/scripts $d/src/migrations; cp scripts/check-migrations.ts $d/scripts/; (cd $d && node --import tsx scripts/check-migrations.ts) 2>&1 | head -5; rm -rf $d`],
+  ['next-base-path', String.raw`cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && (NEXT_PUBLIC_BASE_PATH=/app-path PORT=3100 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js > /tmp/next-server.log 2>&1 &) && sleep 3 && for p in "/" "/app-path" "/app-path/" "/app-path/en" "/app-path/th" "/mockup/demo/list.json" "/app-path/mockup/demo/list.json" "/app-path/_next/static"; do echo "== $p"; curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" "http://127.0.0.1:3100$p"; done`],
   ['payload-manual-code-fences', String.raw`git stash -q && mkdir -p .tmp-check && git show HEAD:src/lib/manual.ts | sed 's/^function parseSections/export function parseSections/' > .tmp-check/manual-old.ts && cat > .tmp-check/old.test.ts <<'EOF'
 import { expect, it } from 'vitest'
 import { parseSections } from './manual-old'
@@ -161,6 +176,7 @@ console.log('robots(default):', JSON.stringify(await robots()))
 console.log('page robots:', JSON.stringify((await pageMetadata({ title: 't', path: '/x' })).robots))
 EOF
 node --import tsx "$d/probe.ts" 2>&1 | tail -20; rm -rf "$d"`],
+  ['payload-noindex-env', String.raw`(SITE_NOINDEX=true SERVER_URL=https://uat.example.com npx next dev -p 3210 > /tmp/dev1.log 2>&1 &) ; sleep 20; echo '--- robots.txt (SITE_NOINDEX=true):'; curl -s http://127.0.0.1:3210/robots.txt; echo '--- home <meta name=robots>:'; curl -s http://127.0.0.1:3210/ | grep -o '<meta name="robots"[^>]*>'; pkill -f 'next dev -p 3210'; sleep 2; echo done`],
 ];
 
 describe('the deny-to-approve list', () => {
