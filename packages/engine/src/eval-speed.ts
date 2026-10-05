@@ -12,7 +12,8 @@ import { readTask } from './store.js';
 
 /**
  * Five E5 tasks that passed there, chosen for few turns and low cost, so a run is cheap enough to repeat before and
- * after each speed change. Changing the list breaks comparison with earlier runs.
+ * after each speed change. Changing the list breaks comparison with earlier runs. The default caps leave room for all
+ * five: the first run's estimate reached $0.12 before the fifth task, and a budget stop scores as a failure.
  */
 export const SPEED_TASKS = [
   'payload-dayjs-bangkok',
@@ -83,8 +84,8 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     strict: true,
     options: {
       model: { type: 'string', default: 'qwen3.8-flash' },
-      'max-cost-per-task': { type: 'string', default: '0.05' },
-      'max-cost': { type: 'string', default: '0.12' },
+      'max-cost-per-task': { type: 'string', default: '0.08' },
+      'max-cost': { type: 'string', default: '0.25' },
       'runs-dir': { type: 'string' },
       check: { type: 'string', default: E5_CHECK },
       from: { type: 'string' },
