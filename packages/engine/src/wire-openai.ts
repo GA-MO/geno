@@ -1,6 +1,6 @@
 import { AnthropicError, APIConnectionError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import { chatStream, toChatRequest, type ChatChunk } from '@g-code/core';
-import { redactor, type Wire, type WireConfig } from './wire.js';
+import { redactor, type Wire, type WireConfig } from './wire-shape.js';
 
 /** The headers that carry the key, as the row says; a local server with no key gets none. */
 function authHeaders({ spec, values }: WireConfig): Record<string, string> {

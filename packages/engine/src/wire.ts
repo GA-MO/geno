@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Message, MessageStreamEvent, MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import type { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import {
@@ -8,39 +7,12 @@ import {
   providerValues,
   specOf,
   type ProviderName,
-  type ProviderSpec,
-  type ProviderValues,
 } from '@g-code/core';
 import { EngineError } from './errors.js';
 import { openaiWire } from './wire-openai.js';
+import { redactor, type Wire, type WireConfig } from './wire-shape.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
-
-export type StreamOptions = {
-  readonly signal: AbortSignal;
-  readonly headers?: Readonly<Record<string, string>>;
-  /** Every Messages stream event as it arrives, translated when the provider speaks another format. */
-  onEvent(event: MessageStreamEvent): void;
-};
-
-/**
- * One provider's adapter: a streamed Messages call and a model listing, whatever the wire format underneath.
- * Failures are thrown as the Anthropic SDK's error classes, so the gateway retries and classifies them alike.
- */
-export type Wire = {
-  stream(params: MessageStreamParams, options: StreamOptions): Promise<Message>;
-  /** The ids the provider offers, for a provider whose row says it lists them. */
-  listModels(signal: AbortSignal): Promise<string[]>;
-  /** The text with the provider's secrets cut out, for an error that might echo them. */
-  redact(text: string): string;
-};
-
-export type WireConfig = {
-  readonly spec: ProviderSpec;
-  readonly values: ProviderValues;
-  readonly baseUrl: string | undefined;
-  readonly fetch: typeof globalThis.fetch | undefined;
-};
 
 /** The provider's values from `env`. Throws an EngineError naming the first required variable that is not set. */
 export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof globalThis.fetch): WireConfig {
@@ -51,17 +23,6 @@ export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof glob
     throw new EngineError(`${missing.env} is not set; put ${missing.id === 'apiKey' ? `your ${provider} API key` : missing.hint} in it`);
   }
   return { spec, values, baseUrl: baseUrlOf(spec, values), fetch };
-}
-
-// Shorter values are not worth hunting for, and would cut ordinary words out of a message.
-const MIN_SECRET_LENGTH = 8;
-
-export function redactor(config: WireConfig): (text: string) => string {
-  const secrets = config.spec.fields.flatMap((field) => {
-    const value = config.values[field.id];
-    return field.secret && value !== undefined && value.length >= MIN_SECRET_LENGTH ? [value] : [];
-  });
-  return (text) => secrets.reduce((out, secret) => out.split(secret).join('[redacted]'), text);
 }
 
 // maxRetries: 0 because retries are the gateway's: the SDK's would retry an exhausted quota, unseen, and never a

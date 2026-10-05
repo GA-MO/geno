@@ -13,7 +13,8 @@ import {
   type ProviderName,
 } from '@g-code/core';
 import { messagesOf, usageOf } from './gateway.js';
-import { wireFor, type Wire } from './wire.js';
+import { wireFor } from './wire.js';
+import type { Wire } from './wire-shape.js';
 
 /** Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`. */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
