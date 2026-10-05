@@ -7,11 +7,11 @@ import { stripHidden, type InstructionFile, type LoadedContext, type ProjectRule
 /** Per directory the first of these that is a file wins. */
 const INSTRUCTION_NAMES = ['AGENTS.override.md', 'AGENTS.md', 'CLAUDE.md'] as const;
 const RULES_DIR = path.join('.cursor', 'rules');
-const SKILL_ROOTS = [path.join('.agents', 'skills'), path.join('.claude', 'skills')] as const;
+export const SKILL_ROOTS = [path.join('.agents', 'skills'), path.join('.claude', 'skills')] as const;
 
 const clean = (text: string): string => stripHidden(text.replace(/\r\n?/g, '\n'));
 
-async function readIfFile(file: string): Promise<string | undefined> {
+export async function readIfFile(file: string): Promise<string | undefined> {
   try {
     if (!(await stat(file)).isFile()) return undefined;
     return clean(await readFile(file, 'utf8'));
@@ -70,7 +70,7 @@ async function shadowedInstructionFile(workspace: string): Promise<string | unde
   return own === undefined ? undefined : path.join(mainRepoRoot, path.basename(own.file));
 }
 
-const shownPath = (workspace: string, file: string): string => {
+export const shownPath = (workspace: string, file: string): string => {
   const relative = path.relative(workspace, file);
   return relative.startsWith('..') || path.isAbsolute(relative) ? file : relative.split(path.sep).join('/');
 };
@@ -138,7 +138,7 @@ export function triggerOf(fields: Frontmatter['fields']): RuleTrigger | undefine
   return description === '' ? undefined : { kind: 'requested', description };
 }
 
-const sortedEntries = async (dir: string) =>
+export const sortedEntries = async (dir: string) =>
   (await readdir(dir, { withFileTypes: true }).catch(() => [])).toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
 export async function loadCursorRules(workspace: string): Promise<ProjectRule[]> {
