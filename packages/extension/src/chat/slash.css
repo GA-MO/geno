@@ -34,3 +34,9 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+/* High contrast selects a row with a light fill; the muted colors would vanish on it. */
+.command-option.active .mention-detail,
+.command-option.active .command-hint {
+  color: inherit;
+}
