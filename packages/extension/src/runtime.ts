@@ -104,11 +104,15 @@ const valuesOf = (runtime: ModelRuntime): Partial<Record<FieldId, Supplied>> => 
 /** What stops the engine from reaching the model, and the command that fixes it. */
 export type SetupProblem = { readonly message: string; readonly fix: { readonly label: string; readonly command: string; readonly args: unknown[] } };
 
-export function setupProblem(runtime: ModelRuntime): SetupProblem | undefined {
+/** `env` is the environment the engine inherits, whose GCODE_MODEL may name the model. */
+export function setupProblem(runtime: ModelRuntime, env: Env = {}): SetupProblem | undefined {
   const spec = specOf(runtime.provider);
   const values = Object.fromEntries(Object.entries(valuesOf(runtime)).map(([id, value]) => [id, value.value]));
   const missing = missingField(spec, values);
-  if (missing === undefined) return undefined;
+  if (missing === undefined) {
+    if (runtime.model ?? (env['GCODE_MODEL'] || spec.defaultModel)) return undefined;
+    return { message: `Geno needs a model for ${spec.label}. Choose one in Geno’s settings.`, fix: { label: 'Open Geno Settings', command: SETTINGS_COMMAND, args: [] } };
+  }
   if (missing.id === 'apiKey') {
     return { message: `Geno has no ${spec.label} API key. Run Geno: Set API Key.`, fix: { label: 'Set API Key', command: SET_KEY_COMMAND, args: [] } };
   }

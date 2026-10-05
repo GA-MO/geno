@@ -30,7 +30,7 @@ async function engineSettings(context: vscode.ExtensionContext, output: vscode.O
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (folder === undefined) throw new Error('Geno chat needs an open folder');
   const runtime = await readEngineRuntime(vscode.workspace.getConfiguration('gcode'), context.secrets, process.env);
-  const problem = setupProblem(runtime.chat);
+  const problem = setupProblem(runtime.chat, process.env);
   if (problem !== undefined) {
     void vscode.window.showWarningMessage(problem.message, problem.fix.label).then((choice) => {
       if (choice !== undefined) void vscode.commands.executeCommand(problem.fix.command, ...problem.fix.args);

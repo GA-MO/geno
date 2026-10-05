@@ -141,6 +141,16 @@ describe('every provider’s runtime', () => {
     expect(described).not.toContain('sk-openai-stored');
   });
 
+  it('asks for a model when the provider has no default and none is set', async () => {
+    const runtime = await readModelRuntime(settingsOf({ provider: 'openai' }), secretsOf({ 'gcode.apiKey.openai': 'sk-openai' }), {});
+    expect(setupProblem(runtime)).toEqual({
+      message: 'Geno needs a model for OpenAI. Choose one in Geno’s settings.',
+      fix: { label: 'Open Geno Settings', command: 'gcode.chat.settings', args: [] },
+    });
+    expect(setupProblem(runtime, { GCODE_MODEL: 'gpt-x' })).toBeUndefined();
+    expect(setupProblem({ ...runtime, model: 'gpt-x' })).toBeUndefined();
+  });
+
   it('refuses a role on a provider it does not know', async () => {
     await expect(readEngineRuntime(settingsOf({ roles: { classifier: { provider: 'nope' } } }), secretsOf({}), {})).rejects.toThrow('gcode.roles.classifier names nope');
   });
