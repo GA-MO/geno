@@ -43,9 +43,12 @@ async function readJson(file: string): Promise<{ readonly kind: 'missing' } | { 
 type Resolved = { readonly plugin: InstalledPlugin } | { readonly problem: string };
 
 /** A plugin without a manifest is named by its key, `name@marketplace`, as Claude Code does. */
-async function resolvePlugin(key: string, installPath: string): Promise<Resolved> {
+async function resolvePlugin(key: string, installPath: string, claudeDir: string): Promise<Resolved> {
   const root = await realpath(installPath).catch(() => undefined);
   if (root === undefined || !(await stat(root)).isDirectory()) return { problem: `${key}: ${installPath} does not exist` };
+  // A plugin folder becomes readable to the model, so it must never take in the Claude config dir and its credentials.
+  const fromRoot = path.relative(root, claudeDir);
+  if (!fromRoot.startsWith('..') && !path.isAbsolute(fromRoot)) return { problem: `${key}: ${installPath} holds the Claude config dir, so it is not read` };
   const manifestFile = path.join(root, '.claude-plugin', 'plugin.json');
   const manifest = await readJson(manifestFile);
   if (manifest.kind === 'broken') return { problem: `${key}: ${manifestFile} is not valid JSON: ${manifest.reason}` };
@@ -65,6 +68,7 @@ export async function loadPlugins(claudeDir: string | undefined, workspace: stri
   if (!parsed.success) return { plugins: [], problems: [`${file}: ${z.prettifyError(parsed.error)}`] };
 
   const project = await canonical(workspace);
+  const claudeReal = await canonical(claudeDir);
   const plugins: InstalledPlugin[] = [];
   const problems: string[] = [];
   for (const key of Object.keys(parsed.data.plugins).toSorted()) {
@@ -74,7 +78,7 @@ export async function loadPlugins(claudeDir: string | undefined, workspace: stri
     }
     const install = applies[0];
     if (install === undefined) continue;
-    const resolved = await resolvePlugin(key, install.installPath);
+    const resolved = await resolvePlugin(key, install.installPath, claudeReal);
     if ('plugin' in resolved) plugins.push(resolved.plugin);
     else problems.push(resolved.problem);
   }

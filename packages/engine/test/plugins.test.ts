@@ -98,6 +98,18 @@ describe('installed Claude Code plugins', () => {
     expect(await loadPlugins(path.join(root, 'claude'), path.join(root, 'ws'))).toEqual({ plugins: [{ name: 'alpha', root: path.join(root, 'cache', 'a') }], problems: [] });
   });
 
+  it('never makes a read root of a plugin folder that holds the Claude config dir, where Claude Code keeps its credentials', async () => {
+    const root = await tree({ 'claude/.credentials.json': '{}' });
+    await mkdir(path.join(root, 'claude', 'plugins'), { recursive: true });
+    await writeFile(
+      path.join(root, 'claude', 'plugins', 'installed_plugins.json'),
+      installed({ 'self@m': [{ scope: 'user', installPath: path.join(root, 'claude') }], 'parent@m': [{ scope: 'user', installPath: root }] }),
+    );
+    const scan = await loadPlugins(path.join(root, 'claude'), path.join(root, 'ws'));
+    expect(scan.plugins).toEqual([]);
+    expect(scan.problems).toEqual([expect.stringMatching(/^parent@m: .*Claude config/), expect.stringMatching(/^self@m: .*Claude config/)]);
+  });
+
   it('treats a missing plugins file as no plugins, without a problem', async () => {
     const root = await tree({});
     expect(await loadPlugins(path.join(root, 'claude'), path.join(root, 'ws'))).toEqual({ plugins: [], problems: [] });
