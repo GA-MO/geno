@@ -15,6 +15,7 @@ import type { HunkStatus } from './hunks.js';
 import type { ApprovalRecord } from './classifier.js';
 import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
+import type { InterruptedTool, ModelMarks, StreamMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { Brand } from './types.js';
 
@@ -80,9 +81,10 @@ export type AssistantTurn = {
   readonly model: string;
 };
 
+/** `marks` is absent from gateways that do not stream, such as test doubles. */
 export type TurnResult =
-  | { readonly kind: 'answer'; readonly turn: AssistantTurn }
-  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
+  | { readonly kind: 'answer'; readonly turn: AssistantTurn; readonly marks?: StreamMarks | undefined }
+  | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string; readonly marks?: StreamMarks | undefined };
 
 /** `denied` is a command the user, or the non-interactive policy, refused to run. */
 export const TOOL_STATUSES = ['ok', 'error', 'denied'] as const;
@@ -105,6 +107,8 @@ export type ToolResultEvent = {
   readonly approval?: ApprovalRecord | undefined;
   /** Images the tool returned beside its text, such as a read of a PNG. */
   readonly images?: readonly ImageAttachment[] | undefined;
+  /** Absent in logs written before turns were timed. */
+  readonly timing?: ToolMarks | undefined;
 } & ToolOutput;
 
 /** The workspace as it was before model turn `turnSeq`, committed to the workspace's shadow repo. */
@@ -143,13 +147,18 @@ export type TurnEvent =
       /** The slash command `content` was expanded from. */
       readonly command?: Invocation | undefined;
     }
-  | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string } & AssistantTurn)
+  /** `timing` is absent in logs written before turns were timed. */
+  | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string; readonly timing?: ModelMarks | undefined } & AssistantTurn)
   | {
       readonly kind: 'error';
       readonly seq: number;
       readonly at: string;
       readonly error: TurnErrorKind;
       readonly message: string;
+      /** The model call that failed or was interrupted. */
+      readonly timing?: ModelMarks | undefined;
+      /** The tools of a batch the user interrupted, which log no results. */
+      readonly tools?: readonly InterruptedTool[] | undefined;
     }
   | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }
   | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)

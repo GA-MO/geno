@@ -3,6 +3,7 @@ export * from './mine.js';
 export * from './replay.js';
 export * from './attachments.js';
 export * from './session.js';
+export * from './timing.js';
 export * from './context.js';
 export * from './commands.js';
 export * from './request.js';
