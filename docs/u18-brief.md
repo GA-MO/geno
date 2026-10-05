@@ -40,6 +40,33 @@ The user confirmed on 2026-10-05 that the props and the other moves belong in th
 - **Peek.** When the chat is idle after a turn, the dino's head peeks over the top edge of the composer. Its eyes follow the mouse inside the panel. It ducks behind the composer while the composer has focus or holds text, and hides while a turn runs.
 - **Prototype.** The interactive panel prototype the user saw (the working poses, the folded finished turn and the peek) is the reference.
 
+## The peek, upgraded (user request, 2026-10-06)
+
+U18a's peek shows only the head over the composer's top edge. The user wants Noodle to grip the edge with both hands and do things, not just pop up and vanish. A prototype was shown and is the reference.
+- **Hands.** Two small 3×2 hands sit on the composer's top edge, drawn over the rainbow border, with knuckle pixels in a darker green (`#4fae86`). The head sits behind the edge, between them.
+- **Moves.** Each is a row in the pose table:
+
+  | Move | Frames |
+  |---|---|
+  | Climb up | head rises, hands land on the edge, blink |
+  | Look around | eyes left, right, then up toward the pointer |
+  | Wave | one hand leaves the edge and waves with happy eyes |
+  | Drum fingers | hands tap the edge in turn |
+  | Chin rest | head lowers onto the hands, slow blinks |
+  | Yawn | mouth open, eyes closed, a small "z" |
+  | Wink | one eye closes |
+  | Duck down | hands let go and it slides behind the composer |
+
+- **When each plays:**
+  - Climb up plays when the chat becomes idle.
+  - While idle, a weighted random move plays every 6 to 12 s, mostly look around and drum fingers.
+  - Chin rest and yawn come only after 60 s or more of idle.
+  - Wave plays once when the user returns to the window after being away for a while.
+  - Duck down plays the moment the composer gets focus or text, and while a turn runs.
+  - The eyes still follow the pointer between moves.
+- **Motion budget.** Same as U18a: it pauses when the window is unfocused or the view is hidden. Under reduced motion or high contrast it shows only the still head and hands, with no moves and no tracking.
+- **Owner.** U18b builds this, together with the working dino.
+
 ## Start page: just the dino
 
 On 2026-10-05 the user went through Horizon, a commit-graph ground, a desk scene and a terminal card, then chose the simplest one: the dino alone, with no other objects.
