@@ -1,7 +1,8 @@
 """Builds the three dinosaurs from their pixel grids: a mono 24x24 activity-bar SVG, a colored SVG avatar,
 a 128x128 PNG icon, an inline-avatar module for the prototype pages, and docs/media/u6-proposals/dinos.png.
+It builds the boxy Noodle variants the same way, with their own sheet, docs/media/u6-proposals/noodle-boxy.png.
 
-Run: python3 prototypes/u6/dinos/make_dinos.py [--preview]
+Run: python3 prototypes/u6/dinos/make_dinos.py [--preview [--boxy]]
 """
 import json
 import sys
@@ -110,6 +111,104 @@ DINOS = {
     },
 }
 
+# Boxy Noodle variants, in increasing boxiness. They share Noodle's palette and tile.
+NOODLE = DINOS['noodle']
+BOXY = {
+    'noodle-box-a': {
+        'title': 'Box A',
+        'tile': NOODLE['tile'],
+        'palette': NOODLE['palette'],
+        'grid': [
+            '........................',
+            '.............BBBBBBBBB..',
+            '.............BBBBBBBBB..',
+            '.............BBBBWEBBB..',
+            '.............BBBBEEBBB..',
+            '.............BBBBBBBBB..',
+            '.............BBBBAABBB..',
+            '.............BBBB.......',
+            '.............BBBB.......',
+            '.............BBBB.......',
+            '.............BBBB.......',
+            '.............BBBB.......',
+            '...BBBBBBBBBBBBBBB......',
+            '...BBBBBSBBBBSBBBB......',
+            'BBBBBBBBBBBBBBBBBB......',
+            'BBBBBBSBBBBBSBBBBB......',
+            '...BBBBBBBBBBBBBBB......',
+            '...BBLLLLLLLLLLLBB......',
+            '...BBLLLLLLLLLLLBB......',
+            '....SBB......SBB........',
+            '....SBB......SBB........',
+            '....SBB......SBB........',
+            '........................',
+            '........................',
+        ],
+    },
+    'noodle-box-b': {
+        'title': 'Box B',
+        'tile': NOODLE['tile'],
+        'palette': NOODLE['palette'],
+        'grid': [
+            '........................',
+            '.............BBBBBBBBB..',
+            '.............BBBBBBBBB..',
+            '.............BBBBWEBBB..',
+            '.............BBBBEEBBB..',
+            '.............BBBBBBBBB..',
+            '.............BBBBAABBB..',
+            '.............BBBBBBBBB..',
+            '..............BBBB......',
+            '..............BBBB......',
+            '..BBBBBBBBBBBBBBBB......',
+            '..BBBBBBSBBBBBSBBB......',
+            '..BBBBBBBBBBBBBBBB......',
+            'BBBBSBBBBBSBBBBBBB......',
+            'BBBBBBBBBBBBBBBBBB......',
+            '..BBBBBBBSBBBBBSBB......',
+            '..BBBBBBBBBBBBBBBB......',
+            '..BBLLLLLLLLLLLLBB......',
+            '..BBLLLLLLLLLLLLBB......',
+            '..BBBBBBBBBBBBBBBB......',
+            '...SBBB......SBBB.......',
+            '...SBBB......SBBB.......',
+            '........................',
+            '........................',
+        ],
+    },
+    'noodle-box-c': {
+        'title': 'Box C',
+        'tile': NOODLE['tile'],
+        'palette': NOODLE['palette'],
+        'grid': [
+            '........................',
+            '........................',
+            '.............BBBBBBB....',
+            '.............BBWEBBB....',
+            '.............BBEEAAB....',
+            '.............BBBBBBB....',
+            '.............BBB........',
+            '.............BBB........',
+            '.............BBB........',
+            '.............BBB........',
+            '.............BBB........',
+            '..BBBBBBBBBBBBBB........',
+            '..BBBBBSBBBBSBBB........',
+            '..BBBBBBBBBBBBBB........',
+            '..BBBSBBBBSBBBBB........',
+            'BBBBBBBBBBBBBBBB........',
+            '..BBBBBSBBBBSBBB........',
+            '..BBBBBBBBBBBBBB........',
+            '..BLLLLLLLLLLLLB........',
+            '..BBBBBBBBBBBBBB........',
+            '...SB......SB...........',
+            '........................',
+            '........................',
+            '........................',
+        ],
+    },
+}
+
 SIZE = 24
 
 
@@ -194,13 +293,13 @@ def font(size):
     return ImageFont.load_default()
 
 
-def sheet():
+def sheet(dinos):
     """Each dino at 16, 24 and 128 on Dark Modern and Light Modern backgrounds, at 2x so it reads on a retina screen."""
     k = 2
     themes = [('Dark Modern', '#181818', '#d7d7d7', '#cccccc'), ('Light Modern', '#f8f8f8', '#1f1f1f', '#3b3b3b')]
     col = [150, 230, 310, 400, 480]  # mono 16, mono 24, avatar 16, avatar 24, icon 128
     row_h = 168
-    width, height = 680, 44 + row_h * len(DINOS)
+    width, height = 680, 44 + row_h * len(dinos)
     out = Image.new('RGB', (width * 2 * k, height * k), '#000')
     for t, (theme, bg, fg, text) in enumerate(themes):
         panel = Image.new('RGB', (width * k, height * k), bg)
@@ -208,7 +307,7 @@ def sheet():
         draw.text((24 * k, 14 * k), theme, fill=text, font=font(13 * k))
         for label, x in zip(['mono 16', 'mono 24', 'avatar 16', 'avatar 24', 'icon 128'], col):
             draw.text((x * k, 14 * k), label, fill=text, font=font(11 * k))
-        for i, dino in enumerate(DINOS.values()):
+        for i, dino in enumerate(dinos.values()):
             top = 44 + i * row_h
             mid = top + 64
             draw.text((24 * k, (mid - 8) * k), dino['title'], fill=text, font=font(14 * k))
@@ -223,9 +322,9 @@ def sheet():
     return out
 
 
-def preview():
+def preview(dinos):
     scale = 12
-    tiles = [grid_image(d['grid'], d['palette'], scale) for d in DINOS.values()]
+    tiles = [grid_image(d['grid'], d['palette'], scale) for d in dinos.values()]
     img = Image.new('RGB', (len(tiles) * (SIZE * scale + 24) + 24, SIZE * scale + 48), '#202020')
     draw = ImageDraw.Draw(img)
     for i, tile in enumerate(tiles):
@@ -238,23 +337,24 @@ def preview():
 
 
 def main():
-    for name, dino in DINOS.items():
+    for name, dino in {**DINOS, **BOXY}.items():
         check(name, dino['grid'], dino['palette'])
     if '--preview' in sys.argv:
         path = Path(sys.argv[-1]) if sys.argv[-1].endswith('.png') else HERE / 'preview.png'
-        preview().save(path)
+        preview({'noodle': NOODLE, **BOXY} if '--boxy' in sys.argv else DINOS).save(path)
         print(path)
         return
     MEDIA.mkdir(parents=True, exist_ok=True)
     avatars = {}
-    for name, dino in DINOS.items():
+    for name, dino in {**DINOS, **BOXY}.items():
         (HERE / f'{name}-mono.svg').write_text(mono_svg(dino['grid']))
         avatars[name] = avatar_svg(dino['grid'], dino['palette']).strip()
         (HERE / f'{name}-avatar.svg').write_text(avatars[name] + '\n')
         icon_png(dino).save(HERE / f'{name}-128.png')
-    (HERE.parent / 'shared/dinos.js').write_text(f'window.DINOS = {json.dumps(avatars, indent=2)};\n')
-    sheet().save(MEDIA / 'dinos.png')
-    print('wrote', MEDIA / 'dinos.png')
+    (HERE.parent / 'shared/dinos.js').write_text(f'window.DINOS = {json.dumps({n: avatars[n] for n in DINOS}, indent=2)};\n')
+    sheet(DINOS).save(MEDIA / 'dinos.png')
+    sheet({'noodle': NOODLE, **BOXY}).save(MEDIA / 'noodle-boxy.png')
+    print('wrote', MEDIA / 'dinos.png', MEDIA / 'noodle-boxy.png')
 
 
 if __name__ == '__main__':
