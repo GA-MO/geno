@@ -90,7 +90,7 @@ const slash = slashPicker(input, {
     redraft();
   },
   wanted: () => host.postMessage({ type: 'want-commands' }),
-  submit: () => submit(),
+  submit,
 });
 const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, inputBox);
 
