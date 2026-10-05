@@ -64,7 +64,7 @@ export async function writeTextFile({ path, content, _meta }: acp.WriteTextFileR
   }
   const edit = new vscode.WorkspaceEdit();
   edit.replace(document.uri, document.validateRange(new vscode.Range(0, 0, document.lineCount, 0)), content);
-  // applyEdit refuses an edit made against a document version that the user has since changed.
+  // A refused edit most likely met a document the user changed in the meantime, so it is reported as stale.
   if (!(await vscode.workspace.applyEdit(edit))) throw stale(path);
   return {};
 }
