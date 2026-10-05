@@ -1,3 +1,4 @@
+import type { ChangedFile } from './fold.js';
 import type { ErrorBlock, PermissionBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 
 /**
@@ -12,7 +13,11 @@ export type Step =
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
   | { readonly kind: 'thinking'; readonly key: 'thinking' }
-  | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] };
+  | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
+  /** Compact detail only: the line the turn's work folds behind, which opens and closes the whole trail. */
+  | { readonly kind: 'fold'; readonly key: 'fold'; readonly turn: string; readonly label: string; readonly open: boolean }
+  /** Compact detail only: the changed files as one row of chips, in the changes card's place. */
+  | { readonly kind: 'files'; readonly key: 'files'; readonly files: readonly ChangedFile[] };
 
 export type EditTool = ToolBlock & { readonly diff: NonNullable<ToolBlock['diff']> };
 
@@ -65,6 +70,8 @@ export function nodeOf(step: Step): NodeState {
     case 'thinking':
       return 'live';
     case 'changes':
+    case 'fold':
+    case 'files':
       return 'done';
   }
 }

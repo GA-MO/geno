@@ -170,6 +170,13 @@ export type Action =
 export const UI_STYLES = ['glass', 'native'] as const;
 export type UiStyle = (typeof UI_STYLES)[number];
 
+/** How much of a turn the panel draws (`gcode.chat.detail`): compact folds its work behind one line; full draws every step. */
+export const CHAT_DETAILS = ['compact', 'full'] as const;
+export type ChatDetail = (typeof CHAT_DETAILS)[number];
+
+/** The panel's look from settings, which the page carries as `data-style` and `data-detail` on its body. */
+export type Look = { readonly style: UiStyle; readonly detail: ChatDetail };
+
 /** An approval mode the session can be in, as the engine advertises it through ACP. */
 export type ModeOption = { readonly id: string; readonly name: string; readonly description: string | undefined };
 
@@ -205,7 +212,7 @@ export type HistoryRow = {
 export type ToView =
   | Action
   | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] }
-  | { readonly type: 'style'; readonly style: UiStyle }
+  | { readonly type: 'look'; readonly look: Look }
   /** Files the user picked or dropped from the explorer, read by the extension, for the composer to attach. */
   | { readonly type: 'picked'; readonly files: readonly PickedFile[]; readonly refused: readonly Refused[] }
   /** The workspace folders and the webview addresses they are served at, for images in the transcript. */
