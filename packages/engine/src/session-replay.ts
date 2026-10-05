@@ -113,6 +113,7 @@ function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
             outputTokens: answers.reduce((n, a) => n + a.usage.output, 0),
             costUsd: answers.some((a) => a.costUsd === null) ? null : answers.reduce((n, a) => n + (a.costUsd ?? 0), 0),
           },
+    ...(prompt.command === undefined ? {} : { command: prompt.command }),
   };
 }
 

@@ -1,5 +1,6 @@
 /** g-code's additions to the Agent Client Protocol, shared by the engine and the extension. docs/e12.md maps every flow. */
 
+import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
 import type { HunkId, ReviewHunk } from './review.js';
 
@@ -114,6 +115,8 @@ export type ReplayedTurn = {
   readonly status: 'done' | 'stopped' | 'failed';
   /** `inputTokens` counts cached tokens too; null for a turn that never reached the model. */
   readonly usage: { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null } | null;
+  /** The slash command the user typed, whose expansion the replayed prompt text is. */
+  readonly command?: Invocation;
 };
 
 /** Key in a replayed `tool_call` or `tool_call_update`'s `_meta`: when it happened, in milliseconds since the epoch. */
