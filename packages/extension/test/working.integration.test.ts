@@ -49,7 +49,7 @@ const GIF_MS = 70;
 let debugPort = 0;
 let window: Window | undefined;
 const requests: unknown[] = [];
-const costs: (PanelCost & { readonly label: string; readonly timers: number })[] = [];
+const costs: (PanelCost & { readonly label: string; readonly timers: number; readonly timerMs: number })[] = [];
 let panelPid: number | undefined;
 
 /** Each model reply waits until the suite lets it go, so the suite can look at each step's pose. */
@@ -121,11 +121,13 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
     panelPid ??= webviewPid(events);
     if (panelPid === undefined) throw new Error('the first trace shows no script in the panel, so its renderer is unknown');
     const main = events.find((e) => e.ph === 'M' && e.name === 'thread_name' && e.pid === panelPid && e.args?.name === 'CrRendererMain')?.tid;
-    const timers = events.filter((e) => e.pid === panelPid && e.tid === main && e.name === 'TimerFire').length;
-    const cost = { label, timers, ...panelCost(events, panelPid) };
+    const fired = events.filter((e) => e.pid === panelPid && e.tid === main && e.name === 'TimerFire');
+    // The time inside timer callbacks: Noodle's ticks and their canvas paints, apart from the turn's own animations.
+    const timerMs = fired.reduce((sum, e) => sum + (e.dur ?? 0), 0) / 1000;
+    const cost = { label, timers: fired.length, timerMs, ...panelCost(events, panelPid) };
     costs.push(cost);
-    console.log(`perf ${label}: ${cost.busyMs.toFixed(1)}ms main-thread busy in ${cost.seconds.toFixed(2)}s (${cost.busyPercent.toFixed(2)}%), ${timers} timers, ${cost.frames} frames`);
-    return { timers };
+    console.log(`perf ${label}: ${cost.busyMs.toFixed(1)}ms main-thread busy in ${cost.seconds.toFixed(2)}s (${cost.busyPercent.toFixed(2)}%), ${fired.length} timers taking ${timerMs.toFixed(1)}ms, ${cost.frames} frames`);
+    return { timers: fired.length };
   },
   release: async () => allow(),
   /** How many model requests have arrived, and how many replies went. */

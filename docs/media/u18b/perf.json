@@ -1,56 +1,62 @@
 [
   {
     "label": "running turn, Noodle thinking, run 1, attempt 1",
-    "timers": 193,
-    "seconds": 10.003556,
-    "busyMs": 786.738,
-    "busyPercent": 7.864583354159262,
+    "timers": 192,
+    "timerMs": 40.317,
+    "seconds": 10.004479,
+    "busyMs": 860.696,
+    "busyPercent": 8.603106668523168,
     "frames": 600,
-    "fps": 59.97867158438459
+    "fps": 59.973138031475706
   },
   {
     "label": "running turn, Noodle resting, run 1",
     "timers": 50,
-    "seconds": 10.003859,
-    "busyMs": 917.104,
-    "busyPercent": 9.167502260877528,
+    "timerMs": 3.71,
+    "seconds": 10.003558,
+    "busyMs": 860.118,
+    "busyPercent": 8.598120788623406,
     "frames": 600,
-    "fps": 59.97685493168186
+    "fps": 59.97865959291684
   },
   {
     "label": "running turn, Noodle thinking, run 2, attempt 1",
     "timers": 192,
-    "seconds": 10.004048,
-    "busyMs": 593.485,
-    "busyPercent": 5.932448544829054,
+    "timerMs": 41.407,
+    "seconds": 10.003196,
+    "busyMs": 869.079,
+    "busyPercent": 8.68801331094582,
     "frames": 600,
-    "fps": 59.97572182780411
+    "fps": 59.9808301266915
   },
   {
     "label": "running turn, Noodle resting, run 2",
     "timers": 50,
-    "seconds": 10.004047,
-    "busyMs": 917.822,
-    "busyPercent": 9.174507076985945,
+    "timerMs": 3.468,
+    "seconds": 10.003069,
+    "busyMs": 704.577,
+    "busyPercent": 7.043608316607633,
     "frames": 600,
-    "fps": 59.975727822950056
+    "fps": 59.98159164952276
   },
   {
     "label": "running turn, Noodle thinking, run 3, attempt 1",
     "timers": 192,
-    "seconds": 10.003169,
-    "busyMs": 726.508,
-    "busyPercent": 7.262778425516954,
+    "timerMs": 33.685,
+    "seconds": 10.003492,
+    "busyMs": 658.306,
+    "busyPercent": 6.58076199791033,
     "frames": 600,
-    "fps": 59.980992023627714
+    "fps": 59.979055313884395
   },
   {
     "label": "running turn, Noodle resting, run 3",
     "timers": 50,
-    "seconds": 10.015811,
-    "busyMs": 796.777,
-    "busyPercent": 7.955192045856298,
+    "timerMs": 3.431,
+    "seconds": 9.999816,
+    "busyMs": 783.89,
+    "busyPercent": 7.839044238413987,
     "frames": 600,
-    "fps": 59.905283755853624
+    "fps": 60.00110402031398
   }
 ]
