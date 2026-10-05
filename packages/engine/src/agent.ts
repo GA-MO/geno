@@ -3,15 +3,15 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS } from '@g-code/core';
+import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, type TurnEvent } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { childEnv } from './child-env.js';
 import type { Command, Io } from './command.js';
-import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits } from './drive.js';
+import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { isMissing, StoreError, type Store } from './store.js';
-import { agentExecutors, type Approver } from './tools/agent.js';
+import { agentExecutors, type Approver, type Diagnostics } from './tools/agent.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
@@ -41,6 +41,9 @@ export type AgentOptions = {
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
   readonly approve: Approver;
+  /** Undefined runs on disk and prints to the terminal. */
+  readonly surface?: Surface;
+  readonly diagnostics?: Diagnostics | undefined;
 };
 
 export const denyAll: Approver = async () => false;
@@ -64,14 +67,16 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       check: options.check ?? (await configuredCheck(workspace)),
       checkAfterEdit: options.checkAfterEdit,
       approve: options.approve,
+      diagnostics: options.diagnostics,
     });
     const repo = shadowRepoFor(store, session.workspace);
-    return await drive(io, store, opened, prompt, options.limits, {
+    const mode = {
       tools: AGENT_TOOL_DEFINITIONS,
       executors,
       system: AGENT_SYSTEM_PROMPT,
-      beforeCall: (events) => takeCheckpoint(repo, session.id, events),
-    });
+      beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
+    };
+    return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
   } finally {
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });

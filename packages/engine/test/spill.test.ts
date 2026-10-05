@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { SPILL_EDGE, spillNotice } from '@g-code/core';
+import { DISK_FILES } from '../src/files.js';
 import { EXECUTORS, runTool, type ToolContext } from '../src/tools/index.js';
 import { settle, spillFile } from '../src/tools/spill.js';
 import { rgCommand } from './helpers.js';
@@ -17,7 +18,7 @@ describe('output spill', () => {
     await mkdir(ws);
     const lines = Array.from({ length: 2000 }, (_, i) => `const NEEDLE_${String(i).padStart(4, '0')} = 'padding padding padding';`);
     await writeFile(path.join(ws, 'big.ts'), `${lines.join('\n')}\n`);
-    const ctx: ToolContext = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), rg: rgCommand(), signal: new AbortController().signal };
+    const ctx: ToolContext = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES };
 
     const result = await runTool(use('grep', { pattern: 'NEEDLE_' }), ctx, EXECUTORS);
     expect(result.status).toBe('ok');

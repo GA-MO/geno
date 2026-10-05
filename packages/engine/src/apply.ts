@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
@@ -10,16 +10,12 @@ import {
   EDIT_FORMATS,
   isApplierName,
   PRICES,
-  proposeChange,
   replay,
   summarize,
   TRIPLE_SCOPES,
   type ApplierName,
   type ApplyFailure,
   type ApplyModel,
-  type BaseRead,
-  type EditFormat,
-  type ProposedChange,
   type ReplayCounts,
   type ReplayResult,
   type Session,
@@ -29,32 +25,6 @@ import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { gatewayFor, type Gateway } from './gateway.js';
 import { isMissing, readTriple, readTriples } from './store.js';
-
-/**
- * Applies a model's edit to a file on disk. Nothing is written unless the file still hashes to `base` and
- * the edit applies; the write goes through a temporary file so a crash never leaves half a file.
- */
-export async function applyEditToFile(
-  file: string,
-  edit: { readonly path: string; readonly format: EditFormat; readonly raw: unknown; readonly base: BaseRead },
-  turn: ProposedChange['turn'],
-): Promise<ProposedChange> {
-  let current: string | null;
-  try {
-    current = await readFile(file, 'utf8');
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-    current = null;
-  }
-  const { change, after } = proposeChange({ ...edit, current, turn });
-  if (after !== null) {
-    await mkdir(path.dirname(file), { recursive: true });
-    const tmp = `${file}.${process.pid}.tmp`;
-    await writeFile(tmp, after);
-    await rename(tmp, file);
-  }
-  return change;
-}
 
 // The gateway is built on the first model call, so the noop and oracle appliers need no API key.
 function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal): ApplyModel {

@@ -17,6 +17,8 @@ export const hashText = (text: string | null): string | null =>
 
 export const baseOf = (text: string | null, mtimeMs: number | null): BaseRead => ({ hash: hashText(text), mtimeMs });
 
+export const staleBaseDetail = (path: string): string => `${path} changed since it was last read; read it again before editing`;
+
 export type ApplyResult = { readonly kind: 'applied' } | { readonly kind: 'failed'; readonly reason: ApplyFailure; readonly detail: string };
 
 /** The edit record. `check` stays null until project checks run after edits. */
@@ -192,7 +194,7 @@ export function proposeChange(args: ProposeArgs): { readonly change: ProposedCha
   });
   const fail = (reason: ApplyFailure, detail: string) => ({ change: record({ kind: 'failed', reason, detail }, []), after: null });
   if (hashText(current) !== base.hash) {
-    return fail('stale-base', `${path} changed since it was last read; read it again before editing`);
+    return fail('stale-base', staleBaseDetail(path));
   }
   if (!isInput(raw)) return fail('parse-error', 'the tool input must be a JSON object');
   const outcome = EDIT_FORMAT_SPECS[format].apply(raw, { path, text: current });
