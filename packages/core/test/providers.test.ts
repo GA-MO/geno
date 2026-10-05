@@ -1,0 +1,102 @@
+import { describe, expect, it } from 'vitest';
+import {
+  baseUrlOf,
+  costOf,
+  missingField,
+  PRICES,
+  PROVIDER_SPECS,
+  PROVIDERS,
+  providerValues,
+  ROLE_SPECS,
+  SECRET_ENV_NAMES,
+  specOf,
+} from '../src/index.js';
+
+const million = { input: 1_000_000, cacheRead: 1_000_000, cacheWrite: 1_000_000, output: 1_000_000 };
+
+describe('the provider registry', () => {
+  it('has one row per provider, each keyed by its own id', () => {
+    expect(Object.keys(PROVIDER_SPECS).sort()).toEqual([...PROVIDERS].sort());
+    for (const id of PROVIDERS) expect(specOf(id).id).toBe(id);
+  });
+
+  it('covers the Anthropic-format and OpenAI-compatible providers the brief names', () => {
+    const byAdapter = (adapter: string) => PROVIDERS.filter((id) => specOf(id).adapter === adapter);
+    expect(byAdapter('anthropic')).toEqual(['openrouter', 'modelstudio', 'anthropic', 'bedrock', 'vertex']);
+    expect(byAdapter('openai')).toEqual(['openai', 'azure-openai', 'gemini', 'deepseek', 'groq', 'cerebras', 'xai', 'mistral', 'ollama', 'lmstudio']);
+  });
+
+  it('keeps today’s variable names, so existing keys and endpoints still work', () => {
+    expect(specOf('modelstudio').fields.map((f) => [f.id, f.env])).toEqual([
+      ['apiKey', 'DASHSCOPE_API_KEY'],
+      ['baseUrl', 'DASHSCOPE_BASE_URL'],
+    ]);
+    expect(specOf('openrouter').fields.find((f) => f.id === 'apiKey')?.env).toBe('OPENROUTER_API_KEY');
+    expect(ROLE_SPECS.chat.env).toEqual({ provider: 'GCODE_PROVIDER', model: 'GCODE_MODEL' });
+    expect(ROLE_SPECS.classifier.env).toEqual({ provider: 'GCODE_CLASSIFIER_PROVIDER', model: 'GCODE_CLASSIFIER_MODEL' });
+    expect(specOf('modelstudio').defaultModel).toBe('qwen3.8-flash');
+    expect(specOf('openrouter').defaultModel).toBe('anthropic/claude-opus-5.5');
+  });
+
+  it('gives every row exactly one base URL field, required when there is no default', () => {
+    for (const id of PROVIDERS) {
+      const spec = specOf(id);
+      const urls = spec.fields.filter((f) => f.id === 'baseUrl');
+      expect(urls, id).toHaveLength(1);
+      expect(urls[0]!.secret, id).toBe(false);
+      if (spec.key.kind === 'header') expect(urls[0]!.required, id).toBe(spec.defaultBaseUrl === undefined);
+    }
+  });
+
+  it('supplies a header key as an apiKey field, AWS with a region, and Google with a project and region', () => {
+    for (const id of PROVIDERS) {
+      const spec = specOf(id);
+      const ids = spec.fields.map((f) => f.id);
+      if (spec.key.kind === 'header') expect(ids, id).toContain('apiKey');
+      if (spec.key.kind === 'aws') expect(ids, id).toEqual(expect.arrayContaining(['region', 'accessKeyId', 'secretAccessKey', 'profile']));
+      if (spec.key.kind === 'google') expect(ids, id).toEqual(expect.arrayContaining(['project', 'region']));
+      expect(new Set(spec.fields.map((f) => f.env)).size, id).toBe(spec.fields.length);
+    }
+    expect(specOf('anthropic').key).toEqual({ kind: 'header', header: 'x-api-key', scheme: undefined });
+    expect(specOf('azure-openai').key).toEqual({ kind: 'header', header: 'api-key', scheme: undefined });
+    expect(specOf('openai').key).toEqual({ kind: 'header', header: 'authorization', scheme: 'Bearer' });
+  });
+
+  it('lists every secret variable, and no setting among them', () => {
+    expect(SECRET_ENV_NAMES).toEqual(
+      expect.arrayContaining(['DASHSCOPE_API_KEY', 'OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'OPENAI_API_KEY', 'GCODE_VERTEX_ACCESS_TOKEN']),
+    );
+    expect(SECRET_ENV_NAMES).not.toContain('AWS_REGION');
+    expect(SECRET_ENV_NAMES).not.toContain('DASHSCOPE_BASE_URL');
+  });
+
+  it('reads values from the environment, treats empty as unset, and names the first missing required field', () => {
+    const spec = specOf('modelstudio');
+    const values = providerValues(spec, { DASHSCOPE_API_KEY: 'sk-1', DASHSCOPE_BASE_URL: '', OPENAI_API_KEY: 'other' });
+    expect(values).toEqual({ apiKey: 'sk-1' });
+    expect(missingField(spec, values)?.env).toBe('DASHSCOPE_BASE_URL');
+    expect(baseUrlOf(spec, values)).toBeUndefined();
+    expect(missingField(specOf('ollama'), {})).toBeUndefined();
+    expect(baseUrlOf(specOf('ollama'), {})).toBe('http://127.0.0.1:11434/v1');
+    expect(baseUrlOf(specOf('openai'), { baseUrl: 'http://127.0.0.1:9/v1' })).toBe('http://127.0.0.1:9/v1');
+  });
+
+  it('has a price table for every provider, so a new row has to say what it knows', () => {
+    expect(Object.keys(PRICES).sort()).toEqual([...PROVIDERS].sort());
+  });
+});
+
+describe('costOf per provider', () => {
+  it('prices Anthropic’s own models at its list price, cache writes at 1.25x input', () => {
+    expect(costOf('anthropic', 'claude-opus-5-5', million)).toBeCloseTo(4 + 0.2 + 5 + 20);
+    expect(costOf('anthropic', 'claude-sonnet-5-5', million)).toBeCloseTo(2 + 0.2 + 2.5 + 10);
+    expect(costOf('anthropic', 'claude-haiku-4-5', million)).toBeCloseTo(1 + 0.1 + 1.25 + 5);
+  });
+
+  it('keeps a model’s price to the provider that charges it', () => {
+    expect(costOf('modelstudio', 'qwen3.8-flash', million)).toBeCloseTo(0.15 + 0.15 + 0.1875 + 0.47);
+    expect(costOf('openai', 'qwen3.8-flash', million)).toBeNull();
+    expect(costOf('anthropic', 'anthropic/claude-opus-5.5', million)).toBeNull();
+    expect(costOf('bedrock', 'anthropic.claude-opus-5-5', million)).toBeNull();
+  });
+});
