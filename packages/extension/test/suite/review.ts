@@ -83,7 +83,7 @@ export async function run(): Promise<void> {
   await screenshot('diff');
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 
-  await vscode.commands.executeCommand('gcode.review.undoSession');
+  await vscode.commands.executeCommand('gcode.review.undoSession', true);
   for (const name of ['a.ts', 'b.ts', 'c.ts'] as const) {
     check((await disk(name)) === FILES[name], `Undo all restores ${name} byte for byte`, await disk(name));
   }

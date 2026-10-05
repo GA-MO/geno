@@ -122,21 +122,27 @@ export class ReviewController implements vscode.Disposable {
     const pending = ids.flatMap((id) => (this.hunks.get(id)?.status === 'pending' ? [this.hunks.get(id)!] : []));
     const byDocument = new Map<string, Tracked[]>();
     for (const hunk of pending) byDocument.set(hunk.uri.toString(), [...(byDocument.get(hunk.uri.toString()) ?? []), hunk]);
-    for (const hunks of byDocument.values()) {
-      const document = await vscode.workspace.openTextDocument(hunks[0]!.uri);
-      const save = !document.isDirty;
-      const edit = new vscode.WorkspaceEdit();
-      for (const hunk of hunks) {
-        edit.replace(document.uri, new vscode.Range(document.positionAt(hunk.span.start), document.positionAt(hunk.span.end)), hunk.oldText);
-        hunk.status = 'undone';
+    const undone: Tracked[] = [];
+    try {
+      for (const hunks of byDocument.values()) {
+        const document = await vscode.workspace.openTextDocument(hunks[0]!.uri);
+        const save = !document.isDirty;
+        const edit = new vscode.WorkspaceEdit();
+        for (const hunk of hunks) {
+          edit.replace(document.uri, new vscode.Range(document.positionAt(hunk.span.start), document.positionAt(hunk.span.end)), hunk.oldText);
+          hunk.status = 'undone';
+        }
+        if (!(await vscode.workspace.applyEdit(edit))) {
+          for (const hunk of hunks) hunk.status = 'pending';
+          throw new Error(`could not undo the hunk in ${vscode.workspace.asRelativePath(document.uri)}`);
+        }
+        undone.push(...hunks);
+        if (save) await document.save();
       }
-      if (!(await vscode.workspace.applyEdit(edit))) {
-        for (const hunk of hunks) hunk.status = 'pending';
-        throw new Error(`could not undo the hunk in ${vscode.workspace.asRelativePath(document.uri)}`);
-      }
-      if (save) await document.save();
+    } finally {
+      // Files already undone stay undone in the log even when a later file fails.
+      await this.decided(undone);
     }
-    await this.decided(pending);
   }
 
   /**
