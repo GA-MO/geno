@@ -121,6 +121,12 @@ describe('the diagram theme', () => {
     expect(theme).toMatchObject({ darkMode: true, fontFamily: 'system-ui', fontSize: '13px' });
   });
 
+  it("outlines shapes in a panel style's own diagram border before the theme's focus color", () => {
+    const theme = themeOf((name) => colors[name], font, true, undefined, 'rgb(140, 140, 140)');
+    expect(theme.colors['primaryBorderColor']).toBe('rgb(140, 140, 140)');
+    expect(theme.colors['actorBorder']).toBe('rgb(140, 140, 140)');
+  });
+
   it('prefers the contrast border in high contrast themes and leaves out what the theme lacks', () => {
     const theme = themeOf((name) => ({ ...colors, '--vscode-contrastBorder': 'rgb(111, 195, 223)' })[name], font, true);
     expect(theme.colors['primaryBorderColor']).toBe('rgb(111, 195, 223)');

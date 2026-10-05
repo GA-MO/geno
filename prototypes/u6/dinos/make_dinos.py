@@ -287,7 +287,7 @@ def glass_tile():
     size, radius = 128 * k, 30 * k
     tile = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(tile)
-    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius, fill=(22, 27, 35, 255), outline=(255, 255, 255, 40), width=k)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius, fill=(20, 20, 20, 255), outline=(255, 255, 255, 40), width=k)
     return tile.resize((128, 128), Image.Resampling.LANCZOS)
 
 

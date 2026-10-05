@@ -170,15 +170,20 @@ export type DiagramTheme = {
 /** The variables a page's own background replaces: a diagram's labels sit on whatever the page is. */
 const SURFACES = ['background', 'edgeLabelBackground'] as const;
 
+/** The shape outlines a page's own border color replaces, which would otherwise take the theme's focus color. */
+const OUTLINES = ['primaryBorderColor', 'actorBorder', 'activationBorderColor'] as const;
+
 /**
  * The theme from `resolve`, which gives a VS Code color variable's value or undefined when the theme lacks it.
  * `surface` is the page's background when it paints one; the chat panel's is transparent over the side bar.
+ * `outline` is the page's own color for shape borders, when its style names one.
  */
 export function themeOf(
   resolve: (name: string) => string | undefined,
   font: { readonly family: string; readonly size: string },
   darkMode: boolean,
   surface?: string,
+  outline?: string,
 ): DiagramTheme {
   const colors: Record<string, string> = {};
   for (const [variable, names] of Object.entries(THEME_COLORS)) {
@@ -186,5 +191,6 @@ export function themeOf(
     if (value !== undefined) colors[variable] = value;
   }
   if (surface !== undefined) for (const variable of SURFACES) colors[variable] = surface;
+  if (outline !== undefined) for (const variable of OUTLINES) colors[variable] = outline;
   return { darkMode, fontFamily: font.family, fontSize: font.size, colors };
 }

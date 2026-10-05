@@ -44,15 +44,16 @@ function resolveColor(name: string): string | undefined {
 }
 
 /**
- * The theme diagrams are drawn in. A panel style that paints its own surfaces names them in `--diagram-scheme`
- * and `--diagram-surface`; otherwise the theme's kind and the page's background decide.
+ * The theme diagrams are drawn in. A panel style that paints its own surfaces names them in `--diagram-scheme`,
+ * `--diagram-surface` and `--diagram-border`; otherwise the theme's kind, the page's background and the theme's
+ * colors decide.
  */
 function readTheme(): DiagramTheme {
   const body = getComputedStyle(document.body);
   const scheme = body.getPropertyValue('--diagram-scheme').trim();
   const light = scheme === '' ? document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') : scheme === 'light';
   const surface = resolveColor('--diagram-surface') ?? (body.backgroundColor === 'rgba(0, 0, 0, 0)' ? undefined : body.backgroundColor);
-  return themeOf(resolveColor, { family: body.fontFamily, size: body.fontSize }, !light, surface);
+  return themeOf(resolveColor, { family: body.fontFamily, size: body.fontSize }, !light, surface, resolveColor('--diagram-border'));
 }
 
 /** The panel as diagrams are drawn for it, read once and again only after the observers see it change. */
