@@ -37,7 +37,7 @@ export async function setUp(suiteName: string, files: Readonly<Record<string, st
   await buildExtension();
   const suite = await buildSuite(work, suiteName);
   // A user-data dir under the repo makes VS Code's IPC socket path longer than macOS allows.
-  const launchArgs = [workspace, '--disable-extensions', '--skip-welcome', '--skip-release-notes', `--user-data-dir=${work}/ud`];
+  const launchArgs = [workspace, '--disable-extensions', '--skip-welcome', '--skip-release-notes', '--force-disable-user-env', `--user-data-dir=${work}/ud`];
   return { work, workspace, home, suite, launchArgs };
 }
 
