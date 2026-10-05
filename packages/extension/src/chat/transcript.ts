@@ -86,8 +86,8 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     );
     return changed ? { ...transcript, turns } : transcript;
   },
-  permission: (transcript, { id, command, reason, options }) =>
-    onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'permission', id, command, reason, options, outcome: { kind: 'open' } }] })),
+  permission: (transcript, { id, command, reason, options, classifier }) =>
+    onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'permission', id, command, reason, options, classifier, outcome: { kind: 'open' } }] })),
   'permission-done': (transcript, { id, optionId }) =>
     onLast(transcript, (turn) =>
       mapBlocks(turn, isOpen(id), (block) => ({ ...block, outcome: optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId } })),

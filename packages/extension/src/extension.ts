@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import { Chat, CHAT_VIEW, HISTORY_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
+import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
 import { registerReview } from './review/commands.js';
@@ -86,6 +86,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     () => modelLabel(vscode.workspace.getConfiguration('gcode'), process.env),
     () => uiStyleOf(vscode.workspace.getConfiguration('gcode')),
     (workspace, sessionId) => openElsewhere(context, workspace, sessionId),
+    () => approvalModeOf(vscode.workspace.getConfiguration('gcode')),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(

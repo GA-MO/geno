@@ -5,8 +5,9 @@ import { composerAttachments } from './composer-attachments.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { setRoots } from './images.js';
 import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
-import type { FromView, Header, ToView, Transcript, Turn } from './messages.js';
+import type { FromView, Header, Modes, ToView, Transcript, Turn } from './messages.js';
 import { historyPanel } from './history.js';
+import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { callsStep, changesCard, emptyState, errorBlock, permissionCard, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
@@ -64,8 +65,10 @@ const modelLabel = h(
   modelName,
   icon('chevron-down'),
 );
-/** g-code's engine runs what its rules allow and asks about the rest; there is no other mode to pick. */
-const approval = h('span', { class: 'approval', title: 'Geno asks before running a command its rules hold back' }, icon('shield'), 'Asks before risky commands');
+const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeId }), (modes: Modes) => {
+  // Auto marks the whole composer, so it shows wherever the user looks to type.
+  inputBox.dataset['mode'] = modes.current;
+});
 const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
 // The composer always wears the running rainbow edge; the ring is its own element so the edge can turn on the compositor.
@@ -75,9 +78,9 @@ const inputBox = h(
   h('span', { class: 'ring', 'aria-hidden': 'true' }),
   chips,
   input,
-  h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send),
+  h('div', { class: 'input-toolbar' }, modelLabel, picker.element, h('span', { class: 'spacer' }), stop, send),
 );
-const form = h('form', { class: 'composer' }, menu, inputBox);
+const form = h('form', { class: 'composer' }, menu, picker.menu, inputBox);
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -260,6 +263,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     return;
   }
   if (message.type === 'header') return showHeader(message.header);
+  if (message.type === 'modes') return picker.show(message.modes);
   if (message.type === 'show-history') return history.open();
   if (message.type === 'hide-history') return history.close();
   if (message.type === 'history') return history.listed(message.scope, message.rows);

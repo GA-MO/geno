@@ -122,6 +122,19 @@
           "default": "",
           "description": "The model for chat, review and Cmd-K. Empty uses the provider's default (qwen3.8-flash on Model Studio)."
         },
+        "gcode.approvalMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "auto"
+          ],
+          "enumDescriptions": [
+            "Ask before every command Geno's rules hold back.",
+            "Run clearly safe commands on its own and let a classifier judge the rest. Geno still asks before deleting the workspace or its .git, touching paths outside it, git push, and downloads from other hosts."
+          ],
+          "default": "ask",
+          "description": "The approval mode new chats start in. The picker in the composer switches the open chat."
+        },
         "gcode.ui.style": {
           "type": "string",
           "enum": [

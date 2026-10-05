@@ -1524,16 +1524,12 @@ body.diagram-tab {
   font-size: var(--small);
 }
 
-.composer-model,
-.approval {
+.composer-model {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
   white-space: nowrap;
-}
-
-.composer-model {
   padding: 1px 4px;
   margin-left: -4px;
   border: none;
@@ -1548,8 +1544,7 @@ body.diagram-tab {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-.model-name,
-.approval {
+.model-name {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1680,6 +1675,180 @@ body.diagram-tab {
   to {
     transform: translate(-50%, -50%) rotate(1turn);
   }
+}
+
+/* The approval mode in the composer, and the menu of modes above it. */
+
+.mode-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--small);
+  white-space: nowrap;
+}
+
+.mode-picker:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.mode-icon {
+  display: inline-flex;
+}
+
+.mode-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Auto is a standing permission, so it stays marked: an amber pill with a bolt for as long as it is on. */
+.mode-picker[data-mode='auto'] {
+  padding: 0 7px;
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--vscode-foreground);
+  font-weight: 600;
+  outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+}
+
+.mode-picker[data-mode='auto'] .mode-icon {
+  color: var(--warn);
+}
+
+.mode-menu {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: var(--gap);
+  width: min(320px, calc(100% - 2 * var(--gap)));
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, transparent));
+  border-radius: 8px;
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-quickInput-background));
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+  z-index: 10;
+}
+
+.mode-menu[hidden] {
+  display: none;
+}
+
+.mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mode-option:hover,
+.mode-option:focus {
+  background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+  color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+  outline: 1px solid var(--vscode-list-focusOutline, transparent);
+  outline-offset: -1px;
+}
+
+/* High contrast marks the option with its contrast border rather than a fill its text may not read on. */
+.vscode-high-contrast .mode-option:hover,
+.vscode-high-contrast .mode-option:focus,
+.vscode-high-contrast-light .mode-option:hover,
+.vscode-high-contrast-light .mode-option:focus {
+  background: transparent;
+  color: inherit;
+  outline: 1px dashed var(--vscode-contrastActiveBorder);
+}
+
+.mode-option > .codicon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.mode-auto > .mode-option-icon {
+  color: var(--warn);
+}
+
+.mode-option-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mode-option-name {
+  font-weight: 600;
+}
+
+.mode-option-detail {
+  color: var(--muted);
+  font-size: var(--small);
+  line-height: 1.4;
+}
+
+/* What Auto settled without asking, with the classifier's reason, under the step it settled. */
+
+.auto-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 2px 0 2px 22px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.auto-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.auto-badge .codicon {
+  font-size: 11px;
+}
+
+.auto-allow .auto-badge {
+  color: var(--ok);
+}
+
+.auto-deny .auto-badge {
+  color: var(--vscode-errorForeground);
+}
+
+.auto-reason {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.permission-classifier {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.permission-classifier .codicon {
+  flex: none;
+  font-size: 11px;
+  color: var(--warn);
 }
 
 /* The header: which project the chat belongs to, and the session's title, which opens the history. */
@@ -2348,6 +2517,24 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 
   & .history-current {
     border-color: var(--glass-edge-hi);
+    background: var(--glass-pane-raised);
+  }
+
+  & .mode-menu {
+    border-color: var(--glass-edge-hi);
+    border-radius: 10px;
+    background: var(--glass-float);
+    box-shadow: var(--glass-float-shadow);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .mode-option:hover,
+  & .mode-option:focus {
+    background: var(--glass-hover);
+  }
+
+  & .auto-badge {
+    border-color: color-mix(in srgb, currentColor 45%, transparent);
     background: var(--glass-pane-raised);
   }
 
