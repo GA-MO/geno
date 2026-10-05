@@ -212,12 +212,16 @@ export async function run(): Promise<void> {
   await new Promise((r) => setTimeout(r, 1500));
   await ui({ do: 'screenshot', name: 'reviewed-dark' });
 
-  // The view's focus command shows the panel and focuses its frame. A test window never holds the OS focus,
-  // so the frame's focus event does not fire here; the suite delivers the one a focused window gets.
+  // The view's focus command shows the panel and focuses its frame. The frame's focus event fires only when the
+  // test window holds the OS focus, which depends on what else is on the screen; without it, the suite delivers
+  // the event a focused window gets.
   await vscode.commands.executeCommand('workbench.view.explorer');
   await vscode.commands.executeCommand('gcode.chat.focus');
   await waitFor('the focus command to show the panel', async () => (await count('.turn')) === 5);
-  check((await panel<string>('doc.activeElement?.tagName')) !== 'TEXTAREA', 'the composer starts without focus in a window without focus');
-  await panel(`(doc.defaultView.dispatchEvent(new FocusEvent('focus')), 1)`);
+  const start = await panel<{ focused: boolean; active?: string }>('({ focused: doc.hasFocus(), active: doc.activeElement?.tagName })');
+  if (!start.focused) {
+    check(start.active !== 'TEXTAREA', 'the composer starts without focus in a window without focus', start);
+    await panel(`(doc.defaultView.dispatchEvent(new FocusEvent('focus')), 1)`);
+  }
   await waitFor('focus on the panel to put the cursor in the composer', () => panel<boolean>(`doc.activeElement?.tagName === 'TEXTAREA'`));
 }
