@@ -446,7 +446,8 @@ button {
 
 .diagram-canvas {
   display: flex;
-  justify-content: center;
+  justify-content: safe center;
+  overflow-x: auto;
 }
 
 /* Mermaid gives the drawing its natural width as a max-width; narrower panels scale it down. */
@@ -538,9 +539,14 @@ body.diagram-tab {
   height: 100%;
 }
 
-/* The tab sizes the drawing itself, past the natural width mermaid sets inline. */
+/* The tab sizes the drawing itself, past the natural width mermaid sets inline and the panel's smallest scale. */
 .diagram-stage .diagram-canvas svg {
+  min-width: 0 !important;
   max-width: none !important;
+}
+
+.diagram-stage .diagram-canvas {
+  overflow: visible;
 }
 
 .diagram-stage:not([data-zoom='fit']) .diagram-canvas {

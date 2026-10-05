@@ -81,6 +81,8 @@ function draw(source: string): void {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+/** A wide diagram shrinks to fit the panel only this far, so its labels stay legible; past it the canvas scrolls. */
+const MIN_SCALE = 0.75;
 const STYLE = /<style[^>]*>([\s\S]*?)<\/style>/;
 
 /**
@@ -100,6 +102,8 @@ function svgOf(state: Extract<DiagramState, { status: 'rendered' }>): SVGSVGElem
   const copy = svg.cloneNode(true) as SVGSVGElement;
   // A clone does not keep its original's nonce.
   copy.querySelector('style')!.nonce = nonce;
+  const width = copy.viewBox.baseVal?.width;
+  if (width) copy.style.minWidth = `${Math.round(width * MIN_SCALE)}px`;
   return copy;
 }
 
