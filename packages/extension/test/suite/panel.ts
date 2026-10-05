@@ -83,22 +83,30 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand('gcode.chat.focus');
   for (let i = 0; i < 5; i++) await vscode.commands.executeCommand('workbench.action.decreaseViewWidth');
 
-  check((await textOf('.empty-model'))?.includes('qwen3.8-flash') === true, 'the empty state names the model', await textOf('.empty-model'));
-  check((await count('.example')) === 3, 'the empty state offers three example prompts');
-  const blink = () => panel<string>(`getComputedStyle(doc.querySelector('.empty-state .hero svg .lid')).animationName`);
-  check((await blink()) === 'blink-eye', 'Noodle blinks in the empty state', await blink());
+  check((await textOf('.start-name')) === 'geno', 'the start page names geno', await textOf('.start-name'));
+  check((await textOf('.start-project')) === vscode.workspace.workspaceFolders![0]!.name, 'the start page names the project', await textOf('.start-project'));
+  const frames = () => panel<string>(`doc.querySelector('.start-dino').dataset.frame + doc.querySelector('.start-dino').style.transform`);
+  const moved = async () => {
+    const before = await frames();
+    await new Promise((r) => setTimeout(r, 600));
+    return (await frames()) !== before;
+  };
+  // Noodle rests while the VS Code window is not focused, which happens when the test window opens behind another.
+  if (vscode.window.state.focused) check(await moved(), 'Noodle moves on the start page');
+  else check((await panel<string>(`doc.querySelector('.start-page').dataset.motion`)) === 'paused' && !(await moved()), 'Noodle rests while the window is not focused');
   await ui({ do: 'motion', value: 'reduce' });
-  check((await blink()) === 'none', 'the blink stops when the user asks for reduced motion', await blink());
+  await waitFor('Noodle to stand still for reduced motion', async () => (await panel<string>(`doc.querySelector('.start-page').dataset.motion`)) === 'still');
+  check(!(await moved()), 'Noodle stays still when the user asks for reduced motion');
   await ui({ do: 'motion', value: '' });
   await screenshots('empty');
 
-  const example = (await panel<string[]>(`[...doc.querySelectorAll('.example')].map((e) => e.textContent)`))[1]!;
-  await click('.example', example);
-  check((await panel<string>('doc.querySelector("textarea").value')) === example, 'an example prompt fills the composer', await panel('doc.querySelector("textarea").value'));
-  check((await footers()) === 0, 'an example prompt does not send');
+  const draft = 'Explain how this project is organized';
+  await click('textarea');
+  await ui({ do: 'type', text: draft });
+  check((await footers()) === 0, 'typing a draft does not send');
   await vscode.commands.executeCommand('workbench.view.explorer');
   await showPanel();
-  await waitFor('the draft to survive the panel being hidden', async () => (await panel<string>('doc.querySelector("textarea").value')) === example);
+  await waitFor('the draft to survive the panel being hidden', async () => (await panel<string>('doc.querySelector("textarea").value')) === draft);
   await click('textarea');
   await ui({ do: 'press', key: 'selectAll', modifiers: ['meta'] });
   await ui({ do: 'press', key: 'Backspace' });
@@ -124,7 +132,10 @@ export async function run(): Promise<void> {
   check((await count('.tool-row')) === 0, 'steps start folded, without their calls');
   const meta = await textOf('.turn-head .turn-meta');
   check(/^worked for \d+(ms|\.\ds|s)$/.test(meta ?? ''), 'the turn header says how long g-code worked', meta);
-  check((await panel<string>(`getComputedStyle(doc.querySelector('.turn-head .avatar .lid')).animationName`)) === 'none', 'the avatar beside a turn holds still');
+  check(
+    (await panel<string[]>(`[doc.querySelector('.turn-head .avatar'), ...doc.querySelectorAll('.turn-head .avatar *')].map((e) => getComputedStyle(e).animationName).filter((n) => n !== 'none')`)).length === 0,
+    'the avatar beside a turn holds still',
+  );
 
   await click('.calls[data-step="read"] .step-row');
   await waitFor('the read step to open', async () => (await count('.calls[data-step="read"] .tool-row')) === 3);

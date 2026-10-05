@@ -186,8 +186,11 @@ export type ModeOption = { readonly id: string; readonly name: string; readonly 
 /** The session's approval modes and the one it is in. */
 export type Modes = { readonly current: string; readonly available: readonly ModeOption[] };
 
-/** What the panel's header names: the workspace folder, and the session's title, undefined until its first prompt. */
-export type Header = { readonly project: string; readonly title: string | undefined };
+/**
+ * What the panel's header names: the workspace folder, and the session's title, undefined until its first prompt.
+ * The start page also shows the folder's branch, undefined outside a repository.
+ */
+export type Header = { readonly project: string; readonly title: string | undefined; readonly branch: string | undefined };
 
 /** The history lists this project's sessions, or every project's. */
 export const HISTORY_SCOPES = ['project', 'all'] as const;
@@ -221,6 +224,8 @@ export type ToView =
   /** The workspace folders and the webview addresses they are served at, for images in the transcript. */
   | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] }
   | { readonly type: 'header'; readonly header: Header }
+  /** Whether the VS Code window has the focus; Noodle rests while it does not. */
+  | { readonly type: 'window-focus'; readonly focused: boolean }
   | { readonly type: 'modes'; readonly modes: Modes }
   /** The `/` commands the session offers, for the composer's picker. */
   | { readonly type: 'commands'; readonly commands: readonly CommandOption[] }

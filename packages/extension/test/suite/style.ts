@@ -99,13 +99,18 @@ export async function run(): Promise<void> {
   const views = await ui<string[]>({ do: 'evalPage', expression: `[...document.querySelectorAll('.sidebar .pane-header .title')].map((t) => t.textContent)` });
   check(views.includes('Chat') && !views.includes('Changes'), 'the Changes view is hidden by default, so the chat fills the side bar', views);
   check((await panel<string>('doc.body.dataset.style')) === 'glass', 'the panel starts in glass, the default style');
-  check((await blurOf('.hero')).includes('blur'), 'the empty state tile is frosted glass', await blurOf('.hero'));
+  const framed = () =>
+    panel<string[]>(
+      `[...doc.querySelectorAll('.dino')].map((e) => getComputedStyle(e)).filter((c) => c.backgroundColor !== 'rgba(0, 0, 0, 0)' || c.backgroundImage !== 'none' || c.borderTopStyle !== 'none' || c.boxShadow !== 'none' || c.outlineStyle !== 'none').map((c) => c.cssText || 'framed')`,
+    );
+  check((await count('.dino')) > 0 && (await framed()).length === 0, 'Noodle stands on the glass with no tile, border or shadow', await framed());
   const surface = await panel<{ image: string; color: string }>(`({ image: getComputedStyle(doc.body).backgroundImage, color: getComputedStyle(doc.body).backgroundColor })`);
   check(surface.image === 'none' && surface.color === 'rgb(30, 30, 32)', 'the panel is a plain dark surface, with no gradient or glow', surface);
-  check((await panel<string>(`getComputedStyle(doc.querySelector('.hero .lid')).animationName`)) === 'blink-eye', 'Noodle still blinks in the empty state');
+  const motion = await panel<string>(`doc.querySelector('.start-page').dataset.motion`);
+  check(motion === (vscode.window.state.focused ? 'moving' : 'paused'), 'Noodle wanders the start page in glass while the window is focused', motion);
 
   // The rainbow does not depend on focus: it runs with the composer focused and without.
-  await click('.empty-title');
+  await click('.start-name');
   check((await rainbows()).join() === 'composer', 'only the composer carries the rainbow', await rainbows());
   check(isRunning(await ring()), 'the composer rainbow runs while the composer is not focused', await ring());
   await click('textarea');
