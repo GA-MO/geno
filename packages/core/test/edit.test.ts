@@ -39,6 +39,12 @@ describe('strReplace', () => {
     });
   });
 
+  it('does not count a wrong edit as applied when its one-line result happens to be in the file', () => {
+    const withReturn = file.replace('function sub(a, b) {\n  return a - b;', 'function sub(a, b) {\n  return 0;');
+    const outcome = strReplace('m.js', withReturn, '  return a * b;', '  return 0;');
+    expect(outcome).toMatchObject({ kind: 'failed', reason: 'zero-matches' });
+  });
+
   it('gives the count and start lines of several matches', () => {
     expect(strReplace('m.js', file, '  return a - b;', '  return 0;')).toEqual({
       kind: 'failed',
