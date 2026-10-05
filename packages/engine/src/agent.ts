@@ -83,6 +83,17 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   }
 }
 
+/** The per-run limit flags of every command that runs the agent. */
+export const LIMIT_FLAGS = {
+  'max-turns': { type: 'string', default: '40' },
+  'max-cost': { type: 'string', default: '0.40' },
+} as const;
+
+export const limitsOf = (values: { readonly 'max-turns': string; readonly 'max-cost': string }): Limits => ({
+  maxTurns: positiveNumber('max-turns', values['max-turns'], true),
+  maxCostUsd: positiveNumber('max-cost', values['max-cost'], false),
+});
+
 export const agent: Command = async (args, { io, store }) => {
   const { values, positionals } = parseArgs({
     args,
@@ -92,19 +103,14 @@ export const agent: Command = async (args, { io, store }) => {
     options: {
       session: { type: 'string' },
       workspace: { type: 'string' },
-      'max-turns': { type: 'string', default: '40' },
-      'max-cost': { type: 'string', default: '0.40' },
+      ...LIMIT_FLAGS,
       check: { type: 'string' },
       'check-after-edit': { type: 'boolean', default: true },
       'non-interactive': { type: 'boolean', default: false },
     },
   });
   const task = positionals.join(' ').trim();
-  const limits = {
-    maxTurns: positiveNumber('max-turns', values['max-turns'], true),
-    maxCostUsd: positiveNumber('max-cost', values['max-cost'], false),
-  };
-
+  const limits = limitsOf(values);
   const opened = await openForPrompt(io, store, values, task, 'task');
   const { exitCode } = await runAgent(io, store, opened, task, {
     limits,

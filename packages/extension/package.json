@@ -58,7 +58,9 @@
     "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js"
   },
   "dependencies": {
-    "@g-code/core": "workspace:*"
+    "@agentclientprotocol/sdk": "^1.7.0",
+    "@g-code/core": "workspace:*",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/vscode": "~1.95.0",
