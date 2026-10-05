@@ -105,6 +105,7 @@ type OpenTurn = {
   outcome: TurnOutcome;
   readonly tokens: TurnTokens | null;
   readonly tools: ToolTime[];
+  readonly spans: ToolMarks[];
   /** The latest moment the turn's own events were logged, in ms since the epoch. */
   lastAt: number;
 };
@@ -116,6 +117,7 @@ function opened(event: AnswerEvent | ErrorEvent, marks: ModelMarks): OpenTurn {
     outcome: event.kind === 'assistant' ? 'answer' : outcomeOf(event.error),
     tokens: event.kind === 'assistant' ? tokensOf(event) : null,
     tools: [],
+    spans: [],
     lastAt: Math.max(Date.parse(event.at), marks.endAt),
   };
 }
@@ -124,7 +126,7 @@ function closed(turn: OpenTurn, endAt: number): TurnTiming {
   const { startAt, requestAt, firstTokenAt, firstAnswerAt, lastTokenAt } = turn.marks;
   const wallMs = endAt - startAt;
   const modelMs = turn.marks.endAt - requestAt;
-  const toolMs = turn.tools.reduce((sum, tool) => sum + tool.ms, 0);
+  const toolMs = coveredMs(turn.spans);
   // A call cut off before it answered spent all its streamed time thinking.
   const thoughtUntil = firstAnswerAt ?? lastTokenAt;
   return {
@@ -142,7 +144,21 @@ function closed(turn: OpenTurn, endAt: number): TurnTiming {
   };
 }
 
-const toolTime = (toolUseId: string, name: string, marks: ToolMarks): ToolTime => ({ toolUseId, name, ms: marks.endAt - marks.startAt });
+/** The wall time some span covers, so tools that ran at the same time count once. */
+function coveredMs(spans: readonly ToolMarks[]): number {
+  let total = 0;
+  let reached = -Infinity;
+  for (const { startAt, endAt } of spans.toSorted((a, b) => a.startAt - b.startAt)) {
+    total += Math.max(0, endAt - Math.max(startAt, reached));
+    reached = Math.max(reached, endAt);
+  }
+  return total;
+}
+
+function addTool(turn: OpenTurn, toolUseId: string, name: string, marks: ToolMarks): void {
+  turn.tools.push({ toolUseId, name, ms: marks.endAt - marks.startAt });
+  turn.spans.push(marks);
+}
 
 /**
  * The timing of each timed model call in the log and the tools it asked for, in log order. A turn runs from its
@@ -165,12 +181,12 @@ export function turnTimings(events: readonly TurnEvent[]): TurnTiming[] {
     }
     if (open === undefined) continue;
     if (event.kind === 'tool-result' && event.timing !== undefined) {
-      open.tools.push(toolTime(event.toolUseId, event.name, event.timing));
+      addTool(open, event.toolUseId, event.name, event.timing);
       open.lastAt = Math.max(open.lastAt, Date.parse(event.at));
     }
     if (event.kind === 'error') {
       if (event.tools !== undefined) open.outcome = outcomeOf(event.error);
-      for (const tool of event.tools ?? []) open.tools.push(toolTime(tool.toolUseId, tool.name, tool));
+      for (const tool of event.tools ?? []) addTool(open, tool.toolUseId, tool.name, tool);
       open.lastAt = Math.max(open.lastAt, Date.parse(event.at));
     }
   }

@@ -104,6 +104,21 @@ describe('turnTimings', () => {
     for (const t of timings) expect(t.modelMs + t.toolMs + t.overheadMs).toBe(t.wallMs);
   });
 
+  it('counts tools that ran at the same time once, by the wall time they cover', () => {
+    const [first] = turnTimings([
+      start,
+      user(1, 900),
+      assistant(2, 1500, [text(10), read('t1'), read('t2'), read('t3')], 50, marks(1000, 1010, 1100, 1100, 1400, 1450)),
+      result(3, 2501, 't1', 1500, 1900),
+      result(4, 2502, 't2', 1520, 1700),
+      result(5, 2503, 't3', 2000, 2500),
+      assistant(6, 2700, [text(5)], 5, marks(2600, 2610, 2650, 2650, 2690, 2695)),
+    ]);
+    expect(first!.tools.map((t) => t.ms)).toEqual([400, 180, 500]);
+    expect(first!.toolMs).toBe(900);
+    expect(first!.overheadMs).toBe(1600 - 440 - 900);
+  });
+
   it('counts a model call interrupted mid-thought as thinking, with no answer, decode or tokens', () => {
     const events: TurnEvent[] = [
       start,
