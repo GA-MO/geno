@@ -22,23 +22,24 @@ export const SOURCE_LABELS: Readonly<Record<McpSource, string>> = {
   'vscode-mcp-json': '.vscode/mcp.json',
   'mcp-json': '.mcp.json',
   acp: 'VS Code user settings',
+  builtin: 'Built in',
 };
 
 /** How a server's state reads in the panel, and the status color it wears. */
 export type StateBadge = { readonly label: string; readonly tone: 'ok' | 'wait' | 'busy' | 'failed' | 'quiet'; readonly detail?: string | undefined };
 
-const BADGES: { readonly [S in McpServerState['status']]: (state: Extract<McpServerState, { status: S }>, tools: number) => StateBadge } = {
+const BADGES: { readonly [S in McpServerState['status']]: (state: Extract<McpServerState, { status: S }>, tools: number, server: McpServerView) => StateBadge } = {
   untrusted: () => ({ label: 'Needs your approval', tone: 'wait' }),
   disabled: () => ({ label: 'Off', tone: 'quiet' }),
   // The engine starts every trusted server of an open session, so a stopped one is about to start.
-  stopped: () => ({ label: 'Starting', tone: 'busy' }),
+  stopped: (_state, _tools, { startsOn }) => (startsOn === 'first-use' ? { label: 'Starts on first use', tone: 'quiet' } : { label: 'Starting', tone: 'busy' }),
   starting: ({ restarts }) => ({ label: restarts === 0 ? 'Starting' : 'Restarting', tone: 'busy' }),
   ready: (_state, tools) => ({ label: tools === 1 ? 'Ready, 1 tool' : `Ready, ${tools} tools`, tone: 'ok' }),
   failed: ({ needsSignIn, reason }) => (needsSignIn ? { label: 'Needs sign-in', tone: 'wait', detail: 'Geno does not support MCP sign-in yet.' } : { label: 'Failed', tone: 'failed', detail: reason }),
 };
 
 export const badgeOf = (server: McpServerView): StateBadge =>
-  (BADGES[server.state.status] as (state: McpServerState, tools: number) => StateBadge)(server.state, server.tools.length);
+  (BADGES[server.state.status] as (state: McpServerState, tools: number, server: McpServerView) => StateBadge)(server.state, server.tools.length, server);
 
 /** A server waits on the user when it is untrusted and not turned off. */
 export const awaitsApproval = (server: McpServerView): boolean => server.state.status === 'untrusted';
@@ -47,8 +48,9 @@ export const awaitsApproval = (server: McpServerView): boolean => server.state.s
  * A server still on its way: starting, or trusted and about to start, since the engine starts every trusted server of
  * an open session in the background. The panel asks again until none is.
  */
-const SETTLING: ReadonlySet<McpServerState['status']> = new Set(['stopped', 'starting']);
-export const isSettling = (listing: McpListing): boolean => listing.kind === 'loaded' && listing.servers.some((server) => SETTLING.has(server.state.status));
+export const isSettling = (listing: McpListing): boolean =>
+  listing.kind === 'loaded' &&
+  listing.servers.some((server) => server.state.status === 'starting' || (server.state.status === 'stopped' && server.startsOn === 'session'));
 
 /** Names as the engine sanitizes them into tool names: everything but `[A-Za-z0-9_]` becomes `_`. */
 const sanitized = (server: string): string => server.replace(/[^A-Za-z0-9_]/g, '_');

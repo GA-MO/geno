@@ -141,6 +141,16 @@
           "default": "ask",
           "description": "The approval mode new chats start in. The picker in the composer switches the open chat."
         },
+        "gcode.browser.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Let the agent drive a browser: Chrome through the chrome-devtools-mcp server, with a fresh profile thrown away after each chat. Pages on localhost, 127.0.0.1, [::1], *.localhost and *.test open without asking; any other site asks first, in Auto too. Chrome starts at the first browser step."
+        },
+        "gcode.browser.headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the agent's browser without a window. Applies to new chats."
+        },
         "gcode.ui.style": {
           "type": "string",
           "enum": [

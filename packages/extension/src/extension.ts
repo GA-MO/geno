@@ -4,6 +4,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
+import { BROWSER_ENABLED_SETTING } from './chat/browser.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
@@ -110,6 +111,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
       if (LOOK_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.restyle();
+      if (event.affectsConfiguration(BROWSER_ENABLED_SETTING)) chat.syncBrowser();
     }),
     vscode.window.registerWebviewViewProvider(CHAT_VIEW, chat),
     vscode.commands.registerCommand(SEND_COMMAND, async (prompt?: string) => {
