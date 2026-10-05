@@ -1,6 +1,6 @@
-# U18 brief: Noodle moves, and a Horizon start page
+# U18 brief: Noodle moves, and a dino-only start page
 
-The user wants the dino to move: to change pose with the work (a notebook when reading, a pencil when editing), and to run, jump, turn around and flex. They also want a cooler start page with no frame around the dino. They saw prototypes on 2026-10-05 and asked for a geek pose that pulls out a laptop to code. Start page A, "Horizon", is the default unless the user picks B.
+The user wants the dino to move: to change pose with the work (a notebook when reading, a pencil when editing), and to run, jump, turn around and flex. They also want a cooler start page with no frame around the dino. They saw prototypes on 2026-10-05 and asked for a geek pose that pulls out a laptop to code. The start page is the dino alone; see below.
 
 ## Sprites
 
