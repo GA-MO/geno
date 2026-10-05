@@ -1,5 +1,6 @@
 import type {
   ContentBlock,
+  ImageBlockParam,
   MessageParam,
   StopReason,
   TextBlockParam,
@@ -7,6 +8,7 @@ import type {
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
 import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
+import { fileItem, imageBlock, NO_ATTACHMENTS, type Attachment, type FileAttachment, type ImageAttachment, type StoredAttachments } from './attachments.js';
 import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
 import type { ApprovalRecord } from './classifier.js';
@@ -100,6 +102,8 @@ export type ToolResultEvent = {
   readonly change?: FileChange | undefined;
   /** How a flagged command was let through or refused. */
   readonly approval?: ApprovalRecord | undefined;
+  /** Images the tool returned beside its text, such as a read of a PNG. */
+  readonly images?: readonly ImageAttachment[] | undefined;
 } & ToolOutput;
 
 /** The workspace as it was before model turn `turnSeq`, committed to the workspace's shadow repo. */
@@ -133,6 +137,8 @@ export type TurnEvent =
       readonly content: string;
       /** What the user attached to the prompt, rendered after it. */
       readonly context?: readonly ContextItem[] | undefined;
+      /** Images and files the user sent with the prompt, as references into the session's attachments folder. */
+      readonly attachments?: readonly Attachment[] | undefined;
     }
   | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string } & AssistantTurn)
   | {
@@ -193,28 +199,48 @@ export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
 export const toolResultText = (event: ToolResultEvent): string =>
   'spill' in event ? spillNotice(event.spill) : event.output;
 
-const toolResultBlock = (event: ToolResultEvent): ToolResultBlockParam => ({
+const toolResultBlock = (event: ToolResultEvent, stored: StoredAttachments): ToolResultBlockParam => ({
   type: 'tool_result',
   tool_use_id: event.toolUseId,
-  content: toolResultText(event),
+  content:
+    event.images === undefined || event.images.length === 0
+      ? toolResultText(event)
+      : [{ type: 'text', text: toolResultText(event) }, ...event.images.map((image) => imageBlock(image, stored))],
   ...(event.status === 'ok' ? {} : { is_error: true }),
 });
 
-const userBlocks = (event: Extract<TurnEvent, { kind: 'user' }>): TextBlockParam[] => [
-  { type: 'text', text: event.content },
-  ...(event.context === undefined || event.context.length === 0 ? [] : [{ type: 'text' as const, text: renderContextItems(event.context) }]),
-];
+/** A file the user attached as the model sees it named: relative inside the workspace, else absolute, else its name. */
+const shownPath = (file: FileAttachment, workspace: string): string => {
+  if (file.path === undefined) return file.name;
+  const root = workspace.endsWith('/') ? workspace : `${workspace}/`;
+  return file.path.startsWith(root) ? file.path.slice(root.length) : file.path;
+};
+
+/** Images first, which the model reads best before the text about them; then the prompt; then mentions and attached files. */
+function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredAttachments, workspace: string): (TextBlockParam | ImageBlockParam)[] {
+  const attachments = event.attachments ?? [];
+  const images = attachments.flatMap((a) => (a.kind === 'image' ? [imageBlock(a, stored)] : []));
+  const items = [...(event.context ?? []), ...attachments.flatMap((a) => (a.kind === 'file' ? [fileItem(a, stored, shownPath(a, workspace))] : []))];
+  return [
+    ...images,
+    // A message of attachments alone has no prompt text, and the API refuses an empty text block.
+    ...(event.content === '' ? [] : [{ type: 'text' as const, text: event.content }]),
+    ...(items.length === 0 ? [] : [{ type: 'text' as const, text: renderContextItems(items) }]),
+  ];
+}
 
 /**
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
  * results in the order the model asked for them, then any unanswered prompts. The session's loaded context opens
  * the first user message, after the system prompt, so it is cached with the prefix but never part of it.
+ * `stored` holds the bytes of the attachments the events reference; one it lacks is replaced by a note.
  */
-export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
+export function replayMessages(events: readonly TurnEvent[], stored: StoredAttachments = NO_ATTACHMENTS): MessageParam[] {
   const messages: MessageParam[] = [];
   let toolUses: readonly ToolUseBlock[] = [];
   let results = new Map<string, ToolResultBlockParam>();
-  let prompts: TextBlockParam[] = [];
+  let prompts: (TextBlockParam | ImageBlockParam)[] = [];
+  let workspace = '';
   // Kept apart from the prompts, so a refused first prompt does not take the loaded context with it.
   let opening: TextBlockParam[] = [];
   const flush = () => {
@@ -229,13 +255,14 @@ export function replayMessages(events: readonly TurnEvent[]): MessageParam[] {
   };
   for (const event of events) {
     if (event.kind === 'session-start') {
+      workspace = event.session.workspace;
       const loaded = event.context === undefined ? undefined : renderLoadedContext(event.context);
       if (loaded !== undefined) opening = [{ type: 'text', text: loaded }];
     }
-    if (event.kind === 'user') prompts.push(...userBlocks(event));
+    if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
-    if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event));
+    if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event, stored));
     if (event.kind === 'assistant') {
       flush();
       // Response blocks go back verbatim: thinking signatures are verified against the exact bytes.
