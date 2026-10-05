@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_SYSTEM_PROMPT,
   asSessionId,
   buildRequest,
   hasPendingPrompt,
@@ -194,5 +195,11 @@ describe('buildRequest', () => {
 
   it('has a system prompt long enough to cache (512 tokens at roughly 4 characters each)', () => {
     expect(SYSTEM_PROMPT.length).toBeGreaterThan(512 * 4);
+  });
+
+  it('offers mermaid diagrams in the fixed system prompt the agent prompt extends', () => {
+    const line = "- When a flow, architecture or process is clearer drawn than written, you may add a small mermaid diagram as a fenced code block with the language mermaid; the chat draws it.";
+    expect(SYSTEM_PROMPT.split('\n')).toContain(line);
+    expect(AGENT_SYSTEM_PROMPT.startsWith(SYSTEM_PROMPT)).toBe(true);
   });
 });
