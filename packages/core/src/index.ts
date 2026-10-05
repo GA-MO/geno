@@ -6,6 +6,7 @@ export * from './request.js';
 export * from './cost.js';
 export * from './tools.js';
 export * from './loop.js';
+export * from './model-error.js';
 export * from './hunks.js';
 export * from './review.js';
 export * from './str-replace.js';

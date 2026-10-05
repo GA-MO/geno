@@ -29,3 +29,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Ported files:
+- packages/core/src/model-error.ts (from packages/ai/src/utils/retry.ts and overflow.ts)
