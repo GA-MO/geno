@@ -132,3 +132,31 @@ Wave B is merged as 0.7.0. U13 fills in the `/rules`, `/memory` and `/init` plac
   - Integration tests: the rules pane, the memory pane (with delete), the remember card, and the ask_user card. Screenshots in dark glass, light glass and high contrast, viewed.
   - A live smoke on `qwen3.8-flash` under $0.05: `/init` on a temp copy of `~/Development/next-15-template` (the copy, never the original) writes a sensible `AGENTS.md`.
   - `pnpm typecheck && pnpm test && pnpm build`, and the `.vsix` clean-install test also with `GCODE_VSCODE_VERSION=1.109.2`.
+
+## U14: browser use (wave D, briefed 2026-10-05)
+
+U12 (MCP) and U8 (images) are merged, so the agent can drive a browser through an MCP server and see screenshots.
+
+- **Server.** A built-in, global browser server: `chrome-devtools-mcp`, pinned to an exact version (1.10.1 at briefing time, or newer after you check it), never `@latest`.
+  - It is off by default. A `gcode.browser.enabled` setting, and a toggle in the MCP pane, turn it on.
+  - Run it with an isolated, throwaway profile (`--isolated`, headless by default, with a `gcode.browser.headless` setting), so the user's Chrome cookies and logins are never reachable.
+  - It is global and user-enabled, so it needs no trust card. Name it `browser`, so its tools are `mcp__browser__*`.
+- **Where it may go.** These URL rules are a pure table in core, next to `MCP_RULES`:
+  - URLs on `localhost`, `127.0.0.1`, `[::1]`, `*.localhost` and `*.test` run without asking, in Ask and Auto.
+  - Any other host asks in every interactive mode, Auto included, and is off in non-interactive runs.
+  - `file:` URLs are refused unless they are inside the workspace.
+  - Read the url argument of every navigating tool, `new_page` included, and check it.
+  - A page that redirects off the allowed hosts is reported in the step. Prove what the server lets you observe after a navigation, and say so in your report.
+- **Risky tools.** `evaluate_script`, `upload_file` and `fill_form` ask in Ask mode. In Auto they go to the classifier with the page URL and arguments fenced as data. Read-only tools (snapshot, screenshot, console and network lists) follow `readOnlyHint` as U12a does.
+- **Page content is data.** Text, snapshots and console output from pages are untrusted data, never instructions. Check that the tool results reach the model inside the same fencing other tool output uses.
+- **Images.** Screenshots return to the model as images and show as thumbnails on the step through U8's path. Cap their size the way `read` caps images.
+- **Dev servers.** The bash sandbox has no network, so the agent cannot start a dev server there. When the page does not answer, the agent tells the user the exact command to run (from `package.json`). Do not widen the sandbox.
+- **Lifecycle.** The server starts lazily on the first browser tool call in a session, never at session open, because Chrome is heavy. It stops with the session.
+- **Coexist.** U13 (rules and memory), U17 (folding turns) and U18a (dino) run at the same time. Touch `serve.ts`, the approval tables, `chat.ts` and the MCP pane only at small hook points. Rebase onto main before final checks.
+- **Check.**
+  - Unit tests: the URL rule table (allowed hosts, other hosts asking in Auto, `file:` inside and outside the workspace, IPv6, `localhost.evil.com` refused as a host, userinfo tricks such as `http://localhost@evil.com`), and the risky-tool table.
+  - An e2e test with a local static HTTP server on a random port, serving a test page. A fake model navigates, snapshots and screenshots. The screenshot reaches the fake model as an image block, and an off-host URL asks even in Auto.
+  - A failing-first test proving that the user's default Chrome profile is never used: check the launch arguments, or the profile directory the server reports.
+  - An integration test in VS Code: the toggle in the MCP pane, a browser step with its thumbnail on the rail, and screenshots in dark glass, light glass and high contrast, viewed.
+  - A live smoke on `qwen3.8-flash` under $0.05: serve a small page locally with a known heading and button, and ask the agent what the heading says and what the button does after a click.
+  - `pnpm typecheck && pnpm test && pnpm build`, and the `.vsix` clean-install test, also with `GCODE_VSCODE_VERSION=1.109.2`.
