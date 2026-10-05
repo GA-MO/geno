@@ -9,6 +9,7 @@ import {
   COMMAND_META,
   expandInvocation,
   isSessionMode,
+  listedCommands,
   mergeCommands,
   SESSION_MODES,
   type CommandMeta,
@@ -16,10 +17,12 @@ import {
   type EngineBuiltin,
   type Expansion,
   type SessionMode,
+  type SkillSource,
   type SlashCommand,
 } from '@g-code/core';
 import type { Command, Io } from './command.js';
 import { workspaceDir } from './drive.js';
+import { claudeDirOf, loadPlugins, type InstalledPlugin, type PluginScan } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, SKILL_ROOTS, sortedEntries } from './project-context.js';
 import type { Store } from './store.js';
 
@@ -47,6 +50,31 @@ const firstLine = (body: string): string => {
 
 type Loader = (dir: string, scope: CommandSource, show: (file: string) => string) => Promise<SlashCommand[]>;
 
+/** The SKILL.md of each folder in `dir` that has a description, named `<namespace><name>`. */
+async function loadSkillDir(dir: string, scope: SkillSource, show: (file: string) => string, namespace: string): Promise<SlashCommand[]> {
+  const skills: SlashCommand[] = [];
+  for (const entry of await sortedEntries(dir)) {
+    const file = path.join(dir, entry.name, 'SKILL.md');
+    const raw = await readIfFile(file);
+    if (raw === undefined) continue;
+    const { fields } = parseFrontmatter(raw);
+    const description = text(fields['description']);
+    if (description === '') continue;
+    const hint = text(fields['argument-hint']);
+    skills.push({
+      kind: 'skill',
+      name: namespace + (text(fields['name']) || entry.name),
+      description,
+      hint: hint === '' ? undefined : hint,
+      scope,
+      path: show(file),
+      text: raw,
+      userInvocable: text(fields['user-invocable']).toLowerCase() !== 'false',
+    });
+  }
+  return skills;
+}
+
 const LOADERS: Readonly<Record<Source['kind'], Loader>> = {
   async prompt(dir, scope, show) {
     const commands: SlashCommand[] = [];
@@ -69,33 +97,35 @@ const LOADERS: Readonly<Record<Source['kind'], Loader>> = {
     }
     return commands;
   },
-  async skill(dir, scope, show) {
-    const skills: SlashCommand[] = [];
-    for (const entry of await sortedEntries(dir)) {
-      const file = path.join(dir, entry.name, 'SKILL.md');
-      const raw = await readIfFile(file);
-      if (raw === undefined) continue;
-      const { fields } = parseFrontmatter(raw);
-      const description = text(fields['description']);
-      if (description === '') continue;
-      const hint = text(fields['argument-hint']);
-      skills.push({ kind: 'skill', name: text(fields['name']) || entry.name, description, hint: hint === '' ? undefined : hint, scope, path: show(file), text: raw });
-    }
-    return skills;
-  },
+  skill: (dir, scope, show) => loadSkillDir(dir, scope, show, ''),
 };
 
-/** The built-ins, then the workspace's commands and skills, then the global ones. */
-export async function loadCommands(workspace: string, home: string): Promise<SlashCommand[]> {
+/** The built-ins, then the workspace's commands and skills, then the global ones, then each plugin's skills. */
+export async function loadCommands(workspace: string, home: string, plugins: readonly InstalledPlugin[]): Promise<SlashCommand[]> {
   const show = (file: string) => shownPath(workspace, file);
-  const groups = await Promise.all(SOURCES.map((source) => LOADERS[source.kind](source.dir(workspace, home), source.scope, show)));
+  const groups = await Promise.all([
+    ...SOURCES.map((source) => LOADERS[source.kind](source.dir(workspace, home), source.scope, show)),
+    ...plugins.map((plugin) => loadSkillDir(path.join(plugin.root, 'skills'), 'plugin', show, `${plugin.name}:`)),
+  ]);
   return mergeCommands([builtinCommands(), ...groups]);
+}
+
+/** The installed plugins as the environment locates them, with each problem reported once per change. */
+export function pluginLoader(io: Io): (workspace: string) => Promise<PluginScan> {
+  let reported = '';
+  return async (workspace) => {
+    const scan = await loadPlugins(claudeDirOf(io.env), workspace);
+    const problems = scan.problems.join('\n');
+    if (problems !== reported && problems !== '') for (const problem of scan.problems) io.err(`plugins: ${problem}`);
+    reported = problems;
+    return scan;
+  };
 }
 
 const metaOf = (command: SlashCommand): CommandMeta => (command.kind === 'builtin' ? { kind: command.kind, runs: command.runs } : { kind: command.kind });
 
 export const availableCommands = (commands: readonly SlashCommand[]): acp.AvailableCommand[] =>
-  commands.map((command) => ({
+  listedCommands(commands).map((command) => ({
     name: command.name,
     description: command.description,
     input: command.hint === undefined ? null : { hint: command.hint },
@@ -178,13 +208,15 @@ export type SessionCommands = {
 };
 
 export function sessionCommands(home: string, io: Io): SessionCommands {
+  const plugins = pluginLoader(io);
+  const load = async (workspace: string) => loadCommands(workspace, home, (await plugins(workspace)).plugins);
   const sessions = new Map<string, { readonly workspace: string; readonly stop: () => void }>();
   return {
     attach(client, sessionId, workspace) {
       sessions.get(sessionId)?.stop();
       let published = '';
       const publish = async () => {
-        const listed = availableCommands(await loadCommands(workspace, home));
+        const listed = availableCommands(await load(workspace));
         const shown = JSON.stringify(listed);
         if (shown === published) return;
         published = shown;
@@ -203,7 +235,7 @@ export function sessionCommands(home: string, io: Io): SessionCommands {
     async expand(sessionId, text) {
       const session = sessions.get(sessionId);
       if (session === undefined || !text.startsWith('/')) return undefined;
-      return expandInvocation(await loadCommands(session.workspace, home), text);
+      return expandInvocation(await load(session.workspace), text);
     },
   };
 }
@@ -218,8 +250,9 @@ const originOf = (command: SlashCommand): string => (ORIGIN[command.kind] as (c:
 
 export const commandsList: Command = async (args, { io, store }) => {
   const { values } = parseArgs({ args, strict: true, options: { workspace: { type: 'string', default: '.' } } });
-  const commands = await loadCommands(await workspaceDir(io.cwd, values.workspace), homeOf(store));
-  for (const command of commands) {
+  const workspace = await workspaceDir(io.cwd, values.workspace);
+  const commands = await loadCommands(workspace, homeOf(store), (await pluginLoader(io)(workspace)).plugins);
+  for (const command of listedCommands(commands)) {
     const usage = command.hint === undefined ? `/${command.name}` : `/${command.name} ${command.hint}`;
     io.out(`${usage.padEnd(20)} ${originOf(command)}    ${command.description}`);
   }

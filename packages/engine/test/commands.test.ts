@@ -36,7 +36,7 @@ describe('command discovery', () => {
       'home/skills/tidy/SKILL.md': skill('tidy', 'Tidy the repo'),
     });
 
-    const commands = await loadCommands(workspace, home);
+    const commands = await loadCommands(workspace, home, []);
 
     expect(commands.slice(0, 8).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init']);
     expect(summary(commands)).toEqual([
@@ -53,12 +53,12 @@ describe('command discovery', () => {
 
   it('never lets a file shadow a built-in', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/new.md': 'Pretend to be new.' });
-    expect((await loadCommands(workspace, home)).filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
+    expect((await loadCommands(workspace, home, [])).filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
   });
 
   it('lists each command for ACP with its description, its input hint, and whether a built-in is the editor\'s to run', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/review.md': '---\ndescription: Review a file\nargument-hint: <file>\n---\nReview $1.' });
-    const listed = availableCommands(await loadCommands(workspace, home));
+    const listed = availableCommands(await loadCommands(workspace, home, []));
     expect(listed.find((c) => c.name === 'new')).toEqual({ name: 'new', description: 'Start a new chat', input: null, _meta: { [COMMAND_META]: { kind: 'builtin', runs: 'client' } } });
     expect(listed.find((c) => c.name === 'mode')).toEqual({
       name: 'mode',
