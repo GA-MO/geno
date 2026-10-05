@@ -155,11 +155,13 @@ export type TurnEvent =
   | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)
   /** The user switched the session's approval mode; it holds until the next switch, across resumes. */
   | { readonly kind: 'mode'; readonly seq: number; readonly at: string; readonly mode: SessionMode }
+  /** A name the user gave the session; the latest one wins over the first prompt. */
+  | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints, restores, review decisions and retries record what happened around the conversation; the loop steps over them. */
+/** Checkpoints, restores, review decisions, retries and titles record what happened around the conversation; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -171,6 +173,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   review: false,
   retry: false,
   mode: false,
+  title: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

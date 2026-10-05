@@ -24,6 +24,14 @@ import {
   UNSAVED_BUFFERS_CAPABILITY,
   UNSAVED_BUFFERS_METHOD,
   addUsage,
+  RENAME_SESSION_METHOD,
+  SESSION_SUMMARY_META,
+  summarizeSession,
+  titleFrom,
+  titleOf,
+  type SessionScope,
+  type SessionSummary,
+  type SessionSummaryMeta,
   APPROVAL_META,
   approvalQuestion,
   DEFAULT_SESSION_MODE,
@@ -67,6 +75,8 @@ import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logMode } from './sessions.js';
+import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
+import { listSessions, renameSession, trashSession } from './history.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 import type { Approval, Approver, Diagnostics, PermissionAnswer } from './tools/agent.js';
@@ -82,18 +92,6 @@ const STOP_REASONS: Readonly<Record<DoneReason, acp.StopReason>> = {
   budget: 'max_turn_requests',
   refusal: 'refusal',
   error: 'end_turn',
-};
-
-const TOOL_STATUS: Readonly<Record<ToolStatus, acp.ToolCallStatus>> = { ok: 'completed', error: 'failed', denied: 'failed' };
-
-const TOOL_KINDS: Readonly<Record<string, acp.ToolKind>> = {
-  read: 'read',
-  grep: 'search',
-  glob: 'search',
-  list: 'search',
-  edit: 'edit',
-  bash: 'execute',
-  check: 'execute',
 };
 
 const PERMISSION_OPTIONS: acp.PermissionOption[] = [
@@ -154,7 +152,6 @@ function updates(client: acp.AgentContext, sessionId: string, io: Io): Updates {
   };
 }
 
-const textUpdate = (text: string): acp.SessionUpdate => ({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } });
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 
@@ -169,20 +166,8 @@ const RETRY_REASONS: readonly (readonly [RegExp, string])[] = [
 const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) => pattern.test(message))?.[1] ?? 'server error';
 
 const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
-  'tool-result': (event) => ({
-    sessionUpdate: 'tool_call_update',
-    toolCallId: event.toolUseId,
-    status: TOOL_STATUS[event.status],
-    content: [
-      { type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } },
-      ...(event.images ?? []).flatMap((image): acp.ToolCallContent[] =>
-        image.path === undefined ? [] : [{ type: 'content', content: { type: 'resource_link', uri: pathToFileURL(image.path).href, name: image.name, mimeType: image.mediaType, size: image.bytes } }],
-      ),
-    ],
-    ...(event.approval === undefined ? {} : { _meta: { [APPROVAL_META]: event.approval } }),
-  }),
-  // A failure belongs in the transcript, and a notice is live status only, so it goes as agent text.
-  error: (event) => textUpdate(`\n\n[${event.error}] ${event.message}`),
+  'tool-result': (event) => toolResultUpdate(event),
+  error: (event) => textUpdate(errorText(event)),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>
     peer.notices
@@ -310,6 +295,15 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
   };
 }
 
+const sessionInfo = (summary: SessionSummary): acp.SessionUpdate => ({ sessionUpdate: 'session_info_update', title: summary.title, updatedAt: summary.updatedAt });
+
+function sessionInfoOf(summary: SessionSummary): acp.SessionInfo {
+  const meta: SessionSummaryMeta = { turns: summary.turns, costUsd: summary.costUsd, createdAt: summary.createdAt };
+  return { sessionId: summary.id, cwd: summary.workspace, title: summary.title, updatedAt: summary.updatedAt, _meta: { [SESSION_SUMMARY_META]: meta } };
+}
+
+const renameRequest = z.object({ sessionId: z.string(), title: z.string() });
+
 const promptText = (blocks: readonly acp.ContentBlock[]): string =>
   blocks
     .flatMap((block) => (block.type === 'text' ? [block.text] : []))
@@ -418,6 +412,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       await logMode(log, mode);
     }).catch((error: unknown) => io.err(`could not log the mode of ${sessionId}: ${String(error)}`));
   };
+  const existing = (sessionId: string) =>
+    openSessionLog(store, sessionId, io).catch((error: unknown) => {
+      throw acp.RequestError.resourceNotFound(`session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+    });
   const known = (sessionId: string) => {
     if (!turns.has(sessionId)) throw acp.RequestError.invalidParams({ sessionId }, `no session ${sessionId}`);
   };
@@ -435,8 +433,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: {
-          loadSession: false,
-          sessionCapabilities: { resume: {} },
+          loadSession: true,
+          sessionCapabilities: { resume: {}, list: {}, delete: {} },
           promptCapabilities: { embeddedContext: true, image: true },
           mcpCapabilities: { http: true, sse: true },
         },
@@ -455,9 +453,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
     })
     .onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
-      const log = await openSessionLog(store, params.sessionId, io).catch((error: unknown) => {
-        throw acp.RequestError.resourceNotFound(`session ${params.sessionId}: ${error instanceof Error ? error.message : String(error)}`);
-      });
+      const log = await existing(params.sessionId);
       const id = log.session.id;
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
@@ -465,6 +461,48 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       mcp.register(id, log.session.workspace, params.mcpServers ?? []);
       io.err(`session: ${id} resumed, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!) };
+    })
+    .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
+      const log = await existing(params.sessionId);
+      const workspace = await workspaceDir(io.cwd, params.cwd);
+      if (log.session.workspace !== workspace) {
+        throw acp.RequestError.invalidParams({ cwd: params.cwd }, `session ${log.session.id} belongs to ${log.session.workspace}; open it there`);
+      }
+      const id = log.session.id;
+      if (!turns.has(id)) turns.set(id, undefined);
+      if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
+      commands.attach(client, id, log.session.workspace);
+      mcp.register(id, log.session.workspace, params.mcpServers);
+      const notify =(update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
+      for (const update of replayUpdates(log.events)) await notify(update);
+      await notify(sessionInfo(summarizeSession(log.session, log.events)));
+      io.err(`session: ${id} loaded, log: ${log.file}`);
+      return { modes: modeState(modes.get(id)!) };
+    })
+    .onRequest(acp.methods.agent.session.list, async ({ params }): Promise<acp.ListSessionsResponse> => {
+      const scope: SessionScope = params.cwd == null ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
+      const sessions = await listSessions(store, io, scope);
+      return { sessions: sessions.map(sessionInfoOf) };
+    })
+    .onRequest(acp.methods.agent.session.delete, async ({ params }) => {
+      const { sessionId } = params;
+      if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before deleting its session');
+      await existing(sessionId);
+      const trashed = await serially(sessionId, () => trashSession(store, io, sessionId));
+      turns.delete(sessionId);
+      modes.delete(sessionId);
+      io.err(`session: ${sessionId} moved to ${trashed}`);
+      return {};
+    })
+    .onRequest(RENAME_SESSION_METHOD, renameRequest, async ({ params, client }) => {
+      const { sessionId } = params;
+      await existing(sessionId);
+      const title = await serially(sessionId, () => renameSession(store, io, sessionId, params.title)).catch((error: unknown) => {
+        if (error instanceof UsageError) throw acp.RequestError.invalidParams({ title: params.title }, error.message);
+        throw error;
+      });
+      await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'session_info_update', title } });
+      return {};
     })
     .onRequest(acp.methods.agent.session.setMode, async ({ params, client }) => {
       const { sessionId, modeId } = params;
@@ -499,6 +537,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       try {
         return await serially(sessionId, async () => {
           const resumed = await resumeSession(store, io, sessionId);
+          if (titleOf(resumed.log.events) === undefined && target === undefined) turn.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
           const opened =
             target === undefined && (hasAttached(attached) || slash !== undefined)
               ? await logPrompt(store, resumed, slash?.content ?? text, attached, turn.surface.files, sessionId, slash)

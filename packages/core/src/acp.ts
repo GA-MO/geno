@@ -90,6 +90,36 @@ export const SELECTION_LINES_META = 'gcode/lines';
 
 export type SelectionLines = { readonly startLine: number; readonly endLine: number };
 
+/** Key in session/list's `SessionInfo._meta`: what the history shows besides ACP's title and time. */
+export const SESSION_SUMMARY_META = 'gcode/summary';
+
+export type SessionSummaryMeta = { readonly turns: number; readonly costUsd: number | null; readonly createdAt: string };
+
+/** Extension method, sent by the editor: names a session. The engine logs the title and sends `session_info_update`. */
+export const RENAME_SESSION_METHOD = '_gcode/renameSession';
+
+export type RenameSessionRequest = { readonly sessionId: string; readonly title: string };
+
+/**
+ * Key in a replayed `user_message_chunk`'s `_meta` during session/load: how the turn it starts went, which ACP
+ * has no update for. Times are milliseconds since the epoch.
+ */
+export const REPLAYED_TURN_META = 'gcode/turn';
+
+export type ReplayedTurn = {
+  readonly startedAt: number;
+  readonly endedAt: number;
+  readonly status: 'done' | 'stopped' | 'failed';
+  /** `inputTokens` counts cached tokens too; null for a turn that never reached the model. */
+  readonly usage: { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null } | null;
+};
+
+/** Key in a replayed `tool_call` or `tool_call_update`'s `_meta`: when it happened, in milliseconds since the epoch. */
+export const REPLAYED_AT_META = 'gcode/at';
+
+/** Key in a replayed `tool_call_update`'s `_meta`: the edit the call made, its hunks in their current review status. */
+export const REPLAYED_CHANGE_META = 'gcode/change';
+
 /**
  * What the user pointed at from the composer, parsed from session/prompt's blocks. `path` is absolute. A file is
  * read through the buffer bridge when the prompt is logged; a selection carries the text the user saw.
