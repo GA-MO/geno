@@ -5,6 +5,7 @@ import { loopStep, nextSeq, type DoneReason, type Run, type ToolResultEvent, typ
 import { EXIT_CODES, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
+import { DISK_FILES, type Files } from './files.js';
 import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
@@ -20,6 +21,36 @@ export type Mode = {
 };
 
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number };
+
+/** How a run shows what it does as it happens. */
+export type Watcher = {
+  text(delta: string): void;
+  /** A tool use about to run, with its one-line description. */
+  toolStart(use: ToolUseBlock, title: string): void;
+  /** Every event, as it is appended to the session log. */
+  logged(event: TurnEvent): void;
+};
+
+/** Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. */
+export type Surface = { readonly files: Files; readonly watcher: Watcher };
+
+export function terminalSurface(io: Io): Surface {
+  let midLine = false;
+  return {
+    files: DISK_FILES,
+    watcher: {
+      text(delta) {
+        midLine = true;
+        io.write(delta);
+      },
+      toolStart: (_use, title) => io.out(`> ${title}`),
+      logged() {
+        if (midLine) io.write('\n');
+        midLine = false;
+      },
+    },
+  };
+}
 
 export type DriveResult = {
   readonly reason: DoneReason;
@@ -95,13 +126,23 @@ function unlessAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T | ty
  * Runs the tool loop on an open session until the model ends its turn or a limit stops it. `prompt` is
  * logged first; an empty one resumes whatever the session left unanswered.
  */
-export async function drive(io: Io, store: Store, opened: OpenSession, prompt: string, limits: Limits, mode: Mode): Promise<DriveResult> {
+export async function drive(
+  io: Io,
+  store: Store,
+  opened: OpenSession,
+  prompt: string,
+  limits: Limits,
+  mode: Mode,
+  surface: Surface = terminalSurface(io),
+): Promise<DriveResult> {
   const { log, gateway } = opened;
   const { session, file } = log;
+  const { watcher } = surface;
   const events: TurnEvent[] = [...log.events];
   const record = async (event: TurnEvent) => {
     events.push(event);
     await appendEvent(file, event);
+    watcher.logged(event);
   };
   const run: Run = { firstSeq: nextSeq(events), ...limits };
   if (prompt !== '') {
@@ -116,16 +157,17 @@ export async function drive(io: Io, store: Store, opened: OpenSession, prompt: s
     spillDir: path.join(store.spillDir, session.id),
     rg: io.env['GCODE_RG'] || 'rg',
     signal,
+    files: surface.files,
   };
 
   // One at a time: two edits to one file in a turn must see each other's result.
   const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<boolean> => {
-    for (const use of toolUses) io.out(`> ${describeCall(use, mode.executors)}`);
     const firstSeq = nextSeq(events);
     const work = (async () => {
       const results: ToolResultEvent[] = [];
       for (const [i, use] of toolUses.entries()) {
         const seq = firstSeq + i;
+        watcher.toolStart(use, describeCall(use, mode.executors));
         const { status, text } = await runTool(use, ctx, mode.executors);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
         results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, ...output });
@@ -140,19 +182,14 @@ export async function drive(io: Io, store: Store, opened: OpenSession, prompt: s
 
   const callModel = async (): Promise<void> => {
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
-    let streamed = false;
     const result = await gateway.turn({
       session,
       events,
       tools: mode.tools,
       ...(mode.system === undefined ? {} : { system: mode.system }),
       signal,
-      onText: (delta) => {
-        streamed = true;
-        io.write(delta);
-      },
+      onText: (delta) => watcher.text(delta),
     });
-    if (streamed) io.write('\n');
     const at = new Date().toISOString();
     if (result.kind === 'error') {
       await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message });

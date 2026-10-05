@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { z } from 'zod';
 import { executor, optional, resolveInside, ToolError } from './context.js';
 
@@ -18,10 +18,9 @@ export const read = executor({
   async run({ path, start_line, end_line }, ctx) {
     const real = await resolveInside(ctx, path);
     if ((await stat(real)).isDirectory()) throw new ToolError(`${path} is a directory; use list`);
-    const bytes = await readFile(real);
-    if (bytes.subarray(0, BINARY_SNIFF).includes(0)) throw new ToolError(`${path} is a binary file`);
-
-    const text = bytes.toString('utf8');
+    const text = await ctx.files.read(real);
+    if (text === null) throw new ToolError(`no such file or directory: ${path}`);
+    if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new ToolError(`${path} is a binary file`);
     if (text === '') return `${path} is empty`;
     const lines = text.split('\n');
     if (text.endsWith('\n')) lines.pop();

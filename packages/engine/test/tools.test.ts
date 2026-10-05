@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { TOOL_SPECS, type ToolName } from '@g-code/core';
+import { DISK_FILES } from '../src/files.js';
 import { listEntries } from '../src/tools/list.js';
 import { describeCall, EXECUTORS, runTool, type ToolContext } from '../src/tools/index.js';
 import { rgCommand } from './helpers.js';
@@ -32,7 +33,7 @@ beforeAll(async () => {
   await symlink(path.join(root, 'outside', 'secret.txt'), path.join(ws, 'escape.txt'));
   await symlink(path.join(root, 'outside'), path.join(ws, 'escape-dir'));
   await symlink(path.join(ws, 'src', 'config.ts'), path.join(ws, 'alias.ts'));
-  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), rg: rgCommand(), signal: new AbortController().signal };
+  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES };
 });
 
 let nextId = 0;

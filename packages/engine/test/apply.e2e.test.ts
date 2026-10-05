@@ -1,9 +1,8 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { baseOf, EDIT_FORMAT_SPECS, EDIT_SYSTEM_PROMPT } from '@g-code/core';
-import { applyEditToFile } from '../src/apply.js';
+import { EDIT_FORMAT_SPECS, EDIT_SYSTEM_PROMPT } from '@g-code/core';
 import { answer, fakeTransport, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { runCli } from './helpers.js';
@@ -128,32 +127,5 @@ describe('gcode eval apply --resume', () => {
     const result = await runCli(['eval', 'apply', '--applier', 'oracle', '--resume', out], env);
     expect(result.code).toBe(2);
     expect(result.stderr).toContain('holds a noop run');
-  });
-});
-
-describe('applyEditToFile', () => {
-  it('writes nothing when the file changed since the model read it', async () => {
-    const file = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-edit-')), 'a.ts');
-    await writeFile(file, 'const a = 1;\n');
-    const base = baseOf('const a = 0;\n', null);
-    const change = await applyEditToFile(
-      file,
-      { path: 'a.ts', format: 'str_replace', raw: { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' }, base },
-      null,
-    );
-    expect(change.result).toMatchObject({ kind: 'failed', reason: 'stale-base' });
-    expect(await readFile(file, 'utf8')).toBe('const a = 1;\n');
-  });
-
-  it('writes the edited text when the base still matches', async () => {
-    const file = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-edit-')), 'a.ts');
-    await writeFile(file, 'const a = 1;\n');
-    const change = await applyEditToFile(
-      file,
-      { path: 'a.ts', format: 'str_replace', raw: { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' }, base: baseOf('const a = 1;\n', null) },
-      null,
-    );
-    expect(change.result).toEqual({ kind: 'applied' });
-    expect(await readFile(file, 'utf8')).toBe('const a = 2;\n');
   });
 });

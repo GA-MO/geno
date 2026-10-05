@@ -1,25 +1,38 @@
-import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
   baseOf,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   denialFor,
+  formatDiagnostics,
   MAX_BASH_TIMEOUT_SECONDS,
   type AgentToolName,
   type BaseRead,
   type CommandScope,
   type Denial,
+  type EditorDiagnostic,
 } from '@g-code/core';
-import { applyEditToFile } from '../apply.js';
+import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
 import type { Sandbox } from '../sandbox.js';
-import { isMissing } from '../store.js';
-import { executor, optional, resolveInside, resolveWritable, ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
+import {
+  displayPath,
+  executor,
+  optional,
+  resolveInside,
+  resolveWritable,
+  ToolDenied,
+  ToolError,
+  type Executor,
+  type ToolContext,
+} from './context.js';
 import { EXECUTORS } from './index.js';
 
 /** Asked before a command on the deny list runs; true lets it run. */
 export type Approver = (denial: Denial) => Promise<boolean>;
+
+/** The editor's problems in some files, given and returned as absolute paths. */
+export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
 
 export type AgentToolEnv = {
   readonly sandbox: Sandbox;
@@ -28,6 +41,8 @@ export type AgentToolEnv = {
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
   readonly approve: Approver;
+  /** Stands in for the check command when the workspace has none and an editor is attached. */
+  readonly diagnostics: Diagnostics | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -48,14 +63,7 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
   return { passed, text: `check \`${tools.check}\` ${verdict}${output === '' ? '' : `\n${output}`}` };
 }
 
-async function currentBase(file: string): Promise<BaseRead> {
-  try {
-    return baseOf(await readFile(file, 'utf8'), null);
-  } catch (error) {
-    if (isMissing(error)) return baseOf(null, null);
-    throw error;
-  }
-}
+const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
 
 export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolName, Executor>> {
   // What the model last saw of each file: the base an edit must still match.
@@ -65,9 +73,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     input: EXECUTORS.read.input,
     describe: EXECUTORS.read.describe,
     async run(raw, ctx) {
-      const text = await EXECUTORS.read.run(raw, ctx);
-      const file = await resolveInside(ctx, (raw as { path: string }).path);
-      reads.set(file, await currentBase(file));
+      // The base is the very text the read tool showed, so a change a moment later makes the next edit stale.
+      let seen: string | null = null;
+      const files: Files = { ...ctx.files, read: async (file) => (seen = await ctx.files.read(file)) };
+      const text = await EXECUTORS.read.run(raw, { ...ctx, files });
+      reads.set(await resolveInside(ctx, (raw as { path: string }).path), baseOf(seen, null));
       return text;
     },
   };
@@ -77,12 +87,12 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     describe: ({ path }) => `edit ${path}`,
     async run(input, ctx) {
       const file = await resolveWritable(ctx, input.path);
-      const current = await currentBase(file);
+      const current = await currentBase(ctx, file);
       const base = current.hash === null ? current : reads.get(file);
       if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);
-      const change = await applyEditToFile(file, { path: input.path, format: AGENT_EDIT_FORMAT, raw: input, base }, null);
+      const change = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw: input, base }, null);
       if (change.result.kind === 'failed') throw new ToolError(change.result.detail);
-      reads.set(file, await currentBase(file));
+      reads.set(file, await currentBase(ctx, file));
       if (!tools.checkAfterEdit) return `Edited ${input.path}.`;
       const check = await runCheck(tools, ctx);
       return check === undefined ? `Edited ${input.path}.` : `Edited ${input.path}.\n\n${check.text}`;
@@ -119,7 +129,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     describe: () => 'check',
     async run(_input, ctx) {
       const result = await runCheck(tools, ctx);
-      return result?.text ?? 'This workspace has no check command. Run its tests or type checker with bash instead.';
+      if (result !== undefined) return result.text;
+      if (tools.diagnostics !== undefined && reads.size > 0) {
+        return formatDiagnostics(await tools.diagnostics([...reads.keys()]), (file) => displayPath(ctx, file));
+      }
+      return 'This workspace has no check command. Run its tests or type checker with bash instead.';
     },
   });
 

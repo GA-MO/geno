@@ -1,6 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
 export type ToolContext = {
@@ -10,6 +11,8 @@ export type ToolContext = {
   readonly spillDir: string;
   readonly rg: string;
   readonly signal: AbortSignal;
+  /** Where read and edit get file text. grep, glob and list always search the disk. */
+  readonly files: Files;
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
