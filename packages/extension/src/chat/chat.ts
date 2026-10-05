@@ -52,6 +52,7 @@ type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.Sessio
 
 const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
   agent_message_chunk: ({ content }) => (content.type === 'text' ? { type: 'text', text: content.text } : undefined),
+  notice: ({ title }) => ({ type: 'notice', text: title }),
   tool_call: ({ toolCallId, title, kind, status }, at) => ({
     type: 'tool',
     id: toolCallId,

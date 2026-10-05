@@ -28,6 +28,19 @@ describe('the transcript reducer', () => {
     expect(isRunning(t)).toBe(true);
   });
 
+  it('shows a notice only while it is the newest thing in a running turn', () => {
+    const retrying = run([
+      { type: 'turn-start', id: 't1', prompt: 'p' },
+      { type: 'notice', text: 'Retrying in 1s (model overloaded)' },
+    ]);
+    expect(retrying.turns[0]!.notice).toBe('Retrying in 1s (model overloaded)');
+    expect(run([{ type: 'text', text: 'Back.' }], retrying).turns[0]!.notice).toBeUndefined();
+    expect(run([{ type: 'tool', id: 'tu1', at: 1, name: 'read', status: 'running' }], retrying).turns[0]!.notice).toBeUndefined();
+    const ended = run([{ type: 'turn-end', status: 'failed', usage: undefined }], retrying);
+    expect(ended.turns[0]!.notice).toBeUndefined();
+    expect(run([{ type: 'notice', text: 'late' }], ended).turns[0]!.notice).toBeUndefined();
+  });
+
   it('times a tool call from its start to its first end, and keeps fields an update leaves out', () => {
     const t = run([
       { type: 'turn-start', id: 't1', prompt: 'p' },

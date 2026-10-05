@@ -61,7 +61,11 @@ export class Engine implements vscode.Disposable {
     const { agent } = this.client().connect(stream);
     await agent.request(acp.methods.agent.initialize, {
       protocolVersion: acp.PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true } },
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: true },
+        session: { notices: {} },
+        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true },
+      },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });
     return { agent, child, cwd };

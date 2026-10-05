@@ -15,6 +15,8 @@ export type Turn = {
   readonly status: TurnStatus;
   /** Undefined until the turn ends, and for a turn that failed before the model answered. */
   readonly usage: Usage | undefined;
+  /** A passing status while the turn runs, such as a retry; the next output or the turn's end clears it. */
+  readonly notice?: string | undefined;
 };
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -87,6 +89,7 @@ export type Action =
   | { readonly type: 'model'; readonly model: string }
   | { readonly type: 'turn-start'; readonly id: string; readonly prompt: string }
   | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'notice'; readonly text: string }
   /** Starts a tool call or updates one; an absent field keeps its value. */
   | {
       readonly type: 'tool';

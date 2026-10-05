@@ -858,6 +858,17 @@ button {
   color: var(--vscode-descriptionForeground);
 }
 
+/* A passing status, such as a retry, in a running turn */
+
+.turn-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: var(--small);
+}
+
 /* Composer */
 
 .composer {

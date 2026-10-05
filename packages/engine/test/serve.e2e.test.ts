@@ -35,7 +35,7 @@ import {
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, httpError, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -136,7 +136,11 @@ async function setup(replies: readonly Reply[]) {
     client.connectWith(gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
       await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
-        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true } },
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+          session: { notices: {} },
+          _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true },
+        },
       });
       if (resume !== undefined) {
         await ctx.request(acp.methods.agent.session.resume, { sessionId: resume, cwd: workspace });
@@ -244,6 +248,18 @@ describe('gcode serve', () => {
     expect(await refusal([{ type: 'text', text: 'Read @x' }, { type: 'resource_link', uri: 'file:///etc/hosts', name: 'hosts' }])).toMatch(/outside the workspace/);
     expect(await refusal([{ type: 'text', text: 'See' }, { type: 'image', data: '', mimeType: 'image/png' }])).toMatch(/cannot be attached/);
     expect(transport.requests).toHaveLength(0);
+  });
+
+  it('shows a retry as a passing notice and finishes the turn when the model answers', async () => {
+    const overloaded = { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } };
+    const { editor, transport, prompt } = await setup([httpError(529, overloaded), answer('Back.', usage)]);
+
+    expect(await prompt('Hello')).toBe('end_turn');
+
+    expect(transport.requests).toHaveLength(2);
+    const notices = editor.updates.filter((u) => u.sessionUpdate === 'notice');
+    expect(notices).toEqual([expect.objectContaining({ sessionUpdate: 'notice', severity: 'warning', title: 'Retrying in 1s (model overloaded)' })]);
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Back.' } });
   });
 
   it('ends each tool call as it finishes and answers the prompt with the turn\'s tokens, model and cost', async () => {
