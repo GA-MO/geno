@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { FileChange } from '@g-code/core';
+import type { ApprovalRecord, FileChange, TurnEvent } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -14,16 +14,27 @@ export type ToolContext = {
   readonly signal: AbortSignal;
   /** Where read and edit get file text, and the unsaved buffers grep and glob search. list sees only the disk. */
   readonly files: Files;
+  /** The session so far, read when a tool needs the conversation, such as the request a command serves. */
+  readonly events: () => readonly TurnEvent[];
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}
 
 /** A command that was refused before it ran. It becomes a `denied` tool result. */
-export class ToolDenied extends ToolError {}
+export class ToolDenied extends ToolError {
+  constructor(
+    message: string,
+    readonly approval: ApprovalRecord,
+  ) {
+    super(message);
+  }
+}
 
-/** What a tool tells the model, and the file edit it made, if any. */
-export type ToolReply = string | { readonly text: string; readonly change: FileChange };
+/** What a tool tells the model, the file edit it made, and how its command was approved, if either. */
+export type ToolReply =
+  | string
+  | { readonly text: string; readonly change?: FileChange | undefined; readonly approval?: ApprovalRecord | undefined };
 
 /** A tool's executor, typed on its parsed input. */
 export type ToolDef<I> = {

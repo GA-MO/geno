@@ -3,15 +3,21 @@ import path from 'node:path';
 import { z } from 'zod';
 import type { ContentBlock, StopReason } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
+  APPROVAL_MODES,
   asSessionId,
+  DENY_RULE_IDS,
   EFFORTS,
   HUNK_STATUSES,
+  nextSeq,
   PROVIDERS,
+  SESSION_MODES,
+  sessionModeOf,
   TOOL_STATUSES,
   TURN_ERROR_KINDS,
   type HunkId,
   type Session,
   type SessionId,
+  type SessionMode,
   type TurnEvent,
 } from '@g-code/core';
 import { EngineError } from './errors.js';
@@ -80,6 +86,20 @@ const fileChangeSchema = z.strictObject({
   ),
 });
 
+const verdict = z.enum(['allow', 'ask', 'deny']);
+
+const approvalSchema = z.strictObject({
+  mode: z.enum(APPROVAL_MODES),
+  rule: z.enum(DENY_RULE_IDS),
+  reason: z.string(),
+  command: z.string(),
+  classifier: z
+    .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable() })
+    .optional(),
+  decidedBy: z.enum(['rule', 'classifier', 'user']),
+  verdict: verdict.exclude(['ask']),
+});
+
 const toolResultFields = {
   kind: z.literal('tool-result'),
   ...seqFields,
@@ -87,6 +107,7 @@ const toolResultFields = {
   name: z.string(),
   status: z.enum(TOOL_STATUSES),
   change: fileChangeSchema.optional(),
+  approval: approvalSchema.optional(),
 };
 
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
@@ -123,6 +144,7 @@ const turnEventSchema = z.union([
     }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
+    z.strictObject({ kind: z.literal('mode'), ...seqFields, mode: z.enum(SESSION_MODES) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
@@ -192,6 +214,14 @@ export async function readSessionLog(file: string): Promise<SessionLog> {
   const header = events[0];
   if (header?.kind !== 'session-start') throw new StoreError(file, 'line 1: missing session-start');
   return { file, session: header.session, events, tornLine, goodBytes };
+}
+
+/** Logs a switch of the session's approval mode. Switching to the mode it already has logs nothing. */
+export async function logMode(log: SessionLog, mode: SessionMode): Promise<SessionLog> {
+  if (sessionModeOf(log.events) === mode) return log;
+  const event: TurnEvent = { kind: 'mode', seq: nextSeq(log.events), at: new Date().toISOString(), mode };
+  await appendEvent(log.file, event);
+  return { ...log, events: [...log.events, event] };
 }
 
 /** Cuts a torn trailing line so the next append starts on a fresh line. */

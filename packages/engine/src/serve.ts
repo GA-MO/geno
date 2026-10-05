@@ -23,6 +23,13 @@ import {
   UNSAVED_BUFFERS_CAPABILITY,
   UNSAVED_BUFFERS_METHOD,
   addUsage,
+  APPROVAL_META,
+  approvalQuestion,
+  DEFAULT_SESSION_MODE,
+  isSessionMode,
+  SESSION_MODES,
+  sessionModeOf,
+  type SessionMode,
   type CheckpointTextResponse,
   type PermissionInput,
   type TokenUsage,
@@ -42,13 +49,14 @@ import {
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
+import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
-import { appendEvent, dropTornTail } from './sessions.js';
+import { appendEvent, dropTornTail, logMode } from './sessions.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 import type { Approver, Diagnostics } from './tools/agent.js';
@@ -82,6 +90,19 @@ const PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow', name: 'Allow once', kind: 'allow_once' },
   { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
 ];
+
+const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
+  ask: { name: 'Ask', description: 'Ask before risky commands.' },
+  auto: {
+    name: 'Auto',
+    description: 'Run safe commands on its own and let a classifier judge the rest. Still asks before deleting the workspace, pushing, downloading, or touching paths outside it.',
+  },
+};
+
+const modeState = (mode: SessionMode): acp.SessionModeState => ({
+  currentModeId: mode,
+  availableModes: SESSION_MODES.map((id) => ({ id, ...SESSION_MODE_INFO[id] })),
+});
 
 const unsavedBuffersResponse = z.object({ buffers: z.array(z.object({ path: z.string(), text: z.string() })) });
 
@@ -135,6 +156,7 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Pe
     toolCallId: event.toolUseId,
     status: TOOL_STATUS[event.status],
     content: [{ type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } }],
+    ...(event.approval === undefined ? {} : { _meta: { [APPROVAL_META]: event.approval } }),
   }),
   // A failure belongs in the transcript, and a notice is live status only, so it goes as agent text.
   error: (event) => textUpdate(`\n\n[${event.error}] ${event.message}`),
@@ -252,12 +274,12 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
         },
       },
     },
-    async approve(denial) {
+    async approve(denial, classifier) {
       await sent.flush();
       const rawInput: PermissionInput = { command: denial.command, reason: denial.reason };
       const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
         sessionId,
-        toolCall: { toolCallId: running, title: `Allow \`${denial.command}\`? It uses ${denial.reason}.`, kind: 'execute', status: 'pending', rawInput },
+        toolCall: { toolCallId: running, title: approvalQuestion(denial, classifier), kind: 'execute', status: 'pending', rawInput },
         options: PERMISSION_OPTIONS,
       });
       return outcome.outcome === 'selected' && outcome.optionId === 'allow';
@@ -317,6 +339,8 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
   let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false };
   const turns = new Map<string, AbortController | undefined>();
+  // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
+  const modes = new Map<string, SessionMode>();
   // A turn and a review decision both append to the session log and number their events from what they read,
   // so each session's writers take turns.
   const writers = new Map<string, Promise<unknown>>();
@@ -350,15 +374,32 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
       const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
       const { id } = opened.log.session;
       turns.set(id, undefined);
+      modes.set(id, DEFAULT_SESSION_MODE);
       io.err(`session: ${id} log: ${opened.log.file}`);
-      return { sessionId: id };
+      return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
     })
     .onRequest(acp.methods.agent.session.resume, async ({ params }) => {
       const log = await openSessionLog(store, params.sessionId, io).catch((error: unknown) => {
         throw acp.RequestError.resourceNotFound(`session ${params.sessionId}: ${error instanceof Error ? error.message : String(error)}`);
       });
-      if (!turns.has(log.session.id)) turns.set(log.session.id, undefined);
-      io.err(`session: ${log.session.id} resumed, log: ${log.file}`);
+      const id = log.session.id;
+      if (!turns.has(id)) turns.set(id, undefined);
+      if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
+      io.err(`session: ${id} resumed, log: ${log.file}`);
+      return { modes: modeState(modes.get(id)!) };
+    })
+    .onRequest(acp.methods.agent.session.setMode, async ({ params, client }) => {
+      const { sessionId, modeId } = params;
+      known(sessionId);
+      if (!isSessionMode(modeId)) throw acp.RequestError.invalidParams({ modeId }, `unknown mode ${modeId}; the modes are ${SESSION_MODES.join(', ')}`);
+      modes.set(sessionId, modeId);
+      await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: modeId } });
+      // Not awaited: a running turn holds the log until it ends, and the switch must not wait for it.
+      void serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        await dropTornTail(log);
+        await logMode(log, modeId);
+      }).catch((error: unknown) => io.err(`could not log the mode of ${sessionId}: ${String(error)}`));
       return {};
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
@@ -389,7 +430,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
                   limits,
                   check: undefined,
                   checkAfterEdit: true,
-                  approval: { mode: 'interactive', approve: turn.approve },
+                  approval: {
+                    kind: 'interactive',
+                    mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
+                    approve: turn.approve,
+                    classify: commandClassifier(io.env, io.fetch),
+                  },
                   surface: turn.surface,
                   diagnostics,
                 })

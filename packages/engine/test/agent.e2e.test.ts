@@ -4,7 +4,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
+import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -287,5 +287,97 @@ describe('gcode agent', () => {
     for (const secret of ['sk-parent-key-must-not-leak', 'fake-secret-must-not-leak', 'DASHSCOPE', 'GCODE_HOME']) {
       expect(text).not.toContain(secret);
     }
+  });
+});
+
+const verdict = (answer: 'allow' | 'ask' | 'deny', reason: string) =>
+  toolCall('', [use(CLASSIFIER_TOOL.name, { verdict: answer, reason })], { input: 400, cacheRead: 0, cacheWrite: 0 });
+const isClassifierCall = (request: { body: { tool_choice?: unknown } }) => request.body.tool_choice !== undefined;
+const userText = (request: { body: { messages: { content: { text: string }[] }[] } }) =>
+  request.body.messages[0]!.content.map((block) => block.text).join('');
+
+describe('gcode agent --mode auto', () => {
+  it('runs safe commands, lets the classifier judge the gray ones, asks before what rules keep, and logs each decision', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
+    const asked: string[] = [];
+    const commands = ['ls', 'node -e "console.log(41 + 1)"', 'rm -rf node_modules', 'node -e "console.log(7)"', 'git push origin main'];
+    const transport = fakeTransport([
+      toolCall('Working.', commands.map(bash), usage),
+      verdict('allow', 'prints a number'),
+      verdict('deny', 'the request did not ask to delete dependencies'),
+      verdict('ask', 'unclear why this is needed'),
+      answer('Done.', usage),
+    ]);
+    const result = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'Print the answer'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return false;
+      },
+    });
+    expect(result.code).toBe(0);
+
+    const classified = transport.requests.filter(isClassifierCall);
+    expect(classified.map(userText)).toEqual([
+      expect.stringContaining('console.log(41 + 1)'),
+      expect.stringContaining('rm -rf node_modules'),
+      expect.stringContaining('console.log(7)'),
+    ]);
+    expect(userText(classified[0]!)).toContain('Print the answer');
+    expect(asked).toEqual([
+      'Allow `node -e console.log(7)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.',
+      'Allow `git push origin main`? It uses git push.',
+    ]);
+    expect(existsSync(path.join(workspace, 'node_modules/pkg/index.js'))).toBe(true);
+    expect(result.stdout).toContain('auto: the classifier allowed it: prints a number');
+    expect(result.stdout).toContain('auto: the classifier denied it: the request did not ask to delete dependencies');
+
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(ofKind(log.events, 'mode').map((e) => e.mode)).toEqual(['auto']);
+    const results = ofKind(log.events, 'tool-result');
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied', 'denied']);
+    expect('output' in results[1]! && results[1].output).toContain('42');
+    expect('output' in results[2]! && results[2].output).toContain('the request did not ask to delete dependencies');
+    expect(results.map((r) => r.approval)).toEqual([
+      undefined,
+      expect.objectContaining({
+        mode: 'auto',
+        rule: 'unlisted',
+        decidedBy: 'classifier',
+        verdict: 'allow',
+        classifier: expect.objectContaining({ verdict: 'allow', reason: 'prints a number', model: 'qwen3.8-flash', costUsd: expect.any(Number), latencyMs: expect.any(Number) }),
+      }),
+      expect.objectContaining({ mode: 'auto', rule: 'rm-rf-in-workspace', decidedBy: 'classifier', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'deny' }) }),
+      expect.objectContaining({ mode: 'auto', rule: 'unlisted', decidedBy: 'user', verdict: 'deny', classifier: expect.objectContaining({ verdict: 'ask' }) }),
+      { mode: 'auto', rule: 'git-push', reason: 'git push', command: 'git push origin main', decidedBy: 'user', verdict: 'deny' },
+    ]);
+  });
+
+  it('keeps auto on a resumed session, and ask mode never calls the classifier', async () => {
+    const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([
+      toolCall('One.', [bash('node -e "1"')], usage),
+      verdict('allow', 'harmless'),
+      answer('Done.', usage),
+      toolCall('Two.', [bash('node -e "2"')], usage),
+      verdict('allow', 'harmless'),
+      answer('Done.', usage),
+      toolCall('Three.', [bash('node -e "3"')], usage),
+      answer('Done.', usage),
+    ]);
+    const first = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
+    const id = sessionIdOf(first.stdout);
+    expect((await runCli(['agent', '--session', id, 'Two'], env, { fetch: transport.fetch })).code).toBe(0);
+    expect(transport.requests.filter(isClassifierCall)).toHaveLength(2);
+    expect((await runCli(['agent', '--session', id, '--mode', 'ask', 'Three'], env, { fetch: transport.fetch })).code).toBe(0);
+    expect(transport.requests.filter(isClassifierCall)).toHaveLength(2);
+    expect(transport.requests).toHaveLength(8);
+  });
+
+  it('rejects an unknown mode', async () => {
+    const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const result = await runCli(['agent', '--workspace', workspace, '--mode', 'yolo', 'Hi'], env, { fetch: fakeTransport([]).fetch });
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--mode must be ask or auto');
   });
 });

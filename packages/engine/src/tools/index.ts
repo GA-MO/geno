@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import type { FileChange, ToolName, ToolStatus } from '@g-code/core';
+import type { ApprovalRecord, FileChange, ToolName, ToolStatus } from '@g-code/core';
 import { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -12,7 +12,12 @@ export type Executors = Readonly<Record<string, Executor>>;
 
 export const EXECUTORS: Readonly<Record<ToolName, Executor>> = { glob, grep, list, read };
 
-export type ToolRun = { readonly status: ToolStatus; readonly text: string; readonly change?: FileChange | undefined };
+export type ToolRun = {
+  readonly status: ToolStatus;
+  readonly text: string;
+  readonly change?: FileChange | undefined;
+  readonly approval?: ApprovalRecord | undefined;
+};
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
@@ -30,7 +35,7 @@ export async function runTool(use: ToolUseBlock, ctx: ToolContext, executors: Ex
     return typeof reply === 'string' ? { status: 'ok', text: reply } : { status: 'ok', ...reply };
   } catch (error) {
     if (ctx.signal.aborted) throw error;
-    if (error instanceof ToolDenied) return { status: 'denied', text: error.message };
+    if (error instanceof ToolDenied) return { status: 'denied', text: error.message, approval: error.approval };
     if (error instanceof ToolError) return { status: 'error', text: error.message };
     if (isFsError(error)) return { status: 'error', text: `${use.name} failed: ${error.message}` };
     throw error;

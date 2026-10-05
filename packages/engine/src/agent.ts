@@ -3,13 +3,24 @@ import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, type TurnEvent } from '@g-code/core';
+import {
+  AGENT_SYSTEM_PROMPT,
+  AGENT_TOOL_DEFINITIONS,
+  approvalQuestion,
+  isSessionMode,
+  SESSION_MODES,
+  sessionModeOf,
+  type SessionMode,
+  type TurnEvent,
+} from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { childEnv } from './child-env.js';
-import type { Command, Io } from './command.js';
+import { commandClassifier } from './classifier.js';
+import { UsageError, type Command, type Io } from './command.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
+import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, NON_INTERACTIVE, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
@@ -49,8 +60,13 @@ export type AgentOptions = {
 
 export const askOnTerminal =
   (io: Io): Approver =>
-  (denial) =>
-    io.confirm(`Allow \`${denial.command}\`? It uses ${denial.reason}.`);
+  (denial, classifier) =>
+    io.confirm(approvalQuestion(denial, classifier));
+
+function modeFlag(raw: string | undefined): SessionMode | undefined {
+  if (raw === undefined || isSessionMode(raw)) return raw;
+  throw new UsageError(`--mode must be ${SESSION_MODES.join(' or ')}`);
+}
 
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
   const { session } = opened.log;
@@ -107,16 +123,23 @@ export const agent: Command = async (args, { io, store }) => {
       check: { type: 'string' },
       'check-after-edit': { type: 'boolean', default: true },
       'non-interactive': { type: 'boolean', default: false },
+      mode: { type: 'string' },
     },
   });
   const task = positionals.join(' ').trim();
   const limits = limitsOf(values);
+  const chosen = modeFlag(values.mode);
+  if (chosen !== undefined && values['non-interactive']) throw new UsageError('--mode is for a user at the terminal; drop it with --non-interactive');
   const opened = await openForPrompt(io, store, values, task, 'task');
-  const { exitCode } = await runAgent(io, store, opened, task, {
+  const log = chosen === undefined ? opened.log : await logMode(opened.log, chosen);
+  const mode = sessionModeOf(log.events);
+  const { exitCode } = await runAgent(io, store, { ...opened, log }, task, {
     limits,
     check: values.check,
     checkAfterEdit: values['check-after-edit'],
-    approval: values['non-interactive'] ? NON_INTERACTIVE : { mode: 'interactive', approve: askOnTerminal(io) },
+    approval: values['non-interactive']
+      ? NON_INTERACTIVE
+      : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) },
   });
   return exitCode;
 };

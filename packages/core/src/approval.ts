@@ -15,6 +15,7 @@ export const DENY_RULE_IDS = [
   'network-download',
   'cloud-cli',
   'database-cli',
+  'unlisted',
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
 
@@ -24,16 +25,36 @@ export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
  */
 export type SimpleCommand = {
   readonly program: string;
+  /** The program word as written, which may be a path. */
+  readonly executable: string;
+  /** The assignments, wrappers and their options before the program. */
+  readonly prefix: readonly string[];
   readonly args: readonly string[];
   readonly words: readonly string[];
   readonly cwd: string | undefined;
 };
 
-/** Interactive runs have a user to ask; non-interactive runs, such as evals, do not. */
-export type ApprovalMode = 'interactive' | 'non-interactive';
+/**
+ * `ask` asks the user before every flagged command. `auto` still asks before what cannot be undone, runs what is clearly
+ * safe, and lets the classifier judge the rest. Non-interactive runs, such as evals, have nobody to ask.
+ */
+export const APPROVAL_MODES = ['ask', 'auto', 'non-interactive'] as const;
+export type ApprovalMode = (typeof APPROVAL_MODES)[number];
+/** The modes a user picks for a session; non-interactive belongs to a run, not a session. */
+export const SESSION_MODES = ['ask', 'auto'] as const satisfies readonly ApprovalMode[];
+export type SessionMode = (typeof SESSION_MODES)[number];
+export const isSessionMode = (raw: string): raw is SessionMode => (SESSION_MODES as readonly string[]).includes(raw);
+export const DEFAULT_SESSION_MODE: SessionMode = 'ask';
+
 export type Verdict = 'allow' | 'ask' | 'deny';
+/** `classify` hands the command to the classifier, which answers with a Verdict. */
+export type RuleVerdict = Verdict | 'classify';
 /** What a run in each mode does with a command a rule matches. Nobody is there to ask in non-interactive mode. */
-export type Verdicts = { readonly interactive: Verdict; readonly 'non-interactive': Exclude<Verdict, 'ask'> };
+export type Verdicts = {
+  readonly ask: Verdict;
+  readonly auto: RuleVerdict;
+  readonly 'non-interactive': Exclude<Verdict, 'ask'>;
+};
 
 type DenyRule = {
   readonly reason: string;
@@ -45,10 +66,13 @@ export type Denial = {
   readonly rule: DenyRuleId;
   readonly reason: string;
   readonly command: string;
-  readonly verdict: Exclude<Verdict, 'allow'>;
+  readonly verdict: Exclude<RuleVerdict, 'allow'>;
 };
 
-const ASK_OR_DENY: Verdicts = { interactive: 'ask', 'non-interactive': 'deny' };
+// What cannot be undone: Auto still asks.
+const ALWAYS_ASK: Verdicts = { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
+// What Auto lets the classifier judge.
+const ASK_OR_CLASSIFY: Verdicts = { ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
 
 const CLOUD_CLIS = new Set([
   'aws', 'az', 'bq', 'doctl', 'eksctl', 'firebase', 'fly', 'flyctl', 'gcloud', 'gsutil', 'helm', 'heroku',
@@ -183,27 +207,124 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
   return { name: undefined, rest: [] };
 }
 
+const always = () => true;
+
+// Options that make an otherwise read-only program run another program, delete or write elsewhere.
+const FIND_ACTIONS = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fprint', '-fprint0', '-fprintf', '-fls']);
+const SED_PRINT = /^(?:\d+|\$)(?:,(?:\d+|\$))?p$/;
+const GIT_READS = new Set([
+  'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'blame', 'grep', 'describe', 'shortlog', 'cat-file',
+  'ls-tree', 'merge-base', 'show-ref', 'add',
+]);
+const GIT_LISTING_FLAGS = new Set(['-a', '-r', '-v', '-vv', '-l', '--all', '--list', '--show-current', '--verbose']);
+// The project's own test, lint, type-check and build scripts, by the names projects give them.
+const PROJECT_SCRIPT = /^(?:test|t|lint|typecheck|type-check|check|build|format|fmt|tsc)(?::[\w.-]+)?$/;
+
+function safeGit(args: readonly string[]): boolean {
+  // Before the subcommand only -C and --no-pager: -c and --config-env can name a program for git to run.
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '-C') i++;
+    else if (arg !== '--no-pager') return !arg.startsWith('-') && safeGitSubcommand(arg, args.slice(i + 1));
+  }
+  return false;
+}
+
+function safeGitSubcommand(name: string, rest: readonly string[]): boolean {
+  if (GIT_READS.has(name)) return true;
+  if (name === 'commit') return !rest.includes('--amend');
+  if (name === 'branch' || name === 'tag') return rest.every((arg) => GIT_LISTING_FLAGS.has(arg));
+  if (name === 'stash') return rest[0] === 'list' || rest[0] === 'show';
+  if (name === 'remote') return rest.every((arg) => arg === '-v');
+  return false;
+}
+
+const safeScript = ([verb, script]: readonly string[]): boolean =>
+  verb !== undefined && (PROJECT_SCRIPT.test(verb) || ((verb === 'run' || verb === 'run-script') && script !== undefined && PROJECT_SCRIPT.test(script)));
+
+const safeVerbs =
+  (...verbs: string[]) =>
+  ([verb]: readonly string[]): boolean =>
+    verb !== undefined && verbs.includes(verb);
+
+/** Programs Auto runs without asking: read-only inspection and the project's own checks, each with its safe forms. */
+const SAFE_PROGRAMS: ReadonlyMap<string, (args: readonly string[]) => boolean> = new Map<string, (args: readonly string[]) => boolean>([
+  ...[
+    'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'tree', 'pwd', 'echo', 'printf', 'true', 'false',
+    'test', '[', 'stat', 'file', 'du', 'which', 'basename', 'dirname', 'realpath', 'readlink', 'diff', 'cmp', 'sort',
+    'uniq', 'cut', 'tr', 'jq', 'nl', 'column', 'date', 'sleep', 'cd', 'pushd', 'popd', 'mkdir', 'touch', 'tee',
+    'mktemp', 'comm', 'paste', 'seq', 'od', 'xxd', 'shasum', 'sha256sum', 'md5', 'md5sum',
+    'tsc', 'vue-tsc', 'svelte-check', 'vitest', 'jest', 'mocha', 'eslint', 'prettier', 'biome', 'stylelint', 'oxlint',
+    'pytest', 'mypy', 'ruff', 'for', 'fi', 'done',
+  ].map((program) => [program, always] as const),
+  ['find', (args) => !args.some((arg) => FIND_ACTIONS.has(arg))],
+  ['rg', (args) => !args.some((arg) => arg === '--pre' || arg.startsWith('--pre='))],
+  ['sed', (args) => args.length >= 2 && args[0] === '-n' && SED_PRINT.test(args[1]!) && !args.slice(2).some((arg) => arg.startsWith('-'))],
+  ['git', safeGit],
+  ['npm', safeScript],
+  ['pnpm', safeScript],
+  ['yarn', safeScript],
+  ['bun', safeScript],
+  ['next', safeVerbs('lint', 'build')],
+  ['playwright', safeVerbs('test')],
+  ['cargo', safeVerbs('test', 'check', 'build', 'clippy', 'fmt')],
+  ['go', safeVerbs('test', 'vet', 'build', 'fmt')],
+]);
+
+// Wrappers that leave the command as it is; sudo, env, xargs and exec change who runs it or what it receives.
+const SAFE_PREFIXES = new Set(['npx', 'bunx', 'time', 'command', 'nohup', 'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{']);
+// Variables that choose which code a program loads or runs.
+const CODE_VARIABLES = /^(?:PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|SHELLOPTS|PS4|PROMPT_COMMAND|IFS|GIT_\w+|npm_config_\w+|PAGER|EDITOR|VISUAL|PYTHON\w*|RUBYOPT|PERL5\w*)=/i;
+// Where a project or a home keeps credentials, as a whole path segment, globs included.
+const SECRET_PATH =
+  /(?:^|[/=@])(?:\.env[^/]*|\.npmrc|\.yarnrc(?:\.yml)?|\.netrc|\.pgpass|\.git-credentials|\.ssh|\.aws|\.gnupg|\.kube|\.docker|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|credentials?(?:\.[^/]*)?|secrets?(?:\.[^/]*)?)(?:\/|$)/i;
+// A glob over hidden names can reach any of them, such as `.e*`.
+const HIDDEN_GLOB = /(?:^|\/)\.[^/]*[*?[]/;
+// A search for credentials by name, which a recursive grep answers from any file it reaches, such as .env.
+const SECRET_TERM = /api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key/i;
+// A write under .git, such as a hook, runs later outside any command the user sees.
+const GIT_DIR = /(?:^|\/)\.git(?:\/|$)/;
+const UNSAFE_WORD = [SECRET_PATH, HIDDEN_GLOB, SECRET_TERM, GIT_DIR];
+const TRUSTED_BIN_DIRS = ['/usr/bin', '/bin', '/usr/local/bin', '/opt/homebrew/bin'];
+
+// A program named by path must be a project tool or a system one: `./ls` can be anything the agent wrote.
+function trustedExecutable(word: string): boolean {
+  if (!word.includes('/')) return true;
+  if (/^(?:\.\/)?node_modules\/\.bin\/[^/]+$/.test(word)) return true;
+  return TRUSTED_BIN_DIRS.includes(path.dirname(word));
+}
+
+function isClearlySafe({ program, executable, prefix, args, words }: SimpleCommand): boolean {
+  if (words.some((word) => UNSAFE_WORD.some((pattern) => pattern.test(word)))) return false;
+  if (prefix.some((word) => (isAssignment(word) ? CODE_VARIABLES.test(word) : !SAFE_PREFIXES.has(path.basename(word))))) return false;
+  // An assignment alone runs nothing; the commands of its substitutions are judged on their own.
+  if (executable === '') return prefix.length > 0 && prefix.every(isAssignment);
+  if ([executable, ...args].some((word) => /[$`]/.test(word))) return false;
+  const safe = SAFE_PROGRAMS.get(program);
+  return safe !== undefined && trustedExecutable(executable) && safe(args);
+}
+
 export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   'rm-rf-outside-workspace': {
     reason: 'rm -rf of the workspace, its .git or a path outside it',
-    verdicts: ASK_OR_DENY,
+    verdicts: ALWAYS_ASK,
     matches: (command, scope) => removes(command, scope, 'protected'),
   },
   // A throwaway eval clone can lose anything, but the user's own project has folders, such as node_modules, that no
   // checkpoint restores.
   'rm-rf-in-workspace': {
     reason: 'rm -rf of a path inside the workspace',
-    verdicts: { interactive: 'ask', 'non-interactive': 'allow' },
+    verdicts: { ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command, scope) => removes(command, scope, 'workspace'),
   },
   'git-push': {
     reason: 'git push',
-    verdicts: ASK_OR_DENY,
+    verdicts: ALWAYS_ASK,
     matches: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
   },
   'git-reset-hard': {
     reason: 'git reset --hard',
-    verdicts: ASK_OR_DENY,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ program, args }) => {
       const { name, rest } = gitSubcommand(args);
       return program === 'git' && name === 'reset' && rest.includes('--hard');
@@ -211,7 +332,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'path-outside-workspace': {
     reason: 'a path outside the workspace',
-    verdicts: ASK_OR_DENY,
+    verdicts: ALWAYS_ASK,
     matches: ({ words }, scope) =>
       words.some((word) => {
         const target = pathOf(word, scope);
@@ -220,7 +341,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'network-download': {
     reason: 'curl or wget',
-    verdicts: ASK_OR_DENY,
+    verdicts: ALWAYS_ASK,
     matches: ({ program, args }) => {
       const options = DOWNLOADERS.get(program);
       return options !== undefined && !onlyLocalUrls(options, args);
@@ -228,13 +349,19 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'cloud-cli': {
     reason: 'a cloud CLI',
-    verdicts: ASK_OR_DENY,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ program }) => CLOUD_CLIS.has(program),
   },
   'database-cli': {
     reason: 'a database CLI',
-    verdicts: ASK_OR_DENY,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ program }) => DATABASE_CLIS.has(program),
+  },
+  // Only Auto acts on this: the other modes run what no other rule flags, as they always have.
+  unlisted: {
+    reason: 'a command not on the safe list',
+    verdicts: { ask: 'allow', auto: 'classify', 'non-interactive': 'allow' },
+    matches: (command) => !isClearlySafe(command),
   },
 };
 
@@ -425,7 +552,8 @@ export function simpleCommand(words: readonly string[], cwd: string | undefined)
     if (i < words.length && WRAPPERS.has(path.basename(words[i]!))) i++;
     else break;
   }
-  return { program: path.basename(words[i] ?? ''), args: words.slice(i + 1), words, cwd };
+  const executable = words[i] ?? '';
+  return { program: path.basename(executable), executable, prefix: words.slice(0, i), args: words.slice(i + 1), words, cwd };
 }
 
 /** The values each variable may hold anywhere in the command line; a variable missing here could hold anything. */
@@ -475,13 +603,17 @@ function variants(words: readonly string[], vars: Bindings): readonly (readonly 
   return expanded.reduce<string[][]>((combos, values) => combos.flatMap((combo) => values.map((v) => [...combo, v])), [[]]);
 }
 
-/** The first command in the line a rule denies in this mode, or else the first one a rule asks about. */
+/**
+ * The first command in the line a rule denies in this mode. Else a question about every flagged command when any rule
+ * asks, since the classifier must never let a line through that a rule keeps for the user. Else the flagged commands
+ * for the classifier.
+ */
 export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const commands = splitCommand(command);
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
   const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
-  const asks: Denial[] = [];
+  const flagged: Denial[] = [];
   for (const words of commands) {
     for (const variant of variants(words, vars)) {
       const simple = simpleCommand(variant, cwd);
@@ -491,13 +623,14 @@ export function denialFor(command: string, scope: CommandScope, mode: ApprovalMo
         if (verdict === 'allow' || !matches(simple, scope)) continue;
         const denial = { rule, reason, command: words.join(' '), verdict };
         if (verdict === 'deny') return denial;
-        asks.push(denial);
+        flagged.push(denial);
       }
     }
   }
-  const [first] = asks;
+  const [first] = flagged;
   if (first === undefined) return undefined;
+  const lead = flagged.find((d) => d.verdict === 'ask') ?? first;
   // One yes runs the whole line, so a question about several flagged commands must show all of them.
-  if (new Set(asks.map((a) => a.command)).size === 1) return first;
-  return { ...first, command: command.trim(), reason: [...new Set(asks.map((a) => a.reason))].join('; ') };
+  if (new Set(flagged.map((d) => d.command)).size === 1) return lead;
+  return { ...lead, command: command.trim(), reason: [...new Set(flagged.map((d) => d.reason))].join('; ') };
 }

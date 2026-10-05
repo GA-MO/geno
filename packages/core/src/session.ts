@@ -6,8 +6,10 @@ import type {
   ToolResultBlockParam,
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/messages/messages';
+import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
 import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
+import type { ApprovalRecord } from './classifier.js';
 import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
 import { spillNotice, type Spill } from './tools.js';
@@ -96,6 +98,8 @@ export type ToolResultEvent = {
   readonly status: ToolStatus;
   /** The file edit this tool made, for review. */
   readonly change?: FileChange | undefined;
+  /** How a flagged command was let through or refused. */
+  readonly approval?: ApprovalRecord | undefined;
 } & ToolOutput;
 
 /** The workspace as it was before model turn `turnSeq`, committed to the workspace's shadow repo. */
@@ -140,6 +144,8 @@ export type TurnEvent =
     }
   | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }
   | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)
+  /** The user switched the session's approval mode; it holds until the next switch, across resumes. */
+  | { readonly kind: 'mode'; readonly seq: number; readonly at: string; readonly mode: SessionMode }
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
@@ -155,12 +161,16 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   restored: false,
   review: false,
   retry: false,
+  mode: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
   `[The user rewound the workspace to how it was before turn ${event.turnSeq}. ${
     event.files.length === 0 ? 'No files changed.' : `These files were restored: ${event.files.join(', ')}.`
   } Read a file again before editing it.]`;
+
+export const sessionModeOf = (events: readonly TurnEvent[]): SessionMode =>
+  events.findLast((e) => e.kind === 'mode')?.mode ?? DEFAULT_SESSION_MODE;
 
 export const nextSeq = (events: readonly TurnEvent[]): number => {
   const last = events.at(-1);

@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { loopStep, nextSeq, type DoneReason, type Run, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { loopStep, nextSeq, type ApprovalRecord, type DoneReason, type Run, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -36,6 +36,8 @@ export type Watcher = {
 /** Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. */
 export type Surface = { readonly files: Files; readonly watcher: Watcher };
 
+const CLASSIFIED: Readonly<Record<ApprovalRecord['verdict'], string>> = { allow: 'allowed', deny: 'denied' };
+
 export function terminalSurface(io: Io): Surface {
   let midLine = false;
   return {
@@ -47,9 +49,11 @@ export function terminalSurface(io: Io): Surface {
       },
       toolStart: (_use, title) => io.out(`> ${title}`),
       toolEnd: () => {},
-      logged() {
+      logged(event) {
         if (midLine) io.write('\n');
         midLine = false;
+        const approval = event.kind === 'tool-result' ? event.approval : undefined;
+        if (approval?.decidedBy === 'classifier') io.out(`  auto: the classifier ${CLASSIFIED[approval.verdict]} it: ${approval.classifier?.reason}`);
       },
     },
   };
@@ -161,6 +165,7 @@ export async function drive(
     rg: io.env['GCODE_RG'] || 'rg',
     signal,
     files: surface.files,
+    events: () => events,
   };
 
   // One at a time: two edits to one file in a turn must see each other's result.
@@ -171,10 +176,10 @@ export async function drive(
       for (const [i, use] of toolUses.entries()) {
         const seq = firstSeq + i;
         watcher.toolStart(use, describeCall(use, mode.executors));
-        const { status, text, change } = await runTool(use, ctx, mode.executors);
+        const { status, text, change, approval } = await runTool(use, ctx, mode.executors);
         watcher.toolEnd(use, status);
         const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
-        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, ...output });
+        results.push({ kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, ...output });
       }
       return results;
     })();

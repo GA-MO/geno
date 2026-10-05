@@ -9,6 +9,7 @@ import {
   isProviderName,
   nextSeq,
   toolUsesOf,
+  type ApprovalRecord,
   type Effort,
   type ModelRetry,
   type ProviderName,
@@ -184,6 +185,11 @@ export const chat: Command = async (args, { io, store }) => {
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 
+const formatApproval = ({ mode, rule, decidedBy, verdict, classifier }: ApprovalRecord): string =>
+  `  approval (${mode}): ${rule} -> ${verdict} by ${decidedBy}${
+    classifier === undefined ? '' : `; classifier ${classifier.verdict} in ${classifier.latencyMs}ms ${formatCost(classifier.costUsd)}: ${classifier.reason}`
+  }`;
+
 export type Totals = {
   readonly turns: number;
   readonly usage: TokenUsage;
@@ -242,9 +248,11 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
         : event.output.replace(/\s+/g, ' ').trim().slice(0, 120)
     }`,
     ...(event.change === undefined ? [] : [`  changed ${event.change.path}: ${event.change.hunks.length} hunks (${event.change.id})`]),
+    ...(event.approval === undefined ? [] : [formatApproval(event.approval)]),
   ],
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
+  mode: ({ seq, mode }) => [`#${seq} mode: ${mode}`],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

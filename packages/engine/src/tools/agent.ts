@@ -2,16 +2,23 @@ import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
   baseOf,
+  classifierInputOf,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   denialFor,
   formatDiagnostics,
   MAX_BASH_TIMEOUT_SECONDS,
   type AgentToolName,
+  type ApprovalMode,
+  type ApprovalRecord,
   type BaseRead,
+  type ClassifierInput,
+  type ClassifierRun,
   type CommandScope,
   type Denial,
   type EditorDiagnostic,
+  type SessionMode,
 } from '@g-code/core';
+import type { Classify } from '../classifier.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
 import type { Sandbox } from '../sandbox.js';
@@ -29,18 +36,38 @@ import {
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 
-/** Asked before a command on the deny list runs; true lets it run. */
-export type Approver = (denial: Denial) => Promise<boolean>;
+/** Asked before a flagged command runs, with the classifier's answer when it sent the question on; true lets it run. */
+export type Approver = (denial: Denial, classifier: ClassifierRun | undefined) => Promise<boolean>;
 
-/** Only an interactive run has someone to ask. */
+/** Only an interactive run has someone to ask, and a classifier to ask first in Auto. */
 export type Approval =
-  | { readonly mode: 'interactive'; readonly approve: Approver }
-  | { readonly mode: 'non-interactive' };
+  | { readonly kind: 'non-interactive' }
+  | {
+      readonly kind: 'interactive';
+      /** Read before each command, so a switch during a turn applies from the next command on. */
+      mode(): SessionMode;
+      readonly approve: Approver;
+      readonly classify: Classify;
+    };
 
-export const NON_INTERACTIVE: Approval = { mode: 'non-interactive' };
+export const NON_INTERACTIVE: Approval = { kind: 'non-interactive' };
 
-const approved = async (approval: Approval, denial: Denial): Promise<boolean> =>
-  denial.verdict === 'ask' && approval.mode === 'interactive' && approval.approve(denial);
+const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
+
+/** Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question. */
+async function settle(approval: Approval, mode: ApprovalMode, denial: Denial, input: () => ClassifierInput, signal: AbortSignal): Promise<ApprovalRecord> {
+  const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
+  if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return { ...record, decidedBy: 'rule', verdict: 'deny' };
+  const classifier = denial.verdict === 'classify' ? await approval.classify(input(), signal) : undefined;
+  if (classifier !== undefined && classifier.verdict !== 'ask') return { ...record, classifier, decidedBy: 'classifier', verdict: classifier.verdict };
+  const allowed = await approval.approve(denial, classifier);
+  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
+}
+
+const denialText = ({ command, reason, classifier, decidedBy }: ApprovalRecord): string =>
+  `denied: \`${command}\` ${
+    decidedBy === 'classifier' ? `was refused by the safety classifier: ${classifier?.reason}` : `uses ${reason}, which needs the user's approval`
+  }. Do not retry it; find another way.`;
 
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
@@ -126,10 +153,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     describe: ({ command }) => `bash ${command}`,
     async run({ command, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS }, ctx) {
-      const denial = denialFor(command, tools.scope, tools.approval.mode);
-      if (denial !== undefined && !(await approved(tools.approval, denial))) {
-        throw new ToolDenied(`denied: \`${denial.command}\` uses ${denial.reason}, which needs the user's approval. Do not retry it; find another way.`);
-      }
+      const mode = modeOf(tools.approval);
+      const denial = denialFor(command, tools.scope, mode);
+      const approval =
+        denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal);
+      if (approval?.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
       const result = await tools.sandbox.run(command, {
         cwd: ctx.workspace,
         env: tools.env,
@@ -140,7 +168,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         ? `[killed after ${timeout_seconds} seconds]`
         : `[exit code ${result.code ?? 'killed'}]`;
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
-      return `${truncated}${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}${status}`;
+      const text = `${truncated}${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}${status}`;
+      return approval === undefined ? text : { text, approval };
     },
   });
 
