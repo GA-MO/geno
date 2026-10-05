@@ -1,15 +1,18 @@
 import { realpath } from 'node:fs/promises';
+import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import {
   BASE_HASH_META,
+  changeOf,
   hashText,
   STALE_BASE_ERROR,
   type DiagnosticsResponse,
+  type FileChange,
   type Severity,
 } from '@g-code/core';
 
-const realOrSelf = (file: string): Promise<string> => realpath(file).catch(() => file);
+export const realOrSelf = (file: string): Promise<string> => realpath(file).catch(() => file);
 
 /** The open document for an absolute path from the engine, which resolves symlinks (on macOS, /var is /private/var). */
 async function openDocument(file: string): Promise<vscode.TextDocument | undefined> {
@@ -50,22 +53,48 @@ const stale = (path: string) =>
   new acp.RequestError(STALE_BASE_ERROR.code, `${path} changed since the engine read it`, { reason: STALE_BASE_ERROR.reason });
 
 /**
- * Writes into the open buffer through a WorkspaceEdit, so the editor can undo it and the disk keeps its copy
- * until the user saves; a file with no open buffer is written to disk. A write whose base no longer matches fails.
+ * The editor's URI for an absolute path from the engine. Inside a workspace folder it is built on the folder's
+ * URI, so a file the engine names by its real path opens as the same document the user has open.
  */
-export async function writeTextFile({ path, content, _meta }: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
-  const document = await openDocument(path);
-  const current = document === undefined ? await diskText(path) : document.getText();
+export async function editorUri(file: string): Promise<vscode.Uri> {
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const relative = path.relative(await realOrSelf(folder.uri.fsPath), file);
+    if (!relative.startsWith('..') && !path.isAbsolute(relative)) return vscode.Uri.joinPath(folder.uri, ...relative.split(path.sep));
+  }
+  return vscode.Uri.file(file);
+}
+
+/**
+ * Writes an edit hunk by hunk through a WorkspaceEdit, so the editor can undo it and hunks under review keep
+ * their places. An open buffer with unsaved changes stays unsaved; any other file is saved, so the disk, which
+ * checkpoints snapshot, holds the agent's edits. A write whose base no longer matches fails.
+ */
+export async function writeTextFile(
+  { path: file, content, _meta }: acp.WriteTextFileRequest,
+  onWrite: (document: vscode.TextDocument, change: FileChange) => void,
+): Promise<acp.WriteTextFileResponse> {
+  const open = await openDocument(file);
+  const current = open === undefined ? await diskText(file) : open.getText();
   const base = _meta?.[BASE_HASH_META];
-  if (base !== undefined && hashText(current) !== base) throw stale(path);
-  if (document === undefined) {
-    await vscode.workspace.fs.writeFile(vscode.Uri.file(path), new TextEncoder().encode(content));
+  if (base !== undefined && hashText(current) !== base) throw stale(file);
+  const uri = open?.uri ?? (await editorUri(file));
+  const change = changeOf(file, current ?? '', content);
+  if (current === null) {
+    await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
+    onWrite(await vscode.workspace.openTextDocument(uri), change);
     return {};
   }
+  const document = open ?? (await vscode.workspace.openTextDocument(uri));
+  const save = !document.isDirty;
   const edit = new vscode.WorkspaceEdit();
-  edit.replace(document.uri, document.validateRange(new vscode.Range(0, 0, document.lineCount, 0)), content);
+  for (const hunk of change.hunks) {
+    const start = hunk.startLine - 1;
+    edit.replace(uri, document.validateRange(new vscode.Range(start, 0, start + hunk.lineCount, 0)), hunk.newText);
+  }
   // A refused edit most likely met a document the user changed in the meantime, so it is reported as stale.
-  if (!(await vscode.workspace.applyEdit(edit))) throw stale(path);
+  if (!(await vscode.workspace.applyEdit(edit))) throw stale(file);
+  onWrite(document, change);
+  if (save) await document.save();
   return {};
 }
 

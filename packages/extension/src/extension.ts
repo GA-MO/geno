@@ -1,7 +1,9 @@
 import path from 'node:path';
 import * as vscode from 'vscode';
-import { Chat, CHAT_VIEW, SEND_COMMAND, STOP_COMMAND } from './chat/chat.js';
+import { Chat, CHAT_VIEW, SEND_COMMAND, sessionMemory, STOP_COMMAND } from './chat/chat.js';
 import type { EngineSettings } from './chat/engine.js';
+import { registerReview } from './review/commands.js';
+import { ReviewController } from './review/controller.js';
 import type { CompletionId } from '@g-code/core/tab';
 import { EditHistoryTracker } from './tab/history.js';
 import { openTabLog, tabEventsFile } from './tab/log.js';
@@ -19,7 +21,11 @@ function engineSettings(extensionPath: string): EngineSettings {
 
 function registerChat(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('g-code engine');
-  const chat = new Chat(() => engineSettings(context.extensionPath), context.extensionUri, output);
+  const review = new ReviewController(() => chat.link(), output);
+  const chat = new Chat(() => engineSettings(context.extensionPath), context.extensionUri, output, sessionMemory(context.storageUri), (document, change) =>
+    review.track(document, change),
+  );
+  registerReview(context, chat, review, output);
   context.subscriptions.push(
     output,
     chat,
