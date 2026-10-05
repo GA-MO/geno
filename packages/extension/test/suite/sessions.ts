@@ -124,6 +124,10 @@ export async function run(): Promise<void> {
   check(!(await visible('.history')) && (await visible('textarea')), 'opening a session closes the history');
   check((await header()) === `${project()} / ${OLDER.prompt}`, 'the header names the loaded session', await header());
   check((await count('.turn')) === 1, 'the panel shows only the loaded session\'s turns', await count('.turn'));
+  check((await textOf('.turn .turn-fold')) === 'Read 1 file', 'a loaded session renders compact, its work behind the summary line', await textOf('.turn .turn-fold'));
+  check((await textOf('.turn .markdown'))?.includes(OLDER.answer) === true, 'the loaded turn shows its answer while folded');
+  await click('.turn .turn-fold');
+  await waitFor('the loaded turn to open', async () => (await count('.turn .step-calls')) === 1);
   check((await textOf('.turn .markdown'))?.includes(OLDER.text) === true, 'the replayed text is drawn');
   check((await count('.calls[data-step="read"] .file-chip')) === 1, 'the replayed read is a step with its file');
   check((await textOf('.turn-footer'))?.includes('$0.0008') === true, 'the replayed turn keeps its cost', await textOf('.turn-footer'));

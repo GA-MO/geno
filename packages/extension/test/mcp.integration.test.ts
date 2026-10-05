@@ -97,7 +97,8 @@ describe('MCP servers in the chat panel', () => {
       'mcp',
       { '.vscode/mcp.json': JSON.stringify({ servers: { [WORKSPACE_SERVER]: workspaceServer } }), 'a.ts': 'export const a = 1;\n' },
       // VS Code's own MCP support stays off, so only Geno could start these servers.
-      { 'gcode.approvalMode': 'auto', 'chat.mcp.enabled': false, 'chat.mcp.access': 'none', 'chat.mcp.autostart': 'never' },
+      // Full detail draws the steps of finished turns, which these assertions name, as the panel did before U17.
+      { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'chat.mcp.access': 'none', 'chat.mcp.autostart': 'never' },
     );
     // The user's VS Code mcp.json, beside settings.json in the user data folder the window runs with.
     await mkdir(path.join(work, 'ud', 'User'), { recursive: true });

@@ -134,7 +134,8 @@ afterAll(() => {
 
 describe('the chat panel style', () => {
   it('is glass with a rainbow on the composer, native on request and in high contrast', async () => {
-    const { home, suite, launchArgs } = await setUp('style', FILES, {});
+    // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
+    const { home, suite, launchArgs } = await setUp('style', FILES, { 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
