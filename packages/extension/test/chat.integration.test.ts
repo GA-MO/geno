@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
-import { buildEngine, cachePath, root, setUp } from './launch.js';
+import { cachePath, root, setUp } from './launch.js';
 import { ORIGINAL } from './suite/chat-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -64,8 +64,7 @@ const toolResult = (index: number): { content: string; is_error?: boolean } =>
 
 describe('chat in VS Code', () => {
   it('edits the unsaved buffer, not the disk, and refuses an edit whose buffer changed after the read', async () => {
-    const engineCli = await buildEngine();
-    const { home, suite, launchArgs } = await setUp('chat', { 'math.ts': ORIGINAL }, { 'gcode.engine.path': engineCli });
+    const { home, suite, launchArgs } = await setUp('chat', { 'math.ts': ORIGINAL }, {});
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
 
     const code = await runTests({

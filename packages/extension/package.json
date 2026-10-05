@@ -1,13 +1,17 @@
 {
   "name": "g-code",
   "displayName": "g-code",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "publisher": "g-code",
   "engines": {
     "vscode": "^1.95.0"
   },
   "main": "./dist/extension.js",
+  "files": [
+    "dist",
+    "media"
+  ],
   "enabledApiProposals": [
     "inlineCompletionsAdditions"
   ],
@@ -27,6 +31,14 @@
       {
         "command": "gcode.chat.stop",
         "title": "g-code: Stop the Chat Turn"
+      },
+      {
+        "command": "gcode.setApiKey",
+        "title": "g-code: Set API Key"
+      },
+      {
+        "command": "gcode.tab.toggle",
+        "title": "g-code: Toggle Tab"
       },
       {
         "command": "gcode.review.keep",
@@ -78,6 +90,25 @@
     "configuration": {
       "title": "g-code",
       "properties": {
+        "gcode.provider": {
+          "type": "string",
+          "enum": [
+            "modelstudio",
+            "openrouter"
+          ],
+          "default": "modelstudio",
+          "description": "The model provider for chat, review and Cmd-K. Run `g-code: Set API Key` to store its key."
+        },
+        "gcode.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Model Studio's Anthropic-compatible endpoint, which embeds your workspace id and region. OpenRouter ignores it."
+        },
+        "gcode.model": {
+          "type": "string",
+          "default": "",
+          "description": "The model for chat, review and Cmd-K. Empty uses the provider's default (qwen3.8-flash on Model Studio)."
+        },
         "gcode.tab.enabled": {
           "type": "boolean",
           "default": true,
@@ -87,6 +118,11 @@
           "type": "string",
           "default": "http://127.0.0.1:8012",
           "description": "Base URL of the llama-server that serves Tab completions."
+        },
+        "gcode.tab.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "The GGUF file the Tab model server loads. Empty uses ~/.g-code/models/qwen2.5-coder-1.5b-q8_0.gguf. When Tab is on and nothing answers at gcode.tab.endpoint, g-code starts llama-server with it, and stops it when VS Code closes."
         },
         "gcode.tab.debounceMs": {
           "type": "number",
@@ -103,11 +139,6 @@
           "type": "string",
           "default": "http://127.0.0.1:8013",
           "description": "Base URL of the llama-server that serves next-edit predictions (scripts/next-edit-server.sh)."
-        },
-        "gcode.engine.path": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the engine CLI (dist/cli.js) that the chat panel runs as `node <path> serve --stdio`. Empty uses the engine built next to this extension in the g-code repository."
         }
       }
     },
@@ -194,7 +225,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js && esbuild src/chat/webview.ts --bundle --platform=browser --format=iife --target=es2022 --outfile=dist/webview.js"
+    "build": "tsx build.mts",
+    "package": "tsx build.mts package"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.7.0",
@@ -204,6 +236,7 @@
   "devDependencies": {
     "@types/vscode": "~1.95.0",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2"
   }
 }

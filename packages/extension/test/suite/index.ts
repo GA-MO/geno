@@ -36,9 +36,14 @@ async function assertTabSkipsNonFileEditors(fileDocument: vscode.TextDocument): 
   }
 }
 
-export async function run(): Promise<void> {
+export function run(): Promise<void> {
+  return completeIn('math.ts');
+}
+
+/** Opens `file`, whose second line ends where the completion goes, and accepts the ghost text shown there. */
+export async function completeIn(file: string): Promise<void> {
   const folder = vscode.workspace.workspaceFolders![0]!.uri;
-  const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(folder, 'math.ts'));
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(folder, file));
   await assertTabSkipsNonFileEditors(document);
   const editor = await vscode.window.showTextDocument(document);
   const line = document.lineAt(1);

@@ -6,10 +6,11 @@ import { DIAGNOSTICS_CAPABILITY } from '@g-code/core';
 
 const RESTART_DELAY_MS = 1000;
 
-/** A running `gcode serve --stdio` and the ACP connection to it. */
-export type Connection = { readonly agent: acp.ClientContext; readonly child: ChildProcess };
+/** A running `gcode serve --stdio`, the ACP connection to it, and the folder it serves. */
+export type Connection = { readonly agent: acp.ClientContext; readonly child: ChildProcess; readonly cwd: string };
 
-export type EngineSettings = { readonly cliPath: string; readonly cwd: string };
+/** `env` is added to VS Code's own environment for the engine, and may hold the API key, so it is never logged. */
+export type EngineSettings = { readonly cliPath: string; readonly cwd: string; readonly env: Readonly<Record<string, string>> };
 
 /**
  * Keeps one engine child process: started on first use, restarted after it exits, its stderr shown in the
@@ -21,7 +22,7 @@ export class Engine implements vscode.Disposable {
   private generation = 0;
 
   constructor(
-    private readonly settings: () => EngineSettings,
+    private readonly settings: () => Promise<EngineSettings>,
     private readonly client: () => acp.ClientApp,
     private readonly output: vscode.OutputChannel,
   ) {}
@@ -35,9 +36,14 @@ export class Engine implements vscode.Disposable {
   }
 
   private async start(): Promise<Connection> {
-    const { cliPath, cwd } = this.settings();
-    this.output.appendLine(`engine: node ${cliPath} serve --stdio in ${cwd}`);
-    const child = spawn('node', [cliPath, 'serve', '--stdio'], { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const { cliPath, cwd, env } = await this.settings();
+    this.output.appendLine(`engine: ${cliPath} serve --stdio in ${cwd}`);
+    // VS Code's own runtime runs the engine, so it needs no node on PATH.
+    const child = spawn(process.execPath, [cliPath, 'serve', '--stdio'], {
+      cwd,
+      env: { ...process.env, ...env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
     const generation = ++this.generation;
     child.stderr.setEncoding('utf8').on('data', (chunk: string) => this.output.append(chunk));
     child.on('error', (error) => this.output.appendLine(`engine: ${error.message}`));
@@ -58,12 +64,17 @@ export class Engine implements vscode.Disposable {
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, _meta: { [DIAGNOSTICS_CAPABILITY]: true } },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });
-    return { agent, child };
+    return { agent, child, cwd };
   }
 
   private async restart(): Promise<void> {
     if (this.disposed || this.current !== undefined) return;
     await this.connection().catch((error: unknown) => this.output.appendLine(`engine: restart failed: ${String(error)}`));
+  }
+
+  /** Stops the running engine, so the next one starts with the current settings and key. */
+  reset(): void {
+    void this.current?.then(({ child }) => child.kill(), () => {});
   }
 
   dispose(): void {
