@@ -103,7 +103,7 @@ export const availableCommands = (commands: readonly SlashCommand[]): acp.Availa
   }));
 
 /**
- * Calls `onChange` once per burst of changes to any source folder. A folder that does not exist yet is caught by
+ * Calls `onChange` after each burst of changes to any source folder. A folder that does not exist yet is caught by
  * watching its nearest existing parent inside the workspace or home, and the watch moves down once it appears.
  */
 export function watchCommands(workspace: string, home: string, onChange: () => void, debounceMs = 200): () => void {
@@ -176,7 +176,7 @@ export type SessionCommands = {
   expand(sessionId: string, text: string): Promise<Expansion | undefined>;
 };
 
-export function sessionCommands(home: string, io: Io, debounceMs?: number): SessionCommands {
+export function sessionCommands(home: string, io: Io): SessionCommands {
   const sessions = new Map<string, { readonly workspace: string; readonly stop: () => void }>();
   return {
     attach(client, sessionId, workspace) {
@@ -189,8 +189,12 @@ export function sessionCommands(home: string, io: Io, debounceMs?: number): Sess
         published = shown;
         await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'available_commands_update', availableCommands: listed } });
       };
-      const send = () => void publish().catch((error: unknown) => io.err(`could not publish the commands of ${sessionId}: ${String(error)}`));
-      const stop = watchCommands(workspace, home, send, debounceMs);
+      // One at a time, so a slow read of the folders cannot publish an older list after a newer one.
+      let publishing = Promise.resolve();
+      const send = () => {
+        publishing = publishing.then(publish).catch((error: unknown) => io.err(`could not publish the commands of ${sessionId}: ${String(error)}`));
+      };
+      const stop = watchCommands(workspace, home, send);
       sessions.set(sessionId, { workspace, stop });
       // After the response that names the session, so the editor knows which session the list is for.
       setImmediate(send);
