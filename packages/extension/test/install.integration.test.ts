@@ -68,11 +68,12 @@ describe('g-code installed from its .vsix', () => {
       { 'add.ts': 'export function add(a: number, b: number): number {\n  return \n}\n' },
       {
         'gcode.provider': 'modelstudio',
-        'gcode.baseUrl': url,
         'gcode.model': 'qwen3.8-flash',
         'gcode.tab.endpoint': url,
         'gcode.tab.debounceMs': 10,
       },
+      // Geno reads the endpoint, which decides where the key goes, from the user's settings only.
+      { 'gcode.baseUrl': url },
     );
     const installed = await installClean(work);
     const suite = await buildSuite(work, 'installed');

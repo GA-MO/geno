@@ -49,7 +49,7 @@ async function main(): Promise<number> {
   if (!key || !baseUrl) throw new Error('the .env needs DASHSCOPE_API_KEY and DASHSCOPE_BASE_URL');
   const repo = path.resolve(root, '../..');
   const files = Object.fromEntries(await Promise.all(FLOW_FILES.map(async (file) => [file, await readFile(path.join(repo, file), 'utf8')] as const)));
-  const { work, home, suite, launchArgs } = await setUp('diagram-live', files, { 'gcode.baseUrl': baseUrl, 'gcode.model': 'qwen3.8-flash' });
+  const { work, home, suite, launchArgs } = await setUp('diagram-live', files, { 'gcode.model': 'qwen3.8-flash' }, { 'gcode.baseUrl': baseUrl });
   const debugPort = await freePort();
   const shot = path.join(work, 'diagram-live.png');
   let report: unknown;

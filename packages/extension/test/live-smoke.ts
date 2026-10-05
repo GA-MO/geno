@@ -34,12 +34,12 @@ async function main(): Promise<number> {
   const { work, workspace, home } = await makeWorkspace(
     { 'math.ts': ORIGINAL, 'add.ts': 'export function add(a: number, b: number): number {\n  return \n}\n' },
     {
-      'gcode.baseUrl': baseUrl,
       'gcode.model': 'qwen3.8-flash',
       'gcode.tab.endpoint': tabEndpoint,
       'gcode.tab.modelPath': path.join(homedir(), '.g-code', 'models', DEFAULT_TAB_MODEL_FILE),
       'gcode.tab.debounceMs': 10,
     },
+    { 'gcode.baseUrl': baseUrl },
   );
   const installed = await installClean(work);
   const suite = await buildSuite(work, 'installed');
