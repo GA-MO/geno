@@ -1,6 +1,4 @@
-// Live smoke for attachments on Model Studio: the engine as the editor drives it over ACP, with a real model.
-// It sends a generated two-color image and expects the answer to name both colors, then asks the agent to read a
-// PNG in the workspace and describe it. Run from the repository root: pnpm tsx packages/engine/test/attachments-smoke.ts
+// Run from the repository root: pnpm tsx packages/engine/test/attachments-smoke.ts
 // GCODE_ENV_FILE names the .env holding DASHSCOPE_API_KEY and DASHSCOPE_BASE_URL; it defaults to the repo's.
 import { mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

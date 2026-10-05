@@ -4,11 +4,6 @@ import { admit, chooseEncoding, classify, needsRedraw, THUMB_SIDE, type Draft, t
 import { h, icon } from './dom.js';
 import type { FromView } from './messages.js';
 
-/**
- * The composer's attachments: images and files pasted, dropped, or picked, each a chip that reads, then is ready
- * or refused with its reason. Images are scaled down here, where a canvas is at hand, before anything is sent.
- */
-
 const dataUrlOf = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -51,8 +46,7 @@ async function prepare(name: string, blob: Blob, path: string | undefined): Prom
     const png = info.mediaType === 'image/jpeg' ? jpeg : await encode(canvas, 'image/png');
     const chosen = chooseEncoding(info.mediaType, png.size, jpeg.size) === 'image/jpeg' ? jpeg : png;
     const mediaType = chosen === jpeg ? 'image/jpeg' : 'image/png';
-    // A redrawn image is a new file, so it no longer opens as the one on disk.
-    return { kind: 'image', name, path: undefined, mediaType, data: await base64Of(chosen), bytes: chosen.size, ...size, thumb };
+    return { kind: 'image', name, path, mediaType, data: await base64Of(chosen), bytes: chosen.size, ...size, thumb };
   } finally {
     bitmap.close();
   }

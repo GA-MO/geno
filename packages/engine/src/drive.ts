@@ -191,7 +191,6 @@ export async function drive(
     return true;
   };
 
-  // The attachments a run has loaded, by hash: every model call of a run replays the same images.
   const loaded = new Map<Sha256, string>();
   const callModel = async (): Promise<void> => {
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));

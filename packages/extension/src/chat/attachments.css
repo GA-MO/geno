@@ -1,9 +1,3 @@
-/*
- * Attachments: chips in the composer, what the user sent above their bubble, a read's thumbnails on its step,
- * and images inline in an answer. Every frame reads the panel's own surface and edge tokens, so glass, native
- * and high contrast each style them their way, and an image is the only color they add.
- */
-
 .request {
   flex-direction: column;
   align-items: flex-end;

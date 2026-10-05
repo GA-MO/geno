@@ -4,11 +4,6 @@ import type { AttachmentView, OpenTarget } from './attachment-model.js';
 import { h, icon } from './dom.js';
 import type { ToolBlock, WebviewRoot } from './messages.js';
 
-/**
- * Images in the transcript. Only files inside a workspace folder load, through the webview's own address for that
- * folder; the page's CSP refuses every other source, and the markdown renderer never asks for one.
- */
-
 let roots: readonly WebviewRoot[] = [];
 
 export const setRoots = (next: readonly WebviewRoot[]): void => {
@@ -67,7 +62,6 @@ export function imageTarget(href: string): ImageTarget {
   return path === undefined || src === undefined ? { kind: 'outside', href } : { kind: 'local', path, src };
 }
 
-/** A thumbnail in a rounded glass frame that opens its file when clicked. */
 export function thumbnail(src: string, name: string, open: () => void, className = 'thumb'): HTMLElement {
   const frame = h('button', { type: 'button', class: className, title: `Open ${name}`, 'aria-label': `Open ${name}`, onclick: open });
   const img = h('img', { src, alt: name, draggable: 'false' });

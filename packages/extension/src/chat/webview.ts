@@ -78,7 +78,6 @@ const inputBox = h(
 );
 const form = h('form', { class: 'composer' }, menu, inputBox);
 document.body.append(log, form, status);
-// Pasted and dropped files become chips above the text; the form takes drops anywhere on the composer.
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
 inputBox.insertBefore(attachments.element, chips);
 
@@ -322,7 +321,6 @@ function accept(index: number): void {
   const item = completing?.items[index];
   if (completing === undefined || item === undefined) return;
   if (item.kind === 'attach') {
-    // The `@` that opened the list was only the way in; the picker replaces it.
     const text = input.value.slice(0, completing.start) + input.value.slice(input.selectionStart);
     const caret = completing.start;
     closeMenu();

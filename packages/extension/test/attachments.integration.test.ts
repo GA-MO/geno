@@ -22,7 +22,6 @@ const PNGS = {
 
 const MODEL = 'qwen3.8-flash';
 
-/** The fake transport's answers name another model; the footers should show the one configured. */
 const asModel = (reply: Reply): Reply => ({
   ...reply,
   events: reply.events.map((e) => (e.type === 'message_start' ? { ...e, message: { ...(e['message'] as object), model: MODEL } } : e)),
