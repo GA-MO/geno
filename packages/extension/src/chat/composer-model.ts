@@ -82,7 +82,7 @@ export const HIGH_CONTEXT = 0.8;
 
 /** U21 measured that Model Studio keeps one prompt cache per effort, so a change writes the history again. */
 const EFFORT_NOTES: Readonly<Record<string, string>> = {
-  modelstudio: 'Changing the effort mid-chat makes Model Studio rewrite its prompt cache once.',
+  modelstudio: 'A change mid-chat rewrites Model Studio’s cache once.',
 };
 
 /** The browser tools that open a URL, whose `url` argument says where the browser is. */

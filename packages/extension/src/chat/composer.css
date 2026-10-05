@@ -201,6 +201,28 @@
   color: var(--ok);
 }
 
+/* The model menu opens over the model button, on the right, one line per row. */
+.composer .model-menu {
+  left: auto;
+  right: var(--gap);
+  width: min(360px, calc(100% - 2 * var(--gap)));
+}
+
+.composer .model-menu .mode-option {
+  align-items: center;
+  padding: 4px 8px;
+}
+
+.composer .model-menu .mode-option-text {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.composer .model-menu .mode-option-name {
+  font-weight: 500;
+}
+
 .model-menu .menu-heading {
   padding: 6px 8px 2px;
   color: var(--muted);
@@ -215,7 +237,10 @@
 }
 
 .model-menu .menu-note {
+  overflow: hidden;
   padding: 4px 8px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
   font-size: var(--small);
 }

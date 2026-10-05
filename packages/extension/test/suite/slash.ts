@@ -144,8 +144,10 @@ export async function run(): Promise<void> {
   await type('/model');
   await press('Escape');
   await press('Enter');
-  await waitFor('/model to open the model setting', async () => vscode.window.tabGroups.activeTabGroup.activeTab?.label === 'Settings');
+  await waitFor('/model to open Models and Keys', async () => (await view()) === 'settings');
   check((await count('.turn')) === 2, '/model starts no turn');
+  await press('Escape');
+  await waitFor('the chat again', async () => (await view()) === 'chat');
 
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
   await vscode.commands.executeCommand('gcode.chat.focus');
