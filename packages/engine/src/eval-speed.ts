@@ -1,8 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { asTaskId, PRICES, SPEED_PARTS, speedReport, turnTimings, type EvalTask, type SpeedPart, type SpeedReport, type TaskTiming } from '@g-code/core';
+import { asTaskId, isPriced, SPEED_PARTS, speedReport, turnTimings, type EvalTask, type SpeedPart, type SpeedReport, type TaskTiming } from '@g-code/core';
 import type { Spread } from '@g-code/core/tab';
+import { chooseModel } from './chat.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { positiveNumber } from './drive.js';
 import { EngineError } from './errors.js';
@@ -96,7 +97,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     await report(io, await readResults(file), path.join(path.dirname(file), 'speed.json'));
     return 0;
   }
-  if (!Object.hasOwn(PRICES, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
+  if (!isPriced(chooseModel(io, { provider: undefined, model: values.model }).provider, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
   const tasks: EvalTask[] = [];
   for (const id of SPEED_TASKS) {
     const task = await readTask(store, asTaskId(id));

@@ -12,7 +12,8 @@ import {
   type ClassifierVerdict,
   type ProviderName,
 } from '@g-code/core';
-import { clientFor, messagesOf, usageOf } from './gateway.js';
+import { messagesOf, usageOf } from './gateway.js';
+import { wireFor, type Wire } from './wire.js';
 
 /** Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`. */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
@@ -41,9 +42,9 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, tim
 
   if (model === 'off') return always('the classifier is off');
   if (!isProviderName(provider)) return always(`unknown classifier provider ${provider}`);
-  let client: ReturnType<typeof clientFor>;
+  let wire: Wire;
   try {
-    client = clientFor(provider, env, fetch);
+    wire = wireFor(provider, env, fetch);
   } catch (error) {
     return always(`the classifier is not set up: ${messagesOf(error).join(': ')}`);
   }
@@ -53,13 +54,13 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, tim
     const elapsed = () => Math.round(performance.now() - started);
     const timeout = AbortSignal.timeout(timeoutMs);
     try {
-      const message = await client.messages.stream(classifierRequest(input, model), { signal: AbortSignal.any([signal, timeout]) }).finalMessage();
-      const costUsd = costOf(model, usageOf(message));
+      const message = await wire.stream(classifierRequest(input, model), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
+      const costUsd = costOf(provider, model, usageOf(message));
       if (message.stop_reason === 'refusal') return asks('the classifier refused to judge the command', elapsed(), costUsd);
       return { ...classifierVerdictOf(message.content), model, latencyMs: elapsed(), costUsd };
     } catch (error) {
       if (timeout.aborted) return asks(`the classifier timed out after ${timeoutMs / 1000}s`, elapsed());
-      return asks(`the classifier failed: ${messagesOf(error).join(': ')}`, elapsed());
+      return asks(`the classifier failed: ${wire.redact(messagesOf(error).join(': '))}`, elapsed());
     }
   };
 }

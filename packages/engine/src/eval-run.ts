@@ -2,8 +2,8 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { addUsage, asTaskId, PRICES, ZERO_USAGE, type EvalTask, type TokenUsage } from '@g-code/core';
-import { formatCost } from './chat.js';
+import { addUsage, asTaskId, isPriced, ZERO_USAGE, type EvalTask, type TokenUsage } from '@g-code/core';
+import { chooseModel, formatCost } from './chat.js';
 import { childEnv } from './child-env.js';
 import { UsageError, type Command, type Context, type Io } from './command.js';
 import { positiveNumber } from './drive.js';
@@ -229,7 +229,7 @@ export const evalRunCommand: Command = async (args, ctx) => {
   });
   if (values.agent === undefined || !isAgentName(values.agent)) throw new UsageError(`--agent must be one of ${AGENT_NAMES.join(', ')}`);
   if (values.all === (values.task !== undefined)) throw new UsageError('pass --task <id> or --all');
-  if (!Object.hasOwn(PRICES, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
+  if (!isPriced(chooseModel(io, { provider: undefined, model: values.model }).provider, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
   let tasks: EvalTask[];
   if (values.all) tasks = await readTasks(store);
   else {

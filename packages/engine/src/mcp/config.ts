@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
-import { MCP_SOURCE_LABELS, MCP_SOURCES, PROVIDER_ENV, type McpServerConfig, type McpSource, type McpTransport } from '@g-code/core';
+import { MCP_SOURCE_LABELS, MCP_SOURCES, SECRET_ENV_NAMES, type McpServerConfig, type McpSource, type McpTransport } from '@g-code/core';
 import type { Env } from '../child-env.js';
 import { isMissing, type Store } from '../store.js';
 
@@ -34,7 +34,7 @@ type FileSource = keyof typeof FILE_KEYS;
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** Variables that hold Geno's own credentials, which a workspace file must not be able to pass to a server it names. */
-const ENGINE_SECRETS = new Set<string>([...Object.values(PROVIDER_ENV).map(({ key }) => key), 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+const ENGINE_SECRETS = new Set<string>([...SECRET_ENV_NAMES, 'ANTHROPIC_AUTH_TOKEN']);
 const isEngineSecret = (name: string): boolean => ENGINE_SECRETS.has(name) || name.startsWith('GCODE_');
 
 type Expander = (text: string) => string;

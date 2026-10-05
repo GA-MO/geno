@@ -9,13 +9,14 @@ import {
   asTripleId,
   EDIT_FORMATS,
   isApplierName,
-  PRICES,
+  isPriced,
   replay,
   summarize,
   TRIPLE_SCOPES,
   type ApplierName,
   type ApplyFailure,
   type ApplyModel,
+  type ProviderName,
   type ReplayCounts,
   type ReplayResult,
   type Session,
@@ -27,7 +28,7 @@ import { gatewayFor, type Gateway } from './gateway.js';
 import { isMissing, readTriple, readTriples } from './store.js';
 
 // The gateway is built on the first model call, so the noop and oracle appliers need no API key.
-function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal): ApplyModel {
+function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal): ApplyModel & { readonly provider: ProviderName } {
   const { provider, model } = chooseModel(io, { provider: undefined, model: modelFlag });
   const session: Session = {
     id: asSessionId(`eval-apply-${Date.now()}`),
@@ -40,6 +41,7 @@ function applyModel(io: Io, modelFlag: string | undefined, signal: AbortSignal):
   let gateway: Gateway | undefined;
   return {
     name: model,
+    provider,
     call: (events, tools, system) => {
       gateway ??= gatewayFor(provider, io.env, io.fetch);
       return gateway.turn({ session, events, tools, system, signal, onText: () => {}, onRetry: () => {} });
@@ -140,7 +142,7 @@ export const applyCommand: Command = async (args, { io, store }) => {
   const triples = values.limit === undefined ? all : all.slice(0, positiveNumber('limit', values.limit, true));
   const model = applyModel(io, values.model, io.interrupts());
   const usesModel = (EDIT_FORMATS as readonly string[]).includes(name);
-  if (usesModel && !Object.hasOwn(PRICES, model.name)) {
+  if (usesModel && !isPriced(model.provider, model.name)) {
     throw new UsageError(`no price for ${model.name}, so --max-cost cannot be enforced; add it to PRICES`);
   }
 
