@@ -32,6 +32,7 @@ import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './brid
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
+import { McpServers } from './mcp-host.js';
 import { Mentions } from './context.js';
 import {
   TOOL_KINDS,
@@ -60,6 +61,7 @@ export const SEND_COMMAND = 'gcode.chat.send';
 export const STOP_COMMAND = 'gcode.chat.stop';
 export const NEW_CHAT_COMMAND = 'gcode.chat.new';
 export const HISTORY_COMMAND = 'gcode.chat.history';
+export const MCP_COMMAND = 'gcode.chat.mcp';
 export const STYLE_SETTING = 'gcode.ui.style';
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
 
@@ -288,6 +290,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly switched = new vscode.EventEmitter<void>();
   /** Fires when the panel moves to another session: at startup, for a new chat, or one loaded from the history. */
   readonly onDidSwitch = this.switched.event;
+  /** The shown session's MCP servers, for the MCP panel. */
+  private readonly mcp: McpServers;
+  /** The MCP action ran before the webview was ready; it opens the panel once it is. */
+  private mcpAsked = false;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -299,8 +305,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly uiStyle: () => UiStyle,
     private readonly openElsewhere: (workspace: string, sessionId: string) => Promise<void>,
     private readonly defaultMode: () => 'ask' | 'auto',
+    /** The MCP servers the user owns, from VS Code's user mcp.json; never the workspace's, which skip no approval this way. */
+    private readonly forwardedServers: () => Promise<acp.McpServer[]>,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
+    this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -332,6 +341,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   dispose(): void {
+    this.mcp.dispose();
     this.switched.dispose();
     this.engine.dispose();
   }
@@ -458,6 +468,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       throw error;
     } finally {
       this.turn = undefined;
+      this.mcp.refresh();
     }
   }
 
@@ -487,7 +498,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const { cwd } = connection;
     if (this.shown !== undefined) {
       try {
-        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd });
+        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers() });
         this.remode(modesOf(modes) ?? this.modes);
         return this.shown;
       } catch {
@@ -510,7 +521,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Starts a session in `mode`, by default the one the settings give new sessions. */
   private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode()): Promise<string> {
-    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: [] });
+    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers() });
     let state = modesOf(modes) ?? { current: mode, available: MODE_FALLBACK };
     if (state.current !== mode && state.available.some((m) => m.id === mode)) {
       await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
@@ -528,7 +539,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.replay = replay;
     let modes: Modes | undefined;
     try {
-      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: [] })).modes);
+      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers() })).modes);
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
@@ -545,6 +556,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.remode(modes);
     await this.memory.save(sessionId);
     this.switched.fire();
+    this.mcp.refresh();
   }
 
   private retitle(title: string | undefined): void {
@@ -580,12 +592,20 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (this.turn !== undefined) throw new Error('Stop the running turn first.');
   }
 
-  /** Runs `open` for the engine's connection as the session it uses from now on. */
+  /** Runs `open` for the engine's connection as the session it uses from now on, and closes the one it leaves, which stops its MCP servers. */
   private async moveTo(open: (connection: Connection) => Promise<string>): Promise<void> {
     const connection = await this.engine.connection();
+    const left = this.shown;
     const session = open(connection);
     this.sessions.set(connection, session);
-    await session;
+    const now = await session;
+    if (left !== undefined && left !== now) void connection.agent.request(acp.methods.agent.session.close, { sessionId: left }).catch(() => {});
+  }
+
+  /** Opens the MCP servers panel. */
+  showMcp(): void {
+    if (this.view === undefined) this.mcpAsked = true;
+    else void this.view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
   }
 
   /** Starts a fresh session; the current one stays on disk. A chat with no turns yet is already fresh. */
@@ -690,6 +710,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'header', header: { project: projectName(), title: this.title } } satisfies ToView);
         void view.webview.postMessage({ type: 'modes', modes: this.modes } satisfies ToView);
         void view.webview.postMessage({ type: 'commands', commands: this.commands } satisfies ToView);
+        void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
+        if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
+        this.mcpAsked = false;
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -717,6 +740,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'open-session': ({ id, workspace }) => void this.openChat(id, workspace).catch(warn),
       'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),
       'delete-session': ({ id, scope }) => void this.deleteChat(id).then(() => this.postHistory(view, scope), warn),
+      ...this.mcp.handlers,
     };
   }
 

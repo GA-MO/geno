@@ -9,6 +9,7 @@ import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
+import { mcpCall } from './mcp-model.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -52,7 +53,13 @@ const VERBS: Readonly<Record<string, readonly [running: string, finished: string
   check: ['Checking for problems', 'Checked for problems'],
 };
 
-const verbOf = (name: string, running: boolean): string => VERBS[name]?.[running ? 0 : 1] ?? name;
+/** An MCP call reads as its tool's own name, with its server beside it. */
+const verbOf = (name: string, running: boolean): string => VERBS[name]?.[running ? 0 : 1] ?? mcpCall(name)?.tool ?? name;
+
+const mcpServerChip = (name: string): HTMLElement | undefined => {
+  const call = mcpCall(name);
+  return call === undefined ? undefined : h('span', { class: 'mcp-call-server', title: `MCP server ${call.server}` }, icon('mcp'), call.server);
+};
 
 const durationOf = (tool: ToolBlock): string | undefined => (tool.endedAt === undefined ? undefined : formatDuration(tool.endedAt - tool.startedAt));
 
@@ -168,6 +175,7 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       'button',
       { class: 'step-row', 'aria-expanded': String(open), 'data-focus': `step:${key}`, onclick: () => ui.toggle(key) },
       icon(KIND_ICONS[first.toolKind], 'kind'),
+      mcpServerChip(name),
       h('span', { class: 'step-verb' }, verbOf(name, running)),
       FILE_TOOLS.has(name) ? h('span', { class: 'chips' }, ...tools.map(fileChip)) : first.target !== '' && h('code', { class: 'step-target' }, first.target),
       h('span', { class: 'spacer' }),

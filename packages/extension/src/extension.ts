@@ -1,8 +1,10 @@
 import { realpath } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
+import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, STYLE_SETTING, uiStyleOf } from './chat/chat.js';
+import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
 import { registerReview } from './review/commands.js';
@@ -87,6 +89,16 @@ function registerChat(context: vscode.ExtensionContext): void {
     () => uiStyleOf(vscode.workspace.getConfiguration('gcode')),
     (workspace, sessionId) => openElsewhere(context, workspace, sessionId),
     () => approvalModeOf(vscode.workspace.getConfiguration('gcode')),
+    async () => {
+      const file = userMcpFile(context.globalStorageUri.fsPath);
+      const { servers, problems } = await readForwarded(file, {
+        env: process.env,
+        userHome: os.homedir(),
+        workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      }).catch((error: unknown) => ({ servers: [], problems: [String(error)] }));
+      for (const problem of problems) output.appendLine(`mcp: ${file}: ${problem}`);
+      return [...servers];
+    },
   );
   registerReview(context, chat, review);
   context.subscriptions.push(
@@ -106,6 +118,10 @@ function registerChat(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand(STOP_COMMAND, () => chat.stop()),
     vscode.commands.registerCommand(NEW_CHAT_COMMAND, () => chat.newChat()),
+    vscode.commands.registerCommand(MCP_COMMAND, async () => {
+      await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
+      chat.showMcp();
+    }),
     vscode.commands.registerCommand(HISTORY_COMMAND, async () => {
       await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
       chat.showHistory();
