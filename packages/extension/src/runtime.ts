@@ -24,7 +24,7 @@ type Secrets = { get(key: string): PromiseLike<string | undefined> };
 
 export function providerOf(settings: Settings): ProviderName {
   const provider = settings.get('provider', 'modelstudio');
-  if (!isProviderName(provider)) throw new Error(`gcode.provider is ${provider}, which is not a provider g-code knows`);
+  if (!isProviderName(provider)) throw new Error(`gcode.provider is ${provider}, which is not a provider Geno knows`);
   return provider;
 }
 
@@ -49,11 +49,11 @@ export type SetupProblem = { readonly message: string; readonly fix: { readonly 
 export function setupProblem(runtime: ModelRuntime): SetupProblem | undefined {
   const label = PROVIDER_LABELS[runtime.provider];
   if (runtime.key === undefined) {
-    return { message: `g-code has no ${label} API key. Run g-code: Set API Key.`, fix: { label: 'Set API Key', command: SET_KEY_COMMAND, args: [] } };
+    return { message: `Geno has no ${label} API key. Run Geno: Set API Key.`, fix: { label: 'Set API Key', command: SET_KEY_COMMAND, args: [] } };
   }
   if (PROVIDER_ENV[runtime.provider].baseUrl !== undefined && runtime.baseUrl === undefined) {
     return {
-      message: `g-code needs your ${label} endpoint in the gcode.baseUrl setting.`,
+      message: `Geno needs your ${label} endpoint in the gcode.baseUrl setting.`,
       fix: { label: 'Open Settings', command: 'workbench.action.openSettings', args: ['gcode.baseUrl'] },
     };
   }

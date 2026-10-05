@@ -48,7 +48,7 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
     vscode.commands.registerCommand(UNDO_SESSION_COMMAND, async (confirmed?: boolean) => {
       // The rewind restores the whole workspace, including files the user changed or created by hand since the session began.
       const answer = confirmed === true ? 'Undo All' : await vscode.window.showWarningMessage(
-        'Undo every change since this g-code session began?',
+        'Undo every change since this Geno session began?',
         { modal: true, detail: 'Every file in the workspace goes back to the session\'s first checkpoint, your own edits included, and files created since are deleted.' },
         'Undo All',
       );

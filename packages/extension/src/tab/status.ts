@@ -11,13 +11,13 @@ export const TOGGLE_COMMAND = 'gcode.tab.toggle';
 type Look = { readonly text: string; readonly tooltip: string; readonly warning?: boolean };
 
 const LOOKS: { readonly [K in TabServerState['kind']]: (state: Extract<TabServerState, { kind: K }>) => Look } = {
-  off: () => ({ text: '$(circle-slash) Tab', tooltip: 'g-code Tab is off. Click to turn it on.' }),
-  starting: () => ({ text: '$(loading~spin) Tab', tooltip: 'g-code Tab is starting its model server. Click to turn Tab off.' }),
+  off: () => ({ text: '$(circle-slash) Tab', tooltip: 'Geno Tab is off. Click to turn it on.' }),
+  starting: () => ({ text: '$(loading~spin) Tab', tooltip: 'Geno Tab is starting its model server. Click to turn Tab off.' }),
   ready: ({ owned }) => ({
     text: '$(sparkle) Tab',
-    tooltip: `g-code Tab is on${owned ? '' : ', using the model server that was already running'}. Click to turn it off.`,
+    tooltip: `Geno Tab is on${owned ? '' : ', using the model server that was already running'}. Click to turn it off.`,
   }),
-  failed: ({ reason }) => ({ text: '$(warning) Tab', tooltip: `g-code Tab failed: ${reason}. Click to turn Tab off.`, warning: true }),
+  failed: ({ reason }) => ({ text: '$(warning) Tab', tooltip: `Geno Tab failed: ${reason}. Click to turn Tab off.`, warning: true }),
 };
 
 const lookOf = <K extends TabServerState['kind']>(state: Extract<TabServerState, { kind: K }>): Look =>
@@ -43,7 +43,7 @@ async function toggle(): Promise<void> {
 /** Runs the Tab model server while Tab is on, shows its state in the status bar, and stops it with the extension. */
 export function registerTabServer(context: vscode.ExtensionContext, settings: () => TabSettings, output: vscode.OutputChannel): void {
   const item = vscode.window.createStatusBarItem('gcode.tab', vscode.StatusBarAlignment.Right, 100);
-  item.name = 'g-code Tab';
+  item.name = 'Geno Tab';
   item.command = TOGGLE_COMMAND;
   const show = (state: TabServerState) => {
     const look = lookOf(state);

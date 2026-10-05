@@ -19,7 +19,7 @@ const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model'];
 
 async function engineSettings(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<EngineSettings> {
   const folder = vscode.workspace.workspaceFolders?.[0];
-  if (folder === undefined) throw new Error('g-code chat needs an open folder');
+  if (folder === undefined) throw new Error('Geno chat needs an open folder');
   const runtime = await readModelRuntime(vscode.workspace.getConfiguration('gcode'), context.secrets, process.env);
   const problem = setupProblem(runtime);
   if (problem !== undefined) {
@@ -47,7 +47,7 @@ async function setApiKey(secrets: vscode.SecretStorage, given?: string): Promise
 }
 
 function registerChat(context: vscode.ExtensionContext): void {
-  const output = vscode.window.createOutputChannel('g-code engine');
+  const output = vscode.window.createOutputChannel('Geno engine');
   const review = new ReviewController(() => chat.link(), output);
   const chat = new Chat(
     () => engineSettings(context, output),
@@ -71,7 +71,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     }),
     vscode.window.registerWebviewViewProvider(CHAT_VIEW, chat),
     vscode.commands.registerCommand(SEND_COMMAND, async (prompt?: string) => {
-      const text = prompt ?? (await vscode.window.showInputBox({ prompt: 'Ask g-code for a change' }));
+      const text = prompt ?? (await vscode.window.showInputBox({ prompt: 'Ask Geno for a change' }));
       return text === undefined || text.trim() === '' ? undefined : chat.send(text.trim());
     }),
     vscode.commands.registerCommand(STOP_COMMAND, () => chat.stop()),
@@ -80,7 +80,7 @@ function registerChat(context: vscode.ExtensionContext): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   registerChat(context);
-  const output = vscode.window.createOutputChannel('g-code');
+  const output = vscode.window.createOutputChannel('Geno');
   const log = openTabLog(tabEventsFile(process.env), (error) => output.appendLine(`tab log: ${String(error)}`));
   const tracker = new OutcomeTracker(log);
   const fim = new TabProvider(readSettings, log, tracker);
@@ -89,7 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     tracker,
     vscode.commands.registerCommand('gcode.hello', () => {
-      void vscode.window.showInformationMessage('Hello from g-code');
+      void vscode.window.showInformationMessage('Hello from Geno');
     }),
     vscode.commands.registerCommand(ACCEPT_COMMAND, (uri: vscode.Uri, id: CompletionId, text: string) =>
       tracker.accepted(uri, id, text),
