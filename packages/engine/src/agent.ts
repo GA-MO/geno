@@ -19,6 +19,7 @@ import {
 } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
+import { checkCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
 import { claudeDirOf } from './plugins.js';
@@ -101,7 +102,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       sandbox,
       env: childEnv(io.env),
       scope: { workspace, tempDir, home },
-      check: options.check ?? (await configuredCheck(workspace)),
+      check: await checkCommand(options.check ?? (await configuredCheck(workspace)), workspace, homeOf(store)),
       checkAfterEdit: options.checkAfterEdit,
       approval: options.approval,
       diagnostics: options.diagnostics,

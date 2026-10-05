@@ -24,6 +24,7 @@ import {
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
+import type { CheckCommand } from '../check-command.js';
 import type { Classify } from '../classifier.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
@@ -120,7 +121,7 @@ export type AgentToolEnv = {
   readonly sandbox: Sandbox;
   readonly env: Readonly<Record<string, string>>;
   readonly scope: CommandScope;
-  readonly check: string | undefined;
+  readonly check: CheckCommand | undefined;
   readonly checkAfterEdit: boolean;
   readonly approval: Approval;
   /** Stands in for the check command when the workspace has none and an editor is attached. */
@@ -136,14 +137,16 @@ type CheckResult = { readonly passed: boolean; readonly text: string };
 
 async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckResult | undefined> {
   if (tools.check === undefined) return undefined;
-  const result = await tools.sandbox.run(tools.check, {
+  const { shown, run, writable } = tools.check;
+  const result = await tools.sandbox.run(run, {
     cwd: ctx.workspace,
     env: tools.env,
     timeoutMs: CHECK_TIMEOUT_MS,
     signal: ctx.signal,
+    writable,
   });
   const output = tail(result.output);
-  return { passed: result.code === 0, text: `${checkHeadline(tools.check, result.code, result.timedOut)}${output === '' ? '' : `\n${output}`}` };
+  return { passed: result.code === 0, text: `${checkHeadline(shown, result.code, result.timedOut)}${output === '' ? '' : `\n${output}`}` };
 }
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
