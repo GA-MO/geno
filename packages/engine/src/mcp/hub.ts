@@ -131,6 +131,8 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
   );
   // Its on and off live in the editor's settings, not the disabled file.
   if (browser !== undefined) {
+    // The server's working folder, which must exist for it to start.
+    await mkdir(browser.home, { recursive: true });
     handles.set(BROWSER_SERVER, new McpServerHandle(browserServerConfig(browser, workspace), true, !browser.settings.enabled, env, workspace));
   }
   const browserState = newBrowserState();

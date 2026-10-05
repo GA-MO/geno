@@ -90,6 +90,7 @@ import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
+import { browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logMode } from './sessions.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
@@ -548,7 +549,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       turns.set(id, undefined);
       modes.set(id, DEFAULT_SESSION_MODE);
       commands.attach(client, id, workspace);
-      mcp.register(id, workspace, params.mcpServers);
+      mcp.register(id, workspace, params.mcpServers, browserSettingsOf(params._meta));
       io.err(`session: ${id} log: ${opened.log.file}`);
       return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
     })
@@ -558,7 +559,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
-      mcp.register(id, log.session.workspace, params.mcpServers ?? []);
+      mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
       io.err(`session: ${id} resumed, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!) };
     })
@@ -572,7 +573,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
-      mcp.register(id, log.session.workspace, params.mcpServers);
+      mcp.register(id, log.session.workspace, params.mcpServers, browserSettingsOf(params._meta));
       const notify =(update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
       for (const update of replayUpdates(log.events)) await notify(update);
       await notify(sessionInfo(summarizeSession(log.session, log.events)));
