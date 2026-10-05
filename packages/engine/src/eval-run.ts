@@ -2,7 +2,7 @@ import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { addUsage, asTaskId, isPriced, ZERO_USAGE, type EvalTask, type TokenUsage } from '@g-code/core';
+import { addUsage, asTaskId, isPriced, ZERO_USAGE, type EffortPolicy, type EvalTask, type TokenUsage } from '@g-code/core';
 import { chooseModel, formatCost } from './chat.js';
 import { childEnv } from './child-env.js';
 import { UsageError, type Command, type Context, type Io } from './command.js';
@@ -29,6 +29,8 @@ export type AgentRunInput = {
   readonly maxCostUsd: number;
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
+  /** Undefined runs the agent's default; an adapter for another agent ignores it. */
+  readonly effortPolicy?: EffortPolicy | undefined;
 };
 
 export type AgentRunResult = {
@@ -93,6 +95,7 @@ export type EvalRunOptions = {
   readonly runsDir: string;
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
+  readonly effortPolicy?: EffortPolicy | undefined;
 };
 
 export type EvalRun = { readonly file: string; readonly results: readonly TaskResult[]; readonly stopped: boolean };
@@ -129,7 +132,7 @@ async function runTask(task: EvalTask, options: EvalRunOptions, runId: string, r
 
     const agentStarted = performance.now();
     const agentRun = await options.adapter.run(
-      { task, workspace, tempDir, runDir, model: options.model, maxCostUsd: budget, check: options.check, checkAfterEdit: options.checkAfterEdit },
+      { task, workspace, tempDir, runDir, model: options.model, maxCostUsd: budget, check: options.check, checkAfterEdit: options.checkAfterEdit, effortPolicy: options.effortPolicy },
       ctx,
     );
     const agentMs = performance.now() - agentStarted;

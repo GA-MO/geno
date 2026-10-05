@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { asTaskId, isPriced, SPEED_PARTS, speedReport, turnTimings, type EvalTask, type SpeedPart, type SpeedReport, type TaskTiming } from '@g-code/core';
+import { asTaskId, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, isEffortPolicyName, isPriced, SPEED_PARTS, speedReport, turnTimings, type EvalTask, type SpeedPart, type SpeedReport, type TaskTiming } from '@g-code/core';
 import type { Spread } from '@g-code/core/tab';
 import { chooseModel } from './chat.js';
 import { UsageError, type Command, type Io } from './command.js';
@@ -90,6 +90,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
       'runs-dir': { type: 'string' },
       check: { type: 'string', default: E5_CHECK },
       from: { type: 'string' },
+      'effort-policy': { type: 'string', default: DEFAULT_EFFORT_POLICY },
     },
   });
   if (values.from !== undefined) {
@@ -97,6 +98,8 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     await report(io, await readResults(file), path.join(path.dirname(file), 'speed.json'));
     return 0;
   }
+  const policy = values['effort-policy'];
+  if (!isEffortPolicyName(policy)) throw new UsageError(`--effort-policy must be one of ${Object.keys(EFFORT_POLICIES).join(', ')}`);
   if (!isPriced(chooseModel(io, { provider: undefined, model: values.model }).provider, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
   const tasks: EvalTask[] = [];
   for (const id of SPEED_TASKS) {
@@ -104,6 +107,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     if (task === undefined) throw new EngineError(`no task ${id} in ${store.tasksDir}; the speed eval needs the E5 tasks`);
     tasks.push(task);
   }
+  io.out(`effort policy: ${policy}`);
   const run = await runEval(ctx, {
     tasks,
     agent: 'gcode',
@@ -114,6 +118,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     runsDir: values['runs-dir'] === undefined ? path.join(store.evalsDir, 'runs') : path.resolve(io.cwd, values['runs-dir']),
     check: values.check,
     checkAfterEdit: true,
+    effortPolicy: EFFORT_POLICIES[policy],
   });
   await report(io, run.results, path.join(path.dirname(run.file), 'speed.json'));
   return run.stopped ? 3 : 0;
