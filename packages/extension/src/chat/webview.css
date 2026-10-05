@@ -1848,7 +1848,8 @@ body.diagram-tab {
   color: var(--warn);
 }
 
-.mode-menu {
+.mode-menu,
+.model-menu {
   position: absolute;
   bottom: calc(100% - 4px);
   left: var(--gap);
@@ -1864,11 +1865,13 @@ body.diagram-tab {
   z-index: 10;
 }
 
-.mode-menu[hidden] {
+.mode-menu[hidden],
+.model-menu[hidden] {
   display: none;
 }
 
-.mode-option {
+.mode-option,
+.model-option {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1878,7 +1881,9 @@ body.diagram-tab {
 }
 
 .mode-option:hover,
-.mode-option:focus {
+.mode-option:focus,
+.model-option:hover,
+.model-option:focus {
   background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
   color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
   outline: 1px solid var(--vscode-list-focusOutline, transparent);
@@ -1888,14 +1893,19 @@ body.diagram-tab {
 /* High contrast marks the option with its contrast border rather than a fill its text may not read on. */
 .vscode-high-contrast .mode-option:hover,
 .vscode-high-contrast .mode-option:focus,
+.vscode-high-contrast .model-option:hover,
+.vscode-high-contrast .model-option:focus,
 .vscode-high-contrast-light .mode-option:hover,
-.vscode-high-contrast-light .mode-option:focus {
+.vscode-high-contrast-light .mode-option:focus,
+.vscode-high-contrast-light .model-option:hover,
+.vscode-high-contrast-light .model-option:focus {
   background: transparent;
   color: inherit;
   outline: 1px dashed var(--vscode-contrastActiveBorder);
 }
 
-.mode-option > .codicon {
+.mode-option > .codicon,
+.model-option > .codicon {
   flex: none;
   margin-top: 2px;
 }
@@ -2650,7 +2660,8 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     background: var(--glass-pane-raised);
   }
 
-  & .mode-menu {
+  & .mode-menu,
+  & .model-menu {
     border-color: var(--glass-edge-hi);
     border-radius: 10px;
     background: var(--glass-float);
@@ -2659,7 +2670,9 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   }
 
   & .mode-option:hover,
-  & .mode-option:focus {
+  & .mode-option:focus,
+  & .model-option:hover,
+  & .model-option:focus {
     background: var(--glass-hover);
   }
 
