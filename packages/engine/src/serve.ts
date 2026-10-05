@@ -82,9 +82,15 @@ import {
   type GlobalRulesResponse,
   type MemoryResponse,
   type RulesResponse,
+  asSessionId,
+  WIDGET_CAPABILITY,
+  WIDGET_DRAFT_META,
+  WIDGET_TOOL,
+  widgetDraftOf,
+  type WidgetRef,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
-import { AttachmentError, attachmentsDir, incomingAttachments, storeAttachments, type Incoming } from './attachments.js';
+import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
@@ -102,7 +108,7 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logEffort, logMode } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
+import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
@@ -173,17 +179,22 @@ type Peer = {
   readonly elicitation: boolean;
   /** It shows a remember question as a memory card with the exact text. */
   readonly memory: boolean;
+  /** It draws show_widget's html. */
+  readonly widgets: boolean;
 };
 
-type Updates = { send(update: acp.SessionUpdate): void; flush(): Promise<void> };
+type Updates = { send(update: acp.SessionUpdate | Promise<acp.SessionUpdate>): void; flush(): Promise<void> };
 
-/** Session updates in order. Notifications are fire-and-forget for the loop, but must all precede the turn's response. */
+/**
+ * Session updates in order. Notifications are fire-and-forget for the loop, but must all precede the turn's response.
+ * An update still being built, such as one that reads a stored widget, holds back the ones after it.
+ */
 function updates(client: acp.AgentContext, sessionId: string, io: Io): Updates {
   let sent = Promise.resolve();
   return {
     send(update) {
       sent = sent
-        .then(() => client.notify(acp.methods.client.session.update, { sessionId, update }))
+        .then(async () => client.notify(acp.methods.client.session.update, { sessionId, update: await update }))
         .catch((error: unknown) => io.err(`session/update failed: ${String(error)}`));
     },
     flush: () => sent,
@@ -292,8 +303,10 @@ function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '
  * One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. `session`
  * is known once the turn opened the log, before its first model call.
  */
-function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io, session: () => Session | undefined): Turn {
+function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io, session: () => Session | undefined, widgetOf: (widget: WidgetRef) => Promise<ShownWidget>): Turn {
   const sent = updates(client, sessionId, io);
+  // What each widget's step last showed while the model wrote it, so a piece of html that changes nothing sends nothing.
+  const drafts = new Map<string, string>();
   // Only a tool that runs alone in its batch asks or writes, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
   let spent: Spent | undefined;
@@ -312,6 +325,16 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
         toolEnd(use, status) {
           sent.send({ sessionUpdate: 'tool_call_update', toolCallId: use.id, status: TOOL_STATUS[status] });
         },
+        toolInput({ id, name, json }) {
+          if (name !== WIDGET_TOOL || !peer.widgets) return;
+          const draft = widgetDraftOf(json);
+          const key = JSON.stringify(draft);
+          if (drafts.get(id) === key) return;
+          const update = drafts.has(id) ? 'tool_call_update' : 'tool_call';
+          drafts.set(id, key);
+          const title = draft.title === undefined ? WIDGET_TOOL : `${WIDGET_TOOL} ${draft.title}`;
+          sent.send({ sessionUpdate: update, toolCallId: id, title, kind: 'other', status: 'pending', _meta: { [WIDGET_DRAFT_META]: draft } });
+        },
         logged(event) {
           if (event.kind === 'assistant') {
             spent = {
@@ -320,7 +343,10 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
               costUsd: spent?.costUsd === null || event.costUsd === null ? null : (spent?.costUsd ?? 0) + event.costUsd,
             };
           }
-          const update = loggedUpdate(event, peer);
+          const update =
+            event.kind === 'tool-result' && event.widget !== undefined
+              ? widgetOf(event.widget).then((widget) => toolResultUpdate(event, {}, widget))
+              : loggedUpdate(event, peer);
           if (update !== undefined) sent.send(update);
           const opened = session();
           if (event.kind === 'assistant' && opened !== undefined && spent !== undefined) {
@@ -501,7 +527,12 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env)): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false };
+  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false };
+  /** A session's stored widget, as an update carries it. */
+  const shownWidget = (sessionId: string) => async (widget: WidgetRef): Promise<ShownWidget> => {
+    const dir = attachmentsDir(store, asSessionId(sessionId));
+    return { uri: pathToFileURL(widgetFile(dir, widget)).href, html: await readWidget(dir, widget) };
+  };
   const turns = new Map<string, AbortController | undefined>();
   // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
   const modes = new Map<string, SessionMode>();
@@ -553,6 +584,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         notices: session?.notices != null,
         elicitation: elicitation?.form != null,
         memory: _meta?.[MEMORY_CAPABILITY] === true,
+        widgets: _meta?.[WIDGET_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -600,7 +632,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers, browserSettingsOf(params._meta));
       const notify =(update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
-      for (const update of replayUpdates(log.events)) await notify(update);
+      const dir = attachmentsDir(store, id);
+      const stored = await loadWidgets(dir, log.events);
+      const widgetOf = (widget: WidgetRef): ShownWidget => ({ uri: pathToFileURL(widgetFile(dir, widget)).href, html: stored.get(widget.sha256) });
+      for (const update of replayUpdates(log.events, widgetOf)) await notify(update);
       const context = lastContextUse(log.session, log.events);
       if (context !== undefined) await notify(usageUpdate(context));
       await notify(sessionInfo(summarizeSession(log.session, log.events)));
@@ -681,7 +716,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const controller = new AbortController();
       turns.set(sessionId, controller);
       let session: Session | undefined;
-      const turn = editorTurn(client, sessionId, peer, io, () => session);
+      const turn = editorTurn(client, sessionId, peer, io, () => session, shownWidget(sessionId));
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined;
       try {
@@ -711,6 +746,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                   diagnostics,
                   mcp: await mcp.toolset(sessionId, approval),
                   user: turn.user,
+                  widgets: peer.widgets,
                 })
               : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
           await turn.updates.flush();

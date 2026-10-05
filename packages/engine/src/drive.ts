@@ -7,6 +7,7 @@ import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, tota
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
+import type { ToolInputDraft } from './gateway.js';
 import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
@@ -36,6 +37,8 @@ export type Watcher = {
   toolEnd(use: ToolUseBlock, status: ToolStatus): void;
   /** Every event, as it is appended to the session log. */
   logged(event: TurnEvent): void;
+  /** A tool call the model is still writing. */
+  toolInput?(draft: ToolInputDraft): void;
 };
 
 /** Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. */
@@ -191,13 +194,13 @@ export async function drive(
       const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
-      const { status, text, change, approval, images } = await runTool(use, toolCtx, mode.executors);
+      const { status, text, change, approval, images, widget } = await runTool(use, toolCtx, mode.executors);
       watcher.toolEnd(use, status);
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
       const timing = { startAt: started.startAt, endAt: Date.now() };
       ran.set(i, { ...started, ...timing });
       running.delete(i);
-      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, ...output, timing };
+      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, ...output, timing };
     };
     const work = (async () => {
       for (let start = 0; start < toolUses.length; ) {
@@ -241,6 +244,7 @@ export async function drive(
       ...(mode.system === undefined ? {} : { system: mode.system }),
       signal,
       onText: (delta) => watcher.text(delta),
+      onToolInput: (draft) => watcher.toolInput?.(draft),
       onMarks: (streamed) => {
         marks = streamed;
       },

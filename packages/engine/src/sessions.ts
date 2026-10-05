@@ -22,7 +22,7 @@ import {
   type SessionMode,
   type TurnEvent,
 } from '@g-code/core';
-import { attachmentSchema, imageAttachmentSchema } from './attachments.js';
+import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
 import { EngineError } from './errors.js';
 import { isMissing, StoreError, type Store } from './store.js';
 
@@ -127,6 +127,7 @@ const toolResultFields = {
   change: fileChangeSchema.optional(),
   approval: approvalSchema.optional(),
   images: z.array(imageAttachmentSchema).optional(),
+  widget: widgetRefSchema.optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 
