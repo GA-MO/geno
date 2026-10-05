@@ -187,6 +187,7 @@ function resize(): void {
 }
 
 function fill(text: string): void {
+  closeMenu();
   input.value = text;
   save({ ...state, draft: text });
   resize();

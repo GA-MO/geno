@@ -127,7 +127,7 @@ const RETRY_REASONS: readonly (readonly [RegExp, string])[] = [
 ];
 
 /** The few words a status line gives for why a call is retried; the full message goes in the notice's description. */
-export const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) => pattern.test(message))?.[1] ?? 'server error';
+const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) => pattern.test(message))?.[1] ?? 'server error';
 
 const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
   'tool-result': (event) => ({
@@ -136,7 +136,7 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Pe
     status: TOOL_STATUS[event.status],
     content: [{ type: 'content', content: { type: 'text', text: 'spill' in event ? spillNotice(event.spill) : event.output } }],
   }),
-  // ACP's notices are unstable, so a failure reaches the user as agent text, as the spec suggests.
+  // A failure belongs in the transcript, and a notice is live status only, so it goes as agent text.
   error: (event) => textUpdate(`\n\n[${event.error}] ${event.message}`),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>
