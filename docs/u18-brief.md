@@ -28,6 +28,18 @@ The user wants the dino to move: to change pose with the work (a notebook when r
 - Pixels stay crisp. Draw only at integer scales: 1× (24 px) for the still avatar in finished turns, 2× (48 px) for the working dino next to the current step, and 4× on the start page.
 - **No frame.** The dino has no tile, background or border anywhere. Remove `.avatar` and `.hero` backgrounds and outlines. High contrast keeps a plain outline only if the shape would otherwise disappear.
 
+## In the chat
+
+The user confirmed on 2026-10-05 that the props and the other moves belong in the chat.
+
+- **The working dino.** It is 48 px, beside the current step of the running turn, with the pose table above: notebook, laptop and glasses, pencil, clipboard, running in place, "?", and sweat.
+- **Turn end.**
+  - The turn ends and its checks passed: it flexes once.
+  - The turn ends without checks: it hops or somersaults once, picked at random.
+  - The dino then becomes the still 24 px avatar of the finished turn.
+- **Peek.** When the chat is idle after a turn, the dino's head peeks over the top edge of the composer. Its eyes follow the mouse inside the panel. It ducks behind the composer while the composer has focus or holds text, and hides while a turn runs.
+- **Prototype.** The interactive panel prototype the user saw (the working poses, the folded finished turn and the peek) is the reference.
+
 ## Start page: just the dino
 
 On 2026-10-05 the user went through Horizon, a commit-graph ground, a desk scene and a terminal card, then chose the simplest one: the dino alone, with no other objects.
