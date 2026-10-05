@@ -1,14 +1,11 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { createServer, type RequestListener, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
-import { build, type BuildOptions } from 'esbuild';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { cachePath, root, setUp } from './launch.js';
 
-// Vitest runs from the repository root.
-const root = path.resolve('packages/extension');
 const COMPLETION = 'a + b;';
 const EXTENSION_ID = 'g-code.g-code';
 
@@ -61,29 +58,6 @@ beforeAll(async () => {
 
 afterAll(() => Promise.all([close(fimServer), close(nextEditServer)]));
 
-const common: BuildOptions = { bundle: true, platform: 'node', format: 'cjs', target: 'node20', external: ['vscode'] };
-
-/** A workspace with one file and settings, a fresh GCODE_HOME, and the extension and the named suite built. */
-async function setUp(suiteName: string, file: string, text: string, settings: Record<string, unknown>) {
-  const work = await mkdtemp(path.join(tmpdir(), 'gcode-ext-'));
-  const workspace = path.join(work, 'workspace');
-  const home = path.join(work, 'home');
-  await mkdir(path.join(workspace, '.vscode'), { recursive: true });
-  await writeFile(path.join(workspace, file), text);
-  const quiet = {
-    // VS Code's chat panel otherwise opens at startup and takes keyboard focus from the editor under test.
-    'chat.disableAIFeatures': true,
-    'workbench.secondarySideBar.defaultVisibility': 'hidden',
-  };
-  await writeFile(path.join(workspace, '.vscode', 'settings.json'), JSON.stringify({ ...quiet, ...settings }));
-  await build({ ...common, entryPoints: [path.join(root, 'src/extension.ts')], outfile: path.join(root, 'dist/extension.js') });
-  const suite = path.join(work, 'suite.js');
-  await build({ ...common, entryPoints: [path.join(root, `test/suite/${suiteName}.ts`)], outfile: suite });
-  // A user-data dir under the repo makes VS Code's IPC socket path longer than macOS allows.
-  const launchArgs = [workspace, '--disable-extensions', '--skip-welcome', '--skip-release-notes', `--user-data-dir=${work}/ud`];
-  return { home, suite, launchArgs };
-}
-
 async function events(home: string) {
   return (await readFile(path.join(home, 'tab-events.jsonl'), 'utf8'))
     .trim()
@@ -95,14 +69,13 @@ describe('Tab in VS Code', () => {
   it('shows ghost text from the completion server, accepts it, and logs both', async () => {
     const { home, suite, launchArgs } = await setUp(
       'index',
-      'math.ts',
-      'export function add(a: number, b: number): number {\n  return \n}\n',
+      { 'math.ts': 'export function add(a: number, b: number): number {\n  return \n}\n' },
       { 'gcode.tab.endpoint': `http://127.0.0.1:${portOf(fimServer)}`, 'gcode.tab.debounceMs': 10 },
     );
     const code = await runTests({
       extensionDevelopmentPath: root,
       extensionTestsPath: suite,
-      cachePath: path.resolve(root, '../../.vscode-test'),
+      cachePath,
       launchArgs,
       extensionTestsEnv: { GCODE_HOME: home },
     });
@@ -128,7 +101,7 @@ describe('Tab in VS Code', () => {
       '}',
       '',
     ].join('\n');
-    const { home, suite, launchArgs } = await setUp('next-edit', 'stats.ts', text, {
+    const { home, suite, launchArgs } = await setUp('next-edit', { 'stats.ts': text }, {
       'gcode.tab.nextEdit': true,
       'gcode.tab.nextEditEndpoint': `http://127.0.0.1:${portOf(nextEditServer)}`,
       'gcode.tab.endpoint': `http://127.0.0.1:${portOf(fimServer)}`,
@@ -138,7 +111,7 @@ describe('Tab in VS Code', () => {
       version: 'insiders',
       extensionDevelopmentPath: root,
       extensionTestsPath: suite,
-      cachePath: path.resolve(root, '../../.vscode-test'),
+      cachePath,
       launchArgs: [...launchArgs, `--enable-proposed-api=${EXTENSION_ID}`],
       extensionTestsEnv: { GCODE_HOME: home },
     });

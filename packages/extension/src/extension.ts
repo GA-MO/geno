@@ -1,4 +1,7 @@
+import path from 'node:path';
 import * as vscode from 'vscode';
+import { Chat, CHAT_VIEW, SEND_COMMAND, STOP_COMMAND } from './chat/chat.js';
+import type { EngineSettings } from './chat/engine.js';
 import type { CompletionId } from '@g-code/core/tab';
 import { EditHistoryTracker } from './tab/history.js';
 import { openTabLog, tabEventsFile } from './tab/log.js';
@@ -7,7 +10,30 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
 
+function engineSettings(extensionPath: string): EngineSettings {
+  const configured = vscode.workspace.getConfiguration('gcode.engine').get<string>('path', '');
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  if (folder === undefined) throw new Error('g-code chat needs an open folder');
+  return { cliPath: configured || path.join(extensionPath, '..', 'engine', 'dist', 'cli.js'), cwd: folder.uri.fsPath };
+}
+
+function registerChat(context: vscode.ExtensionContext): void {
+  const output = vscode.window.createOutputChannel('g-code engine');
+  const chat = new Chat(() => engineSettings(context.extensionPath), context.extensionUri, output);
+  context.subscriptions.push(
+    output,
+    chat,
+    vscode.window.registerWebviewViewProvider(CHAT_VIEW, chat),
+    vscode.commands.registerCommand(SEND_COMMAND, async (prompt?: string) => {
+      const text = prompt ?? (await vscode.window.showInputBox({ prompt: 'Ask g-code for a change' }));
+      return text === undefined || text.trim() === '' ? undefined : chat.send(text.trim());
+    }),
+    vscode.commands.registerCommand(STOP_COMMAND, () => chat.stop()),
+  );
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  registerChat(context);
   const output = vscode.window.createOutputChannel('g-code');
   const log = openTabLog(tabEventsFile(process.env), (error) => output.appendLine(`tab log: ${String(error)}`));
   const tracker = new OutcomeTracker(log);

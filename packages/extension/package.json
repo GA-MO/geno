@@ -19,6 +19,14 @@
       {
         "command": "gcode.hello",
         "title": "g-code: Hello"
+      },
+      {
+        "command": "gcode.chat.send",
+        "title": "g-code: Ask for a Change"
+      },
+      {
+        "command": "gcode.chat.stop",
+        "title": "g-code: Stop the Chat Turn"
       }
     ],
     "configuration": {
@@ -49,13 +57,36 @@
           "type": "string",
           "default": "http://127.0.0.1:8013",
           "description": "Base URL of the llama-server that serves next-edit predictions (scripts/next-edit-server.sh)."
+        },
+        "gcode.engine.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the engine CLI (dist/cli.js) that the chat panel runs as `node <path> serve --stdio`. Empty uses the engine built next to this extension in the g-code repository."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gcode",
+          "title": "g-code",
+          "icon": "media/chat.svg"
+        }
+      ]
+    },
+    "views": {
+      "gcode": [
+        {
+          "type": "webview",
+          "id": "gcode.chat",
+          "name": "Chat"
+        }
+      ]
     }
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js"
+    "build": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=dist/extension.js && esbuild src/chat/webview.ts --bundle --platform=browser --format=iife --target=es2022 --outfile=dist/webview.js"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.7.0",
