@@ -4,7 +4,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, DENY_RULE_IDS, type TurnEvent } from '@g-code/core';
+import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -187,7 +187,7 @@ describe('gcode agent', () => {
       'a cloud CLI',
       'a database CLI',
     ]);
-    expect(DENY_RULE_IDS).toHaveLength(denied.length);
+    expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
     const vitest = results.at(-1)!;
     expect('output' in vitest && vitest.output).toMatch(/\[exit code \d+\]$/);
     expect(transport.requests[1]!.body.messages.at(-1).content[0]).toMatchObject({ is_error: true });
@@ -208,6 +208,44 @@ describe('gcode agent', () => {
     expect(asked).toEqual(['Allow `rm -rf .git`? It uses rm -rf of the workspace, its .git or a path outside it.']);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(ofKind(log.events, 'tool-result')[0]).toMatchObject({ status: 'ok', output: '[exit code 0]' });
+  });
+
+  const deletes = ['rm -rf node_modules', 'd=$(mktemp -d); rm -rf "$d"'];
+
+  it('asks before rm -rf inside the workspace in interactive mode, and keeps the folder when the user says no', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
+    const asked: string[] = [];
+    const transport = fakeTransport([toolCall('Cleaning.', deletes.map(bash), usage), answer('Done.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, 'Clean up'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return false;
+      },
+    });
+    expect(result.code).toBe(0);
+    expect(asked).toEqual(['Allow `rm -rf node_modules`? It uses rm -rf of a path inside the workspace.']);
+    expect(existsSync(path.join(workspace, 'node_modules/pkg/index.js'))).toBe(true);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(ofKind(log.events, 'tool-result').map((r) => r.status)).toEqual(['denied', 'ok']);
+  });
+
+  it('runs rm -rf inside the workspace without asking in non-interactive mode', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
+    const asked: string[] = [];
+    const transport = fakeTransport([toolCall('Cleaning.', deletes.map(bash), usage), answer('Done.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Clean up'], env, {
+      fetch: transport.fetch,
+      confirm: (question) => {
+        asked.push(question);
+        return false;
+      },
+    });
+    expect(result.code).toBe(0);
+    expect(asked).toEqual([]);
+    expect(existsSync(path.join(workspace, 'node_modules'))).toBe(false);
+    const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
+    expect(ofKind(log.events, 'tool-result').map((r) => r.status)).toEqual(['ok', 'ok']);
   });
 
   it('runs bash with only PATH, HOME, LANG, TERM and TMPDIR from the parent environment', async () => {

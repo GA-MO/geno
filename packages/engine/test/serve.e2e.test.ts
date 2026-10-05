@@ -225,6 +225,19 @@ describe('gcode serve', () => {
     expect(editor.updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: push.id, status: 'failed' }));
   });
 
+  it('asks the editor before rm -rf inside the workspace, with the question as the title', async () => {
+    const remove = use('bash', { command: 'rm -rf src' });
+    const { editor, prompt } = await setup([toolCall('Removing.', [remove], usage), answer('Kept it.', usage)]);
+
+    expect(await prompt('Remove src')).toBe('end_turn');
+
+    expect(editor.permissions).toEqual([
+      expect.objectContaining({
+        toolCall: expect.objectContaining({ toolCallId: remove.id, title: 'Allow `rm -rf src`? It uses rm -rf of a path inside the workspace.' }),
+      }),
+    ]);
+  });
+
   it('answers check with the editor diagnostics for the files the model read when there is no check command', async () => {
     const { file, editor, transport, prompt } = await setup([
       toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),

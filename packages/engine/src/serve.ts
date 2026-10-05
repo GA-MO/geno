@@ -284,7 +284,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits): acp.AgentApp {
                   limits,
                   check: undefined,
                   checkAfterEdit: true,
-                  approve: turn.approve,
+                  approval: { mode: 'interactive', approve: turn.approve },
                   surface: turn.surface,
                   diagnostics,
                 })

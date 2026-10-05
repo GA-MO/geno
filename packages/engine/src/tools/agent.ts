@@ -31,6 +31,16 @@ import { EXECUTORS } from './index.js';
 /** Asked before a command on the deny list runs; true lets it run. */
 export type Approver = (denial: Denial) => Promise<boolean>;
 
+/** Only an interactive run has someone to ask. */
+export type Approval =
+  | { readonly mode: 'interactive'; readonly approve: Approver }
+  | { readonly mode: 'non-interactive' };
+
+export const NON_INTERACTIVE: Approval = { mode: 'non-interactive' };
+
+const approved = async (approval: Approval, denial: Denial): Promise<boolean> =>
+  denial.verdict === 'ask' && approval.mode === 'interactive' && approval.approve(denial);
+
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
 
@@ -40,7 +50,7 @@ export type AgentToolEnv = {
   readonly scope: CommandScope;
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
-  readonly approve: Approver;
+  readonly approval: Approval;
   /** Stands in for the check command when the workspace has none and an editor is attached. */
   readonly diagnostics: Diagnostics | undefined;
 };
@@ -114,8 +124,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     describe: ({ command }) => `bash ${command}`,
     async run({ command, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS }, ctx) {
-      const denial = denialFor(command, tools.scope);
-      if (denial !== undefined && !(await tools.approve(denial))) {
+      const denial = denialFor(command, tools.scope, tools.approval.mode);
+      if (denial !== undefined && !(await approved(tools.approval, denial))) {
         throw new ToolDenied(`denied: \`${denial.command}\` uses ${denial.reason}, which needs the user's approval. Do not retry it; find another way.`);
       }
       const result = await tools.sandbox.run(command, {
