@@ -1,9 +1,10 @@
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { addUsage, asTaskId, isPriced, ZERO_USAGE, type EffortPolicy, type EvalTask, type TokenUsage } from '@g-code/core';
 import { chooseModel, formatCost } from './chat.js';
+import { checkCacheDir } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { UsageError, type Command, type Context, type Io } from './command.js';
 import { positiveNumber } from './drive.js';
@@ -12,7 +13,7 @@ import { cloneAt } from './git.js';
 import { claudeCodeAdapter } from './eval-claude.js';
 import { gcodeAdapter } from './eval-gcode.js';
 import { runShell, tail } from './process.js';
-import { readTask, readTasks, taskDir } from './store.js';
+import { homeOf, readTask, readTasks, taskDir } from './store.js';
 
 export const AGENT_NAMES = ['gcode', 'claude-code'] as const;
 export type AgentName = (typeof AGENT_NAMES)[number];
@@ -144,6 +145,7 @@ async function runTask(task: EvalTask, options: EvalRunOptions, runId: string, r
     });
     return record(verify.code === 0 ? 'pass' : 'fail', agentRun, agentMs, tail(verify.output, 20, 2000));
   } finally {
+    await rm(checkCacheDir(homeOf(store), path.join(await realpath(base), path.basename(task.repo))), { recursive: true, force: true });
     await rm(base, { recursive: true, force: true });
   }
 }
