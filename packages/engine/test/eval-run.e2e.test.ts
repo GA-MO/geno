@@ -1,14 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { asTaskId, type EvalTask } from '@g-code/core';
+import { checkCacheDir } from '../src/check-command.js';
 import type { Io } from '../src/command.js';
 import { runEval, type AgentAdapter, type TaskResult } from '../src/eval-run.js';
 import { applyPatch } from '../src/git.js';
-import { openStore, taskDir } from '../src/store.js';
+import { homeOf, openStore, taskDir } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 
 const PATCH = `diff --git a/greet.txt b/greet.txt
@@ -135,5 +136,25 @@ describe('gcode eval run', () => {
     expect(run.stopped).toBe(true);
     expect(budgets.map((b) => b.toFixed(2))).toEqual(['0.40', '0.20']);
     expect(out.join('\n')).toContain('! budget: stopped at an estimated $0.6000 before task 3 of 4, past --max-cost 0.5');
+  });
+
+  it("removes each task's check cache with its clone", async () => {
+    const { tasks, store, io, home } = await setUp();
+    const caches: string[] = [];
+    const adapter: AgentAdapter = {
+      async run(input) {
+        const cache = checkCacheDir(homeOf(store), await realpath(input.workspace));
+        await mkdir(cache, { recursive: true });
+        await writeFile(path.join(cache, 'tsbuildinfo'), '{}');
+        caches.push(cache);
+        return stubAdapter([]).run(input, { io, store });
+      },
+    };
+    await runEval(
+      { io, store },
+      { tasks, agent: 'gcode', adapter, model: 'qwen3.8-flash', maxCostPerTaskUsd: 0.4, maxCostUsd: 3, runsDir: path.join(home, 'runs'), check: undefined, checkAfterEdit: true },
+    );
+    expect(caches).toHaveLength(2);
+    expect(caches.filter((cache) => existsSync(cache))).toEqual([]);
   });
 });
