@@ -12,6 +12,7 @@ import { commandsList } from './commands.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { evalRunCommand } from './eval-run.js';
+import { evalSpeedCommand } from './eval-speed.js';
 import { mcpCommands } from './mcp/cli.js';
 import { listSessionsCommand } from './history.js';
 import { mine } from './mine.js';
@@ -38,6 +39,7 @@ export const USAGE = `usage:
     appliers: noop, oracle, str_replace, apply_patch, whole_file
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
   gcode eval run --agent gcode|claude-code (--task <id> | --all) [--model qwen3.8-flash] [--max-cost-per-task 0.40] [--max-cost 3] [--runs-dir <dir>] [--check "<cmd>"] [--no-check-after-edit]
+  gcode eval speed [--model qwen3.8-flash] [--max-cost-per-task 0.05] [--max-cost 0.12] [--runs-dir <dir>] [--check "<cmd>"] [--from <results.jsonl>]
   gcode eval classifier [--dry-run] [--concurrency 4] [--max-cost 0.40]
   gcode tab report [--since <iso>]
   gcode tab replay [--history 6] [--limit 100] [--warmup 3] [--endpoint <url>] [--out <file>]`;
@@ -150,6 +152,7 @@ const evalCommands: Record<string, Command> = {
   apply: applyCommand,
   'check-task': checkTaskCommand,
   run: evalRunCommand,
+  speed: evalSpeedCommand,
   classifier: classifierEvalCommand,
 };
 
