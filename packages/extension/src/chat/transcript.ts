@@ -1,4 +1,5 @@
-import type { Action, Block, PermissionBlock, ToolBlock, Transcript, Turn } from './messages.js';
+import type { AskUserAnswer } from '@g-code/core';
+import type { Action, Block, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn } from './messages.js';
 
 export const emptyTranscript = (model: string): Transcript => ({ model, turns: [] });
 
@@ -29,6 +30,7 @@ const toolWithId = (id: string) => (block: Block): block is ToolBlock => block.k
 const isRunningTool = (block: Block): block is ToolBlock => block.kind === 'tool' && block.status === 'running';
 const isOpen = (id?: string) => (block: Block): block is PermissionBlock =>
   block.kind === 'permission' && block.outcome.kind === 'open' && (id === undefined || block.id === id);
+const answered = (answer: AskUserAnswer): PermissionOutcome => (answer.kind === 'answered' ? { kind: 'answered', answers: answer.answers } : { kind: 'skipped' });
 const nextId = (turn: Turn): string => `${turn.id}:${turn.blocks.length}`;
 
 function newTool(id: string, at: number): ToolBlock {
@@ -109,7 +111,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     onLast(transcript, (turn) =>
       mapBlocks(turn, isOpen(id), (block) => ({
         ...block,
-        outcome: answer !== undefined ? { kind: 'answered', text: answer } : optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId },
+        outcome: answer !== undefined ? answered(answer) : optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId },
       })),
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),

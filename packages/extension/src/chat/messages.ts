@@ -1,4 +1,4 @@
-import type { AppliedRule, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
@@ -91,15 +91,17 @@ export type PermissionChoice = { readonly optionId: string; readonly name: strin
 export type PermissionOutcome =
   | { readonly kind: 'open' }
   | { readonly kind: 'chosen'; readonly optionId: string }
-  /** A question's answer: an option picked or words typed; empty when the user declined to answer. */
-  | { readonly kind: 'answered'; readonly text: string }
+  /** A question card's answers, keyed by question id. */
+  | { readonly kind: 'answered'; readonly answers: AskUserAnswers }
+  /** The user declined a question card, with Skip or Esc. */
+  | { readonly kind: 'skipped' }
   | { readonly kind: 'cancelled' };
 
 /**
- * What a card asks besides running a command: to keep a note across sessions (`remember`), or a question
- * (`ask_user`), whose `options` are answers to pick and which also takes the user's own words.
+ * What a card asks besides running a command: to keep a note across sessions (`remember`), or one to four questions
+ * (`ask_user`), each with its options and an Other answer in the user's own words.
  */
-export type PermissionAsk = { readonly kind: 'memory'; readonly text: string; readonly scope: MemoryScope } | { readonly kind: 'question'; readonly question: string };
+export type PermissionAsk = { readonly kind: 'memory'; readonly text: string; readonly scope: MemoryScope } | { readonly kind: 'question'; readonly request: AskUserRequest };
 
 /**
  * The engine waiting on the user: before it runs a command its rules hold back, or, with `ask`, before it keeps a
@@ -165,8 +167,8 @@ export type Action =
       readonly ask?: PermissionAsk | undefined;
       readonly toolId?: string | undefined;
     }
-  /** `answer` settles a question; otherwise `optionId` is the choice, undefined when the request was cancelled. */
-  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: string | undefined }
+  /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
+  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }
   | { readonly type: 'error'; readonly message: string }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
 
@@ -284,8 +286,8 @@ export type FromView =
   | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
-  /** The answer to a question card; empty declines to answer. */
-  | { readonly type: 'answer'; readonly id: string; readonly text: string }
+  /** The user's answers to a question card, or their refusal. */
+  | { readonly type: 'answer'; readonly id: string; readonly answer: AskUserAnswer }
   /** Keep or undo hunks, one from a hunk's buttons or every pending one of a turn from its changes card. */
   | { readonly type: 'keep'; readonly hunks: readonly string[] }
   | { readonly type: 'undo'; readonly hunks: readonly string[] }
