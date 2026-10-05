@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -36,8 +36,33 @@ const ofKind = <K extends TurnEvent['kind']>(events: readonly TurnEvent[], kind:
 let nextId = 0;
 const use = (name: string, input: unknown): FakeToolUse => ({ id: `tu_${nextId++}`, name, input });
 const bash = (command: string) => use('bash', { command });
+const toolResult = (body: { messages: { content: { type: string; content?: string }[] }[] }): string =>
+  body.messages.at(-1)!.content.find((block) => block.type === 'tool_result')!.content!;
 
 describe('gcode agent', () => {
+  it('sends the project context loaded at session start, unchanged after the files change, on every turn', async () => {
+    const { workspace, env, store } = await setup({
+      'AGENTS.md': 'Run tests with pnpm test.\n',
+      '.cursor/rules/ts.mdc': '---\nglobs: *.ts\n---\nNo default exports.\n',
+      'a.ts': 'export const a = 1;\n',
+    });
+    const transport = fakeTransport([toolCall('Reading.', [use('read', { path: 'a.ts' })], usage), answer('Read it.', usage), answer('Again.', usage)]);
+    const first = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Read a.ts'], env, { fetch: transport.fetch });
+    expect(first.code).toBe(0);
+    writeFileSync(path.join(workspace, 'AGENTS.md'), 'Changed after the session started.\n');
+    const id = sessionIdOf(first.stdout);
+    expect((await runCli(['agent', '--session', id, '--non-interactive', 'Once more'], env, { fetch: transport.fetch })).code).toBe(0);
+
+    const opening = (i: number) => transport.requests[i]!.body.messages[0].content[0].text as string;
+    expect(opening(0)).toContain('<project_instructions path="AGENTS.md">\nRun tests with pnpm test.\n\n</project_instructions>');
+    expect(opening(0)).toContain('- .cursor/rules/ts.mdc (*.ts)');
+    expect(transport.requests[0]!.body.system[0].text).toBe(AGENT_SYSTEM_PROMPT);
+    expect(opening(2)).toBe(opening(0));
+    expect(toolResult(transport.requests[1]!.body)).toContain('<project_rule path=".cursor/rules/ts.mdc" matched="a.ts">\nNo default exports.\n</project_rule>');
+    const log = await readSessionLog(sessionFile(store, asSessionId(id)));
+    expect(log.events[0]).toMatchObject({ kind: 'session-start', context: { instructions: [{ path: 'AGENTS.md', text: 'Run tests with pnpm test.\n' }] } });
+  });
+
   it('edits two files across two turns, and rewind restores both byte for byte', async () => {
     const original = { 'a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n' };
     const { workspace, env, store } = await setup(original);
