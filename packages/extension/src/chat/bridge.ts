@@ -94,7 +94,8 @@ export async function writeTextFile(
   // A refused edit most likely met a document the user changed in the meantime, so it is reported as stale.
   if (!(await vscode.workspace.applyEdit(edit))) throw stale(file);
   onWrite(document, change);
-  if (save) await document.save();
+  // The edit is in the buffer either way; a failed save leaves it unsaved rather than failing a write that happened.
+  if (save) await document.save().then(undefined, () => false);
   return {};
 }
 

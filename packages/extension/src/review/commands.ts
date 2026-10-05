@@ -44,7 +44,15 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
     vscode.commands.registerCommand(UNDO_COMMAND, (node: HunkId | Tracked) => review.undo([idOf(node)])),
     vscode.commands.registerCommand(KEEP_FILE_COMMAND, (uri?: vscode.Uri) => review.keep(review.pendingIn(fileOf(uri)).map((h) => h.id))),
     vscode.commands.registerCommand(UNDO_FILE_COMMAND, (uri?: vscode.Uri) => review.undo(review.pendingIn(fileOf(uri)).map((h) => h.id))),
-    vscode.commands.registerCommand(UNDO_SESSION_COMMAND, () => review.undoSession()),
+    vscode.commands.registerCommand(UNDO_SESSION_COMMAND, async (confirmed?: boolean) => {
+      // The rewind restores the whole workspace, including files the user changed or created by hand since the session began.
+      const answer = confirmed === true ? 'Undo All' : await vscode.window.showWarningMessage(
+        'Undo every change since this g-code session began?',
+        { modal: true, detail: 'Every file in the workspace goes back to the session\'s first checkpoint, your own edits included, and files created since are deleted.' },
+        'Undo All',
+      );
+      return answer === 'Undo All' ? review.undoSession() : undefined;
+    }),
     vscode.commands.registerCommand(OPEN_DIFF_COMMAND, (uri?: vscode.Uri) => openDiff(fileOf(uri))),
     vscode.commands.registerCommand(REVEAL_COMMAND, async (id: HunkId) => {
       const hunk = review.get(id);
