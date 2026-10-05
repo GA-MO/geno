@@ -90,3 +90,35 @@ This follows the mockup the user approved on 2026-10-06.
 ## U18b: the working dino
 
 This is the rest of `docs/u18-brief.md`. Start it after U36.
+
+## U37: widgets in the chat (after U36)
+
+The user saw Claude's `show_widget` (an HTML, CSS and JS fragment drawn inline in the chat) and asked for it in Geno.
+
+**Probe, 2026-10-06.** `qwen3.8-flash` was asked for 5 widgets with a short system prompt: a Payload admin mockup, a Next.js and Payload flow diagram, a speed chart, three pricing layouts, and a debounce versus throttle demo.
+- **What worked.**
+  - All 5 rendered and their interactions worked. The filter really filtered, a node click explained, and throttle fired 4 times over about 1 s of moves while debounce fired once.
+  - No rule was broken: no external resources, only the given colors, flat design.
+  - Cost was $0.0065 in total. Each took 25 to 42 s and 2,200 to 3,000 output tokens.
+  - The script and outputs are in the session scratchpad, `widget-probe/`.
+- **Weak spots.**
+  - Every widget used a fixed 680 px width.
+  - One chart used near-white on the dark background.
+  - Writing is slow.
+
+**Build:**
+- **A `show_widget` tool** taking `{ title, html, loading_messages? }`. The engine stores the fragment as a session attachment (U8's hash-addressed store) and logs the reference, so a loaded session shows it again.
+- **Rendering.** It draws in a sandboxed iframe: `sandbox="allow-scripts"`, never `allow-same-origin`. Its CSP has no network (`default-src 'none'`, inline scripts and styles allowed), so it has no access to the webview, VS Code, files or Geno. The only channel is `postMessage` for its height. A link click becomes a request the user approves.
+- **Theme.** The current glass theme's CSS variables are injected into the frame, light or dark, with a chart palette of 6 colors that read on both. The system prompt for the tool names the variables and the palette, says `width: 100%` with no fixed widths, and asks for the order style, then markup, then script.
+- **While the model writes,** the step shows the loading messages and the working dino's pencil pose (U18b).
+- **Actions in a ⋯ menu:**
+  - Copy as image: render the frame to PNG through the extension host, not the frame.
+  - Download as HTML: a standalone file with the theme variables inlined.
+  - Open in a VS Code editor tab.
+- **When it is offered.** The tool is offered in every interactive mode, Plan included, because it changes nothing on disk. It is not offered in non-interactive runs.
+- **Check:**
+  - Unit tests: the tool's input schema, the stored attachment round trip, and the frame HTML builder (the CSP and the sandbox attributes are exact).
+  - A security test: a widget that tries `fetch`, `parent.document`, `top.location`, `localStorage` and a `form` post gets none of them. Prove each with a red run.
+  - An integration test that a fake model's widget renders, resizes to its content, and survives a reload.
+  - A live smoke on `qwen3.8-flash` under $0.03 with two of the probe prompts.
+  - Screenshots in dark glass, light glass and high contrast.
