@@ -50,7 +50,7 @@ describe('the summary of a turn', () => {
       call('b2', 'bash', 'npm test', 'failed'),
       call('b3', 'bash', 'rm -rf /', 'failed', { auto: { verdict: 'deny', reason: 'it deletes everything' } }),
       call('b4', 'bash', 'rm -rf build', 'running'),
-      { type: 'permission', id: 'p1', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'no', name: 'Deny', kind: 'reject_once' }] },
+      { type: 'permission', id: 'p1', toolId: 'b4', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'no', name: 'Deny', kind: 'reject_once' }] },
       { type: 'permission-done', id: 'p1', optionId: 'no' },
       call('b4', 'bash', 'rm -rf build', 'failed'),
       call('m1', 'mcp__docs__search', '{"q":"x"}'),
@@ -66,10 +66,21 @@ describe('the summary of a turn', () => {
     expect(summaryLine(summaryOf(turn))).toBe('Searched once · ran 1 command');
   });
 
+  it('denies the call the permission asked about, even when the card arrives before the call', () => {
+    const turn = turnOf([
+      call('g1', 'grep', 'build'),
+      { type: 'permission', id: 'p1', toolId: 'b1', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'no', name: 'Deny', kind: 'reject_once' }] },
+      { type: 'permission-done', id: 'p1', optionId: 'no' },
+      call('b1', 'bash', 'rm -rf build', 'failed'),
+      end(),
+    ]);
+    expect(summaryLine(summaryOf(turn))).toBe('Searched once · ran 1 command · 1 denied');
+  });
+
   it('allows a command whose permission the user granted', () => {
     const turn = turnOf([
       call('b1', 'bash', 'rm -rf build', 'running'),
-      { type: 'permission', id: 'p1', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'yes', name: 'Allow', kind: 'allow_once' }] },
+      { type: 'permission', id: 'p1', toolId: 'b1', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'yes', name: 'Allow', kind: 'allow_once' }] },
       { type: 'permission-done', id: 'p1', optionId: 'yes' },
       call('b1', 'bash', 'rm -rf build', 'completed'),
       end(),

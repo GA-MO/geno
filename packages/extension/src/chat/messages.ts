@@ -114,6 +114,8 @@ export type PermissionBlock = {
   /** Why the classifier would not decide, when Auto asked it first. */
   readonly classifier?: string | undefined;
   readonly ask?: PermissionAsk | undefined;
+  /** The call it asks about. Its own update can reach the panel after the question does. */
+  readonly toolId?: string | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -160,6 +162,7 @@ export type Action =
       readonly options: readonly PermissionChoice[];
       readonly classifier?: string | undefined;
       readonly ask?: PermissionAsk | undefined;
+      readonly toolId?: string | undefined;
     }
   /** `answer` settles a question; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: string | undefined }

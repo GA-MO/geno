@@ -1,4 +1,4 @@
-import { TOOL_KINDS, type Block, type ChatDetail, type ToolBlock, type ToolKind, type Turn } from './messages.js';
+import { TOOL_KINDS, type Block, type ChatDetail, type PermissionBlock, type ToolBlock, type ToolKind, type Turn } from './messages.js';
 import { isEdit, nodeOf, railOf, type EditTool, type Step } from './rail.js';
 
 /** What a turn did, as its summary line counts it: calls by tool kind, then the calls that failed and those denied. */
@@ -48,23 +48,17 @@ const ENDINGS: readonly { readonly of: 'failed' | 'denied'; readonly says: (n: n
   { of: 'denied', says: (n) => `${n} denied` },
 ];
 
-/**
- * The calls Auto denied, or whose permission the user rejected. A permission always asks about the call just before
- * it, since the engine runs one call at a time.
- */
+const rejected = ({ outcome, options }: PermissionBlock): boolean =>
+  outcome.kind === 'chosen' && options.find((option) => option.optionId === outcome.optionId)?.kind.startsWith('reject') === true;
+
+/** The calls Auto denied, or whose permission the user rejected. */
 function deniedCalls(blocks: readonly Block[]): ReadonlySet<string> {
-  const denied = new Set<string>();
-  let last: ToolBlock | undefined;
-  for (const block of blocks) {
-    if (block.kind === 'tool') {
-      last = block;
-      if (block.auto?.verdict === 'deny') denied.add(block.id);
-    } else if (block.kind === 'permission' && last !== undefined && block.outcome.kind === 'chosen') {
-      const { optionId } = block.outcome;
-      if (block.options.find((option) => option.optionId === optionId)?.kind.startsWith('reject') === true) denied.add(last.id);
-    }
-  }
-  return denied;
+  return new Set(
+    blocks.flatMap((block) => {
+      if (block.kind === 'tool') return block.auto?.verdict === 'deny' ? [block.id] : [];
+      return block.kind === 'permission' && block.toolId !== undefined && rejected(block) ? [block.toolId] : [];
+    }),
+  );
 }
 
 export function summaryOf(turn: Turn): Summary {
