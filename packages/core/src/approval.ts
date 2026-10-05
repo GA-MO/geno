@@ -63,7 +63,7 @@ type DenyRule = {
 };
 
 export type Denial = {
-  readonly rule: DenyRuleId;
+  readonly rule: ApprovalRuleId;
   readonly reason: string;
   readonly command: string;
   readonly verdict: Exclude<RuleVerdict, 'allow'>;
@@ -364,6 +364,31 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     matches: (command) => !isClearlySafe(command),
   },
 };
+
+/**
+ * MCP tool calls, which run outside the sandbox in a server the user connected. Ask asks until the user allows the tool
+ * for the session; Auto runs what the server marks read-only and lets the classifier judge the rest. A non-interactive
+ * run offers MCP tools only when its flag turns them on, which is that run's consent.
+ */
+export const MCP_RULE_IDS = ['mcp-read-only', 'mcp-tool'] as const;
+export type McpRuleId = (typeof MCP_RULE_IDS)[number];
+export type ApprovalRuleId = DenyRuleId | McpRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS] as const;
+export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
+
+export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
+  'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
+  'mcp-tool': { reason: 'an MCP tool', verdicts: { ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
+};
+
+/** What settles one MCP call before it runs, or undefined when it runs. A tool the user allowed for the session always runs. */
+export function mcpDenialFor(call: { readonly name: string; readonly readOnly: boolean }, mode: ApprovalMode, allowedForSession: boolean): Denial | undefined {
+  if (allowedForSession) return undefined;
+  const rule: McpRuleId = call.readOnly ? 'mcp-read-only' : 'mcp-tool';
+  const { reason, verdicts } = MCP_RULES[rule];
+  const verdict = verdicts[mode];
+  return verdict === 'allow' ? undefined : { rule, reason, command: call.name, verdict };
+}
 
 const SEPARATORS = ['&&', '||', ';;', ';', '&', '|', '\n', '(', ')'];
 const REDIRECTS = ['>>', '>&', '&>', '>', '<'];
