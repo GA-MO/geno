@@ -235,6 +235,7 @@
     "@g-code/core": "workspace:*",
     "@vscode/codicons": "0.0.46-24",
     "marked": "^18.0.14",
+    "mermaid": "^12.1.0",
     "prismjs": "^1.30.0",
     "zod": "^4.6.5"
   },

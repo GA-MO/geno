@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createVSIX } from '@vscode/vsce';
@@ -25,6 +25,26 @@ const BUNDLES: readonly BuildOptions[] = [
     minify: true,
   },
   {
+    entryPoints: [path.join(root, 'src/chat/diagram-tab-view.ts')],
+    outfile: path.join(dist, 'diagram-tab.js'),
+    platform: 'browser',
+    format: 'iife',
+    target: 'es2022',
+    minify: true,
+  },
+  {
+    // Mermaid, which the panels import only once a transcript holds a diagram. As ES modules split into chunks,
+    // a page loads the diagram types it draws and no others.
+    entryPoints: { render: path.join(root, 'src/chat/diagram-render.ts') },
+    outdir: path.join(dist, 'diagram'),
+    chunkNames: 'chunks/[name]-[hash]',
+    platform: 'browser',
+    format: 'esm',
+    splitting: true,
+    target: 'es2022',
+    minify: true,
+  },
+  {
     // The panel's styles with the codicon font they import, served from dist under the webview's strict CSP.
     entryPoints: [path.join(root, 'src/chat/webview.css')],
     outfile: path.join(dist, 'webview.css'),
@@ -46,6 +66,8 @@ const BUNDLES: readonly BuildOptions[] = [
 
 /** Builds the extension host bundle, the chat webview and the engine the extension spawns. */
 export async function buildExtension(): Promise<void> {
+  // Chunk names change with their content, so old ones would pile up in the package.
+  await rm(path.join(dist, 'diagram'), { recursive: true, force: true });
   await Promise.all(BUNDLES.map((options) => build({ bundle: true, logLevel: 'warning', ...options })));
   await mkdir(path.join(dist, 'engine'), { recursive: true });
   await writeFile(path.join(dist, 'engine/package.json'), '{ "type": "module" }\n');

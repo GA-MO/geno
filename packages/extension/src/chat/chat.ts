@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import { z } from 'zod';
@@ -18,10 +17,12 @@ import {
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
+import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { Mentions } from './context.js';
 import { TOOL_KINDS, type Action, type FileDiff, type FromView, type ToView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type Usage } from './messages.js';
+import { pageHtml } from './page.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
 
 export const CHAT_VIEW = 'gcode.chat';
@@ -327,22 +328,14 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       undo: ({ hunk }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunk),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
+      'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
     };
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] };
-    const nonce = randomBytes(16).toString('base64');
-    const { cspSource } = view.webview;
-    const script = view.webview.asWebviewUri(vscode.Uri.joinPath(dist, 'webview.js'));
-    const style = view.webview.asWebviewUri(vscode.Uri.joinPath(dist, 'webview.css'));
-    // data-manual keeps Prism from scanning the page on load; the panel highlights code blocks itself.
-    view.webview.html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource}; font-src ${cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${style}">
-</head><body><script nonce="${nonce}" src="${script}" data-manual></script></body></html>`;
+    view.webview.html = pageHtml(view.webview, dist, 'webview.js');
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
     view.onDidDispose(() => {

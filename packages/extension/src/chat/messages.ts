@@ -125,4 +125,6 @@ export type FromView =
   | { readonly type: 'undo'; readonly hunk: string }
   /** Opens the file a hunk is in, at the hunk. */
   | { readonly type: 'reveal'; readonly hunk: string }
-  | { readonly type: 'copy'; readonly text: string };
+  | { readonly type: 'copy'; readonly text: string }
+  /** Opens a diagram full size in an editor tab. */
+  | { readonly type: 'open-diagram'; readonly source: string };

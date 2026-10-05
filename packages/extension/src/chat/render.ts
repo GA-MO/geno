@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
@@ -217,11 +218,12 @@ export const errorBlock = (block: ErrorBlock): HTMLElement =>
 /** Assistant text, revealed up to `shown` characters, with a caret while more is coming. */
 export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
   const element = h('div', { class: 'markdown' });
-  element.append(renderMarkdown(text, { copy: (code) => ui.post({ type: 'copy', text: code }) }));
+  const actions = { copy: (code: string) => ui.post({ type: 'copy', text: code }), open: (source: string) => ui.post({ type: 'open-diagram', source }) };
+  element.append(renderMarkdown(text, { copy: actions.copy, diagram: (diagram) => diagramBlock(diagram, actions) }));
   if (caret) {
     const last = element.lastElementChild;
     // The caret follows the last word, inside the paragraph or list item it ends.
-    const host = last === null || last.classList.contains('code-block') ? element : (last.matches('ul, ol') ? last.lastElementChild ?? last : last);
+    const host = last === null || last.matches('.code-block, .diagram') ? element : (last.matches('ul, ol') ? last.lastElementChild ?? last : last);
     host.append(h('span', { class: 'caret', 'aria-hidden': 'true' }));
   }
   return element;

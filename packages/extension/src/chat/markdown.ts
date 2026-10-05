@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { lexer, type MarkedToken, type Token, type Tokens } from 'marked';
+import { diagramOf, type Diagram } from './diagram.js';
 import { h, icon, type Child } from './dom.js';
 import { highlight } from './highlight.js';
 
@@ -8,7 +9,7 @@ import { highlight } from './highlight.js';
  * HTML from the model is shown as the text it is, so the model can never inject markup or script.
  */
 
-export type MarkdownContext = { readonly copy: (text: string) => void };
+export type MarkdownContext = { readonly copy: (text: string) => void; readonly diagram: (diagram: Diagram) => Child };
 
 type Kind = MarkedToken['type'];
 /** A renderer per token type; a type missing from a table is shown as its source text. */
@@ -41,24 +42,29 @@ const INLINE: Renderers = {
 
 const inlineNode = (token: Token, ctx: MarkdownContext): Child => render(INLINE, token, ctx, (raw) => raw);
 
-function codeBlock(code: string, lang: string | undefined, ctx: MarkdownContext): HTMLElement {
-  const label = lang?.trim().split(/\s/)[0] || undefined;
-  const copy = h(
+/** A copy button that shows a check for a moment once it has copied. */
+export function copyButton(text: string, copy: (text: string) => void, label = 'Copy code'): HTMLButtonElement {
+  const button = h(
     'button',
     {
       class: 'icon-button copy',
       title: 'Copy',
-      'aria-label': 'Copy code',
+      'aria-label': label,
       onclick: () => {
-        ctx.copy(code);
-        copy.replaceChildren(icon('check'));
-        setTimeout(() => copy.replaceChildren(icon('copy')), 1500);
+        copy(text);
+        button.replaceChildren(icon('check'));
+        setTimeout(() => button.replaceChildren(icon('copy')), 1500);
       },
     },
     icon('copy'),
   );
+  return button;
+}
+
+export function codeBlock(code: string, lang: string | undefined, copy: (text: string) => void): HTMLElement {
+  const label = lang?.trim().split(/\s/)[0] || undefined;
   const pre = h('pre', {}, h('code', {}, ...highlight(code, label)));
-  return h('div', { class: 'code-block' }, h('div', { class: 'code-toolbar' }, label !== undefined && h('span', { class: 'code-lang' }, label), copy), pre);
+  return h('div', { class: 'code-block' }, h('div', { class: 'code-toolbar' }, label !== undefined && h('span', { class: 'code-lang' }, label), copyButton(code, copy)), pre);
 }
 
 function listItem(item: Tokens.ListItem, ctx: MarkdownContext): HTMLElement {
@@ -72,7 +78,10 @@ const BLOCK: Renderers = {
   // Inside a tight list item marked yields bare text tokens for its lines.
   text: (t, ctx) => h('span', {}, ...(t.tokens === undefined ? [t.text] : inline(t.tokens, ctx))),
   heading: (t, ctx) => h(`h${Math.min(Math.max(t.depth, 1), 6)}` as 'h1', {}, ...inline(t.tokens, ctx)),
-  code: (t, ctx) => codeBlock(t.text, t.lang, ctx),
+  code: (t, ctx) => {
+    const diagram = diagramOf(t.lang, t.raw, t.text);
+    return diagram === undefined ? codeBlock(t.text, t.lang, ctx.copy) : ctx.diagram(diagram);
+  },
   blockquote: (t, ctx) => h('blockquote', {}, ...blocks(t.tokens, ctx)),
   hr: () => h('hr'),
   html: (t) => h('p', {}, t.raw),
