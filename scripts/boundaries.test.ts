@@ -15,6 +15,7 @@ describe('boundaries', () => {
     expect(BOUNDARIES.bundles[0]?.entries).toEqual([
       'packages/extension/src/chat/webview.ts',
       'packages/extension/src/chat/diagram-tab-view.ts',
+      'packages/extension/src/chat/widget-tab-view.ts',
       'packages/extension/src/chat/diagram-render.ts',
     ]);
   });

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
-import { parseShowWidget, WIDGET_CAPABILITY, WIDGET_META, WIDGET_PALETTE, type WidgetRef } from '@g-code/core';
+import { asSessionId, parseShowWidget, WIDGET_CAPABILITY, WIDGET_META, WIDGET_PALETTE, type WidgetRef } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { attachmentsDir } from '../src/attachments.js';
@@ -86,13 +86,13 @@ async function main(): Promise<number> {
   const shown: Shown[] = [];
   const assistants: { usage?: { input: number; cacheRead: number; cacheWrite: number; output: number }; costUsd?: number | null }[] = [];
   for (const sessionId of sessions) {
-    const dir = attachmentsDir(store, sessionId as acp.SessionId);
+    const dir = attachmentsDir(store, asSessionId(sessionId));
     for (const ref of refs.values()) {
       const file = path.join(dir, `${ref.sha256}.html`);
       const html = await readFile(file, 'utf8').catch(() => undefined);
       if (html !== undefined && !shown.some((w) => w.ref.sha256 === ref.sha256)) shown.push({ ref, html });
     }
-    const events = (await readFile(sessionFile(store, sessionId as acp.SessionId), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    const events = (await readFile(sessionFile(store, asSessionId(sessionId)), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
     assistants.push(...events.filter((e) => e.kind === 'assistant'));
   }
   const cost = assistants.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
