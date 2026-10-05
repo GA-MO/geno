@@ -18,6 +18,8 @@ export const PALETTE = {
   s: '#9aa5b1',
   r: '#ff7eb6',
   c: '#6ad7ff',
+  /** The peek's knuckles. */
+  d: '#4fae86',
 } as const;
 export type Ink = keyof typeof PALETTE;
 
@@ -188,7 +190,7 @@ export type Frame = {
 };
 
 /** A pose plays its intro once, then its loop; a `once` pose stops on its last frame. */
-export type Pose = { readonly intro?: readonly Frame[]; readonly loop: readonly Frame[]; readonly once?: true };
+export type Pose<F = Frame> = { readonly intro?: readonly F[]; readonly loop: readonly F[]; readonly once?: true };
 
 export const STAND: Frame = { eye: 'open', tail: 'down', legs: 'stand', arms: 'none' };
 const f = (over: Partial<Frame>): Frame => ({ ...STAND, ...over });
@@ -258,6 +260,19 @@ export const POSES = poseTable({
   sweat: {
     loop: [f({ marks: ['sweat'], hold: 12 }), f({ eye: 'blink', marks: ['sweat'], hold: 2 })],
   },
+  /** A roll in the air, a quarter turn at a time, so the pixels stay whole; it lands upright with a sparkle. */
+  somersault: {
+    once: true,
+    loop: [
+      f({ legs: 'tucked', dy: -1, hold: 2 }),
+      f({ legs: 'tucked', dy: -1, quarter: 1, hold: 2 }),
+      f({ legs: 'tucked', dy: -1, quarter: 2, hold: 2 }),
+      f({ legs: 'tucked', dy: -1, quarter: 3, hold: 2 }),
+      f({ legs: 'tucked', hold: 1 }),
+      f({ marks: ['sparkle'], hold: 3 }),
+      f({ hold: 1 }),
+    ],
+  },
   /** The user just sent a message: a little hop, then a happy look up at it. */
   face: {
     once: true,
@@ -267,7 +282,26 @@ export const POSES = poseTable({
 export type PoseName = keyof typeof POSES;
 export const POSE_NAMES = Object.keys(POSES) as readonly PoseName[];
 
-export const framesOf = (pose: Pose): readonly Frame[] => [...(pose.intro ?? []), ...pose.loop];
+export const framesOf = <F>(pose: Pose<F>): readonly F[] => [...(pose.intro ?? []), ...pose.loop];
+
+const ticksOf = (frames: readonly { readonly hold?: number }[]): number => frames.reduce((sum, frame) => sum + (frame.hold ?? 1), 0);
+
+/**
+ * The frame `t` ticks into a pose: its intro once when `intro`, then its loop, which a `once` pose plays once and
+ * then holds on its last frame. `cycled` says the pose has played through once; `ended`, that a `once` pose is over.
+ */
+export function playhead<F extends { readonly hold?: number }>(pose: Pose<F>, t: number, intro: boolean): { readonly frame: F; readonly cycled: boolean; readonly ended: boolean } {
+  const opening = intro ? (pose.intro ?? []) : [];
+  const loop = ticksOf(pose.loop);
+  const cycled = t >= ticksOf(opening) + loop;
+  if (pose.once === true && cycled) return { frame: pose.loop.at(-1)!, cycled, ended: true };
+  let at = t < ticksOf(opening) ? t : (t - ticksOf(opening)) % loop;
+  for (const frame of t < ticksOf(opening) ? opening : pose.loop) {
+    at -= frame.hold ?? 1;
+    if (at < 0) return { frame, cycled, ended: false };
+  }
+  return { frame: pose.loop[0]!, cycled, ended: false };
+}
 
 const blank = (): string[][] => Array.from({ length: SIZE }, () => Array<string>(SIZE).fill('.'));
 
@@ -328,3 +362,103 @@ export function svgOf(grid: Grid): string {
   );
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${grid[0]!.length}" height="${grid.length}" viewBox="0 0 ${grid[0]!.length} ${grid.length}" shape-rendering="crispEdges">${rects.join('')}</svg>`;
 }
+
+/**
+ * The peek: Noodle leaning on the composer's top edge, the grid's last row. One body, from the head down the neck
+ * to the shoulders and the chest with its white belly, cut off by the edge; the arms and hands are drawn per frame.
+ */
+const PEEK_BODY: Grid = [
+  '........................',
+  '.............ggggggggg..',
+  '.............ggggggggg..',
+  '.............ggggggggg..',
+  '.............ggggggggg..',
+  '.............ggggggggg..',
+  '.............ggggggggg..',
+  '.............gggg.......',
+  '.............gggg.......',
+  '.............gggg.......',
+  '.............gggg.......',
+  '.............gggg.......',
+  '..........gggggggggg....',
+  '.........gggggggggggg...',
+  '.........gggggggggggg...',
+  '..........gggwwwwggg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+  '..........ggwwwwwwgg....',
+];
+
+/** A 3 by 2 hand, its knuckles a darker green. */
+const HAND = ['dgd', 'ggg'];
+
+/**
+ * Where a hand is: gripping the edge, lifted a row off it, let go (the arm hangs below the edge), or waving above
+ * it in one of two places. Drawn for the right side; the left side is its mirror about the chest.
+ */
+const HANDS = parts({
+  grip: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', ...HAND] }],
+  lift: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', ...HAND] }],
+  off: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.'] }],
+  waveA: [{ x: 21, y: 8, art: [...HAND, '.g.', '.g.', '.g.', 'gg.', 'g..'] }],
+  waveB: [{ x: 20, y: 9, art: [...HAND, '.g.', '.g.', '.g.', '.g.'] }],
+});
+export type Hand = keyof typeof HANDS;
+
+/** The chest's middle column, doubled: the left hand is the right one mirrored about it. */
+const CHEST_MIRROR = 29;
+const mirrored = (stamps: readonly Stamp[]): Stamp[] =>
+  stamps.map(({ x, y, art }) => ({ x: CHEST_MIRROR - (x + art[0]!.length - 1), y, art: art.map((line) => [...line].reverse().join('')) }));
+
+/** One picture of the peek. `sink` is how many rows the whole body sits below its full climb; the composer hides what passes its edge. */
+export type PeekFrame = {
+  readonly eye: Eye;
+  readonly left: Hand;
+  readonly right: Hand;
+  readonly sink?: number;
+  /** The eye looks toward the pointer, which the view knows, instead of `eye`. */
+  readonly toPointer?: true;
+  readonly hold?: number;
+};
+
+export function composePeek(frame: PeekFrame): Grid {
+  const cells = PEEK_BODY.map((row) => [...row]);
+  paint(cells, [...mirrored(HANDS[frame.left]), ...HANDS[frame.right], ...EYES[frame.eye]]);
+  return cells.map((row) => row.join(''));
+}
+
+const GRIPPING: PeekFrame = { eye: 'open', left: 'grip', right: 'grip' };
+const p = (over: Partial<PeekFrame>): PeekFrame => ({ ...GRIPPING, ...over });
+const LET_GO: PeekFrame = { ...GRIPPING, left: 'off', right: 'off' };
+
+/** The peek's moves, each a row; the view picks which plays and when. */
+export const PEEK_MOVES = {
+  climb: {
+    once: true,
+    loop: [
+      ...[24, 20, 16, 12, 8, 5, 3, 1].map((sink) => ({ ...LET_GO, sink })),
+      p({ hold: 3 }),
+      p({ eye: 'blink', hold: 2 }),
+      p({ hold: 3 }),
+    ],
+  },
+  /** While the user types: eyes down toward the text, with a blink now and then. */
+  typing: { loop: [p({ eye: 'downLeft', hold: 40 }), p({ eye: 'blink', hold: 2 })] },
+  lookAround: { once: true, loop: [p({ eye: 'left', hold: 8 }), p({ eye: 'open', hold: 8 }), p({ toPointer: true, hold: 12 })] },
+  drum: {
+    once: true,
+    loop: [1, 2, 3].flatMap(() => [p({ eye: 'downLeft', left: 'lift', hold: 2 }), p({ eye: 'downLeft', hold: 1 }), p({ eye: 'downLeft', right: 'lift', hold: 2 }), p({ eye: 'downLeft', hold: 1 })]),
+  },
+  wave: {
+    once: true,
+    loop: [...[1, 2, 3].flatMap(() => [p({ eye: 'happy', right: 'waveA', hold: 3 }), p({ eye: 'happy', right: 'waveB', hold: 3 })]), p({ hold: 2 })],
+  },
+  /** The hands let go, then the whole body slides down behind the composer. */
+  duck: { once: true, loop: [{ ...LET_GO, hold: 2 }, ...[4, 10, 16, 24].map((sink) => ({ ...LET_GO, sink }))] },
+} as const satisfies Record<string, Pose<PeekFrame>>;
+export type PeekMove = keyof typeof PEEK_MOVES;
