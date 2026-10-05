@@ -8,6 +8,8 @@ type Target = { readonly type: string; readonly url: string; readonly webSocketD
 type Connection = {
   /** `sessionId` addresses a target attached through this connection. */
   send<T = any>(method: string, params?: Record<string, unknown>, sessionId?: string): Promise<T>;
+  /** Calls `listener` with the params of every `method` event until the returned function is called. */
+  on(method: string, listener: (params: any) => void): () => void;
   close(): void;
 };
 
@@ -19,8 +21,10 @@ async function connect(url: string): Promise<Connection> {
   });
   let next = 0;
   const waiting = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+  const listeners = new Set<{ readonly method: string; readonly listener: (params: any) => void }>();
   socket.addEventListener('message', (event) => {
-    const message = JSON.parse(String(event.data)) as { id?: number; result?: unknown; error?: { message: string } };
+    const message = JSON.parse(String(event.data)) as { id?: number; method?: string; params?: unknown; result?: unknown; error?: { message: string } };
+    if (message.method !== undefined) for (const l of listeners) if (l.method === message.method) l.listener(message.params);
     const waiter = message.id === undefined ? undefined : waiting.get(message.id);
     if (waiter === undefined) return;
     waiting.delete(message.id!);
@@ -34,6 +38,11 @@ async function connect(url: string): Promise<Connection> {
         waiting.set(id, { resolve, reject });
         socket.send(JSON.stringify({ id, method, params, ...(sessionId === undefined ? {} : { sessionId }) }));
       }),
+    on: (method, listener) => {
+      const entry = { method, listener };
+      listeners.add(entry);
+      return () => listeners.delete(entry);
+    },
     close: () => socket.close(),
   };
 }
