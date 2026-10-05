@@ -28,7 +28,7 @@ export function startPage(post: (message: FromView) => void) {
   const recents = h('section', { class: 'start-recents', 'aria-label': 'Continue a chat', hidden: true }, h('h2', { class: 'start-recents-title' }, 'Continue'), list);
   const element = h(
     'section',
-    { class: 'start-page', 'aria-label': 'New chat' },
+    { class: 'start-page empty-state', 'aria-label': 'New chat' },
     stage,
     h('h1', { class: 'start-name' }, 'geno', h('span', { class: 'start-cursor', 'aria-hidden': 'true' })),
     h('p', { class: 'start-where' }, h('span', { class: 'start-project-part' }, icon('folder'), project), branchPart),
@@ -40,14 +40,23 @@ export function startPage(post: (message: FromView) => void) {
   let motion: Motion = 'paused';
   let timer: ReturnType<typeof setInterval> | undefined;
 
+  /** Writes a style only when it changes, so a tick in which Noodle stands still costs the page nothing. */
+  const styled = new Map<string, string>();
+  function style(target: HTMLElement, key: string, property: 'transform' | 'opacity', value: string): void {
+    if (styled.get(key) === value) return;
+    styled.set(key, value);
+    target.style[property] = value;
+  }
+
   function place(): void {
     const frame = motion === 'still' ? STAND : frameOf(scene);
     sprite.draw(frame);
-    sprite.element.style.transform = `translate(${Math.round(scene.x)}px, ${-Math.round(scene.y)}px)`;
+    style(sprite.element, 'dino', 'transform', `translate(${Math.round(scene.x)}px, ${-Math.round(scene.y)}px)`);
+    if (element.dataset['move'] !== scene.move) element.dataset['move'] = scene.move;
     const middle = scene.x + SCALE * (scene.facing > 0 ? BODY_MIDDLE : 24 - BODY_MIDDLE);
-    const size = 1 - 0.6 * Math.min(1, scene.y / SHADOW_FADE_PX);
-    shadow.style.transform = `translateX(${Math.round(middle)}px) translateX(-50%) scale(${size.toFixed(2)})`;
-    shadow.style.opacity = size.toFixed(2);
+    const size = (1 - 0.6 * Math.min(1, scene.y / SHADOW_FADE_PX)).toFixed(2);
+    style(shadow, 'shadow', 'transform', `translateX(${Math.round(middle)}px) translateX(-50%) scale(${size})`);
+    style(shadow, 'shade', 'opacity', size);
   }
 
   function tick(): void {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { branchOfHead } from '../src/git-branch.js';
 import type { HistoryRow } from '../src/chat/messages.js';
+import { motionOf } from '../src/chat/motion.js';
 import { gazeOf, peekState } from '../src/chat/peek-model.js';
 import { recentSessions } from '../src/chat/recents.js';
 
@@ -61,5 +62,22 @@ describe('the peek over the composer', () => {
     expect(gazeOf(-200, -300)).toBe('upLeft');
     expect(gazeOf(30, -300)).toBe('up');
     expect(gazeOf(-200, -10)).toBe('left');
+  });
+});
+
+describe('the motion budget', () => {
+  const all = { shown: true, visible: true, focused: true, reducedMotion: false, highContrast: false };
+
+  it('moves only while the start page is shown, the panel visible and the window focused', () => {
+    expect(motionOf(all)).toBe('moving');
+    expect(motionOf({ ...all, shown: false })).toBe('paused');
+    expect(motionOf({ ...all, visible: false })).toBe('paused');
+    expect(motionOf({ ...all, focused: false })).toBe('paused');
+  });
+
+  it('stands still under reduced motion and in high contrast, whatever else holds', () => {
+    expect(motionOf({ ...all, reducedMotion: true })).toBe('still');
+    expect(motionOf({ ...all, highContrast: true })).toBe('still');
+    expect(motionOf({ ...all, focused: false, highContrast: true })).toBe('still');
   });
 });
