@@ -17,6 +17,7 @@ import type { ModelRetry } from './model-error.js';
 import type { FileChange, HunkId } from './review.js';
 import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
+import type { ProviderName } from './providers.js';
 import type { Brand } from './types.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
@@ -25,23 +26,6 @@ export const asSessionId = (raw: string): SessionId => raw as SessionId;
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Effort = (typeof EFFORTS)[number];
 export const isEffort = (raw: string): raw is Effort => (EFFORTS as readonly string[]).includes(raw);
-
-export const PROVIDERS = ['openrouter', 'modelstudio'] as const;
-export type ProviderName = (typeof PROVIDERS)[number];
-export const isProviderName = (raw: string): raw is ProviderName =>
-  (PROVIDERS as readonly string[]).includes(raw);
-
-/** The environment variables the engine reads each provider's key and, where it varies, endpoint from. */
-export const PROVIDER_ENV = {
-  openrouter: { key: 'OPENROUTER_API_KEY', baseUrl: undefined },
-  modelstudio: { key: 'DASHSCOPE_API_KEY', baseUrl: 'DASHSCOPE_BASE_URL' },
-} as const satisfies Record<ProviderName, { readonly key: string; readonly baseUrl: string | undefined }>;
-
-/** The model a session uses when neither a flag, GCODE_MODEL nor the editor names one. */
-export const DEFAULT_MODELS: Readonly<Record<ProviderName, string>> = {
-  openrouter: 'anthropic/claude-opus-5.5',
-  modelstudio: 'qwen3.8-flash',
-};
 
 export type Session = {
   readonly id: SessionId;
