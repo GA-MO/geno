@@ -36,6 +36,15 @@ async function assertTabSkipsNonFileEditors(fileDocument: vscode.TextDocument): 
   }
 }
 
+/** Puts the focus back in the document's editor and asks Tab for its completion there. */
+async function showGhostText(document: vscode.TextDocument): Promise<void> {
+  // VS Code can open its chat panel at startup and move focus into its input box.
+  await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+  await vscode.window.showTextDocument(document, { preserveFocus: false });
+  await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+  await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+}
+
 export function run(): Promise<void> {
   return completeIn('math.ts');
 }
@@ -50,19 +59,20 @@ export async function completeIn(file: string): Promise<void> {
   editor.selection = new vscode.Selection(line.range.end, line.range.end);
 
   const shown = await waitFor('a shown completion in the log', async () => {
-    // VS Code can open its chat panel at startup and move focus into its input box, so put focus back each time.
-    await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
-    await vscode.window.showTextDocument(document, { preserveFocus: false });
-    await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-    await vscode.commands.executeCommand('editor.action.inlineSuggest.trigger');
+    await showGhostText(document);
     await new Promise((r) => setTimeout(r, 300));
     return (await logLines()).find((e) => e.kind === 'request' && e.request?.outcome.kind === 'shown')?.request;
   });
 
-  await vscode.commands.executeCommand('editor.action.inlineSuggest.commit');
-  await waitFor('the ghost text to be inserted', async () =>
-    document.lineAt(1).text.endsWith(shown.text) ? true : undefined,
-  );
+  // VS Code drops ghost text whenever the editor loses focus (editor.inlineSuggest.keepOnBlur is off), so each try
+  // shows it again before accepting it.
+  await waitFor('the ghost text to be inserted', async () => {
+    if (document.lineAt(1).text.endsWith(shown.text)) return true;
+    await showGhostText(document);
+    await vscode.commands.executeCommand('editor.action.inlineSuggest.commit');
+    await new Promise((r) => setTimeout(r, 300));
+    return undefined;
+  });
   await waitFor('the accepted outcome in the log', async () =>
     (await logLines()).some((e) => e.kind === 'outcome') ? true : undefined,
   );
