@@ -34,6 +34,18 @@
         "title": "Geno: Stop the Chat Turn"
       },
       {
+        "command": "gcode.chat.new",
+        "title": "New Chat",
+        "category": "Geno",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gcode.chat.history",
+        "title": "Chat History",
+        "category": "Geno",
+        "icon": "$(history)"
+      },
+      {
         "command": "gcode.setApiKey",
         "title": "Geno: Set API Key"
       },
@@ -188,6 +200,16 @@
     },
     "menus": {
       "view/title": [
+        {
+          "command": "gcode.chat.new",
+          "when": "view == gcode.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gcode.chat.history",
+          "when": "view == gcode.chat",
+          "group": "navigation@2"
+        },
         {
           "command": "gcode.review.undoSession",
           "when": "view == gcode.changes && config.gcode.ui.showChanges",

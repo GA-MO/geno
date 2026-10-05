@@ -125,7 +125,32 @@ export type Action =
 export const UI_STYLES = ['glass', 'native'] as const;
 export type UiStyle = (typeof UI_STYLES)[number];
 
-/** What the extension tells the chat webview: transcript changes, answers to its completion requests, and its style. */
+/** What the panel's header names: the workspace folder, and the session's title, undefined until its first prompt. */
+export type Header = { readonly project: string; readonly title: string | undefined };
+
+/** The history lists this project's sessions, or every project's. */
+export const HISTORY_SCOPES = ['project', 'all'] as const;
+export type HistoryScope = (typeof HISTORY_SCOPES)[number];
+
+/** One past session in the history list. */
+export type HistoryRow = {
+  readonly id: string;
+  readonly title: string;
+  /** The session's workspace, absolute. */
+  readonly workspace: string;
+  /** The name of the session's workspace folder. */
+  readonly project: string;
+  /** False for another project's session, which opens in that project's window. */
+  readonly here: boolean;
+  /** Milliseconds since the epoch. */
+  readonly updatedAt: number;
+  readonly turns: number;
+  readonly costUsd: number | null;
+  /** The session the panel shows. */
+  readonly current: boolean;
+};
+
+/** What the extension tells the chat webview: transcript changes, answers to its requests, its style and header. */
 export type ToView =
   | Action
   | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] }
@@ -133,7 +158,14 @@ export type ToView =
   /** Files the user picked or dropped from the explorer, read by the extension, for the composer to attach. */
   | { readonly type: 'picked'; readonly files: readonly PickedFile[]; readonly refused: readonly Refused[] }
   /** The workspace folders and the webview addresses they are served at, for images in the transcript. */
-  | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] };
+  | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] }
+  | { readonly type: 'header'; readonly header: Header }
+  /** The History action: open the list. */
+  | { readonly type: 'show-history' }
+  /** Closes the list, after a session was chosen or a new chat started. */
+  | { readonly type: 'hide-history' }
+  | { readonly type: 'history'; readonly scope: HistoryScope; readonly rows: readonly HistoryRow[] }
+  | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string };
 
 /** A folder the webview may load images from: its absolute path and the address of that folder inside the webview. */
 export type WebviewRoot = { readonly path: string; readonly uri: string };
@@ -162,4 +194,10 @@ export type FromView =
   /** Opens the setting that picks the model. */
   | { readonly type: 'choose-model' }
   /** Opens a diagram full size in an editor tab. */
-  | { readonly type: 'open-diagram'; readonly source: string };
+  | { readonly type: 'open-diagram'; readonly source: string }
+  /** Asks for the history list; answered by `history` or `history-failed`. */
+  | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
+  | { readonly type: 'open-session'; readonly id: string; readonly workspace: string }
+  /** The list is answered again once the change is made. */
+  | { readonly type: 'rename-session'; readonly id: string; readonly title: string; readonly scope: HistoryScope }
+  | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope };

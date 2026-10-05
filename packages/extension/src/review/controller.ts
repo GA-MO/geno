@@ -84,6 +84,13 @@ export class ReviewController implements vscode.Disposable {
     this.changed.fire();
   }
 
+  /** Drops the review of the session the chat left, and rebuilds it for the one it moved to. */
+  async reset(): Promise<void> {
+    this.hunks.clear();
+    this.changed.fire();
+    await this.restore();
+  }
+
   /** Rebuilds the review after a reload from the decisions the engine logged, finding each pending hunk's text again. */
   async restore(): Promise<void> {
     const { hunks } = await this.request<ReviewResponse>(REVIEW_METHOD, (sessionId): ReviewRequest => ({ sessionId, decisions: [] }));

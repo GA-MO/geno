@@ -5,7 +5,8 @@ import { composerAttachments } from './composer-attachments.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { setRoots } from './images.js';
 import { ATTACH_ROW, formatMention, insertMention, mentionAtCaret, mentionsIn, SELECTION, withoutMention, type MentionCompletion } from './mentions.js';
-import type { FromView, ToView, Transcript, Turn } from './messages.js';
+import type { FromView, Header, ToView, Transcript, Turn } from './messages.js';
+import { historyPanel } from './history.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { callsStep, changesCard, emptyState, errorBlock, permissionCard, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
@@ -77,7 +78,36 @@ const inputBox = h(
   h('div', { class: 'input-toolbar' }, modelLabel, approval, h('span', { class: 'spacer' }), stop, send),
 );
 const form = h('form', { class: 'composer' }, menu, inputBox);
-document.body.append(log, form, status);
+
+const projectLabel = h('span', { class: 'header-project' });
+const titleLabel = h('span', { class: 'header-title' });
+const header = h(
+  'header',
+  { class: 'chat-header' },
+  icon('folder'),
+  projectLabel,
+  h('span', { class: 'header-sep', 'aria-hidden': 'true' }, '/'),
+  h('button', { type: 'button', class: 'header-session', title: 'Show the chat history', onclick: () => history.open() }, titleLabel, icon('chevron-down')),
+);
+
+function showHeader({ project, title }: Header): void {
+  projectLabel.textContent = project;
+  titleLabel.textContent = title ?? 'New chat';
+  header.title = `${project} / ${title ?? 'New chat'}`;
+}
+
+// The history takes the transcript's and the composer's place while it is open.
+const history = historyPanel(
+  (message) => host.postMessage(message),
+  (open) => {
+    document.body.dataset['view'] = open ? 'history' : 'chat';
+    log.hidden = open;
+    form.hidden = open;
+    if (!open) input.focus();
+  },
+);
+document.body.dataset['view'] = 'chat';
+document.body.append(header, history.element, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => {});
 inputBox.insertBefore(attachments.element, chips);
 
@@ -229,6 +259,11 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     setRoots(message.roots);
     return;
   }
+  if (message.type === 'header') return showHeader(message.header);
+  if (message.type === 'show-history') return history.open();
+  if (message.type === 'hide-history') return history.close();
+  if (message.type === 'history') return history.listed(message.scope, message.rows);
+  if (message.type === 'history-failed') return history.failed(message.scope, message.message);
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -424,7 +459,7 @@ input.addEventListener('keydown', (event) => {
 });
 stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && isRunning(transcript)) {
+  if (event.key === 'Escape' && isRunning(transcript) && !history.isOpen()) {
     event.preventDefault();
     host.postMessage({ type: 'stop' });
   }

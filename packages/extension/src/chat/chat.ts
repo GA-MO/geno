@@ -1,11 +1,19 @@
+import { realpath } from 'node:fs/promises';
+import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import {
   afterLines,
   DIAGNOSTICS_METHOD,
+  HUNK_STATUSES,
   hunkIdOf,
   INLINE_EDIT_META,
+  RENAME_SESSION_METHOD,
+  REPLAYED_AT_META,
+  REPLAYED_CHANGE_META,
+  REPLAYED_TURN_META,
+  SESSION_SUMMARY_META,
   TOOL_CALL_META,
   TURN_USAGE_META,
   UNSAVED_BUFFERS_METHOD,
@@ -13,6 +21,7 @@ import {
   type HunkId,
   type HunkStatus,
   type InlineEditTarget,
+  type RenameSessionRequest,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -23,13 +32,30 @@ import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { Mentions } from './context.js';
-import { TOOL_KINDS, UI_STYLES, type Action, type FileDiff, type FromView, type ToView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type UiStyle, type Usage } from './messages.js';
+import {
+  TOOL_KINDS,
+  UI_STYLES,
+  type Action,
+  type FileDiff,
+  type FromView,
+  type HistoryRow,
+  type HistoryScope,
+  type ToView,
+  type ToolKind,
+  type ToolStatus,
+  type Transcript,
+  type TurnStatus,
+  type UiStyle,
+  type Usage,
+} from './messages.js';
 import { pageHtml } from './page.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
 export const STOP_COMMAND = 'gcode.chat.stop';
+export const NEW_CHAT_COMMAND = 'gcode.chat.new';
+export const HISTORY_COMMAND = 'gcode.chat.history';
 export const STYLE_SETTING = 'gcode.ui.style';
 
 /** The panel's look from settings; anything but a known style falls back to glass, the default. */
@@ -42,6 +68,18 @@ const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.st
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
 const permissionInput = z.object({ command: z.string(), reason: z.string() });
+const replayedTurn = z.object({
+  startedAt: z.number(),
+  endedAt: z.number(),
+  status: z.enum(['done', 'stopped', 'failed']),
+  usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).nullable(),
+});
+const replayedChange = z.object({
+  id: z.string(),
+  path: z.string(),
+  hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
+});
+const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
 
 const TOOL_STATUSES: Readonly<Record<acp.ToolCallStatus, ToolStatus>> = { pending: 'running', in_progress: 'running', completed: 'completed', failed: 'failed' };
 
@@ -89,6 +127,12 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
 const actionOf = <K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf<K>, at: number): Action | undefined =>
   (UPDATES[update.sessionUpdate] as ((u: UpdateOf<K>, at: number) => Action | undefined) | undefined)?.(update, at);
 
+/** When an update happened: now, or for a replayed tool call, when it was logged. */
+const timeOf = (update: acp.SessionUpdate): number => {
+  const at = update._meta?.[REPLAYED_AT_META];
+  return typeof at === 'number' ? at : Date.now();
+};
+
 /** How a turn's stop reason shows: its status, and what to tell the user when it did not simply finish. */
 const ENDINGS: Readonly<Record<acp.StopReason, { readonly status: Exclude<TurnStatus, 'streaming'>; readonly message?: string }>> = {
   end_turn: { status: 'done' },
@@ -108,13 +152,33 @@ function usageOf(response: acp.PromptResponse): Usage | undefined {
 
 const linesOf = (text: string): string[] => (text === '' ? [] : text.replace(/\n$/, '').split('\n'));
 
-function diffOf(document: vscode.TextDocument, change: FileChange): FileDiff {
+function diffOf(file: vscode.Uri, change: FileChange): FileDiff {
   const lines = afterLines(change);
   return {
-    path: vscode.workspace.asRelativePath(document.uri),
-    hunks: change.hunks.map((hunk, i) => ({ id: hunkIdOf(change, i), line: lines[i]!, removed: linesOf(hunk.oldText), added: linesOf(hunk.newText), status: 'pending' })),
+    path: vscode.workspace.asRelativePath(file),
+    hunks: change.hunks.map((hunk, i) => ({ id: hunkIdOf(change, i), line: lines[i]!, removed: linesOf(hunk.oldText), added: linesOf(hunk.newText), status: hunk.status })),
   };
 }
+
+const projectName = (): string => vscode.workspace.workspaceFolders?.[0]?.name ?? 'No folder';
+
+/** A replayed turn's end, which ACP has no update for: the engine sends it with the prompt that starts the turn. */
+function replayedEnd(update: acp.SessionUpdate): Action | undefined {
+  const turn = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
+  if (!turn.success) return undefined;
+  const { endedAt, status, usage } = turn.data;
+  return { type: 'turn-end', at: endedAt, status, usage: usage ?? undefined };
+}
+
+/**
+ * A session being loaded: its replayed turns build a transcript of their own, shown in one piece when the load ends.
+ * The SDK delivers a session's updates in order but apart from the load's response, so the replay is over once the
+ * title the engine sends last arrives.
+ */
+type Replay = { readonly id: string; transcript: Transcript; end: Action | undefined; title: string | undefined; readonly finished: () => void };
+
+/** How long a load waits for the rest of its replay after the engine answered. */
+const REPLAY_TAIL_MS = 5000;
 
 /** The session total shown beside the view's title; empty until a turn reports usage. */
 function totalsLabel(transcript: Transcript): string {
@@ -123,6 +187,9 @@ function totalsLabel(transcript: Transcript): string {
   const tokens = `${formatTokens(totals.inputTokens + totals.outputTokens)} tokens`;
   return totals.costUsd === null ? tokens : `${formatCost(totals.costUsd)} · ${tokens}`;
 }
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+const warn = (error: unknown): void => void vscode.window.showWarningMessage(messageOf(error));
 
 /** The engine session that chat turns, inline edits and review share. */
 export type SessionLink = { readonly connection: Connection; readonly sessionId: string };
@@ -166,6 +233,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private lastSession: string | undefined;
   /** Files outside the workspace the user attached, which their chips may open. */
   private readonly attachedPaths = new Set<string>();
+  /** The session the panel shows, and its title. */
+  private shown: string | undefined;
+  private title: string | undefined;
+  private replay: Replay | undefined;
+  private readonly switched = new vscode.EventEmitter<void>();
+  /** Fires when the panel moves to another session: at startup, for a new chat, or one loaded from the history. */
+  readonly onDidSwitch = this.switched.event;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -175,6 +249,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly onWrite: WriteListener,
     private readonly modelName: () => string,
     private readonly uiStyle: () => UiStyle,
+    private readonly openElsewhere: (workspace: string, sessionId: string) => Promise<void>,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.transcript = emptyTranscript(modelName());
@@ -207,6 +282,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   dispose(): void {
+    this.switched.dispose();
     this.engine.dispose();
   }
 
@@ -219,16 +295,39 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         writeTextFile(params, (document, change) => {
           this.onWrite(document, change);
           const toolId = params._meta?.[TOOL_CALL_META];
-          if (typeof toolId === 'string') this.dispatch({ type: 'diff', toolId, at: Date.now(), diff: diffOf(document, change) });
+          if (typeof toolId === 'string') this.dispatch({ type: 'diff', toolId, at: Date.now(), diff: diffOf(document.uri, change) });
         }),
       )
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) => this.askPermission(params))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
-      .onNotification(acp.methods.client.session.update, ({ params }) => {
-        const action = actionOf(params.update, Date.now());
-        if (action !== undefined) this.dispatch(action);
-      });
+      .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update));
+  }
+
+  private updated(sessionId: string, update: acp.SessionUpdate): void {
+    if (update.sessionUpdate === 'session_info_update') {
+      if (update.title === undefined) return;
+      if (this.replay?.id === sessionId) {
+        this.replay.title = update.title ?? undefined;
+        this.replay.finished();
+      } else if (this.shown === sessionId) this.retitle(update.title ?? undefined);
+      return;
+    }
+    if (update.sessionUpdate === 'user_message_chunk') {
+      if (this.replay === undefined || update.content.type !== 'text') return;
+      if (this.replay.end !== undefined) this.dispatch(this.replay.end);
+      const start = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
+      this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: start.success ? start.data.startedAt : Date.now(), prompt: update.content.text });
+      this.replay.end = replayedEnd(update);
+      return;
+    }
+    const at = timeOf(update);
+    const action = actionOf(update, at);
+    if (action !== undefined) this.dispatch(action);
+    const change = replayedChange.safeParse(update._meta?.[REPLAYED_CHANGE_META]);
+    if (update.sessionUpdate === 'tool_call_update' && change.success) {
+      this.dispatch({ type: 'diff', toolId: update.toolCallId, at, diff: diffOf(vscode.Uri.file(change.data.path), change.data) });
+    }
   }
 
   /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions and its attachments go along as context. */
@@ -292,21 +391,138 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     return session;
   }
 
-  /** Resumes the stored session, or starts one when there is none or the engine no longer has it. */
+  /**
+   * The session for a new engine connection. The one the panel shows is resumed; at startup the stored one is
+   * loaded, its transcript drawn. A new session starts when there is none or the engine no longer has it.
+   */
   private async openSession(connection: Connection): Promise<string> {
     const { cwd } = connection;
-    const stored = await this.storedSession();
+    if (this.shown !== undefined) {
+      try {
+        await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd });
+        return this.shown;
+      } catch {
+        // The log went away while the engine restarted; start over.
+      }
+    }
+    const stored = this.shown === undefined ? await this.storedSession() : undefined;
     if (stored !== undefined) {
       try {
-        await connection.agent.request(acp.methods.agent.session.resume, { sessionId: stored, cwd });
+        await this.load(connection, stored);
         return stored;
       } catch {
         // A log deleted or from another machine; start over.
       }
     }
-    const { sessionId } = await connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] });
-    await this.memory.save(sessionId);
+    // The window's first session: a turn being sent may already show, so the transcript stays.
+    return this.fresh(connection, this.transcript);
+  }
+
+  private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName())): Promise<string> {
+    const { sessionId } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: [] });
+    await this.show(sessionId, transcript, undefined);
     return sessionId;
+  }
+
+  /** Loads a session the engine logged, replaying its turns into a transcript the panel then shows. */
+  private async load(connection: Connection, sessionId: string): Promise<void> {
+    let finished = () => {};
+    const tail = new Promise<void>((resolve) => (finished = resolve));
+    const replay: Replay = { id: sessionId, transcript: emptyTranscript(this.modelName()), end: undefined, title: undefined, finished };
+    this.replay = replay;
+    try {
+      await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: [] });
+      await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
+    } finally {
+      this.replay = undefined;
+    }
+    const transcript = replay.end === undefined ? replay.transcript : reduce(replay.transcript, replay.end);
+    await this.show(sessionId, transcript, replay.title);
+  }
+
+  /** Makes the session the panel's: remembered for the next window, its transcript and title shown. */
+  private async show(sessionId: string, transcript: Transcript, title: string | undefined): Promise<void> {
+    this.shown = sessionId;
+    this.dispatch({ type: 'reset', transcript });
+    this.retitle(title);
+    await this.memory.save(sessionId);
+    this.switched.fire();
+  }
+
+  private retitle(title: string | undefined): void {
+    this.title = title;
+    void this.view?.webview.postMessage({ type: 'header', header: { project: projectName(), title } } satisfies ToView);
+  }
+
+  private idle(): void {
+    if (this.turn !== undefined) throw new Error('Stop the running turn first.');
+  }
+
+  /** Runs `open` for the engine's connection as the session it uses from now on. */
+  private async moveTo(open: (connection: Connection) => Promise<string>): Promise<void> {
+    const connection = await this.engine.connection();
+    const session = open(connection);
+    this.sessions.set(connection, session);
+    await session;
+  }
+
+  /** Starts a fresh session; the current one stays on disk. A chat with no turns yet is already fresh. */
+  async newChat(): Promise<void> {
+    this.idle();
+    void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
+    if (this.shown !== undefined && this.transcript.turns.length === 0) return;
+    await this.moveTo((connection) => this.fresh(connection));
+  }
+
+  /** Opens the History list in the panel. */
+  showHistory(): void {
+    void this.view?.webview.postMessage({ type: 'show-history' } satisfies ToView);
+  }
+
+  async listSessions(scope: HistoryScope): Promise<HistoryRow[]> {
+    const { agent, cwd } = await this.engine.connection();
+    const here = await realpath(cwd).catch(() => cwd);
+    const { sessions } = await agent.request(acp.methods.agent.session.list, scope === 'project' ? { cwd } : {});
+    return sessions.map((info) => {
+      const summary = sessionSummary.safeParse(info._meta?.[SESSION_SUMMARY_META]);
+      return {
+        id: info.sessionId,
+        title: info.title ?? 'New chat',
+        workspace: info.cwd,
+        project: path.basename(info.cwd),
+        here: info.cwd === here,
+        updatedAt: info.updatedAt == null ? 0 : Date.parse(info.updatedAt),
+        turns: summary.success ? summary.data.turns : 0,
+        costUsd: summary.success ? summary.data.costUsd : null,
+        current: info.sessionId === this.shown,
+      };
+    });
+  }
+
+  /**
+   * Loads a session of this project into the panel, where the chat continues from it. Another project's session
+   * opens in that project's window, since its tools run in its own workspace.
+   */
+  async openChat(sessionId: string, workspace: string): Promise<void> {
+    const { cwd } = await this.engine.connection();
+    if (workspace !== (await realpath(cwd).catch(() => cwd))) return this.openElsewhere(workspace, sessionId);
+    this.idle();
+    void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
+    if (sessionId === this.shown) return;
+    await this.moveTo((connection) => this.load(connection, sessionId).then(() => sessionId));
+  }
+
+  async renameChat(sessionId: string, title: string): Promise<void> {
+    const { agent } = await this.engine.connection();
+    await agent.request<unknown, RenameSessionRequest>(RENAME_SESSION_METHOD, { sessionId, title });
+  }
+
+  /** Moves a session's log to the trash. Deleting the panel's own session starts a fresh one. */
+  async deleteChat(sessionId: string): Promise<void> {
+    if (sessionId === this.shown) this.idle();
+    const { agent } = await this.engine.connection();
+    await agent.request(acp.methods.agent.session.delete, { sessionId });
+    if (sessionId === this.shown) await this.moveTo((connection) => this.fresh(connection));
   }
 
   private async askPermission({ toolCall, options }: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
@@ -325,6 +541,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Applies a change to the transcript and sends it to the webview, which applies the same change. */
   private dispatch(action: Action): void {
+    if (this.replay !== undefined) {
+      this.replay.transcript = reduce(this.replay.transcript, action);
+      return;
+    }
     const next = reduce(this.transcript, action);
     if (next === this.transcript) return;
     this.transcript = next;
@@ -338,6 +558,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ready: () => {
         void view.webview.postMessage({ type: 'roots', roots: webviewRoots(view.webview) } satisfies ToView);
         void view.webview.postMessage({ type: 'reset', transcript: this.transcript } satisfies Action);
+        void view.webview.postMessage({ type: 'header', header: { project: projectName(), title: this.title } } satisfies ToView);
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -358,6 +579,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
       'choose-model': () => void vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model'),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
+      'list-sessions': ({ scope }) => this.postHistory(view, scope),
+      'open-session': ({ id, workspace }) => void this.openChat(id, workspace).catch(warn),
+      'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),
+      'delete-session': ({ id, scope }) => void this.deleteChat(id).then(() => this.postHistory(view, scope), warn),
     };
   }
 
@@ -365,6 +590,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (uris.length === 0) return;
     const { files, refused } = await readForComposer(uris);
     await view.webview.postMessage({ type: 'picked', files, refused } satisfies ToView);
+  }
+
+  private postHistory(view: vscode.WebviewView, scope: HistoryScope): void {
+    void this.listSessions(scope).then(
+      (rows) => view.webview.postMessage({ type: 'history', scope, rows } satisfies ToView),
+      (error: unknown) => view.webview.postMessage({ type: 'history-failed', scope, message: messageOf(error) } satisfies ToView),
+    );
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
