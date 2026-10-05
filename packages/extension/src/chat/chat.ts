@@ -21,13 +21,20 @@ import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { Mentions } from './context.js';
-import { TOOL_KINDS, type Action, type FileDiff, type FromView, type ToView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type Usage } from './messages.js';
+import { TOOL_KINDS, UI_STYLES, type Action, type FileDiff, type FromView, type ToView, type ToolKind, type ToolStatus, type Transcript, type TurnStatus, type UiStyle, type Usage } from './messages.js';
 import { pageHtml } from './page.js';
 import { emptyTranscript, reduce, totalsOf } from './transcript.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
 export const STOP_COMMAND = 'gcode.chat.stop';
+export const STYLE_SETTING = 'gcode.ui.style';
+
+/** The panel's look from settings; anything but a known style falls back to glass, the default. */
+export function uiStyleOf(configuration: vscode.WorkspaceConfiguration): UiStyle {
+  const value = configuration.get<string>('ui.style');
+  return (UI_STYLES as readonly (string | undefined)[]).includes(value) ? (value as UiStyle) : 'glass';
+}
 
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
@@ -159,6 +166,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly memory: SessionMemory,
     private readonly onWrite: WriteListener,
     private readonly modelName: () => string,
+    private readonly uiStyle: () => UiStyle,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.transcript = emptyTranscript(modelName());
@@ -178,6 +186,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   resetEngine(): void {
     this.engine.reset();
     this.dispatch({ type: 'model', model: this.modelName() });
+  }
+
+  /** Tells a shown panel the look the setting now asks for; a panel created later reads it itself. */
+  restyle(): void {
+    void this.view?.webview.postMessage({ type: 'style', style: this.uiStyle() } satisfies ToView);
   }
 
   /** Mirrors review decisions made anywhere, the editor's CodeLens included, onto the diff cards. */
@@ -336,7 +349,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
     view.webview.options = { enableScripts: true, localResourceRoots: [dist] };
-    view.webview.html = pageHtml(view.webview, dist, 'webview.js');
+    view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.uiStyle());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
     view.onDidDispose(() => {

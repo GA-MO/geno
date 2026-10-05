@@ -112,8 +112,15 @@ export type Action =
   | { readonly type: 'error'; readonly message: string }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
 
-/** What the extension tells the chat webview: transcript changes, and answers to its completion requests. */
-export type ToView = Action | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] };
+/** How the panel looks: dark glass with a rainbow edge on live work, or VS Code's native styling (`gcode.ui.style`). */
+export const UI_STYLES = ['glass', 'native'] as const;
+export type UiStyle = (typeof UI_STYLES)[number];
+
+/** What the extension tells the chat webview: transcript changes, answers to its completion requests, and its style. */
+export type ToView =
+  | Action
+  | { readonly type: 'completions'; readonly id: number; readonly items: readonly MentionCompletion[] }
+  | { readonly type: 'style'; readonly style: UiStyle };
 
 /** What the webview asks of the extension. */
 export type FromView =

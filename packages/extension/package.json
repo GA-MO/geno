@@ -110,6 +110,19 @@
           "default": "",
           "description": "The model for chat, review and Cmd-K. Empty uses the provider's default (qwen3.8-flash on Model Studio)."
         },
+        "gcode.ui.style": {
+          "type": "string",
+          "enum": [
+            "glass",
+            "native"
+          ],
+          "enumDescriptions": [
+            "Dark glass panes over a soft gradient, with a running rainbow edge on the turn at work and the focused composer.",
+            "VS Code's own colors and borders, as the Trail panel had before."
+          ],
+          "default": "glass",
+          "description": "How the chat panel looks. High contrast themes always use the native style."
+        },
         "gcode.tab.enabled": {
           "type": "boolean",
           "default": true,
