@@ -10,6 +10,8 @@ export type CardUi = { readonly post: (message: FromView) => void; readonly mark
 /** Each waiting card's state, kept across a rebuild of the step that holds it. */
 const states = new Map<string, CardState>();
 
+const replaced = <T>(list: readonly T[], i: number, value: T): T[] => list.map((x, j) => (j === i ? value : x));
+
 /**
  * A waiting `ask_user` card: a tab per question, the options as radio or checkbox rows with Other last, the active
  * option's preview, and one Submit answers. The keyboard map is `onKey` in question-model.ts.
@@ -32,11 +34,7 @@ export function questionCard(id: string, request: AskUserRequest, ui: CardUi): H
       state = typeOther(request, { ...state, tab: i }, field.value);
       if (!(event as InputEvent).isComposing) paint(undefined);
     });
-    field.addEventListener('focus', () => {
-      if (state.rows[i] === q.options.length && state.tab === i) return;
-      state = { ...state, tab: i, rows: state.rows.map((row, j) => (j === i ? q.options.length : row)) };
-      paint(undefined);
-    });
+    field.addEventListener('focus', () => activate(q.options.length));
     return field;
   }
 
@@ -81,11 +79,7 @@ export function questionCard(id: string, request: AskUserRequest, ui: CardUi): H
         'data-focus': `row:${id}:${q.id}:${i}`,
         ...(i === active ? { 'data-keyboard': true } : {}),
         onclick: () => apply(clickRow(request, state, i)),
-        onfocus: () => {
-          if (state.rows[state.tab] === i) return;
-          state = { ...state, rows: state.rows.map((r, j) => (j === state.tab ? i : r)) };
-          paint(undefined);
-        },
+        onfocus: () => activate(i),
       },
       mark(q.multiSelect, on),
       h('span', { class: 'question-key', 'aria-hidden': 'true' }, String(i + 1)),
@@ -130,6 +124,26 @@ export function questionCard(id: string, request: AskUserRequest, ui: CardUi): H
       { class: 'question-preview', 'aria-label': 'Preview', role: 'region' },
       text === undefined ? h('p', { class: 'question-preview-empty' }, 'No preview for this option.') : ui.markdown(text),
     );
+  }
+
+  /**
+   * A row took the focus, by pointer or keyboard: it becomes the active row and its preview shows. The rows stay in
+   * place, since replacing one between a press and its release would swallow the click.
+   */
+  function activate(row: number): void {
+    if (state.rows[state.tab] === row) return;
+    state = { ...state, rows: replaced(state.rows, state.tab, row) };
+    states.set(id, state);
+    for (const each of root.querySelectorAll<HTMLElement>('.question-list > .question-row')) {
+      const control = each.classList.contains('question-other') ? each.querySelector<HTMLElement>('textarea')! : each;
+      const on = Number(each.dataset['row']) === row;
+      control.tabIndex = on ? 0 : -1;
+      if (on) control.dataset['keyboard'] = '';
+      else delete control.dataset['keyboard'];
+    }
+    const q = request.questions[state.tab]!;
+    const side = preview(q, row);
+    if (side !== undefined) root.querySelector('.question-preview')?.replaceWith(side);
   }
 
   function paint(effect: Effect | undefined): void {
