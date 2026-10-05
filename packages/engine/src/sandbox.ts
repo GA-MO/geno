@@ -16,8 +16,11 @@ export type SandboxPolicy = {
   readonly allowedDomains: readonly string[];
 };
 
+/** `writable` lets this one command also write there, as the check writes its build info outside the workspace. */
+export type SandboxRunOptions = ShellOptions & { readonly writable?: readonly string[] };
+
 export type Sandbox = {
-  run(command: string, options: ShellOptions): Promise<ShellResult>;
+  run(command: string, options: SandboxRunOptions): Promise<ShellResult>;
   close(): Promise<void>;
 };
 
@@ -128,7 +131,10 @@ export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
   const filesystem = { denyRead: [...policy.denyRead], allowRead: [...policy.readable], allowWrite: [...policy.writable], denyWrite: [] };
   let open = true;
   return {
-    run: async (command, options) => runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem }), options),
+    run: async (command, options) => {
+      const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
+      return runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
+    },
     async close() {
       if (!open) return;
       open = false;
