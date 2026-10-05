@@ -53,6 +53,10 @@ export type Store = {
   readonly spillDir: string;
   readonly checkpointsDir: string;
   readonly tabEvents: string;
+  /** The user's own MCP servers, trusted. */
+  readonly mcpConfigFile: string;
+  /** The workspace MCP servers the user approved. */
+  readonly mcpTrustFile: string;
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
@@ -65,6 +69,8 @@ export function openStore(env: Readonly<Record<string, string | undefined>>): St
     spillDir: path.join(root, 'spill'),
     checkpointsDir: path.join(root, 'checkpoints'),
     tabEvents: path.join(root, 'tab-events.jsonl'),
+    mcpConfigFile: path.join(root, 'mcp.json'),
+    mcpTrustFile: path.join(root, 'mcp-trust.json'),
     tasksDir: path.join(evalsDir, 'tasks'),
     triplesDir: path.join(evalsDir, 'apply'),
   };

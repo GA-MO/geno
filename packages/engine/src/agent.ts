@@ -7,6 +7,7 @@ import {
   AGENT_SYSTEM_PROMPT,
   AGENT_TOOL_DEFINITIONS,
   approvalQuestion,
+  describeServerState,
   isSessionMode,
   SESSION_MODES,
   sessionModeOf,
@@ -20,6 +21,7 @@ import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
+import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
@@ -56,12 +58,14 @@ export type AgentOptions = {
   /** Undefined runs on disk and prints to the terminal. */
   readonly surface?: Surface;
   readonly diagnostics?: Diagnostics | undefined;
+  /** The session's MCP tools for this turn, after the built-in ones. */
+  readonly mcp?: McpToolset | undefined;
 };
 
 export const askOnTerminal =
   (io: Io): Approver =>
-  (denial, classifier) =>
-    io.confirm(approvalQuestion(denial, classifier));
+  async (denial, classifier) =>
+    (await io.confirm(approvalQuestion(denial, classifier))) ? 'allow' : 'reject';
 
 function modeFlag(raw: string | undefined): SessionMode | undefined {
   if (raw === undefined || isSessionMode(raw)) return raw;
@@ -86,9 +90,10 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       rules: ruleAttacher(opened.log.events),
     });
     const repo = shadowRepoFor(store, session.workspace);
+    const mcp = options.mcp;
     const mode = {
-      tools: AGENT_TOOL_DEFINITIONS,
-      executors,
+      tools: mcp === undefined ? AGENT_TOOL_DEFINITIONS : [...AGENT_TOOL_DEFINITIONS, ...mcp.tools],
+      executors: mcp === undefined ? executors : { ...mcp.executors, ...executors },
       system: AGENT_SYSTEM_PROMPT,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
     };
@@ -124,6 +129,7 @@ export const agent: Command = async (args, { io, store }) => {
       'check-after-edit': { type: 'boolean', default: true },
       'non-interactive': { type: 'boolean', default: false },
       mode: { type: 'string' },
+      mcp: { type: 'boolean' },
     },
   });
   const task = positionals.join(' ').trim();
@@ -133,13 +139,19 @@ export const agent: Command = async (args, { io, store }) => {
   const opened = await openForPrompt(io, store, values, task, 'task');
   const log = chosen === undefined ? opened.log : await logMode(opened.log, chosen);
   const mode = sessionModeOf(log.events);
-  const { exitCode } = await runAgent(io, store, { ...opened, log }, task, {
-    limits,
-    check: values.check,
-    checkAfterEdit: values['check-after-edit'],
-    approval: values['non-interactive']
-      ? NON_INTERACTIVE
-      : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) },
-  });
-  return exitCode;
+  const approval: Approval = values['non-interactive']
+    ? { kind: 'non-interactive', mcp: true }
+    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
+  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval };
+  // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
+  if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
+  const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });
+  try {
+    const mcp = await hub.toolset(approval);
+    for (const problem of hub.problems) io.err(`mcp: ${problem}`);
+    for (const view of hub.views()) if (view.state.status === 'untrusted' || view.state.status === 'failed') io.err(`mcp: ${view.name} is ${describeServerState(view.state)}`);
+    return (await runAgent(io, store, { ...opened, log }, task, { ...options, mcp })).exitCode;
+  } finally {
+    await hub.stop();
+  }
 };

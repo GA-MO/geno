@@ -12,6 +12,7 @@ import { commandsList } from './commands.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { evalRunCommand } from './eval-run.js';
+import { mcpCommands } from './mcp/cli.js';
 import { mine } from './mine.js';
 import { rewind } from './rewind.js';
 import { serve } from './serve.js';
@@ -19,13 +20,15 @@ import { tabCommands } from './tab.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
-  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] <task...>
+  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] <task...>
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
   gcode commands list [--workspace <dir>]
   gcode rewind --session <id> --to <turn>
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
+  gcode mcp list [--workspace <dir>]
+  gcode mcp trust <name> [--workspace <dir>]
   gcode eval list
   gcode eval mine --repo <path> [--limit 50] [--max-lines 40] [--no-slices]
   gcode eval replay <triple-id> [--applier <name>] [--model <id>]
@@ -163,6 +166,7 @@ const commands: Record<string, Command> = {
   chat,
   commands: group({ list: commandsList }),
   eval: group(evalCommands),
+  mcp: group(mcpCommands),
   rewind,
   serve,
   session: group({ show: showSession }),
