@@ -154,6 +154,9 @@ export async function click(view: Webview, selector: string, text?: string): Pro
 const KEYS: Readonly<Record<string, { readonly key: string; readonly code: string; readonly keyCode: number; readonly text?: string; readonly commands?: readonly string[] }>> = {
   Enter: { key: 'Enter', code: 'Enter', keyCode: 13, text: '\r' },
   Escape: { key: 'Escape', code: 'Escape', keyCode: 27 },
+  Tab: { key: 'Tab', code: 'Tab', keyCode: 9 },
+  ArrowUp: { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38 },
+  ArrowDown: { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40 },
   Backspace: { key: 'Backspace', code: 'Backspace', keyCode: 8, commands: ['deleteBackward'] },
   selectAll: { key: 'a', code: 'KeyA', keyCode: 65, commands: ['selectAll'] },
 };

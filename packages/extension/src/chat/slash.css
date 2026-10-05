@@ -18,7 +18,6 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 6px;
   padding: 0 7px 0 5px;
   border: 1px solid var(--glass-edge-hi, var(--border));
   border-radius: 6px;
@@ -29,7 +28,6 @@
   font-size: var(--small);
   line-height: 19px;
   white-space: nowrap;
-  vertical-align: 1px;
 }
 
 .command-chip .codicon {
