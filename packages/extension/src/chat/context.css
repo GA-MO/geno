@@ -158,23 +158,6 @@
   overflow-wrap: anywhere;
 }
 
-.question-answers {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.question-free {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.question-free .question-input {
-  flex: 1;
-  min-width: 0;
-}
-
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
   & .rules-row,
   & .memory-row {

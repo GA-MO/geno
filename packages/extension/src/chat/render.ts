@@ -3,7 +3,10 @@ import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import type { AskUserRequest } from '@g-code/core';
+import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import { answerWords, settledLine } from './question-model.js';
+import { questionCard } from './question-view.js';
 import type { ChangedFile } from './fold.js';
 import { headerOf, type EditTool, type Step } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
@@ -357,43 +360,13 @@ const allowedOf = (block: PermissionBlock): boolean => {
   return outcome.kind === 'chosen' && block.options.find((o) => o.optionId === outcome.optionId)?.kind.startsWith('allow') === true;
 };
 
-/** A question's answers: one click on an option, or the user's own words, or Skip. */
-function answerForm(block: PermissionBlock, ui: Ui): HTMLElement {
-  const answer = (text: string) => ui.post({ type: 'answer', id: block.id, text });
-  const field = h('textarea', { class: 'question-input', rows: 1, placeholder: 'Or type your answer', 'aria-label': 'Your answer', 'data-focus': `answer:${block.id}` });
-  field.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || field.value.trim() === '') return;
-    event.preventDefault();
-    answer(field.value);
-  });
-  return h(
-    'div',
-    { class: 'question-answers' },
-    block.options.length > 0 &&
-      h(
-        'div',
-        { class: 'permission-actions question-options' },
-        ...block.options.map((option) =>
-          h('button', { type: 'button', class: 'button secondary question-option', 'data-focus': `choose:${block.id}:${option.optionId}`, onclick: () => answer(option.optionId) }, option.name),
-        ),
-      ),
-    h(
-      'div',
-      { class: 'question-free' },
-      field,
-      h('button', { type: 'button', class: 'button', 'data-focus': `send-answer:${block.id}`, onclick: () => field.value.trim() !== '' && answer(field.value) }, 'Answer'),
-      h('button', { type: 'button', class: 'button ghost', 'data-focus': `skip:${block.id}`, onclick: () => answer('') }, 'Skip'),
-    ),
-  );
-}
-
 type CardFace = {
   readonly label: string;
   readonly glyph: string;
   readonly title: string;
   readonly body: (block: PermissionBlock) => readonly Child[];
   readonly actions: (block: PermissionBlock, ui: Ui) => HTMLElement;
-  readonly settled: (block: PermissionBlock) => HTMLElement;
+  readonly settled: (block: PermissionBlock, quiet: boolean) => readonly Child[];
 };
 
 const SCOPE_TEXT = {
@@ -415,8 +388,9 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
       block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
     ],
     actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
-    settled: (block) =>
+    settled: (block) => [
       block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied'),
+    ],
   },
   memory: {
     label: 'Geno asks to remember a note',
@@ -427,37 +401,58 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
       h('p', { class: 'permission-reason' }, block.ask?.kind === 'memory' ? `${SCOPE_TEXT[block.ask.scope]} You can change or delete it in /memory.` : ''),
     ],
     actions: (block, ui) => choiceButtons(block, ui, MEMORY_LABELS),
-    settled: (block) =>
+    settled: (block) => [
       block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Remembered') : outcomeLine(false, 'close', 'Not remembered'),
+    ],
   },
   question: {
     label: 'Geno asks you a question',
     glyph: 'question',
     title: 'Geno asks',
-    body: (block) => [h('p', { class: 'question-text' }, block.command)],
-    actions: answerForm,
-    settled: ({ outcome }) =>
-      outcome.kind === 'answered' && outcome.text !== ''
-        ? outcomeLine(true, 'check', `Answered: ${outcome.text}`)
-        : outcomeLine(false, outcome.kind === 'cancelled' ? 'circle-slash' : 'close', outcome.kind === 'cancelled' ? 'Cancelled' : 'Skipped'),
+    body: () => [],
+    actions: (block, ui) => questionCard(block.id, requestOf(block), { post: ui.post, markdown: (text) => textBlock(text, false, ui) }),
+    settled: (block, quiet) => settledQuestion(requestOf(block), block.outcome, quiet),
   },
 };
 
-/** A card that waits on the user. Every kind goes through here, so whatever shows a waiting permission shows them all. */
-export function permissionCard(block: PermissionBlock, ui: Ui): HTMLElement {
+/**
+ * A card that waits on the user. Every kind goes through here, so whatever shows a waiting permission shows them all.
+ * A `quiet` card is one a compact turn keeps in view while its work is folded: an answered question shows only its line.
+ */
+export function permissionCard(block: PermissionBlock, ui: Ui, quiet = false): HTMLElement {
   const face = FACES[block.ask?.kind ?? 'command'];
+  const folded = quiet && block.ask?.kind === 'question' && block.outcome.kind !== 'open';
   return h(
     'section',
     {
-      class: `permission permission-${block.outcome.kind}${block.ask === undefined ? '' : ` permission-ask-${block.ask.kind}`}`,
+      class: `permission permission-${block.outcome.kind}${block.ask === undefined ? '' : ` permission-ask-${block.ask.kind}`}${folded ? ' permission-folded' : ''}`,
       role: 'group',
       'aria-label': face.label,
       'data-permission': block.id,
     },
-    h('div', { class: 'permission-title' }, icon(face.glyph), h('span', {}, face.title)),
-    ...face.body(block),
-    block.outcome.kind === 'open' ? face.actions(block, ui) : face.settled(block),
+    !folded && h('div', { class: 'permission-title' }, icon(face.glyph), h('span', {}, face.title)),
+    ...(folded ? [] : face.body(block)),
+    ...(block.outcome.kind === 'open' ? [face.actions(block, ui)] : face.settled(block, folded)),
   );
+}
+
+const requestOf = (block: PermissionBlock): AskUserRequest => (block.ask?.kind === 'question' ? block.ask.request : { questions: [] });
+
+/** An answered card: one line, and unless folded, the question and each answer under it. */
+function settledQuestion(request: AskUserRequest, outcome: PermissionOutcome, folded: boolean): Child[] {
+  if (outcome.kind !== 'answered') return [outcomeLine(false, outcome.kind === 'cancelled' ? 'circle-slash' : 'close', outcome.kind === 'cancelled' ? 'Cancelled' : 'Skipped')];
+  const line = outcomeLine(true, 'check', settledLine(request, outcome.answers));
+  if (folded) return [line];
+  const [only] = request.questions;
+  if (request.questions.length === 1) return [h('p', { class: 'question-text' }, only!.question), line];
+  return [
+    line,
+    h(
+      'dl',
+      { class: 'question-answers' },
+      ...request.questions.flatMap((q) => [h('dt', {}, h('span', { class: 'question-answer-header' }, q.header), ' ', q.question), h('dd', {}, answerWords(outcome.answers[q.id]))]),
+    ),
+  ];
 }
 
 export const errorBlock = (block: ErrorBlock): HTMLElement =>

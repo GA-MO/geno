@@ -98,6 +98,9 @@ function changedFiles(edits: readonly EditTool[]): ChangedFile[] {
  */
 const needsUser = (step: Step): boolean => nodeOf(step) === 'wait' || step.kind === 'error';
 
+/** An answered question stays in view as one line: what the user decided shapes the answer below it. */
+const decided = (step: Step): boolean => step.kind === 'permission' && step.block.ask?.kind === 'question' && step.block.outcome.kind === 'answered';
+
 export function turnView(turn: Turn): TurnView {
   const trail = railOf(turn);
   const lastCall = turn.blocks.findLastIndex((block) => block.kind === 'tool');
@@ -120,7 +123,7 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 /** What a compact turn keeps in view while folded, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step));
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step));
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => step.kind !== 'text' || step === narration).slice(-RECENT));
