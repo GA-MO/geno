@@ -163,9 +163,26 @@ describe('the steps the rail shows', () => {
         { type: 'permission', id: 'p1', command: '', reason: '', options: [], ask },
         ...Array.from({ length: 4 }, (_, i) => call(`h${i}`, 'grep', `q${i}`)),
       ]);
-    for (const ask of [{ kind: 'memory', text: 'Use pnpm', scope: 'project' }, { kind: 'question', question: 'Which file?' }] as const) {
+    for (const ask of [{ kind: 'memory', text: 'Use pnpm', scope: 'project' }, { kind: 'question', request: { questions: [{ id: 'file', header: 'File', question: 'Which file?', multiSelect: false, options: [] }] } }] as const) {
       expect(shownSteps(asking(ask), 'compact', false).map(name)).toEqual(['fold:+6 earlier steps', 'permission', 'calls:grep', 'calls:grep', 'calls:grep', 'calls:grep']);
     }
+  });
+
+  it('keeps an answered question in view as one line of a folded turn, and leaves a permission the user settled behind the fold', () => {
+    const request = { questions: [{ id: 'layout', header: 'Layout', question: 'Which layout?', multiSelect: false, options: [{ label: 'Grid' }, { label: 'List' }] }] };
+    const turn = turnOf([
+      call('g1', 'grep', 'a'),
+      call('q1', 'ask_user', 'Which layout?'),
+      { type: 'permission', id: 'p1', command: 'Which layout?', reason: '', options: [], ask: { kind: 'question', request } },
+      { type: 'permission-done', id: 'p1', optionId: undefined, answer: { kind: 'answered', answers: { layout: { picked: ['Grid'] } } } },
+      call('b1', 'bash', 'ls'),
+      { type: 'permission', id: 'p2', command: 'ls', reason: 'ls', options: [{ optionId: 'ok', name: 'Allow', kind: 'allow_once' }] },
+      { type: 'permission-done', id: 'p2', optionId: 'ok' },
+      said('Grid it is.'),
+      end(),
+    ]);
+    expect(shownSteps(turn, 'compact', false).map(name)).toEqual(['fold:Searched once · ran 1 command · used 1 tool', 'permission', 'text:Grid it is.']);
+    expect(shownSteps(turn, 'compact', true).filter((step) => step.kind === 'permission'), 'opened, the turn shows both cards').toHaveLength(2);
   });
 
   it('gathers a turn’s edits into one chip per file, in the changes card’s place', () => {

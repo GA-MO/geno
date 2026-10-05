@@ -212,7 +212,7 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     case 'calls':
       return { deps: [quiet, ...step.tools, '|', ...state.open, '|', ...state.unfolded], build: () => callsStep(step.key, step.name, step.tools, ui, quiet) };
     case 'permission':
-      return { deps: [step.block], build: () => permissionCard(step.block, ui) };
+      return { deps: [step.block, quiet], build: () => permissionCard(step.block, ui, quiet) };
     case 'error':
       return { deps: [step.block], build: () => errorBlock(step.block) };
     case 'notice':
@@ -307,8 +307,8 @@ function schedule(): void {
   frame ??= requestAnimationFrame(render);
 }
 
-/** A waiting card's control that takes the keyboard: its answer field, or else its first button. */
-const answerControl = (card: Element): HTMLElement | null => card.querySelector<HTMLElement>('textarea, button');
+/** A waiting card's control that takes the keyboard: the one it marks, such as a question's first option, or else its first field or button. */
+const answerControl = (card: Element): HTMLElement | null => card.querySelector<HTMLElement>('[data-keyboard]') ?? card.querySelector<HTMLElement>('textarea, button');
 
 /** A question from the engine takes the keyboard once, on its default button. */
 const asked = new Set<string>();
