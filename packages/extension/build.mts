@@ -1,11 +1,15 @@
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createVSIX } from '@vscode/vsce';
 import { build, type BuildOptions } from 'esbuild';
+import { DINO_DIST, DINO_FILES, withEyelid } from './src/dino.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(root, 'dist');
+
+/** The chat avatar goes into the webview bundle as markup, so the panel's CSP needs no image source. */
+const avatar = withEyelid(await readFile(path.join(root, DINO_FILES.avatar), 'utf8'));
 
 const BUNDLES: readonly BuildOptions[] = [
   {
@@ -23,6 +27,7 @@ const BUNDLES: readonly BuildOptions[] = [
     format: 'iife',
     target: 'es2022',
     minify: true,
+    define: { DINO_AVATAR: JSON.stringify(avatar) },
   },
   {
     entryPoints: [path.join(root, 'src/chat/diagram-tab-view.ts')],
@@ -79,6 +84,9 @@ async function pruneChunks(outputs: readonly string[]): Promise<void> {
 export async function buildExtension(): Promise<void> {
   const results = await Promise.all(BUNDLES.map((options) => build({ bundle: true, logLevel: 'warning', metafile: true, ...options })));
   await pruneChunks(results.flatMap((result) => Object.keys(result.metafile?.outputs ?? {})));
+  await mkdir(path.join(dist, 'dino'), { recursive: true });
+  await copyFile(path.join(root, DINO_FILES.mono), path.join(root, DINO_DIST.mono));
+  await copyFile(path.join(root, DINO_FILES.icon), path.join(root, DINO_DIST.icon));
   await mkdir(path.join(dist, 'engine'), { recursive: true });
   await writeFile(path.join(dist, 'engine/package.json'), '{ "type": "module" }\n');
 }
