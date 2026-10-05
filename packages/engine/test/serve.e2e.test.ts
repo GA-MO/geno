@@ -434,6 +434,36 @@ describe('gcode serve', () => {
     expect(turns).toEqual(['plan', 'ask']);
   });
 
+  it('offers the session effort as a config option, sends the effort set with session/set_config_option, and keeps it on load', async () => {
+    const { workspace, transport, connect } = await setup([answer('Thinking harder.', usage)]);
+    const effortOption = (current: string) => ({
+      id: 'effort',
+      name: 'Effort',
+      description: expect.any(String),
+      category: 'thought_level',
+      type: 'select',
+      currentValue: current,
+      options: ['low', 'medium', 'high', 'xhigh', 'max'].map((value) => expect.objectContaining({ value })),
+    });
+
+    let created: acp.NewSessionResponse | undefined;
+    const id = await connect(async (ctx, sessionId) => {
+      const set = await ctx.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: 'effort', value: 'high' });
+      expect(set.configOptions).toEqual([effortOption('high')]);
+      await expect(ctx.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: 'effort', value: 'turbo' })).rejects.toThrow(/turbo/);
+      await expect(ctx.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: 'speed', value: 'high' })).rejects.toThrow(/speed/);
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Think it through' }] });
+      return sessionId;
+    }, undefined, (response) => (created = response));
+
+    expect(created?.configOptions).toEqual([effortOption('medium')]);
+    expect(transport.requests[0]!.body.output_config).toEqual({ effort: 'high' });
+    const loaded = await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] }));
+    expect(loaded.configOptions).toEqual([effortOption('high')]);
+    const resumed = await connect((ctx) => ctx.request(acp.methods.agent.session.resume, { sessionId: id, cwd: workspace }));
+    expect(resumed.configOptions).toEqual([effortOption('high')]);
+  });
+
   it('answers check with the editor diagnostics for the files the model read when there is no check command', async () => {
     const { file, editor, transport, prompt } = await setup([
       toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
