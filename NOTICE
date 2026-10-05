@@ -34,3 +34,5 @@ Ported files:
 - packages/engine/src/project-context.ts (from packages/coding-agent/src/core/resource-loader.ts and footer-data-provider.ts)
 - packages/core/src/page.ts (from packages/coding-agent/src/core/tools/truncate.ts and tools/read.ts)
 - packages/engine/src/stdout-guard.ts (from packages/coding-agent/src/core/output-guard.ts)
+- packages/core/src/commands.ts (from packages/coding-agent/src/core/prompt-templates.ts)
+- packages/engine/src/commands.ts (from packages/coding-agent/src/core/prompt-templates.ts)
