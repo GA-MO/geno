@@ -55,7 +55,10 @@ const BODY: Grid = [
   '........................',
 ];
 
-const EYES = {
+/** A part table, its names taken from its keys. */
+const parts = <K extends string>(table: Readonly<Record<K, readonly Stamp[]>>) => table;
+
+const EYES = parts({
   open: [{ x: 17, y: 3, art: ['wk'] }],
   blink: [{ x: 17, y: 3, art: ['kk'] }],
   left: [{ x: 17, y: 3, art: ['kw'] }],
@@ -64,26 +67,26 @@ const EYES = {
   up: [{ x: 17, y: 2, art: ['wk'] }],
   upLeft: [{ x: 17, y: 2, art: ['kw'] }],
   happy: [{ x: 16, y: 3, art: ['.kk.', 'k..k'] }],
-} as const satisfies Record<string, readonly Stamp[]>;
+});
 export type Eye = keyof typeof EYES;
 
-const TAILS = {
+const TAILS = parts({
   down: [{ x: 0, y: 14, art: ['ggg', 'ggg'] }],
   up: [{ x: 0, y: 11, art: ['g..', 'gg.', 'ggg'] }],
-} as const satisfies Record<string, readonly Stamp[]>;
+});
 export type Tail = keyof typeof TAILS;
 
-const LEGS = {
+const LEGS = parts({
   stand: [{ x: 4, y: 19, art: ['ggg......ggg', 'ggg......ggg', 'ggg......ggg'] }],
   stepA: [{ x: 2, y: 19, art: ['..ggg......ggg', '.ggg........ggg', 'ggg..........ggg'] }],
   stepB: [{ x: 2, y: 19, art: ['..ggg......ggg', '...ggg....ggg', '....ggg..ggg'] }],
   tucked: [{ x: 4, y: 19, art: ['ggg......ggg', '.ggg......ggg'] }],
   /** Sitting: drawn under a body lowered two rows, the feet forward. */
   folded: [{ x: 4, y: 19, art: ['gggggg...gggggg'] }],
-} as const satisfies Record<string, readonly Stamp[]>;
+});
 export type Legs = keyof typeof LEGS;
 
-const ARMS = {
+const ARMS = parts({
   none: [],
   half: [{ x: 18, y: 14, art: ['gg'] }],
   up: [{ x: 18, y: 11, art: ['.g', '.g', 'g.'] }],
@@ -95,10 +98,10 @@ const ARMS = {
   /** Typing: the hand down on the keys, then lifted. */
   tapA: [{ x: 18, y: 16, art: ['g', 'g'] }],
   tapB: [{ x: 18, y: 15, art: ['g', 'g'] }],
-} as const satisfies Record<string, readonly Stamp[]>;
+});
 export type Arms = keyof typeof ARMS;
 
-const MARKS = {
+const MARKS = parts({
   dots1: [{ x: 11, y: 5, art: ['s'] }],
   dots2: [
     { x: 11, y: 5, art: ['s'] },
@@ -113,7 +116,7 @@ const MARKS = {
   sweat: [{ x: 11, y: 2, art: ['.b', 'bb', 'bb'] }],
   sparkle: [{ x: 20, y: 7, art: ['.y.', 'yyy', '.y.'] }],
   dust: [{ x: 0, y: 19, art: ['s..', '.s.', 's.s'] }],
-} as const satisfies Record<string, readonly Stamp[]>;
+});
 export type Mark = keyof typeof MARKS;
 
 const GLASSES: readonly Stamp[] = [{ x: 16, y: 2, art: ['kkkk', 'k..k', 'k..k', 'kkkk'] }];
@@ -190,9 +193,11 @@ export type Pose = { readonly intro?: readonly Frame[]; readonly loop: readonly 
 export const STAND: Frame = { eye: 'open', tail: 'down', legs: 'stand', arms: 'none' };
 const f = (over: Partial<Frame>): Frame => ({ ...STAND, ...over });
 
+const poseTable = <K extends string>(table: Readonly<Record<K, Pose>>) => table;
+
 const laptop = (rise: number, lid: number, lines = 0): Prop => ({ kind: 'laptop', rise, lid, lines });
 
-export const POSES = {
+export const POSES = poseTable({
   idle: {
     loop: [f({ hold: 30 }), f({ eye: 'blink', hold: 2 }), f({ hold: 20 }), f({ tail: 'up', hold: 3 }), f({ hold: 4 }), f({ tail: 'up', hold: 3 }), f({ hold: 10 })],
   },
@@ -258,7 +263,7 @@ export const POSES = {
     once: true,
     loop: [f({ legs: 'tucked', dy: -1, hold: 2 }), f({ eye: 'up', hold: 4 }), f({ eye: 'happy', hold: 6 }), f({ hold: 1 })],
   },
-} as const satisfies Record<string, Pose>;
+});
 export type PoseName = keyof typeof POSES;
 export const POSE_NAMES = Object.keys(POSES) as readonly PoseName[];
 

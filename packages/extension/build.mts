@@ -1,15 +1,16 @@
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createVSIX } from '@vscode/vsce';
 import { build, type BuildOptions } from 'esbuild';
-import { DINO_DIST, DINO_FILES, withEyelid } from './src/dino.js';
+import { compose, STAND, svgOf } from './src/chat/sprite.js';
+import { DINO_DIST, DINO_FILES } from './src/dino.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(root, 'dist');
 
-/** The chat avatar goes into the webview bundle as markup, so the panel's CSP needs no image source. */
-const avatar = withEyelid(await readFile(path.join(root, DINO_FILES.avatar), 'utf8'));
+/** The still chat avatar goes into the webview bundle as markup, so the panel's CSP needs no image source. */
+const avatar = svgOf(compose(STAND));
 
 const BUNDLES: readonly BuildOptions[] = [
   {
