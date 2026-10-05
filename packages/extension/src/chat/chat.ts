@@ -8,6 +8,7 @@ import {
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   hunkIdOf,
+  APPROVAL_META,
   INLINE_EDIT_META,
   RENAME_SESSION_METHOD,
   REPLAYED_AT_META,
@@ -40,6 +41,7 @@ import {
   type FromView,
   type HistoryRow,
   type HistoryScope,
+  type Modes,
   type ToView,
   type ToolKind,
   type ToolStatus,
@@ -57,6 +59,18 @@ export const STOP_COMMAND = 'gcode.chat.stop';
 export const NEW_CHAT_COMMAND = 'gcode.chat.new';
 export const HISTORY_COMMAND = 'gcode.chat.history';
 export const STYLE_SETTING = 'gcode.ui.style';
+export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
+
+/** The approval modes the engine advertises, until it says so itself. */
+const MODE_FALLBACK: Modes['available'] = [
+  { id: 'ask', name: 'Ask', description: 'Ask before risky commands.' },
+  { id: 'auto', name: 'Auto', description: 'Run safe commands on its own and let a classifier judge the rest.' },
+];
+
+/** The mode new sessions start in, from settings; anything but auto is ask. */
+export function approvalModeOf(configuration: vscode.WorkspaceConfiguration): 'ask' | 'auto' {
+  return configuration.get<string>('approvalMode') === 'auto' ? 'auto' : 'ask';
+}
 
 /** The panel's look from settings; anything but a known style falls back to glass, the default. */
 export function uiStyleOf(configuration: vscode.WorkspaceConfiguration): UiStyle {
@@ -80,6 +94,26 @@ const replayedChange = z.object({
   hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
 });
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
+const approvalRecord = z.object({
+  decidedBy: z.enum(['rule', 'classifier', 'user']),
+  verdict: z.enum(['allow', 'deny']),
+  classifier: z.object({ reason: z.string() }).optional(),
+});
+
+/** A flagged command the classifier settled, which the step shows; one the user or a rule settled shows nothing more. */
+function autoOf(meta: Record<string, unknown> | null | undefined): Extract<Action, { type: 'tool' }>['auto'] {
+  const record = approvalRecord.safeParse(meta?.[APPROVAL_META]);
+  if (!record.success || record.data.decidedBy !== 'classifier' || record.data.classifier === undefined) return undefined;
+  return { verdict: record.data.verdict, reason: record.data.classifier.reason };
+}
+
+/** The classifier's reason in a permission question it would not answer itself, as the engine words it. */
+const classifierReasonOf = (title: string | null | undefined): string | undefined => /The classifier says: (.+)\.$/.exec(title ?? '')?.[1];
+
+const modesOf = (state: acp.SessionModeState | null | undefined): Modes | undefined =>
+  state == null
+    ? undefined
+    : { current: state.currentModeId, available: state.availableModes.map(({ id, name, description }) => ({ id, name, description: description ?? undefined })) };
 
 const TOOL_STATUSES: Readonly<Record<acp.ToolCallStatus, ToolStatus>> = { pending: 'running', in_progress: 'running', completed: 'completed', failed: 'failed' };
 
@@ -109,9 +143,10 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
     toolKind: kindOf(kind),
     status: TOOL_STATUSES[status ?? 'pending'],
   }),
-  tool_call_update: ({ toolCallId, title, status, content }, at) => {
+  tool_call_update: ({ toolCallId, title, status, content, _meta }, at) => {
     const output = outputOf(content);
     const images = imagesOf(content);
+    const auto = autoOf(_meta);
     return {
       type: 'tool',
       id: toolCallId,
@@ -120,6 +155,7 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
       ...(status == null ? {} : { status: TOOL_STATUSES[status] }),
       ...(output === undefined ? {} : { output }),
       ...(images.length === 0 ? {} : { images }),
+      ...(auto === undefined ? {} : { auto }),
     };
   },
 };
@@ -237,6 +273,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private shown: string | undefined;
   private title: string | undefined;
   private replay: Replay | undefined;
+  /** The shown session's approval modes; before it exists, the mode it will start in. */
+  private modes: Modes;
   private readonly switched = new vscode.EventEmitter<void>();
   /** Fires when the panel moves to another session: at startup, for a new chat, or one loaded from the history. */
   readonly onDidSwitch = this.switched.event;
@@ -250,9 +288,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly modelName: () => string,
     private readonly uiStyle: () => UiStyle,
     private readonly openElsewhere: (workspace: string, sessionId: string) => Promise<void>,
+    private readonly defaultMode: () => 'ask' | 'auto',
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.transcript = emptyTranscript(modelName());
+    this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
 
   /** The session id a previous window left, if any. */
@@ -305,6 +345,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private updated(sessionId: string, update: acp.SessionUpdate): void {
+    if (update.sessionUpdate === 'current_mode_update') {
+      if (sessionId === this.shown) this.remode({ ...this.modes, current: update.currentModeId });
+      return;
+    }
     if (update.sessionUpdate === 'session_info_update') {
       if (update.title === undefined) return;
       if (this.replay?.id === sessionId) {
@@ -399,7 +443,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const { cwd } = connection;
     if (this.shown !== undefined) {
       try {
-        await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd });
+        const { modes } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd });
+        this.remode(modesOf(modes) ?? this.modes);
         return this.shown;
       } catch {
         // The log went away while the engine restarted; start over.
@@ -414,13 +459,20 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         // A log deleted or from another machine; start over.
       }
     }
-    // The window's first session: a turn being sent may already show, so the transcript stays.
-    return this.fresh(connection, this.transcript);
+    // The window's first session: a turn being sent may already show, so the transcript stays, and so does a mode
+    // picked before the session existed.
+    return this.fresh(connection, this.transcript, this.modes.current);
   }
 
-  private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName())): Promise<string> {
-    const { sessionId } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: [] });
-    await this.show(sessionId, transcript, undefined);
+  /** Starts a session in `mode`, by default the one the settings give new sessions. */
+  private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode()): Promise<string> {
+    const { sessionId, modes } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: [] });
+    let state = modesOf(modes) ?? { current: mode, available: MODE_FALLBACK };
+    if (state.current !== mode && state.available.some((m) => m.id === mode)) {
+      await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
+      state = { ...state, current: mode };
+    }
+    await this.show(sessionId, transcript, undefined, state);
     return sessionId;
   }
 
@@ -430,21 +482,23 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const tail = new Promise<void>((resolve) => (finished = resolve));
     const replay: Replay = { id: sessionId, transcript: emptyTranscript(this.modelName()), end: undefined, title: undefined, finished };
     this.replay = replay;
+    let modes: Modes | undefined;
     try {
-      await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: [] });
+      modes = modesOf((await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: [] })).modes);
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
     }
     const transcript = replay.end === undefined ? replay.transcript : reduce(replay.transcript, replay.end);
-    await this.show(sessionId, transcript, replay.title);
+    await this.show(sessionId, transcript, replay.title, modes ?? { current: 'ask', available: MODE_FALLBACK });
   }
 
   /** Makes the session the panel's: remembered for the next window, its transcript and title shown. */
-  private async show(sessionId: string, transcript: Transcript, title: string | undefined): Promise<void> {
+  private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes): Promise<void> {
     this.shown = sessionId;
     this.dispatch({ type: 'reset', transcript });
     this.retitle(title);
+    this.remode(modes);
     await this.memory.save(sessionId);
     this.switched.fire();
   }
@@ -452,6 +506,21 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private retitle(title: string | undefined): void {
     this.title = title;
     void this.view?.webview.postMessage({ type: 'header', header: { project: projectName(), title } } satisfies ToView);
+  }
+
+  private remode(modes: Modes): void {
+    this.modes = modes;
+    void this.view?.webview.postMessage({ type: 'modes', modes } satisfies ToView);
+  }
+
+  /**
+   * Switches the shown session's approval mode; the engine confirms with `current_mode_update`. Before the window
+   * has a session, the choice waits for the one it starts.
+   */
+  async setMode(modeId: string): Promise<void> {
+    if (this.shown === undefined) return this.remode({ ...this.modes, current: modeId });
+    const { connection, sessionId } = await this.link();
+    await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId });
   }
 
   private idle(): void {
@@ -531,7 +600,14 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
       const { command, reason } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '' };
-      this.dispatch({ type: 'permission', id, command, reason, options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })) });
+      this.dispatch({
+        type: 'permission',
+        id,
+        command,
+        reason,
+        options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),
+        classifier: classifierReasonOf(toolCall.title),
+      });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.permissions.delete(id);
@@ -559,6 +635,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'roots', roots: webviewRoots(view.webview) } satisfies ToView);
         void view.webview.postMessage({ type: 'reset', transcript: this.transcript } satisfies Action);
         void view.webview.postMessage({ type: 'header', header: { project: projectName(), title: this.title } } satisfies ToView);
+        void view.webview.postMessage({ type: 'modes', modes: this.modes } satisfies ToView);
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -579,6 +656,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
       'choose-model': () => void vscode.commands.executeCommand('workbench.action.openSettings', 'gcode.model'),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
+      'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'list-sessions': ({ scope }) => this.postHistory(view, scope),
       'open-session': ({ id, workspace }) => void this.openChat(id, workspace).catch(warn),
       'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),

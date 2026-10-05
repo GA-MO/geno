@@ -3,7 +3,7 @@ import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { DiffHunk, ErrorBlock, FileDiff, FromView, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { headerOf, type EditTool } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
@@ -129,6 +129,24 @@ function fileChip(tool: ToolBlock): HTMLElement {
   );
 }
 
+const AUTO_BADGES: Readonly<Record<AutoDecision['verdict'], { readonly label: string; readonly icon: string }>> = {
+  allow: { label: 'Auto-approved', icon: 'zap' },
+  deny: { label: 'Auto-denied', icon: 'circle-slash' },
+};
+
+/** What Auto decided about a command without asking, and the classifier's reason, shown on the step even while it is folded. */
+function autoNote(tool: ToolBlock & { readonly auto: AutoDecision }): HTMLElement {
+  const badge = AUTO_BADGES[tool.auto.verdict];
+  return h(
+    'div',
+    { class: `auto-note auto-${tool.auto.verdict}`, 'data-auto': tool.id },
+    h('span', { class: 'auto-badge' }, icon(badge.icon), badge.label),
+    h('span', { class: 'auto-reason' }, tool.auto.reason),
+  );
+}
+
+const isAuto = (tool: ToolBlock): tool is ToolBlock & { readonly auto: AutoDecision } => tool.auto !== undefined;
+
 /** Tools whose runs show as file chips rather than a target. */
 const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
 
@@ -155,6 +173,7 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),
       icon(open ? 'chevron-down' : 'chevron-right', 'chevron'),
     ),
+    ...tools.filter(isAuto).map(autoNote),
     toolImages(tools, (target) => ui.post({ type: 'open', target })),
     open && h('div', { class: 'call-list' }, ...tools.map((tool) => toolRow(tool, ui))),
   );
@@ -294,6 +313,7 @@ export function permissionCard(block: PermissionBlock, ui: Ui): HTMLElement {
     h('div', { class: 'permission-title' }, icon('shield'), h('span', {}, 'Run this command?')),
     h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
     h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
+    block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
     result,
   );
 }

@@ -58,10 +58,14 @@ export type ToolBlock = {
   readonly diff: FileDiff | undefined;
   /** Images the tool returned, such as a read of a PNG, shown as thumbnails on the step. */
   readonly images?: readonly ToolImage[] | undefined;
+  /** A flagged command Auto settled without asking: the classifier's verdict and its reason. */
+  readonly auto?: AutoDecision | undefined;
 };
 
 /** An image file a tool returned; `path` is absolute. */
 export type ToolImage = { readonly path: string; readonly name: string };
+
+export type AutoDecision = { readonly verdict: 'allow' | 'deny'; readonly reason: string };
 
 /** A file an edit changed, as hunks the review controller tracks by the same ids. */
 export type FileDiff = { readonly path: string; readonly hunks: readonly DiffHunk[] };
@@ -87,6 +91,8 @@ export type PermissionBlock = {
   readonly reason: string;
   readonly options: readonly PermissionChoice[];
   readonly outcome: PermissionOutcome;
+  /** Why the classifier would not decide, when Auto asked it first. */
+  readonly classifier?: string | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -112,11 +118,19 @@ export type Action =
       readonly status?: ToolStatus;
       readonly output?: string;
       readonly images?: readonly ToolImage[];
+      readonly auto?: AutoDecision;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
   | { readonly type: 'review'; readonly hunks: Readonly<Record<string, HunkStatus>> }
-  | { readonly type: 'permission'; readonly id: string; readonly command: string; readonly reason: string; readonly options: readonly PermissionChoice[] }
+  | {
+      readonly type: 'permission';
+      readonly id: string;
+      readonly command: string;
+      readonly reason: string;
+      readonly options: readonly PermissionChoice[];
+      readonly classifier?: string | undefined;
+    }
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined }
   | { readonly type: 'error'; readonly message: string }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
@@ -124,6 +138,12 @@ export type Action =
 /** How the panel looks: dark glass with a rainbow edge on live work, or VS Code's native styling (`gcode.ui.style`). */
 export const UI_STYLES = ['glass', 'native'] as const;
 export type UiStyle = (typeof UI_STYLES)[number];
+
+/** An approval mode the session can be in, as the engine advertises it through ACP. */
+export type ModeOption = { readonly id: string; readonly name: string; readonly description: string | undefined };
+
+/** The session's approval modes and the one it is in. */
+export type Modes = { readonly current: string; readonly available: readonly ModeOption[] };
 
 /** What the panel's header names: the workspace folder, and the session's title, undefined until its first prompt. */
 export type Header = { readonly project: string; readonly title: string | undefined };
@@ -160,6 +180,7 @@ export type ToView =
   /** The workspace folders and the webview addresses they are served at, for images in the transcript. */
   | { readonly type: 'roots'; readonly roots: readonly WebviewRoot[] }
   | { readonly type: 'header'; readonly header: Header }
+  | { readonly type: 'modes'; readonly modes: Modes }
   /** The History action: open the list. */
   | { readonly type: 'show-history' }
   /** Closes the list, after a session was chosen or a new chat started. */
@@ -195,6 +216,8 @@ export type FromView =
   | { readonly type: 'choose-model' }
   /** Opens a diagram full size in an editor tab. */
   | { readonly type: 'open-diagram'; readonly source: string }
+  /** Switches the session's approval mode; the engine confirms with the modes. */
+  | { readonly type: 'set-mode'; readonly modeId: string }
   /** Asks for the history list; answered by `history` or `history-failed`. */
   | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
   | { readonly type: 'open-session'; readonly id: string; readonly workspace: string }
