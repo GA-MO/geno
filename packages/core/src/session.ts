@@ -147,6 +147,8 @@ export type TurnEvent =
   | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)
   /** The user switched the session's approval mode; it holds until the next switch, across resumes. */
   | { readonly kind: 'mode'; readonly seq: number; readonly at: string; readonly mode: SessionMode }
+  /** The user set the session's effort; it holds from the next model call until the next change, across resumes. */
+  | { readonly kind: 'effort'; readonly seq: number; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   | ToolResultEvent;
@@ -165,6 +167,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   review: false,
   retry: false,
   mode: false,
+  effort: false,
   title: false,
 };
 
@@ -175,6 +178,9 @@ export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>):
 
 export const sessionModeOf = (events: readonly TurnEvent[]): SessionMode =>
   events.findLast((e) => e.kind === 'mode')?.mode ?? DEFAULT_SESSION_MODE;
+
+export const sessionEffortOf = (session: Session, events: readonly TurnEvent[]): Effort =>
+  events.findLast((e) => e.kind === 'effort')?.effort ?? session.effort;
 
 export const nextSeq = (events: readonly TurnEvent[]): number => {
   const last = events.at(-1);

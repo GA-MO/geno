@@ -9,6 +9,7 @@ import {
   EFFORTS,
   effortFor,
   reportsFailure,
+  sessionEffortOf,
   SYSTEM_PROMPT,
   turnKindOf,
   withTurnEffort,
@@ -136,6 +137,16 @@ describe('the effort policy table', () => {
     expect(withTurnEffort(session, afterPrompt, STEPPED).effort).toBe('medium');
     expect(withTurnEffort(session, afterTools, STEPPED).effort).toBe('low');
     expect(withTurnEffort(session, afterFailure, STEPPED).effort).toBe('medium');
+  });
+
+  it('steps from the newest effort the user set during the session, not the one it started with', () => {
+    const set = (seq: number, effort: Effort): TurnEvent => ({ kind: 'effort', seq, at, effort });
+    const events: TurnEvent[] = [start, set(1, 'low'), set(2, 'max'), user(3), assistant(4, [bash('t1')]), result(5, 't1', '[exit code 0]')];
+    expect(sessionEffortOf(session, events)).toBe('max');
+    expect(sessionEffortOf(session, [start])).toBe('medium');
+    expect(withTurnEffort(session, events.slice(0, 4), STEPPED).effort).toBe('max');
+    expect(withTurnEffort(session, events, STEPPED).effort).toBe('xhigh');
+    expect(turnKindOf([...events, set(6, 'low')])).toBe('after-tools');
   });
 
   it('under the flat policy builds the very request it built before the table existed', () => {

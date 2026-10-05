@@ -11,9 +11,11 @@ import {
   nextSeq,
   PROVIDERS,
   SESSION_MODES,
+  sessionEffortOf,
   sessionModeOf,
   TOOL_STATUSES,
   TURN_ERROR_KINDS,
+  type Effort,
   type HunkId,
   type Session,
   type SessionId,
@@ -178,6 +180,7 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
     z.strictObject({ kind: z.literal('mode'), ...seqFields, mode: z.enum(SESSION_MODES) }),
+    z.strictObject({ kind: z.literal('effort'), ...seqFields, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
@@ -254,6 +257,14 @@ export async function readSessionLog(file: string): Promise<SessionLog> {
 export async function logMode(log: SessionLog, mode: SessionMode): Promise<SessionLog> {
   if (sessionModeOf(log.events) === mode) return log;
   const event: TurnEvent = { kind: 'mode', seq: nextSeq(log.events), at: new Date().toISOString(), mode };
+  await appendEvent(log.file, event);
+  return { ...log, events: [...log.events, event] };
+}
+
+/** Logs a change of the session's effort. Setting the effort it already has logs nothing. */
+export async function logEffort(log: SessionLog, effort: Effort): Promise<SessionLog> {
+  if (sessionEffortOf(log.session, log.events) === effort) return log;
+  const event: TurnEvent = { kind: 'effort', seq: nextSeq(log.events), at: new Date().toISOString(), effort };
   await appendEvent(log.file, event);
   return { ...log, events: [...log.events, event] };
 }

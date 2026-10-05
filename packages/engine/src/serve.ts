@@ -42,6 +42,7 @@ import {
   MCP_TRUST_METHOD,
   type McpServersResponse,
   SESSION_MODES,
+  sessionEffortOf,
   sessionModeOf,
   type SessionMode,
   type CheckpointTextResponse,
@@ -92,7 +93,8 @@ import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { browserLauncherOf, browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
-import { appendEvent, dropTornTail, logMode } from './sessions.js';
+import { appendEvent, dropTornTail, logEffort, logMode } from './sessions.js';
+import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import { guardStdout } from './stdout-guard.js';
@@ -551,7 +553,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       commands.attach(client, id, workspace);
       mcp.register(id, workspace, params.mcpServers, browserSettingsOf(params._meta));
       io.err(`session: ${id} log: ${opened.log.file}`);
-      return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE) };
+      return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE), configOptions: effortConfigOptions(opened.log.session.effort) };
     })
     .onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
       const log = await existing(params.sessionId);
@@ -561,7 +563,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
       io.err(`session: ${id} resumed, log: ${log.file}`);
-      return { modes: modeState(modes.get(id)!) };
+      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
     })
     .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
       const log = await existing(params.sessionId);
@@ -578,7 +580,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       for (const update of replayUpdates(log.events)) await notify(update);
       await notify(sessionInfo(summarizeSession(log.session, log.events)));
       io.err(`session: ${id} loaded, log: ${log.file}`);
-      return { modes: modeState(modes.get(id)!) };
+      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
     })
     .onRequest(acp.methods.agent.session.list, async ({ params }): Promise<acp.ListSessionsResponse> => {
       const scope: SessionScope = params.cwd == null ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
@@ -620,6 +622,18 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!isSessionMode(modeId)) throw acp.RequestError.invalidParams({ modeId }, `unknown mode ${modeId}; the modes are ${SESSION_MODES.join(', ')}`);
       await switchMode(client, sessionId, modeId);
       return {};
+    })
+    .onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+      const { sessionId } = params;
+      known(sessionId);
+      const effort = chosenEffort(params);
+      // Not awaited, as a mode switch: a running turn holds the log, and the next turn reads the effort from it.
+      void serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        await dropTornTail(log);
+        await logEffort(log, effort);
+      }).catch((error: unknown) => io.err(`could not log the effort of ${sessionId}: ${String(error)}`));
+      return { configOptions: effortConfigOptions(effort) };
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
       const { sessionId } = params;

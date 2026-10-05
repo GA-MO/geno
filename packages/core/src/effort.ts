@@ -1,4 +1,4 @@
-import { EFFORTS, IN_CONVERSATION, type Effort, type Session, type ToolResultEvent, type TurnEvent } from './session.js';
+import { EFFORTS, IN_CONVERSATION, sessionEffortOf, type Effort, type Session, type ToolResultEvent, type TurnEvent } from './session.js';
 import { reportsFailure } from './tools.js';
 
 /**
@@ -41,8 +41,8 @@ export function turnKindOf(events: readonly TurnEvent[]): TurnKind {
   return batch.some(failed) ? 'after-failure' : 'after-tools';
 }
 
-/** The session as the next call sees it: its effort is the session's, moved by the policy's step for the call's kind. */
+/** The session as the next call sees it: its effort is the one the user chose, moved by the policy's step for the call's kind. */
 export const withTurnEffort = (session: Session, events: readonly TurnEvent[], policy: EffortPolicy): Session => ({
   ...session,
-  effort: effortFor(session.effort, policy[turnKindOf(events)]),
+  effort: effortFor(sessionEffortOf(session, events), policy[turnKindOf(events)]),
 });
