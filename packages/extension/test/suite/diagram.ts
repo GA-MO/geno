@@ -124,8 +124,11 @@ export async function run(): Promise<void> {
       messages: [...svg.querySelectorAll('.messageText')].map((t) => t.textContent.trim()),
     };
   })()`);
-  check(['Webview', 'Extension', 'Engine', 'Model'].every((a) => sequence.actors.includes(a)), 'the sequence diagram shows every participant', sequence.actors);
-  check(sequence.messages.length === 7 && sequence.messages[0] === 'send(text)', 'the sequence diagram shows every message in order', sequence.messages);
+  check(['Webview', 'Extension', 'Engine', 'Model', 'Session log'].every((a) => sequence.actors.includes(a)), 'the sequence diagram shows every participant', sequence.actors);
+  check(sequence.messages.length === 8 && sequence.messages[0] === 'send(text)', 'the sequence diagram shows every message in order', sequence.messages);
+
+  const scales = await panel<number[]>(`[...doc.querySelectorAll('.diagram[data-state="rendered"] svg')].map((s) => s.getBoundingClientRect().width / s.viewBox.baseVal.width)`);
+  check(scales.every((scale) => scale >= 0.74), 'no diagram shrinks below three quarters of its size', scales);
 
   await send(PROMPTS.broken, 3);
   await waitFor('the broken diagram to fail', async () => (await count('.diagram[data-state="failed"]')) === 1);

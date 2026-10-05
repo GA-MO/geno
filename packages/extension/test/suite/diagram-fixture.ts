@@ -19,6 +19,8 @@ export const SEQUENCE = [
   '  participant X as Extension',
   '  participant E as Engine',
   '  participant M as Model',
+  '  participant T as Tools in the sandbox',
+  '  participant L as Session log',
   '  W->>X: send(text)',
   '  X->>E: session/prompt',
   '  E->>M: Messages request',
@@ -26,6 +28,7 @@ export const SEQUENCE = [
   '  E-->>X: agent_message_chunk',
   '  X-->>W: text action',
   '  E-->>X: end_turn with usage',
+  '  E->>L: append the turn events',
 ].join('\n');
 
 /** The decision node never closes its brace, so mermaid cannot parse it. */
