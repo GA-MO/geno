@@ -5,7 +5,12 @@ export const FILES = {
   'dist/out.js': 'console.log(2);\n',
 } as const;
 
-export const PROMPTS = { auto: 'Clean up the build output', ask: 'Remove the build folder again' } as const;
+export const PROMPTS = { auto: 'Clean up the build output', ask: 'Remove the build folder again', plan: 'Plan how to rename a to answer' } as const;
+
+export const PLAN = '1. Rename `a` to `answer` in a.ts.\n2. Update its callers.\n\nFiles: a.ts.\n\nRisks: other modules may import `a`.';
+
+/** What Start building sends, as the extension words it. */
+export const FOLLOW_UP = 'Go ahead with the plan.';
 
 export const COMMANDS = {
   removeBuild: 'rm -rf build',

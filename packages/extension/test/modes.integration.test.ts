@@ -9,7 +9,7 @@ import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../e
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
-import { COMMANDS, FILES, REASONS } from './suite/modes-fixture.js';
+import { COMMANDS, FILES, FOLLOW_UP, PLAN, REASONS } from './suite/modes-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
 const MODEL = 'qwen3.8-flash';
@@ -36,9 +36,13 @@ const replies: readonly Reply[] = [
   asModel(answer('Cleaned the build and dist; I left a.ts alone.', usage)),
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
   asModel(answer('Left it as it is.', usage)),
+  toolCall('Looking around first.', [bash('ls')], usage),
+  asModel(answer(PLAN, usage)),
+  asModel(answer('Renamed it.', usage)),
 ];
 
-const requests: { tool_choice?: unknown }[] = [];
+const requests: { tool_choice?: unknown; tools: { name: string }[]; messages: { content: { type: string; text?: string }[] }[] }[] = [];
+const toolNames = (index: number) => requests[index]!.tools.map((t) => t.name);
 const shots = process.env['GCODE_SCREENSHOTS'];
 let debugPort = 0;
 let window: Window | undefined;
@@ -118,8 +122,13 @@ describe('Ask and Auto in the chat panel', () => {
     });
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
-    // Auto asked the classifier three times; Ask never did.
-    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false]);
+    // Auto asked the classifier three times; Ask and Plan never did.
+    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false, false, false, false]);
+    expect(toolNames(9)).not.toContain('edit');
+    expect(toolNames(10)).not.toContain('edit');
+    // Start building left Plan for the configured default, Auto, and sent the follow-up.
+    expect(toolNames(11)).toContain('edit');
+    expect(requests[11]!.messages.at(-1)!.content.at(-1)).toMatchObject({ type: 'text', text: FOLLOW_UP });
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
     expect(await exists(path.join(workspace, 'dist'))).toBe(false);
     expect(await exists(path.join(workspace, 'a.ts'))).toBe(true);

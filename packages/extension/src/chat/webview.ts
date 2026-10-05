@@ -9,7 +9,7 @@ import type { FromView, Header, Modes, ToView, Transcript, Turn } from './messag
 import { historyPanel } from './history.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
-import { callsStep, changesCard, emptyState, errorBlock, permissionCard, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { callsStep, changesCard, emptyState, errorBlock, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { emptyTranscript, isRunning, reduce } from './transcript.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
@@ -65,9 +65,12 @@ const modelLabel = h(
   modelName,
   icon('chevron-down'),
 );
+let mode = '';
 const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeId }), (modes: Modes) => {
   // Auto marks the whole composer, so it shows wherever the user looks to type.
   inputBox.dataset['mode'] = modes.current;
+  mode = modes.current;
+  schedule();
 });
 const chips = h('div', { class: 'context-chips', role: 'list', 'aria-label': 'Context for the next message' });
 const menu = h('ul', { class: 'mentions', id: 'mentions', role: 'listbox', 'aria-label': 'Context to add', hidden: true });
@@ -199,11 +202,15 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn)], build: () => turnHead(turn) }]);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.mode], build: () => turnHead(turn) }]);
       const steps = railOf(turn);
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
       reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText)));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]);
+      const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && i === transcript.turns.length - 1;
+      reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
+        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status], build: () => turnFooter(turn) }]),
+        ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),
+      ]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
   }

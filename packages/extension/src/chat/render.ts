@@ -352,8 +352,17 @@ export function turnHead(turn: Turn): HTMLElement {
     dino('avatar'),
     h('span', { class: 'turn-name' }, 'Geno'),
     h('span', { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta' }, headerOf(turn, formatDuration)),
+    turn.mode === 'plan' && h('span', { class: 'turn-mode', title: 'This turn ran in Plan mode, which changes nothing' }, icon('checklist'), 'Plan'),
   );
 }
+
+/** Under a finished Plan turn while the session is still in Plan: carry the plan out. */
+export const startBuilding = (ui: Ui): HTMLElement =>
+  h(
+    'div',
+    { class: 'start-building' },
+    h('button', { type: 'button', class: 'button', 'data-focus': 'start-building', onclick: () => ui.post({ type: 'start-building' }) }, icon('play'), 'Start building'),
+  );
 
 const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { readonly icon: string; readonly label: string }>> = {
   stopped: { icon: 'debug-stop', label: 'Stopped' },
