@@ -20,12 +20,12 @@ import { childEnv } from './child-env.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
-import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
+import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
-import { agentExecutors, NON_INTERACTIVE, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
 
@@ -140,7 +140,7 @@ export const agent: Command = async (args, { io, store }) => {
   const log = chosen === undefined ? opened.log : await logMode(opened.log, chosen);
   const mode = sessionModeOf(log.events);
   const approval: Approval = values['non-interactive']
-    ? { kind: 'non-interactive', mcp: true }
+    ? { kind: 'non-interactive', mcp: values.mcp === true }
     : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
   const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval };
   // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
