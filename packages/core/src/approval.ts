@@ -385,14 +385,34 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
  * run offers MCP tools only when its flag turns them on, which is that run's consent.
  */
 export const MCP_RULE_IDS = ['mcp-read-only', 'mcp-tool'] as const;
+/** The built-in browser's rules, below. */
+export const BROWSER_RULE_IDS = ['browser-local-url', 'browser-remote-url', 'browser-refused-url', 'browser-remote-page', 'browser-risky-tool'] as const;
+export type BrowserRuleId = (typeof BROWSER_RULE_IDS)[number];
 export type McpRuleId = (typeof MCP_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS] as const;
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS] as const;
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
   'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
   'mcp-tool': { reason: 'an MCP tool', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
+};
+
+/**
+ * The built-in browser's calls, which `browserDenialFor` in browser.ts matches. A page on this machine opens without
+ * asking; any other host asks in every interactive mode, Auto included, because a page can carry the agent's context
+ * out; and the user's answer covers that one navigation. None of these offers "allow for the session".
+ */
+
+export const BROWSER_RULES: Readonly<Record<BrowserRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
+  'browser-local-url': { reason: 'opening a page on this machine', verdicts: { plan: 'deny', ask: 'allow', auto: 'allow', 'non-interactive': 'allow' } },
+  'browser-remote-url': { reason: 'opening a page on another host', verdicts: ALWAYS_ASK },
+  'browser-refused-url': { reason: 'a URL the browser may not open', verdicts: { plan: 'deny', ask: 'deny', auto: 'deny', 'non-interactive': 'deny' } },
+  'browser-remote-page': { reason: 'acting on a page from another host the user did not approve', verdicts: ALWAYS_ASK },
+  'browser-risky-tool': {
+    reason: 'a browser tool that runs script, uploads a file or fills a form',
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
+  },
 };
 
 /**
