@@ -8,8 +8,10 @@ import { isMissing } from '../store.js';
 export type ToolContext = {
   /** Real path of the workspace root. */
   readonly workspace: string;
-  /** This session's spill directory: the one readable root outside the workspace. */
+  /** This session's spill directory, readable though outside the workspace. */
   readonly spillDir: string;
+  /** Real paths of other roots the read tools may see but nothing may change, such as installed plugins. */
+  readonly readRoots: readonly string[];
   /** This session's attachments folder, where an image a tool returns is stored by its hash. */
   readonly attachmentsDir: string;
   readonly rg: string;
@@ -85,20 +87,21 @@ async function realOrUndefined(target: string): Promise<string | undefined> {
   }
 }
 
-/** The real path of `raw` (relative to the workspace, or absolute), rejected unless it is inside an allowed root. */
+/** The real path of `raw` (relative to the workspace, or absolute), rejected unless it is inside a readable root. */
 export async function resolveInside(ctx: ToolContext, raw: string): Promise<string> {
   const target = path.resolve(ctx.workspace, raw);
   const outside = new ToolError(`${raw} is outside the workspace`);
   // realpath follows every symlink, so a link that points out of the workspace is caught here.
   const real = await realOrUndefined(target);
   if (real === undefined) {
-    if (within(ctx.workspace, target) || within(ctx.spillDir, target)) {
+    if ([ctx.workspace, ctx.spillDir, ...ctx.readRoots].some((root) => within(root, target))) {
       throw new ToolError(`no such file or directory: ${raw}`);
     }
     throw outside;
   }
   const spillRoot = await realOrUndefined(ctx.spillDir);
-  if (within(ctx.workspace, real) || (spillRoot !== undefined && within(spillRoot, real))) return real;
+  const roots = [ctx.workspace, ...(spillRoot === undefined ? [] : [spillRoot]), ...ctx.readRoots];
+  if (roots.some((root) => within(root, real))) return real;
   throw outside;
 }
 

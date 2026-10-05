@@ -20,6 +20,7 @@ import {
   type Denial,
   type EditorDiagnostic,
   type SessionMode,
+  type SlashCommand,
 } from '@g-code/core';
 import type { Classify } from '../classifier.js';
 import { applyEditToFile, type Files } from '../files.js';
@@ -38,6 +39,7 @@ import {
 } from './context.js';
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
+import { skillExecutor } from './skill.js';
 
 /** The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session. */
 export type PermissionAnswer = 'allow' | 'allow-session' | 'reject';
@@ -122,6 +124,8 @@ export type AgentToolEnv = {
   /** Stands in for the check command when the workspace has none and an editor is attached. */
   readonly diagnostics: Diagnostics | undefined;
   readonly rules: RuleAttacher;
+  /** The slash commands as discovered now, for the skill tool. */
+  readonly commands: () => Promise<readonly SlashCommand[]>;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -226,6 +230,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   });
 
-  const all: Readonly<Record<AgentToolName, Executor>> = { ...EXECUTORS, read: withRuleAttachments(read, tools.rules), edit, bash, check };
+  const all: Readonly<Record<AgentToolName, Executor>> = {
+    ...EXECUTORS,
+    read: withRuleAttachments(read, tools.rules),
+    edit,
+    bash,
+    check,
+    skill: skillExecutor(tools.commands),
+  };
   return Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
 }

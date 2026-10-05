@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { ToolError, type ToolContext } from './context.js';
+import { displayPath, resolveInside, ToolError, type ToolContext } from './context.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,24 +50,39 @@ export function comparePaths(a: string, b: string): number {
   return left.length - right.length;
 }
 
+/** The real directory a search covers: the workspace, or a directory in any readable root. */
+export async function searchRoot(ctx: ToolContext, directory: string | undefined): Promise<string> {
+  if (directory === undefined) return ctx.workspace;
+  const real = await resolveInside(ctx, directory);
+  if (!(await stat(real)).isDirectory()) throw new ToolError(`${directory} is not a directory`);
+  return real;
+}
+
 /** `files` lines are paths; `matches` lines are path:line:text. */
 export type SearchOutput = 'files' | 'matches';
 
 /**
- * ripgrep over the workspace as the editor shows it: each buffer with unsaved edits is searched in place of its
- * file on disk, from a copy at the same relative path in a scratch directory. Returns lines as ripgrep prints them
- * with --sort=path. A buffer of a file .gitignore excludes is searched all the same, since the user has it open.
+ * ripgrep over `dir`, a real path from searchRoot, as the editor shows it: each buffer with unsaved edits
+ * is searched in place of its file on disk, from a copy at the same relative path in a scratch directory. Returns
+ * lines as ripgrep prints them with --sort=path, each path shown as displayPath shows it. A buffer of a file
+ * .gitignore excludes is searched all the same, since the user has it open.
  */
-export async function searchWorkspace(ctx: ToolContext, args: readonly string[], output: SearchOutput): Promise<string[]> {
+export async function searchWorkspace(ctx: ToolContext, args: readonly string[], output: SearchOutput, dir: string): Promise<string[]> {
+  const shownDir = displayPath(ctx, dir);
+  const prefix = shownDir === '.' ? '' : `${shownDir}/`;
+  return (await searchDir(ctx, dir, args, output)).map((line) => prefix + line);
+}
+
+async function searchDir(ctx: ToolContext, dir: string, args: readonly string[], output: SearchOutput): Promise<string[]> {
   const buffers = (await ctx.files.unsaved()).flatMap(({ path: file, text }) => {
-    const relative = path.relative(ctx.workspace, file);
+    const relative = path.relative(dir, file);
     return relative === '' || relative.startsWith('..') || path.isAbsolute(relative) ? [] : [{ relative: relative.split(path.sep).join('/'), text }];
   });
   // NUL after the path keeps a path with a colon in it apart from its line number.
   const flags = output === 'matches' ? ['--null'] : [];
   const pathOf = (line: string): string => (output === 'matches' ? line.slice(0, line.indexOf('\0')) : line);
   const shown = (line: string): string => line.replace('\0', ':');
-  if (buffers.length === 0) return (await ripgrep(ctx, ctx.workspace, [...flags, ...args])).map(shown);
+  if (buffers.length === 0) return (await ripgrep(ctx, dir, [...flags, ...args])).map(shown);
 
   const overlay = await mkdtemp(path.join(tmpdir(), 'gcode-unsaved-'));
   try {
@@ -78,7 +93,7 @@ export async function searchWorkspace(ctx: ToolContext, args: readonly string[],
     // Later globs win in ripgrep, so these exclusions hold whatever glob the caller passed.
     const onDisk = buffers.flatMap(({ relative }) => ['--glob', `!/${escapeGlob(relative)}`]);
     const [disk, open] = await Promise.all([
-      ripgrep(ctx, ctx.workspace, [...flags, ...args, ...onDisk]),
+      ripgrep(ctx, dir, [...flags, ...args, ...onDisk]),
       ripgrep(ctx, overlay, [...flags, ...args]),
     ]);
     // A stable sort keeps each file's lines in their order.
