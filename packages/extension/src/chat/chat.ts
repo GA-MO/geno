@@ -749,7 +749,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
    * the card down.
    */
   private async askQuestion(params: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {
-    const parsed = parseAskUser(params._meta?.[ASK_USER_META]);
+    const parsed = parseAskUser(params._meta?.[ASK_USER_META], 'wire');
     if (params.mode !== 'form' || !parsed.ok) return { action: 'decline' };
     const request = parsed.value;
     const id = String(this.nextPermission++);

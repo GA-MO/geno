@@ -101,15 +101,21 @@ const extraKey = (raw: Record<string, unknown>, allowed: readonly string[]): str
 const isOther = (label: string): boolean => /^other\b/i.test(label.trim());
 const between = (n: number, { min, max }: { readonly min: number; readonly max: number }) => n >= min && n <= max;
 
-function parseOption(raw: unknown, where: string): Parsed<AskUserOption> {
+/**
+ * Who wrote the request. The model's must hold every limit. The `wire` copy an editor reads from `_meta` is one the
+ * engine already parsed, and may be a question in U13's shape: bare labels, and zero to six of them.
+ */
+export type AskUserSource = 'model' | 'wire';
+
+function parseOption(raw: unknown, where: string, source: AskUserSource): Parsed<AskUserOption> {
   if (!isRecord(raw)) return fail(`${where} must be an object with a label and a description`);
   const extra = extraKey(raw, ['label', 'description', 'recommended', 'preview']);
   if (extra !== undefined) return fail(`${where} has an unknown field "${extra}"`);
   const { label, description, recommended, preview } = raw;
   if (!text(label)) return fail(`${where} needs a label`);
   if (label.trim().length > ASK_USER_LIMITS.label) return fail(`${where}'s label is longer than ${ASK_USER_LIMITS.label} characters`);
-  if (isOther(label)) return fail(`${where} is "${label.trim()}". Do not list Other: the card always offers it`);
-  if (!text(description)) return fail(`${where} ("${label.trim()}") needs a description`);
+  if (isOther(label) && source === 'model') return fail(`${where} is "${label.trim()}". Do not list Other: the card always offers it`);
+  if (!text(description) && !(source === 'wire' && description === undefined)) return fail(`${where} ("${label.trim()}") needs a description`);
   if (recommended !== undefined && typeof recommended !== 'boolean') return fail(`${where}'s recommended must be true or false`);
   if (preview !== undefined && typeof preview !== 'string') return fail(`${where}'s preview must be a string`);
   if (typeof preview === 'string' && preview.length > ASK_USER_LIMITS.preview) return fail(`${where}'s preview is longer than ${ASK_USER_LIMITS.preview} characters`);
@@ -117,14 +123,14 @@ function parseOption(raw: unknown, where: string): Parsed<AskUserOption> {
     ok: true,
     value: {
       label: label.trim(),
-      description: description.trim(),
+      ...(typeof description === 'string' ? { description: description.trim() } : {}),
       ...(recommended === true ? { recommended: true as const } : {}),
       ...(typeof preview === 'string' && preview.trim() !== '' ? { preview } : {}),
     },
   };
 }
 
-function parseQuestion(raw: unknown, n: number): Parsed<AskUserQuestion> {
+function parseQuestion(raw: unknown, n: number, source: AskUserSource): Parsed<AskUserQuestion> {
   const where = `question ${n}`;
   if (!isRecord(raw)) return fail(`${where} must be an object`);
   const extra = extraKey(raw, ['id', 'header', 'question', 'multiSelect', 'options']);
@@ -135,11 +141,12 @@ function parseQuestion(raw: unknown, n: number): Parsed<AskUserQuestion> {
   if (header.trim().length > ASK_USER_LIMITS.header) return fail(`${where}'s header "${header.trim()}" is longer than ${ASK_USER_LIMITS.header} characters`);
   if (!text(question)) return fail(`${where} needs the question text`);
   if (typeof multiSelect !== 'boolean') return fail(`${where}'s multiSelect must be true or false`);
-  if (!Array.isArray(options) || !between(options.length, ASK_USER_LIMITS.options))
+  const limits = source === 'wire' ? { min: 0, max: ASK_USER_LIMITS.legacyOptions } : ASK_USER_LIMITS.options;
+  if (!Array.isArray(options) || !between(options.length, limits))
     return fail(`${where} needs ${ASK_USER_LIMITS.options.min} to ${ASK_USER_LIMITS.options.max} options; Other is added for you`);
   const parsed: AskUserOption[] = [];
   for (const [i, option] of options.entries()) {
-    const one = parseOption(option, `${where}, option ${i + 1}`);
+    const one = parseOption(option, `${where}, option ${i + 1}`, source);
     if (!one.ok) return one;
     if (parsed.some((o) => o.label.toLowerCase() === one.value.label.toLowerCase())) return fail(`${where} lists "${one.value.label}" twice`);
     parsed.push(one.value);
@@ -164,7 +171,7 @@ function parseLegacy(raw: Record<string, unknown>): Parsed<AskUserRequest> {
 }
 
 /** The model's `ask_user` input as a request, or what is wrong with it, in words the model can act on. */
-export function parseAskUser(raw: unknown): Parsed<AskUserRequest> {
+export function parseAskUser(raw: unknown, source: AskUserSource = 'model'): Parsed<AskUserRequest> {
   if (!isRecord(raw)) return fail('ask_user takes an object with questions');
   if (!('questions' in raw) && 'question' in raw) return parseLegacy(raw);
   const extra = extraKey(raw, ['questions']);
@@ -174,7 +181,7 @@ export function parseAskUser(raw: unknown): Parsed<AskUserRequest> {
     return fail(`ask_user takes ${ASK_USER_LIMITS.questions.min} to ${ASK_USER_LIMITS.questions.max} questions`);
   const parsed: AskUserQuestion[] = [];
   for (const [i, question] of questions.entries()) {
-    const one = parseQuestion(question, i + 1);
+    const one = parseQuestion(question, i + 1, source);
     if (!one.ok) return one;
     if (parsed.some((q) => q.id === one.value.id)) return fail(`two questions have the id "${one.value.id}"`);
     parsed.push(one.value);
