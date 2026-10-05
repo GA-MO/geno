@@ -122,14 +122,28 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
 };
 
-const SEPARATORS = ['&&', '||', ';;', '$(', ';', '&', '|', '\n', '(', ')', '`'];
+const SEPARATORS = ['&&', '||', ';;', ';', '&', '|', '\n', '(', ')'];
 const REDIRECTS = ['>>', '>&', '&>', '>', '<'];
 
-/** Splits a shell command into simple commands of words. Quotes group and are removed; substitutions split. */
+type Heredoc = { readonly delimiter: string; readonly quoted: boolean; readonly stripTabs: boolean };
+
+/**
+ * Splits a shell command into simple commands of words. Quotes group and are removed. A command substitution stays in
+ * its word as text and its commands are split out ahead of it. Heredoc bodies are data, except for the substitutions
+ * of an unquoted one.
+ */
 export function splitCommand(command: string): string[][] {
   const commands: string[][] = [];
+  scan(command, 0, undefined, commands);
+  return commands;
+}
+
+// Appends the commands from `start` up to `closer` (or the end) and returns the closer's index.
+function scan(src: string, start: number, closer: ')' | '`' | undefined, commands: string[][]): number {
   let words: string[] = [];
   let word: string | null = null;
+  let parens = 0;
+  const heredocs: Heredoc[] = [];
   const endWord = () => {
     if (word !== null) words.push(word);
     word = null;
@@ -139,38 +153,66 @@ export function splitCommand(command: string): string[][] {
     if (words.length > 0) commands.push(words);
     words = [];
   };
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i]!;
+  let i = start;
+  for (; i < src.length; i++) {
+    const ch = src[i]!;
+    if (ch === closer && parens === 0) break;
     if (ch === "'") {
-      const close = command.indexOf("'", i + 1);
-      const end = close === -1 ? command.length : close;
-      word = (word ?? '') + command.slice(i + 1, end);
+      const close = src.indexOf("'", i + 1);
+      const end = close === -1 ? src.length : close;
+      word = (word ?? '') + src.slice(i + 1, end);
       i = end;
       continue;
     }
     if (ch === '"') {
       let j = i + 1;
       let text = '';
-      while (j < command.length && command[j] !== '"') {
-        if (command[j] === '\\' && j + 1 < command.length) j++;
-        text += command[j];
+      while (j < src.length && src[j] !== '"') {
+        const substitution = substitutionAt(src, j, commands);
+        if (substitution !== undefined) {
+          text += src.slice(j, substitution + 1);
+          j = substitution + 1;
+          continue;
+        }
+        if (src[j] === '\\' && j + 1 < src.length) j++;
+        text += src[j];
         j++;
       }
       word = (word ?? '') + text;
       i = j;
       continue;
     }
-    if (ch === '\\' && i + 1 < command.length) {
-      word = (word ?? '') + command[++i];
+    if (ch === '\\' && i + 1 < src.length) {
+      word = (word ?? '') + src[++i];
       continue;
     }
-    const separator = SEPARATORS.find((op) => command.startsWith(op, i));
+    const substitution = substitutionAt(src, i, commands);
+    if (substitution !== undefined) {
+      word = (word ?? '') + src.slice(i, substitution + 1);
+      i = substitution;
+      continue;
+    }
+    if (src.startsWith('<<', i) && !src.startsWith('<<<', i)) {
+      endWord();
+      const { heredoc, end } = readHeredoc(src, i + 2);
+      heredocs.push(heredoc);
+      i = end - 1;
+      continue;
+    }
+    if (ch === '\n' && heredocs.length > 0) {
+      endCommand();
+      i = skipHeredocBodies(src, i + 1, heredocs.splice(0), commands) - 1;
+      continue;
+    }
+    const separator = SEPARATORS.find((op) => src.startsWith(op, i));
     if (separator !== undefined) {
+      if (separator === '(') parens++;
+      if (separator === ')') parens = Math.max(0, parens - 1);
       endCommand();
       i += separator.length - 1;
       continue;
     }
-    const redirect = REDIRECTS.find((op) => command.startsWith(op, i));
+    const redirect = REDIRECTS.find((op) => src.startsWith(op, i));
     if (redirect !== undefined) {
       if (word !== null && /^\d$/.test(word)) word = null;
       endWord();
@@ -182,18 +224,81 @@ export function splitCommand(command: string): string[][] {
       continue;
     }
     if (ch === '#' && word === null) {
-      const newline = command.indexOf('\n', i);
-      i = newline === -1 ? command.length : newline - 1;
+      const newline = src.indexOf('\n', i);
+      i = newline === -1 ? src.length : newline - 1;
       continue;
     }
     word = (word ?? '') + ch;
   }
   endCommand();
-  return commands;
+  return i;
 }
 
-// Programs that run the next word as the command.
-const WRAPPERS = new Set(['sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice']);
+// At `$(` or a backtick, appends the substitution's commands and returns the index of its closer.
+function substitutionAt(src: string, i: number, commands: string[][]): number | undefined {
+  if (src.startsWith('$(', i)) return scan(src, i + 2, ')', commands);
+  if (src[i] === '`') return scan(src, i + 1, '`', commands);
+  return undefined;
+}
+
+function readHeredoc(src: string, start: number): { readonly heredoc: Heredoc; readonly end: number } {
+  let i = start;
+  const stripTabs = src[i] === '-';
+  if (stripTabs) i++;
+  while (src[i] === ' ' || src[i] === '\t') i++;
+  let delimiter = '';
+  let quoted = false;
+  for (; i < src.length && !/[\s;&|<>()]/.test(src[i]!); i++) {
+    const ch = src[i]!;
+    if (ch === "'" || ch === '"') {
+      const close = src.indexOf(ch, i + 1);
+      const end = close === -1 ? src.length : close;
+      delimiter += src.slice(i + 1, end);
+      quoted = true;
+      i = end;
+    } else if (ch === '\\' && i + 1 < src.length) {
+      delimiter += src[++i];
+      quoted = true;
+    } else delimiter += ch;
+  }
+  return { heredoc: { delimiter, quoted, stripTabs }, end: i };
+}
+
+// Returns the index just past the last body's delimiter line.
+function skipHeredocBodies(src: string, start: number, heredocs: readonly Heredoc[], commands: string[][]): number {
+  let i = start;
+  for (const { delimiter, quoted, stripTabs } of heredocs) {
+    const bodyStart = i;
+    let bodyEnd = src.length;
+    while (i < src.length) {
+      const newline = src.indexOf('\n', i);
+      const lineEnd = newline === -1 ? src.length : newline;
+      const line = src.slice(i, lineEnd);
+      const next = newline === -1 ? src.length : newline + 1;
+      if ((stripTabs ? line.replace(/^\t+/, '') : line) === delimiter) {
+        bodyEnd = i;
+        i = next;
+        break;
+      }
+      i = next;
+    }
+    if (!quoted) substitutionsIn(src.slice(bodyStart, bodyEnd), commands);
+  }
+  return i;
+}
+
+function substitutionsIn(text: string, commands: string[][]): void {
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\\') i++;
+    else i = substitutionAt(text, i, commands) ?? i;
+  }
+}
+
+// Programs that run the next word as the command, and shell keywords that start a command.
+const WRAPPERS = new Set([
+  'sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice',
+  'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{',
+]);
 const isAssignment = (word: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
 
 export function simpleCommand(words: readonly string[]): SimpleCommand {
