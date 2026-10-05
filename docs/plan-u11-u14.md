@@ -66,6 +66,11 @@ Both edit the composer, `chat.ts` and `serve.ts`.
   - A fake stdio server and a fake HTTP server in tests, covering listing, calling, a crash and restart, trust gating (an untrusted workspace server never spawns, proven by a marker file), env scrubbing, and lazy mode past the threshold.
   - A live check with `chrome-devtools` from `~/Development/payload-site-template/.mcp.json`, read-only: trust it in a temp `GCODE_HOME`, list its tools and call one harmless tool. This needs only `npx`, no key. If it cannot start headless here, report why.
 
+## Added by the user
+
+- A Plan mode, read-only and answering with a plan, borrowed from OpenCode. It goes in U9b, next to Ask and Auto.
+- `/init` creates or updates `AGENTS.md` by having the agent read the project, borrowed from OpenCode. Its command entry lands in U11a, and U13 implements it.
+
 ## U11b, U12b, U13, U14
 
 Briefs for these are written when their wave starts, from what the A-wave reports actually built.
