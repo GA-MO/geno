@@ -123,6 +123,11 @@
           "default": "glass",
           "description": "How the chat panel looks. High contrast themes always use the native style."
         },
+        "gcode.ui.showChanges": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show Geno's Changes view under the chat. Off by default, since Source Control lists the same files; the chat's changes card and the editor's Keep and Undo lenses review edits either way."
+        },
         "gcode.tab.enabled": {
           "type": "boolean",
           "default": true,
@@ -176,7 +181,8 @@
         {
           "id": "gcode.changes",
           "name": "Changes",
-          "initialSize": 1
+          "initialSize": 1,
+          "when": "config.gcode.ui.showChanges"
         }
       ]
     },
@@ -184,34 +190,34 @@
       "view/title": [
         {
           "command": "gcode.review.undoSession",
-          "when": "view == gcode.changes",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "gcode.review.openDiff",
-          "when": "view == gcode.changes && viewItem =~ /^file/",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges && viewItem =~ /^file/",
           "group": "inline@1"
         },
         {
           "command": "gcode.review.keepFile",
-          "when": "view == gcode.changes && viewItem == file-pending",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges && viewItem == file-pending",
           "group": "inline@2"
         },
         {
           "command": "gcode.review.undoFile",
-          "when": "view == gcode.changes && viewItem == file-pending",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges && viewItem == file-pending",
           "group": "inline@3"
         },
         {
           "command": "gcode.review.keep",
-          "when": "view == gcode.changes && viewItem == hunk-pending",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges && viewItem == hunk-pending",
           "group": "inline@1"
         },
         {
           "command": "gcode.review.undo",
-          "when": "view == gcode.changes && viewItem == hunk-pending",
+          "when": "view == gcode.changes && config.gcode.ui.showChanges && viewItem == hunk-pending",
           "group": "inline@2"
         }
       ],
