@@ -119,8 +119,8 @@ export async function evaluate<T>(view: Webview, expression: string): Promise<T>
  * through the compositor's hit testing, which a window nobody sees never updates, so the page would keep it.
  */
 
-/** Clicks the first `selector` match whose trimmed text is `text` when given, at its center. */
-export async function click(view: Webview, selector: string, text?: string): Promise<void> {
+/** The center of the first `selector` match whose trimmed text is `text` when given, scrolled into view. */
+async function centerOf(view: Webview, selector: string, text?: string): Promise<{ x: number; y: number }> {
   const at = await evaluate<{ x: number; y: number } | string>(
     view,
     `(() => {
@@ -134,6 +134,17 @@ export async function click(view: Webview, selector: string, text?: string): Pro
     })()`,
   );
   if (typeof at === 'string') throw new Error(at);
+  return at;
+}
+
+/** Moves the pointer over the center of the first `selector` match, as a user hovering it would. */
+export async function hover(view: Webview, selector: string): Promise<void> {
+  await view.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...(await centerOf(view, selector)) });
+}
+
+/** Clicks the first `selector` match whose trimmed text is `text` when given, at its center. */
+export async function click(view: Webview, selector: string, text?: string): Promise<void> {
+  const at = await centerOf(view, selector, text);
   await view.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...at });
   await view.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...at, button: 'left', clickCount: 1 });
   await view.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at, button: 'left', clickCount: 1 });

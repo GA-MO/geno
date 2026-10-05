@@ -23,6 +23,12 @@ export async function panelClip(window: Window): Promise<Clip> {
   return result.value as Clip;
 }
 
+/** Captures just the panel, at `scale` times its CSS size, for details such as a 1px rail or a 6px scrollbar. */
+export async function capturePanel(window: Window, file: string, scale = 2): Promise<void> {
+  const { data } = await window.page.send<{ data: string }>('Page.captureScreenshot', { format: 'png', clip: { ...(await panelClip(window)), scale } });
+  await writeFile(file, Buffer.from(data, 'base64'));
+}
+
 /** The rainbow's running animations in the panel, paused at `t` of their cycle (0 to 1), or all resumed. */
 const RAINBOW = `doc.getAnimations().filter((a) => a.animationName === 'rainbow-run')`;
 export const seekRainbow = (view: Webview, t: number) =>
