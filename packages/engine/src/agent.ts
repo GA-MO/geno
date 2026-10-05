@@ -4,12 +4,11 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
-  AGENT_SYSTEM_PROMPT,
-  AGENT_TOOL_DEFINITIONS,
+  AGENT_MODE_SYSTEM_PROMPTS,
+  AGENT_MODE_TOOL_DEFINITIONS,
   approvalQuestion,
   describeServerState,
   isSessionMode,
-  SESSION_MODES,
   sessionModeOf,
   type SessionMode,
   type TurnEvent,
@@ -69,7 +68,7 @@ export const askOnTerminal =
 
 function modeFlag(raw: string | undefined): SessionMode | undefined {
   if (raw === undefined || isSessionMode(raw)) return raw;
-  throw new UsageError(`--mode must be ${SESSION_MODES.join(' or ')}`);
+  throw new UsageError('--mode must be ask or auto, or plan to plan without changing anything');
 }
 
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
@@ -91,10 +90,14 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     });
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
+    // The run offers the tools and prompt of the mode it starts in; a switch mid-run applies from the next run.
+    // MCP tools are offered in every mode, and their rules decide what each mode lets them do.
+    const startMode = options.approval.kind === 'interactive' ? options.approval.mode() : 'non-interactive';
+    const own = AGENT_MODE_TOOL_DEFINITIONS[startMode];
     const mode = {
-      tools: mcp === undefined ? AGENT_TOOL_DEFINITIONS : [...AGENT_TOOL_DEFINITIONS, ...mcp.tools],
+      tools: mcp === undefined ? own : [...own, ...mcp.tools],
       executors: mcp === undefined ? executors : { ...mcp.executors, ...executors },
-      system: AGENT_SYSTEM_PROMPT,
+      system: AGENT_MODE_SYSTEM_PROMPTS[startMode],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);

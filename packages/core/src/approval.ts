@@ -35,22 +35,36 @@ export type SimpleCommand = {
 };
 
 /**
- * `ask` asks the user before every flagged command. `auto` still asks before what cannot be undone, runs what is clearly
- * safe, and lets the classifier judge the rest. Non-interactive runs, such as evals, have nobody to ask.
+ * `plan` reads and runs only what is clearly safe, and changes nothing. `ask` asks the user before every flagged command.
+ * `auto` still asks before what cannot be undone, runs what is clearly safe, and lets the classifier judge the rest.
+ * Non-interactive runs, such as evals, have nobody to ask.
  */
-export const APPROVAL_MODES = ['ask', 'auto', 'non-interactive'] as const;
+export const APPROVAL_MODES = ['plan', 'ask', 'auto', 'non-interactive'] as const;
 export type ApprovalMode = (typeof APPROVAL_MODES)[number];
-/** The modes a user picks for a session; non-interactive belongs to a run, not a session. */
-export const SESSION_MODES = ['ask', 'auto'] as const satisfies readonly ApprovalMode[];
+/** The modes a user picks for a session, in the order a picker lists them; non-interactive belongs to a run, not a session. */
+export const SESSION_MODES = ['plan', 'ask', 'auto'] as const satisfies readonly ApprovalMode[];
 export type SessionMode = (typeof SESSION_MODES)[number];
 export const isSessionMode = (raw: string): raw is SessionMode => (SESSION_MODES as readonly string[]).includes(raw);
 export const DEFAULT_SESSION_MODE: SessionMode = 'ask';
 
+/** Why a mode refuses whatever it does not allow, when it says more than the rule's own reason. */
+export const MODE_REFUSALS: Readonly<Record<ApprovalMode, string | undefined>> = {
+  plan: 'Plan mode is read-only; switch to Ask or Auto to make changes',
+  ask: undefined,
+  auto: undefined,
+  'non-interactive': undefined,
+};
+
 export type Verdict = 'allow' | 'ask' | 'deny';
 /** `classify` hands the command to the classifier, which answers with a Verdict. */
 export type RuleVerdict = Verdict | 'classify';
-/** What a run in each mode does with a command a rule matches. Nobody is there to ask in non-interactive mode. */
+/**
+ * What a run in each mode does with a command a rule matches. Plan never asks or classifies: it denies every bash rule,
+ * the unlisted one included, so it runs only the safe list, and allows only what an MCP server marks read-only. Nobody
+ * is there to ask in non-interactive mode.
+ */
 export type Verdicts = {
+  readonly plan: Exclude<Verdict, 'ask'>;
   readonly ask: Verdict;
   readonly auto: RuleVerdict;
   readonly 'non-interactive': Exclude<Verdict, 'ask'>;
@@ -70,9 +84,9 @@ export type Denial = {
 };
 
 // What cannot be undone: Auto still asks.
-const ALWAYS_ASK: Verdicts = { ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
+const ALWAYS_ASK: Verdicts = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
 // What Auto lets the classifier judge.
-const ASK_OR_CLASSIFY: Verdicts = { ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
+const ASK_OR_CLASSIFY: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
 
 const CLOUD_CLIS = new Set([
   'aws', 'az', 'bq', 'doctl', 'eksctl', 'firebase', 'fly', 'flyctl', 'gcloud', 'gsutil', 'helm', 'heroku',
@@ -314,7 +328,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   // checkpoint restores.
   'rm-rf-in-workspace': {
     reason: 'rm -rf of a path inside the workspace',
-    verdicts: { ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command, scope) => removes(command, scope, 'workspace'),
   },
   'git-push': {
@@ -357,10 +371,10 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: ASK_OR_CLASSIFY,
     matches: ({ program }) => DATABASE_CLIS.has(program),
   },
-  // Only Auto acts on this: the other modes run what no other rule flags, as they always have.
+  // Plan and Auto act on this: Ask and non-interactive runs run what no other rule flags, as they always have.
   unlisted: {
     reason: 'a command not on the safe list',
-    verdicts: { ask: 'allow', auto: 'classify', 'non-interactive': 'allow' },
+    verdicts: { plan: 'deny', ask: 'allow', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command) => !isClearlySafe(command),
   },
 };
@@ -377,17 +391,20 @@ export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS] as const;
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
-  'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
-  'mcp-tool': { reason: 'an MCP tool', verdicts: { ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
+  'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
+  'mcp-tool': { reason: 'an MCP tool', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
 };
 
-/** What settles one MCP call before it runs, or undefined when it runs. A tool the user allowed for the session always runs. */
+/**
+ * What settles one MCP call before it runs, or undefined when it runs. A tool the user allowed for the session skips
+ * the question and the classifier, but not a mode's denial, so Plan still refuses it.
+ */
 export function mcpDenialFor(call: { readonly name: string; readonly readOnly: boolean }, mode: ApprovalMode, allowedForSession: boolean): Denial | undefined {
-  if (allowedForSession) return undefined;
   const rule: McpRuleId = call.readOnly ? 'mcp-read-only' : 'mcp-tool';
   const { reason, verdicts } = MCP_RULES[rule];
   const verdict = verdicts[mode];
-  return verdict === 'allow' ? undefined : { rule, reason, command: call.name, verdict };
+  if (verdict === 'allow' || (allowedForSession && verdict !== 'deny')) return undefined;
+  return { rule, reason, command: call.name, verdict };
 }
 
 const SEPARATORS = ['&&', '||', ';;', ';', '&', '|', '\n', '(', ')'];

@@ -108,6 +108,7 @@ const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
 const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session' };
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
+  plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
   ask: { name: 'Ask', description: 'Ask before risky commands.' },
   auto: {
     name: 'Auto',
