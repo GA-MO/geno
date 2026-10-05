@@ -13,6 +13,7 @@ import {
   renderMemory,
   sessionModeOf,
   userToolDefinitions,
+  type EffortPolicy,
   type SessionMode,
   type TurnEvent,
 } from '@g-code/core';
@@ -69,6 +70,8 @@ export type AgentOptions = {
   readonly mcp?: McpToolset | undefined;
   /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
   readonly user?: UserChannel | undefined;
+  /** Undefined uses the default policy. */
+  readonly effortPolicy?: EffortPolicy | undefined;
 };
 
 export const askOnTerminal =
@@ -121,6 +124,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       system: [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n'),
       readRoots: [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])],
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
+      ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
   } finally {
