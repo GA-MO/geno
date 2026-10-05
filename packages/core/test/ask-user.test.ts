@@ -107,6 +107,17 @@ describe('parseAskUser', () => {
   });
 });
 
+describe('the request on the wire', () => {
+  it('reads back every request the model could make, the old shape included, as the editor receives it in _meta', () => {
+    for (const raw of [{ question: 'Which database?', options: ['Postgres', 'SQLite'] }, { question: 'Why?' }, { questions: [question('a', { multiSelect: true })] }]) {
+      const asked = parseAskUser(raw);
+      if (!asked.ok) throw new Error(asked.problem);
+      expect(parseAskUser(JSON.parse(JSON.stringify(asked.value)), 'wire')).toEqual(asked);
+    }
+    expect(parseAskUser({ questions: [question('a', { options: [option('Grid'), { label: 'List' }] })] }), 'the model still describes every option').toMatchObject({ ok: false });
+  });
+});
+
 describe('the ACP form', () => {
   it('maps each question to a choice field keyed by its id and an Other field, with descriptions and the recommended marker', () => {
     expect(askUserForm(TWO)).toEqual({
