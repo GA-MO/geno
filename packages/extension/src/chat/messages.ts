@@ -3,6 +3,7 @@ import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refuse
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
+import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
 
@@ -68,7 +69,18 @@ export type ToolBlock = {
   readonly images?: readonly ToolImage[] | undefined;
   /** A flagged command Auto settled without asking: the classifier's verdict and its reason. */
   readonly auto?: AutoDecision | undefined;
+  /** What a show_widget call draws: its loading lines while the model writes it, then the widget. */
+  readonly widget?: ToolWidget | undefined;
 };
+
+/**
+ * A widget's life on its step: drafting while the model writes it, ready with the stored html once the call ran,
+ * missing when a loaded session's attachments folder no longer holds it.
+ */
+export type ToolWidget =
+  | { readonly state: 'drafting'; readonly title: string | undefined; readonly loading: readonly string[] }
+  | { readonly state: 'ready'; readonly title: string; readonly sha256: string; readonly html: string }
+  | { readonly state: 'missing'; readonly title: string };
 
 /** An image file a tool returned; `path` is absolute. */
 export type ToolImage = { readonly path: string; readonly name: string };
@@ -154,6 +166,7 @@ export type Action =
       readonly output?: string;
       readonly images?: readonly ToolImage[];
       readonly auto?: AutoDecision;
+      readonly widget?: ToolWidget;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
@@ -268,6 +281,19 @@ export type ContextFromView =
   | { readonly type: 'memory-edit'; readonly id: string; readonly text: string }
   | { readonly type: 'memory-delete'; readonly id: string };
 
+/** A widget's actions: `theme` is the panel's widget theme as it is now, which a download or a tab keeps. */
+export type WidgetFromView =
+  /** A link a widget asked to open, which the user approved under the widget. */
+  | { readonly type: 'widget-link'; readonly href: string }
+  | { readonly type: 'widget-open'; readonly toolId: string; readonly theme: WidgetTheme }
+  | { readonly type: 'widget-download'; readonly toolId: string; readonly theme: WidgetTheme }
+  /** The panel could not put the image on the clipboard, so the extension offers to save it. `png` is base64. */
+  | { readonly type: 'widget-image'; readonly title: string; readonly png: string };
+
+/** What the widget tab is told, and what its page asks. */
+export type ToWidgetTab = { readonly type: 'show'; readonly html: string; readonly theme: WidgetTheme };
+export type FromWidgetTab = { readonly type: 'ready' } | { readonly type: 'widget-link'; readonly href: string };
+
 /** A folder the webview may load images from: its absolute path and the address of that folder inside the webview. */
 export type WebviewRoot = { readonly path: string; readonly uri: string };
 
@@ -303,6 +329,7 @@ export type FromView =
   | { readonly type: 'choose-model' }
   /** Opens a diagram full size in an editor tab. */
   | { readonly type: 'open-diagram'; readonly source: string }
+  | WidgetFromView
   /** Switches the session's approval mode; the engine confirms with the modes. */
   | { readonly type: 'set-mode'; readonly modeId: string }
   /** After a Plan turn: leave Plan and tell the agent to carry out the plan. */

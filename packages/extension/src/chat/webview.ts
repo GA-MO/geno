@@ -2,6 +2,7 @@
 /// <reference lib="dom.iterable" />
 /// <reference lib="dom.asynciterable" />
 import type { OutgoingAttachment } from './attachment-model.js';
+import { widgetStep } from './widget-view.js';
 import { composerAttachments } from './composer-attachments.js';
 import { composerView, NO_FACTS, type ComposerFacts } from './composer-model.js';
 import { composerControls } from './composer-view.js';
@@ -233,6 +234,9 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.block, quiet], build: () => permissionCard(step.block, ui, quiet) };
     case 'error':
       return { deps: [step.block], build: () => errorBlock(step.block) };
+    // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
+    case 'widget':
+      return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
     case 'notice':
       return { deps: [step.text], build: () => turnNotice(step.text) };
     case 'thinking':

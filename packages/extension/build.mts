@@ -39,6 +39,14 @@ export const BUNDLES: readonly BuildOptions[] = [
     minify: true,
   },
   {
+    entryPoints: [path.join(root, 'src/chat/widget-tab-view.ts')],
+    outfile: path.join(dist, 'widget-tab.js'),
+    platform: 'browser',
+    format: 'iife',
+    target: 'es2022',
+    minify: true,
+  },
+  {
     // Mermaid, which the panels import only once a transcript holds a diagram. As ES modules split into chunks,
     // a page loads the diagram types it draws and no others.
     entryPoints: { render: path.join(root, 'src/chat/diagram-render.ts') },
