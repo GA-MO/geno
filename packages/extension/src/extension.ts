@@ -13,7 +13,7 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { registerTabServer } from './tab/status.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
-import { describeRuntime, engineEnv, PROVIDER_LABELS, providerOf, readModelRuntime, secretName, SET_KEY_COMMAND, setupProblem } from './runtime.js';
+import { describeRuntime, engineEnv, modelLabel, PROVIDER_LABELS, providerOf, readModelRuntime, secretName, SET_KEY_COMMAND, setupProblem } from './runtime.js';
 
 const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model'];
 
@@ -49,13 +49,19 @@ async function setApiKey(secrets: vscode.SecretStorage, given?: string): Promise
 function registerChat(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('g-code engine');
   const review = new ReviewController(() => chat.link(), output);
-  const chat = new Chat(() => engineSettings(context, output), context.extensionUri, output, sessionMemory(context.storageUri), (document, change) =>
-    review.track(document, change),
+  const chat = new Chat(
+    () => engineSettings(context, output),
+    context.extensionUri,
+    output,
+    sessionMemory(context.storageUri),
+    (document, change) => review.track(document, change),
+    () => modelLabel(vscode.workspace.getConfiguration('gcode'), process.env),
   );
   registerReview(context, chat, review, output);
   context.subscriptions.push(
     output,
     chat,
+    review.onDidChange(() => chat.reviewed(review.all())),
     vscode.commands.registerCommand(SET_KEY_COMMAND, (key?: string) => setApiKey(context.secrets, key)),
     context.secrets.onDidChange(() => chat.resetEngine()),
     vscode.workspace.onDidChangeConfiguration((event) => {

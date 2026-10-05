@@ -22,6 +22,15 @@ const BUNDLES: readonly BuildOptions[] = [
     platform: 'browser',
     format: 'iife',
     target: 'es2022',
+    minify: true,
+  },
+  {
+    // The panel's styles with the codicon font they import, served from dist under the webview's strict CSP.
+    entryPoints: [path.join(root, 'src/chat/webview.css')],
+    outfile: path.join(dist, 'webview.css'),
+    loader: { '.ttf': 'file' },
+    assetNames: '[name]',
+    minify: true,
   },
   {
     // sandbox-runtime is bundled too, since the .vsix ships no node_modules; on macOS it needs none of its vendor files.
