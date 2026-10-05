@@ -1,0 +1,14 @@
+{
+  "name": "gcode-u6-prototypes",
+  "publisher": "g-code-test",
+  "version": "0.0.0",
+  "private": true,
+  "engines": { "vscode": "^1.95.0" },
+  "main": "./extension.cjs",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [{ "command": "u6.show", "title": "U6 prototype: Show Direction" }],
+    "viewsContainers": { "activitybar": [{ "id": "u6", "title": "g-code", "icon": "activity.svg" }] },
+    "views": { "u6": [{ "type": "webview", "id": "u6.proto", "name": "Chat" }] }
+  }
+}
