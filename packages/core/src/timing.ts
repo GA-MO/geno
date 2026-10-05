@@ -1,5 +1,6 @@
 import type { ContentBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { TurnEvent } from './session.js';
+import { percentile, type Spread } from './tab/report.js';
 
 /**
  * When one model call's stream reached each point, in ms since the Unix epoch. Bookkeeping only: the request is
@@ -175,4 +176,64 @@ export function turnTimings(events: readonly TurnEvent[]): TurnTiming[] {
   }
   close(open?.lastAt ?? 0);
   return timings;
+}
+
+/** The parts of a turn a speed report spreads, keyed by how each reads off a turn. Null leaves the turn out of that part. */
+export const SPEED_PARTS = {
+  'first token': (t: TurnTiming) => t.ttftMs,
+  thinking: (t: TurnTiming) => t.thinkingMs,
+  decode: (t: TurnTiming) => t.decodeMs,
+  model: (t: TurnTiming) => t.modelMs,
+  tools: (t: TurnTiming) => t.toolMs,
+  overhead: (t: TurnTiming) => t.overheadMs,
+} as const satisfies Record<string, (t: TurnTiming) => number | null>;
+export type SpeedPart = keyof typeof SPEED_PARTS;
+
+export type TaskTiming = { readonly taskId: string; readonly pass: boolean; readonly agentMs: number; readonly turns: readonly TurnTiming[] };
+
+/** Per turn, over every turn of every task, and the sum over all of them. */
+export type PartSpread = Spread & { readonly totalMs: number };
+
+export type SpeedReport = {
+  readonly tasks: number;
+  readonly passed: number;
+  readonly turns: number;
+  /** The agent's wall time, summed over tasks: what the parts have to explain. */
+  readonly agentMs: number;
+  readonly parts: Readonly<Record<SpeedPart, PartSpread>>;
+  /** Agent time no turn covers: the sandbox, loading context, and the gap after the last turn. */
+  readonly outsideTurnsMs: number;
+  /** Model plus tool time as a share of agent time; null with no agent time. */
+  readonly explained: number | null;
+  readonly outputTokens: Spread;
+  readonly thinkingTokens: Spread;
+  /** Output tokens per second of streamed output (thinking plus decode), over turns that streamed any. */
+  readonly outputTokensPerSecond: Spread;
+};
+
+const spreadOf = (values: readonly number[]): Spread => ({ p50: percentile(values, 50), p90: percentile(values, 90) });
+
+export function speedReport(tasks: readonly TaskTiming[]): SpeedReport {
+  const turns = tasks.flatMap((task) => task.turns);
+  const partOf = (read: (t: TurnTiming) => number | null): PartSpread => {
+    const values = turns.flatMap((t) => read(t) ?? []);
+    return { ...spreadOf(values), totalMs: values.reduce((sum, v) => sum + v, 0) };
+  };
+  const parts = Object.fromEntries(Object.entries(SPEED_PARTS).map(([part, read]) => [part, partOf(read)])) as Record<SpeedPart, PartSpread>;
+  const agentMs = tasks.reduce((sum, task) => sum + task.agentMs, 0);
+  const wallMs = turns.reduce((sum, t) => sum + t.wallMs, 0);
+  const answered = turns.flatMap((t) => (t.tokens === null ? [] : [{ t, tokens: t.tokens }]));
+  const streamed = answered.filter(({ t }) => t.thinkingMs + t.decodeMs > 0);
+  return {
+    tasks: tasks.length,
+    passed: tasks.filter((task) => task.pass).length,
+    turns: turns.length,
+    agentMs,
+    parts,
+    outsideTurnsMs: agentMs - wallMs,
+    explained: agentMs === 0 ? null : (parts.model.totalMs + parts.tools.totalMs) / agentMs,
+    outputTokens: spreadOf(answered.map(({ tokens }) => tokens.output)),
+    thinkingTokens: spreadOf(answered.map(({ tokens }) => tokens.thinking)),
+    outputTokensPerSecond: spreadOf(streamed.map(({ t, tokens }) => (tokens.output * 1000) / (t.thinkingMs + t.decodeMs))),
+  };
 }

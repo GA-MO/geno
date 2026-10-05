@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { asSessionId, buildRequest, turnTimings, type ModelMarks, type TurnEvent } from '../src/index.js';
+import { asSessionId, buildRequest, speedReport, turnTimings, type ModelMarks, type TurnEvent } from '../src/index.js';
 
 const T0 = Date.parse('2026-10-05T00:00:00.000Z');
 const iso = (ms: number) => new Date(T0 + ms).toISOString();
@@ -183,6 +183,20 @@ describe('turnTimings', () => {
   it('skips calls logged before turns were timed, so old logs still read', () => {
     const events: TurnEvent[] = [start, user(1, 0), assistant(2, 1000, [text(10), read('t1')], 5), result(3, 1100, 't1'), assistant(4, 2000, [text(5)], 5)];
     expect(turnTimings(events)).toEqual([]);
+  });
+
+  it('reports how much of the agent time model and tool time explain, and what no turn covers', () => {
+    const report = speedReport([
+      { taskId: 'a', pass: true, agentMs: 7000, turns: turnTimings(thinkingThenAnswer) },
+      { taskId: 'b', pass: false, agentMs: 3500, turns: turnTimings([start, user(1, 0), { kind: 'error', seq: 2, at: iso(3001), error: 'abort', message: 'x', timing: marks(0, 5, 800, null, 2900, 3000) }]) },
+    ]);
+    expect(report).toMatchObject({ tasks: 2, passed: 1, turns: 3, agentMs: 10_500, outsideTurnsMs: 10_500 - (5000 + 1425 + 3001) });
+    expect(report.parts.model.totalMs).toBe(3550 + 1410 + 2995);
+    expect(report.parts.tools).toEqual({ p50: 0, p90: 960, totalMs: 1200 });
+    expect(report.explained).toBeCloseTo((3550 + 1410 + 2995 + 1200) / 10_500);
+    // The aborted call reports no usage, so token spreads cover the two answered turns only.
+    expect(report.outputTokens).toEqual({ p50: 210, p90: 362 });
+    expect(report.outputTokensPerSecond.p50).toBeCloseTo((400 / 3 + 20) / 2);
   });
 
   it('leaves the request bytes the model sees unchanged', () => {
