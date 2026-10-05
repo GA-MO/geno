@@ -746,9 +746,10 @@ body.diagram-tab {
   animation: blink 1s steps(1) infinite;
 }
 
+/* The caret dims rather than vanishes, so the live end of the answer stays findable mid-blink. */
 @keyframes blink {
   50% {
-    opacity: 0;
+    opacity: 0.3;
   }
 }
 
