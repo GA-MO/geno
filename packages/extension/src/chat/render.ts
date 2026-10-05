@@ -3,7 +3,7 @@ import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatCost, formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { headerOf, type EditTool } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
@@ -290,41 +290,132 @@ const CHOICE_STYLES: Readonly<Record<string, string>> = {
   reject_always: 'button ghost',
 };
 
-export function permissionCard(block: PermissionBlock, ui: Ui): HTMLElement {
+/** The buttons of a card that waits: one per option the engine offered. */
+const choiceButtons = (block: PermissionBlock, ui: Ui, labels: Readonly<Record<string, string>>): HTMLElement =>
+  h(
+    'div',
+    { class: 'permission-actions' },
+    ...block.options.map((option) =>
+      h(
+        'button',
+        {
+          class: CHOICE_STYLES[option.kind] ?? 'button secondary',
+          'data-focus': `choose:${block.id}:${option.optionId}`,
+          onclick: () => ui.post({ type: 'permission', id: block.id, optionId: option.optionId }),
+        },
+        labels[option.kind] ?? option.name,
+      ),
+    ),
+  );
+
+const outcomeLine = (allowed: boolean, glyph: string, text: string): HTMLElement =>
+  h('div', { class: `permission-outcome ${allowed ? 'allowed' : 'denied'}` }, icon(glyph), text);
+
+const allowedOf = (block: PermissionBlock): boolean => {
   const { outcome } = block;
-  const chosen = outcome.kind === 'chosen' ? block.options.find((o) => o.optionId === outcome.optionId) : undefined;
-  const allowed = chosen?.kind.startsWith('allow') === true;
-  const result =
-    outcome.kind === 'open'
-      ? h(
-          'div',
-          { class: 'permission-actions' },
-          ...block.options.map((option) =>
-            h(
-              'button',
-              {
-                class: CHOICE_STYLES[option.kind] ?? 'button secondary',
-                'data-focus': `choose:${block.id}:${option.optionId}`,
-                onclick: () => ui.post({ type: 'permission', id: block.id, optionId: option.optionId }),
-              },
-              CHOICE_LABELS[option.kind] ?? option.name,
-            ),
-          ),
-        )
-      : h(
-          'div',
-          { class: `permission-outcome ${allowed ? 'allowed' : 'denied'}` },
-          icon(outcome.kind === 'cancelled' ? 'circle-slash' : allowed ? 'check' : 'close'),
-          outcome.kind === 'cancelled' ? 'Cancelled' : allowed ? 'Allowed' : 'Denied',
-        );
+  return outcome.kind === 'chosen' && block.options.find((o) => o.optionId === outcome.optionId)?.kind.startsWith('allow') === true;
+};
+
+/** A question's answers: one click on an option, or the user's own words, or Skip. */
+function answerForm(block: PermissionBlock, ui: Ui): HTMLElement {
+  const answer = (text: string) => ui.post({ type: 'answer', id: block.id, text });
+  const field = h('textarea', { class: 'question-input', rows: 1, placeholder: 'Or type your answer', 'aria-label': 'Your answer', 'data-focus': `answer:${block.id}` });
+  field.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || field.value.trim() === '') return;
+    event.preventDefault();
+    answer(field.value);
+  });
+  return h(
+    'div',
+    { class: 'question-answers' },
+    block.options.length > 0 &&
+      h(
+        'div',
+        { class: 'permission-actions question-options' },
+        ...block.options.map((option) =>
+          h('button', { type: 'button', class: 'button secondary question-option', 'data-focus': `choose:${block.id}:${option.optionId}`, onclick: () => answer(option.optionId) }, option.name),
+        ),
+      ),
+    h(
+      'div',
+      { class: 'question-free' },
+      field,
+      h('button', { type: 'button', class: 'button', 'data-focus': `send-answer:${block.id}`, onclick: () => field.value.trim() !== '' && answer(field.value) }, 'Answer'),
+      h('button', { type: 'button', class: 'button ghost', 'data-focus': `skip:${block.id}`, onclick: () => answer('') }, 'Skip'),
+    ),
+  );
+}
+
+type CardFace = {
+  readonly label: string;
+  readonly glyph: string;
+  readonly title: string;
+  readonly body: (block: PermissionBlock) => readonly Child[];
+  readonly actions: (block: PermissionBlock, ui: Ui) => HTMLElement;
+  readonly settled: (block: PermissionBlock) => HTMLElement;
+};
+
+const SCOPE_TEXT = {
+  project: 'Geno will follow this note in every later chat in this project.',
+  global: 'Geno will follow this note in every later chat, in every project.',
+} as const;
+
+const MEMORY_LABELS: Readonly<Record<string, string>> = { allow_once: 'Remember', reject_once: "Don't remember" };
+
+/** How each kind of waiting card reads: a command to run, a note to keep, or a question to answer. */
+const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
+  command: {
+    label: 'Geno asks to run a command',
+    glyph: 'shield',
+    title: 'Run this command?',
+    body: (block) => [
+      h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
+      h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
+      block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
+    ],
+    actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
+    settled: (block) =>
+      block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied'),
+  },
+  memory: {
+    label: 'Geno asks to remember a note',
+    glyph: 'bookmark',
+    title: 'Remember this?',
+    body: (block) => [
+      h('blockquote', { class: 'memory-text' }, block.command),
+      h('p', { class: 'permission-reason' }, block.ask?.kind === 'memory' ? `${SCOPE_TEXT[block.ask.scope]} You can change or delete it in /memory.` : ''),
+    ],
+    actions: (block, ui) => choiceButtons(block, ui, MEMORY_LABELS),
+    settled: (block) =>
+      block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Remembered') : outcomeLine(false, 'close', 'Not remembered'),
+  },
+  question: {
+    label: 'Geno asks you a question',
+    glyph: 'question',
+    title: 'Geno asks',
+    body: (block) => [h('p', { class: 'question-text' }, block.command)],
+    actions: answerForm,
+    settled: ({ outcome }) =>
+      outcome.kind === 'answered' && outcome.text !== ''
+        ? outcomeLine(true, 'check', `Answered: ${outcome.text}`)
+        : outcomeLine(false, outcome.kind === 'cancelled' ? 'circle-slash' : 'close', outcome.kind === 'cancelled' ? 'Cancelled' : 'Skipped'),
+  },
+};
+
+/** A card that waits on the user. Every kind goes through here, so whatever shows a waiting permission shows them all. */
+export function permissionCard(block: PermissionBlock, ui: Ui): HTMLElement {
+  const face = FACES[block.ask?.kind ?? 'command'];
   return h(
     'section',
-    { class: `permission permission-${outcome.kind}`, role: 'group', 'aria-label': 'Geno asks to run a command', 'data-permission': block.id },
-    h('div', { class: 'permission-title' }, icon('shield'), h('span', {}, 'Run this command?')),
-    h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
-    h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
-    block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
-    result,
+    {
+      class: `permission permission-${block.outcome.kind}${block.ask === undefined ? '' : ` permission-ask-${block.ask.kind}`}`,
+      role: 'group',
+      'aria-label': face.label,
+      'data-permission': block.id,
+    },
+    h('div', { class: 'permission-title' }, icon(face.glyph), h('span', {}, face.title)),
+    ...face.body(block),
+    block.outcome.kind === 'open' ? face.actions(block, ui) : face.settled(block),
   );
 }
 

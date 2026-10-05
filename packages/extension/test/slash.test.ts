@@ -65,6 +65,12 @@ describe('routing a sent / command', () => {
     expect(routeText(BUILTIN_OPTIONS, '/model')).toEqual({ kind: 'editor', action: 'model' });
   });
 
+  it('opens the rules and memory panes for /rules and /memory, and sends /init to the engine', () => {
+    expect(routeText(BUILTIN_OPTIONS, '/rules')).toEqual({ kind: 'editor', action: 'rules' });
+    expect(routeText(BUILTIN_OPTIONS, '/memory')).toEqual({ kind: 'editor', action: 'memory' });
+    expect(routeText(BUILTIN_OPTIONS, '/init')).toEqual({ kind: 'prompt', command: { name: 'init', args: '', route: 'engine' } });
+  });
+
   it('sends engine built-ins, prompts and skills as typed, with the chip they show as', () => {
     expect(routeText(listed, '/mode auto')).toEqual({ kind: 'prompt', command: { name: 'mode', args: 'auto', route: 'engine' } });
     expect(routeText(listed, '/review src/app.ts  "error paths"')).toEqual({
