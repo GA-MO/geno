@@ -62,7 +62,7 @@ function required(env: Env, variable: string, what: string): string {
   return value;
 }
 
-const usageOf = ({ usage }: Message): TokenUsage => ({
+export const usageOf = ({ usage }: Message): TokenUsage => ({
   input: usage.input_tokens,
   cacheRead: usage.cache_read_input_tokens ?? 0,
   cacheWrite: usage.cache_creation_input_tokens ?? 0,
@@ -78,7 +78,7 @@ function refusalMessage(message: Message): string {
 const ABORTED: TurnResult = { kind: 'error', error: 'abort', message: 'interrupted by the user' };
 
 // The SDK keeps the transport's own error as the cause, and that is what names a reset or a refused connection.
-const messagesOf = (error: unknown): string[] =>
+export const messagesOf = (error: unknown): string[] =>
   error instanceof Error ? [error.message, ...messagesOf(error.cause)] : error === undefined ? [] : [String(error)];
 
 const failureOf = (error: AnthropicError): ModelFailure => ({
@@ -97,6 +97,14 @@ function retryAfterMs(error: AnthropicError): number | undefined {
   return Number.isNaN(wait) ? undefined : Math.max(0, Math.round(wait));
 }
 
+/** A Messages client for the provider. Throws an EngineError when its key or endpoint is not set. */
+export function clientFor(providerName: ProviderName, env: Env, fetch?: typeof globalThis.fetch): Anthropic {
+  const key = required(env, PROVIDER_ENV[providerName].key, `your ${providerName} API key`);
+  // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment. Retries are
+  // ours: the SDK's would retry an exhausted quota, unseen, and never a stream that fails after its headers.
+  return new Anthropic({ baseURL: PROVIDER_TABLE[providerName].baseUrl(env), authToken: key, apiKey: null, maxRetries: 0, fetch });
+}
+
 export function gatewayFor(
   providerName: ProviderName,
   env: Env,
@@ -104,10 +112,7 @@ export function gatewayFor(
   retry: RetryPolicy = RETRY_POLICY,
 ): Gateway {
   const provider = PROVIDER_TABLE[providerName];
-  const key = required(env, PROVIDER_ENV[providerName].key, `your ${providerName} API key`);
-  // apiKey: null stops the SDK from also sending an ANTHROPIC_API_KEY found in the environment. Retries are
-  // ours: the SDK's would retry an exhausted quota, unseen, and never a stream that fails after its headers.
-  const client = new Anthropic({ baseURL: provider.baseUrl(env), authToken: key, apiKey: null, maxRetries: 0, fetch });
+  const client = clientFor(providerName, env, fetch);
 
   async function call({ session, events, tools, system, signal, onText }: TurnInput): Promise<TurnResult> {
     const started = performance.now();

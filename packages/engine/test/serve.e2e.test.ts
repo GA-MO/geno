@@ -6,9 +6,11 @@ import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
+  APPROVAL_META,
   BASE_HASH_META,
   changeOf,
   CHECKPOINT_TEXT_METHOD,
+  CLASSIFIER_TOOL,
   DIAGNOSTICS_CAPABILITY,
   DIAGNOSTICS_METHOD,
   hashText,
@@ -132,7 +134,11 @@ async function setup(replies: readonly Reply[]) {
       editor.updates.push(params.update);
     });
   /** Connects a fresh engine, starts a session, or resumes `resume`, and runs `work` on it. */
-  const connect = <T>(work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>, resume?: string) =>
+  const connect = <T>(
+    work: (ctx: acp.ClientContext, sessionId: string) => Promise<T>,
+    resume?: string,
+    onNew?: (response: acp.NewSessionResponse) => void,
+  ) =>
     client.connectWith(gcodeAgent(io, openStore(env), { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
       await ctx.request(acp.methods.agent.initialize, {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -146,7 +152,9 @@ async function setup(replies: readonly Reply[]) {
         await ctx.request(acp.methods.agent.session.resume, { sessionId: resume, cwd: workspace });
         return work(ctx, resume);
       }
-      const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      const created = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      onNew?.(created);
+      const { sessionId } = created;
       return work(ctx, sessionId);
     });
 
@@ -346,6 +354,47 @@ describe('gcode serve', () => {
         toolCall: expect.objectContaining({ toolCallId: remove.id, title: 'Allow `rm -rf src`? It uses rm -rf of a path inside the workspace.' }),
       }),
     ]);
+  });
+
+  it('advertises ask and auto, switches with session/set_mode, judges a gray command by the classifier in auto, and keeps the mode on resume', async () => {
+    const gray = use('bash', { command: 'node -e "console.log(42)"' });
+    const verdict = use(CLASSIFIER_TOOL.name, { verdict: 'allow', reason: 'prints a number' });
+    const { editor, transport, connect } = await setup([
+      toolCall('Running.', [gray], usage),
+      toolCall('', [verdict], usage),
+      answer('Done.', usage),
+    ]);
+
+    let created: acp.NewSessionResponse | undefined;
+    const id = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+      await expect(ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'yolo' })).rejects.toThrow(/yolo/);
+      const turn = await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Print it' }] });
+      expect(turn.stopReason).toBe('end_turn');
+      return sessionId;
+    }, undefined, (response) => (created = response));
+
+    expect(created?.modes).toEqual({
+      currentModeId: 'ask',
+      availableModes: [expect.objectContaining({ id: 'ask', name: 'Ask' }), expect.objectContaining({ id: 'auto', name: 'Auto' })],
+    });
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'auto' });
+    expect(editor.permissions).toEqual([]);
+    expect(transport.requests.filter((r) => r.body.tool_choice !== undefined)).toHaveLength(1);
+    expect(editor.updates).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: gray.id,
+        status: 'completed',
+        _meta: { [APPROVAL_META]: expect.objectContaining({ decidedBy: 'classifier', verdict: 'allow', classifier: expect.objectContaining({ reason: 'prints a number' }) }) },
+      }),
+    );
+
+    const resumed = await connect(async (ctx) => {
+      const response = await ctx.request(acp.methods.agent.session.resume, { sessionId: id, cwd: '/' });
+      return response.modes?.currentModeId;
+    });
+    expect(resumed).toBe('auto');
   });
 
   it('answers check with the editor diagnostics for the files the model read when there is no check command', async () => {

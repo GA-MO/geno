@@ -31,6 +31,9 @@ export const TURN_USAGE_META = 'gcode/usage';
 /** `costUsd` is null when any call of the turn had no known price. */
 export type TurnUsage = { readonly model: string; readonly costUsd: number | null };
 
+/** Key in a bash call's closing tool_call_update `_meta`: the ApprovalRecord of a command a rule flagged, for the step to show. */
+export const APPROVAL_META = 'gcode/approval';
+
 /** session/request_permission's `toolCall.rawInput`: the command asked about and why it needs asking. */
 export type PermissionInput = { readonly command: string; readonly reason: string };
 
