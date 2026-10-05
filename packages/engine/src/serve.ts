@@ -43,6 +43,9 @@ import {
   type McpServersResponse,
   SESSION_MODES,
   sessionEffortOf,
+  contextUseOf,
+  lastContextUse,
+  type Session,
   sessionModeOf,
   type SessionMode,
   type CheckpointTextResponse,
@@ -98,6 +101,7 @@ import { browserLauncherOf, browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logEffort, logMode } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
+import { usageUpdate } from './usage-update.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import { guardStdout } from './stdout-guard.js';
@@ -284,8 +288,11 @@ function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '
   return { usage, _meta: { [TURN_USAGE_META]: meta } };
 }
 
-/** One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. */
-function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io): Turn {
+/**
+ * One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. `session`
+ * is known once the turn opened the log, before its first model call.
+ */
+function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io, session: () => Session | undefined): Turn {
   const sent = updates(client, sessionId, io);
   // Tools run one at a time, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
@@ -315,6 +322,10 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
           }
           const update = loggedUpdate(event, peer);
           if (update !== undefined) sent.send(update);
+          const opened = session();
+          if (event.kind === 'assistant' && opened !== undefined && spent !== undefined) {
+            sent.send(usageUpdate(contextUseOf(opened.provider, opened.model, event.usage), { model: spent.model, costUsd: spent.costUsd }));
+          }
         },
       },
     },
@@ -572,6 +583,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
+      const context = lastContextUse(log.session, log.events);
+      if (context !== undefined) await client.notify(acp.methods.client.session.update, { sessionId: id, update: usageUpdate(context) });
       io.err(`session: ${id} resumed, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
     })
@@ -588,6 +601,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       mcp.register(id, log.session.workspace, params.mcpServers, browserSettingsOf(params._meta));
       const notify =(update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
       for (const update of replayUpdates(log.events)) await notify(update);
+      const context = lastContextUse(log.session, log.events);
+      if (context !== undefined) await notify(usageUpdate(context));
       await notify(sessionInfo(summarizeSession(log.session, log.events)));
       io.err(`session: ${id} loaded, log: ${log.file}`);
       return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
@@ -665,12 +680,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
       const controller = new AbortController();
       turns.set(sessionId, controller);
-      const turn = editorTurn(client, sessionId, peer, io);
+      let session: Session | undefined;
+      const turn = editorTurn(client, sessionId, peer, io, () => session);
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined;
       try {
         return await serially(sessionId, async () => {
           const resumed = await resumeSession(store, io, sessionId);
+          session = resumed.log.session;
           if (titleOf(resumed.log.events) === undefined && target === undefined) turn.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
           const opened =
             target === undefined && (hasAttached(attached) || slash !== undefined)

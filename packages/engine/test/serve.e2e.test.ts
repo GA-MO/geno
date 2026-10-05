@@ -464,6 +464,31 @@ describe('gcode serve', () => {
     expect(resumed.configOptions).toEqual([effortOption('high')]);
   });
 
+  it('reports the context and the turn\'s cost so far after each model call, and the last context on load and resume', async () => {
+    const { workspace, editor, connect } = await setup([toolCall('Reading.', [use('read', { path: 'a.ts' })], usage), answer('Done.', usage)]);
+    const usages = () => editor.updates.flatMap((u) => (u.sessionUpdate === 'usage_update' ? [u] : []));
+
+    const id = await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Read it' }] });
+      return sessionId;
+    });
+    const live = usages();
+    expect(live.map(({ used, size }) => ({ used, size }))).toEqual([
+      { used: 1030, size: 1_000_000 },
+      { used: 1042, size: 1_000_000 },
+    ]);
+    const costs = live.map((u) => (u._meta?.[TURN_USAGE_META] as { costUsd: number }).costUsd);
+    expect(costs[0]).toBeGreaterThan(0);
+    expect(costs[1]).toBeGreaterThan(costs[0]!);
+
+    editor.updates.length = 0;
+    await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] }));
+    expect(usages().map(({ used, size }) => ({ used, size }))).toEqual([{ used: 1042, size: 1_000_000 }]);
+    editor.updates.length = 0;
+    await connect((ctx) => ctx.request(acp.methods.agent.session.resume, { sessionId: id, cwd: workspace }));
+    expect(usages().map(({ used, size }) => ({ used, size }))).toEqual([{ used: 1042, size: 1_000_000 }]);
+  });
+
   it('answers check with the editor diagnostics for the files the model read when there is no check command', async () => {
     const { file, editor, transport, prompt } = await setup([
       toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
@@ -682,7 +707,7 @@ describe('gcode serve', () => {
     expect(rest.map((u) => u.sessionUpdate)).toEqual([
       ...['agent_message_chunk', 'tool_call', 'tool_call_update'],
       ...['agent_message_chunk', 'tool_call', 'tool_call_update'],
-      ...['agent_message_chunk', 'session_info_update'],
+      ...['agent_message_chunk', 'usage_update', 'session_info_update'],
     ]);
     expect(rest[1]).toMatchObject({ toolCallId: read.id, title: 'read a.ts', kind: 'read' });
     expect(rest[4]).toMatchObject({ toolCallId: edit.id, title: 'edit a.ts', kind: 'edit' });
