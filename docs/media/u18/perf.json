@@ -1,56 +1,56 @@
 [
   {
     "label": "start page wandering, run 1, attempt 1",
-    "timers": 184,
-    "seconds": 10.008139,
-    "busyMs": 182.652,
-    "busyPercent": 1.8250346043355314,
-    "frames": 601,
-    "fps": 60.0511243898591
+    "timers": 183,
+    "seconds": 10.003742,
+    "busyMs": 142.468,
+    "busyPercent": 1.4241470841611068,
+    "frames": 600,
+    "fps": 59.97755639839571
   },
   {
     "label": "start page with Noodle resting, run 1",
     "timers": 40,
-    "seconds": 10.002497,
-    "busyMs": 22.182,
-    "busyPercent": 0.22176462537304434,
+    "seconds": 10.002047,
+    "busyMs": 14.933,
+    "busyPercent": 0.14929943840495852,
     "frames": 600,
-    "fps": 59.9850217400715
+    "fps": 59.98772051361087
   },
   {
     "label": "start page wandering, run 2, attempt 1",
     "timers": 183,
-    "seconds": 10.001478,
-    "busyMs": 250.597,
-    "busyPercent": 2.5055996723684237,
-    "frames": 599,
-    "fps": 59.89114808831254
+    "seconds": 10.002031,
+    "busyMs": 100.61,
+    "busyPercent": 1.0058957025828055,
+    "frames": 600,
+    "fps": 59.98781647447403
   },
   {
     "label": "start page with Noodle resting, run 2",
     "timers": 40,
-    "seconds": 10.00259,
-    "busyMs": 19.884,
-    "busyPercent": 0.19878851377493229,
+    "seconds": 10.00254,
+    "busyMs": 13.939,
+    "busyPercent": 0.13935460393060162,
     "frames": 600,
-    "fps": 59.984464023817836
+    "fps": 59.98476386997703
   },
   {
     "label": "start page wandering, run 3, attempt 1",
     "timers": 183,
-    "seconds": 10.002243,
-    "busyMs": 178.093,
-    "busyPercent": 1.7805306269803682,
-    "frames": 599,
-    "fps": 59.886567442922555
+    "seconds": 10.003489,
+    "busyMs": 120.975,
+    "busyPercent": 1.2093280654379688,
+    "frames": 600,
+    "fps": 59.979073301325165
   },
   {
     "label": "start page with Noodle resting, run 3",
-    "timers": 69,
-    "seconds": 10.002085,
-    "busyMs": 93.453,
-    "busyPercent": 0.9343351911126531,
-    "frames": 600,
-    "fps": 59.98749260779128
+    "timers": 40,
+    "seconds": 10.047217,
+    "busyMs": 53.37,
+    "busyPercent": 0.5311918713410888,
+    "frames": 593,
+    "fps": 59.021319037898756
   }
 ]
