@@ -15,7 +15,8 @@
     "./backends": "./src/backends.ts",
     "./background": "./src/background.ts",
     "./wake": "./src/wake.ts",
-    "./todo": "./src/todo.ts"
+    "./todo": "./src/todo.ts",
+    "./spinoff": "./src/spinoff.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

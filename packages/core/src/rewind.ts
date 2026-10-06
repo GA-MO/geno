@@ -36,6 +36,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   'backend-model': true,
   title: true,
   review: true,
+  spinoff: true,
   user: false,
   assistant: false,
   error: false,
