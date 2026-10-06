@@ -12,6 +12,9 @@ import {
   EDITOR_ACTION_METHOD,
   EDITOR_ACTIONS_CAPABILITY,
   type EditorActionRequest,
+  READ_TERMINAL_CAPABILITY,
+  READ_TERMINAL_METHOD,
+  type ReadTerminalRequest,
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   INLINE_EDIT_META,
@@ -215,6 +218,7 @@ import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import type { Editor } from './tools/editor.js';
+import { readTerminalResponse, type TerminalReader } from './tools/terminal.js';
 import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
@@ -310,9 +314,11 @@ type Peer = {
   readonly backendEnv: boolean;
   /** It carries out EDITOR_ACTION_METHOD, so the model gets open_file, reveal and show_diff. */
   readonly editorActions: boolean;
+  /** It answers READ_TERMINAL_METHOD, so the model gets read_terminal. */
+  readonly terminals: boolean;
 };
 
-const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false };
+const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false, terminals: false };
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
@@ -442,6 +448,20 @@ function editorActions(route: Route): Editor {
     await viewer.client.request<unknown, EditorActionRequest>(EDITOR_ACTION_METHOD, { sessionId: route.sessionId, action }).catch((error: unknown) => {
       throw new ToolError(`the editor could not show ${action.path}: ${error instanceof Error ? error.message : String(error)}`);
     });
+  };
+}
+
+/** The terminals of the editor showing the session, as it redacted and capped them; a refusal the model reads while none does. */
+function editorTerminals(route: Route): TerminalReader {
+  return async (request) => {
+    const viewer = viewerThat(route, (peer) => peer.terminals);
+    if (viewer === undefined) throw new ToolError('no editor shows this session now, so there is no terminal to read');
+    const raw = await viewer.client.request<unknown, ReadTerminalRequest>(READ_TERMINAL_METHOD, { sessionId: route.sessionId, ...request }).catch((error: unknown) => {
+      throw new ToolError(`the editor could not read its terminals: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    const parsed = readTerminalResponse.safeParse(raw);
+    if (!parsed.success) throw new ToolError(`the editor sent a malformed terminal read: ${z.prettifyError(parsed.error)}`);
+    return parsed.data;
   };
 }
 
@@ -1115,6 +1135,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
       const editor = from.peer.editorActions ? editorActions(route) : undefined;
+      const terminal = from.peer.terminals ? editorTerminals(route) : undefined;
       const response = await serially(sessionId, async (): Promise<acp.PromptResponse> => {
         if (backend !== undefined) {
           const log = await openSessionLog(store, sessionId, io);
@@ -1192,6 +1213,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 user: shown.user,
                 widgets: from.peer.widgets,
                 editor,
+                terminal,
                 externals,
                 keyOf: keyOf(sessionId),
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
@@ -1378,6 +1400,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         tasks: _meta?.[TASKS_CAPABILITY] === true,
         backendEnv: _meta?.[BACKEND_ENV_CAPABILITY] === true,
         editorActions: _meta?.[EDITOR_ACTIONS_CAPABILITY] === true,
+        terminals: _meta?.[READ_TERMINAL_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
