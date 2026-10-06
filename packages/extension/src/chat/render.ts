@@ -421,7 +421,24 @@ const SCOPE_TEXT = {
 const MEMORY_LABELS: Readonly<Record<string, string>> = { allow_once: 'Remember', reject_once: "Don't remember" };
 
 /** How each kind of waiting card reads: a command to run, a note to keep, or a question to answer. */
-const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
+const COMMAND_FACE: CardFace = {
+  label: 'Geno asks to run a command',
+  glyph: 'shield',
+  title: 'Run this command?',
+  body: (block) => [
+    block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
+    h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
+    h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
+    block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
+  ],
+  actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
+  settled: (block) => [
+    block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied'),
+  ],
+};
+
+const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFace>> = {
+  edit: { ...COMMAND_FACE, label: 'Geno asks to change a file', glyph: 'edit', title: 'Change this file?' },
   command: {
     label: 'Geno asks to run a command',
     glyph: 'shield',
@@ -465,7 +482,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
  * A `quiet` card is one a compact turn keeps in view while its work is folded: an answered question shows only its line.
  */
 export function permissionCard(block: PermissionBlock, ui: Ui, quiet = false): HTMLElement {
-  const face = FACES[block.ask?.kind ?? 'command'];
+  const face = FACES[block.ask?.kind ?? (block.toolKind === 'edit' ? 'edit' : 'command')];
   const folded = quiet && block.ask?.kind === 'question' && block.outcome.kind !== 'open';
   return h(
     'section',

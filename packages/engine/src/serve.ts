@@ -134,6 +134,7 @@ import {
   type BackendBinding,
   type BackendsResponse,
   type ExternalBackendId,
+  type ApprovalRuleId,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
@@ -183,6 +184,9 @@ const STOP_REASONS: Readonly<Record<DoneReason, acp.StopReason>> = {
   refusal: 'refusal',
   error: 'end_turn',
 };
+
+/** An external agent's question shows as the kind of call it asks about, so an edit's card reads as an edit. */
+const PERMISSION_KINDS: Readonly<Partial<Record<ApprovalRuleId, acp.ToolKind>>> = { 'external-read': 'read', 'external-write': 'edit', 'external-command': 'execute', 'external-other': 'other' };
 
 const PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow', name: 'Allow once', kind: 'allow_once' },
@@ -520,7 +524,7 @@ function editorTurn(
         const { outcome } = await askEditor(route, undefined, (viewer) =>
           viewer.client.request(acp.methods.client.session.requestPermission, {
             sessionId: route.sessionId,
-            toolCall: { toolCallId, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+            toolCall: { toolCallId, title, kind: PERMISSION_KINDS[denial.rule] ?? (isMcpRule(denial.rule) ? 'other' : 'execute'), status: 'pending', rawInput },
             ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
             options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
           }),

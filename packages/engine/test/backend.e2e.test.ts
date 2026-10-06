@@ -194,7 +194,7 @@ describe('an external ACP agent as a backend', () => {
     t.answers.push('allow');
     await t.prompt(agent, chat, 'Now edit it');
     expect(t.asked).toHaveLength(1);
-    expect(t.asked[0]!.toolCall).toMatchObject({ toolCallId: 'e1', title: expect.stringContaining('edit a.ts') });
+    expect(t.asked[0]!.toolCall).toMatchObject({ toolCallId: 'e1', kind: 'edit', title: expect.stringContaining('edit a.ts') });
     expect(t.asked[0]!.options.map((o) => o.kind)).toEqual(['allow_once', 'reject_once']);
     expect(t.agentCalls().filter((c) => c['permission']).map((c) => c['permission'].outcome)).toEqual([{ outcome: 'selected', optionId: 'allow-once' }]);
     expect(readFileSync(path.join(lane, 'a.ts'), 'utf8')).toBe('one\nTWO\nthree\n');

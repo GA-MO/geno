@@ -71,6 +71,7 @@ export async function run(): Promise<void> {
   const buttons = await panel<string[]>(`[...doc.querySelectorAll('.permission-open .permission-actions button')].map((b) => b.textContent)`);
   check(buttons.join() === 'Allow,Deny', 'the card offers Geno’s allow once and deny, never always', buttons);
   check((await textOf('.permission-open .permission-command'))?.includes('edit a.ts') === true, 'the card names the edit', await textOf('.permission-open .permission-command'));
+  check((await textOf('.permission-open .permission-title')) === 'Change this file?', 'the card reads as an edit, not a command', await textOf('.permission-open .permission-title'));
   await click('.permission-open .permission-actions .button:not(.secondary)');
   await waitFor('the turn to finish', async () => (await count('.turn .turn-footer')) === 1);
   check((await textOf('.transcript'))?.includes(ANSWER) === true, 'the agent’s answer shows', await textOf('.transcript'));

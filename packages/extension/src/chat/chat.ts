@@ -1021,6 +1021,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         classifier: classifierReasonOf(toolCall.title),
         ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
         toolId: toolCall.toolCallId,
+        ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
       });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
