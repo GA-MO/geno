@@ -1,4 +1,4 @@
-import type { EditorAction, AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { EditorAction, AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting, TodoList } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -120,6 +120,8 @@ export type ToolBlock = {
   readonly auto?: AutoDecision | undefined;
   /** What a show_widget call draws: its loading lines while the model writes it, then the widget. */
   readonly widget?: ToolWidget | undefined;
+  /** The whole list a todo call set, once it ran. */
+  readonly todo?: TodoList | undefined;
   /** The background command a bash call started, as the engine last reported it. */
   readonly background?: BackgroundStep | undefined;
   /** What an open_file, reveal or show_diff call showed in the editor, which its step shows again. */
@@ -240,6 +242,7 @@ export type Action =
       readonly auto?: AutoDecision;
       readonly widget?: ToolWidget;
       readonly editorAction?: EditorAction;
+      readonly todo?: TodoList;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** A background command changed; it may belong to any turn, since it outlives the one that started it. */

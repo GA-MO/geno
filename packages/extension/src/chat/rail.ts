@@ -1,5 +1,6 @@
 import type { ChangedFile } from './fold.js';
 import type { WaitKind } from '@g-code/core';
+import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import type { Child, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 import type { EditorTool } from './editor-step.js';
@@ -22,6 +23,8 @@ export type Step =
   | { readonly kind: 'editor'; readonly key: string; readonly tool: EditorTool }
   /** A show_widget call: the widget itself, never folded into a run of calls. */
   | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
+  /** The todo list: pinned above a running turn's latest step, and once the turn ends, where it last changed. */
+  | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly pinned: boolean }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
   | { readonly kind: 'thinking'; readonly key: 'thinking' }
   | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
@@ -46,11 +49,32 @@ export const childrenUnder = (turn: Turn, toolId: string): Child[] => Object.val
 
 export const isEdit = (tool: ToolBlock): tool is EditTool => tool.diff !== undefined;
 
-export function railOf(turn: Turn): Step[] {
+/** The list as the turn's last todo call left it; undefined when the turn set none. */
+export const todoListOf = (turn: Turn): TodoList | undefined => turn.blocks.findLast((block): block is ToolBlock => block.kind === 'tool' && block.todo !== undefined)?.todo;
+
+/** A todo call that ran or still runs shows as the list, not as a call; one the engine refused stays a failed call. */
+const isTodoCall = (block: ToolBlock): boolean => block.name === TODO_TOOL && block.status !== 'failed';
+
+/**
+ * A running turn pins the list it set, or the one it started with while that has work left; a finished list from an
+ * earlier turn is history, not progress.
+ */
+function pinnedList(turn: Turn, carried: TodoList): TodoList | undefined {
+  const own = todoListOf(turn);
+  if (own !== undefined) return own.length === 0 ? undefined : own;
+  return carried.some((item) => item.status !== 'done') ? carried : undefined;
+}
+
+/** `carried` is the list the turn starts with: the latest an earlier turn set, as Plan's is when Start building runs. */
+export function railOf(turn: Turn, carried: TodoList = []): Step[] {
   const steps: Step[] = [];
+  const streaming = turn.status === 'streaming';
+  const lastSet = turn.blocks.findLast((block) => block.kind === 'tool' && block.todo !== undefined);
   for (const block of turn.blocks) {
     const last = steps.at(-1);
-    if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
+    if (block.kind === 'tool' && isTodoCall(block)) {
+      if (!streaming && block === lastSet && block.todo!.length > 0) steps.push({ kind: 'todo', key: 'todo', turn: turn.id, list: block.todo!, pinned: false });
+    } else if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
@@ -62,6 +86,8 @@ export function railOf(turn: Turn): Step[] {
   }
   if (turn.notice !== undefined) steps.push({ kind: 'notice', key: 'notice', text: turn.notice });
   else if (isThinking(turn)) steps.push({ kind: 'thinking', key: 'thinking' });
+  const pinned = streaming ? pinnedList(turn, carried) : undefined;
+  if (pinned !== undefined) steps.splice(Math.max(0, steps.length - 1), 0, { kind: 'todo', key: 'todo', turn: turn.id, list: pinned, pinned: true });
   const edits = turn.blocks.flatMap((b) => (b.kind === 'tool' && isEdit(b) ? [b] : []));
   if (edits.length > 0) steps.push({ kind: 'changes', key: 'changes', edits });
   return steps;
@@ -92,6 +118,8 @@ export function nodeOf(step: Step): NodeState {
       return 'done';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
+    case 'todo':
+      return step.pinned ? 'live' : 'done';
     case 'agent':
       if (step.tool.status === 'running' || step.children.some((child) => child.status.kind === 'running')) return 'live';
       return step.tool.status === 'failed' ? 'failed' : 'done';

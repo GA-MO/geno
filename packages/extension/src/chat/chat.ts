@@ -124,6 +124,7 @@ import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
 import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
+import { todoOfUpdate } from './todo-model.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
@@ -334,7 +335,8 @@ function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf
   if (action?.type !== 'tool') return action;
   const widget = widgetOf(update);
   const editorAction = update.sessionUpdate === 'tool_call_update' ? editorActionOf(update._meta) : undefined;
-  return { ...action, ...(widget === undefined ? {} : { widget }), ...(editorAction === undefined ? {} : { editorAction }) };
+  const todo = todoOfUpdate(update);
+  return { ...action, ...(widget === undefined ? {} : { widget }), ...(editorAction === undefined ? {} : { editorAction }), ...(todo === undefined ? {} : { todo }) };
 }
 
 /** When an update happened: now, or for a replayed tool call, when it was logged. */
