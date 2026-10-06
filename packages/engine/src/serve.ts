@@ -706,8 +706,9 @@ export function engineShared(io: Io) {
     leftWaits: { taken: false },
     // Each running session's steers, children's included.
     steers: new Steers(),
-    // Each running turn's end, which a steer that missed the turn waits for before it runs as the next one.
-    turnEnds: new Map<string, Promise<void>>(),
+    // Each session's latest turn's end, true when the user stopped it: a steer that missed the turn waits for it, and
+    // runs as the next turn only if the turn was not stopped. Kept after the end, so a late steer still reads it.
+    turnEnds: new Map<string, Promise<boolean>>(),
     // Each session's steers that missed their turn, run one turn after another in the order they came.
     nextTurns: new Map<string, Promise<unknown>>(),
   };
@@ -865,8 +866,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
     const controller = new AbortController();
     turns.set(sessionId, controller);
-    let turnEnded = () => {};
-    turnEnds.set(sessionId, new Promise<void>((resolve) => (turnEnded = resolve)));
+    let turnEnded = (_stopped: boolean) => {};
+    turnEnds.set(sessionId, new Promise<boolean>((resolve) => (turnEnded = resolve)));
     let session: Session | undefined;
     const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
@@ -942,8 +943,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       ended = TASK_ENDS[response.stopReason];
       return response;
     } finally {
-      turnEnds.delete(sessionId);
-      turnEnded();
+      turnEnded(controller.signal.aborted);
       live.delete(sessionId);
       tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
       // A session closed during its turn stays closed.
@@ -966,7 +966,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const { [STEER_META]: _, ...meta } = params._meta ?? {};
     const turn = (nextTurns.get(sessionId) ?? Promise.resolve())
       .then(() => turnEnds.get(sessionId))
-      .then(() => prompt({ ...params, _meta: meta }));
+      .then((stopped) => {
+        // Stop stops: like a queued follow-up, a steer the stopped turn never took goes back to the user.
+        if (stopped === true) throw acp.RequestError.invalidRequest({ sessionId }, 'the turn was stopped before the steer landed, so it did not run');
+        return prompt({ ...params, _meta: meta });
+      });
     const queued = turn.catch(() => {});
     nextTurns.set(sessionId, queued);
     void queued.then(() => {

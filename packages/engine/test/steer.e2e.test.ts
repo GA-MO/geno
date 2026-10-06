@@ -283,6 +283,32 @@ describe('gcode serve: steering a running turn', () => {
     expect(model.requests('[parent]')).toHaveLength(2);
   });
 
+  it('gives a steer back, unrun, when the user stops the turn it was waiting on', async () => {
+    const model = models({
+      '[parent]': () => ({ reply: { ...answer('thinking about alpha', usage), stallAfter: 3 } }),
+    });
+    const { log, result } = await serve(
+      model.fetch,
+      async () => {},
+      async (editor) => {
+        const turn = editor.prompt('[parent] what is alpha?');
+        await within(model.arrived('[parent]', 0), 'the first model call');
+        const steered = editor.steer('and beta?').then(
+          () => 'ran',
+          (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await editor.ctx.notify(acp.methods.agent.session.cancel, { sessionId: editor.sessionId });
+        return { turn: await within(turn, 'the stopped turn to end'), steered: await within(steered, 'the steer to be given back') };
+      },
+    );
+
+    expect(result.turn.stopReason).toBe('cancelled');
+    expect(result.steered).toMatch(/the turn was stopped before the steer landed/);
+    expect(model.requests('[parent]'), 'no turn ran for the steer').toHaveLength(1);
+    expect(log.events.filter((e) => e.kind === 'user').map((e) => (e.kind === 'user' ? e.content : ''))).toEqual(['[parent] what is alpha?']);
+  });
+
   it('runs two steers that missed the turn as two turns, one after the other, and Stop still reaches the second', async () => {
     const finish = gate();
     const model = models({
