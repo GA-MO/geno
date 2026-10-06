@@ -323,11 +323,12 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
   let results = new Map<string, ToolResultBlockParam>();
   let prompts: (TextBlockParam | ImageBlockParam)[] = [];
   let workspace = '';
-  // Kept apart from the prompts, so a refused first prompt does not take the loaded context with it.
+  // Kept apart from the prompts, so a refused prompt does not take the loaded context or the compacted turns with it.
   let opening: TextBlockParam[] = [];
-  const flush = () => {
+  // Before a model turn the opening goes out even alone: a compaction can keep from the middle of a turn.
+  const flush = (beforeTurn: boolean) => {
     const content = [...toolUses.flatMap((use) => results.get(use.id) ?? []), ...prompts];
-    if (content.length > 0) {
+    if (content.length > 0 || (beforeTurn && opening.length > 0)) {
       messages.push({ role: 'user', content: [...opening, ...content] });
       opening = [];
     }
@@ -342,7 +343,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
       if (loaded !== undefined) opening = [{ type: 'text', text: loaded }];
     }
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
-    if (event.kind === 'compact') prompts.push({ type: 'text', text: compactedText(event) });
+    if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
@@ -350,13 +351,13 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event, stored));
     if (event.kind === 'assistant') {
-      flush();
+      flush(true);
       // Response blocks go back verbatim: thinking signatures are verified against the exact bytes.
       messages.push({ role: 'assistant', content: [...event.content] });
       toolUses = toolUsesOf(event.content);
     }
   }
-  flush();
+  flush(false);
   return messages;
 }
 
