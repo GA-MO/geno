@@ -15,7 +15,8 @@
     "lint:deps": "tsx scripts/boundaries.ts",
     "package": "pnpm --filter ./packages/extension package",
     "gcode": "tsx packages/engine/src/cli.ts",
-    "tab:bench": "tsx scripts/tab-bench.mjs"
+    "tab:bench": "tsx scripts/tab-bench.mjs",
+    "test:affected": "tsx scripts/test-affected.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
