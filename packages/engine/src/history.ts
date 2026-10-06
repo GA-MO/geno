@@ -1,13 +1,10 @@
-import { realpathSync } from 'node:fs';
 import { mkdir, readdir, rename } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import {
   byRecency,
   inScope,
   nextSeq,
-  summarizeSession,
   titleFrom,
   type SessionScope,
   type SessionSummary,
@@ -15,49 +12,15 @@ import {
 import { openSessionLog } from './chat.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { workspaceDir } from './drive.js';
-import { appendEvent, dropTornTail, readSessionLog } from './sessions.js';
+import { sessionIndex, TEMP_ROOTS } from './session-index.js';
+import { appendEvent, dropTornTail } from './sessions.js';
 import { isMissing, type Store } from './store.js';
-
-const realOrSelf = (dir: string): string => {
-  try {
-    return realpathSync(dir);
-  } catch {
-    return dir;
-  }
-};
-
-/** Where eval clones and test workspaces live, as logged (resolved) and as written. */
-export const TEMP_ROOTS: readonly string[] = [
-  ...new Set([tmpdir(), realOrSelf(tmpdir()), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders']),
-];
 
 /** Every session log in the store that the scope shows, newest first. A log that cannot be read is reported and skipped. */
 export async function listSessions(store: Store, io: Io, scope: SessionScope): Promise<SessionSummary[]> {
-  let names: string[];
-  try {
-    names = await readdir(store.sessionsDir);
-  } catch (error) {
-    if (isMissing(error)) return [];
-    throw error;
-  }
-  const summaries = await Promise.all(
-    names
-      .filter((name) => name.endsWith('.jsonl'))
-      .map(async (name) => {
-        try {
-          const log = await readSessionLog(path.join(store.sessionsDir, name));
-          // A subagent's session belongs to its parent's chat, not the history.
-          const start = log.events[0];
-          if (start?.kind === 'session-start' && start.child !== undefined) return [];
-          return [summarizeSession(log.session, log.events)];
-        } catch (error) {
-          io.err(`warning: skipped ${name}: ${error instanceof Error ? error.message : String(error)}`);
-          return [];
-        }
-      }),
-  );
-  return summaries
-    .flat()
+  const docs = await sessionIndex(store).docs(io.err);
+  return docs
+    .map((doc) => doc.summary)
     .filter((summary) => inScope(summary, scope, TEMP_ROOTS))
     .sort(byRecency);
 }
