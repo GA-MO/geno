@@ -281,7 +281,7 @@
         "gcode.browser.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Let the agent drive a browser: Chrome through the chrome-devtools-mcp server, with a fresh profile thrown away after each chat. Pages on localhost, 127.0.0.1, [::1], *.localhost and *.test open without asking; any other site asks first, in Auto too. Chrome starts at the first browser step."
+          "description": "Let the agent drive a browser: Chrome through the chrome-devtools-mcp server, with a fresh profile thrown away after each chat. Pages on localhost, 127.0.0.1, [::1], *.localhost and *.test open without asking; any other site asks first in Ask, and goes to the classifier in Auto. Chrome starts at the first browser step."
         },
         "gcode.browser.headless": {
           "type": "boolean",

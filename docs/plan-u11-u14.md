@@ -143,7 +143,7 @@ U12 (MCP) and U8 (images) are merged, so the agent can drive a browser through a
   - It is global and user-enabled, so it needs no trust card. Name it `browser`, so its tools are `mcp__browser__*`.
 - **Where it may go.** These URL rules are a pure table in core, next to `MCP_RULES`:
   - URLs on `localhost`, `127.0.0.1`, `[::1]`, `*.localhost` and `*.test` run without asking, in Ask and Auto.
-  - Any other host asks in every interactive mode, Auto included, and is off in non-interactive runs.
+  - Any other host asks in every interactive mode, Auto included, and is off in non-interactive runs. (Auto now sends it to the classifier; see "Auto blocks instead of asking" in `docs/u9-brief.md`.)
   - `file:` URLs are refused unless they are inside the workspace.
   - Read the url argument of every navigating tool, `new_page` included, and check it.
   - A page that redirects off the allowed hosts is reported in the step. Prove what the server lets you observe after a navigation, and say so in your report.
