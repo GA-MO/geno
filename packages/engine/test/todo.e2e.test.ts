@@ -46,12 +46,18 @@ function connect<T>(io: Io, store: Store, run: (connection: Connection) => Promi
   });
 }
 
-/** The lists the updates carried, in order: what the panel draws, live or replayed. */
-const shownLists = (updates: readonly acp.SessionNotification[], sessionId: string): TodoList[] =>
-  updates.flatMap(({ sessionId: id, update }) => {
+/** The list each todo call showed, in order: what the panel draws, live or replayed. Live, a call's end and its result both carry it. */
+const shownLists = (updates: readonly acp.SessionNotification[], sessionId: string): TodoList[] => {
+  const lists = new Map<string, TodoList>();
+  for (const { sessionId: id, update } of updates) {
     const meta = update.sessionUpdate === 'tool_call_update' ? (update._meta?.[TODO_META] as { items: TodoList } | undefined) : undefined;
-    return id === sessionId && meta !== undefined ? [meta.items] : [];
-  });
+    if (id === sessionId && meta !== undefined && update.sessionUpdate === 'tool_call_update') {
+      expect(lists.get(update.toolCallId) ?? meta.items, 'a call never changes its list').toEqual(meta.items);
+      lists.set(update.toolCallId, meta.items);
+    }
+  }
+  return [...lists.values()];
+};
 
 const toolNames = (body: { readonly messages: readonly { readonly role: string; readonly content: unknown }[] }): string[] =>
   body.messages.flatMap((m) => (m.role !== 'assistant' || typeof m.content === 'string' ? [] : (m.content as { type: string; name?: string; input?: unknown }[]).flatMap((b) => (b.type === 'tool_use' && b.name === 'todo' ? [JSON.stringify(b.input)] : []))));

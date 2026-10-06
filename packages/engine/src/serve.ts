@@ -108,6 +108,7 @@ import {
   asSessionId,
   WIDGET_CAPABILITY,
   WIDGET_DRAFT_META,
+  TODO_META,
   WIDGET_TOOL,
   widgetDraftOf,
   SUBAGENT_META,
@@ -541,8 +542,8 @@ function editorTurn(
           runningDescription = use.name === 'bash' ? bashDescriptionOf(use.input) : undefined;
           sent.send({ sessionUpdate: 'tool_call', toolCallId: use.id, title, kind: TOOL_KINDS[use.name] ?? 'other', status: 'in_progress', rawInput: use.input });
         },
-        toolEnd(use, status) {
-          sent.send({ sessionUpdate: 'tool_call_update', toolCallId: use.id, status: TOOL_STATUS[status] });
+        toolEnd(use, status, todo) {
+          sent.send({ sessionUpdate: 'tool_call_update', toolCallId: use.id, status: TOOL_STATUS[status], ...(todo === undefined ? {} : { _meta: { [TODO_META]: { items: todo } } }) });
         },
         toolInput({ id, name, json }) {
           if (name !== WIDGET_TOOL || !peer.widgets) return;
