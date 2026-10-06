@@ -53,11 +53,21 @@ export type Breakdown = {
 /**
  * The tokenizer approximation, used wherever the provider gives no count. Text splits into pieces the way BPE
  * pre-tokenizers split it: runs of letters, single digits (Qwen and Llama tokenize digits one by one), runs of other
- * symbols, and whitespace. A run of Latin letters costs one token per WORD_CHARS letters, rounded up; a letter
- * outside Latin costs one token; a symbol run one per SYMBOL_CHARS; a whitespace run with a line break one; and a lone
- * space nothing, since BPE merges it into the next word. Calibrated against qwen3.8-flash's counts (docs/u61.md).
+ * symbols, and whitespace. A run of Latin letters costs one token per wordChars letters, rounded up; a letter
+ * outside Latin costs one token; a symbol run one per symbolChars; any other whitespace run one; and a lone space
+ * nothing, since BPE merges it into the next word. Messages, tool calls and tool definitions add fixed framing. Calibrated against qwen3.8-flash's counts (docs/u61.md).
  */
-export const TOKENIZER = { wordChars: 8, symbolChars: 3, messageOverhead: 4, toolOverhead: 8, imageTokens: 1600 } as const;
+export const TOKENIZER = {
+  wordChars: 8,
+  symbolChars: 3,
+  messageOverhead: 4,
+  /** A tool call or a tool result: its id and framing. */
+  toolCallOverhead: 8,
+  /** A tool definition's framing, and the tool-calling instructions the chat template adds once when any tool is offered. */
+  toolDefinitionOverhead: 15,
+  toolsPreamble: 190,
+  imageTokens: 1600,
+} as const;
 
 const PIECES = /[A-Za-zÀ-ɏ]+|\p{L}|\p{N}|[^\p{L}\p{N}\s]+|\s+/gu;
 
@@ -113,14 +123,14 @@ function blockRuns(block: ContentBlockParam, role: 'user' | 'assistant', labels:
   if (role === 'assistant') {
     if (block.type === 'text') return [['assistant', estimateTokens(block.text)]];
     if (block.type === 'thinking') return labels.thinking ? [['assistant', estimateTokens(block.thinking)]] : [];
-    if (block.type === 'tool_use') return [['assistant', TOKENIZER.toolOverhead + estimateTokens(`${block.name}${JSON.stringify(block.input)}`)]];
+    if (block.type === 'tool_use') return [['assistant', TOKENIZER.toolCallOverhead + estimateTokens(`${block.name}${JSON.stringify(block.input)}`)]];
     return [['assistant', estimateTokens(JSON.stringify(block))]];
   }
   if (block.type === 'image') return [['attachments', TOKENIZER.imageTokens]];
   if (block.type === 'tool_result') {
     const part = labels.results.get(block.tool_use_id) ?? 'toolResults';
     const content = typeof block.content === 'string' || block.content === undefined ? [{ type: 'text' as const, text: block.content ?? '' }] : block.content;
-    return [[part, TOKENIZER.toolOverhead], ...content.map((c): PartRun => [part, c.type === 'text' ? estimateTokens(c.text) : c.type === 'image' ? TOKENIZER.imageTokens : estimateTokens(JSON.stringify(c))])];
+    return [[part, TOKENIZER.toolCallOverhead], ...content.map((c): PartRun => [part, c.type === 'text' ? estimateTokens(c.text) : c.type === 'image' ? TOKENIZER.imageTokens : estimateTokens(JSON.stringify(c))])];
   }
   if (block.type !== 'text') return [['user', estimateTokens(JSON.stringify(block))]];
   const items = labels.itemBlocks.get(block.text);
@@ -156,7 +166,9 @@ function merged(runs: readonly PartRun[]): PartRun[] {
  */
 export function requestRuns(request: MessageStreamParams, events: readonly TurnEvent[], adapter: Adapter): PartRun[] {
   const labels = labelsOf(events, adapter);
-  const tools = (request.tools ?? []).map((tool): PartRun => ['tools', TOKENIZER.toolOverhead + estimateTokens(JSON.stringify(tool))]);
+  const offered = request.tools ?? [];
+  const tools = offered.map((tool): PartRun => ['tools', TOKENIZER.toolDefinitionOverhead + estimateTokens(JSON.stringify(tool))]);
+  if (offered.length > 0) tools.push(['tools', TOKENIZER.toolsPreamble]);
   const messages = request.messages.flatMap((message): PartRun[] => {
     const blocks: readonly ContentBlockParam[] = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
     const runs = blocks.flatMap((block) => blockRuns(block, message.role === 'user' ? 'user' : 'assistant', labels));
