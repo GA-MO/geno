@@ -16,12 +16,16 @@ import {
   type RewindRequest,
   type RewindResponse,
   type Span,
+  type CheckpointRef,
 } from '@g-code/core';
 import { editorUri } from '../chat/bridge.js';
 import type { SessionLink } from '../chat/chat.js';
+import type { ReviewMode } from './mode.js';
 
 export const KEEP_COMMAND = 'gcode.review.keep';
 export const UNDO_COMMAND = 'gcode.review.undo';
+export const UNDO_TURN_COMMAND = 'gcode.review.undoTurn';
+export const OPEN_CHANGE_COMMAND = 'gcode.review.openChange';
 
 /**
  * A hunk under review. A pending hunk has a span: where its new text sits in the document, moved along with
@@ -39,7 +43,8 @@ export type Tracked = {
 
 /**
  * The review state of the session's edits: which hunks are pending, kept or undone, and where each pending one
- * is. Keep and undo apply here at once; the decision is then logged by the engine.
+ * is. Keep and undo apply here at once; the decision is then logged by the engine. In auto review it holds no
+ * hunks, so no lens, decoration or Changes row shows, and a turn is undone whole from its checkpoint.
  */
 export class ReviewController implements vscode.Disposable {
   private readonly hunks = new Map<HunkId, Tracked>();
@@ -51,6 +56,7 @@ export class ReviewController implements vscode.Disposable {
   constructor(
     private readonly link: () => Promise<SessionLink>,
     private readonly output: vscode.OutputChannel,
+    private readonly mode: () => ReviewMode,
   ) {
     this.subscriptions = [this.changed, vscode.workspace.onDidChangeTextDocument((event) => this.moved(event))];
   }
@@ -76,6 +82,7 @@ export class ReviewController implements vscode.Disposable {
 
   /** Puts an edit the engine just wrote under review. `document` already holds the change's result. */
   track(document: vscode.TextDocument, change: FileChange): void {
+    if (this.mode() === 'auto') return;
     const spans = spansIn(document.getText(), change);
     change.hunks.forEach((hunk, i) => {
       const id = hunkIdOf(change, i);
@@ -93,6 +100,7 @@ export class ReviewController implements vscode.Disposable {
 
   /** Rebuilds the review after a reload from the decisions the engine logged, finding each pending hunk's text again. */
   async restore(): Promise<void> {
+    if (this.mode() === 'auto') return;
     const { hunks } = await this.request<ReviewResponse>(REVIEW_METHOD, (sessionId): ReviewRequest => ({ sessionId, decisions: [] }));
     for (const hunk of hunks) await this.restoreOne(hunk);
     this.changed.fire();
@@ -165,6 +173,13 @@ export class ReviewController implements vscode.Disposable {
     for (const hunk of this.hunks.values()) hunk.status = 'undone';
     this.changed.fire();
     return files;
+  }
+
+  /** Restores the checkpoint before a turn through the engine's rewind, and returns every hunk with its status after it. */
+  async undoTurn(checkpoint: CheckpointRef): Promise<readonly ReviewHunk[]> {
+    await this.request<RewindResponse>(REWIND_METHOD, (sessionId): RewindRequest => ({ sessionId, ...checkpoint }));
+    const { hunks } = await this.request<ReviewResponse>(REVIEW_METHOD, (sessionId): ReviewRequest => ({ sessionId, decisions: [] }));
+    return hunks;
   }
 
   private async decided(hunks: readonly Tracked[]): Promise<void> {

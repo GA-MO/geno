@@ -24,7 +24,7 @@ import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { laneOffer } from './backend-model.js';
-import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
 import { slashPicker } from './slash-view.js';
@@ -37,6 +37,8 @@ import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, t
 import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
 import { offersRewind, type RewindState } from './rewind-model.js';
 import { rewindSlot } from './rewind-view.js';
+import type { ReviewMode } from '../review/mode.js';
+import { turnChangesOf } from '../review/summary.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -78,6 +80,7 @@ function keepPlace(): boolean {
 }
 
 const detail = (): ChatDetail => (document.body.dataset['detail'] === 'full' ? 'full' : 'compact');
+const reviewMode = (): ReviewMode => (document.body.dataset['review'] === 'review' ? 'review' : 'auto');
 
 /** Which transcript the panel shows: the chat's own, or one subagent's in the side view, which Back leaves. */
 type Focus = { readonly kind: 'parent' } | { readonly kind: 'child'; readonly id: string; readonly scroll: number };
@@ -97,6 +100,7 @@ const ui: Ui = {
     schedule();
   },
   openChild: (id) => openChild(id),
+  review: reviewMode,
 };
 
 const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'Geno chat', 'aria-live': 'polite', tabindex: '-1' });
@@ -287,11 +291,11 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     case 'thinking':
       return { deps: [], build: thinkingRow };
     case 'changes':
-      return { deps: [...step.edits, '|', ...state.unfolded], build: () => changesCard(step.edits, ui) };
+      return { deps: [...step.edits, '|', ...state.unfolded, reviewMode()], build: () => changesCard(step.edits, ui) };
     case 'fold':
       return { deps: [step.label, step.open], build: () => foldRow(step, ui) };
     case 'files':
-      return { deps: [JSON.stringify(step.files)], build: () => filesRow(step.files, ui) };
+      return { deps: [JSON.stringify(step.files), reviewMode()], build: () => filesRow(step.files, ui) };
   }
 }
 
@@ -353,7 +357,10 @@ function render(): void {
       const last = i === transcript.turns.length - 1;
       const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && last;
       const apply = last ? laneOffer(transcript) : undefined;
+      const changes = turn.status === 'streaming' || reviewMode() === 'review' ? undefined : turnChangesOf(turn);
+      const later = changes !== undefined && transcript.turns.slice(i + 1).some((next) => turnChangesOf(next)?.undone === false);
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
+        ...(changes === undefined ? [] : [{ key: 'changes', deps: [JSON.stringify(changes), later], build: () => turnChangesRow(changes, later, ui) }]),
         ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole, transcript.backend?.plan], build: () => turnFooter(turn, whole, transcript.backend) }]),
         ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),
         ...(apply !== undefined ? [{ key: `apply:${apply}`, deps: [], build: () => applyLaneButton(apply, ui) }] : []),
@@ -498,6 +505,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'look') {
     document.body.dataset['style'] = message.look.style;
     document.body.dataset['detail'] = message.look.detail;
+    document.body.dataset['review'] = message.look.review;
     schedule();
     return;
   }

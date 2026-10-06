@@ -1,16 +1,21 @@
+import type { CheckpointRef } from '@g-code/core';
 import { TOOL_KINDS, type Block, type ChatDetail, type PermissionBlock, type ToolBlock, type ToolKind, type Turn } from './messages.js';
 import { isEdit, nodeOf, railOf, type EditTool, type Step } from './rail.js';
 
 /** What a turn did, as its summary line counts it: calls by tool kind, then the calls that failed and those denied. */
 export type Summary = { readonly kinds: Readonly<Record<ToolKind, number>>; readonly failed: number; readonly denied: number };
 
-/** A file the turn changed, as its chip shows it: its line counts, the hunk it opens at, and the hunks still to review. */
+/**
+ * A file the turn changed, as its chip shows it: its line counts, the hunk it opens at, the hunks still to review,
+ * and the checkpoint before its turn, which auto review diffs it against.
+ */
 export type ChangedFile = {
   readonly path: string;
   readonly added: number;
   readonly removed: number;
   readonly first: string;
   readonly pending: readonly string[];
+  readonly checkpoint: CheckpointRef;
 };
 
 export type TextStep = Extract<Step, { readonly kind: 'text' }>;
@@ -78,10 +83,11 @@ export function summaryLine(summary: Summary): string {
   return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
-function changedFiles(edits: readonly EditTool[]): ChangedFile[] {
+export function changedFiles(edits: readonly EditTool[]): ChangedFile[] {
   const files = new Map<string, ChangedFile>();
+  const checkpoint = { before: edits[0]?.diff.change ?? '' };
   for (const { diff } of edits) {
-    const was = files.get(diff.path) ?? { path: diff.path, added: 0, removed: 0, first: diff.hunks[0]?.id ?? '', pending: [] };
+    const was = files.get(diff.path) ?? { path: diff.path, added: 0, removed: 0, first: diff.hunks[0]?.id ?? '', pending: [], checkpoint };
     files.set(diff.path, {
       ...was,
       added: was.added + diff.hunks.reduce((n, hunk) => n + hunk.added.length, 0),

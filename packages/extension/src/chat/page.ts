@@ -23,5 +23,5 @@ export function pageHtml(webview: vscode.Webview, dist: vscode.Uri, entry: strin
 <html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; style-src ${cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; font-src ${cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${uri('webview.css')}">
-</head><body${look === undefined ? '' : ` data-style="${look.style}" data-detail="${look.detail}"`}><script nonce="${nonce}" src="${uri(entry)}" data-diagrams="${uri('diagram/render.js')}" data-manual></script></body></html>`;
+</head><body${look === undefined ? '' : ` data-style="${look.style}" data-detail="${look.detail}" data-review="${look.review}"`}><script nonce="${nonce}" src="${uri(entry)}" data-diagrams="${uri('diagram/render.js')}" data-manual></script></body></html>`;
 }

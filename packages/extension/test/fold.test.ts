@@ -22,6 +22,7 @@ const call = (id: string, name: string, target: string, status: 'running' | 'com
 
 const diff = (file: string, id: string, added: number, removed: number, status: 'pending' | 'kept' = 'pending'): FileDiff => ({
   path: file,
+  change: `c-${id}`,
   hunks: [{ id, line: 1, removed: Array(removed).fill('-'), added: Array(added).fill('+'), status }],
 });
 
@@ -105,7 +106,7 @@ describe('the final answer', () => {
     ]);
     const view = turnView(turn);
     expect(view.answer).toEqual([]);
-    expect(view.files).toEqual([{ path: 'src/a.ts', added: 3, removed: 1, first: 'h1', pending: ['h1'] }]);
+    expect(view.files).toEqual([{ path: 'src/a.ts', added: 3, removed: 1, first: 'h1', pending: ['h1'], checkpoint: { before: 'c-h1' } }]);
     expect(shownSteps(turn, 'compact', false).map(name)).toEqual(['fold:Edited 1 file', 'files']);
   });
 
@@ -200,8 +201,8 @@ describe('the steps the rail shows', () => {
     expect(shown.map(name)).toEqual(['fold:Edited 2 files', 'text:Edited both.', 'files']);
     expect(shown.at(-1)).toMatchObject({
       files: [
-        { path: 'a.ts', added: 5, removed: 3, first: 'h1', pending: ['h3'] },
-        { path: 'b.ts', added: 2, removed: 0, first: 'h2', pending: ['h2'] },
+        { path: 'a.ts', added: 5, removed: 3, first: 'h1', pending: ['h3'], checkpoint: { before: 'c-h1' } },
+        { path: 'b.ts', added: 2, removed: 0, first: 'h2', pending: ['h2'], checkpoint: { before: 'c-h1' } },
       ],
     });
   });

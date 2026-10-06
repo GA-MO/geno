@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, LANES_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, TASKS_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
+import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, LANES_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, TASKS_COMMAND, LOOK_SETTINGS, lookOf, reviewModeOf } from './chat/chat.js';
 import { BROWSER_ENABLED_SETTING } from './chat/browser.js';
 import { backendEnv } from './chat/backends-host.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
@@ -105,7 +105,7 @@ async function takeHandoff(context: vscode.ExtensionContext): Promise<string | u
 
 function registerChat(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Geno engine');
-  const review = new ReviewController(() => chat.link(), output);
+  const review = new ReviewController(() => chat.link(), output, () => reviewModeOf(vscode.workspace.getConfiguration('gcode')));
   const memory = sessionMemory(context.storageUri);
   const chat = new Chat(
     () => engineSettings(context, output),

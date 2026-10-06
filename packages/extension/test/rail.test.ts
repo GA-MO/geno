@@ -7,7 +7,7 @@ import { emptyTranscript, reduce } from '../src/chat/transcript.js';
 const run = (actions: readonly Action[], start: Transcript = emptyTranscript('qwen3.8-flash')): Transcript => actions.reduce(reduce, start);
 const turnOf = (actions: readonly Action[]) => run([{ type: 'turn-start', id: 't1', at: 1000, prompt: 'p' }, ...actions]).turns[0]!;
 
-const diff = (file: string): FileDiff => ({ path: file, hunks: [{ id: `${file}:0`, line: 1, removed: ['a'], added: ['b'], status: 'pending' }] });
+const diff = (file: string): FileDiff => ({ path: file, change: `c-${file}`, hunks: [{ id: `${file}:0`, line: 1, removed: ['a'], added: ['b'], status: 'pending' }] });
 const tool = (id: string, name: string, target: string, status: 'running' | 'completed' | 'failed' = 'completed'): Action => ({
   type: 'tool',
   id,
