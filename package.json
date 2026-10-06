@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "test:vscode:docker": "sh scripts/test-vscode-docker.sh",
     "lint:deps": "tsx scripts/boundaries.ts",
     "package": "pnpm --filter ./packages/extension package",
     "gcode": "tsx packages/engine/src/cli.ts",
