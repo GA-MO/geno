@@ -185,7 +185,7 @@ describe('the host sending a steer', () => {
     steers.handlers.steer({ type: 'steer', target: { kind: 'chat' }, text: 'and b.ts' });
     sent[0]!.answer({ stopReason: 'end_turn', _meta: { [STEER_META]: { kind: 'delivered', seq: 5 } } });
     await flush();
-    steers.turnEnded(link);
+    steers.turnEnded(link, false);
     expect(posted).toEqual([{ type: 'steered', target: { kind: 'chat' }, result: { kind: 'delivered' } }]);
     expect(adopted).toEqual([]);
   });
@@ -195,9 +195,9 @@ describe('the host sending a steer', () => {
     const link = { connection, sessionId: 's1' };
     const { steers, posted, adopted } = host(link, connection);
     steers.handlers.steer({ type: 'steer', target: { kind: 'chat' }, text: 'and b.ts' });
-    steers.turnEnded({ connection, sessionId: 'other' });
+    steers.turnEnded({ connection, sessionId: 'other' }, false);
     expect(adopted, "another turn's end leaves it").toEqual([]);
-    steers.turnEnded(link);
+    steers.turnEnded(link, false);
     expect(posted).toEqual([{ type: 'steered', target: { kind: 'chat' }, result: { kind: 'next-turn' } }]);
     expect(adopted.map((a) => a.text)).toEqual(['and b.ts']);
     const end = { stopReason: 'end_turn', _meta: { [STEER_META]: { kind: 'next-turn' } } } as const;
@@ -205,6 +205,16 @@ describe('the host sending a steer', () => {
     await expect(adopted[0]!.response).resolves.toEqual(end);
     expect(sent, 'the steer went once').toHaveLength(1);
     expect(posted).toHaveLength(1);
+  });
+
+  it('gives a steer back when the user stopped the turn it waited on, and starts no turn for it', () => {
+    const { connection } = fakeEngine();
+    const link = { connection, sessionId: 's1' };
+    const { steers, posted, adopted } = host(link, connection);
+    steers.handlers.steer({ type: 'steer', target: { kind: 'chat' }, text: 'and b.ts' });
+    steers.turnEnded(link, true);
+    expect(adopted).toEqual([]);
+    expect(posted).toEqual([{ type: 'steered', target: { kind: 'chat' }, result: { kind: 'failed', message: 'The turn was stopped, so this did not send' } }]);
   });
 
   it('sends a plain prompt when no turn runs any more', () => {
