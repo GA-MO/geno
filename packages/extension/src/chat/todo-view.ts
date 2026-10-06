@@ -29,7 +29,6 @@ const itemRow = (item: TodoItem): HTMLElement => {
   );
 };
 
-/** The checklist under its one line, "3 of 7 done · write tests", which folds and opens it. */
 export function todoStep(step: TodoStep, ui: Ui): HTMLElement {
   const open = todoOpen(step, ui);
   const { done, total } = todoProgress(step.list);
