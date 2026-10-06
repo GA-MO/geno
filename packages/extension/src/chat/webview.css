@@ -11,6 +11,7 @@
 @import './arena.css';
 @import './widget.css';
 @import './command.css';
+@import './steer.css';
 
 /*
  * Trail: a run is a path. In the native style every color comes from the theme's variables, mixed with color-mix
