@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, DEFAULT_EFFORT_POLICY, holdsTurnOpen, steerEvent, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
+import { changesCourse, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, steerEvent, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -336,8 +336,7 @@ export async function drive(
     } else if (step.kind === 'call-model' && mode.issued !== undefined) return end('end_turn');
     else if (step.kind === 'call-model') {
       if (!(await deliverSteers())) await callModel();
-    }
-    else {
+    } else {
       const interrupted = await runTools(step.toolUses);
       if (interrupted !== undefined) {
         await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user', tools: interrupted });
