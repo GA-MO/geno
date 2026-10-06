@@ -136,6 +136,16 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       }),
     ),
   diff: (transcript, { toolId, at, diff }) => onLast(transcript, (turn) => withTool(turn, toolId, at, (tool) => ({ ...tool, diff }))),
+  background: (transcript, { toolId, job }) => {
+    let changed = false;
+    const turns = transcript.turns.map((turn) =>
+      mapBlocks(turn, toolWithId(toolId), (tool) => {
+        changed = true;
+        return { ...tool, background: job };
+      }),
+    );
+    return changed ? { ...transcript, turns } : transcript;
+  },
   review: (transcript, { hunks }) => {
     let changed = false;
     const turns = transcript.turns.map((turn) =>

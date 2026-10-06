@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -112,7 +112,12 @@ export type ToolBlock = {
   readonly auto?: AutoDecision | undefined;
   /** What a show_widget call draws: its loading lines while the model writes it, then the widget. */
   readonly widget?: ToolWidget | undefined;
+  /** The background command a bash call started, as the engine last reported it. */
+  readonly background?: BackgroundStep | undefined;
 };
+
+/** A background command on its bash step: its job id, its state, and the end of its output so far. */
+export type BackgroundStep = { readonly id: string; readonly state: JobState; readonly tail: string };
 
 /**
  * A widget's life on its step: drafting while the model writes it, ready with the stored html once the call ran,
@@ -219,6 +224,8 @@ export type Action =
       readonly widget?: ToolWidget;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
+  /** A background command changed; it may belong to any turn, since it outlives the one that started it. */
+  | { readonly type: 'background'; readonly toolId: string; readonly job: BackgroundStep }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
   | { readonly type: 'review'; readonly hunks: Readonly<Record<string, HunkStatus>> }
   | {
@@ -377,6 +384,8 @@ export type FromView =
   | { readonly type: 'retry-now' }
   /** Stops one running subagent; its parent goes on with what the child had. */
   | { readonly type: 'cancel-child'; readonly id: string }
+  /** Stops a background command of the shown session by its job id. */
+  | { readonly type: 'stop-background'; readonly id: string }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
   /** The user's answers to a question card, or their refusal. */
   | { readonly type: 'answer'; readonly id: string; readonly answer: AskUserAnswer }

@@ -79,3 +79,44 @@ export function tail(output: string, lines = 40, chars = 4000): string {
   const kept = output.trimEnd().split('\n').slice(-lines).join('\n');
   return kept.length > chars ? kept.slice(-chars) : kept;
 }
+
+export type SpawnOptions = {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+  /** Stdout and stderr as they arrive, interleaved. */
+  readonly onOutput: (chunk: Buffer) => void;
+};
+
+/** A command left running: its process group, how it ended once it has, and a way to signal the whole group. */
+export type SpawnedShell = {
+  readonly pid: number;
+  readonly exited: Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
+  /** Sends `signal` to the group; false once the group is gone. */
+  signal(signal: NodeJS.Signals): boolean;
+};
+
+/** Starts `command` with sh in its own process group, as runShell does, and returns without waiting for it. */
+export function spawnShell(command: string, options: SpawnOptions): Promise<SpawnedShell> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('/bin/sh', ['-c', command], { cwd: options.cwd, env: options.env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    child.stdout.on('data', options.onOutput);
+    child.stderr.on('data', options.onOutput);
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) => child.on('close', (code, signal) => done({ code, signal })));
+    child.once('error', reject);
+    child.once('spawn', () => {
+      const pid = child.pid!;
+      resolve({
+        pid,
+        exited,
+        signal(signal) {
+          try {
+            process.kill(-pid, signal);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      });
+    });
+  });
+}

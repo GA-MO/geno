@@ -98,6 +98,7 @@ import {
   TASK_UPDATE_METHOD,
   TASKS_CAPABILITY,
   TASKS_METHOD,
+  BACKGROUND_STOP_METHOD,
   type LaneNewResponse,
   type LanesResponse,
   ARENA_COMPARE_METHOD,
@@ -144,6 +145,7 @@ import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, star
 import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
 import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
 import { Tasks } from './tasks.js';
+import { backgroundShared, backgroundStopRequest, logArrivals } from './background-hooks.js';
 import { Viewers, type Viewer } from './viewers.js';
 import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
 import { openSessionLog, resumeSession, startExternalSession, startSession, type OpenSession } from './chat.js';
@@ -165,7 +167,7 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { backgroundUpdate, errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
@@ -719,6 +721,8 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
  * the tasks, and each running turn's live state. One engine process keeps one, shared by every connection to it.
  */
 export function engineShared(io: Io) {
+  const viewers = new Viewers<Peer>(io.err);
+  const tasks = new Tasks();
   return {
     turns: new Map<string, AbortController | undefined>(),
     // Running subagents by their own session ids, which `session/cancel` may name.
@@ -730,8 +734,10 @@ export function engineShared(io: Io) {
     // A turn and a review decision both append to the session log and number their events from what they read,
     // so each session's writers take turns.
     writers: new Map<string, Promise<unknown>>(),
-    viewers: new Viewers<Peer>(io.err),
-    tasks: new Tasks(),
+    viewers,
+    tasks,
+    // Background commands, which outlive their turn and the window that started them.
+    ...backgroundShared(viewers, tasks),
     live: new Map<string, LiveTurn>(),
     // Each connection's way to hear of an Arena run's steps.
     arenaWatchers: new Set<(update: ArenaUpdate) => void>(),
@@ -803,7 +809,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals, jobs, inbox } = shared;
   const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -823,6 +829,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     writers.set(sessionId, next.catch(() => {}));
     return next;
   };
+  // An arrival waits behind a running turn's writes, which take it at their next safe point; what is left is logged after.
+  inbox.arrived = (sessionId) =>
+    void serially(sessionId, () => logArrivals(store, io, inbox, sessionId)).catch((error: unknown) => io.err(`could not log what reached ${sessionId}: ${String(error)}`));
   const commands = sessionCommands(homesOf(store, io.env), io);
   /** A session no editor shows and no turn runs in lets go of its MCP servers; a load or resume opens them again. */
   const release = (sessionId: string) => {
@@ -1029,6 +1038,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 widgets: from.peer.widgets,
                 externals,
                 keyOf: keyOf(sessionId),
+                background: { jobs, inbox },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,
@@ -1064,6 +1074,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     } finally {
       live.delete(sessionId);
       tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
+      inbox.arrived(sessionId);
       // A session closed during its turn stays closed.
       if (turns.has(sessionId)) turns.set(sessionId, undefined);
       release(sessionId);
@@ -1239,6 +1250,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         for (const update of replayUpdates(events, widgetOf)) await notify(update);
         if (streaming !== '') await notify(textUpdate(streaming));
         if (running?.waiting != null && self().peer.notices) await notify(waitUpdate(running.waiting));
+        for (const job of jobs.views(id)) await notify(backgroundUpdate(job));
         const context = lastContextUse(log.session, events);
         if (context !== undefined && log.session.backend === undefined) await notify(usageUpdate(context));
         await notify(sessionInfo(summarizeSession(log.session, events)));
@@ -1261,6 +1273,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { sessionId } = params;
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before deleting its session');
       await existing(sessionId);
+      await jobs.kill('session-deleted', { sessionId });
       const trashed = await serially(sessionId, () => trashSession(store, io, sessionId));
       turns.delete(sessionId);
       modes.delete(sessionId);
@@ -1332,6 +1345,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onRequest(TASKS_METHOD, z.object({}).loose(), async (): Promise<TasksResponse> => tasks.list())
     .onRequest(BACKENDS_METHOD, z.object({}).loose(), async (): Promise<BackendsResponse> => ({ backends: await backendInfos(io.env) }))
+    .onRequest(BACKGROUND_STOP_METHOD, backgroundStopRequest, async ({ params }) => {
+      await jobs.stop(params.sessionId, params.id, 'user').catch((error: unknown) => {
+        if (error instanceof ToolError) throw acp.RequestError.invalidParams(params, error.message);
+        throw error;
+      });
+      return {};
+    })
     .onRequest(LANES_METHOD, lanesRequest, async ({ params }): Promise<LanesResponse> => ({ lanes: await laneInfos(await laneRepo(params.cwd), store, io, tasks) }))
     .onRequest(LANE_NEW_METHOD, lanePrompt, async ({ params }): Promise<LaneNewResponse> => {
       const repo = await laneRepo(params.cwd);
@@ -1397,6 +1417,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       await Promise.resolve()
         .then(() => idleLane(lane, tasks))
         .catch(refused({ name: params.name }));
+      await jobs.kill('lane-discarded', { cwd: lane.path });
       await discardLane(repo, lane, params.discardChanges).catch(refused({ name: params.name }));
       return {};
     })

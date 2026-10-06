@@ -27,6 +27,8 @@ import {
   type TurnEvent,
   LANE_CONFLICT_REASONS,
   type LaneConflictReason,
+  isJobId,
+  type JobId,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
 import { EngineError } from './errors.js';
@@ -34,6 +36,13 @@ import { isMissing, StoreError, type Store } from './store.js';
 
 const count = z.number().int().nonnegative();
 const seqFields = { seq: z.number().int().positive(), at: z.iso.datetime() };
+
+const killCause = z.enum(['session-deleted', 'lane-discarded', 'engine-exit']);
+const endedJobStateSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('exited'), exitCode: z.number().int().nullable(), signal: z.string().nullable() }),
+  z.strictObject({ status: z.literal('stopped'), by: z.enum(['model', 'user']) }),
+  z.strictObject({ status: z.literal('killed'), cause: killCause }),
+]);
 
 const epochMs = z.number().nonnegative();
 const toolMarks = { startAt: epochMs, endAt: epochMs };
@@ -240,6 +249,17 @@ const turnEventSchema = z.union([
       turns: count,
       costUsd: z.number().nonnegative().nullable(),
       summary: z.string(),
+    }),
+    z.strictObject({
+      kind: z.literal('background-end'),
+      ...seqFields,
+      job: z.strictObject({
+        id: z.string().refine(isJobId, 'not a job id').transform((raw) => raw as JobId),
+        toolUseId: z.string(),
+        command: z.string().min(1),
+        state: endedJobStateSchema,
+      }),
+      tail: z.string(),
     }),
     z.strictObject({
       kind: z.literal('lane-apply'),
