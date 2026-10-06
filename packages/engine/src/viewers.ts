@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk';
+import { NOT_SHOWN_ERROR } from '@g-code/core';
 
 /** One editor connection: how to reach it, what it can show, and when it went away. */
 export type Viewer<P> = { readonly client: acp.AgentContext; readonly peer: P; readonly closed: AbortSignal };
@@ -65,7 +66,7 @@ export class Viewers<P> {
   }
 
   /**
-   * Asks the editor that shows the session, waiting for one while none does. An editor that answers with an error has
+   * Asks the editor that shows the session, waiting for one while none does. An editor that answers with an error, other than that it no longer shows the session, has
    * answered; one whose connection fails instead is hidden, and the question goes to the next editor that shows it.
    */
   async ask<T>(sessionId: string, signal: AbortSignal | undefined, request: (viewer: Viewer<P>) => Promise<T>): Promise<T> {
@@ -74,7 +75,8 @@ export class Viewers<P> {
       try {
         return await request(viewer);
       } catch (error) {
-        if (error instanceof acp.RequestError || signal?.aborted) throw error;
+        const answered = error instanceof acp.RequestError && error.code !== NOT_SHOWN_ERROR.code;
+        if (answered || signal?.aborted) throw error;
         this.hide(sessionId, viewer);
       }
     }

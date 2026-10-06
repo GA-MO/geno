@@ -25,7 +25,7 @@ export type TaskRecord = {
   readonly startedAt: number;
   readonly endedAt: number | null;
   /** The turn's model calls so far; undefined before the first. */
-  readonly usage: TaskUsage | undefined;
+  readonly usage?: TaskUsage | undefined;
 };
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
@@ -66,6 +66,12 @@ export type TaskUpdate = { readonly task: TaskRecord; readonly notice: TaskNotic
  */
 export const DETACH_METHOD = '_gcode/detach';
 export type DetachRequest = { readonly sessionId: string };
+
+/**
+ * An editor's answer to a question about a session it stopped showing before the user answered. The question goes
+ * back to waiting, for the next editor that shows the session.
+ */
+export const NOT_SHOWN_ERROR = { code: -32011, reason: 'not-shown' } as const;
 
 /** In the load and resume responses' `_meta`: the session's turn is still running, and its updates follow live. */
 export const RUNNING_META = 'gcode/running';
