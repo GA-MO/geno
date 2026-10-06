@@ -5,6 +5,8 @@ import type { ContentBlock, StopReason } from '@anthropic-ai/sdk/resources/messa
 import {
   APPROVAL_MODES,
   asSessionId,
+  CHILD_CAPS,
+  CHILD_STARTS,
   APPROVAL_RULE_IDS,
   EFFORTS,
   HUNK_STATUSES,
@@ -131,10 +133,29 @@ const toolResultFields = {
   timing: z.strictObject(toolMarks).optional(),
 };
 
+const childCapsSchema = z.strictObject({ maxTurns: z.number().int().positive(), maxCostUsd: z.number().positive() });
+const childStartSchema = z.enum(CHILD_STARTS);
+const childId = z.string().min(1).transform(asSessionId);
+
+const childOfSchema = z.strictObject({
+  parentId: childId,
+  toolUseId: z.string().min(1),
+  role: z.string().min(1),
+  caps: childCapsSchema,
+  start: childStartSchema,
+});
+
+const childEndSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('done') }),
+  z.strictObject({ kind: z.literal('failed'), reason: z.string() }),
+  z.strictObject({ kind: z.literal('cancelled') }),
+  z.strictObject({ kind: z.literal('capped'), cap: z.enum(CHILD_CAPS) }),
+]);
+
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
 const turnEventSchema = z.union([
   z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema, context: loadedContextSchema.optional() }),
+    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema, context: loadedContextSchema.optional(), child: childOfSchema.optional() }),
     z.strictObject({
       kind: z.literal('user'),
       ...seqFields,
@@ -153,6 +174,7 @@ const turnEventSchema = z.union([
       latencyMs: count,
       model: z.string().min(1),
       timing: modelMarksSchema.optional(),
+      issuedBy: z.literal('user').optional(),
     }),
     z.strictObject({
       kind: z.literal('error'),
@@ -183,6 +205,27 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('mode'), ...seqFields, mode: z.enum(SESSION_MODES) }),
     z.strictObject({ kind: z.literal('effort'), ...seqFields, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
+    z.strictObject({
+      kind: z.literal('child-start'),
+      ...seqFields,
+      child: childId,
+      toolUseId: z.string().min(1),
+      role: z.string().min(1),
+      model: z.string().min(1),
+      effort: z.enum(EFFORTS),
+      caps: childCapsSchema,
+      start: childStartSchema,
+    }),
+    z.strictObject({
+      kind: z.literal('child-end'),
+      ...seqFields,
+      child: childId,
+      toolUseId: z.string().min(1),
+      end: childEndSchema,
+      turns: count,
+      costUsd: z.number().nonnegative().nullable(),
+      summary: z.string(),
+    }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({

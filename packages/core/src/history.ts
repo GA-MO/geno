@@ -41,7 +41,8 @@ export function titleOf(events: readonly TurnEvent[]): string | undefined {
 
 export function summarizeSession(session: Session, events: readonly TurnEvent[]): SessionSummary {
   const prompts = events.filter((e) => e.kind === 'user');
-  const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
+  // A subagent's spend is the parent's: the parent's log records it when the child ends.
+  const spends = events.flatMap((e) => (e.kind === 'assistant' || e.kind === 'child-end' ? [e.costUsd] : []));
   const last = events.at(-1);
   return {
     id: session.id,
@@ -50,7 +51,7 @@ export function summarizeSession(session: Session, events: readonly TurnEvent[])
     createdAt: session.createdAt,
     updatedAt: last === undefined || last.kind === 'session-start' ? session.createdAt : last.at,
     turns: prompts.length,
-    costUsd: answers.some((a) => a.costUsd === null) ? null : answers.reduce((sum, a) => sum + (a.costUsd ?? 0), 0),
+    costUsd: spends.includes(null) ? null : spends.reduce<number>((sum, cost) => sum + (cost ?? 0), 0),
   };
 }
 
