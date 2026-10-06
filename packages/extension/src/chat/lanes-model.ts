@@ -83,7 +83,7 @@ export function laneRowOf(lane: LaneInfo): LaneRow {
     diff: files === 0 ? 'No changes' : `+${added} −${removed} · ${plural(files, 'file')}`,
     diffTitle: files === 0 ? 'No changes since the lane started' : `${plural(added, 'line')} added and ${plural(removed, 'line')} removed in ${plural(files, 'file')}`,
     check: CHECK_BADGES[lane.check],
-    cost: lane.session?.costUsd == null ? undefined : formatCost(lane.session.costUsd),
+    cost: lane.session?.costUsd == null || lane.session.costUsd === 0 ? undefined : formatCost(lane.session.costUsd),
     actions: {
       open: lane.session !== null && lane.status !== 'missing',
       apply: lane.status === 'changed' && !live,

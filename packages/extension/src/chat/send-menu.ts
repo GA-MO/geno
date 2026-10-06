@@ -46,7 +46,7 @@ export function sendMenu(hooks: SendMenuHooks) {
     const draft = hooks.hasDraft();
     menu.replaceChildren(
       option('send', hooks.running() ? 'Queue follow-up' : 'Send', 'Enter', draft, hooks.send),
-      option('lane', 'Run in a new lane', 'in the background', draft, hooks.runInLane),
+      option('lane', 'Run in a new lane', 'background', draft, hooks.runInLane),
       ...(draft ? [] : [h('li', { class: 'menu-note', role: 'presentation' }, 'Type a task first.')]),
     );
   }

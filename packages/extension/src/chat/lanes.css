@@ -182,6 +182,11 @@ body.vscode-high-contrast-light .button.danger {
   color: var(--muted);
 }
 
+.send-menu .model-option-name,
+.send-menu .model-option-detail {
+  white-space: nowrap;
+}
+
 .send-menu [aria-disabled='true'] {
   opacity: 0.5;
   cursor: default;
