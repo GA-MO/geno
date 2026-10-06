@@ -70,6 +70,7 @@ describe('the task rows', () => {
       state: { label: 'Running', tone: 'busy' },
       fresh: false,
       children: undefined,
+      backend: undefined,
       time: '1m 0s',
       cost: undefined,
       live: true,
@@ -88,6 +89,12 @@ describe('the task rows', () => {
     const limited = rowOf(task({ status: 'waiting', waiting: { kind: 'limited', since: 1000, retryAt: resetAt, resetAt, message: '429' } }), undefined, 1000, clock);
     expect(limited.state).toEqual({ label: 'Limited until 14:05', tone: 'wait' });
     expect(laneRowOf(lane({ task: 'waiting' })).actions).toMatchObject({ apply: false, discard: 'off' });
+  });
+
+  it('name the external agent a task runs on, and its lane once the first turn made one', () => {
+    expect(rowOf(task({ backend: 'cursor', lane: null }), undefined, 1000)).toMatchObject({ backend: 'Cursor', where: 'New lane' });
+    expect(rowOf(task({ backend: 'cursor', lane: 'please-read-a-ts' }), undefined, 1000)).toMatchObject({ backend: 'Cursor', where: 'Lane please-read-a-ts' });
+    expect(rowOf(task({ lane: null }), undefined, 1000)).toMatchObject({ backend: undefined, where: 'Main checkout' });
   });
 
   it('sorts into Needs you, Ready, Working and Done, and leaves an empty section out', () => {

@@ -44,6 +44,7 @@ import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js
 import { showWidget } from './tools/widget.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
+import type { ExternalAgents, KeyOf } from './external.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -93,6 +94,9 @@ export type AgentOptions = {
   readonly allowWorker?: boolean | undefined;
   /** A subagent call the caller issues as the user's own, as an `@` mention would; the Arena's review is one. */
   readonly issued?: AssistantTurn | undefined;
+  /** The engine's external agents, which a child on an external backend runs in. */
+  readonly externals?: ExternalAgents | undefined;
+  readonly keyOf?: KeyOf | undefined;
 };
 
 export const askOnTerminal =
@@ -171,6 +175,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       executors: executorsFor,
       parentMode: () => ({ tools, system }),
       readRoots,
+      externals: options.externals,
+      keyOf: options.keyOf,
     });
     if (agentTool) tools = [...tools, children.tool];
     const mode = {

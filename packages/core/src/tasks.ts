@@ -1,4 +1,5 @@
 import type { Asking, TaskKind } from './attention.js';
+import type { ExternalBackendId } from './backends.js';
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
@@ -38,6 +39,8 @@ export type TaskRecord = {
   readonly kind?: TaskKind | undefined;
   /** When the task last came back to the user, by `returnedAtOf`; null before it first did. */
   readonly returnedAt?: number | null | undefined;
+  /** The external agent the session runs on; absent for Geno's own loop. */
+  readonly backend?: ExternalBackendId | undefined;
 };
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */

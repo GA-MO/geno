@@ -20,6 +20,7 @@ import {
   summarizeSession,
   trivialRanking,
   variantPrompt,
+  EXTERNAL_BACKEND_IDS,
   variantsFor,
   ZERO_USAGE,
   type ArenaDiff,
@@ -71,7 +72,12 @@ export type ArenaDeps = {
 /** The review child's caps, which the cost preview counts in full. */
 export const REVIEW_LIMITS = { maxTurns: 8, maxCostUsd: 0.05 };
 
-const variantSchema = z.strictObject({ seed: z.enum(SEED_IDS as [string, ...string[]]).default('plain'), model: z.string().min(1).nullable().default(null), effort: z.enum(EFFORTS).nullable().default(null) });
+const variantSchema = z.strictObject({
+  seed: z.enum(SEED_IDS as [string, ...string[]]).default('plain'),
+  model: z.string().min(1).nullable().default(null),
+  effort: z.enum(EFFORTS).nullable().default(null),
+  backend: z.enum(EXTERNAL_BACKEND_IDS).optional(),
+});
 const arenaConfigSchema = z.strictObject({
   variety: z.enum(['seeds', 'effort', 'models']).optional(),
   models: z.array(z.string().min(1)).optional(),

@@ -1,5 +1,6 @@
 /** g-code's additions to the Agent Client Protocol, shared by the engine and the extension. docs/e12.md maps every flow. */
 
+import type { ExternalBackendId } from './backends.js';
 import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
 import type { HunkId, ReviewHunk } from './review.js';
@@ -30,7 +31,7 @@ export const TOOL_CALL_META = 'gcode/toolCallId';
 export const TURN_USAGE_META = 'gcode/usage';
 
 /** `costUsd` is null when any call of the turn had no known price. */
-export type TurnUsage = { readonly model: string; readonly costUsd: number | null };
+export type TurnUsage = { readonly model: string; readonly costUsd: number | null; readonly backend?: ExternalBackendId | undefined };
 
 /** Key in a bash call's closing tool_call_update `_meta`: the ApprovalRecord of a command a rule flagged, for the step to show. */
 export const APPROVAL_META = 'gcode/approval';

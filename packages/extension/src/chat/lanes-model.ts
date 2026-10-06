@@ -1,5 +1,6 @@
 import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, Section, TaskRecord, TaskStatus } from '@g-code/core';
 import { placeTasks, SECTIONS } from '@g-code/core/attention';
+import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
 import { clockOf, formatCost, formatDuration } from './format.js';
 
@@ -110,6 +111,8 @@ export type TaskRow = {
   readonly fresh: boolean;
   /** Subagents or lanes rolled into the row, in words; undefined for none. */
   readonly children: string | undefined;
+  /** The external agent it runs on; undefined for Geno's own loop. */
+  readonly backend: string | undefined;
   /** How long it has run, or ran. */
   readonly time: string;
   readonly cost: string | undefined;
@@ -141,12 +144,16 @@ function childrenOf({ task, children }: PlacedTask): string | undefined {
   return running === 0 ? undefined : `${plural(running, 'agent')} running`;
 }
 
+/** Where a task works: its lane, or the main checkout. An external agent always works in a lane, made on its first turn. */
+const whereOf = (task: TaskRecord): string => (task.lane !== null ? `Lane ${task.lane}` : task.backend !== undefined ? 'New lane' : 'Main checkout');
+
 export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: number, clock: (ms: number) => string = clockOf): TaskRow {
   const { task, attention } = placed;
   return {
     id: task.sessionId,
     title: task.title,
-    where: task.lane === null ? 'Main checkout' : `Lane ${task.lane}`,
+    where: whereOf(task),
+    backend: task.backend === undefined ? undefined : EXTERNAL_BACKENDS[task.backend].label,
     state: stateOf(task, attention, now, clock),
     fresh: attention.kind === 'ready',
     children: childrenOf(placed),

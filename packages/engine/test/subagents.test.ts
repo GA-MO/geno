@@ -29,6 +29,8 @@ describe('loadAgents', () => {
     const { agents, problems } = await loadAgents(workspace, { app, user: undefined }, [{ name: 'kit', root: plugin }]);
 
     expect(agents.map((a) => [a.name, a.source, a.description])).toEqual([
+      ['claude-code', 'builtin', expect.any(String)],
+      ['cursor', 'builtin', expect.any(String)],
       ['explore', 'workspace', 'my explore'],
       ['kit:scout', 'plugin', 'plugin scout'],
       ['plan', 'builtin', expect.any(String)],
@@ -45,7 +47,7 @@ describe('loadAgents', () => {
   it('gives the built-ins alone when no folder exists', async () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-agents-')));
     const { agents, problems } = await loadAgents(path.join(root, 'ws'), { app: path.join(root, 'app'), user: undefined }, []);
-    expect(agents.map((a) => a.name)).toEqual(['explore', 'plan', 'review', 'worker']);
+    expect(agents.map((a) => a.name)).toEqual(['claude-code', 'cursor', 'explore', 'plan', 'review', 'worker']);
     expect(problems).toEqual([]);
   });
 });

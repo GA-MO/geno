@@ -10,7 +10,8 @@
     "./widget": "./src/widget.ts",
     "./arena": "./src/arena.ts",
     "./waiting": "./src/waiting.ts",
-    "./attention": "./src/attention.ts"
+    "./attention": "./src/attention.ts",
+    "./backends": "./src/backends.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

@@ -68,8 +68,9 @@ export const BUNDLES: readonly BuildOptions[] = [
   },
   {
     // sandbox-runtime is bundled too, since the .vsix ships no node_modules; on macOS it needs none of its vendor files.
-    entryPoints: [path.join(root, '../engine/src/embedded.ts')],
-    outfile: path.join(dist, 'engine/cli.js'),
+    // The sandbox host runs an external agent inside the sandbox, as a process of its own beside the engine.
+    entryPoints: { cli: path.join(root, '../engine/src/embedded.ts'), 'sandbox-host': path.join(root, '../engine/src/sandbox-host.ts') },
+    outdir: path.join(dist, 'engine'),
     platform: 'node',
     format: 'esm',
     target: 'node20',

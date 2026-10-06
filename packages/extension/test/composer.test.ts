@@ -49,13 +49,13 @@ describe('composerView, idle', () => {
     const view = composerView(input());
     expect(view.action).toBe('send');
     expect(view.running).toBeUndefined();
-    expect(view.model).toEqual({ name: 'qwen3.8-flash', effort: 'Medium' });
+    expect(view.model).toEqual({ name: 'qwen3.8-flash', effort: 'Medium', backend: undefined });
     expect(view.placeholder).toBe('Describe the change you want, @ to add context, / for commands');
     expect(composerView(input({ transcript: transcriptOf(start, end) })).placeholder).toBe('Ask a follow-up, @ to add context, / for commands');
   });
 
   it('leaves the effort out until the engine offers it', () => {
-    expect(composerView(input({ facts: facts({ effort: undefined }) })).model).toEqual({ name: 'qwen3.8-flash', effort: undefined });
+    expect(composerView(input({ facts: facts({ effort: undefined }) })).model).toEqual({ name: 'qwen3.8-flash', effort: undefined, backend: undefined });
   });
 
   it('offers each model and each effort, marks the current ones, and notes the cache cost of an effort change on Model Studio', () => {
@@ -65,7 +65,7 @@ describe('composerView, idle', () => {
       { provider: 'openrouter', providerLabel: 'OpenRouter', model: 'qwen3.8-flash' },
     ];
     const { menu } = composerView(input({ facts: facts({ models }) }));
-    expect(menu.models.map((m) => `${m.provider}/${m.model}:${m.current}`)).toEqual(['modelstudio/qwen3.8-flash:true', 'modelstudio/qwen3.7-plus:false', 'openrouter/qwen3.8-flash:false']);
+    expect(menu.models.map((m) => `${m.key}:${m.current}`)).toEqual(['modelstudio/qwen3.8-flash:true', 'modelstudio/qwen3.7-plus:false', 'openrouter/qwen3.8-flash:false']);
     expect(menu.efforts.map((e) => `${e.value}:${e.current}`)).toEqual(['low:false', 'medium:true', 'high:false']);
     expect(menu.note).toBe('A change mid-chat rewrites Model Studio’s cache once.');
     expect(composerView(input({ facts: facts({ models, provider: 'openrouter' }) })).menu.note).toBeUndefined();

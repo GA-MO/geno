@@ -40,6 +40,7 @@ import type { Files } from './files.js';
 import { workingDiff } from './git.js';
 import type { InstalledPlugin } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, sortedEntries } from './project-context.js';
+import { ExternalAgents, runExternalTurn, type KeyOf } from './external.js';
 import { appendEvent, sessionFile } from './sessions.js';
 import type { Store } from './store.js';
 import type { Approval } from './tools/agent.js';
@@ -144,6 +145,9 @@ export type SubagentEnv = {
   /** The parent's tools and system prompt, which a fork reuses so that it shares the parent's cached prefix. */
   readonly parentMode: () => Pick<Mode, 'tools' | 'system'>;
   readonly readRoots: readonly string[];
+  /** Where a child on an external agent runs its process; undefined starts one for that child alone. */
+  readonly externals?: ExternalAgents | undefined;
+  readonly keyOf?: KeyOf | undefined;
 };
 
 export type Subagents = {
@@ -201,8 +205,9 @@ export function subagents(env: SubagentEnv): Subagents {
       workspace: parentSession.workspace,
       provider: parentSession.provider,
       // A fork shares the parent's cached prefix only on the parent's model.
-      model: start === 'fork' ? parentSession.model : (agent.model ?? parentSession.model),
+      model: agent.backend !== undefined ? agent.backend : start === 'fork' ? parentSession.model : (agent.model ?? parentSession.model),
       effort: agent.effort ?? sessionEffortOf(parentSession, parentEvents),
+      ...(agent.backend === undefined ? {} : { backend: { id: agent.backend } }),
     };
     const header = parentEvents[0];
     const file = sessionFile(store, session.id);
@@ -235,8 +240,22 @@ export function subagents(env: SubagentEnv): Subagents {
 
     let end: ChildEnd;
     let events: readonly TurnEvent[] = opening;
+    const externals = agent.backend === undefined ? undefined : (env.externals ?? new ExternalAgents(childIo));
     try {
-      const result = await drive(childIo, store, opened, start === 'fork' ? forkTask(agent, task) : task, caps, mode, { files: env.files, watcher });
+      const result =
+        externals !== undefined
+          ? await runExternalTurn({
+              io: childIo,
+              store,
+              log: opened.log,
+              prompt: task,
+              approval: asker(env.approval, agent.name, session.id),
+              surface: { files: env.files, watcher },
+              signal: controller.signal,
+              agents: externals,
+              keyOf: env.keyOf ?? (async () => undefined),
+            })
+          : await drive(childIo, store, opened, start === 'fork' ? forkTask(agent, task) : task, caps, mode, { files: env.files, watcher });
       events = result.events;
       const error = result.events.findLast((e) => e.kind === 'error');
       end = childEndOf(result.reason, controller.signal.aborted, error?.kind === 'error' ? error.message : undefined);
@@ -244,11 +263,15 @@ export function subagents(env: SubagentEnv): Subagents {
       end = controller.signal.aborted ? { kind: 'cancelled' } : { kind: 'failed', reason: error instanceof Error ? error.message : String(error) };
     } finally {
       ctx.signal.removeEventListener('abort', cancel);
+      externals?.close(session.id);
     }
     const ran = events.filter((e) => e.kind !== 'session-start' && !opening.includes(e));
     const total = totalOf(ran);
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
-    const report = reportOf(ran);
+    const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
+    const report = [reportOf(ran), ...(lane == null ? [] : [`[${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.]`])]
+      .filter((part) => part !== '')
+      .join('\n\n');
     await ctx.logChild!({ kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary: childSummary(report) });
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });
     const text = childReport(agent.name, session.id, end, report);
