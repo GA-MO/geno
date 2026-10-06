@@ -19,7 +19,7 @@ import {
 } from '../src/index.js';
 
 const WS = '/repo/.geno/worktrees/fix';
-const scope: CommandScope = { workspace: WS, home: '/home/me' };
+const scope: CommandScope = { workspace: WS, tempDir: '/tmp/x', home: '/home/me' };
 const call = (kind: ExternalCall['kind'], over: Partial<ExternalCall> = {}): ExternalCall => ({ kind, title: '', rawInput: {}, locations: [], ...over });
 
 describe('the translated event table', () => {
