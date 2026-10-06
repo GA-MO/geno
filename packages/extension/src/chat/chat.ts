@@ -76,6 +76,12 @@ import {
   type BackendsResponse,
   type ExternalBackendId,
   asSessionId,
+  parseSpinoffShown,
+  SPINOFF_DISMISS_METHOD,
+  SPINOFF_META,
+  SPINOFF_START_METHOD,
+  type SpinoffRequest,
+  type SpinoffResponse,
 } from '@g-code/core';
 import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, UNDO_COMMAND, UNDO_TURN_COMMAND } from '../review/controller.js';
 import { DEFAULT_REVIEW_MODE, REVIEW_MODE_SETTING, REVIEW_MODES, type ReviewMode } from '../review/mode.js';
@@ -133,6 +139,7 @@ import { widgetOf } from './widget-model.js';
 import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
 import { readTerminalRequest } from './terminals.js';
 import { todoOfUpdate } from './todo-model.js';
+import { spinoffsIn } from './spinoff-model.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
@@ -354,7 +361,14 @@ function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf
   const widget = widgetOf(update);
   const editorAction = update.sessionUpdate === 'tool_call_update' ? editorActionOf(update._meta) : undefined;
   const todo = todoOfUpdate(update);
-  return { ...action, ...(widget === undefined ? {} : { widget }), ...(editorAction === undefined ? {} : { editorAction }), ...(todo === undefined ? {} : { todo }) };
+  const spinoff = update.sessionUpdate === 'tool_call_update' ? parseSpinoffShown(update._meta?.[SPINOFF_META]) : undefined;
+  return {
+    ...action,
+    ...(widget === undefined ? {} : { widget }),
+    ...(editorAction === undefined ? {} : { editorAction }),
+    ...(todo === undefined ? {} : { todo }),
+    ...(spinoff === undefined ? {} : { spinoff }),
+  };
 }
 
 /** When an update happened: now, or for a replayed tool call, when it was logged. */
@@ -953,6 +967,30 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     await agent.request<unknown, BackgroundStopRequest>(BACKGROUND_STOP_METHOD, { sessionId: this.shown, id });
   }
 
+  /** Starts a suggested task in its own lane, or dismisses it; a refusal goes back to its card. */
+  private async decideSpinoff(method: typeof SPINOFF_START_METHOD | typeof SPINOFF_DISMISS_METHOD, id: string): Promise<void> {
+    const sessionId = this.shown;
+    if (sessionId === undefined) return;
+    try {
+      const { agent } = await this.engine.connection();
+      const { spinoff } = await agent.request<SpinoffResponse, SpinoffRequest>(method, { sessionId, id, mode: this.defaultMode() });
+      if (this.shown === sessionId) this.dispatch({ type: 'spinoff', shown: { kind: 'move', id: spinoff.id, state: spinoff.state } });
+      if (spinoff.state.kind === 'started') this.background.handlers['lanes-list']({ type: 'lanes-list' });
+    } catch (error) {
+      void this.view?.webview.postMessage({ type: 'spinoff-failed', id, message: messageOf(error) } satisfies ToView);
+    }
+  }
+
+  /** Opens the session a started suggestion became, in its lane. */
+  private async openSpinoff(id: string): Promise<void> {
+    const state = spinoffsIn(this.transcript).find((spinoff) => spinoff.id === id)?.state;
+    if (state?.kind !== 'started') return;
+    const { lanes } = this.background.current();
+    const workspace = this.background.get(state.sessionId)?.workspace ?? (lanes.kind === 'loaded' ? lanes.lanes.find((lane) => lane.name === state.lane)?.path : undefined);
+    if (workspace === undefined) throw new Error(`lane ${state.lane} is gone; its session is still in History`);
+    await this.openChat(state.sessionId, workspace);
+  }
+
   /** Stops one subagent of the running turn by its session id; the engine ends it, and the parent goes on. */
   async cancelChild(id: string): Promise<void> {
     const turn = this.turn;
@@ -1331,6 +1369,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'retry-now': () => void this.retryNow().catch(warn),
       'cancel-child': ({ id }) => void this.cancelChild(id).catch(warn),
       'stop-background': ({ id }) => void this.stopBackground(id).catch(warn),
+      'spinoff-start': ({ id }) => void this.decideSpinoff(SPINOFF_START_METHOD, id),
+      'spinoff-dismiss': ({ id }) => void this.decideSpinoff(SPINOFF_DISMISS_METHOD, id),
+      'spinoff-open': ({ id }) => void this.openSpinoff(id).catch(warn),
       drafting: ({ typing }) => this.drafting(typing),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),

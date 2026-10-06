@@ -1,6 +1,7 @@
 import type { AskUserAnswer, ChildEnd } from '@g-code/core';
 import type { Action, Block, Child, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn, TurnStatus } from './messages.js';
 import { withSteer } from './steer-model.js';
+import { withSpinoff } from './spinoff-model.js';
 
 export const emptyTranscript = (model: string): Transcript => ({ model, turns: [] });
 
@@ -130,14 +131,17 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       if (waiting !== null && was !== undefined && was.kind === waiting.kind && was.since === waiting.since) return { ...turn, waiting };
       return { ...settleWait(turn, at), waiting: waiting ?? undefined };
     }),
-  tool: (transcript, { id, at, type: _type, ...fields }) =>
-    onLast(transcript, (turn) =>
+  tool: (transcript, { id, at, type: _type, spinoff, ...fields }) => {
+    const next = onLast(transcript, (turn) =>
       withTool(quiet(turn), id, at, (tool) => {
         const defined = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Partial<ToolBlock>;
         const next = { ...tool, ...defined, endedAt: ended(tool, fields.status, at) };
         return (Object.keys(next) as (keyof ToolBlock)[]).every((key) => next[key] === tool[key]) ? tool : next;
       }),
-    ),
+    );
+    return spinoff === undefined ? next : withSpinoff(next, spinoff);
+  },
+  spinoff: (transcript, { shown }) => withSpinoff(transcript, shown),
   diff: (transcript, { toolId, at, diff }) => onLast(transcript, (turn) => withTool(turn, toolId, at, (tool) => ({ ...tool, diff }))),
   background: (transcript, { toolId, job }) => {
     let changed = false;

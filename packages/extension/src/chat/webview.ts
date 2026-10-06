@@ -25,6 +25,8 @@ import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, todoListOf, type Step } from './rail.js';
 import { todoOpen, todoStep } from './todo-view.js';
+import { openSpinoffs, spinoffCardOf, type SpinoffPending } from './spinoff-model.js';
+import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
 import type { TodoList } from '@g-code/core/todo';
 import { laneOffer } from './backend-model.js';
 import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
@@ -226,7 +228,17 @@ const rules = rulesPanel(post, (open) => showPane('rules', open));
 const memory = memoryPanel(post, (open) => showPane('memory', open));
 const settings = settingsPanel(post, (open) => showPane('settings', open));
 const lanes = lanesPanel(post, (open) => showPane('lanes', open));
-const tasks = tasksPanel(post, (open) => showPane('tasks', open));
+/** Starts sent and not yet answered, and the reasons ones failed, by suggestion id, until the session changes. */
+let spinoffPending: SpinoffPending = {};
+const spinoffUi: SpinoffUi = {
+  post,
+  start: (id) => {
+    spinoffPending = { ...spinoffPending, [id]: { kind: 'starting' } };
+    post({ type: 'spinoff-start', id });
+    schedule();
+  },
+};
+const tasks = tasksPanel(post, (open) => showPane('tasks', open), spinoffUi);
 const arena = arenaPanel(post, (open) => showPane('arena', open), (id) => post({ type: 'task-seen', id }));
 const child: Pane = {
   isOpen: () => focus.kind === 'child',
@@ -293,6 +305,10 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.tool.editorAction], build: () => editorStep(step.tool, ui) };
     case 'todo':
       return { deps: [step.list, step.pinned, todoOpen(step, ui)], build: () => todoStep(step, ui) };
+    case 'spinoff': {
+      const card = spinoffCardOf(step.tool.spinoff, spinoffPending);
+      return { deps: [JSON.stringify(card)], build: () => (card.kind === 'hidden' ? h('div', { hidden: true }) : spinoffCard(card, spinoffUi, 'turn')) };
+    }
     case 'agent':
       return { deps: [quiet, step.tool, ...step.children, '|', ...state.open], build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()) };
     case 'notice':
@@ -383,6 +399,7 @@ function render(): void {
   }
 
   animating ||= renderChild();
+  tasks.suggested(openSpinoffs(transcript).map((spinoff) => spinoffCardOf(spinoff, spinoffPending)));
   tickClocks(document, Date.now());
   const running = isRunning(transcript);
   if (empty && !wasEmpty) start.refresh();
@@ -600,7 +617,14 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'rewind-state') return rewound(message.turn, message.state);
   if (message.type === 'rewind-prompt') return edit(message.text, undefined);
   if (message.type === 'reset' || message.type === 'turn-start') rewinds.clear();
-  if (message.type === 'reset') usage = undefined;
+  if (message.type === 'reset') {
+    usage = undefined;
+    spinoffPending = {};
+  }
+  if (message.type === 'spinoff-failed') {
+    spinoffPending = { ...spinoffPending, [message.id]: { kind: 'failed', message: message.message } };
+    return schedule();
+  }
   // A steer on its way goes to the session it was sent to, which the panel no longer shows.
   if (message.type === 'reset' && followup?.state === 'steering') followup = undefined;
   transcript = reduce(transcript, message);
