@@ -118,7 +118,7 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('lanes and background sessions in the panel', () => {
   it('runs a draft in a new lane, applies it for review, discards with a confirm, and keeps a chat turn running through a window reload', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('lanes', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { work, workspace, home, suite, launchArgs } = await setUp('lanes', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');

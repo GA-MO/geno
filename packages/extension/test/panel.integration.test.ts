@@ -115,7 +115,7 @@ afterAll(() => {
 describe('the chat panel in VS Code', () => {
   it('sends, stops, asks, and keeps and undoes edits through clicks and keys in the real panel', async () => {
     // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
-    const { home, suite, launchArgs } = await setUp('panel', FILES, { 'gcode.chat.detail': 'full' });
+    const { home, suite, launchArgs } = await setUp('panel', FILES, { 'gcode.chat.detail': 'full', 'gcode.review.mode': 'review' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;

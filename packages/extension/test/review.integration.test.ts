@@ -63,7 +63,7 @@ const userText = (index: number): string =>
 
 describe('review in VS Code', () => {
   it('keeps and undoes hunks that follow the text, undoes the session, lands Cmd-K as hunks, and restores review after a reload', async () => {
-    const { work, home, suite, launchArgs } = await setUp('review', FILES, { 'gcode.ui.showChanges': true });
+    const { work, home, suite, launchArgs } = await setUp('review', FILES, { 'gcode.ui.showChanges': true, 'gcode.review.mode': 'review' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
