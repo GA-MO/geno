@@ -50,8 +50,11 @@ import { skillExecutor } from './skill.js';
 /** The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session. */
 export type PermissionAnswer = 'allow' | 'allow-session' | 'reject';
 
+/** The subagent a question comes from; the user answers it, since a subagent can approve nothing itself. */
+export type Asker = { readonly name: string; readonly sessionId: string };
+
 /** Asked before a flagged command runs, with the classifier's answer when it sent the question on. */
-export type Approver = (denial: Denial, classifier: ClassifierRun | undefined) => Promise<PermissionAnswer>;
+export type Approver = (denial: Denial, classifier: ClassifierRun | undefined, asker?: Asker) => Promise<PermissionAnswer>;
 
 /** Only an interactive run has someone to ask, and a classifier to ask first in Auto. */
 export type Approval =
