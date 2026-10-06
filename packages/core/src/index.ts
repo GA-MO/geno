@@ -33,6 +33,8 @@ export * from './acp.js';
 export * from './inline-edit.js';
 export * from './mcp.js';
 export * from './browser.js';
+export * from './web.js';
+export * from './html-markdown.js';
 export * from './browser-tools.generated.js';
 export * from './history.js';
 export * from './memory.js';

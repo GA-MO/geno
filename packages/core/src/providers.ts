@@ -205,9 +205,40 @@ export const fieldOf = (spec: ProviderSpec, id: FieldId): ProviderField | undefi
 
 export const baseUrlOf = (spec: ProviderSpec, values: ProviderValues): string | undefined => values.baseUrl ?? spec.defaultBaseUrl;
 
+/**
+ * Web search providers, for web_search. One row each; Brave Search answers a plain GET with a JSON body. The key is
+ * a secret like a model provider's, and with no key web_search is not offered.
+ */
+export const SEARCH_PROVIDERS = ['brave'] as const;
+export type SearchProviderName = (typeof SEARCH_PROVIDERS)[number];
+export const isSearchProviderName = (raw: string): raw is SearchProviderName => (SEARCH_PROVIDERS as readonly string[]).includes(raw);
+
+export type SearchProviderSpec = {
+  readonly id: SearchProviderName;
+  readonly label: string;
+  /** Where the engine reads the key. */
+  readonly keyEnv: string;
+  readonly endpoint: string;
+  /** Where the user gets a key, for the settings page. */
+  readonly signUp: string;
+};
+
+export const SEARCH_PROVIDER_SPECS: { readonly [P in SearchProviderName]: SearchProviderSpec & { readonly id: P } } = {
+  brave: { id: 'brave', label: 'Brave Search', keyEnv: 'BRAVE_SEARCH_API_KEY', endpoint: 'https://api.search.brave.com/res/v1/web/search', signUp: 'https://brave.com/search/api/' },
+};
+
+/** The search provider web_search uses: the first with a key in `env`, or undefined, which leaves the tool out. */
+export type SearchConfig = { readonly provider: SearchProviderName; readonly key: string };
+
+export function searchConfigOf(env: Readonly<Record<string, string | undefined>>): SearchConfig | undefined {
+  const provider = SEARCH_PROVIDERS.find((id) => env[SEARCH_PROVIDER_SPECS[id].keyEnv]);
+  return provider === undefined ? undefined : { provider, key: env[SEARCH_PROVIDER_SPECS[provider].keyEnv]! };
+}
+
 /** Every variable that holds a provider credential, so nothing hands one to a child process or an MCP server. */
 export const SECRET_ENV_NAMES: readonly string[] = [
   ...new Set(PROVIDERS.flatMap((id) => PROVIDER_SPECS[id].fields.filter((field) => field.secret).map((field) => field.env))),
+  ...SEARCH_PROVIDERS.map((id) => SEARCH_PROVIDER_SPECS[id].keyEnv),
 ];
 
 /**

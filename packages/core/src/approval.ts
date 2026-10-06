@@ -392,6 +392,9 @@ export const MCP_RULE_IDS = ['mcp-read-only', 'mcp-tool'] as const;
 /** The built-in browser's rules, below. */
 export const BROWSER_RULE_IDS = ['browser-local-url', 'browser-remote-url', 'browser-refused-url', 'browser-remote-page', 'browser-risky-tool'] as const;
 export type BrowserRuleId = (typeof BROWSER_RULE_IDS)[number];
+/** web_fetch and web_search, which web.ts matches. */
+export const WEB_RULE_IDS = ['web-local-url', 'web-remote-url', 'web-refused-url', 'web-search'] as const;
+export type WebRuleId = (typeof WEB_RULE_IDS)[number];
 export type McpRuleId = (typeof MCP_RULE_IDS)[number];
 /** An external agent's permission requests, which backends.ts maps. */
 export const EXTERNAL_RULE_IDS = ['external-read', 'external-write', 'external-command', 'external-other'] as const;
@@ -399,8 +402,8 @@ export type ExternalRuleId = (typeof EXTERNAL_RULE_IDS)[number];
 /** A deny rule the user set for the workspace, which permission-rules.ts matches. */
 export const WORKSPACE_RULE_IDS = ['workspace-deny'] as const;
 export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | ExternalRuleId | WorkspaceRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS] as const;
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS] as const;
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
@@ -423,6 +426,18 @@ export const BROWSER_RULES: Readonly<Record<BrowserRuleId, { readonly reason: st
     reason: 'a browser tool that runs script, uploads a file or fills a form',
     verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
   },
+};
+
+/**
+ * web_fetch and web_search, which run in the engine outside the sandbox. A remote host follows the browser's remote URL
+ * rule, except that Plan allows it: a fetch only reads, and the page reaches the model only through a helper's answer.
+ * A search sends its query to the search provider, so it is judged the same way.
+ */
+export const WEB_RULES: Readonly<Record<WebRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
+  'web-local-url': { reason: 'fetching a page on this machine', verdicts: { plan: 'allow', ask: 'allow', auto: 'allow', 'non-interactive': 'allow' } },
+  'web-remote-url': { reason: 'fetching a page from another host', verdicts: { ...ASK_OR_CLASSIFY, plan: 'allow' } },
+  'web-refused-url': { reason: 'a URL web_fetch may not fetch', verdicts: { plan: 'deny', ask: 'deny', auto: 'deny', 'non-interactive': 'deny' } },
+  'web-search': { reason: 'a web search, which sends the query to the search provider', verdicts: { ...ASK_OR_CLASSIFY, plan: 'allow' } },
 };
 
 /**
