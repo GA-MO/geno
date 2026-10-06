@@ -175,7 +175,7 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('best-of-n in the panel', () => {
   it('previews the cost, races three lanes, ranks and compares them, applies the winner for review and grafts a hunk from another lane', async () => {
-    const { workspace, home, suite, launchArgs } = await setUp('arena', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { workspace, home, suite, launchArgs } = await setUp('arena', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');

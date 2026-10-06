@@ -92,7 +92,7 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('an external agent as a chat backend in the panel', () => {
   it('picks Cursor from the model menu, switches its model, runs a turn with a permission card, and applies its lane for review', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('backends', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { work, workspace, home, suite, launchArgs } = await setUp('backends', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
