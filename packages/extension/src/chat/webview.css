@@ -1341,6 +1341,11 @@ body.diagram-tab {
   font-size: var(--small);
 }
 
+.permission-rule {
+  margin-top: -6px;
+  overflow-wrap: anywhere;
+}
+
 .permission-actions {
   display: flex;
   flex-wrap: wrap;

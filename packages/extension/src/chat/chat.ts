@@ -78,6 +78,7 @@ import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
+import { PermissionsHost } from './permissions-host.js';
 import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
@@ -161,7 +162,7 @@ export const reviewModeOf = (configuration: vscode.WorkspaceConfiguration): Revi
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
-const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional() });
+const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional(), rule: z.string().optional() });
 
 const bashInput = z.object({ description: z.string() });
 
@@ -469,6 +470,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private mcpAsked = false;
   /** The rules and memory panes. */
   private readonly panes: ContextPanes;
+  private readonly permissionRules: PermissionsHost;
   /** The providers, keys and roles page. */
   private readonly settingsPage: SettingsPage;
   /** The settings action ran before the webview was ready; it opens the page once it is. */
@@ -514,6 +516,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.permissionRules = new PermissionsHost(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.widgets = widgetHost(this.extensionUri, (toolId) =>
       this.transcript.turns.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'tool' && block.id === toolId ? [block] : []))[0]?.widget,
     );
@@ -1114,7 +1117,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const optionId = await new Promise<string | undefined | typeof NOT_SHOWN>((resolve) => {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
-      const { command, reason, description } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined };
+      const { command, reason, description, rule } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined };
       const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
       this.dispatch({
         type: 'permission',
@@ -1127,6 +1130,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
         toolId: toolCall.toolCallId,
         ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
+        ...(rule === undefined ? {} : { rule }),
       });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
@@ -1237,6 +1241,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.mcp.handlers,
       ...this.panes.handlers,
       ...this.settingsPage.handlers,
+      ...this.permissionRules.handlers,
       ...this.composer.handlers,
       ...this.widgets.handlers,
       ...this.background.handlers,
