@@ -10,6 +10,7 @@
     "./widget": "./src/widget.ts",
     "./arena": "./src/arena.ts",
     "./waiting": "./src/waiting.ts",
+    "./spend-view": "./src/spend-view.ts",
     "./attention": "./src/attention.ts",
     "./backends": "./src/backends.ts",
     "./background": "./src/background.ts",
