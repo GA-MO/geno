@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SEEDS } from '@g-code/core';
+import { asTaskId, SEEDS } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { evalArenaCommand, type ArenaTaskResult } from '../src/eval-arena.js';
 import { openStore, taskDir } from '../src/store.js';
@@ -39,7 +39,7 @@ describe('gcode eval arena', () => {
     const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
     const env = { GCODE_HOME: home, HOME: home, GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic', GCODE_RG: rgCommand(), PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
     const store = openStore(env);
-    await mkdir(taskDir(store, 'loud-two'), { recursive: true });
+    await mkdir(taskDir(store, asTaskId('loud-two')), { recursive: true });
     await writeFile(path.join(store.tasksDir, 'loud-two.json'), JSON.stringify({ id: 'loud-two', repo, baseCommit, prompt: 'Make line two loud', setup: 'true', verify: 'grep -qx TWO a.ts' }));
     const out: string[] = [];
     const io: Io = { env, cwd: home, out: (line) => out.push(line), err: (line) => out.push(`! ${line}`), write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: fakeModel };
