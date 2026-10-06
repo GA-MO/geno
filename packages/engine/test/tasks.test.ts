@@ -5,6 +5,15 @@ import { Tasks } from '../src/tasks.js';
 const base = { workspace: '/repo', lane: null, startedAt: 1 } as const;
 
 describe('Tasks, the attention fields', () => {
+  it('keeps the background commands a session runs across its next turn', () => {
+    const tasks = new Tasks();
+    tasks.start({ ...base, sessionId: 's', title: 'Chat' });
+    tasks.jobs('s', [{ id: 'bg-1', command: 'pnpm dev', startedAt: 1 }]);
+    tasks.end('s', 'done', undefined);
+    tasks.start({ ...base, sessionId: 's', title: 'Chat' });
+    expect(tasks.get('s')!.jobs).toEqual([{ id: 'bg-1', command: 'pnpm dev', startedAt: 1 }]);
+  });
+
   it('names the card a task waits on, and stamps when it came back', () => {
     const tasks = new Tasks();
     tasks.start({ ...base, sessionId: 's', title: 'Chat' });

@@ -16,11 +16,11 @@ export class Tasks {
   private readonly changed = new Set<() => void>();
   private readonly parents = new Map<string, string>();
 
-  /** A turn of the session starts. A session that ran before keeps its parent and when it last came back. */
+  /** A turn of the session starts. A session that ran before keeps its parent, its running background commands and when it last came back. */
   start(task: Omit<TaskRecord, 'status' | 'endedAt' | 'usage' | 'returnedAt'>): void {
     this.asking.delete(task.sessionId);
     const before = this.records.get(task.sessionId);
-    this.put({ parent: before?.parent, kind: before?.kind, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined });
+    this.put({ parent: before?.parent, kind: before?.kind, jobs: before?.jobs, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined });
   }
 
   /** The session's task rolls up into `parent`'s, from its next start on if it has not started yet. */
