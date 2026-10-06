@@ -35,6 +35,7 @@ import {
   parseShowWidget,
   parseTodo,
   TODO_META,
+  RECALL_TOOL,
   TODO_TOOL,
   todoLine,
   WIDGET_META,
@@ -90,6 +91,7 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseShowWidget(input);
     return parsed.ok ? `${WIDGET_TOOL} ${parsed.value.title}` : WIDGET_TOOL;
   },
+  [RECALL_TOOL]: ({ query }) => `${RECALL_TOOL} ${String(query)}`,
   [TODO_TOOL]: (input) => {
     const parsed = parseTodo(input);
     return parsed.ok ? `${TODO_TOOL} ${todoLine(parsed.value)}` : TODO_TOOL;

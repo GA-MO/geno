@@ -28,7 +28,6 @@ export type SessionDoc = { readonly summary: SessionSummary; readonly title: Sea
 /** A shown excerpt and the ranges of it that match the query, as `[start, end)` offsets, sorted and apart. */
 export type Snippet = { readonly text: string; readonly marks: readonly (readonly [number, number])[] };
 
-/** Where a hit points: a turn, or only the session's title. */
 export type HitTurn = { readonly turn: number; readonly seq: number; readonly at: string };
 
 /** The best match in one session. */
@@ -41,7 +40,6 @@ export type SearchHit = {
   readonly turn: HitTurn | null;
   readonly source: SearchSource;
   readonly snippet: Snippet;
-  /** How many of the session's turns match. */
   readonly matchingTurns: number;
   readonly score: number;
 };
@@ -52,11 +50,12 @@ export type SearchHit = {
  */
 export type SearchMatch = 'all' | 'most';
 
+/** `exclude` leaves out a session and every fork of it, since a fork's log copies its source's turns. */
 export type SearchOptions = {
   readonly match: SearchMatch;
   readonly limit: number;
   readonly snippetLength: number;
-  readonly exclude?: SessionId | undefined;
+  readonly exclude?: readonly SessionId[] | undefined;
 };
 
 /** A text past this many characters is indexed by its start; a pasted log says little about what a session decided. */
@@ -65,19 +64,28 @@ const MAX_TERMS = 10;
 /** Occurrences of a term counted in one text, so a word repeated a hundred times does not drown the others. */
 const MAX_COUNT = 3;
 
-/** Lower case, keeping every offset: a character whose lower case is longer, such as İ, stays as it is. */
+/**
+ * Lower case, keeping every offset: a character whose lower case is longer keeps only its first code unit, so İ
+ * folds to i; and Greek final sigma folds to σ, so a word matches inside a longer one.
+ */
 export function fold(text: string): string {
   const lower = text.toLowerCase();
-  if (lower.length === text.length) return lower;
+  if (lower.length === text.length) return lower.replaceAll('ς', 'σ');
   let out = '';
   for (const ch of text) {
     const each = ch.toLowerCase();
-    out += each.length === ch.length ? each : ch;
+    out += each.length === ch.length ? each : each.slice(0, ch.length);
   }
-  return out;
+  return out.replaceAll('ς', 'σ');
 }
 
-const oneLine = (raw: string): string => raw.normalize('NFC').replace(/\s+/g, ' ').trim().slice(0, SEARCH_TEXT_MAX);
+const isHighSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdbff;
+
+function oneLine(raw: string): string {
+  const line = raw.normalize('NFC').replace(/\s+/g, ' ').trim();
+  if (line.length <= SEARCH_TEXT_MAX) return line;
+  return line.slice(0, isHighSurrogate(line.charCodeAt(SEARCH_TEXT_MAX - 1)) ? SEARCH_TEXT_MAX - 1 : SEARCH_TEXT_MAX);
+}
 
 const searchText = (source: SearchSource, raw: string): SearchText | undefined => {
   const text = oneLine(raw);
@@ -104,7 +112,8 @@ export function sessionDoc(session: Session, events: readonly TurnEvent[], toolT
     if (event.kind === 'assistant') {
       for (const block of event.content) {
         if (block.type === 'text') add('assistant', block.text);
-        if (block.type === 'tool_use') add('tool', toolTitle(block));
+        // A recall call's title is only the words searched for, and would make the session match them.
+        if (block.type === 'tool_use' && block.name !== RECALL_TOOL) add('tool', toolTitle(block));
       }
     }
   }
@@ -147,8 +156,8 @@ function scoreTexts(texts: readonly SearchText[], terms: readonly string[]): Sco
       bestScore = words * 100 + own;
     }
   }
-  // Each word the run holds outranks any number of repeats of one word.
-  return { score: matched.size * 100 + score, matched, best };
+  // Repeats are held under 100, so each more word the run holds outranks any number of them.
+  return { score: matched.size * 100 + Math.min(score, 99), matched, best };
 }
 
 const isMark = (ch: string | undefined): boolean => ch !== undefined && /\p{M}/u.test(ch);
@@ -187,7 +196,10 @@ export function snippetOf(text: SearchText, terms: readonly string[], length: nu
   const ranges: [number, number][] = [];
   for (const term of terms) {
     for (let at = text.folded.indexOf(term, start); at !== -1 && at + term.length <= end; at = text.folded.indexOf(term, at + term.length)) {
-      ranges.push([at - start + before.length, at + term.length - start + before.length]);
+      // A Thai tone or vowel mark after the match belongs to its last consonant, so the mark takes it in.
+      let stop = at + term.length;
+      while (stop < end && isMark(text.text[stop])) stop++;
+      ranges.push([at - start + before.length, stop - start + before.length]);
     }
   }
   ranges.sort((a, b) => a[0] - b[0]);
@@ -228,7 +240,7 @@ function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions
     snippet: snippetOf(shown, terms, options.snippetLength),
     matchingTurns,
     // The best turn ranks the session; a matching title and more matching turns add to it, a little each.
-    score: (best?.scored.score ?? 0) + (title.matched.size === 0 ? 0 : title.score) + Math.min(matchingTurns, 5) * 5,
+    score: (best?.scored.score ?? 0) + title.score + Math.min(matchingTurns, 5) * 5,
   };
 }
 
@@ -236,9 +248,11 @@ function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions
 export function searchSessions(docs: Iterable<SessionDoc>, query: string, options: SearchOptions): SearchHit[] {
   const terms = searchTerms(query);
   if (terms.length === 0) return [];
+  const excluded = new Set(options.exclude);
   const hits: SearchHit[] = [];
   for (const doc of docs) {
-    if (doc.summary.id === options.exclude) continue;
+    const source = doc.summary.forkedFrom?.sessionId;
+    if (excluded.has(doc.summary.id) || (source !== undefined && excluded.has(source))) continue;
     const hit = hitIn(doc, terms, options);
     if (hit !== undefined) hits.push(hit);
   }
@@ -249,7 +263,6 @@ export function searchSessions(docs: Iterable<SessionDoc>, query: string, option
 
 export const RECALL_TOOL = 'recall';
 
-/** What one recall call returns at most, and how much of each turn it quotes. */
 export const RECALL_LIMITS = { hits: 6, snippet: 240 } as const;
 
 export const RECALL_SPEC: Tool = {
@@ -269,7 +282,7 @@ export const RECALL_SPEC: Tool = {
 export const RECALL_SEARCH: Omit<SearchOptions, 'exclude'> = { match: 'most', limit: RECALL_LIMITS.hits, snippetLength: RECALL_LIMITS.snippet };
 
 const RECALL_TAG = 'recalled_sessions';
-const FORGED_RECALL = new RegExp(`<(/?)(${RECALL_TAG})`, 'gi');
+const FORGED_RECALL = new RegExp(`<\\s*(/?)\\s*(${RECALL_TAG})`, 'gi');
 const unforged = (text: string): string => text.replace(FORGED_RECALL, '‹$1$2');
 
 /** The day a hit points at: its turn's, or the session's last activity when only the title matched. */

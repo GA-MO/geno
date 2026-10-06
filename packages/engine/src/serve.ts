@@ -700,7 +700,7 @@ function sessionInfoOf(summary: SessionSummary): acp.SessionInfo {
 }
 
 const renameRequest = z.object({ sessionId: z.string(), title: z.string() });
-const searchRequest = z.object({ query: z.string().max(500), cwd: z.string().optional() });
+const searchRequest = z.object({ query: z.string().max(500), cwd: z.string().nullish() });
 
 /** How the history's search answers: every word the user typed must occur, and a row shows a short line of it. */
 const HISTORY_SEARCH = { match: 'all', limit: 50, snippetLength: 120 } as const;
@@ -1482,7 +1482,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { sessions: sessions.map(sessionInfoOf) };
     })
     .onRequest(SEARCH_SESSIONS_METHOD, searchRequest, async ({ params }): Promise<SearchSessionsResponse> => {
-      const scope: SessionScope = params.cwd === undefined ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
+      const scope: SessionScope = params.cwd == null ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
       return { hits: await sessionIndex(store).search(params.query, scope, HISTORY_SEARCH, io.err) };
     })
     .onRequest(acp.methods.agent.session.delete, async ({ params }) => {

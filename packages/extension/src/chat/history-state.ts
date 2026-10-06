@@ -40,7 +40,6 @@ export const CLOSED: HistoryState = { kind: 'closed' };
 const BROWSING: RowMode = { kind: 'browsing' };
 const NONE: Found = { kind: 'none' };
 
-/** What a search for `query` starts from. */
 export const foundFor = (query: string): Found => (query.trim() === '' ? NONE : { kind: 'searching', query: query.trim() });
 
 type EventOf<K extends HistoryEvent['type']> = Extract<HistoryEvent, { type: K }>;

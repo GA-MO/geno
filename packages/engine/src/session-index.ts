@@ -20,7 +20,13 @@ export const TEMP_ROOTS: readonly string[] = [
   ...new Set([tmpdir(), realOrSelf(tmpdir()), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders']),
 ];
 
-/** A log as it was last read: its size and change time say whether it changed since, and `doc` is undefined for a subagent's log. */
+const exists = (file: string): Promise<boolean> =>
+  stat(file).then(
+    () => true,
+    () => false,
+  );
+
+/** A log as it was last read: its size and change time say whether it changed since; `doc` is undefined for a subagent's log or one that could not be read. */
 type Entry = { readonly size: number; readonly mtimeMs: number; readonly doc: SessionDoc | undefined };
 
 export type Warn = (line: string) => void;
@@ -36,7 +42,6 @@ export class SessionIndex {
 
   constructor(private readonly store: Store) {}
 
-  /** The scope's best hits for the query. */
   async search(query: string, scope: SessionScope, options: SearchOptions, warn: Warn): Promise<SearchHit[]> {
     const docs = await this.docs(warn);
     return searchSessions(
@@ -72,18 +77,27 @@ export class SessionIndex {
   }
 
   private async update(file: string, warn: Warn): Promise<void> {
+    let version: { readonly size: number; readonly mtimeMs: number };
     try {
-      const { size, mtimeMs } = await stat(file);
-      const known = this.entries.get(file);
-      if (known !== undefined && known.size === size && known.mtimeMs === mtimeMs) return;
+      version = await stat(file);
+    } catch (error) {
+      this.entries.delete(file);
+      if (!isMissing(error)) warn(`warning: skipped ${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    const known = this.entries.get(file);
+    if (known !== undefined && known.size === version.size && known.mtimeMs === version.mtimeMs) return;
+    try {
       const log = await readSessionLog(file);
       const start = log.events[0];
       // A subagent's session belongs to its parent's chat, not the history.
       const child = start?.kind === 'session-start' && start.child !== undefined;
-      this.entries.set(file, { size, mtimeMs, doc: child ? undefined : sessionDoc(log.session, log.events, titleOf) });
+      this.entries.set(file, { ...version, doc: child ? undefined : sessionDoc(log.session, log.events, titleOf) });
     } catch (error) {
-      this.entries.delete(file);
-      if (!isMissing(error)) warn(`warning: skipped ${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`);
+      // A log trashed since the stat is gone; one that cannot be read is reported once per version, not per keystroke.
+      if (!(await exists(file))) return void this.entries.delete(file);
+      this.entries.set(file, { ...version, doc: undefined });
+      warn(`warning: skipped ${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

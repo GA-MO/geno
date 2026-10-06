@@ -326,7 +326,6 @@ export type HistoryHit = {
   /** `at` is in milliseconds since the epoch. */
   readonly turn: { readonly number: number; readonly seq: number; readonly at: number } | null;
   readonly snippet: Snippet;
-  /** How many of the session's turns match. */
   readonly matchingTurns: number;
 };
 

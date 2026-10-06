@@ -178,7 +178,11 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
     const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
     const project: SessionScope = { kind: 'project', workspace: lane?.repo.main ?? session.workspace };
-    const recall = (query: string) => sessionIndex(store).search(query, project, { ...RECALL_SEARCH, exclude: session.id }, io.err);
+    const head = opened.log.events[0];
+    const forkSource = head?.kind === 'session-start' ? head.fork?.sessionId : undefined;
+    // The session, its forks and the session it was forked from all hold turns the model already has in context.
+    const exclude = forkSource === undefined ? [session.id] : [session.id, forkSource];
+    const recall = (query: string) => sessionIndex(store).search(query, project, { ...RECALL_SEARCH, exclude }, io.err);
     const executorsFor = (approval: Approval, own = false) =>
       agentExecutors({
         sandbox,
