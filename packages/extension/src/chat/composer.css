@@ -12,7 +12,13 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 2px;
-  scrollbar-width: thin;
+  /*
+   * VS Code's webview sets scrollbar-color on html, and either standard property switches a scroller to the native
+   * scrollbar. On macOS that is an overlay, and in a row this short it covers the chips' remove buttons for a moment
+   * after each scroll. Resetting both gives the tray the panel's ::-webkit-scrollbar, which takes its own space.
+   */
+  scrollbar-color: auto;
+  scrollbar-width: auto;
 }
 
 .tray[hidden],
