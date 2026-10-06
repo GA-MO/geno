@@ -13,6 +13,7 @@ export * from './effort.js';
 export * from './cost.js';
 export * from './context-window.js';
 export * from './tools.js';
+export * from './deferred-tools.js';
 export * from './page.js';
 export * from './loop.js';
 export * from './tool-batch.js';
