@@ -96,8 +96,8 @@ describe('remembered permission rules', () => {
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.options.map((o) => [o.optionId, o.name])).toEqual([
       ['allow', 'Allow once'],
-      ['allow-workspace', 'Always allow in this workspace'],
       ['reject', 'Reject'],
+      ['allow-workspace', 'Always allow in this workspace'],
     ]);
     expect(permissions[0]!.toolCall.rawInput).toMatchObject({ command: 'ls ..', reason: 'a path outside the workspace', rule: 'ls ..' });
 

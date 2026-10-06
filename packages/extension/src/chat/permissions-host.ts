@@ -13,7 +13,8 @@ import type { PermissionsFromView, PermissionsListing, PermissionsToView } from 
 
 type Link = { readonly connection: Connection; readonly sessionId: string };
 
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+// The engine's refusal reads as its own sentence, without the JSON-RPC error's name in front.
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error)).replace(/^Invalid params: /, '');
 
 const listingOf = ({ workspace, rules }: PermissionsResponse, refused?: string): PermissionsListing => ({
   kind: 'loaded',

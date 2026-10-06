@@ -229,11 +229,11 @@ const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' },
   PERMISSION_OPTIONS[1]!,
 ];
-// A command with an offered rule can also be allowed for the workspace, from now on.
+// A command with an offered rule can also be allowed for the workspace, from now on. It comes last, after the
+// once-only answers, so the card's first row stays Allow and Deny.
 const RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [
-  PERMISSION_OPTIONS[0]!,
+  ...PERMISSION_OPTIONS,
   { optionId: 'allow-workspace', name: 'Always allow in this workspace', kind: 'allow_always' },
-  PERMISSION_OPTIONS[1]!,
 ];
 const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session', 'allow-workspace': 'allow-workspace' };
 
