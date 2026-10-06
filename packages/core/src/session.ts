@@ -108,6 +108,8 @@ export type ToolResultEvent = {
   readonly editorAction?: EditorAction | undefined;
   /** The whole list a todo call set (`todo.ts`). */
   readonly todo?: TodoList | undefined;
+  /** The deferred tools a tool_search call loaded, callable from then on in the session (`deferred-tools.ts`). */
+  readonly loaded?: readonly string[] | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;
