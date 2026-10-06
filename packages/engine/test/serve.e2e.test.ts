@@ -458,8 +458,8 @@ describe('gcode serve', () => {
       return sessionId;
     });
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
-    expect(transport.requests[0]!.body.tools).toEqual([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]);
-    expect(transport.requests[0]!.body.system[0].text, 'Plan has too little to defer').toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
+    expect(transport.requests[0]!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]).offered);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_MODE_SYSTEM_PROMPTS.plan}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(transport.requests[1]!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.ask, ...webToolDefinitions(false)]).offered);
 
     editor.updates.length = 0;

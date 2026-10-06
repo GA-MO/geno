@@ -98,8 +98,7 @@ async function run(replies: readonly Reply[], { mode, answers = [], search }: Ru
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     ...(search === undefined ? {} : { BRAVE_SEARCH_API_KEY: 'brave-key' }),
   };
-  // Plan in the terminal has too little besides the web tools to defer (docs/u46.md); every other mode defers them.
-  const loads = mode === 'plan' ? [] : [toolCall('', [loadTools('web_fetch', ...(search === undefined ? [] : ['web_search']))], usage)];
+  const loads = [toolCall('', [loadTools('web_fetch', ...(search === undefined ? [] : ['web_search']))], usage)];
   const transport = fakeTransport([...loads, ...replies]);
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
   const asked: Denial[] = [];
@@ -251,7 +250,7 @@ describe('web_fetch against a local server', () => {
     const plan = await run([fetchCall(`${remote}/landed`), answer('ok', usage), answer('Done.', usage)], { mode: 'plan' });
     expect(plan.asked).toEqual([]);
     expect(plan.results[0]!.status).toBe('ok');
-    expect(inFull(plan.requests[0]!.body), 'Plan in the terminal sends web_fetch in full').toContain('web_fetch');
+    expect(inFull(plan.requests[0]!.body), 'Plan in the terminal defers web_fetch behind tool_search').not.toContain('web_fetch');
   });
 
   it('reports a missing page and a binary page to the model', async () => {

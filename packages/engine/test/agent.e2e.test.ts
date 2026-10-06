@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_MODE_SYSTEM_PROMPTS, AGENT_MODE_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DEFERRED_TOOLS_NOTE, DENY_RULE_IDS, DENY_RULES, toolRoster, webToolDefinitions, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
+import { answer, fakeTransport, offeredTools, toolCall, type FakeToolUse } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -400,9 +400,9 @@ describe('gcode agent --mode plan', () => {
     expect(result.code).toBe(0);
 
     const [first] = transport.requests;
-    expect(first!.body.tools.map((t: { name: string }) => t.name)).toEqual(['bash', 'check', 'glob', 'grep', 'list', 'read', 'skill', 'todo', 'web_fetch']);
-    expect(first!.body.tools).toEqual([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]);
-    expect(first!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
+    expect(offeredTools(first!.body)).toEqual(['bash', 'check', 'glob', 'grep', 'list', 'read', 'todo', 'tool_search', 'recall', 'skill', 'web_fetch']);
+    expect(first!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]).offered);
+    expect(first!.body.system[0].text).toBe(`${AGENT_MODE_SYSTEM_PROMPTS.plan}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(first!.body.system[0].text).toContain('You are in Plan mode, which is read-only.');
     expect(asked).toEqual([]);
     expect(transport.requests.filter(isClassifierCall)).toEqual([]);
