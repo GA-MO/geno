@@ -71,13 +71,15 @@ afterAll(() => {
 });
 
 describe('the Agents section of the settings page', () => {
-  it('finds no Cursor CLI and shows how to install it, then a fake one: signs in by browser and by API key, updates, and signs out', async () => {
+  it('finds no Cursor CLI and shows how to install it, then a fake one: signs in by browser and by API key, updates, and signs out; then the same for Claude Code and its adapter', async () => {
     const state = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-agent-')), 'state');
     const { work, home, suite, launchArgs } = await setUp('agents', { 'a.ts': 'export const a = 1;\n' }, {});
     const bin = path.join(work, 'bin');
     // An empty home, so the user's own ~/.local/bin/agent is never found.
     const userHome = path.join(work, 'user-home');
-    await Promise.all([bin, state, userHome].map((dir) => mkdir(dir, { recursive: true })));
+    // npm's global prefix, where the suite puts the fake Claude Code adapter for the card to find.
+    const npmPrefix = path.join(work, 'npm-global');
+    await Promise.all([bin, state, userHome, path.join(npmPrefix, 'bin')].map((dir) => mkdir(dir, { recursive: true })));
     await writeFile(path.join(state, 'version'), FAKE.version);
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     debugPort = await freePort();
@@ -92,6 +94,9 @@ describe('the Agents section of the settings page', () => {
       extensionTestsEnv: {
         PATH: `${bin}:${BARE_PATH}`,
         HOME: userHome,
+        NPM_CONFIG_PREFIX: npmPrefix,
+        npm_config_prefix: '',
+        NVM_BIN: '',
         GCODE_HOME: home,
         GCODE_PROVIDER: 'modelstudio',
         GCODE_MODEL: 'qwen3.8-flash',
