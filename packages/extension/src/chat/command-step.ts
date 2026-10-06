@@ -1,4 +1,5 @@
-import type { ToolBlock, ToolStatus } from './messages.js';
+import { jobEndText, type JobState } from '@g-code/core/background';
+import type { BackgroundStep, ToolBlock, ToolStatus } from './messages.js';
 
 /** Output lines a folded command step shows before its fade. */
 export const PREVIEW_LINES = 4;
@@ -20,7 +21,27 @@ export type CommandStep = {
   /** Every output line, for the button that shows them all. */
   readonly lines: number;
   readonly status: ToolStatus;
+  /** The background command the call started; its output is then the end of what the command printed so far. */
+  readonly job?: CommandJob | undefined;
 };
+
+/**
+ * A background command on its step. `running` offers Stop; once it ended, `line` is the notice of how it ended.
+ * `fromEnd`: the folded output keeps the newest lines, as a live tail does.
+ */
+export type CommandJob = { readonly id: string; readonly running: boolean; readonly line: string; readonly tone: JobTone; readonly fromEnd: true };
+
+export type JobTone = 'running' | 'ended' | 'failed' | 'stopped';
+
+const toneOf = (state: JobState): JobTone =>
+  state.status === 'running' ? 'running' : state.status === 'exited' ? (state.exitCode === 0 ? 'ended' : 'failed') : 'stopped';
+
+function jobOf(job: BackgroundStep): CommandJob {
+  const { state } = job;
+  const running = state.status === 'running';
+  const line = running ? (state.ending === undefined ? `Running in background as ${job.id}` : `Stopping ${job.id}…`) : `${job.id} ${jobEndText(state)}`;
+  return { id: job.id, running, line, tone: toneOf(state), fromEnd: true };
+}
 
 /** The model's description, on one line and short enough for a title, or the plain fallback. */
 function titleOf(tool: ToolBlock): string {
@@ -38,14 +59,17 @@ function outputLines(output: string | undefined): readonly string[] | undefined 
 }
 
 export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
-  const lines = outputLines(tool.output);
+  const { background } = tool;
+  const lines = background === undefined ? outputLines(tool.output) : background.tail === '' ? [] : background.tail.split('\n');
   const truncated = !expanded && lines !== undefined && lines.length > PREVIEW_LINES;
+  const shown = lines === undefined || !truncated ? lines : background === undefined ? lines.slice(0, PREVIEW_LINES) : lines.slice(-PREVIEW_LINES);
   return {
     title: titleOf(tool),
     command: tool.target,
-    output: lines === undefined ? undefined : truncated ? lines.slice(0, PREVIEW_LINES) : lines,
+    output: shown,
     truncated,
     lines: lines?.length ?? 0,
     status: tool.status,
+    job: background === undefined ? undefined : jobOf(background),
   };
 }
