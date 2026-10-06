@@ -1,0 +1,492 @@
+/* The Arena pane: the best-of-n preview, the race, the ranking and the compare. It sits in the Lanes pane's frame. */
+
+.arena-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.arena-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.arena-card p {
+  margin: 0;
+}
+
+.arena-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: 600;
+}
+
+.arena-task {
+  overflow-wrap: anywhere;
+}
+
+.arena-head .arena-task {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.arena-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.arena-head-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.arena-muted {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.arena-error {
+  color: var(--vscode-errorForeground);
+  overflow-wrap: anywhere;
+}
+
+.arena-cost {
+  font-variant-numeric: tabular-nums;
+}
+
+.arena-letter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-size: calc(var(--small) - 1px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.arena-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.arena-variants li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The variety choice: a segmented control, which narrows with the panel. */
+.arena-variety {
+  display: flex;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  gap: 2px;
+}
+
+.arena-choice {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font-size: var(--small);
+  line-height: 18px;
+}
+
+.arena-choice:hover:not(:disabled) {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.arena-choice.chosen {
+  border-color: var(--border);
+  color: var(--vscode-foreground);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.arena-choice:disabled {
+  cursor: default;
+}
+
+.arena-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.arena-notice .codicon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.arena-notice.tone-busy,
+.arena-notice.tone-ok {
+  color: var(--vscode-foreground);
+}
+
+/* The race: one track per lane, its dino moved along by --progress, 0 to 1. */
+.race-list,
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.race-row,
+.rank-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rank-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rank-row.winner {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--border));
+}
+
+.race-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.race-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-top .mcp-state {
+  flex: none;
+}
+
+.race-track {
+  position: relative;
+  height: 26px;
+  margin-right: 18px;
+}
+
+.race-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--vscode-foreground) 28%, transparent);
+}
+
+.race-runner {
+  position: absolute;
+  bottom: 2px;
+  left: calc(var(--progress, 0) * (100% - 24px));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  transition: left 900ms ease-out;
+}
+
+.race-runner .race-end {
+  display: none;
+  margin-bottom: 2px;
+}
+
+.race-runner:not(:has(canvas)) .race-end {
+  display: block;
+}
+
+.race-finish {
+  position: absolute;
+  right: -18px;
+  bottom: 2px;
+  color: var(--muted);
+}
+
+.race-meta,
+.rank-row .lane-actions {
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-number {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-reason {
+  overflow-wrap: anywhere;
+}
+
+.rank-cost {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.rank-check summary {
+  color: var(--muted);
+  font-size: var(--small);
+  cursor: pointer;
+}
+
+.rank-check pre,
+.compare-lines {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background);
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--code-size) - 1px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The compare: a column per lane when the panel is wide enough, else one lane at a time behind the switcher. */
+.arena-compare {
+  container: arena-compare / inline-size;
+}
+
+.compare-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.compare-switch {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.compare-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: var(--small);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.compare-tab.chosen {
+  color: var(--vscode-foreground);
+  background: var(--surface-2);
+  border-color: var(--mark);
+}
+
+.compare-rank {
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-star {
+  color: var(--ok);
+  font-size: 11px;
+}
+
+.compare-columns {
+  display: none;
+}
+
+.compare-file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.compare-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.compare-path span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-cell {
+  display: none;
+  min-width: 0;
+}
+
+.compare-cell.focused {
+  display: block;
+}
+
+.compare-cell-head {
+  display: none;
+}
+
+.compare-hunks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compare-hunk {
+  min-width: 0;
+  font-size: var(--small);
+}
+
+.compare-pick,
+.compare-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.compare-pick {
+  color: var(--vscode-foreground);
+  cursor: pointer;
+}
+
+.compare-pick input {
+  margin: 0;
+  accent-color: var(--mark);
+}
+
+.compare-lines .del {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground));
+}
+
+.compare-lines .add {
+  color: var(--vscode-gitDecoration-addedResourceForeground, var(--ok));
+}
+
+.compare-graft {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding-top: 4px;
+}
+
+.compare-graft .button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Wide: every lane in its own column, cells aligned file by file. A container query cannot read the lane count, so each count has its own width. */
+@container arena-compare (min-width: 460px) {
+  .compare-inner[data-lanes='2'] .compare-switch {
+    display: none;
+  }
+
+  .compare-inner[data-lanes='2'] :is(.compare-columns, .compare-cells) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .compare-inner[data-lanes='2'] .compare-cell {
+    display: block;
+  }
+}
+
+@container arena-compare (min-width: 600px) {
+  .compare-inner[data-lanes='3'] .compare-switch {
+    display: none;
+  }
+
+  .compare-inner[data-lanes='3'] :is(.compare-columns, .compare-cells) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .compare-inner[data-lanes='3'] .compare-cell {
+    display: block;
+  }
+}
+
+@container arena-compare (min-width: 760px) {
+  .compare-inner[data-lanes='4'] .compare-switch {
+    display: none;
+  }
+
+  .compare-inner[data-lanes='4'] :is(.compare-columns, .compare-cells) {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .compare-inner[data-lanes='4'] .compare-cell {
+    display: block;
+  }
+}
+
+.compare-column {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--small);
+}
+
+/* High contrast keeps the theme's own borders on the choices and the tabs. */
+body.vscode-high-contrast :is(.arena-choice.chosen, .compare-tab.chosen),
+body.vscode-high-contrast-light :is(.arena-choice.chosen, .compare-tab.chosen) {
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder));
+  background: transparent;
+}

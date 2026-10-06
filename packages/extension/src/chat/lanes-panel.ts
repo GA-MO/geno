@@ -7,7 +7,7 @@ const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
 
 /** A pane that takes the transcript's place while open, with Back and Escape, as the MCP pane does. */
-function pane(label: string, heading: string, onToggle: (open: boolean) => void, shown: () => void) {
+export function pane(label: string, heading: string, onToggle: (open: boolean) => void, shown: () => void) {
   let open = false;
   const body = h('div', { class: 'lanes-body' });
   const element = h(

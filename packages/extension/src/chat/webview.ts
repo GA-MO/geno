@@ -15,6 +15,7 @@ import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } fr
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { lanesPanel, tasksPanel } from './lanes-panel.js';
+import { arenaPanel } from './arena-panel.js';
 import { mcpPanel } from './mcp-panel.js';
 import { sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
@@ -208,6 +209,7 @@ const memory = memoryPanel(post, (open) => showPane('memory', open));
 const settings = settingsPanel(post, (open) => showPane('settings', open));
 const lanes = lanesPanel(post, (open) => showPane('lanes', open));
 const tasks = tasksPanel(post, (open) => showPane('tasks', open));
+const arena = arenaPanel(post, (open) => showPane('arena', open));
 const child: Pane = {
   isOpen: () => focus.kind === 'child',
   close: () => {
@@ -216,10 +218,10 @@ const child: Pane = {
     showPane('child', false);
   },
 };
-const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, lanes, tasks, child };
+const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, lanes, tasks, arena, child };
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, lanes.element, tasks.element, childView, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, lanes.element, tasks.element, arena.element, childView, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
 tray.insertBefore(attachments.element, chips);
 inputBox.insertBefore(attachments.note, input);
@@ -467,7 +469,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-history') return history.open();
   if (message.type === 'hide-history') return history.close();
   if (message.type === 'window-focus') {
-    for (const each of [gate, workGate, peekGate]) each.set('focused', message.focused);
+    for (const each of [gate, workGate, peekGate, arena.gate]) each.set('focused', message.focused);
     return;
   }
   if (message.type === 'history') {
@@ -498,6 +500,8 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-lanes') return lanes.open();
   if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown);
   if (message.type === 'show-tasks') return tasks.open();
+  if (message.type === 'arena') return arena.listed(message.state);
+  if (message.type === 'show-arena') return arena.open();
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
