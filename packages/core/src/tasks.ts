@@ -1,3 +1,4 @@
+import type { ExternalBackendId } from './backends.js';
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
@@ -42,6 +43,8 @@ export type TaskRecord = {
   readonly usage?: TaskUsage | undefined;
   /** What a `waiting` task waits for; absent in every other status. */
   readonly waiting?: Waiting | undefined;
+  /** The external agent the session runs on; absent for Geno's own loop. */
+  readonly backend?: ExternalBackendId | undefined;
 };
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */

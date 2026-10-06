@@ -8,6 +8,7 @@ import {
   CHILD_CAPS,
   CHILD_STARTS,
   APPROVAL_RULE_IDS,
+  EXTERNAL_BACKEND_IDS,
   EFFORTS,
   HUNK_STATUSES,
   nextSeq,
@@ -62,6 +63,7 @@ const sessionSchema = z.strictObject({
   provider: z.enum(PROVIDERS).default('openrouter'),
   model: z.string().min(1),
   effort: z.enum(EFFORTS),
+  backend: z.strictObject({ id: z.enum(EXTERNAL_BACKEND_IDS) }).optional(),
 });
 
 // Blocks are stored exactly as the API returned them and replayed verbatim, so only their tag is checked.
@@ -248,6 +250,8 @@ const turnEventSchema = z.union([
       deleted: z.array(z.string()),
       grafted: count.optional(),
     }),
+    z.strictObject({ kind: z.literal('backend-start'), ...seqFields, agentSessionId: z.string().min(1), lane: z.string().min(1).nullable(), sandboxed: z.boolean(), loadable: z.boolean() }),
+    z.strictObject({ kind: z.literal('backend-model'), seq: seqFields.seq.optional(), at: seqFields.at, model: z.string().min(1) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({

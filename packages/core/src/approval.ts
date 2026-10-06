@@ -391,8 +391,11 @@ export const MCP_RULE_IDS = ['mcp-read-only', 'mcp-tool'] as const;
 export const BROWSER_RULE_IDS = ['browser-local-url', 'browser-remote-url', 'browser-refused-url', 'browser-remote-page', 'browser-risky-tool'] as const;
 export type BrowserRuleId = (typeof BROWSER_RULE_IDS)[number];
 export type McpRuleId = (typeof MCP_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS] as const;
+/** An external agent's permission requests, which backends.ts maps. */
+export const EXTERNAL_RULE_IDS = ['external-read', 'external-write', 'external-command', 'external-other'] as const;
+export type ExternalRuleId = (typeof EXTERNAL_RULE_IDS)[number];
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | ExternalRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...EXTERNAL_RULE_IDS] as const;
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
