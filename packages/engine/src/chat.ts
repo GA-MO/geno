@@ -12,6 +12,7 @@ import {
   type BackendBinding,
   specOf,
   nextSeq,
+  spendOf,
   toolUsesOf,
   type ApprovalRecord,
   type Effort,
@@ -220,19 +221,16 @@ export type Totals = {
   readonly latencyMs: number;
 };
 
+/** A compaction's summary call counts in the usage and cost, and not in the turns or latency. */
 export function totalOf(events: readonly TurnEvent[]): Totals {
   const answers = events.filter((e): e is EventOf<'assistant'> => e.kind === 'assistant');
-  const sum = (pick: (e: EventOf<'assistant'>) => number) => answers.reduce((n, e) => n + pick(e), 0);
+  const spends = events.flatMap((e) => spendOf(e) ?? []);
+  const sum = (pick: (u: TokenUsage) => number) => spends.reduce((n, s) => n + pick(s.usage), 0);
   return {
     turns: answers.length,
-    usage: {
-      input: sum((e) => e.usage.input),
-      cacheRead: sum((e) => e.usage.cacheRead),
-      cacheWrite: sum((e) => e.usage.cacheWrite),
-      output: sum((e) => e.usage.output),
-    },
-    costUsd: answers.some((e) => e.costUsd === null) ? null : sum((e) => e.costUsd ?? 0),
-    latencyMs: sum((e) => e.latencyMs),
+    usage: { input: sum((u) => u.input), cacheRead: sum((u) => u.cacheRead), cacheWrite: sum((u) => u.cacheWrite), output: sum((u) => u.output) },
+    costUsd: spends.some((s) => s.costUsd === null) ? null : spends.reduce((n, s) => n + (s.costUsd ?? 0), 0),
+    latencyMs: answers.reduce((n, e) => n + e.latencyMs, 0),
   };
 }
 
@@ -264,6 +262,10 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     `#${seq} checkpoint before turn ${turnSeq}: ${sha.slice(0, 12)}${files.length === 0 ? '' : ` changed ${files.join(', ')}`}`,
   ],
   cut: ({ seq, turnSeq }) => [`#${seq} cut the conversation from turn ${turnSeq} on`],
+  compact: ({ seq, trigger, keptFrom, tokensBefore, tokensAfter, usage, costUsd, summary }) => [
+    `#${seq} compact (${trigger}): kept from #${keptFrom}, ${tokensBefore} -> about ${tokensAfter} tokens, ${formatUsage(usage, costUsd)}`,
+    ...summary.split('\n').map((line) => `  ${line}`),
+  ],
   restored: ({ seq, turnSeq, sha, files }) => [
     `#${seq} restored to the checkpoint before turn ${turnSeq} (${sha.slice(0, 12)}): ${files.length === 0 ? 'no files changed' : files.join(', ')}`,
   ],

@@ -59,6 +59,8 @@ export * from './backends.js';
 export * from './backend-permissions.js';
 export * from './background.js';
 export * from './rewind.js';
+export * from './compact.js';
+export * from './compaction.js';
 export * from './wake.js';
 export * from './parts.js';
 export * from './breakdown.js';
