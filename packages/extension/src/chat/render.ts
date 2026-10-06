@@ -535,6 +535,7 @@ export function turnHead(turn: Turn): HTMLElement {
     'div',
     { class: 'turn-head' },
     dino('avatar'),
+    icon('loading', 'turn-working codicon-modifier-spin'),
     h('span', { class: 'turn-name' }, 'Geno'),
     h(
       'span',
