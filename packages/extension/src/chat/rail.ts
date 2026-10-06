@@ -2,6 +2,7 @@ import type { ChangedFile } from './fold.js';
 import type { WaitKind } from '@g-code/core';
 import type { Child, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
+import type { EditorTool } from './editor-step.js';
 
 /**
  * A turn as the panel draws it: one rail of steps from the prompt to the answer. Runs of reads or edits fold
@@ -17,6 +18,8 @@ export type Step =
   | { readonly kind: 'steer'; readonly key: string; readonly block: SteerBlock }
   /** An `agent` call, with the subagents it started nested under it. */
   | { readonly kind: 'agent'; readonly key: string; readonly tool: ToolBlock; readonly children: readonly Child[] }
+  /** An open_file, reveal or show_diff call that ran: one row that shows its target again. */
+  | { readonly kind: 'editor'; readonly key: string; readonly tool: EditorTool }
   /** A show_widget call: the widget itself, never folded into a run of calls. */
   | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
@@ -51,6 +54,7 @@ export function railOf(turn: Turn): Step[] {
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
+    else if (block.editorAction !== undefined) steps.push({ kind: 'editor', key: `editor:${block.id}`, tool: block as EditorTool });
     else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
     else if (block.name === AGENT_CALL) steps.push({ kind: 'agent', key: `agent:${block.id}`, tool: block, children: childrenUnder(turn, block.id) });
     else if (last?.kind === 'calls' && last.name === block.name && FILE_TOOLS.has(block.name)) steps[steps.length - 1] = { ...last, tools: [...last.tools, block] };
@@ -84,6 +88,8 @@ export function nodeOf(step: Step): NodeState {
       return step.block.outcome.kind === 'open' ? 'wait' : 'done';
     case 'error':
       return 'failed';
+    case 'editor':
+      return 'done';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
     case 'agent':

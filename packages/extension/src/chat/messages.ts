@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { EditorAction, AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -122,6 +122,8 @@ export type ToolBlock = {
   readonly widget?: ToolWidget | undefined;
   /** The background command a bash call started, as the engine last reported it. */
   readonly background?: BackgroundStep | undefined;
+  /** What an open_file, reveal or show_diff call showed in the editor, which its step shows again. */
+  readonly editorAction?: EditorAction | undefined;
 };
 
 /** A background command on its bash step: its job id, its state, and the end of its output so far. */
@@ -237,6 +239,7 @@ export type Action =
       readonly images?: readonly ToolImage[];
       readonly auto?: AutoDecision;
       readonly widget?: ToolWidget;
+      readonly editorAction?: EditorAction;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** A background command changed; it may belong to any turn, since it outlives the one that started it. */
@@ -423,6 +426,8 @@ export type FromView =
   | { readonly type: 'undo-turn'; readonly checkpoint: CheckpointRef; readonly later: boolean }
   /** Auto review: a file a turn changed, in a diff against the checkpoint before that turn. */
   | { readonly type: 'open-change'; readonly path: string; readonly checkpoint: CheckpointRef }
+  /** Shows again what an editor tool's step showed. */
+  | { readonly type: 'editor-action'; readonly action: EditorAction }
   | { readonly type: 'copy'; readonly text: string }
   /** Opens the Models and Keys page. */
   | { readonly type: 'choose-model' }
