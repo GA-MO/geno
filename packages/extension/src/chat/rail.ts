@@ -1,5 +1,5 @@
 import type { ChangedFile } from './fold.js';
-import type { ErrorBlock, PermissionBlock, TextBlock, ToolBlock, Turn } from './messages.js';
+import type { Child, ErrorBlock, PermissionBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 
 /**
  * A turn as the panel draws it: one rail of steps from the prompt to the answer. Runs of reads or edits fold
@@ -11,6 +11,8 @@ export type Step =
   | { readonly kind: 'calls'; readonly key: string; readonly name: string; readonly tools: readonly ToolBlock[] }
   | { readonly kind: 'permission'; readonly key: string; readonly block: PermissionBlock }
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
+  /** An `agent` call, with the subagents it started nested under it. */
+  | { readonly kind: 'agent'; readonly key: string; readonly tool: ToolBlock; readonly children: readonly Child[] }
   /** A show_widget call: the widget itself, never folded into a run of calls. */
   | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
@@ -30,6 +32,11 @@ export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
 /** Tools whose consecutive calls fold into one step, each call a file chip. */
 const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
 
+/** The engine's tool that starts a subagent. */
+export const AGENT_CALL = 'agent';
+
+export const childrenUnder = (turn: Turn, toolId: string): Child[] => Object.values(turn.children ?? {}).filter((child) => child.toolId === toolId);
+
 export const isEdit = (tool: ToolBlock): tool is EditTool => tool.diff !== undefined;
 
 export function railOf(turn: Turn): Step[] {
@@ -40,6 +47,7 @@ export function railOf(turn: Turn): Step[] {
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
+    else if (block.name === AGENT_CALL) steps.push({ kind: 'agent', key: `agent:${block.id}`, tool: block, children: childrenUnder(turn, block.id) });
     else if (last?.kind === 'calls' && last.name === block.name && FILE_TOOLS.has(block.name)) steps[steps.length - 1] = { ...last, tools: [...last.tools, block] };
     else steps.push({ kind: 'calls', key: `calls:${block.id}`, name: block.name, tools: [block] });
   }
@@ -72,6 +80,9 @@ export function nodeOf(step: Step): NodeState {
       return 'failed';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
+    case 'agent':
+      if (step.tool.status === 'running' || step.children.some((child) => child.status.kind === 'running')) return 'live';
+      return step.tool.status === 'failed' ? 'failed' : 'done';
     case 'notice':
     case 'thinking':
       return 'live';

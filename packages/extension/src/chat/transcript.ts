@@ -1,5 +1,5 @@
-import type { AskUserAnswer } from '@g-code/core';
-import type { Action, Block, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn } from './messages.js';
+import type { AskUserAnswer, ChildEnd } from '@g-code/core';
+import type { Action, Block, Child, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn, TurnStatus } from './messages.js';
 
 export const emptyTranscript = (model: string): Transcript => ({ model, turns: [] });
 
@@ -49,6 +49,29 @@ const ended = (tool: ToolBlock, status: ToolBlock['status'] | undefined, at: num
 
 /** The turn without its passing status, which any new output replaces. */
 const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...turn, notice: undefined });
+
+/** How a child's end reads on its own turn. */
+const CHILD_TURN_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TurnStatus, 'streaming'>>> = { done: 'done', cancelled: 'stopped', failed: 'failed', capped: 'failed' };
+
+/** Replaces the child `id` of the turn with `change(child)`; a turn without it, or an unchanged child, is returned as is. */
+function withChild(turn: Turn, id: string, change: (child: Child) => Child): Turn {
+  const child = turn.children?.[id];
+  if (child === undefined) return turn;
+  const next = change(child);
+  return next === child ? turn : { ...turn, children: { ...turn.children, [id]: next } };
+}
+
+/** A child's turn after one action, through the same reducer as any turn. */
+function childTurn(child: Child, action: Action): Child {
+  const turn = reduce({ model: child.model, turns: [child.turn] }, action).turns[0]!;
+  return turn === child.turn ? child : { ...child, turn };
+}
+
+/** A child that is still running ends `end`, with its turn; one that already ended keeps its end. */
+function endChild(child: Child, at: number, end: ChildEnd, spent: Pick<Child, 'turns' | 'costUsd'>): Child {
+  if (child.status.kind !== 'running') return child;
+  return { ...childTurn(child, { type: 'turn-end', at, status: CHILD_TURN_ENDS[end.kind], usage: undefined }), status: end, endedAt: at, ...spent };
+}
 
 const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, action: ActionOf<K>) => Transcript } = {
   reset: (_transcript, { transcript }) => transcript,
@@ -120,8 +143,18 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
-      return { ...quiet(settled), status, endedAt: at, usage };
+      const children = Object.keys(settled.children ?? {}).reduce((t, id) => withChild(t, id, (child) => endChild(child, at, { kind: 'cancelled' }, { turns: child.turns, costUsd: child.costUsd })), settled);
+      return { ...quiet(children), status, endedAt: at, usage };
     }),
+  'child-start': (transcript, { id, toolId, role, task, model, at }) =>
+    onLast(transcript, (turn) => {
+      if (turn.children?.[id] !== undefined) return turn;
+      const own: Turn = { id, prompt: task, blocks: [], status: 'streaming', startedAt: at, endedAt: undefined, usage: undefined };
+      const child: Child = { id, toolId, role, model, status: { kind: 'running' }, startedAt: at, endedAt: undefined, turns: 0, costUsd: undefined, turn: own };
+      return { ...turn, children: { ...turn.children, [id]: child } };
+    }),
+  child: (transcript, { id, action }) => onLast(transcript, (turn) => withChild(turn, id, (child) => childTurn(child, action))),
+  'child-end': (transcript, { id, at, end, turns, costUsd }) => onLast(transcript, (turn) => withChild(turn, id, (child) => endChild(child, at, end, { turns, costUsd }))),
 };
 
 /** The transcript after `action`. Parts the action leaves alone keep their identity, so a view can skip them. */
@@ -142,3 +175,9 @@ export function totalsOf(transcript: Transcript): Totals {
 }
 
 export const isRunning = (transcript: Transcript): boolean => transcript.turns.at(-1)?.status === 'streaming';
+
+/** The children of the last turn, the only one whose children can still run, that run now. */
+export const runningChildren = (transcript: Transcript): Child[] => Object.values(transcript.turns.at(-1)?.children ?? {}).filter((child) => child.status.kind === 'running');
+
+/** A child by its session id, in whichever turn started it. */
+export const childOf = (transcript: Transcript, id: string): Child | undefined => transcript.turns.findLast((turn) => turn.children?.[id] !== undefined)?.children?.[id];

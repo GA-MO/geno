@@ -1,7 +1,7 @@
 import type { ContextUse } from '@g-code/core';
 import type { McpListing } from './mcp-model.js';
 import type { Transcript } from './messages.js';
-import { isRunning } from './transcript.js';
+import { isRunning, runningChildren } from './transcript.js';
 
 /**
  * The composer's view model: a pure function from what the panel knows about the session to what each slot of the
@@ -58,10 +58,15 @@ export type ModelMenu = {
   readonly note: string | undefined;
 };
 
+/** A running subagent as the agents pill offers it. */
+export type RunningChild = { readonly id: string; readonly role: string; readonly model: string; readonly elapsed: string };
+
 export type RunningView = {
   readonly elapsed: string;
   /** Undefined before the turn's first model call. */
   readonly cost: { readonly text: string; readonly title: string } | undefined;
+  /** The pill for the turn's running subagents; undefined while none runs. */
+  readonly agents: { readonly label: string; readonly title: string; readonly children: readonly RunningChild[] } | undefined;
 };
 
 export type ComposerView = {
@@ -130,6 +135,13 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
+function agentsOf(transcript: Transcript, now: number): RunningView['agents'] {
+  const children = runningChildren(transcript).map(({ id, role, model, startedAt }) => ({ id, role, model, elapsed: formatElapsed(now - startedAt) }));
+  if (children.length === 0) return undefined;
+  const label = `${children.length} ${children.length === 1 ? 'agent' : 'agents'}`;
+  return { label, title: `${label} running: ${children.map((c) => c.role).join(', ')}`, children };
+}
+
 function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView['cost'] {
   if (usd === undefined) return undefined;
   if (usd === null) return { text: '฿ unknown', title: 'This model has no price in Geno’s table' };
@@ -160,7 +172,7 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
     action: running ? 'stop' : 'send',
     running:
       running && turn !== undefined
-        ? { elapsed: formatElapsed(now - turn.startedAt), cost: costOf(facts.turnCostUsd, facts.bahtPerUsd) }
+        ? { elapsed: formatElapsed(now - turn.startedAt), cost: costOf(facts.turnCostUsd, facts.bahtPerUsd), agents: agentsOf(transcript, now) }
         : undefined,
   };
 }

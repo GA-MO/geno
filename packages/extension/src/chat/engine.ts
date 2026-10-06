@@ -66,6 +66,8 @@ export class Engine implements vscode.Disposable {
         session: { notices: {} },
         // ask_user's questions arrive as form elicitations, and remember's as permission requests shown as memory cards.
         elicitation: { form: {} },
+        // Children are announced with subagent_update, and their own updates stream under their session ids.
+        subagents: {},
         _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true, [WIDGET_CAPABILITY]: true },
       },
       clientInfo: { name: 'g-code', version: '0.0.0' },
