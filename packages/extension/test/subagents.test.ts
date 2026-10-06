@@ -75,12 +75,13 @@ describe('the agents pill', () => {
     expect(view(run(parent), T0 + 1000).running?.agents).toBeUndefined();
     const one = run([...parent, startChild('c_a', 'tu_a')]);
     expect(view(one, T0 + 5020).running?.agents).toEqual({
-      label: '1 agent',
+      count: 1,
+      noun: 'agent',
       title: '1 agent running: explore',
       children: [{ id: 'c_a', role: 'explore', model: 'qwen3.8-flash', elapsed: '0:05' }],
     });
     const two = run([startChild('c_b', 'tu_b')], one);
-    expect(view(two, T0 + 5020).running?.agents?.label).toBe('2 agents');
+    expect(view(two, T0 + 5020).running?.agents).toMatchObject({ count: 2, noun: 'agents', title: '2 agents running: explore, explore' });
     const back = run([{ type: 'child-end', id: 'c_a', at: T0 + 3000, end: { kind: 'done' }, turns: 1, costUsd: 0 }], two);
     expect(view(back, T0 + 5020).running?.agents?.children.map((c) => c.id)).toEqual(['c_b']);
     const none = run([{ type: 'child-end', id: 'c_b', at: T0 + 3000, end: { kind: 'capped', cap: 'turns' }, turns: 4, costUsd: 0.01 }], back);

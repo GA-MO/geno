@@ -13,6 +13,11 @@
   list-style: none;
 }
 
+/* The working dino keeps the top of its step clear; the rows sit below it, so they take the full width back. */
+.step:has(> .working-dino) .child-list {
+  margin-right: -56px;
+}
+
 .child-row {
   display: flex;
   align-items: center;
@@ -35,6 +40,7 @@
   font-size: var(--small);
   text-align: left;
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
   cursor: pointer;
 }
 
@@ -79,6 +85,11 @@
 
 .child-capped .child-status {
   color: var(--warn);
+}
+
+/* The children's own rows say they run, so the call's spinner would say it twice. */
+.calls:has(> .child-list) .step-status {
+  display: none;
 }
 
 /* The helper's 24px box holds a 1× Noodle; under a dino-free slot it keeps the row's columns even. */
@@ -239,4 +250,32 @@
   color: var(--muted);
   font-size: var(--small);
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * While a turn runs, the bottom row holds the clock, the cost and the pill as well, and the user's panel is narrow.
+ * The row gives up what the turn footer repeats first: the effort and the cost, then the model and the pill's noun.
+ */
+.input-toolbar {
+  container: composer-row / inline-size;
+}
+
+@container composer-row (max-width: 460px) {
+  .input-toolbar:has(.round-button.stop:not([hidden])) :is(.model-effort, .run-cost) {
+    display: none;
+  }
+}
+
+@container composer-row (max-width: 360px) {
+  .input-toolbar:has(.round-button.stop:not([hidden])) :is(.composer-model, .run-time .codicon, .agents-noun) {
+    display: none;
+  }
+
+  .input-toolbar:has(.round-button.stop:not([hidden])) .toolbar-left {
+    gap: 2px;
+  }
+
+  .input-toolbar:has(.round-button.stop:not([hidden])) .toolbar-right {
+    gap: 4px;
+  }
 }

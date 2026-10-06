@@ -66,7 +66,7 @@ export type RunningView = {
   /** Undefined before the turn's first model call. */
   readonly cost: { readonly text: string; readonly title: string } | undefined;
   /** The pill for the turn's running subagents; undefined while none runs. */
-  readonly agents: { readonly label: string; readonly title: string; readonly children: readonly RunningChild[] } | undefined;
+  readonly agents: { readonly count: number; readonly noun: string; readonly title: string; readonly children: readonly RunningChild[] } | undefined;
 };
 
 export type ComposerView = {
@@ -138,8 +138,8 @@ export function formatElapsed(ms: number): string {
 function agentsOf(transcript: Transcript, now: number): RunningView['agents'] {
   const children = runningChildren(transcript).map(({ id, role, model, startedAt }) => ({ id, role, model, elapsed: formatElapsed(now - startedAt) }));
   if (children.length === 0) return undefined;
-  const label = `${children.length} ${children.length === 1 ? 'agent' : 'agents'}`;
-  return { label, title: `${label} running: ${children.map((c) => c.role).join(', ')}`, children };
+  const noun = children.length === 1 ? 'agent' : 'agents';
+  return { count: children.length, noun, title: `${children.length} ${noun} running: ${children.map((c) => c.role).join(', ')}`, children };
 }
 
 function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView['cost'] {

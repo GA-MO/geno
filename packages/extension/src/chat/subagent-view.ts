@@ -17,9 +17,18 @@ const LOOKS: { readonly [K in ChildStatus['kind']]: (status: Extract<ChildStatus
 
 export const childLook = (status: ChildStatus) => (LOOKS[status.kind] as (s: ChildStatus) => { readonly icon: string; readonly label: string })(status);
 
-/** How long the child has run, as the composer's clock reads, then how long it took. */
-export const childTime = (child: Child, now: number): string =>
-  child.endedAt === undefined ? formatElapsed(now - child.startedAt) : formatDuration(child.endedAt - child.startedAt);
+/**
+ * How long the child has run, as the composer's clock reads, then how long it took. A running clock carries its
+ * start, and `tickClocks` moves it each second without rebuilding the row, which would take the keyboard from it.
+ */
+function childTime(child: Child, now: number, ...before: HTMLElement[]): HTMLElement {
+  if (child.endedAt !== undefined) return h('span', { class: 'child-time' }, ...before, formatDuration(child.endedAt - child.startedAt));
+  return h('span', { class: 'child-time' }, ...before, h('span', { 'data-since': child.startedAt }, formatElapsed(now - child.startedAt)));
+}
+
+export function tickClocks(root: ParentNode, now: number): void {
+  for (const clock of root.querySelectorAll<HTMLElement>('[data-since]')) clock.textContent = formatElapsed(now - Number(clock.dataset['since']));
+}
 
 /** A child's cost is known once it ends. */
 export const childCost = (child: Child): string | undefined => (child.costUsd === undefined || child.costUsd === null ? undefined : formatCost(child.costUsd));
@@ -50,7 +59,7 @@ function childRow(child: Child, ui: Ui, now: number): HTMLElement {
       h('span', { class: 'child-role' }, child.role),
       h('span', { class: 'child-model' }, child.model),
       h('span', { class: 'spacer' }),
-      h('span', { class: 'child-time' }, childTime(child, now)),
+      childTime(child, now),
       cost !== undefined && h('span', { class: 'child-cost' }, cost),
       icon('chevron-right', 'chevron'),
     ),
@@ -88,7 +97,7 @@ export function childHead(child: Child, ui: Ui, now: number, back: () => void): 
       'div',
       { class: 'child-meta' },
       h('span', { class: `child-state status-${child.status.kind}` }, icon(look.icon), look.label),
-      h('span', { class: 'child-time' }, icon('clock'), childTime(child, now)),
+      childTime(child, now, icon('clock')),
       cost !== undefined && h('span', { class: 'child-cost' }, cost),
       child.turns > 0 && h('span', { class: 'child-turns' }, `${child.turns} model ${child.turns === 1 ? 'call' : 'calls'}`),
     ),
