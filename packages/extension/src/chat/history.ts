@@ -156,9 +156,10 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
       `${row.turns} ${row.turns === 1 ? 'turn' : 'turns'}`,
       row.costUsd === null ? undefined : formatCost(row.costUsd),
     ].filter((part) => part !== undefined);
+    const origin = row.forkedFrom;
     return h(
       'li',
-      { class: `history-row${row.current ? ' current' : ''}`, 'data-session': row.id },
+      { class: `history-row${row.current ? ' current' : ''}${origin === undefined ? '' : ' forked'}`, 'data-session': row.id },
       h(
         'button',
         {
@@ -177,6 +178,13 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
         h('button', { type: 'button', class: 'icon-button', title: 'Rename', 'aria-label': `Rename ${row.title}`, onclick: () => apply({ type: 'rename', id: row.id }) }, icon('edit')),
         h('button', { type: 'button', class: 'icon-button', title: 'Move to trash', 'aria-label': `Delete ${row.title}`, onclick: () => apply({ type: 'confirm', id: row.id }) }, icon('trash')),
       ),
+      origin !== undefined &&
+        h(
+          'button',
+          { type: 'button', class: 'link-button history-fork', title: `Open ${origin.title}`, 'data-focus': `fork-origin:${row.id}`, onclick: () => post({ type: 'open-session', id: origin.id, workspace: row.workspace }) },
+          icon('repo-forked'),
+          h('span', {}, `Forked from ${origin.title}`),
+        ),
     );
   }
 

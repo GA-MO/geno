@@ -95,7 +95,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
   backend: (transcript, { backend }) => (JSON.stringify(transcript.backend) === JSON.stringify(backend) ? transcript : { ...transcript, backend }),
-  'turn-start': (transcript, { id, at, prompt, attachments, mode, command }) => ({
+  'turn-start': (transcript, { id, at, prompt, attachments, mode, command, seq }) => ({
     ...transcript,
     turns: [
       ...transcript.turns,
@@ -110,6 +110,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
         mode,
         ...(attachments === undefined || attachments.length === 0 ? {} : { attachments }),
         ...(command === undefined ? {} : { command }),
+        ...(seq === undefined ? {} : { seq }),
       },
     ],
   }),
@@ -175,13 +176,13 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),
   steer: (transcript, { seq, shown }) => onLast(transcript, (turn) => withSteer(turn, seq, shown)),
-  'turn-end': (transcript, { at, status, usage }) =>
+  'turn-end': (transcript, { at, status, usage, seq }) =>
     onLast(transcript, (turn) => {
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
       const children = Object.keys(settled.children ?? {}).reduce((t, id) => withChild(t, id, (child) => (child.status.kind === 'running' ? { ...endChild(child, at, { kind: 'cancelled' }, { turns: child.turns, costUsd: child.costUsd }), endedByParent: true } : child)), settled);
-      return { ...settleWait(quiet(children), at), status, endedAt: at, usage };
+      return { ...settleWait(quiet(children), at), status, endedAt: at, usage, ...(seq === undefined ? {} : { seq }) };
     }),
   'child-start': (transcript, { id, toolId, role, task, model, at }) =>
     onLast(transcript, (turn) => {

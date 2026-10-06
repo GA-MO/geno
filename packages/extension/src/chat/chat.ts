@@ -24,6 +24,7 @@ import {
   SESSION_SUMMARY_META,
   TOOL_CALL_META,
   TURN_USAGE_META,
+  TURN_SEQ_META,
   UNSAVED_BUFFERS_METHOD,
   type AskUserAnswer,
   type FileChange,
@@ -111,6 +112,7 @@ import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from '.
 import type { CommandOption, SentCommand } from './slash.js';
 import { isChildAction, subagentAction } from './subagent-host.js';
 import { SteerHost, steerActionOf } from './steer-host.js';
+import { RewindHost } from './rewind-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
@@ -165,6 +167,7 @@ const descriptionOf = (name: string, rawInput: unknown): { readonly description?
 };
 const rememberInput = z.object({ text: z.string(), scope: z.enum(MEMORY_SCOPES) });
 const replayedTurn = z.object({
+  seq: z.number().int().optional(),
   mode: z.string().optional(),
   startedAt: z.number(),
   endedAt: z.number(),
@@ -177,7 +180,7 @@ const replayedChange = z.object({
   path: z.string(),
   hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
 });
-const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
+const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable(), forkedFrom: z.object({ sessionId: z.string(), title: z.string() }).optional() });
 const waitingSchema = z.object({ kind: z.enum(WAIT_KINDS), since: z.number(), retryAt: z.number().nullable(), resetAt: z.number().nullable(), message: z.string() });
 const killCause = z.enum(['session-deleted', 'lane-discarded', 'engine-exit']);
 const stopBy = z.enum(['model', 'user']);
@@ -477,6 +480,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly arena: ArenaHost;
   /** Messages for a running turn, a subagent or a task, which land at its next tool round. */
   private readonly steers: SteerHost;
+  /** The message menu's rewinds and forks. */
+  private readonly rewinds: RewindHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
   /** The running turn of the shown session that another window started, which the panel took over on load. */
@@ -547,8 +552,25 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       adopt: (text, response) => this.prompt(text, text, undefined, async () => [], [], undefined, response),
       post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
+    this.rewinds = new RewindHost({
+      connection: () => this.engine.connection(),
+      idle: () => (this.shown === undefined || this.turn !== undefined ? undefined : { sessionId: this.shown, cwd: this.shownCwd }),
+      seqOf: (turn) => this.transcript.turns.find((t) => t.id === turn)?.seq,
+      reload: () => this.reshow(),
+      open: (sessionId) => this.moveTo((connection) => this.load(connection, sessionId, this.shownCwd).then(() => sessionId)),
+      shown: (file) => vscode.workspace.asRelativePath(file),
+      post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
+    });
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
+  }
+
+  /** Loads the shown session again, as the engine now has it. */
+  private async reshow(): Promise<void> {
+    const shown = this.shown;
+    if (shown === undefined) return;
+    const cwd = this.shownCwd;
+    await this.moveTo((connection) => this.load(connection, shown, cwd).then(() => shown));
   }
 
   /** The session a previous window left, if any. */
@@ -664,6 +686,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         prompt: update.content.text,
         mode: start.success ? start.data.mode : undefined,
         command: start.success ? this.sentCommand(start.data.command) : undefined,
+        seq: start.success ? start.data.seq : undefined,
       });
       this.replay.end = replayedEnd(update);
       return;
@@ -753,7 +776,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (left()) return response.stopReason;
       const ending = ENDINGS[response.stopReason];
       if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
-      this.dispatch({ type: 'turn-end', at: Date.now(), status: ending.status, usage: usageOf(response) });
+      const seq = response._meta?.[TURN_SEQ_META];
+      this.dispatch({ type: 'turn-end', at: Date.now(), status: ending.status, usage: usageOf(response), seq: typeof seq === 'number' ? seq : undefined });
       return response.stopReason;
     } catch (error) {
       if (mine !== undefined && left()) throw error;
@@ -1045,6 +1069,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         turns: summary.success ? summary.data.turns : 0,
         costUsd: summary.success ? summary.data.costUsd : null,
         current: info.sessionId === this.shown,
+        ...(summary.success && summary.data.forkedFrom !== undefined ? { forkedFrom: { id: summary.data.forkedFrom.sessionId, title: summary.data.forkedFrom.title } } : {}),
       };
     });
   }
@@ -1209,6 +1234,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.background.handlers,
       ...this.arena.handlers,
       ...this.steers.handlers,
+      ...this.rewinds.handlers,
     };
   }
 

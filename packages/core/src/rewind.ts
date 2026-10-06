@@ -13,10 +13,10 @@ export type RewindKind = RewindChoice['kind'];
 
 export const REWIND_KINDS = ['files', 'conversation', 'both'] as const satisfies readonly RewindKind[];
 
-export const REWINDS: { readonly [K in RewindKind]: { readonly files: boolean; readonly conversation: boolean; readonly label: string } } = {
-  files: { files: true, conversation: false, label: 'Restore files' },
-  conversation: { files: false, conversation: true, label: 'Restore conversation' },
-  both: { files: true, conversation: true, label: 'Restore both' },
+export const REWINDS: { readonly [K in RewindKind]: { readonly files: boolean; readonly conversation: boolean } } = {
+  files: { files: true, conversation: false },
+  conversation: { files: false, conversation: true },
+  both: { files: true, conversation: true },
 };
 
 /** The conversation from the prompt at `turnSeq` on was cut: that prompt went back to the composer. */

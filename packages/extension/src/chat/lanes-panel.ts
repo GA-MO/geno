@@ -169,6 +169,13 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
       row.children !== undefined && h('span', { class: 'task-children' }, row.children),
       h('span', { class: 'task-time' }, row.time),
       row.cost !== undefined && h('span', { class: 'lane-cost' }, row.cost),
+      row.forkedFrom !== undefined &&
+        h(
+          'button',
+          { type: 'button', class: 'link-button task-fork', title: `Open ${row.forkedFrom.title}`, onclick: () => (done(), post({ type: 'task-origin', sessionId: row.forkedFrom!.id, workspace: row.forkedFrom!.workspace })) },
+          icon('repo-forked'),
+          h('span', {}, `Forked from ${row.forkedFrom.title}`),
+        ),
     ),
     row.jobs.length > 0 &&
       h(

@@ -6,6 +6,7 @@ import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
+import type { RewindFromView, RewindToView } from './rewind-model.js';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -25,6 +26,8 @@ export type Transcript = {
 export type Turn = {
   readonly id: string;
   readonly prompt: string;
+  /** The engine's event number of the prompt, which rewind and fork name the turn by; undefined until the engine says. */
+  readonly seq?: number | undefined;
   readonly blocks: readonly Block[];
   readonly status: TurnStatus;
   /** Milliseconds since the epoch, stamped by the extension; `endedAt` is undefined while the turn runs. */
@@ -207,6 +210,7 @@ export type Action =
       readonly attachments?: readonly AttachmentView[] | undefined;
       readonly mode?: string | undefined;
       readonly command?: SentCommand | undefined;
+      readonly seq?: number | undefined;
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
@@ -249,7 +253,7 @@ export type Action =
   | { readonly type: 'error'; readonly message: string }
   /** A steer the engine logged in the running turn at `seq`. */
   | { readonly type: 'steer'; readonly seq: number; readonly shown: SteerShown }
-  | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined }
+  | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined; readonly seq?: number | undefined }
   | { readonly type: 'child-start'; readonly id: string; readonly toolId: string; readonly role: string; readonly task: string; readonly model: string; readonly at: number }
   | { readonly type: 'child'; readonly id: string; readonly action: ChildAction }
   | { readonly type: 'child-end'; readonly id: string; readonly at: number; readonly end: ChildEnd; readonly turns: number; readonly costUsd: number | null };
@@ -297,6 +301,8 @@ export type HistoryRow = {
   readonly costUsd: number | null;
   /** The session the panel shows. */
   readonly current: boolean;
+  /** The session it was forked from, which the row links to. */
+  readonly forkedFrom?: { readonly id: string; readonly title: string } | undefined;
 };
 
 /** What the extension tells the chat webview: transcript changes, answers to its requests, its style and header. */
@@ -326,7 +332,8 @@ export type ToView =
   | ComposerToView
   | LanesToView
   | ArenaToView
-  | SteerToView;
+  | SteerToView
+  | RewindToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -423,4 +430,5 @@ export type FromView =
   | ComposerFromView
   | LanesFromView
   | ArenaFromView
-  | SteerFromView;
+  | SteerFromView
+  | RewindFromView;

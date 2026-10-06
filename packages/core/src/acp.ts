@@ -132,8 +132,8 @@ export type RenameSessionRequest = { readonly sessionId: string; readonly title:
 export const REPLAYED_TURN_META = 'gcode/turn';
 
 export type ReplayedTurn = {
-  /** The event number of the prompt, which rewind and fork name the turn by. */
-  readonly seq: number;
+  /** The event number of the prompt, which rewind and fork name the turn by; absent for a lane apply, which has no prompt. */
+  readonly seq?: number;
   /** The session's mode when the prompt was sent. */
   readonly mode: string;
   readonly startedAt: number;

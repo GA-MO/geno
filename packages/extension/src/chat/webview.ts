@@ -35,6 +35,8 @@ import { helperDinos } from './helper-dino.js';
 import { agentStep, childHead, tickClocks } from './subagent-view.js';
 import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, type SendNow, type SteerToView } from './steer-model.js';
 import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
+import { offersRewind, type RewindState } from './rewind-model.js';
+import { rewindSlot } from './rewind-view.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -309,6 +311,7 @@ function turnShell(turn: Turn): HTMLElement {
     'article',
     { class: 'turn', 'data-turn': turn.id },
     userMessage(turn.prompt, turn.attachments, ui, turn.command),
+    h('div', { class: 'rewind-slot' }),
     h('div', { class: 'head-slot' }),
     h('ol', { class: 'rail' }),
     h('div', { class: 'footer-slot' }),
@@ -337,6 +340,9 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
+      const offered = offersRewind(turn, transcript);
+      const rewinding = rewinds.get(turn.id);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .rewind-slot')!, [{ key: 'rewind', deps: [offered, rewinding], build: () => rewindSlot(turn.id, offered, rewinding, (message) => host.postMessage(message), () => rewound(turn.id, undefined)) }]);
       reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage, transcript.backend?.label], build: () => turnHead(turn, transcript.backend) }]);
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
       const open = ui.isOpen(foldId(turn.id));
@@ -552,6 +558,9 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
   if (message.type === 'steered') return steered(message);
+  if (message.type === 'rewind-state') return rewound(message.turn, message.state);
+  if (message.type === 'rewind-prompt') return edit(message.text, undefined);
+  if (message.type === 'reset' || message.type === 'turn-start') rewinds.clear();
   // A steer on its way goes to the session it was sent to, which the panel no longer shows.
   if (message.type === 'reset' && followup?.state === 'steering') followup = undefined;
   transcript = reduce(transcript, message);
@@ -562,6 +571,18 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'turn-end') sendQueued(message.status);
   schedule();
 });
+
+/** How a rewind or fork from each message goes, by turn id, until the next turn or session. */
+const rewinds = new Map<string, RewindState>();
+
+/** A message's rewind moved on; a confirm takes the keyboard on the button its words choose. */
+function rewound(turn: string, state: RewindState | undefined): void {
+  if (state === undefined) rewinds.delete(turn);
+  else rewinds.set(turn, state);
+  schedule();
+  if (state?.kind === 'confirm') requestAnimationFrame(() => log.querySelector<HTMLElement>(`[data-turn="${CSS.escape(turn)}"] .rewind-confirm [data-keyboard]`)?.focus());
+  else if (state === undefined) requestAnimationFrame(() => log.querySelector<HTMLElement>(`[data-focus="rewind:${CSS.escape(turn)}"]`)?.focus());
+}
 
 /** A follow-up queued during the turn goes once it finishes; after a stop or a failure it comes back to the composer instead. */
 function sendQueued(ended: 'done' | 'stopped' | 'failed'): void {
