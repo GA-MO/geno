@@ -29,6 +29,7 @@ import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
 import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { memoryStore } from './memory.js';
@@ -95,7 +96,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const workspace = await workspaceDir(io.cwd, session.workspace);
   const tempDir = await mkdtemp(path.join(tmpdir(), 'gcode-agent-'));
   const home = io.env['HOME'] || homedir();
-  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir }));
+  const lane = await laneAt(workspace, home);
+  if (lane !== undefined) await bindSession(lane, session.id);
+  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -113,6 +116,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       diagnostics: options.diagnostics,
       rules: ruleAttacher(opened.log.events),
       commands,
+      lane: lane?.bounds,
     });
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
