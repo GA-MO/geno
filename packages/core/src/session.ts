@@ -21,6 +21,7 @@ import type { ProviderName } from './providers.js';
 import type { ChildEvent, ChildOf } from './subagent.js';
 import type { WaitEvent } from './waiting.js';
 import type { LaneApplyRecord } from './tasks.js';
+import type { BackendBinding, BackendStart } from './backends.js';
 import type { Brand } from './types.js';
 import type { WidgetRef } from './widget.js';
 
@@ -38,6 +39,8 @@ export type Session = {
   readonly provider: ProviderName;
   readonly model: string;
   readonly effort: Effort;
+  /** The external agent the session runs on; absent for Geno's own loop. */
+  readonly backend?: BackendBinding | undefined;
 };
 
 export type TokenUsage = {
@@ -165,6 +168,10 @@ export type TurnEvent =
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   /** A lane applied into this session's workspace, its changes put under review like an edit's. */
   | ({ readonly kind: 'lane-apply'; readonly seq: number; readonly at: string; readonly changes: readonly FileChange[] } & LaneApplyRecord)
+  /** An external agent's session started: on the first turn, and again after its process died or the engine restarted. */
+  | ({ readonly kind: 'backend-start'; readonly seq: number; readonly at: string } & BackendStart)
+  /** The user chose one of the external agent's models; like an effort change, one made during a turn has no seq. */
+  | { readonly kind: 'backend-model'; readonly seq?: number | undefined; readonly at: string; readonly model: string }
   | WaitEvent
   | ChildEvent
   | ToolResultEvent;
@@ -189,6 +196,8 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'child-end': false,
   'lane-apply': false,
   wait: false,
+  'backend-start': false,
+  'backend-model': false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
