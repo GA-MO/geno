@@ -1483,7 +1483,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onRequest(SEARCH_SESSIONS_METHOD, searchRequest, async ({ params }): Promise<SearchSessionsResponse> => {
       const scope: SessionScope = params.cwd === undefined ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
-      return { hits: await sessionIndex(store, io.err).search(params.query, scope, HISTORY_SEARCH) };
+      return { hits: await sessionIndex(store).search(params.query, scope, HISTORY_SEARCH, io.err) };
     })
     .onRequest(acp.methods.agent.session.delete, async ({ params }) => {
       const { sessionId } = params;
