@@ -13,6 +13,8 @@ import {
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
+  STEER_META,
+  steerMarkOf,
   reviewState,
   toolResultText,
   type FileChange,
@@ -33,6 +35,13 @@ import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages
 import { EXECUTORS } from './tools/index.js';
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
+
+/** A steer as the user message chunk that shows it where it landed in its turn, live and in a replay. */
+export const steerUpdate = (event: EventOf<'user'>): acp.SessionUpdate => ({
+  sessionUpdate: 'user_message_chunk',
+  content: { type: 'text', text: event.content },
+  _meta: { [STEER_META]: steerMarkOf(event) },
+});
 
 export const TOOL_KINDS: Readonly<Record<string, acp.ToolKind>> = {
   read: 'read',
@@ -129,7 +138,7 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
   let mode = DEFAULT_SESSION_MODE;
   for (const event of events) {
     if (event.kind === 'mode') mode = event.mode;
-    if (event.kind === 'user') runs.push({ prompt: event, mode, events: [] });
+    if (event.kind === 'user' && event.steer !== true) runs.push({ prompt: event, mode, events: [] });
     // A lane apply is a turn of its own in the panel, as the prompt that asked for it showed live.
     else if (event.kind === 'lane-apply') runs.push({ prompt: { kind: 'user', seq: event.seq, at: event.at, content: laneApplyPrompt(event.lane, event.grafted) }, mode, events: [event] });
     else runs.at(-1)?.events.push(event);
@@ -220,6 +229,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
         });
         updates.push(textUpdate(laneApplyText(event, event.changes.length)));
       }
+      if (event.kind === 'user') updates.push(steerUpdate(event));
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
       if (event.kind === 'background-end') {
         const { id, toolUseId, command, state } = event.job;

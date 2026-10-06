@@ -200,7 +200,7 @@ export async function reviewArena(store: Store, io: Io, repo: LaneRepo, run: Are
 async function laneOutcome(store: Store, io: Io, sessionId: string): Promise<{ turns: number; costUsd: number | null; errored: boolean }> {
   const log = await openSessionLog(store, sessionId, io).catch(() => undefined);
   if (log === undefined) return { turns: 0, costUsd: null, errored: true };
-  const lastPrompt = log.events.findLastIndex((e) => e.kind === 'user');
+  const lastPrompt = log.events.findLastIndex((e) => e.kind === 'user' && e.steer !== true);
   return {
     turns: log.events.filter((e) => e.kind === 'assistant').length,
     costUsd: summarizeSession(log.session, log.events).costUsd,

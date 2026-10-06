@@ -33,6 +33,8 @@ import { childOf, emptyTranscript, isRunning, reduce, runningChildren } from './
 import { workingDino } from './working-dino.js';
 import { helperDinos } from './helper-dino.js';
 import { agentStep, childHead, tickClocks } from './subagent-view.js';
+import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, type SendNow, type SteerToView } from './steer-model.js';
+import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -111,17 +113,17 @@ const stop = h('button', { type: 'button', class: 'round-button stop', title: 'S
 let facts: ComposerFacts = NO_FACTS;
 let mcpListing: McpListing = { kind: 'loading' };
 let background: Background = NO_BACKGROUND;
-type Queued = { readonly text: string; readonly attachments: readonly OutgoingAttachment[] };
-let queued: Queued | undefined;
+let followup: Followup | undefined;
 const controls = composerControls((message) => host.postMessage(message), {
   addContext: () => addContext(),
   openCommands: () => openCommands(),
   openTasks: () => tasks.openAt('needs-you'),
   unqueue: () => {
-    queued = undefined;
+    followup = undefined;
     schedule();
   },
 });
+const sendNow = sendNowButton(() => steerNow());
 const more = sendMenu({ send: () => submit(), runInLane: () => runInLane(), hasDraft: () => input.value.trim() !== '', running: () => isRunning(transcript) });
 let mode = '';
 const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeId }), (modes: Modes) => {
@@ -145,7 +147,7 @@ const inputBox = h(
     'div',
     { class: 'input-toolbar' },
     h('span', { class: 'toolbar-left' }, ...controls.left, picker.element),
-    h('span', { class: 'toolbar-right' }, ...controls.right, more.button, stop, send),
+    h('span', { class: 'toolbar-right' }, ...controls.right, more.button, sendNow.element, stop, send),
   ),
 );
 const slash = slashPicker(input, {
@@ -171,7 +173,8 @@ helpers.setMotion(helperGate.motion());
 
 const childSlot = h('div', { class: 'child-head-slot' });
 const childRail = h('ol', { class: 'rail child-rail' });
-const childView = h('section', { class: 'child-view', 'aria-label': 'Subagent transcript', hidden: true }, childSlot, h('div', { class: 'child-turn' }, childRail));
+const childField = childSteer((message) => host.postMessage(message));
+const childView = h('section', { class: 'child-view', 'aria-label': 'Subagent transcript', hidden: true }, childSlot, h('div', { class: 'child-turn' }, childRail), childField.element);
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -233,6 +236,7 @@ inputBox.insertBefore(attachments.note, input);
 /** The tray shows while any chip is in it. */
 function showTray(): void {
   tray.hidden = !(chips.childElementCount > 0 || !attachments.element.hidden || controls.tray.some((chip) => !chip.hidden));
+  sendNow.show(sendNowState());
 }
 
 // The glass style floats the composer over the transcript, which keeps this much room below its last line.
@@ -269,6 +273,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.block, quiet], build: () => permissionCard(step.block, ui, quiet) };
     case 'error':
       return { deps: [step.block], build: () => errorBlock(step.block) };
+    case 'steer':
+      return { deps: [step.block], build: () => steerStep(step.block) };
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
@@ -362,8 +368,10 @@ function render(): void {
   helperGate.set('shown', helpers.active() && document.body.dataset['view'] === 'chat');
   // One Noodle at a time: the start page has its own, and the working dino has the stage while a turn runs.
   peek.blocked(empty || running || document.body.dataset['view'] !== 'chat');
-  const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now(), background });
+  const view = composerView({ transcript, facts, mcp: mcpListing, queued: followup === undefined ? undefined : followup.text || `${followup.attachments.length} attachments`, now: Date.now(), background });
   controls.show(view);
+  controls.followup(pillOf(followup));
+  sendNow.show(sendNowState());
   showTray();
   send.hidden = view.action !== 'send';
   // The send menu goes with Send: while a turn runs, Enter queues, and the running row keeps its room.
@@ -414,6 +422,7 @@ function renderChild(): boolean {
   const own = shown.turn;
   const lastText = own.blocks.at(-1)?.kind === 'text' ? own.blocks.at(-1)!.id : undefined;
   reconcile(childRail, railOf(own).map((step) => stepItem(own, step, step.kind === 'text' && step.block.id === lastText, false)));
+  childField.show(shown);
   return own.status === 'streaming' && pendingText(own);
 }
 
@@ -542,6 +551,9 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-tasks') return tasks.open();
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
+  if (message.type === 'steered') return steered(message);
+  // A steer on its way goes to the session it was sent to, which the panel no longer shows.
+  if (message.type === 'reset' && followup?.state === 'steering') followup = undefined;
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -553,15 +565,48 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
 
 /** A follow-up queued during the turn goes once it finishes; after a stop or a failure it comes back to the composer instead. */
 function sendQueued(ended: 'done' | 'stopped' | 'failed'): void {
-  const next = queued;
-  queued = undefined;
-  if (next === undefined) return;
-  if (ended === 'done') {
-    host.postMessage({ type: 'send', text: next.text, ...(next.attachments.length === 0 ? {} : { attachments: next.attachments }) });
+  const was = followup;
+  const { next, effect } = followupAtTurnEnd(was, ended);
+  followup = next;
+  if (was === undefined) return;
+  if (effect === 'send') host.postMessage({ type: 'send', text: was.text, ...(was.attachments.length === 0 ? {} : { attachments: was.attachments }) });
+  if (effect === 'restore') restoreFollowup(was);
+}
+
+function restoreFollowup(was: Followup): void {
+  if (input.value.trim() === '') edit(was.text, undefined);
+  attachments.restore(was.attachments);
+}
+
+/** How a steer went: the chat's own settles its pill; a subagent's or a task's tells its field. */
+function steered({ target, result }: SteerToView): void {
+  if (target.kind !== 'chat') {
+    childField.steered(target, result);
+    tasks.steered(target, result);
     return;
   }
-  if (input.value.trim() === '') edit(next.text, undefined);
-  attachments.restore(next.attachments);
+  const was = followup;
+  const { next, effect } = followupSteered(was, result, isRunning(transcript));
+  followup = next;
+  if (effect === 'restore' && was !== undefined) restoreFollowup(was);
+  schedule();
+}
+
+const sendNowState = (): SendNow =>
+  sendNowOf(isRunning(transcript), followup, { text: input.value.trim(), extras: attachments.ready().length + mentionsIn(input.value).length });
+
+/** Send now: the queued follow-up, or else the draft, goes to land at the running turn's next tool round. Anything else queues as Enter does. */
+function steerNow(): void {
+  const now = sendNowState();
+  if (now.kind !== 'ready') return submit();
+  if (now.steers === 'queued') followup = { ...followup!, state: 'steering' };
+  else {
+    followup = { text: input.value.trim(), attachments: [], state: 'steering' };
+    peek.sent();
+    fill('');
+  }
+  host.postMessage({ type: 'steer', target: { kind: 'chat' }, text: followup.text });
+  schedule();
 }
 
 /** The composer after its text changed: its height, and a chip for each `@` mention in it. */
@@ -736,8 +781,8 @@ function submit(): void {
   const attached = attachments.ready();
   if ((text === '' && attached.length === 0) || attachments.busy()) return;
   if (isRunning(transcript)) {
-    if (queued !== undefined) return;
-    queued = { text, attachments: attached };
+    if (followup !== undefined) return;
+    followup = { text, attachments: attached, state: 'queued' };
     schedule();
   } else host.postMessage({ type: 'send', text, ...(attached.length === 0 ? {} : { attachments: attached }) });
   peek.sent();
@@ -784,6 +829,11 @@ input.addEventListener('keydown', (event) => {
       move();
       return;
     }
+  }
+  if (isSendNowKey(event) && !imeKey(event)) {
+    event.preventDefault();
+    steerNow();
+    return;
   }
   if (event.key === 'Enter' && !event.shiftKey && !imeKey(event)) {
     event.preventDefault();

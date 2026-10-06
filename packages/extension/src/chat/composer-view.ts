@@ -2,6 +2,7 @@
 import type { BackendRow, ComposerView, ModelMenu } from './composer-model.js';
 import { h, icon } from './dom.js';
 import type { FromView } from './messages.js';
+import type { PillState } from './steer-model.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 /** The ring's radius in its 16px box; the stroke's dash runs the circumference. */
@@ -205,10 +206,12 @@ export function composerControls(
     h('button', { type: 'button', class: 'chip-remove', 'aria-label': 'Turn the browser off', title: 'Turn the browser off', onclick: () => post({ type: 'mcp-enable', name: 'browser', enabled: false }) }, icon('close')),
   );
   const queuedLabel = h('span', { class: 'tray-label' });
+  const queuedState = h('span', { class: 'queued-state' });
   const queued = h(
     'div',
     { class: 'tray-chip queued-chip', role: 'listitem', hidden: true, title: 'Sends when the turn finishes' },
     icon('clock'),
+    queuedState,
     queuedLabel,
     h('button', { type: 'button', class: 'chip-remove', 'aria-label': 'Drop the queued follow-up', title: 'Drop it', onclick: hooks.unqueue }, icon('close')),
   );
@@ -251,6 +254,12 @@ export function composerControls(
     left: [add, commands] as const,
     right: [status, ring.element, modelButton] as const,
     menu: menu.menu,
+    /** Whether the follow-up waits for the turn's end or was sent to land at its next tool round (U44). */
+    followup(pill: PillState | undefined): void {
+      queuedState.textContent = pill?.label ?? '';
+      queued.title = pill?.title ?? '';
+      queued.dataset['state'] = pill?.state ?? '';
+    },
     show(view: ComposerView): void {
       browser.hidden = view.browser === undefined;
       browserLabel.textContent = view.browser?.label ?? '';

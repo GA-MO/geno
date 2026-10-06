@@ -139,8 +139,11 @@ import {
   type BackendsResponse,
   type ExternalBackendId,
   type ApprovalRuleId,
+  STEER_META,
+  startsTurn,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
+import { Steers, steerRunning } from './steer.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
 import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
 import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
@@ -167,7 +170,7 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { backgroundUpdate, errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { backgroundUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
@@ -319,6 +322,7 @@ const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) 
 
 const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
   'tool-result': (event) => toolResultUpdate(event),
+  user: (event) => (event.steer === true ? steerUpdate(event) : undefined),
   error: (event) => textUpdate(errorText(event)),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>
@@ -723,6 +727,7 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 export function engineShared(io: Io) {
   const viewers = new Viewers<Peer>(io.err);
   const tasks = new Tasks();
+  const background = backgroundShared(viewers, tasks);
   return {
     turns: new Map<string, AbortController | undefined>(),
     // Running subagents by their own session ids, which `session/cancel` may name.
@@ -737,7 +742,7 @@ export function engineShared(io: Io) {
     viewers,
     tasks,
     // Background commands, which outlive their turn and the window that started them.
-    ...backgroundShared(viewers, tasks),
+    ...background,
     live: new Map<string, LiveTurn>(),
     // Each connection's way to hear of an Arena run's steps.
     arenaWatchers: new Set<(update: ArenaUpdate) => void>(),
@@ -747,6 +752,13 @@ export function engineShared(io: Io) {
     leftWaits: { taken: false },
     // Each external session's agent process.
     externals: new ExternalAgents(io),
+    // Each running session's steers, children's included, arriving in the background commands' inbox.
+    steers: new Steers(background.inbox),
+    // Each session's latest turn's end, true when the user stopped it: a steer that missed the turn waits for it, and
+    // runs as the next turn only if the turn was not stopped. Kept after the end, so a late steer still reads it.
+    turnEnds: new Map<string, Promise<boolean>>(),
+    // Each session's steers that missed their turn, run one turn after another in the order they came.
+    nextTurns: new Map<string, Promise<unknown>>(),
   };
 }
 
@@ -809,7 +821,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals, jobs, inbox } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns } = shared;
   const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -946,6 +958,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
     const controller = new AbortController();
     turns.set(sessionId, controller);
+    let turnEnded = (_stopped: boolean) => {};
+    turnEnds.set(sessionId, new Promise<boolean>((resolve) => (turnEnded = resolve)));
     let session: Session | undefined;
     const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
@@ -961,7 +975,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => e.kind === 'user')?.content ?? '') : text)),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast(startsTurn)?.content ?? '') : text)),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
@@ -1038,7 +1052,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 widgets: from.peer.widgets,
                 externals,
                 keyOf: keyOf(sessionId),
-                background: { jobs, inbox },
+                engine: { jobs, steers },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,
@@ -1072,6 +1086,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       ended = TASK_ENDS[response.stopReason];
       return response;
     } finally {
+      turnEnded(controller.signal.aborted);
       live.delete(sessionId);
       tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
       inbox.arrived(sessionId);
@@ -1079,6 +1094,34 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (turns.has(sessionId)) turns.set(sessionId, undefined);
       release(sessionId);
     }
+  };
+
+  const prompt = (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
+    known(params.sessionId);
+    if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
+    return runTurn(params.sessionId, params.prompt, params._meta, self());
+  };
+
+  /** A prompt for the running turn, at its next tool round; one the turn ended without taking runs as the next turn. */
+  const steer = async (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
+    const outcome = await steerRunning(steers, params.sessionId, params.prompt);
+    if (outcome.kind === 'delivered') return { stopReason: 'end_turn', _meta: { [STEER_META]: outcome } };
+    const { sessionId } = params;
+    const { [STEER_META]: _, ...meta } = params._meta ?? {};
+    const turn = (nextTurns.get(sessionId) ?? Promise.resolve())
+      .then(() => turnEnds.get(sessionId))
+      .then((stopped) => {
+        // Stop stops: like a queued follow-up, a steer the stopped turn never took goes back to the user.
+        if (stopped === true) throw acp.RequestError.invalidRequest({ sessionId }, 'the turn was stopped before the steer landed, so it did not run');
+        return prompt({ ...params, _meta: meta });
+      });
+    const queued = turn.catch(() => {});
+    nextTurns.set(sessionId, queued);
+    void queued.then(() => {
+      if (nextTurns.get(sessionId) === queued) nextTurns.delete(sessionId);
+    });
+    const response = await turn;
+    return { ...response, _meta: { ...response._meta, [STEER_META]: outcome } };
   };
 
   /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
@@ -1335,9 +1378,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { configOptions: effortConfigOptions(effort) };
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
-      known(params.sessionId);
-      if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
-      return runTurn(params.sessionId, params.prompt, params._meta, self());
+      if (params._meta?.[STEER_META] === true) return steer(params);
+      return prompt(params);
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();

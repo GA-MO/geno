@@ -179,7 +179,7 @@ export function turnTimings(events: readonly TurnEvent[]): TurnTiming[] {
     open = undefined;
   };
   for (const event of events) {
-    if (event.kind === 'user') close(open?.lastAt ?? 0);
+    if (event.kind === 'user' && event.steer !== true) close(open?.lastAt ?? 0);
     if ((event.kind === 'assistant' || event.kind === 'error') && event.timing !== undefined) {
       close(event.timing.startAt);
       open = opened(event, event.timing);

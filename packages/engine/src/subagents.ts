@@ -19,6 +19,8 @@ import {
   forkTask,
   isReadOnly,
   mergeAgents,
+  MESSAGE_AGENT_TOOL,
+  messageAgentResult,
   parseAgentDefinition,
   sessionEffortOf,
   ZERO_USAGE,
@@ -43,6 +45,7 @@ import { parseFrontmatter, readIfFile, shownPath, sortedEntries } from './projec
 import { ExternalAgents, runExternalTurn, type KeyOf } from './external.js';
 import { appendEvent, sessionFile } from './sessions.js';
 import type { Store } from './store.js';
+import type { SteerInbox, Steers } from './steer.js';
 import type { Approval } from './tools/agent.js';
 import { executor, ToolError, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
@@ -148,16 +151,23 @@ export type SubagentEnv = {
   /** Where a child on an external agent runs its process; undefined starts one for that child alone. */
   readonly externals?: ExternalAgents | undefined;
   readonly keyOf?: KeyOf | undefined;
+  /** The engine's inboxes: each child gets one, and the parent's takes a background child's report. */
+  readonly steers: Steers;
 };
 
 export type Subagents = {
   readonly tool: Tool;
   readonly executor: Executor;
+  /** `message_agent`, offered with `agent` and only with it. */
+  readonly message: Executor;
+  /** Cancels the background children still running, once the parent's run ended with nobody left to take their reports. */
+  stopBackground(): void;
   /** Settles once every child started so far has ended and logged its end. */
   settled(): Promise<void>;
 };
 
-const inputSchema = z.strictObject({ agent: z.string().min(1), task: z.string(), fork: z.boolean().optional() });
+const inputSchema = z.strictObject({ agent: z.string().min(1), task: z.string(), fork: z.boolean().optional(), background: z.boolean().optional() });
+const messageSchema = z.strictObject({ agent_session: z.string().min(1), text: z.string().trim().min(1) });
 
 function semaphore(size: number) {
   let free = size;
@@ -192,15 +202,26 @@ export function subagents(env: SubagentEnv): Subagents {
   const running = new Set<Promise<unknown>>();
   let committed = 0;
   const byName = (name: string) => agents.find((agent) => agent.name === name);
+  // Every child this run started, running or not, so message_agent can tell a finished one from a wrong id.
+  const started = new Set<string>();
+  const inBackground = new Set<AbortController>();
 
-  const runChild = async (agent: AgentDefinition, task: string, start: ChildStart, use: { readonly id: string }, ctx: Parameters<Executor['run']>[1]): Promise<string> => {
+  const runChild = async (
+    agent: AgentDefinition,
+    task: string,
+    start: ChildStart,
+    use: { readonly id: string },
+    ctx: Parameters<Executor['run']>[1],
+    id: SessionId,
+    inbox: SteerInbox,
+  ): Promise<string> => {
     const caps = childCaps(agent, env.limits.maxCostUsd - committed);
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
     committed += caps.maxCostUsd;
     const parentEvents = ctx.events();
     const parentSession = parent.log.session;
     const session: Session = {
-      id: asSessionId(randomUUID()),
+      id,
       createdAt: new Date().toISOString(),
       workspace: parentSession.workspace,
       provider: parentSession.provider,
@@ -232,10 +253,12 @@ export function subagents(env: SubagentEnv): Subagents {
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
     const executors = pick(env.executors(asker(env.approval, agent.name, session.id)), agent.tools);
     const own = new Set<string>(agent.tools);
+    // A child starts no background command, so what arrives for it is the steers its parent or the user sends.
+    const arrivals = () => env.steers.inbox.take(session.id);
     const mode: Mode =
       start === 'fork'
-        ? { ...env.parentMode(), executors, readRoots: env.readRoots }
-        : { tools: AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), system: childSystemPrompt(agent), executors, readRoots: env.readRoots };
+        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals }
+        : { tools: AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), system: childSystemPrompt(agent), executors, readRoots: env.readRoots, arrivals };
     const opened: OpenSession = { log: { file, session, events: opening, tornLine: undefined, goodBytes: 0 }, gateway: parent.gateway };
 
     let end: ChildEnd;
@@ -255,7 +278,7 @@ export function subagents(env: SubagentEnv): Subagents {
               agents: externals,
               keyOf: env.keyOf ?? (async () => undefined),
             })
-          : await drive(childIo, store, opened, start === 'fork' ? forkTask(agent, task) : task, caps, mode, { files: env.files, watcher });
+          : await drive(childIo, store, opened, start === 'fork' ? forkTask(agent, task) : task, caps, mode, { files: env.files, watcher, steers: inbox });
       events = result.events;
       const error = result.events.findLast((e) => e.kind === 'error');
       end = childEndOf(result.reason, controller.signal.aborted, error?.kind === 'error' ? error.message : undefined);
@@ -287,7 +310,7 @@ export function subagents(env: SubagentEnv): Subagents {
       return definition !== undefined && isReadOnly(definition);
     },
     describe: ({ agent, task }) => `${AGENT_TOOL} ${agent}: ${task.split('\n')[0]}`,
-    async run({ agent: name, task, fork }, ctx) {
+    async run({ agent: name, task, fork, background }, ctx) {
       const agent = byName(name);
       if (agent === undefined) throw new ToolError(`no subagent ${name}; the subagents are ${agents.map((a) => a.name).join(', ')}`);
       if (agent.isolation === 'worktree') throw new ToolError(`${name} asks for isolation: worktree, which Geno does not support yet; it cannot run`);
@@ -296,16 +319,57 @@ export function subagents(env: SubagentEnv): Subagents {
       if (!readOnly && env.approval.kind === 'non-interactive' && !env.allowWriters) {
         throw new ToolError(`${name} may change files, and a non-interactive run starts only read-only subagents`);
       }
+      const parentInbox = env.steers.of(parent.log.session.id);
+      if (background === true && !readOnly) throw new ToolError(`${name} may change files, so it cannot run in the background beside this conversation's own edits`);
+      if (background === true && parentInbox === undefined) throw new ToolError('a background subagent needs a running turn to report to');
       const use = { id: ctx.toolUseId ?? `toolu_gcode_${randomUUID()}` };
-      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, ctx));
+      const id = asSessionId(randomUUID());
+      started.add(id);
+      // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
+      const inbox = env.steers.open(id, parent.log.session.id);
+      const stop = new AbortController();
+      if (background === true) inBackground.add(stop);
+      const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
+      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox));
       running.add(child);
-      void child.finally(() => running.delete(child)).catch(() => {});
-      return child;
+      void child
+        .finally(() => {
+          running.delete(child);
+          inBackground.delete(stop);
+          env.steers.release(id, inbox);
+        })
+        .catch(() => {});
+      if (background !== true) return child;
+      const paid = parentInbox!.owe();
+      const report = (text: string) => {
+        parentInbox!.push({ text, from: 'child' });
+        paid();
+      };
+      void child.then(report, (error: unknown) => report(error instanceof Error ? error.message : String(error)));
+      return `Started ${name} in the background as subagent session ${id}. Its report arrives as a message when it finishes; until then message_agent with agent_session "${id}" can steer it.`;
+    },
+  });
+  const message = executor({
+    input: messageSchema,
+    concurrent: () => true,
+    describe: ({ agent_session, text }) => `${MESSAGE_AGENT_TOOL} ${agent_session}: ${text.split('\n')[0]}`,
+    async run({ agent_session, text }) {
+      const inbox = env.steers.of(agent_session);
+      if (inbox === undefined || inbox.parentId !== parent.log.session.id) {
+        if (started.has(agent_session)) return messageAgentResult({ kind: 'next-turn' });
+        throw new ToolError(`no subagent ${agent_session} of this session`);
+      }
+      const delivery = inbox.push({ text, from: 'parent' });
+      return messageAgentResult(delivery === undefined ? { kind: 'next-turn' } : await delivery);
     },
   });
   return {
     tool,
     executor: run,
+    message,
+    stopBackground: () => {
+      for (const stop of inBackground) stop.abort();
+    },
     settled: async () => {
       while (running.size > 0) await Promise.allSettled([...running]);
     },

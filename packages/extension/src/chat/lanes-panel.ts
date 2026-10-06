@@ -3,6 +3,9 @@ import type { Section, TaskRecord } from '@g-code/core';
 import { SECTIONS } from '@g-code/core/attention';
 import { h, icon, reconcile } from './dom.js';
 import { DONE_SHOWN, laneRowOf, SECTION_HEADINGS, taskSections, type Badge, type LaneRow, type LanesFromView, type LanesListing, type SeenMarkers, type TaskRow } from './lanes-model.js';
+import type { FromView } from './messages.js';
+import type { SteerTarget, SteerResult } from './steer-model.js';
+import { taskSteers } from './steer-view.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -140,7 +143,7 @@ export function lanesPanel(post: (message: LanesFromView) => void, onToggle: (op
   };
 }
 
-function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void): HTMLElement {
+function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void, message: () => void): HTMLElement {
   const open = () => (done(), post({ type: 'task-open', sessionId: row.id }));
   return h(
     'li',
@@ -180,6 +183,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
         ? h('span', { class: 'task-here' }, 'Shown in the chat')
         : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', 'data-focus': `task-open:${row.id}`, onclick: open }, 'Open'),
       row.stop && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
+      row.stop && !row.current && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'message', title: 'Send it a message that lands at its next tool round', onclick: message }, 'Message'),
     ),
   );
 }
@@ -205,7 +209,7 @@ function taskSection(section: Section, toggle: () => void) {
 }
 
 /** The Tasks pane: each top-level task, with its subagents or lanes rolled in, in Needs you, Ready, Working or Done. */
-export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (open: boolean) => void) {
+export function tasksPanel(post: (message: FromView) => void, onToggle: (open: boolean) => void) {
   let tasks: readonly TaskRecord[] = [];
   let shown: string | undefined;
   let seen: SeenMarkers = {};
@@ -231,6 +235,7 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     }
   }, () => render());
   frame.body.append(note, h('div', { class: 'tasks' }, ...SECTIONS.map((section) => sections[section].element)));
+  const steers = taskSteers(post, () => render());
 
   function render(): void {
     if (!frame.isOpen()) return;
@@ -242,14 +247,21 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
       const { element, list, count, summary, more } = sections[section];
       element.hidden = rows.length === 0;
       count.textContent = String(rows.length);
-      const items = reconcile(list, rows.map((row) => ({ key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close()) })));
+      // A task's message field follows its row, so Done's fold counts rows, not the items they make.
+      const entries = rows.flatMap((row, at) =>
+        [
+          { key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close(), () => steers.open(row.id, row.title)) },
+          ...steers.items(row.id, row.stop && !row.current),
+        ].map((entry) => ({ entry, at })),
+      );
+      const items = reconcile(list, entries.map(({ entry }) => entry));
       if (section === 'working') {
         summary.textContent = rows.map((row) => row.title).join(', ');
         list.hidden = !workingOpen;
         element.querySelector('.tasks-fold')!.setAttribute('aria-expanded', String(workingOpen));
       }
       if (section === 'done') {
-        items.forEach((item, i) => (item.hidden = !doneAll && i >= DONE_SHOWN));
+        items.forEach((item, i) => (item.hidden = !doneAll && entries[i]!.at >= DONE_SHOWN));
         more.hidden = rows.length <= DONE_SHOWN;
         more.textContent = doneAll ? 'Show fewer' : `Show ${rows.length - DONE_SHOWN} more`;
       }
@@ -280,5 +292,6 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
       seen = markers;
       render();
     },
+    steered: (target: SteerTarget, result: SteerResult) => steers.steered(target, result),
   };
 }
