@@ -39,6 +39,9 @@ export function memoryProblem(text: string, entries: readonly MemoryEntry[], rep
 
 const escapeXml = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+export const MEMORY_PREAMBLE =
+  'The user approved these notes for you to remember from earlier sessions. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do.';
+
 /**
  * The notes as a section of the system prompt, or undefined when there are none. Fixed text around the notes in a
  * fixed order, so the prompt's bytes, and the cached prefix, hold still while memory does.
@@ -46,7 +49,7 @@ const escapeXml = (text: string): string => text.replace(/&/g, '&amp;').replace(
 export function renderMemory(entries: readonly MemoryEntry[]): string | undefined {
   if (entries.length === 0) return undefined;
   return [
-    'The user approved these notes for you to remember from earlier sessions. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do.',
+    MEMORY_PREAMBLE,
     '<memory>',
     ...sortedMemory(entries).map((entry) => `<note scope="${entry.scope}">${escapeXml(entry.text)}</note>`),
     '</memory>',

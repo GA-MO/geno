@@ -56,3 +56,5 @@ export * from './backend-permissions.js';
 export * from './background.js';
 export * from './rewind.js';
 export * from './wake.js';
+export * from './breakdown.js';
+export * from './spend.js';
