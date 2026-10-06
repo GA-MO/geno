@@ -20,6 +20,7 @@ import {
   type TurnEvent,
   type TurnResult,
 } from '@g-code/core';
+import { sharedSlots, type ModelSlots } from './model-slots.js';
 import { wireFor } from './wire.js';
 
 export type TurnInput = {
@@ -112,6 +113,7 @@ export function gatewayFor(
   env: Env,
   fetch?: typeof globalThis.fetch,
   retry: RetryPolicy = RETRY_POLICY,
+  slots: ModelSlots = sharedSlots(providerName, env),
 ): Gateway {
   const wire = wireFor(providerName, env, fetch);
   const sessionHeader = specOf(providerName).sessionHeader;
@@ -157,19 +159,26 @@ export function gatewayFor(
     async turn(input) {
       const { signal } = input;
       for (let attempt = 1; ; attempt++) {
-        const clock = streamClock();
+        // The clock starts once the call has its slot, so a queued call does not read as a slow first token.
+        let clock = streamClock();
         const settled = (result: TurnResult): TurnResult => {
           input.onMarks?.(clock.marks());
           return result;
         };
         try {
-          return settled(await call(input, clock));
+          return settled(
+            await slots.run(() => {
+              clock = streamClock();
+              return call(input, clock);
+            }, signal),
+          );
         } catch (error) {
           if (error instanceof APIUserAbortError || signal.aborted) return settled(ABORTED);
           if (!(error instanceof AnthropicError)) throw error;
           const failure = failureOf(error, wire.redact);
           const kind = classifyModelError(failure);
           const delayMs = kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
+          if (delayMs !== undefined && error instanceof APIError && error.status === 429) slots.pause(delayMs);
           if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message });
           await input.onRetry({ attempt, delayMs, message: failure.message });
           try {
