@@ -16,8 +16,12 @@ import { rgCommand } from './helpers.js';
 vi.setConfig({ testTimeout: 30_000 });
 
 const small = { input: 2_000, cacheRead: 0, cacheWrite: 0 };
-// Past 80% of qwen3.8-flash's 1,000,000-token window.
-const full = { input: 850_000, cacheRead: 0, cacheWrite: 0 };
+// GCODE_COMPACT_AT sets the threshold at 8,000 tokens, so a test's few kilobytes of files fill the context.
+const COMPACT_AT = '8000';
+const under = { input: 7_000, cacheRead: 0, cacheWrite: 0 };
+const over = { input: 8_200, cacheRead: 0, cacheWrite: 0 };
+// About 6,000 tokens, which a compaction can take out of the context.
+const bigFile = ['export const PARSER_MARKER = 1;', ...Array.from({ length: 300 }, (_, i) => `export const line${i} = 'a line the parser keeps as it is, number ${i}';`)].join('\n');
 const read = (id: string, file: string) => ({ id, name: 'read', input: { path: file } });
 const tooLong = httpError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'prompt is too long: 1048576 tokens > 1000000 maximum' } });
 
@@ -42,10 +46,8 @@ function connect<T>(io: Io, store: Store, run: (connection: Connection) => Promi
   });
 }
 
-async function setup(replies: readonly Reply[]) {
-  const workspace = await realpath(
-    makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const PARSER_MARKER = 1;\n', 'b.ts': 'export const b = 2;\n' } }]),
-  );
+async function setup(replies: readonly Reply[], extra: Readonly<Record<string, string>> = {}) {
+  const workspace = await realpath(makeRepo('ws', [{ message: 'start', files: { 'a.ts': `${bigFile}\n`, 'b.ts': 'export const b = 2;\n' } }]));
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const env = {
     GCODE_HOME: home,
@@ -55,6 +57,7 @@ async function setup(replies: readonly Reply[]) {
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     GCODE_RG: rgCommand(),
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    ...extra,
   };
   const store = openStore(env);
   const model = fakeTransport(replies);
@@ -71,18 +74,18 @@ const marks = (updates: readonly acp.SessionNotification[]): CompactMark[] =>
 const compactions = (events: readonly TurnEvent[]) => events.filter((e): e is Extract<TurnEvent, { kind: 'compact' }> => e.kind === 'compact');
 
 describe('gcode serve: context compaction', () => {
-  it('compacts on its own past 80% of the window, keeps the turn going, and rebuilds the context after a reload', async () => {
+  it('compacts on its own past the threshold, keeps the turn going, and rebuilds the context after a reload', async () => {
     const { workspace, store, model, io, log } = await setup([
       toolCall('Reading.', [read('r1', 'a.ts')], small),
-      answer('Read it.', small),
-      toolCall('Checking b.', [read('r2', 'b.ts')], full),
+      answer('Read it.', under),
+      toolCall('Checking b.', [read('r2', 'b.ts')], over),
       answer('## Goal\nFix the parser.\n## Progress\nRead a.ts.\n## Decisions\nNone yet.\n## Next steps\nFix it.', small),
       answer('Fixed.', small),
       answer('You are welcome.', small),
       answer('## Goal\nSECOND SUMMARY\n## Progress\n## Decisions\n## Next steps', small),
       answer('Going on.', small),
       answer('Redone.', small),
-    ]);
+    ], { GCODE_COMPACT_AT: COMPACT_AT });
 
     const { sessionId, fixTurn } = await connect(io, store, async ({ ctx, updates }) => {
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
@@ -104,7 +107,8 @@ describe('gcode serve: context compaction', () => {
 
       const [mark] = marks(updates);
       expect(mark).toMatchObject({ trigger: 'auto', tokensBefore: expect.any(Number), summary: expect.stringContaining('## Goal') });
-      expect(mark!.tokensBefore).toBeGreaterThanOrEqual(850_000);
+      expect(mark!.tokensBefore).toBeGreaterThanOrEqual(8_200);
+      expect(mark!.tokensAfter).toBeLessThan(Number(COMPACT_AT));
       const used = updates.flatMap(({ update }) => (update.sessionUpdate === 'usage_update' ? [update.used] : []));
       expect(used, 'the ring drops to the estimate once compacted').toContain(mark!.tokensAfter);
       return { sessionId, fixTurn: fix._meta?.['gcode/turnSeq'] as number };

@@ -18,7 +18,8 @@ import {
   loopStep,
   planCompaction,
   replayMessages,
-  shouldCompact,
+  autoCompaction,
+  plannedTokens,
   summarizeSession,
   summaryPrompt,
   transcriptOf,
@@ -311,9 +312,18 @@ describe('when to compact', () => {
     // The last call measured 10,100 tokens; the bash result queued after it adds about 3,000.
     expect(contextTokens(log)).toBe(10_100 + eventTokens(log.at(-1)!));
     expect(compactAtTokens(16_000)).toBe(12_800);
-    expect(shouldCompact(log, compactAtTokens(16_000))).toBe(true);
-    expect(shouldCompact(log, compactAtTokens(17_000))).toBe(false);
-    expect(shouldCompact(log, compactAtTokens(undefined))).toBe(false);
+    expect(autoCompaction(log, compactAtTokens(16_000))?.keptFrom).toBe(14);
+    expect(autoCompaction(log, compactAtTokens(17_000))).toBeUndefined();
+    expect(autoCompaction(log, compactAtTokens(undefined))).toBeUndefined();
+  });
+
+  it('skips a compaction that could not bring the context back under the threshold', () => {
+    const planned = plan(log, keepTailTokens(12_800));
+    expect(plannedTokens(planned, contextTokens(log))).toBeLessThan(12_800);
+    // At 9,000 the threshold is passed, but what the cut keeps and the summary bring would pass it again.
+    expect(contextTokens(log)).toBeGreaterThan(9_000);
+    expect(plannedTokens(plan(log, keepTailTokens(9_000)), contextTokens(log))).toBeGreaterThanOrEqual(9_000);
+    expect(autoCompaction(log, 9_000)).toBeUndefined();
   });
 
   it("takes the user's own threshold over the window's", () => {
@@ -327,7 +337,9 @@ describe('when to compact', () => {
   });
 
   it('waits for a model call after a compaction before compacting again', () => {
-    expect(shouldCompact([...log, compacted(log, 16, 4_000)], 1_000)).toBe(false);
+    const after = [...log, compacted(log, 16, 4_000)];
+    expect(contextTokens(after)).toBeGreaterThan(1_000);
+    expect(autoCompaction(after, 1_000)).toBeUndefined();
   });
 });
 

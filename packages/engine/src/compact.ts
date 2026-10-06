@@ -12,6 +12,7 @@ import {
   summaryEvents,
   summaryPrompt,
   type CompactEvent,
+  type CompactPlan,
   type CompactTrigger,
   type ModelRetry,
   type Session,
@@ -41,6 +42,8 @@ export type CompactOutcome =
 
 export type CompactRequest = {
   readonly trigger: CompactTrigger;
+  /** The cut, when the caller planned it already, as auto compaction does; else the usual one. */
+  readonly plan?: CompactPlan | undefined;
   readonly focus?: string | undefined;
   readonly compactAt: number | undefined;
   readonly stored: StoredAttachments;
@@ -53,7 +56,7 @@ export type CompactRequest = {
  * compaction to log, numbered 0 for the log to number. Nothing is logged here, and a failed call changes nothing.
  */
 export async function compactContext(gateway: Gateway, session: Session, events: readonly TurnEvent[], request: CompactRequest): Promise<CompactOutcome> {
-  const plan = planCompaction(events, keepTailTokens(request.compactAt));
+  const plan = request.plan ?? planCompaction(events, keepTailTokens(request.compactAt));
   if (plan === undefined) return { kind: 'nothing' };
   const at = new Date().toISOString();
   const maxChars = request.compactAt === undefined ? undefined : Math.floor(request.compactAt * CHARS_PER_TOKEN);

@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, shouldCompact, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -284,10 +284,11 @@ export async function drive(
   const loaded = new Map<Sha256, string>();
   const compactAt = compactAtOf(io.env, session);
   // True when a compaction was logged; a failed or empty one leaves the context as it was.
-  const compact = async (trigger: CompactTrigger): Promise<boolean> => {
+  const compact = async (trigger: CompactTrigger, plan?: CompactPlan): Promise<boolean> => {
     watcher.compacting?.();
     const outcome = await compactContext(gateway, session, events, {
       trigger,
+      plan,
       compactAt,
       stored: await loadAttachments(ctx.attachmentsDir, events, loaded),
       signal,
@@ -302,7 +303,8 @@ export async function drive(
     return false;
   };
   const callModel = async (): Promise<void> => {
-    if (shouldCompact(events, compactAt)) await compact('auto');
+    const due = autoCompaction(events, compactAt);
+    if (due !== undefined) await compact('auto', due);
     const startAt = Date.now();
     let marks: StreamMarks | undefined;
     // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
