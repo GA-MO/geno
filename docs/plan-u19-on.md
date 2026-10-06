@@ -8,6 +8,18 @@ The user approved this order:
 
 Every unit follows "Shared rules for every unit" in `docs/plan-u11-u14.md`. That includes its Verification rule: run the `unit` project, plus only the VS Code integration files your unit adds or touches. The coordinator runs the full suite before each merge.
 
+## สถานะ (updated 2026-10-06)
+ทำแล้ว: U13–U14, U17–U21, U34–U38, U18a/b, Allow-focus, sandbox ใช้ร่วมหลายแชต (b99c95d), test flakes; ติดตั้ง 0.11.0 แล้ว (6585656); full suite ล่าสุด 131 files / 1460 tests ผ่าน
+ค้าง: ไม่มีงานครึ่งทางใน tree (worktree เหลือแค่ vigilant-kalam-d976c6 ของ user — ห้ามลบ)
+ค้าง: ยังไม่ได้พิสูจน์ด้วยมือ: คลิกปุ่มใน widget จริง (เทสแก้โดยยิง CDP เข้า frame target; เหตุผลว่ามือจริงไม่โดน = inference)
+ค้าง: รอ user ยืนยัน: bahtPerUsd=33 (เดา), ความถี่ peek, ไดโนเกาะ input 2x
+ค้าง: ยังไม่เริ่ม: U15 (Claude Code backend ผ่าน ACP), U22–U26 (subagents, lanes, arena) + Backlog ท้ายไฟล์
+ค้นพบ: เปลี่ยน effort กลางแชต = Model Studio cache แยกตาม effort → stepped effort แพงขึ้น 24%; default flat (docs/results/u21-effort.md)
+ค้นพบ: เวลาไปที่ thinking 36% + decode 25%; read แทบ 0 → parallel reads ไม่ช่วยความเร็ว (u19/u20 results); lever ถัดไป = checker ที่รันค้าง
+ค้นพบ: sandbox-runtime config+proxy เป็น global ต่อ process → fs rules ต่อ command ได้ แต่ network allowlist ต้องเหมือนกันทุก sandbox → lanes/arena ที่ต้องการ network ต่างกันใน process เดียวทำไม่ได้ (แก้ U24–U26 ให้ใช้ allowlist เดียว หรือแยก process)
+ค้นพบ: กฎ "agent รันเฉพาะ integration file ตัวเอง" พลาด regression (U36 modes) → เพิ่มกฎให้รันไฟล์ที่ drive UI ที่แก้ด้วย (plan-u11-u14.md)
+ถัดไป: /go phase U22 ตาม docs/plan-u19-on.md
+
 ## U34: boundary lint
 
 Keep each part of Geno cheap to lift out into a library later. Add a dependency-rules check that runs with `pnpm test`, or as its own `pnpm lint:deps` called from `pnpm test`, and fails on a crossing.
@@ -187,3 +199,7 @@ U19 measured tools at 24% of agent time. Almost all of it was `bash` (94.9 s ove
 - **Budget overshoot.** The engine checks `--max-cost` only after each model call, so a run can end slightly over its cap (U13 saw $0.0509 against $0.05).
 - **Approval card order.** An approval card can draw above its own step when it arrives first (U17). Counts no longer depend on it; only the display order does.
 - **Compact.** There is no compact action yet, so the context ring offers only the numbers (U36).
+
+## U22: subagent engine (next; replaces U16)
+
+Brief: research/competitors-2026-10.md §5 "U22". Agent definitions in Claude Code's format (workspace, global, plugin), built-ins explore/plan/review/worker, a model-callable `agent` tool off by default, children as sessions with parentId, cost caps, depth 1, up to 4 read-only children in parallel (the sandbox now allows several sessions at once, b99c95d; children share one network allowlist), `subagent_update` over ACP when advertised, else `_gcode/subagent`. Then U23 (panel), U24–U26 (lanes, arena), with the allowlist constraint above.
