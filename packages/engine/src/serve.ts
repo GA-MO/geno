@@ -234,10 +234,10 @@ const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notice
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
- * loaded the session after a window reload, or none while it runs in the background. `signal` is the turn's own.
+ * loaded the session after a window reload, or none while it runs in the background. `signal` is the turn's own, and
+ * `wake` the session's Retry now.
  */
-/** `wake` is the session's Retry now. */
-type Route = { readonly viewers: Viewers<Peer>; readonly tasks: Tasks; readonly sessionId: string; readonly signal: AbortSignal; readonly wake?: Wake | undefined };
+type Route = { readonly viewers: Viewers<Peer>; readonly tasks: Tasks; readonly sessionId: string; readonly signal: AbortSignal; readonly wake: Wake };
 
 /** The editor showing the route's session, when it can do what `can` asks. */
 const viewerThat = (route: Route, can: (peer: Peer) => boolean): Viewer<Peer> | undefined => {
@@ -434,8 +434,7 @@ function editorTurn(
     surface: {
       files: peer.files && !disk ? editorFiles(route, () => running) : DISK_FILES,
       wake: route.wake,
-      // The engine's own waits are for a later engine to take up; a subagent's wait goes with its parent's call.
-      ...(route.wake === undefined ? {} : { waiter: { pid: process.pid, cwd: io.cwd } }),
+      waiter: { pid: process.pid, cwd: io.cwd },
       watcher: {
         waiting(wait) {
           live.waiting = wait;

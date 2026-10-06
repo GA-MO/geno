@@ -327,7 +327,7 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.mode, turn.usage], build: () => turnHead(turn) }]);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage], build: () => turnHead(turn) }]);
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
       const open = ui.isOpen(foldId(turn.id));
       const whole = detail() === 'full' || open;

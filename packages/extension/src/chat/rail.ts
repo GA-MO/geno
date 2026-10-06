@@ -60,9 +60,9 @@ export function railOf(turn: Turn): Step[] {
   return steps;
 }
 
-/** A running turn whose last word was not text and that runs and asks nothing is waiting on the model. */
+/** A running turn whose last word was not text and that runs and asks nothing is waiting on the model, unless its call waits offline or for a limit. */
 function isThinking(turn: Turn): boolean {
-  if (turn.status !== 'streaming') return false;
+  if (turn.status !== 'streaming' || turn.waiting !== undefined) return false;
   const busy = turn.blocks.some((b) => (b.kind === 'tool' && b.status === 'running') || (b.kind === 'permission' && b.outcome.kind === 'open'));
   return !busy && turn.blocks.at(-1)?.kind !== 'text';
 }
