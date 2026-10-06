@@ -22,11 +22,13 @@ const MESSAGE_CHARS = 8_000;
 const MESSAGES_CHARS = 40_000;
 
 /**
- * A tool result or a tool call's input is cut to its start and end in the transcript the summary call reads, at about
- * this many characters, since results are what fills a context and the summary needs what they showed, not all of them.
+ * The transcript the summary call reads stays within this many characters, about 60,000 tokens, which costs about
+ * $0.01 on qwen3.8-flash. Past it, the longest tool results and inputs are cut first, to their start and end.
  */
-const SERIALIZED_CHARS = 3_000;
-const SERIALIZED_TAIL_CHARS = 1_000;
+export const SUMMARY_INPUT_CHARS = 210_000;
+
+/** A cut never leaves a result shorter than this; past that, the oldest lines go. */
+const MIN_CUT_CHARS = 3_000;
 
 type EventOf<K extends TurnEventKind> = Extract<TurnEvent, { kind: K }>;
 
@@ -259,7 +261,7 @@ const summaryInstructions = (focus: string | undefined): string =>
   [
     'Summarize the conversation above, so that you can continue the work from the summary alone. The user\'s messages, the todo list, the files read and changed, and the tools you loaded are kept apart, word for word, so do not copy them out; refer to them where they matter. If the conversation opens with an earlier compacted context, merge its summary in: keep what still holds and update the rest.',
     '',
-    'The session goes on after this transcript: its newest turns are kept as they are and follow your summary, so describe where the work stood at the end of the transcript. Long tool results are shortened here to their start and end; the agent saw them whole, so do not report them as cut or unread.',
+    'The session goes on after this transcript: its newest turns are kept as they are and follow your summary, so describe where the work stood at the end of the transcript. Long tool results may be shortened here to their start and end; the agent saw them whole, so do not report them as cut or unread.',
     '',
     'Use exactly these sections:',
     '',
@@ -282,44 +284,69 @@ const summaryInstructions = (focus: string | undefined): string =>
   ].join('\n');
 
 // The marker says the cut is the transcript's: a first live summary read a cut result as one the agent never saw whole.
-const cut = (text: string): string => {
-  if (text.length <= SERIALIZED_CHARS) return text;
-  const head = SERIALIZED_CHARS - SERIALIZED_TAIL_CHARS;
-  return `${text.slice(0, head)}\n[... ${text.length - SERIALIZED_CHARS} characters left out of this transcript only; the agent saw them ...]\n${text.slice(-SERIALIZED_TAIL_CHARS)}`;
-};
+function cutTo(text: string, cap: number): string {
+  if (text.length <= cap) return text;
+  const tail = Math.min(1_000, Math.floor(cap / 3));
+  return `${text.slice(0, cap - tail)}\n[... ${text.length - cap} characters left out of this transcript only; the agent saw them ...]\n${text.slice(-tail)}`;
+}
 
 function resultText(block: ToolResultBlockParam): string {
   if (typeof block.content === 'string') return block.content;
   return (block.content ?? []).map((part) => (part.type === 'text' ? part.text : '[an image]')).join('\n');
 }
 
+/** A transcript line: its label, and its text, which may be cut when it is a tool's input or result. */
+type Line = { readonly head: string; readonly body: string; readonly cuttable: boolean };
+
 /** One block as a transcript line; `names` maps each tool call to its tool, for the result that answers it. */
-function blockLine(role: MessageParam['role'], block: ContentBlockParam, names: ReadonlyMap<string, string>): string | undefined {
-  if (block.type === 'text') return role === 'assistant' ? `[Assistant]: ${block.text}` : block.text.startsWith('<compacted_context>') ? block.text : `[User]: ${block.text}`;
-  if (block.type === 'image') return '[User]: [an image]';
-  if (block.type === 'tool_use') return `[Assistant called ${block.name}]: ${cut(JSON.stringify(block.input))}`;
-  if (block.type === 'tool_result') return `[${block.is_error === true ? 'Error from' : 'Result of'} ${names.get(block.tool_use_id) ?? 'a tool'}]: ${cut(resultText(block))}`;
+function lineOf(role: MessageParam['role'], block: ContentBlockParam, names: ReadonlyMap<string, string>): Line | undefined {
+  if (block.type === 'text') {
+    if (role === 'assistant') return { head: '[Assistant]: ', body: block.text, cuttable: false };
+    return block.text.startsWith('<compacted_context>') ? { head: '', body: block.text, cuttable: false } : { head: '[User]: ', body: block.text, cuttable: false };
+  }
+  if (block.type === 'image') return { head: '[User]: ', body: '[an image]', cuttable: false };
+  if (block.type === 'tool_use') return { head: `[Assistant called ${block.name}]: `, body: JSON.stringify(block.input), cuttable: true };
+  if (block.type === 'tool_result') return { head: `[${block.is_error === true ? 'Error from' : 'Result of'} ${names.get(block.tool_use_id) ?? 'a tool'}]: `, body: resultText(block), cuttable: true };
   return undefined;
 }
 
+const totalUnder = (lengths: readonly number[], cap: number): number => lengths.reduce((sum, length) => sum + Math.min(length, cap), 0);
+
+/** The largest length every cuttable text can keep with all of them fitting `room`; never under MIN_CUT_CHARS. */
+function capFor(lengths: readonly number[], room: number): number {
+  if (totalUnder(lengths, Number.POSITIVE_INFINITY) <= room) return Number.POSITIVE_INFINITY;
+  let low = MIN_CUT_CHARS;
+  let high = Math.max(...lengths);
+  if (totalUnder(lengths, low) > room) return low;
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2);
+    if (totalUnder(lengths, mid) <= room) low = mid;
+    else high = mid;
+  }
+  return low;
+}
+
 /**
- * The conversation as a transcript the summary call reads, with long tool results cut, since they are what fills a
- * context and the summary needs what they showed, not all of them. Past `maxChars`, the oldest lines go first, but an
- * earlier compacted context at the top stays.
+ * The conversation as a transcript the summary call reads, within `maxChars`. Everything stays whole while it fits.
+ * Past that, tool inputs and results are cut, the longest first, since they are what fills a context and the summary
+ * needs what they showed, not all of them. Past that too, the oldest lines go, but an earlier compacted context stays.
  */
-export function transcriptOf(messages: readonly MessageParam[], maxChars: number = Number.POSITIVE_INFINITY): string {
+export function transcriptOf(messages: readonly MessageParam[], maxChars: number = SUMMARY_INPUT_CHARS): string {
   const names = new Map<string, string>();
-  const lines: string[] = [];
+  const lines: Line[] = [];
   for (const message of messages) {
     const blocks = typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content;
     for (const block of blocks) {
       if (block.type === 'tool_use') names.set(block.id, block.name);
-      const line = blockLine(message.role, block, names);
+      const line = lineOf(message.role, block, names);
       if (line !== undefined) lines.push(line);
     }
   }
-  const pinned = lines.filter((line) => line.startsWith('<compacted_context>'));
-  const rest = lines.filter((line) => !line.startsWith('<compacted_context>'));
+  const fixed = lines.reduce((sum, line) => sum + line.head.length + (line.cuttable ? 0 : line.body.length), 0);
+  const cap = capFor(lines.flatMap((line) => (line.cuttable ? [line.body.length] : [])), maxChars - fixed);
+  const shown = lines.map((line) => `${line.head}${line.cuttable ? cutTo(line.body, cap) : line.body}`);
+  const pinned = shown.filter((line) => line.startsWith('<compacted_context>'));
+  const rest = shown.filter((line) => !line.startsWith('<compacted_context>'));
   let size = pinned.reduce((n, line) => n + line.length, 0);
   let from = rest.length;
   while (from > 0 && size + rest[from - 1]!.length <= maxChars) size += rest[--from]!.length;
