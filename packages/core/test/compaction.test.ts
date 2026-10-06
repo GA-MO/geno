@@ -271,6 +271,24 @@ describe('a second compaction on top of the first', () => {
   });
 });
 
+describe('a compaction logged mid-turn, then cut across by the next', () => {
+  // The first keeps from seq 12 and is logged after seq 15, mid-turn; the second keeps from seq 14, before it.
+  const tailFrom12 = log.slice(log.findIndex((e) => e.kind !== 'session-start' && e.seq === 12)).reduce((sum, e) => sum + eventTokens(e), 0);
+  const first = compacted(log, 16, tailFrom12, 'FIRST');
+  const grown = [...log, first, assistant(17, 'Done.')];
+  const second = compacted(grown, 18, 1_000_000, 'SECOND');
+
+  it('leaves the first out of the context, since the second summarized it', () => {
+    expect(first.keptFrom).toBe(12);
+    expect(second.keptFrom).toBe(14);
+    const after = [...grown, second];
+    expect(seqs(contextView(after))).toEqual(['start', 18, 14, 15, 17]);
+    const text = JSON.stringify(replayMessages(after));
+    expect(text).toContain('SECOND');
+    expect(text).not.toContain('FIRST');
+  });
+});
+
 describe('rewind and fork across a compaction', () => {
   const event = compacted(log, 16, 4_000);
   const after = [...log, event, user(17, 'next')];
