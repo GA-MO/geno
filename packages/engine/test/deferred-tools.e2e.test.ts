@@ -16,7 +16,8 @@ import { rgCommand } from './helpers.js';
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
-const server: acp.McpServer = { name: 'fake', command: process.execPath, args: ['--import', TSX, FIXTURE], env: [] };
+const server: acp.McpServer = { name: 'fake', command: process.execPath, args: ['--import', TSX, FIXTURE], env: [{ name: 'TOOL_COUNT', value: '1' }] };
+const EXTRA = 'mcp__fake__extra_00';
 const ECHO = 'mcp__fake__echo';
 
 const sessions: McpSessions[] = [];
@@ -38,7 +39,7 @@ type Body = { tools: { name: string; description?: string }[]; system: { text: s
 const resultIn = (body: Body, id: string) => body.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content)).find((b) => b.type === 'tool_result' && b.tool_use_id === id);
 
 describe('deferred tools through gcode serve', () => {
-  it('refuses an unloaded MCP tool, loads it with tool_search, calls it, and calls it again after a reload, with the same tool and system bytes on every call', async () => {
+  it('refuses an unloaded MCP tool, loads it with tool_search, calls it, and calls it again after a reload, with the same tool and system bytes on every call, and types a stringly number', async () => {
     const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-deferred-')));
     const env = {
       GCODE_HOME: await mkdtemp(path.join(tmpdir(), 'gcode-home-')),
@@ -52,12 +53,16 @@ describe('deferred tools through gcode serve', () => {
     const load = { id: 'tu_load', name: TOOL_SEARCH_TOOL, input: { query: 'echo' } };
     const first = { id: 'tu_first', name: ECHO, input: { text: 'one' } };
     const later = { id: 'tu_later', name: ECHO, input: { text: 'two' } };
+    const loadExtra = { id: 'tu_load_extra', name: TOOL_SEARCH_TOOL, input: { select: [EXTRA] } };
+    // Qwen writes some numbers as strings when the schema came in a tool_search result.
+    const stringly = { id: 'tu_stringly', name: EXTRA, input: { n: '3' } };
     const transport = fakeTransport([
       toolCall('Echoing.', [early], usage),
       toolCall('Loading it.', [load], usage),
       toolCall('Echoing.', [first], usage),
       answer('Done.', usage),
-      toolCall('Echoing again.', [later], usage),
+      toolCall('Echoing again.', [later, loadExtra], usage),
+      toolCall('Counting.', [stringly], usage),
       answer('Done again.', usage),
     ]);
     const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
@@ -87,7 +92,7 @@ describe('deferred tools through gcode serve', () => {
     });
 
     const bodies = transport.requests.map((r) => r.body as Body);
-    expect(bodies).toHaveLength(6);
+    expect(bodies).toHaveLength(7);
     expect(bodies[0]!.tools.map((t) => t.name)).not.toContain(ECHO);
     expect(offeredTools(bodies[0]!), 'the MCP tool is listed by name in the deferred block').toContain(ECHO);
     expect(bodies[0]!.system[0]!.text).toContain(DEFERRED_TOOLS_NOTE);
@@ -106,6 +111,7 @@ describe('deferred tools through gcode serve', () => {
     expect(loaded.content).toContain('"input_schema":');
     expect(resultIn(bodies[3]!, first.id)).toMatchObject({ content: 'echo: one' });
     expect(resultIn(bodies[5]!, later.id), 'the load survives the reload: no second tool_search').toMatchObject({ content: 'echo: two' });
+    expect(resultIn(bodies[6]!, stringly.id), 'the string is typed as the number its schema asks for').toMatchObject({ content: 'extra 0 got 3' });
 
     const { events } = await readSessionLog(sessionFile(store, asSessionId(sessionId)));
     const results = events.filter((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result');
@@ -114,6 +120,8 @@ describe('deferred tools through gcode serve', () => {
       [TOOL_SEARCH_TOOL, 'ok', [ECHO]],
       [ECHO, 'ok', undefined],
       [ECHO, 'ok', undefined],
+      [TOOL_SEARCH_TOOL, 'ok', [EXTRA]],
+      [EXTRA, 'ok', undefined],
     ]);
   }, 60_000);
 });

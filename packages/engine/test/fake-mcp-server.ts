@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-/** A test MCP server: `echo` (read-only), `env`, `crash`, `image`, plus `extra_<n>` tools to push past the lazy threshold. */
+/** A test MCP server: `echo` (read-only), `env`, `crash`, `image`, plus `extra_<n>` tools that take a number. */
 export function fakeMcpServer(extraTools = 0): McpServer {
   const server = new McpServer({ name: 'fake', version: '1.0.0' });
   server.registerTool(

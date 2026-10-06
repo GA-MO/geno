@@ -6,7 +6,7 @@ export const TOOL_SEARCH_TOOL = 'tool_search';
 /** The tools the loop uses nearly every turn. They are always sent in full; every other tool may be deferred. */
 export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['agent', 'ask_user', 'bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo']);
 
-/** Appended to the system prompt of a run that defers tools; fixed text, so the cached prefix holds. */
+/** Follows the mode's system prompt in a run that defers tools; fixed text, so the cached prefix holds. */
 export const DEFERRED_TOOLS_NOTE = `Some of your tools are listed by name only, in the description of ${TOOL_SEARCH_TOOL}. Before the first call of one, load it with ${TOOL_SEARCH_TOOL}; it then stays callable for the rest of the session.`;
 
 /** A tool sent by name and hint only, until `tool_search` loads its definition into the conversation. */
@@ -20,10 +20,10 @@ export type DeferredTool = { readonly definition: Tool; readonly hint: string };
 export type ToolRoster = { readonly offered: readonly Tool[]; readonly deferred: ReadonlyMap<string, DeferredTool> };
 
 /** Measured on Model Studio qwen3.8-flash over Geno's own and the browser's definitions by scripts/prefix-tokens.ts. */
-export const CHARS_PER_TOKEN = 3.5;
+const CHARS_PER_TOKEN = 3.5;
 
-export const textTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);
-export const toolTokens = (tool: Tool): number => textTokens(JSON.stringify(tool));
+const textTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);
+const toolTokens = (tool: Tool): number => textTokens(JSON.stringify(tool));
 
 /**
  * Deferring pays when the tokens it takes out of every call, net of tool_search and the note, outweigh the turns that
@@ -140,3 +140,29 @@ export const unloadedCallError = (deferred: ReadonlyMap<string, DeferredTool>, l
   deferred.has(name) && !loaded.has(name)
     ? `${name} is a deferred tool and is not loaded yet. Call ${TOOL_SEARCH_TOOL} with select: ["${name}"] first, then call ${name} with the input its schema asks for.`
     : undefined;
+
+type Schema = { readonly type?: unknown; readonly properties?: Readonly<Record<string, Schema>>; readonly items?: Schema };
+
+const SCALARS: Readonly<Record<string, (text: string) => unknown>> = {
+  number: (text) => (text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : text),
+  integer: (text) => (/^\s*-?\d+\s*$/.test(text) ? Number(text) : text),
+  boolean: (text) => (/^true$/i.test(text) ? true : /^false$/i.test(text) ? false : text),
+};
+
+/**
+ * A deferred tool's schema reaches the model as text, not in `tools`, and Model Studio's Qwen then writes some numbers
+ * and booleans as strings ("2", "False"; docs/u46.md). This turns such a string into the type its schema names, through
+ * nested objects and arrays, and leaves everything else as the model wrote it for the tool to judge.
+ */
+export function coerceToSchema(raw: unknown, value: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return value;
+  const schema = raw as Schema;
+  const type = typeof schema.type === 'string' ? schema.type : undefined;
+  if (typeof value === 'string' && type !== undefined && type in SCALARS) return SCALARS[type]!(value);
+  if (Array.isArray(value)) return schema.items === undefined ? value : value.map((item) => coerceToSchema(schema.items, item));
+  if (typeof value === 'object' && value !== null && schema.properties !== undefined) {
+    const properties = schema.properties;
+    return Object.fromEntries(Object.entries(value).map(([key, field]) => [key, Object.hasOwn(properties, key) ? coerceToSchema(properties[key], field) : field]));
+  }
+  return value;
+}

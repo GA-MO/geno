@@ -1,9 +1,24 @@
 import { z } from 'zod';
-import { loadedTools, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster } from '@g-code/core';
+import { coerceToSchema, loadedTools, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster } from '@g-code/core';
 import { ALWAYS, executor, ToolError, type Executor } from './context.js';
 import type { Executors } from './index.js';
 
 const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional(), query: z.string().min(1).optional() });
+
+/** A deferred tool's executor: refused until loaded, and its input typed by its schema (`coerceToSchema`). */
+function gate(roster: ToolRoster, name: string, inner: Executor): Executor {
+  const typed = (raw: unknown) => coerceToSchema(roster.deferred.get(name)!.definition.input_schema, raw);
+  return {
+    input: inner.input,
+    ...(inner.concurrent === undefined ? {} : { concurrent: (raw: unknown) => inner.concurrent!(typed(raw)) }),
+    describe: (raw) => inner.describe(typed(raw)),
+    async run(raw, ctx) {
+      const refused = unloadedCallError(roster.deferred, loadedTools(ctx.events()), name);
+      if (refused !== undefined) throw new ToolError(refused);
+      return inner.run(typed(raw), ctx);
+    },
+  };
+}
 
 /**
  * The roster's executors: `tool_search`, and each deferred tool refusing to run until a tool_search in the log loaded
@@ -12,21 +27,7 @@ const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional
 export function rosterExecutors(roster: ToolRoster, executors: Executors): Executors {
   if (roster.deferred.size === 0) return executors;
   const gated = Object.fromEntries(
-    Object.entries(executors).map(([name, inner]): [string, Executor] =>
-      roster.deferred.has(name)
-        ? [
-            name,
-            {
-              ...inner,
-              async run(raw, ctx) {
-                const refused = unloadedCallError(roster.deferred, loadedTools(ctx.events()), name);
-                if (refused !== undefined) throw new ToolError(refused);
-                return inner.run(raw, ctx);
-              },
-            },
-          ]
-        : [name, inner],
-    ),
+    Object.entries(executors).map(([name, inner]): [string, Executor] => [name, roster.deferred.has(name) ? gate(roster, name, inner) : inner]),
   );
   const search = executor({
     concurrent: ALWAYS,
