@@ -45,6 +45,9 @@ import {
   laneGraftPrompt,
   type DetachRequest,
   type TaskRecord,
+  WAIT_KINDS,
+  WAITING_META,
+  RETRY_NOW_METHOD,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -156,6 +159,7 @@ const replayedChange = z.object({
   hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
 });
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
+const waitingSchema = z.object({ kind: z.enum(WAIT_KINDS), since: z.number(), retryAt: z.number().nullable(), resetAt: z.number().nullable(), message: z.string() });
 const taskUpdate = z.object({
   task: z.object({
     sessionId: z.string(),
@@ -166,6 +170,7 @@ const taskUpdate = z.object({
     startedAt: z.number(),
     endedAt: z.number().nullable(),
     usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).optional(),
+    waiting: waitingSchema.optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
@@ -174,6 +179,7 @@ const taskUpdate = z.object({
 const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 'streaming'> | undefined>> = {
   running: undefined,
   'needs-input': undefined,
+  waiting: undefined,
   done: 'done',
   failed: 'failed',
   stopped: 'stopped',

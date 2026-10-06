@@ -41,4 +41,5 @@ export * from './widget.js';
 export * from './lanes.js';
 export * from './subagent.js';
 export * from './tasks.js';
+export * from './waiting.js';
 export * from './arena.js';

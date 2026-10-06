@@ -72,6 +72,7 @@ describe('turnTimings', () => {
       decodeMs: 2000,
       modelMs: 3550,
       toolMs: 1200,
+      waitMs: 0,
       overheadMs: 250,
       tools: [
         { toolUseId: 't1', name: 'read', ms: 200 },
@@ -92,6 +93,7 @@ describe('turnTimings', () => {
       decodeMs: 1000,
       modelMs: 1410,
       toolMs: 0,
+      waitMs: 0,
       overheadMs: 15,
       tools: [],
       tokens: { input: 10, output: 20, thinking: 0, cacheRead: 2000, cacheWrite: 300 },
@@ -101,7 +103,12 @@ describe('turnTimings', () => {
   it('keeps every turn whole: wall is model plus tools plus overhead', () => {
     const timings = turnTimings(thinkingThenAnswer);
     expect(timings).toHaveLength(2);
-    for (const t of timings) expect(t.modelMs + t.toolMs + t.overheadMs).toBe(t.wallMs);
+    for (const t of timings) expect(t.modelMs + t.toolMs + t.waitMs + t.overheadMs).toBe(t.wallMs);
+  });
+
+  it('keeps a call’s wait offline or for a limit out of its overhead', () => {
+    const [waited] = turnTimings([start, user(1, 0), assistant(2, 40_200, [text(5)], 5, { ...marks(10, 40_010, 40_100, 40_100, 40_150, 40_160), waitMs: 39_000 })]);
+    expect(waited).toMatchObject({ wallMs: 40_190, modelMs: 150, toolMs: 0, waitMs: 39_000, overheadMs: 1040 });
   });
 
   it('counts tools that ran at the same time once, by the wall time they cover', () => {
@@ -135,6 +142,7 @@ describe('turnTimings', () => {
         decodeMs: 0,
         modelMs: 2995,
         toolMs: 0,
+        waitMs: 0,
         overheadMs: 6,
         tools: [],
         tokens: null,
@@ -166,6 +174,7 @@ describe('turnTimings', () => {
         wallMs: 1700,
         modelMs: 1000,
         toolMs: 660,
+        waitMs: 0,
         overheadMs: 40,
         tools: [
           { toolUseId: 't1', name: 'read', ms: 200 },

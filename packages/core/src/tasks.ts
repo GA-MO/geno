@@ -1,17 +1,31 @@
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
+import type { Waiting } from './waiting.js';
 
 /**
  * Background sessions. The engine runs as one process per workspace that outlives the editor's window, so a turn goes
  * on when the panel closes or the window reloads. Every session that runs a turn in that process is a task.
  */
 
-/** `needs-input`: a permission or a question waits for the user. `stopped`: the user stopped it. */
-export const TASK_STATUSES = ['running', 'needs-input', 'done', 'failed', 'stopped'] as const;
+/**
+ * `needs-input`: a permission or a question waits for the user. `waiting`: a model call waits offline or for a rate
+ * limit, and the record's `waiting` says which. `stopped`: the user stopped it.
+ */
+export const TASK_STATUSES = ['running', 'needs-input', 'waiting', 'done', 'failed', 'stopped'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /** A task whose turn has not ended. */
-export const isLive = (status: TaskStatus): boolean => status === 'running' || status === 'needs-input';
+export const isLive = (status: TaskStatus): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
+
+/** A live task that wants the user's eye: a card to answer, or a call held offline or by a limit. */
+export const NEEDS_ATTENTION: { readonly [S in TaskStatus]: boolean } = {
+  running: false,
+  'needs-input': true,
+  waiting: true,
+  done: false,
+  failed: false,
+  stopped: false,
+};
 
 /** One session's latest turn, as the engine reports it to every editor connected to it. Times are ms since the epoch. */
 export type TaskRecord = {
@@ -26,6 +40,8 @@ export type TaskRecord = {
   readonly endedAt: number | null;
   /** The turn's model calls so far; undefined before the first. */
   readonly usage?: TaskUsage | undefined;
+  /** What a `waiting` task waits for; absent in every other status. */
+  readonly waiting?: Waiting | undefined;
 };
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
@@ -42,6 +58,8 @@ export type TaskNotice = { readonly kind: TaskNoticeKind; readonly severity: 'in
 export const TASK_NOTICES: { readonly [S in TaskStatus]: TaskNotice | undefined } = {
   running: undefined,
   'needs-input': { kind: 'needs-input', severity: 'warning', verb: 'needs your answer' },
+  // A dropped connection or a short limit passes by itself; the running row and the tasks list show it.
+  waiting: undefined,
   done: { kind: 'done', severity: 'info', verb: 'finished' },
   failed: { kind: 'failed', severity: 'error', verb: 'failed' },
   stopped: undefined,

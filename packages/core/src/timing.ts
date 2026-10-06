@@ -17,6 +17,8 @@ export type StreamMarks = {
   readonly lastTokenAt: number | null;
   /** The call returned: the message completed, failed or was aborted. */
   readonly endAt: number;
+  /** Time the call spent waiting offline or for a rate limit, before the attempt that produced the result. Absent when it never waited. */
+  readonly waitMs?: number | undefined;
 };
 
 /** A model call's marks, from the moment the loop began it: before its checkpoint, attachment load and retries. */
@@ -45,7 +47,7 @@ export type TurnTokens = {
 };
 
 /**
- * One model call and the tools it asked for. `wallMs` = `modelMs` + `toolMs` + `overheadMs`, and
+ * One model call and the tools it asked for. `wallMs` = `modelMs` + `toolMs` + `waitMs` + `overheadMs`, and
  * `modelMs` = `ttftMs` + `thinkingMs` + `decodeMs` + the stream's tail after its last token.
  */
 export type TurnTiming = {
@@ -63,7 +65,9 @@ export type TurnTiming = {
   /** Request sent to the call's end. */
   readonly modelMs: number;
   readonly toolMs: number;
-  /** The rest of the wall: checkpoints, retries and their waits, spilling and logging. */
+  /** Waiting offline or for a rate limit to reset. */
+  readonly waitMs: number;
+  /** The rest of the wall: checkpoints, retries and their backoff, spilling and logging. */
   readonly overheadMs: number;
   readonly tools: readonly ToolTime[];
   /** Null for a call that ended in an error, which reports no usage. */
@@ -127,6 +131,7 @@ function closed(turn: OpenTurn, endAt: number): TurnTiming {
   const wallMs = endAt - startAt;
   const modelMs = turn.marks.endAt - requestAt;
   const toolMs = coveredMs(turn.spans);
+  const waitMs = turn.marks.waitMs ?? 0;
   // A call cut off before it answered spent all its streamed time thinking.
   const thoughtUntil = firstAnswerAt ?? lastTokenAt;
   return {
@@ -138,7 +143,8 @@ function closed(turn: OpenTurn, endAt: number): TurnTiming {
     decodeMs: firstAnswerAt === null || lastTokenAt === null ? 0 : lastTokenAt - firstAnswerAt,
     modelMs,
     toolMs,
-    overheadMs: wallMs - modelMs - toolMs,
+    waitMs,
+    overheadMs: wallMs - modelMs - toolMs - waitMs,
     tools: turn.tools,
     tokens: turn.tokens,
   };

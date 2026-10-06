@@ -7,7 +7,7 @@ const result = (seq: number, output: string): TurnEvent => ({ kind: 'tool-result
 describe('the notification trigger table', () => {
   it('tells the user when a task finishes, fails or waits for them, and nothing else', () => {
     const told = Object.fromEntries(TASK_STATUSES.map((to) => [to, taskNotice('running', to)?.kind ?? null]));
-    expect(told).toEqual({ running: null, 'needs-input': 'needs-input', done: 'done', failed: 'failed', stopped: null });
+    expect(told).toEqual({ running: null, 'needs-input': 'needs-input', waiting: null, done: 'done', failed: 'failed', stopped: null });
   });
 
   it('says nothing for a status that did not change, or for going back to work after an answer', () => {

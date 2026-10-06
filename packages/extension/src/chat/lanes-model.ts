@@ -1,4 +1,5 @@
 import type { CheckOutcome, LaneInfo, LaneStatus, TaskRecord, TaskStatus } from '@g-code/core';
+import { waitLabel } from '@g-code/core/waiting';
 import { formatCost, formatDuration } from './format.js';
 
 /**
@@ -36,6 +37,7 @@ export type Badge = { readonly label: string; readonly tone: Tone };
 export const TASK_BADGES: { readonly [S in TaskStatus]: Badge } = {
   running: { label: 'Running', tone: 'busy' },
   'needs-input': { label: 'Needs your answer', tone: 'wait' },
+  waiting: { label: 'Waiting', tone: 'wait' },
   done: { label: 'Done', tone: 'ok' },
   failed: { label: 'Failed', tone: 'failed' },
   stopped: { label: 'Stopped', tone: 'quiet' },
@@ -71,7 +73,10 @@ export type LaneRow = {
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 
-const isLiveStatus = (status: TaskStatus | null): boolean => status === 'running' || status === 'needs-input';
+const isLiveStatus = (status: TaskStatus | null): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
+
+/** A time of day as the user's clock reads it, such as 14:05. */
+export const clockOf = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 export function laneRowOf(lane: LaneInfo): LaneRow {
   const live = isLiveStatus(lane.task);
@@ -106,12 +111,12 @@ export type TaskRow = {
   readonly current: boolean;
 };
 
-export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number): TaskRow {
+export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number, clock: (ms: number) => string = clockOf): TaskRow {
   return {
     id: task.sessionId,
     title: task.title,
     where: task.lane === null ? 'Main checkout' : `Lane ${task.lane}`,
-    state: TASK_BADGES[task.status],
+    state: task.status === 'waiting' && task.waiting !== undefined ? { label: waitLabel(task.waiting, now, clock), tone: 'wait' } : TASK_BADGES[task.status],
     time: formatDuration((task.endedAt ?? now) - task.startedAt),
     cost: task.usage?.costUsd == null ? undefined : formatCost(task.usage.costUsd),
     live: isLiveStatus(task.status),
