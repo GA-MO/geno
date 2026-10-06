@@ -3,7 +3,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { STEER_META, type SteerOutcome, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -12,6 +12,9 @@ import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
+
+// A steer that never lands must fail here in seconds, never leave a worker spinning.
+vi.setConfig({ testTimeout: 15_000, hookTimeout: 15_000 });
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 
