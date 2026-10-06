@@ -81,7 +81,7 @@ export type BackgroundJob = {
 };
 
 /** What the panel and the Tasks pane show of a job. `tail` is the end of its output. */
-export type JobView = Pick<BackgroundJob, 'id' | 'toolUseId' | 'command' | 'state' | 'startedAt' | 'endedAt'> & {
+export type JobView = Pick<BackgroundJob, 'id' | 'toolUseId' | 'command' | 'state'> & {
   readonly description?: string | undefined;
   readonly tail: string;
 };
