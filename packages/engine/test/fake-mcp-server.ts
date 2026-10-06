@@ -12,7 +12,12 @@ export function fakeMcpServer(extraTools = 0): McpServer {
   server.registerTool(
     'echo',
     { description: 'Echo the text back.', inputSchema: { text: z.string() }, annotations: { readOnlyHint: true } },
-    async ({ text }) => ({ content: [{ type: 'text', text: `echo: ${text}` }] }),
+    async ({ text }) => {
+      // Long enough that two calls in flight overlap on a millisecond clock.
+      const delay = Number(process.env['ECHO_DELAY_MS'] ?? '0');
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      return { content: [{ type: 'text', text: `echo: ${text}` }] };
+    },
   );
   server.registerTool('env', { description: 'Show the environment the server runs with.' }, async () => ({
     content: [{ type: 'text', text: JSON.stringify(process.env) }],

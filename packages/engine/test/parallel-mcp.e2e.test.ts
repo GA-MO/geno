@@ -31,7 +31,7 @@ async function runEchoes(mode: SessionMode, reply: PermissionAnswer) {
   const store = openStore(env);
   await mkdir(workspace, { recursive: true });
   await mkdir(path.dirname(store.mcpConfigFile), { recursive: true });
-  await writeFile(store.mcpConfigFile, JSON.stringify({ mcpServers: { fake: { command: process.execPath, args: ['--import', TSX, FIXTURE] } } }));
+  await writeFile(store.mcpConfigFile, JSON.stringify({ mcpServers: { fake: { command: process.execPath, args: ['--import', TSX, FIXTURE], env: { ECHO_DELAY_MS: '100' } } } }));
   const hub = await openMcpHub({ store, env, workspace, acp: [] });
   hubs.push(hub);
   await hub.start();
