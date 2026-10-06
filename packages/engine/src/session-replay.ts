@@ -3,6 +3,11 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  isWakePrompt,
+  triggerOf,
+  WAKE_META,
+  wakeLabel,
+  type WakeMark,
   BACKGROUND_META,
   type JobView,
   laneApplyPrompt,
@@ -35,6 +40,10 @@ import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages
 import { EXECUTORS } from './tools/index.js';
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
+
+/** A woken turn's mark, which its first chunk carries live and in a replay. */
+export const wakeMetaOf = (event: EventOf<'user'>): Record<string, WakeMark> =>
+  isWakePrompt(event) ? { [WAKE_META]: { seq: event.seq, triggers: event.wake, label: wakeLabel(event.wake) } } : {};
 
 /** A steer as the user message chunk that shows it where it landed in its turn, live and in a replay. */
 export const steerUpdate = (event: EventOf<'user'>): acp.SessionUpdate => ({
@@ -149,8 +158,8 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
 function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
   const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
   const error = events.findLast((e) => e.kind === 'error');
-  // A background command may end long after its turn did; the turn ended with its own last event.
-  const last = events.findLast((e) => e.kind !== 'background-end');
+  // Background work may report long after its turn ended, for a woken turn to take; the turn ended with its own last event.
+  const last = events.findLast((e) => e.kind !== 'background-end' && e.kind !== 'child-end' && e.kind !== 'wake' && triggerOf(e) === undefined);
   return {
     ...(events[0]?.kind === 'lane-apply' ? {} : { seq: prompt.seq }),
     mode,
@@ -188,7 +197,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
   return runsOf(events).flatMap((run) => {
     const meta: ReplayedTurn = turnOf(run);
     const updates: acp.SessionUpdate[] = [
-      { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: run.prompt.content }, _meta: { [REPLAYED_TURN_META]: meta } },
+      { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: run.prompt.content }, _meta: { [REPLAYED_TURN_META]: meta, ...wakeMetaOf(run.prompt) } },
     ];
     for (const event of run.events) {
       if (event.kind === 'assistant') {

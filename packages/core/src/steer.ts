@@ -44,10 +44,11 @@ export const STEER_AT: Readonly<Record<LoopStep['kind'], SteerAction>> = {
 export const steerActionOf = (events: readonly TurnEvent[], run: Run): SteerAction => STEER_AT[loopStep(events, run).kind];
 
 /**
- * Whether a turn the model ended stays open: a background child still owes its report, or its report is queued. The
- * turn waits for it, delivers it, and calls the model again; any other steer queued at the end waits for the next turn.
+ * Whether a turn the model ended stays open, where nothing wakes the session later: a background child still owes its
+ * report, or its report is queued. The turn waits for it, delivers it, and calls the model again; any steer queued at
+ * the end waits for the next turn.
  */
-export const holdsTurnOpen = (owed: number, queued: readonly Steer[]): boolean => owed > 0 || queued.some((steer) => steer.from === 'child');
+export const holdsTurnOpen = (owed: number, reports: number): boolean => owed > 0 || reports > 0;
 
 type UserEvent = Extract<TurnEvent, { kind: 'user' }>;
 

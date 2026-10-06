@@ -4,6 +4,7 @@ import {
   asSessionId,
   childEndWords,
   jobEndText,
+  wakeLabel,
   hasPendingPrompt,
   isEmptyContext,
   isEffort,
@@ -246,8 +247,8 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
           `context: ${[...context.instructions.map((f) => f.path), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
         ]),
   ],
-  user: ({ seq, content, context, attachments }) => [
-    `#${seq} user: ${content}`,
+  user: ({ seq, content, context, attachments, wake }) => [
+    wake === undefined ? `#${seq} user: ${content}` : `#${seq} ${wakeLabel(wake)}`,
     ...(context ?? []).map((item) => `  attached ${item.kind} ${item.path}${item.kind === 'selection' ? `:${item.startLine}-${item.endLine}` : ''}`),
     ...(attachments ?? []).map((a) => `  attached ${a.kind} ${a.name}${a.kind === 'image' ? ` ${a.width}x${a.height}` : ''} (${a.sha256.slice(0, 12)})`),
   ],
@@ -278,6 +279,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
   wait: ({ seq, at, wait }) => [`#${seq} ${formatWait(wait, Date.parse(at))}`],
+  wake: ({ seq, note }) => [`#${seq} wake ${note.kind}${'id' in note ? ` ${note.id}` : ''}${note.kind === 'scheduled' ? ` at ${new Date(note.dueAt).toISOString()}: ${note.reason}` : note.kind === 'monitor' ? ` on ${note.job}: ${note.outcome}` : ''}`],
   mode: ({ seq, mode }) => [`${seq === undefined ? '' : `#${seq} `}mode: ${mode}`],
   effort: ({ seq, effort }) => [`${seq === undefined ? '' : `#${seq} `}effort: ${effort}`],
   title: ({ seq, title }) => [`#${seq} renamed: ${title}`],

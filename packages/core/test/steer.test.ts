@@ -62,10 +62,9 @@ describe('steer delivery points', () => {
   });
 
   it("keeps a turn open only for a background child's report", () => {
-    expect(holdsTurnOpen(1, [])).toBe(true);
-    expect(holdsTurnOpen(0, [{ text: 'report', from: 'child' }])).toBe(true);
-    expect(holdsTurnOpen(0, [{ text: 'and b?', from: 'user' }])).toBe(false);
-    expect(holdsTurnOpen(0, [])).toBe(false);
+    expect(holdsTurnOpen(1, 0)).toBe(true);
+    expect(holdsTurnOpen(0, 1)).toBe(true);
+    expect(holdsTurnOpen(0, 0)).toBe(false);
   });
 });
 

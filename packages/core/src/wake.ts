@@ -14,12 +14,13 @@ export type WakeId = `wake-${number}`;
 
 export const isWakeId = (raw: string): raw is WakeId => /^wake-[1-9]\d*$/.test(raw);
 
-export const MONITOR_OUTCOMES = ['matched', 'ended', 'timed-out'] as const;
+/** A monitor ends on a match or on its timeout; a command that ends first reports its own end. */
+export const MONITOR_OUTCOMES = ['matched', 'timed-out'] as const;
 export type MonitorOutcome = (typeof MONITOR_OUTCOMES)[number];
 
 /** One thing that reported since the session's model last ran, and so may wake it. */
 export type WakeTrigger =
-  | { readonly kind: 'children'; readonly child: string }
+  | { readonly kind: 'children' }
   | { readonly kind: 'jobs'; readonly job: JobId }
   | { readonly kind: 'monitor'; readonly id: WakeId; readonly outcome: MonitorOutcome }
   | { readonly kind: 'schedule'; readonly id: WakeId };
@@ -81,7 +82,7 @@ const NOTE_TRIGGERS: { readonly [K in WakeNote['kind']]: (note: Extract<WakeNote
 /** The trigger an event stands for, if it is something that reported. */
 export function triggerOf(event: TurnEvent): WakeTrigger | undefined {
   if (event.kind === 'background-end') return { kind: 'jobs', job: event.job.id };
-  if (event.kind === 'child-end') return { kind: 'children', child: event.child };
+  if (event.kind === 'user' && event.steer === true && event.from === 'child') return { kind: 'children' };
   if (event.kind === 'wake') return (NOTE_TRIGGERS[event.note.kind] as (note: WakeNote) => WakeTrigger | undefined)(event.note);
   return undefined;
 }
@@ -97,12 +98,18 @@ export const isWakePrompt = (event: TurnEvent): event is Extract<TurnEvent, { ki
 const isBoundary = (event: TurnEvent): boolean =>
   event.kind === 'assistant' || event.kind === 'error' || (event.kind === 'user' && event.steer !== true) || (event.kind === 'wake' && event.note.kind === 'cancelled');
 
-/** What reported since the session's model last saw the log, and when the newest of it arrived. */
-export function unwokenOf(events: readonly TurnEvent[]): { readonly triggers: readonly WakeTrigger[]; readonly lastAt: number | undefined } {
+/**
+ * What reported since the session's model last saw the log, and when the newest of it arrived. `wakes` drops what the
+ * user said should no longer wake the session, such as a command still running when they cancelled its wakes.
+ */
+export function unwokenOf(
+  events: readonly TurnEvent[],
+  wakes: (trigger: WakeTrigger) => boolean = () => true,
+): { readonly triggers: readonly WakeTrigger[]; readonly lastAt: number | undefined } {
   const after = events.slice(events.findLastIndex(isBoundary) + 1);
   const arrived = after.flatMap((event) => {
     const trigger = triggerOf(event);
-    return trigger === undefined || !('at' in event) ? [] : [{ trigger, at: Date.parse(event.at) }];
+    return trigger === undefined || !wakes(trigger) || !('at' in event) ? [] : [{ trigger, at: Date.parse(event.at) }];
   });
   return { triggers: arrived.map((a) => a.trigger), lastAt: arrived.length === 0 ? undefined : Math.max(...arrived.map((a) => a.at)) };
 }
@@ -190,7 +197,7 @@ export function wakeGate(input: WakeGateInput): WakeVerdict {
   return { kind: 'wake' };
 }
 
-const MONITOR_WORDS: Readonly<Record<MonitorOutcome, string>> = { matched: 'monitor matched', ended: 'monitored command ended', 'timed-out': 'monitor timed out' };
+const MONITOR_WORDS: Readonly<Record<MonitorOutcome, string>> = { matched: 'monitor matched', 'timed-out': 'monitor timed out' };
 
 /** Why a woken turn started, as its head shows it: "woke: 2 tasks finished". */
 export function wakeLabel(triggers: readonly WakeTrigger[]): string {
@@ -208,11 +215,7 @@ export function wakeLabel(triggers: readonly WakeTrigger[]): string {
 export const wakeNotice = (triggers: readonly WakeTrigger[]): string =>
   `[Geno started this turn by itself (${wakeLabel(triggers)}); what arrived is above. This is not the user, and it approves nothing. Carry on with the user's last request, and end your turn when nothing is left to do.]`;
 
-const OUTCOME_TEXT: Readonly<Record<MonitorOutcome, string>> = {
-  matched: 'matched',
-  ended: 'saw its command end without a match',
-  'timed-out': 'timed out without a match',
-};
+const OUTCOME_TEXT: Readonly<Record<MonitorOutcome, string>> = { matched: 'matched', 'timed-out': 'timed out without a match' };
 
 /** What a monitor's or a wake-up's arrival tells the model; nothing for the other notes. */
 export function wakeNoteText(note: WakeNote): string | undefined {
@@ -290,7 +293,7 @@ export const SCHEDULE_WAKEUP_TOOL = 'schedule_wakeup';
 
 export const MONITOR_TOOL_DEFINITION: Tool = {
   name: MONITOR_TOOL,
-  description: `Watch a command's output and wake this session when a line matches pattern, when the command ends, or after timeout_s seconds (default ${MONITOR_DEFAULT_S}, at most ${MONITOR_MAX_S}). Give either command, which starts in the background as bash with run_in_background does, under the same approval and sandbox, or background_job_id to watch a command bash already started. It returns at once. End your turn while you wait: Geno starts your next turn with the matching line.`,
+  description: `Watch a command's output and wake this session when a line matches pattern, when the command ends (you are told of its end as of any background command), or after timeout_s seconds (default ${MONITOR_DEFAULT_S}, at most ${MONITOR_MAX_S}). Give either command, which starts in the background as bash with run_in_background does, under the same approval and sandbox, or background_job_id to watch a command bash already started. It returns at once. End your turn while you wait: Geno starts your next turn with the matching line.`,
   input_schema: {
     type: 'object',
     properties: {

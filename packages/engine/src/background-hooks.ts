@@ -1,10 +1,10 @@
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
-import { nextSeq, TELLS_MODEL } from '@g-code/core';
+import { nextSeq, TELLS_MODEL, type TurnEvent } from '@g-code/core';
 import { BackgroundJobs } from './background.js';
 import { openSessionLog } from './chat.js';
 import type { Io } from './command.js';
-import { Inbox, loggedArrival } from './inbox.js';
+import { arrivalEvents, Inbox } from './inbox.js';
 import { backgroundUpdate } from './session-replay.js';
 import { appendEvent, dropTornTail } from './sessions.js';
 import type { Store } from './store.js';
@@ -36,7 +36,7 @@ export async function logArrivals(store: Store, io: Io, inbox: Inbox, sessionId:
   const log = await openSessionLog(store, sessionId, io);
   await dropTornTail(log);
   let seq = nextSeq(log.events);
-  for (const arrival of arrivals) await appendEvent(log.file, loggedArrival(arrival, seq++));
+  for (const event of arrivals.flatMap(arrivalEvents)) await appendEvent(log.file, { ...event, seq: seq++ } as TurnEvent);
 }
 
 export const backgroundStopRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });

@@ -162,6 +162,13 @@ import {
   type ApprovalRuleId,
   STEER_META,
   startsTurn,
+  isUsersOwn,
+  lastUserPromptSeq,
+  unwokenOf,
+  wakeNotice,
+  WAKE_CANCEL_METHOD,
+  DRAFT_METHOD,
+  type WakeTrigger,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -192,7 +199,7 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { backgroundUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { wakeMetaOf, backgroundUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
@@ -201,6 +208,7 @@ import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import { waitsLeft, waitUpdate } from './wait-hooks.js';
+import { draftNotice, wakeCancelRequest, WakeDriver } from './wake-hooks.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 
@@ -767,6 +775,14 @@ async function logPrompt(
   return { ...opened, log: { ...log, events: [...log.events, event] } };
 }
 
+/** A woken turn's first event: why it woke, from the engine and not the user. */
+async function logWake(opened: OpenSession, triggers: readonly WakeTrigger[]): Promise<OpenSession> {
+  const { log } = opened;
+  const event: TurnEvent = { kind: 'user', seq: nextSeq(log.events), at: new Date().toISOString(), content: wakeNotice(triggers), from: 'wake', wake: triggers };
+  await appendEvent(log.file, event);
+  return { ...opened, log: { ...log, events: [...log.events, event] } };
+}
+
 async function appendDecisions(store: Store, io: Io, sessionId: string, decisions: readonly ReviewDecision[]): Promise<void> {
   if (decisions.length === 0) return;
   const log = await openSessionLog(store, sessionId, io);
@@ -784,17 +800,25 @@ export function engineShared(io: Io) {
   const viewers = new Viewers<Peer>(io.err);
   const tasks = new Tasks();
   const background = backgroundShared(viewers, tasks);
+  const turns = new Map<string, AbortController | undefined>();
+  // A turn and a review decision both append to the session log and number their events from what they read,
+  // so each session's writers take turns.
+  const writers = new Map<string, Promise<unknown>>();
+  const serially = <T>(sessionId: string, work: () => Promise<T>): Promise<T> => {
+    const next = (writers.get(sessionId) ?? Promise.resolve()).then(work, work);
+    writers.set(sessionId, next.catch(() => {}));
+    return next;
+  };
   return {
-    turns: new Map<string, AbortController | undefined>(),
+    turns,
     // Running subagents by their own session ids, which `session/cancel` may name.
     childCancels: new Map<string, () => void>(),
     // Each session's Auto state, kept across its turns for as long as the engine runs.
     autos: new Map<string, { state: AutoState }>(),
     // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
     modes: new Map<string, SessionMode>(),
-    // A turn and a review decision both append to the session log and number their events from what they read,
-    // so each session's writers take turns.
-    writers: new Map<string, Promise<unknown>>(),
+    writers,
+    serially,
     viewers,
     tasks,
     // Background commands, which outlive their turn and the window that started them.
@@ -803,7 +827,7 @@ export function engineShared(io: Io) {
     // Each connection's way to hear of an Arena run's steps.
     arenaWatchers: new Set<(update: ArenaUpdate) => void>(),
     // Each session's Retry now, which cuts a wait of its running turn short.
-    wakes: new Map<string, Wake>(),
+    retries: new Map<string, Wake>(),
     // Whether a connection already took up the waits an engine that stopped left in the logs; the first one does.
     leftWaits: { taken: false },
     // Each external session's agent process.
@@ -815,6 +839,15 @@ export function engineShared(io: Io) {
     turnEnds: new Map<string, Promise<boolean>>(),
     // Each session's steers that missed their turn, run one turn after another in the order they came.
     nextTurns: new Map<string, Promise<unknown>>(),
+    // What wakes each session after its turn ended, and the gate that decides when.
+    wakes: new WakeDriver({
+      ...background,
+      tasks,
+      turns,
+      shownBy: (sessionId) => viewers.of(sessionId),
+      serially,
+      autoWake: io.env['GCODE_AUTO_WAKE'] !== 'off',
+    }),
   };
 }
 
@@ -877,8 +910,8 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns } = shared;
-  const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
+  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes } = shared;
+  const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
   // This connection itself, as the editor that shows the sessions it opens; known once it connected.
@@ -892,14 +925,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return { uri: pathToFileURL(widgetFile(dir, widget)).href, html: await readWidget(dir, widget) };
   };
   const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
-  const serially = <T>(sessionId: string, work: () => Promise<T>): Promise<T> => {
-    const next = (writers.get(sessionId) ?? Promise.resolve()).then(work, work);
-    writers.set(sessionId, next.catch(() => {}));
-    return next;
-  };
-  // An arrival waits behind a running turn's writes, which take it at their next safe point; what is left is logged after.
+  wakes.bind(store, io);
+  // An arrival waits behind a running turn's writes, which take it at their next safe point; what is left is logged
+  // after, and may wake the session.
   inbox.arrived = (sessionId) =>
-    void serially(sessionId, () => logArrivals(store, io, inbox, sessionId)).catch((error: unknown) => io.err(`could not log what reached ${sessionId}: ${String(error)}`));
+    void serially(sessionId, () => logArrivals(store, io, inbox, sessionId))
+      .then(() => wakes.soon(sessionId))
+      .catch((error: unknown) => io.err(`could not log what reached ${sessionId}: ${String(error)}`));
   const commands = sessionCommands(homesOf(store, io.env), io);
   /** A session no editor shows and no turn runs in lets go of its MCP servers; a load or resume opens them again. */
   const release = (sessionId: string) => {
@@ -991,17 +1023,18 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   /**
    * One turn of a session, for a prompt from `from`, the editor that asked. It runs to its end whether or not any
    * editor still shows the session; the tasks list follows it. A `resume` turn has no prompt: it takes up the wait an
-   * engine that stopped left in the log.
+   * engine that stopped left in the log. A `wake` turn has none either: the engine starts it with what arrived.
    */
   const runTurn = async (
     sessionId: string,
     blocks: readonly acp.ContentBlock[],
     meta: Record<string, unknown> | null | undefined,
     from: Viewer<Peer>,
-    resume = false,
+    start: 'prompt' | 'resume' | 'wake' = 'prompt',
   ): Promise<acp.PromptResponse> => {
     known(sessionId);
     if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
+    const resume = start !== 'prompt';
     const text = promptText(blocks);
     const attached: Attached = { mentions: parsedMentions(sessionId, blocks), attachments: parsedAttachments(sessionId, blocks) };
     if (text === '' && attached.attachments.length === 0 && !resume) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
@@ -1042,7 +1075,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast(startsTurn)?.content ?? '') : text)),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => startsTurn(e) && isUsersOwn(e))?.content ?? '') : text)),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
@@ -1086,7 +1119,16 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         }
         const resumed = await resumeSession(store, io, sessionId);
         session = resumed.log.session;
-        shown.live.events.push(...resumed.log.events);
+        // What woke the session; another turn may have taken it since the gate opened.
+        const woken = start === 'wake' ? unwokenOf(resumed.log.events, wakes.registry.wakes(sessionId)).triggers : [];
+        if (start === 'wake' && woken.length === 0) return { stopReason: 'end_turn' };
+        const wakeLimits = start === 'wake' ? { ...limits, countFrom: lastUserPromptSeq(resumed.log.events) } : limits;
+        const base = start === 'wake' ? await logWake(resumed, woken) : resumed;
+        shown.live.events.push(...base.log.events);
+        const wake = base.log.events.at(-1);
+        if (start === 'wake' && wake?.kind === 'user') {
+          shown.updates.send({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: wake.content }, _meta: wakeMetaOf(wake) });
+        }
         if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
         if (rawLane !== undefined) {
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
@@ -1096,9 +1138,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         }
         const opened =
           target === undefined && (hasAttached(attached) || slash !== undefined)
-            ? await logPrompt(store, resumed, slash?.content ?? text, attached, shown.surface.files, sessionId, slash)
-            : resumed;
-        const prompt = opened === resumed ? text : '';
+            ? await logPrompt(store, base, slash?.content ?? text, attached, shown.surface.files, sessionId, slash)
+            : base;
+        const prompt = opened === base ? text : '';
         const approval: Approval = {
           kind: 'interactive',
           mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
@@ -1109,7 +1151,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const result =
           target === undefined
             ? await runAgent(turnIo, store, opened, prompt, {
-                limits,
+                limits: wakeLimits,
                 check: undefined,
                 checkAfterEdit: true,
                 approval,
@@ -1120,7 +1162,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 widgets: from.peer.widgets,
                 externals,
                 keyOf: keyOf(sessionId),
-                engine: { jobs, steers },
+                engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd } } } : {}) },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,
@@ -1158,7 +1200,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     } finally {
       turnEnded(controller.signal.aborted);
       live.delete(sessionId);
-      tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
+      tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage(), wakes.view(sessionId));
       inbox.arrived(sessionId);
       // A session closed during its turn stays closed.
       if (turns.has(sessionId)) turns.set(sessionId, undefined);
@@ -1217,6 +1259,23 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return { id, turn };
   };
 
+  /** A session the engine may not hold open any more, such as one its window closed, before a turn of its own. */
+  const reopen = async (sessionId: string) => {
+    if (turns.has(sessionId)) return;
+    const log = await existing(sessionId);
+    turns.set(sessionId, undefined);
+    if (!modes.has(sessionId)) modes.set(sessionId, sessionModeOf(log.events));
+    mcp.register(sessionId, log.session.workspace, [], undefined);
+  };
+
+  /** A woken turn, which the gate opened; a turn that started meanwhile takes what arrived instead. */
+  const wakeTurn = (sessionId: string) => {
+    if (turns.get(sessionId) !== undefined) return;
+    void reopen(sessionId)
+      .then(() => runTurn(sessionId, [], undefined, self(), 'wake'))
+      .catch((error: unknown) => io.err(`session ${sessionId}: the woken turn did not run: ${error instanceof Error ? error.message : String(error)}`));
+  };
+
   /** Runs on in the background each turn an engine that stopped left waiting, as the first editor connects. */
   const takeUpWaits = async () => {
     const left = await waitsLeft(store, io.cwd).catch((error: unknown) => {
@@ -1230,8 +1289,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       mcp.register(id, log.session.workspace, [], undefined);
       io.err(`session: ${id} takes up the wait its last engine left`);
-      void runTurn(id, [], undefined, self(), true).catch((error: unknown) => io.err(`session ${id}: ${String(error)}`));
+      void runTurn(id, [], undefined, self(), 'resume').catch((error: unknown) => io.err(`session ${id}: ${String(error)}`));
     }
+    const woken = await wakes.takeUp(store, io, io.cwd, { pid: process.pid, cwd: io.cwd }).catch((error: unknown) => {
+      io.err(`could not look for wake-ups to take up: ${String(error)}`);
+      return [];
+    });
+    for (const id of woken) io.err(`session: ${id} takes up the wake-ups its last engine left`);
   };
 
   return acp
@@ -1252,9 +1316,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (peer.tasks) void connection.client.notify(ARENA_UPDATE_METHOD, update).catch(() => {});
       };
       arenaWatchers.add(watch);
+      wakes.connected({ connection: shows, run: wakeTurn });
       void connection.closed.then(() => {
         unlisten();
         arenaWatchers.delete(watch);
+        wakes.disconnected(shows);
         for (const sessionId of viewers.shownBy(shows)) {
           viewers.hide(sessionId, shows);
           commands.detach(sessionId);
@@ -1386,6 +1452,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { sessionId } = params;
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before deleting its session');
       await existing(sessionId);
+      wakes.registry.forget(sessionId);
       await jobs.kill('session-deleted', { sessionId });
       const trashed = await serially(sessionId, () => trashSession(store, io, sessionId));
       turns.delete(sessionId);
@@ -1406,7 +1473,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       await mcp.close(sessionId);
       return {};
     })
-    .onRequest(RETRY_NOW_METHOD, sessionRequest, async ({ params }): Promise<RetryNowResponse> => ({ retried: wakes.get(params.sessionId)?.wake() ?? false }))
+    .onRequest(RETRY_NOW_METHOD, sessionRequest, async ({ params }): Promise<RetryNowResponse> => ({ retried: retries.get(params.sessionId)?.wake() ?? false }))
     .onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {
       viewers.hide(params.sessionId, self());
       commands.detach(params.sessionId);
@@ -1450,6 +1517,20 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
       if (params._meta?.[STEER_META] === true) return steer(params);
       return prompt(params);
+    })
+    .onNotification(DRAFT_METHOD, draftNotice, ({ params }) => wakes.draft(params.sessionId, self(), params.typing))
+    .onRequest(WAKE_CANCEL_METHOD, wakeCancelRequest, async ({ params }) => {
+      const { sessionId } = params;
+      known(sessionId);
+      wakes.registry.cancel(sessionId);
+      // Logged, so what arrived before the Cancel wakes nothing either, and a wake-up is not taken up after a restart.
+      await serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        await dropTornTail(log);
+        await appendEvent(log.file, { kind: 'wake', seq: nextSeq(log.events), at: new Date().toISOString(), note: { kind: 'cancelled' } });
+      });
+      wakes.soon(sessionId);
+      return {};
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();
@@ -1579,6 +1660,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (choice.kind !== 'files') {
           // A cut turn's background commands have no turn left to report to.
           const cut = toolUsesFrom(log.events, turnSeq);
+          wakes.registry.cancel(sessionId, cut);
           for (const job of jobs.views(sessionId)) if (cut.has(job.toolUseId)) await jobs.stop(sessionId, job.id, 'user').catch(() => {});
         }
         return rewindSession(store, log, turnSeq, choice).catch(refused({ turnSeq }));

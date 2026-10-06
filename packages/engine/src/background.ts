@@ -60,6 +60,8 @@ type Entry = {
   readonly shell: SpawnedShell;
   readonly done: Promise<BackgroundJob>;
   timer: ReturnType<typeof setTimeout> | undefined;
+  /** Monitors on the job's output, each fed every chunk as it arrives. */
+  readonly watchers: Set<(chunk: string) => void>;
 };
 
 const STARTED = /^Started background command (bg-\d+)\./;
@@ -68,7 +70,7 @@ const STARTED = /^Started background command (bg-\d+)\./;
 export function jobIdsIn(events: readonly TurnEvent[]): JobId[] {
   return events.flatMap((event): JobId[] => {
     if (event.kind === 'background-end') return [event.job.id];
-    const id = event.kind === 'tool-result' && event.name === 'bash' && 'output' in event ? STARTED.exec(event.output)?.[1] : undefined;
+    const id = event.kind === 'tool-result' && (event.name === 'bash' || event.name === 'monitor') && 'output' in event ? STARTED.exec(event.output)?.[1] : undefined;
     return id !== undefined && isJobId(id) ? [id] : [];
   });
 }
@@ -116,7 +118,9 @@ export class BackgroundJobs {
         env: start.env,
         onOutput: (chunk) => {
           output.append(chunk);
-          if (entry !== undefined) this.printed(entry);
+          if (entry === undefined) return;
+          this.printed(entry);
+          for (const watcher of entry.watchers) watcher(chunk.toString('utf8'));
         },
       });
     } catch (error) {
@@ -145,7 +149,7 @@ export class BackgroundJobs {
       this.forgetOld(jobs);
       return ended;
     });
-    entry = { job, cwd: start.cwd, output, shell, done, timer: undefined };
+    entry = { job, cwd: start.cwd, output, shell, done, timer: undefined, watchers: new Set() };
     jobs.set(id, entry);
     this.hooks.changed(entry.job, viewOf(entry));
     return { job, text: backgroundStartText(id) };
@@ -180,6 +184,16 @@ export class BackgroundJobs {
     const { text, dropped } = entry.output.unread();
     const skipped = dropped > 0 ? `[${dropped} bytes of output were dropped before this read]\n` : '';
     return `${status}\n${text === '' ? '(no new output since the last read)' : `${skipped}New output:\n${text.replace(/\n$/, '')}`}`;
+  }
+
+  /**
+   * Feeds `chunk` everything the job prints from now on, until the returned `stop`. `kept` is what it printed before
+   * that and still keeps; `ended` settles as the job ends.
+   */
+  watch(sessionId: string, id: string, chunk: (text: string) => void): { readonly job: BackgroundJob; readonly kept: string; readonly ended: Promise<BackgroundJob>; stop(): void } {
+    const entry = this.entry(sessionId, id);
+    entry.watchers.add(chunk);
+    return { job: entry.job, kept: entry.output.tail(Number.MAX_SAFE_INTEGER), ended: entry.done, stop: () => entry.watchers.delete(chunk) };
   }
 
   /** bash_stop and the step's Stop button: SIGTERM, then SIGKILL after the grace period. Settles once it ended. */

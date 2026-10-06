@@ -54,6 +54,7 @@ import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './ba
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { skillExecutor } from './skill.js';
+import { wakeExecutors, type SessionWakes } from './wake.js';
 
 /**
  * The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session.
@@ -172,6 +173,8 @@ export type AgentToolEnv = {
   readonly background?: SessionBackground | undefined;
   /** The workspace's remembered rules; undefined runs with none. */
   readonly permissions?: PermissionStore | undefined;
+  /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
+  readonly wakes?: SessionWakes | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -237,6 +240,36 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
 
   const edit = editExecutor(reads, async (ctx) => (tools.checkAfterEdit ? (await runCheck(tools, ctx))?.text : undefined));
 
+  /** The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal throws. */
+  const approveCommand = async (command: string, ctx: ToolContext, background: boolean): Promise<ApprovalRecord | undefined> => {
+    const mode = modeOf(tools.approval);
+    if (background && mode === 'plan') throw new ToolError(`background commands are not available: ${MODE_REFUSALS.plan}. Do not retry it.`);
+    const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
+    if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
+    const { permissions } = tools;
+    const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? []);
+    const keep = async () => {
+      if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
+    };
+    const approval =
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal, keep);
+    if (approval?.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
+    return approval;
+  };
+
+  const startInBackground = (background: SessionBackground, command: string, description: string | undefined, ctx: ToolContext) =>
+    background.jobs.start({
+      sessionId: background.sessionId,
+      toolUseId: ctx.toolUseId ?? '',
+      command,
+      description,
+      cwd: ctx.workspace,
+      env: tools.env,
+      spillDir: ctx.spillDir,
+      events: ctx.events(),
+      sandbox: tools.sandbox,
+    });
+
   const bash = executor({
     input: z.strictObject({
       command: z.string().min(1),
@@ -248,30 +281,9 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     async run({ command, description, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS, run_in_background = false }, ctx) {
       const background = run_in_background ? tools.background : undefined;
       if (run_in_background && background === undefined) throw new ToolError(NO_BACKGROUND);
-      const mode = modeOf(tools.approval);
-      if (background !== undefined && mode === 'plan') throw new ToolError(`background commands are not available: ${MODE_REFUSALS.plan}. Do not retry it.`);
-      const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
-      if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
-      const { permissions } = tools;
-      const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? []);
-      const keep = async () => {
-        if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
-      };
-      const approval =
-        denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal, keep);
-      if (approval?.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
+      const approval = await approveCommand(command, ctx, background !== undefined);
       if (background !== undefined) {
-        const { text } = await background.jobs.start({
-          sessionId: background.sessionId,
-          toolUseId: ctx.toolUseId ?? '',
-          command,
-          description,
-          cwd: ctx.workspace,
-          env: tools.env,
-          spillDir: ctx.spillDir,
-          events: ctx.events(),
-          sandbox: tools.sandbox,
-        });
+        const { text } = await startInBackground(background, command, description, ctx);
         return approval === undefined ? text : { text, approval };
       }
       const result = await tools.sandbox.run(command, {
@@ -306,6 +318,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     edit,
     bash,
     ...backgroundExecutors(tools.background),
+    ...wakeExecutors(tools.wakes, tools.background, async (command, description, ctx) => {
+      const approval = await approveCommand(command, ctx, true);
+      const { job, text } = await startInBackground(tools.background!, command, description, ctx);
+      return { job: job.id, text, approval };
+    }),
     check,
     skill: skillExecutor(tools.commands),
   };
