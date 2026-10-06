@@ -52,7 +52,7 @@ export type ArenaFromView =
   | { readonly type: 'arena-cancel' }
   /** Cancels each running lane's session. */
   | { readonly type: 'arena-stop'; readonly id: string }
-  /** Records the winner, then applies it in the shown chat, for review. */
+  /** Records the winner, then applies it in the shown chat. */
   | { readonly type: 'arena-pick'; readonly id: string; readonly lane: string }
   | { readonly type: 'arena-graft'; readonly id: string; readonly lane: string; readonly hunks: readonly string[] };
 

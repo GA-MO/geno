@@ -27,7 +27,7 @@ export type LanesFromView =
   | { readonly type: 'lane-new'; readonly text: string }
   /** Opens the lane's session in the panel. */
   | { readonly type: 'lane-open'; readonly name: string }
-  /** Applies the lane into the main checkout, as changes for review in the shown chat. */
+  /** Applies the lane into the main checkout, as a turn of the shown chat. */
   | { readonly type: 'lane-apply'; readonly name: string }
   /** `discardChanges` is the user's yes to the confirm a lane with changes asks. */
   | { readonly type: 'lane-discard'; readonly name: string; readonly discardChanges: boolean }
