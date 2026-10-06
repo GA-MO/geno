@@ -1,16 +1,23 @@
 import * as vscode from 'vscode';
 import { EDIT, FILES, HELPER_LINE, PROMPT } from './editor-actions-fixture.js';
-import { check, click, count, openPanel, panel, panelWidth, screenshots, waitFor, workbench } from './lanes-ui.js';
+import { check, click, count, openPanel, panel, panelWidth, screenshots, textOf, waitFor, workbench } from './lanes-ui.js';
 
 const uriOf = (file: string) => vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0]!.uri, file);
 
 /** The label of the row the Explorer has selected. */
 const explorerSelection = () => workbench<string | null>(`document.querySelector('.explorer-folders-view .monaco-list-row.selected .label-name')?.textContent ?? null`);
 
+/** What the window shows, for a timeout's message. */
+const seen = async () => ({
+  active: vscode.window.activeTextEditor?.document.uri.toString(),
+  tabs: vscode.window.tabGroups.all.flatMap((group) => group.tabs.map((tab) => tab.label)),
+  transcript: await textOf('.transcript'),
+});
+
 const steps = () => panel<string[]>(`[...doc.querySelectorAll('.editor-step .step-row')].map((row) => row.textContent)`);
 
 async function landedOnHelper(what: string): Promise<void> {
-  await waitFor(what, async () => vscode.window.activeTextEditor?.document.uri.fsPath === uriOf('src/util.ts').fsPath);
+  await waitFor(what, async () => vscode.window.activeTextEditor?.document.uri.fsPath === uriOf('src/util.ts').fsPath, 20_000, seen);
   const editor = vscode.window.activeTextEditor!;
   check(editor.selection.active.line === HELPER_LINE - 1, `${what}: the cursor is on line ${HELPER_LINE}`, editor.selection.active.line + 1);
   check(editor.visibleRanges.some((range) => range.contains(new vscode.Position(HELPER_LINE - 1, 0))), `${what}: line ${HELPER_LINE} is in view`, editor.visibleRanges);
@@ -19,7 +26,7 @@ async function landedOnHelper(what: string): Promise<void> {
 const diffTab = () => vscode.window.tabGroups.all.flatMap((group) => group.tabs).find((tab) => tab.input instanceof vscode.TabInputTextDiff)?.input as vscode.TabInputTextDiff | undefined;
 
 async function diffHasTheRightSides(what: string): Promise<void> {
-  await waitFor(what, async () => diffTab() !== undefined);
+  await waitFor(what, async () => diffTab() !== undefined, 20_000, seen);
   const diff = diffTab()!;
   check(diff.original.scheme === 'gcode-checkpoint' && new URLSearchParams(diff.original.query).has('sha'), `${what}: the left side is a checkpoint`, diff.original.toString());
   check(diff.modified.scheme === 'file' && diff.modified.fsPath === uriOf('a.ts').fsPath, `${what}: the right side is a.ts itself`, diff.modified.toString());

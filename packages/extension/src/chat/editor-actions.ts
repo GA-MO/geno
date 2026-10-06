@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { z } from 'zod';
 import { EDITOR_ACTION_META, type EditorAction, type EditorActionRequest } from '@g-code/core';
 import { openCheckpointDiff } from '../review/checkpoint.js';
+import { editorUri } from './bridge.js';
 
 const position = z.number().int().positive();
 
@@ -22,12 +23,15 @@ export function editorActionOf(meta: Record<string, unknown> | null | undefined)
 const RUN: { readonly [K in EditorAction['kind']]: (action: Extract<EditorAction, { kind: K }>) => Thenable<unknown> } = {
   async open({ path, line, column }) {
     const at = new vscode.Position(Math.max(0, (line ?? 1) - 1), Math.max(0, (column ?? 1) - 1));
-    const editor = await vscode.window.showTextDocument(vscode.Uri.file(path), { preview: false, selection: new vscode.Range(at, at) });
+    const editor = await vscode.window.showTextDocument(await editorUri(path), { preview: false, selection: new vscode.Range(at, at) });
     editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   },
-  diff: ({ path, base }) => openCheckpointDiff(vscode.Uri.file(path), base),
-  reveal: ({ path }) => vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(path)),
+  diff: async ({ path, base }) => openCheckpointDiff(await editorUri(path), base),
+  reveal: async ({ path }) => vscode.commands.executeCommand('revealInExplorer', await editorUri(path)),
 };
 
-/** Shows what the model pointed at, live from the engine or again from a step. It never changes a file. */
+/**
+ * Shows what the model pointed at, live from the engine or again from a step. It never changes a file. The engine
+ * names real paths, so each goes through the workspace folder's URI to land on the document the user has open.
+ */
 export const runEditorAction = (action: EditorAction): Thenable<unknown> => (RUN[action.kind] as (a: EditorAction) => Thenable<unknown>)(action);
