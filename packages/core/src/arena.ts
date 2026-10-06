@@ -103,7 +103,8 @@ export type ArenaId = Brand<string, 'ArenaId'>;
 
 /**
  * A lane's way through the run. `running` is its task, `checking` the project check after it. `passed` means the task
- * ended by itself and the check passed, or there is no check. `failed` is a failed task or check, `stopped` the user's.
+ * ended by itself or at its turn or cost cap, and the check passed, or there is no check. `failed` is a failed task
+ * or check, `stopped` the user's. A capped lane is still checked, since what it changed may already do the task.
  */
 export const ARENA_LANE_STATUSES = ['running', 'checking', 'passed', 'failed', 'stopped'] as const;
 export type ArenaLaneStatus = (typeof ARENA_LANE_STATUSES)[number];
@@ -155,14 +156,17 @@ export type RankedLane = { readonly lane: string; readonly rank: number; readonl
 /** The review's order over the passing lanes, best first. `source` says how much of it the review itself gave. */
 export type Ranking = { readonly order: readonly RankedLane[]; readonly summary: string; readonly source: RankingSource };
 
+/** How a lane's task ended: by itself, at its turn or cost cap, with an error, or by the user. */
+export type LaneEnd = 'done' | 'capped' | 'failed' | 'stopped';
+
 export type ArenaEvent =
-  | { readonly kind: 'lane-ended'; readonly lane: string; readonly task: 'done' | 'failed' | 'stopped'; readonly turns: number; readonly costUsd: number | null }
+  | { readonly kind: 'lane-ended'; readonly lane: string; readonly task: LaneEnd; readonly turns: number; readonly costUsd: number | null }
   | { readonly kind: 'lane-checked'; readonly lane: string; readonly check: LaneCheck }
   | { readonly kind: 'reviewing' }
   | { readonly kind: 'ranked'; readonly ranking: Ranking; readonly review: ArenaReview | null }
   | { readonly kind: 'picked'; readonly lane: string };
 
-const LANE_ENDS: { readonly [K in Extract<ArenaEvent, { kind: 'lane-ended' }>['task']]: ArenaLaneStatus } = { done: 'checking', failed: 'failed', stopped: 'stopped' };
+const LANE_ENDS: { readonly [K in LaneEnd]: ArenaLaneStatus } = { done: 'checking', capped: 'checking', failed: 'failed', stopped: 'stopped' };
 
 const withLane = (run: ArenaRun, name: string, change: (lane: ArenaLane) => ArenaLane): ArenaRun => ({
   ...run,

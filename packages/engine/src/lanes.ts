@@ -6,8 +6,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import {
+  applyHunks,
   asSessionId,
   changeOf,
+  hunkIdOf,
   hashText,
   isLaneBase,
   isDisposable,
@@ -27,6 +29,7 @@ import {
   type LaneRecord,
   type LaneStatus,
   type DiffStat,
+  type FileChange,
   type SessionId,
   type SetupApproval,
 } from '@g-code/core';
@@ -388,27 +391,67 @@ async function mergeFile(scratch: string, ours: string, base: string, theirs: st
   throw new EngineError(`git merge-file failed: ${result.stderr.trim() || `exit ${result.code}`}`);
 }
 
-/**
- * Merges the lane's changes since its base into the main checkout's current files, 3-way per file, and returns them
- * as review changes, or every conflict. It writes nothing; `writeLaneChanges` does, so the caller decides.
- */
-export async function applyLane(repo: LaneRepo, lane: LaneRecord, files: Files = DISK_FILES): Promise<LaneApplyResult> {
-  if (!existsSync(lane.path)) throw new EngineError(`lane ${lane.name} has no worktree at ${lane.path}`);
+/** One file the lane changed since its base: its text at the base and in the lane now, null where it is absent. */
+type LaneFile = { readonly file: string; readonly special: boolean; readonly base: string | null; readonly theirs: string | null };
+
+/** Every file the lane changed since its base, uncommitted and untracked files included, in git's order. */
+async function laneFiles(lane: LaneRecord, scratch: string): Promise<LaneFile[]> {
+  const tree = await workingTree(lane, scratch);
+  const raw = nulList(await git(lane.path, ['diff-tree', '-r', '-z', '--no-renames', '--raw', lane.base.commit, tree]));
+  const files: LaneFile[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    const [oldMode = '', newMode = ''] = raw[i]!.slice(1).split(' ');
+    const file = raw[i + 1]!;
+    const special = SPECIAL_MODES.has(oldMode) || SPECIAL_MODES.has(newMode);
+    const [base, theirs] = special ? [null, null] : await Promise.all([blobAt(lane.path, lane.base.commit, file), blobAt(lane.path, tree, file)]);
+    files.push({ file, special, base, theirs });
+  }
+  return files;
+}
+
+async function inScratch<T>(work: (scratch: string) => Promise<T>): Promise<T> {
   const scratch = await mkdtemp(path.join(tmpdir(), 'gcode-lane-'));
   try {
-    const tree = await workingTree(lane, scratch);
-    const raw = nulList(await git(lane.path, ['diff-tree', '-r', '-z', '--no-renames', '--raw', lane.base.commit, tree]));
+    return await work(scratch);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/** The lane's changes since its base as review changes, base to lane, for the Arena's compare. */
+export async function laneChanges(lane: LaneRecord): Promise<FileChange[]> {
+  if (!existsSync(lane.path)) return [];
+  return inScratch(async (scratch) => (await laneFiles(lane, scratch)).filter((f) => !f.special).map((f) => changeOf(f.file, f.base ?? '', f.theirs ?? '')));
+}
+
+/** The lane's changes since its base as a unified diff, as the Arena's review reads them. */
+export async function laneDiffText(lane: LaneRecord): Promise<string> {
+  if (!existsSync(lane.path)) return '';
+  return inScratch(async (scratch) => git(lane.path, ['diff-tree', '-p', '-r', '--no-renames', '--no-color', lane.base.commit, await workingTree(lane, scratch)]));
+}
+
+/**
+ * What of a lane file an apply takes: the lane's text, a text with only some of its hunks, null to delete, or
+ * undefined to leave the file alone.
+ */
+type Take = (file: LaneFile) => string | null | undefined;
+
+const WHOLE: Take = (file) => file.theirs;
+
+async function mergeInto(repo: LaneRepo, lane: LaneRecord, files: Files, take: Take): Promise<LaneApplyResult> {
+  if (!existsSync(lane.path)) throw new EngineError(`lane ${lane.name} has no worktree at ${lane.path}`);
+  return inScratch(async (scratch) => {
     const changes: LaneChange[] = [];
     const conflicts: LaneConflict[] = [];
-    for (let i = 0; i + 1 < raw.length; i += 2) {
-      const [oldMode = '', newMode = ''] = raw[i]!.slice(1).split(' ');
-      const file = raw[i + 1]!;
-      const target = path.join(repo.main, file);
-      if (SPECIAL_MODES.has(oldMode) || SPECIAL_MODES.has(newMode)) {
+    for (const laneFile of await laneFiles(lane, scratch)) {
+      const { file, base } = laneFile;
+      if (laneFile.special) {
         conflicts.push({ path: file, reason: 'special' });
         continue;
       }
-      const [base, theirs, ours] = await Promise.all([blobAt(lane.path, lane.base.commit, file), blobAt(lane.path, tree, file), files.read(target)]);
+      const theirs = take(laneFile);
+      if (theirs === undefined) continue;
+      const ours = await files.read(path.join(repo.main, file));
       const step = mergeStepOf({ base, ours, theirs });
       if (step.kind === 'same') continue;
       if (step.kind === 'conflict') {
@@ -423,9 +466,37 @@ export async function applyLane(repo: LaneRepo, lane: LaneRecord, files: Files =
       changes.push({ change: changeOf(file, ours ?? '', after ?? ''), after, baseHash: hashText(ours) });
     }
     return conflicts.length > 0 ? { kind: 'conflicts', conflicts } : { kind: 'clean', changes };
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
+  });
+}
+
+/**
+ * Merges the lane's changes since its base into the main checkout's current files, 3-way per file, and returns them
+ * as review changes, or every conflict. It writes nothing; `writeLaneChanges` does, so the caller decides.
+ */
+export const applyLane = (repo: LaneRepo, lane: LaneRecord, files: Files = DISK_FILES): Promise<LaneApplyResult> => mergeInto(repo, lane, files, WHOLE);
+
+/**
+ * `applyLane` for some of the lane's hunks: `hunks` are ids from `laneChanges`. Each file the picked hunks touch is
+ * merged as if the lane had made only those hunks, so a graft over the winner's apply merges 3-way like an apply.
+ * An id that no longer names a hunk, because the lane changed since the compare read it, refuses the whole graft.
+ */
+export async function graftLane(repo: LaneRepo, lane: LaneRecord, hunks: readonly string[], files: Files = DISK_FILES): Promise<LaneApplyResult> {
+  const wanted = new Set(hunks);
+  const found = new Set<string>();
+  const result = await mergeInto(repo, lane, files, (laneFile) => {
+    const change = changeOf(laneFile.file, laneFile.base ?? '', laneFile.theirs ?? '');
+    const picked = change.hunks.filter((_, i) => {
+      const id = hunkIdOf(change, i);
+      if (wanted.has(id)) found.add(id);
+      return wanted.has(id);
+    });
+    if (picked.length === 0) return undefined;
+    if (laneFile.theirs === null && picked.length === change.hunks.length) return null;
+    return applyHunks(laneFile.base ?? '', picked);
+  });
+  const missing = hunks.filter((id) => !found.has(id));
+  if (missing.length > 0) throw new EngineError(`lane ${lane.name} changed since the compare; ${missing.length === 1 ? '1 hunk is' : `${missing.length} hunks are`} gone, so open the compare again`);
+  return result;
 }
 
 /** Lines the lane added and removed since its base, uncommitted and untracked files included. A binary file counts as a file only. */

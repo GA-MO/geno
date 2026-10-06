@@ -100,11 +100,29 @@ import {
   TASKS_METHOD,
   type LaneNewResponse,
   type LanesResponse,
+  ARENA_COMPARE_METHOD,
+  ARENA_NEW_METHOD,
+  ARENA_PICK_METHOD,
+  ARENA_PREVIEW_METHOD,
+  ARENA_UPDATE_METHOD,
+  ARENAS_METHOD,
+  isArenaSize,
+  isVariety,
+  LANE_GRAFT_META,
+  type ArenaCompareResponse,
+  type ArenaNewResponse,
+  type ArenaPreviewResponse,
+  type ArenasResponse,
+  type ArenaUpdate,
+  type LaneEnd,
+  type LaneRecord,
+  type VariantSpec,
   type TaskStatus,
   type TaskUsage,
   type TasksResponse,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
+import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
 import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
 import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
 import { Tasks } from './tasks.js';
@@ -663,6 +681,8 @@ export function engineShared(io: Io) {
     viewers: new Viewers<Peer>(io.err),
     tasks: new Tasks(),
     live: new Map<string, LiveTurn>(),
+    // Each connection's way to hear of an Arena run's steps.
+    arenaWatchers: new Set<(update: ArenaUpdate) => void>(),
   };
 }
 
@@ -671,6 +691,28 @@ export type EngineShared = ReturnType<typeof engineShared>;
 const lanePrompt = z.object({ cwd: z.string(), prompt: z.string().trim().min(1), mode: z.string().optional() });
 const laneDiscardRequest = z.object({ cwd: z.string(), name: z.string().min(1), discardChanges: z.boolean() });
 const lanesRequest = z.object({ cwd: z.string() });
+const arenaSizeOf = (n: number, params: unknown): 2 | 3 | 4 => {
+  if (!isArenaSize(n)) throw acp.RequestError.invalidParams(params, `best-of-n runs 2 to 4 lanes, not ${n}`);
+  return n;
+};
+const varietyOf = (raw: string | undefined, params: unknown) => {
+  if (raw === undefined || isVariety(raw)) return raw;
+  throw acp.RequestError.invalidParams(params, `unknown variety ${raw}`);
+};
+const arenaPreviewRequest = z.object({ cwd: z.string(), n: z.number().int(), variety: z.string().optional() });
+const arenaNewRequest = z.object({ cwd: z.string(), task: z.string().trim().min(1), n: z.number().int(), variety: z.string().optional(), mode: z.string().optional() });
+const arenaRequest = z.object({ cwd: z.string(), id: z.string() });
+const arenaPickRequest = z.object({ cwd: z.string(), id: z.string(), lane: z.string().min(1) });
+const laneGraftMeta = z.strictObject({ lane: z.string().min(1), hunks: z.array(z.string().min(1)).min(1) });
+
+/** How a lane's turn ended, as the Arena counts it. */
+const ARENA_ENDS: Readonly<Record<acp.StopReason, LaneEnd>> = {
+  end_turn: 'done',
+  max_tokens: 'failed',
+  max_turn_requests: 'capped',
+  refusal: 'failed',
+  cancelled: 'stopped',
+};
 
 /** How a turn that ran to its end reads in the tasks list. */
 const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' | 'needs-input'>>> = {
@@ -687,7 +729,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers } = shared;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
   // This connection itself, as the editor that shows the sessions it opens; known once it connected.
@@ -773,7 +815,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const rawTarget = meta?.[INLINE_EDIT_META];
     const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
     if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
-    const rawLane = meta?.[LANE_APPLY_META];
+    const rawGraft = meta?.[LANE_GRAFT_META];
+    const graft = rawGraft === undefined ? undefined : laneGraftMeta.safeParse(rawGraft);
+    if (graft?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${LANE_GRAFT_META}: ${z.prettifyError(graft.error)}`);
+    const rawLane = meta?.[LANE_APPLY_META] ?? graft?.data.lane;
     if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
     const slash = target === undefined && rawLane === undefined ? await commands.expand(sessionId, text) : undefined;
     if (slash?.kind === 'builtin') {
@@ -811,7 +856,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
         if (rawLane !== undefined) {
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
-          await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks).catch(refused({ lane: rawLane }));
+          await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
           await shown.updates.flush();
           return { stopReason: controller.signal.aborted ? 'cancelled' : 'end_turn' };
         }
@@ -867,6 +912,24 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     }
   };
 
+  /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
+  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec) => {
+    const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined });
+    const { id } = opened.log.session;
+    // Bound now, so the Lanes pane names the task from the first update on.
+    const bound = await laneAt(lane.path, undefined);
+    if (bound !== undefined) await bindSession(bound, id);
+    const mode = rawMode !== undefined && isSessionMode(rawMode) ? rawMode : DEFAULT_SESSION_MODE;
+    turns.set(id, undefined);
+    modes.set(id, mode);
+    if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
+    mcp.register(id, lane.path, [], undefined);
+    io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
+    const turn = runTurn(id, [{ type: 'text', text: prompt }], undefined, self());
+    void turn.catch((error: unknown) => io.err(`lane ${lane.name}: ${String(error)}`));
+    return { id, turn };
+  };
+
   return acp
     .agent({ name: 'gcode' })
     .onConnect((connection) => {
@@ -881,8 +944,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const unlisten = tasks.listen((update) => {
         if (peer.tasks) void connection.client.notify(TASK_UPDATE_METHOD, update).catch(() => {});
       });
+      const watch = (update: ArenaUpdate) => {
+        if (peer.tasks) void connection.client.notify(ARENA_UPDATE_METHOD, update).catch(() => {});
+      };
+      arenaWatchers.add(watch);
       void connection.closed.then(() => {
         unlisten();
+        arenaWatchers.delete(watch);
         for (const sessionId of viewers.shownBy(shows)) {
           viewers.hide(sessionId, shows);
           commands.detach(sessionId);
@@ -1043,19 +1111,46 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(LANE_NEW_METHOD, lanePrompt, async ({ params }): Promise<LaneNewResponse> => {
       const repo = await laneRepo(params.cwd);
       const lane = await laneFor(repo, params.prompt, store, io).catch(refused({ cwd: params.cwd }));
-      const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: undefined, effort: undefined });
-      const { id } = opened.log.session;
-      // Bound now, so the Lanes pane names the task from the first update on.
-      const bound = await laneAt(lane.path, undefined);
-      if (bound !== undefined) await bindSession(bound, id);
-      const mode = params.mode !== undefined && isSessionMode(params.mode) ? params.mode : DEFAULT_SESSION_MODE;
-      turns.set(id, undefined);
-      modes.set(id, mode);
-      if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
-      mcp.register(id, lane.path, [], undefined);
-      io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
-      void runTurn(id, [{ type: 'text', text: params.prompt }], undefined, self()).catch((error: unknown) => io.err(`lane ${lane.name}: ${String(error)}`));
+      const { id } = await startLaneSession(lane, params.prompt, params.mode);
       return { name: lane.name, sessionId: id };
+    })
+    .onRequest(ARENA_PREVIEW_METHOD, arenaPreviewRequest, async ({ params }): Promise<ArenaPreviewResponse> => {
+      const n = arenaSizeOf(params.n, params);
+      const repo = await laneRepo(params.cwd);
+      const variants = await arenaVariants(repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
+      return { preview: await arenaPreview(store, io, n), variants };
+    })
+    .onRequest(ARENA_NEW_METHOD, arenaNewRequest, async ({ params }): Promise<ArenaNewResponse> => {
+      const n = arenaSizeOf(params.n, params);
+      const repo = await laneRepo(params.cwd);
+      const variants = await arenaVariants(repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
+      const started = await startArena(
+        {
+          repo,
+          store,
+          io,
+          check: undefined,
+          runLane: async (lane, variant, prompt) => {
+            const { id, turn } = await startLaneSession(lane, prompt, params.mode, variant);
+            return { sessionId: id, ended: turn.then((response) => ARENA_ENDS[response.stopReason]) };
+          },
+          onUpdate: (run) => {
+            for (const watch of arenaWatchers) watch({ run });
+          },
+        },
+        params.task,
+        variants,
+        await arenaPreview(store, io, n),
+      ).catch(refused({ cwd: params.cwd }));
+      void started.finished.catch((error: unknown) => io.err(`arena ${started.run.id}: ${String(error)}`));
+      return { run: started.run };
+    })
+    .onRequest(ARENAS_METHOD, lanesRequest, async ({ params }): Promise<ArenasResponse> => ({ arenas: await listArenas(await laneRepo(params.cwd)) }))
+    .onRequest(ARENA_COMPARE_METHOD, arenaRequest, async ({ params }): Promise<ArenaCompareResponse> => arenaCompare(await laneRepo(params.cwd), params.id).catch(refused({ id: params.id })))
+    .onRequest(ARENA_PICK_METHOD, arenaPickRequest, async ({ params }) => {
+      const run = await pickWinner(await laneRepo(params.cwd), params.id, params.lane).catch(refused({ lane: params.lane }));
+      for (const watch of arenaWatchers) watch({ run });
+      return { run };
     })
     .onRequest(LANE_DISCARD_METHOD, laneDiscardRequest, async ({ params }) => {
       const repo = await laneRepo(params.cwd);

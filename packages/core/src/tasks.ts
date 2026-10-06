@@ -127,20 +127,24 @@ export type LaneDiscardRequest = { readonly cwd: string; readonly name: string; 
 export const LANE_APPLY_META = 'gcode/laneApply';
 
 /** What an apply wrote, or why it wrote nothing, as the apply step's result in the session log. */
-export type LaneApplyRecord = { readonly lane: string; readonly conflicts: readonly LaneConflict[]; readonly deleted: readonly string[] };
+/** `grafted` is how many of the lane's hunks a graft took; absent for an apply of the whole lane. */
+export type LaneApplyRecord = { readonly lane: string; readonly conflicts: readonly LaneConflict[]; readonly deleted: readonly string[]; readonly grafted?: number | undefined };
 
 /** The prompt an apply shows as, in the panel and in a replay. */
-export const laneApplyPrompt = (lane: string): string => `Apply lane ${lane}`;
+export const laneApplyPrompt = (lane: string, grafted?: number): string =>
+  grafted === undefined ? `Apply lane ${lane}` : `Graft ${grafted} ${grafted === 1 ? 'hunk' : 'hunks'} from lane ${lane}`;
 
 /** What a lane apply says in the chat, live and replayed; `written` is how many files it wrote. */
-export function laneApplyText({ lane, conflicts, deleted }: LaneApplyRecord, written: number): string {
+export function laneApplyText({ lane, conflicts, deleted, grafted }: LaneApplyRecord, written: number): string {
+  const verb = grafted === undefined ? 'applied' : 'grafted';
   if (conflicts.length > 0) {
     const lines = conflicts.map((conflict) => `- \`${conflict.path}\`: ${LANE_CONFLICT_REASONS[conflict.reason]}`);
     const count = conflicts.length === 1 ? '1 file conflicts' : `${conflicts.length} files conflict`;
-    return [`Nothing from lane ${lane} was applied: ${count} with the main checkout.`, ...lines].join('\n');
+    return [`Nothing from lane ${lane} was ${verb}: ${count} with the main checkout.`, ...lines].join('\n');
   }
   const files = written + deleted.length;
   if (files === 0) return `Lane ${lane} has nothing to apply.`;
   const gone = deleted.length === 0 ? '' : ` Deleted ${deleted.map((file) => `\`${file}\``).join(', ')}.`;
-  return `Applied ${files === 1 ? '1 file' : `${files} files`} from lane ${lane}. Keep or undo each change.${gone}`;
+  const what = grafted === undefined ? '' : `${grafted === 1 ? '1 hunk' : `${grafted} hunks`} in `;
+  return `${grafted === undefined ? 'Applied' : 'Grafted'} ${what}${files === 1 ? '1 file' : `${files} files`} from lane ${lane}. Keep or undo each change.${gone}`;
 }

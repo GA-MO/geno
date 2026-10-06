@@ -235,6 +235,7 @@ const turnEventSchema = z.union([
       changes: z.array(fileChangeSchema),
       conflicts: z.array(z.strictObject({ path: z.string(), reason: z.enum(Object.keys(LANE_CONFLICT_REASONS) as [LaneConflictReason, ...LaneConflictReason[]]) })),
       deleted: z.array(z.string()),
+      grafted: count.optional(),
     }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
