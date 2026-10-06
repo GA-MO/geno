@@ -172,14 +172,14 @@ export function parseRule(effect: RuleEffect, text: string, scope: CommandScope)
   return { ok: true, pattern: words as unknown as CommandPattern };
 }
 
-/** Extension method, sent by the editor: the rules of the session's workspace. */
+/** Extension method, sent by the editor: the rules of the workspace a folder belongs to, its main checkout for a lane. */
 export const PERMISSIONS_METHOD = '_gcode/permissions';
 /** Extension method, sent by the editor: adds a rule typed as text, then answers with the rules. */
 export const PERMISSION_ADD_METHOD = '_gcode/permissionAdd';
 /** Extension method, sent by the editor: removes one rule, then answers with the rules. */
 export const PERMISSION_REMOVE_METHOD = '_gcode/permissionRemove';
 
-export type PermissionsRequest = { readonly sessionId: string };
-export type PermissionAddRequest = { readonly sessionId: string; readonly effect: RuleEffect; readonly text: string };
-export type PermissionRemoveRequest = { readonly sessionId: string; readonly id: string };
+export type PermissionsRequest = { readonly cwd: string };
+export type PermissionAddRequest = { readonly cwd: string; readonly effect: RuleEffect; readonly text: string };
+export type PermissionRemoveRequest = { readonly cwd: string; readonly id: string };
 export type PermissionsResponse = { readonly workspace: string; readonly rules: readonly PermissionRule[] };

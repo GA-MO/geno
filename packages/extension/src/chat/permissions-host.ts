@@ -11,7 +11,7 @@ import {
 import type { Connection } from './engine.js';
 import type { PermissionsFromView, PermissionsListing, PermissionsToView } from './permissions-model.js';
 
-type Link = { readonly connection: Connection; readonly sessionId: string };
+type Link = { readonly connection: Connection; readonly cwd: string };
 
 // The engine's refusal reads as its own sentence, without the JSON-RPC error's name in front.
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error)).replace(/^Invalid params: /, '');
@@ -23,7 +23,7 @@ const listingOf = ({ workspace, rules }: PermissionsResponse, refused?: string):
   ...(refused === undefined ? {} : { refused }),
 });
 
-/** Settings' Permissions section in the extension: the rules of the shown session's workspace, kept by the engine. */
+/** Settings' Permissions section in the extension: the rules of the shown chat's folder, kept by the engine. */
 export class PermissionsHost {
   constructor(
     private readonly link: () => Promise<Link>,
@@ -40,7 +40,7 @@ export class PermissionsHost {
     this.post({ type: 'permissions', listing });
   }
 
-  private list = (link: Link) => link.connection.agent.request<PermissionsResponse, PermissionsRequest>(PERMISSIONS_METHOD, { sessionId: link.sessionId });
+  private list = (link: Link) => link.connection.agent.request<PermissionsResponse, PermissionsRequest>(PERMISSIONS_METHOD, { cwd: link.cwd });
 
   /** A rule the engine refuses leaves the list as it was and says why under the form. */
   private async add(effect: PermissionAddRequest['effect'], text: string): Promise<void> {
@@ -48,7 +48,7 @@ export class PermissionsHost {
     try {
       const link = await this.link();
       try {
-        listing = listingOf(await link.connection.agent.request<PermissionsResponse, PermissionAddRequest>(PERMISSION_ADD_METHOD, { sessionId: link.sessionId, effect, text }));
+        listing = listingOf(await link.connection.agent.request<PermissionsResponse, PermissionAddRequest>(PERMISSION_ADD_METHOD, { cwd: link.cwd, effect, text }));
       } catch (error) {
         listing = listingOf(await this.list(link), messageOf(error));
       }
@@ -62,6 +62,6 @@ export class PermissionsHost {
     'permissions-list': () => void this.show(this.list),
     'permissions-add': ({ effect, text }) => void this.add(effect, text),
     'permissions-remove': ({ id }) =>
-      void this.show((link) => link.connection.agent.request<PermissionsResponse, PermissionRemoveRequest>(PERMISSION_REMOVE_METHOD, { sessionId: link.sessionId, id })),
+      void this.show((link) => link.connection.agent.request<PermissionsResponse, PermissionRemoveRequest>(PERMISSION_REMOVE_METHOD, { cwd: link.cwd, id })),
   };
 }

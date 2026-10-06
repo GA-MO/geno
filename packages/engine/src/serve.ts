@@ -702,8 +702,9 @@ const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
 const sessionRequest = z.object({ sessionId: z.string() });
-const permissionAddRequest = z.object({ sessionId: z.string(), effect: z.enum(RULE_EFFECTS), text: z.string() });
-const permissionRemoveRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
+const permissionsRequest = z.object({ cwd: z.string() });
+const permissionAddRequest = z.object({ cwd: z.string(), effect: z.enum(RULE_EFFECTS), text: z.string() });
+const permissionRemoveRequest = z.object({ cwd: z.string(), id: z.string().min(1) });
 const memoryEditRequest = z.object({ sessionId: z.string(), id: z.string().min(1), text: z.string() });
 const memoryDeleteRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
 const inlineEditTarget = z
@@ -941,9 +942,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     known(sessionId);
     return memoryStore(homeOf(store), (await existing(sessionId)).session.workspace);
   };
-  const permissionsOf = async (sessionId: string) => {
-    known(sessionId);
-    const workspace = await workspaceDir(io.cwd, (await existing(sessionId)).session.workspace);
+  // Keyed by folder, not session: Settings must not start a session, which would fix its provider before a role change.
+  const permissionsOf = async (cwd: string) => {
+    const workspace = await workspaceDir(io.cwd, cwd).catch(refused({ cwd }));
     const home = io.env['HOME'] || homedir();
     const rules = permissionStore(homeOf(store), await rulesWorkspace(workspace, home));
     const scope = { workspace: rules.workspace, tempDir: tmpdir(), home };
@@ -1618,18 +1619,18 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(MEMORY_DELETE_METHOD, memoryDeleteRequest, async ({ params }): Promise<MemoryResponse> => ({
       entries: await (await memoryOf(params.sessionId)).remove(params.id).catch(refusedMemory(params.id)),
     }))
-    .onRequest(PERMISSIONS_METHOD, sessionRequest, async ({ params }): Promise<PermissionsResponse> => {
-      const { rules, answer } = await permissionsOf(params.sessionId);
+    .onRequest(PERMISSIONS_METHOD, permissionsRequest, async ({ params }): Promise<PermissionsResponse> => {
+      const { rules, answer } = await permissionsOf(params.cwd);
       return answer(rules.list());
     })
     .onRequest(PERMISSION_ADD_METHOD, permissionAddRequest, async ({ params }): Promise<PermissionsResponse> => {
-      const { rules, scope, answer } = await permissionsOf(params.sessionId);
+      const { rules, scope, answer } = await permissionsOf(params.cwd);
       const parsed = parseRule(params.effect, params.text, scope);
       if (!parsed.ok) throw acp.RequestError.invalidParams({ text: params.text }, parsed.reason);
       return answer(rules.add(params.effect, parsed.pattern));
     })
     .onRequest(PERMISSION_REMOVE_METHOD, permissionRemoveRequest, async ({ params }): Promise<PermissionsResponse> => {
-      const { rules, answer } = await permissionsOf(params.sessionId);
+      const { rules, answer } = await permissionsOf(params.cwd);
       return answer(rules.remove(params.id));
     })
     .onRequest(MCP_SERVERS_METHOD, mcpServersRequest, async ({ params }): Promise<McpServersResponse> => {

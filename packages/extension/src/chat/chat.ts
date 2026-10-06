@@ -516,7 +516,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
-    this.permissionRules = new PermissionsHost(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    // The folder alone: opening Settings must not start a session before the user picks its provider.
+    this.permissionRules = new PermissionsHost(async () => {
+      const connection = await this.engine.connection();
+      return { connection, cwd: this.shownCwd ?? connection.cwd };
+    },(message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.widgets = widgetHost(this.extensionUri, (toolId) =>
       this.transcript.turns.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'tool' && block.id === toolId ? [block] : []))[0]?.widget,
     );
