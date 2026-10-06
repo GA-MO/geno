@@ -135,6 +135,10 @@ export type TurnEvent =
       readonly attachments?: readonly Attachment[] | undefined;
       /** The slash command `content` was expanded from. */
       readonly command?: Invocation | undefined;
+      /** Delivered into a running turn, after its last tool results, rather than starting one (`steer.ts`). */
+      readonly steer?: true | undefined;
+      /** A steer someone other than the user sent: the parent agent, or a background child reporting back. */
+      readonly from?: 'parent' | 'child' | undefined;
     }
   /**
    * `timing` is absent in logs written before turns were timed. `issuedBy: 'user'` marks a tool call the user typed,
