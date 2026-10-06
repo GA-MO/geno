@@ -12,6 +12,7 @@ import {
   EXTERNAL_BACKEND_IDS,
   EFFORTS,
   HUNK_STATUSES,
+  INPUT_PARTS,
   nextSeq,
   PROVIDERS,
   SESSION_MODES,
@@ -234,6 +235,7 @@ const turnEventSchema = z.union([
       model: z.string().min(1),
       timing: modelMarksSchema.optional(),
       issuedBy: z.literal('user').optional(),
+      promptParts: z.array(z.tuple([z.enum(INPUT_PARTS), count])).optional(),
     }),
     z.strictObject({
       kind: z.literal('error'),

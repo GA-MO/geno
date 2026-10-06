@@ -20,6 +20,9 @@ import {
   reviewState,
   REWIND_METHOD,
   REWIND_PREVIEW_METHOD,
+  sessionSpend,
+  USAGE_METHOD,
+  type UsageResponse,
   REWIND_TURN_METHOD,
   REWIND_KINDS,
   FORK_AT_META,
@@ -713,6 +716,7 @@ const reviewRequest = z.object({
 });
 const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string(), before: z.string().min(1).optional(), sha: z.string().min(1).optional() });
 const rewindRequest = z.object({ sessionId: z.string(), before: z.string().min(1).optional() });
+const usageRequest = z.object({ sessionId: z.string() });
 const rewindPreviewRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive() });
 const rewindTurnRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), choice: z.object({ kind: z.enum(REWIND_KINDS) }) });
 const forkAt = z.number().int().positive().optional();
@@ -1665,6 +1669,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const { files } = await rewindTo(store, log, checkpoint.turnSeq);
         return { files: files.map((file) => path.join(log.session.workspace, file)) };
       });
+    })
+    .onRequest(USAGE_METHOD, usageRequest, async ({ params }): Promise<UsageResponse> => {
+      known(params.sessionId);
+      return sessionSpend((await openSessionLog(store, params.sessionId, io)).events);
     })
     .onRequest(REWIND_PREVIEW_METHOD, rewindPreviewRequest, async ({ params }): Promise<RewindPreviewResponse> => {
       const { sessionId, turnSeq } = params;

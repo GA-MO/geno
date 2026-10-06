@@ -6,6 +6,7 @@ import {
   classifyFailure,
   costOf,
   planWait,
+  requestRuns,
   RETRY_POLICY,
   retryDelayMs,
   specOf,
@@ -145,7 +146,7 @@ export function gatewayFor(
   waits: WaitOptions = waitOptionsOf(env),
 ): Gateway {
   const wire = wireFor(providerName, env, fetch);
-  const sessionHeader = specOf(providerName).sessionHeader;
+  const { sessionHeader, adapter } = specOf(providerName);
 
   async function call({ session, events, tools, system, stored, signal, onText, onToolInput }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
@@ -154,7 +155,8 @@ export function gatewayFor(
       drafts.set(index, next);
       onToolInput?.(next);
     };
-    const message = await wire.stream(buildRequest(session, events, tools, system, stored), {
+    const request = buildRequest(session, events, tools, system, stored);
+    const message = await wire.stream(request, {
       signal,
       headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
       onAnswered: () => clock.answered(),
@@ -181,6 +183,7 @@ export function gatewayFor(
         costUsd: costOf(session.provider, session.model, usage),
         latencyMs: Math.round(performance.now() - started),
         model: message.model,
+        promptParts: requestRuns(request, events, adapter),
       },
     };
   }
