@@ -3,7 +3,7 @@ import path from 'node:path';
 import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
 import { ENGINE_ENV_FILE } from './child-env.js';
 import { EngineError } from './errors.js';
-import { runShell, type ShellOptions, type ShellResult } from './process.js';
+import { runShell, spawnShell, type ShellOptions, type ShellResult, type SpawnedShell, type SpawnOptions } from './process.js';
 import { isMissing, readTasks, type Store } from './store.js';
 
 export type SandboxPolicy = {
@@ -21,6 +21,10 @@ export type SandboxRunOptions = ShellOptions & { readonly writable?: readonly st
 
 export type Sandbox = {
   run(command: string, options: SandboxRunOptions): Promise<ShellResult>;
+  /** Starts a command under the same rules and returns while it runs, as a background command does. */
+  spawn(command: string, options: SpawnOptions): Promise<SpawnedShell>;
+  /** Keeps the sandbox open past `close` until the returned function runs, for a command that outlives its turn. */
+  retain(): () => Promise<void>;
   close(): Promise<void>;
 };
 
@@ -99,7 +103,8 @@ function start(policy: SandboxPolicy): SharedRuntime {
     finish,
     users: 1,
     ready: SandboxManager.initialize({
-      network: { allowedDomains: [...policy.allowedDomains], deniedDomains: [] },
+      // Loopback only, so a dev server started in the background can be reached with curl; the allowlist still holds for every other host.
+      network: { allowedDomains: [...policy.allowedDomains], deniedDomains: [], allowLocalBinding: true },
       // Every command passes its own rules, so a command wrapped without them may write nothing.
       filesystem: { denyRead: [], allowRead: [], allowWrite: [], denyWrite: [] },
     }),
@@ -134,16 +139,31 @@ export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
   }
   const runtime = await join(policy);
   const filesystem = { denyRead: [...policy.denyRead], allowRead: [...policy.readable], allowWrite: [...policy.writable], denyWrite: [] };
+  // The opener's hold and one per retained command; the runtime is left once all have let go.
+  let holds = 1;
+  const release = async () => {
+    if (--holds === 0) await leave(runtime);
+  };
   let open = true;
   return {
     run: async (command, options) => {
       const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
       return runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
     },
+    spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem }), options),
+    retain() {
+      holds++;
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        await release();
+      };
+    },
     async close() {
       if (!open) return;
       open = false;
-      await leave(runtime);
+      await release();
     },
   };
 }

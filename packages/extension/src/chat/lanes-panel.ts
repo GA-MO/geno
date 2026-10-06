@@ -167,6 +167,12 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
       h('span', { class: 'task-time' }, row.time),
       row.cost !== undefined && h('span', { class: 'lane-cost' }, row.cost),
     ),
+    row.jobs.length > 0 &&
+      h(
+        'ul',
+        { class: 'task-jobs', 'aria-label': 'Background commands' },
+        ...row.jobs.map((job) => h('li', { class: 'task-job', 'data-job': job.id, title: job.label }, icon('circle-filled', 'job-icon'), h('span', { class: 'task-job-id' }, job.id), h('span', { class: 'task-job-label' }, job.label))),
+      ),
     h(
       'div',
       { class: 'lane-actions' },

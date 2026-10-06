@@ -11,7 +11,8 @@
     "./arena": "./src/arena.ts",
     "./waiting": "./src/waiting.ts",
     "./attention": "./src/attention.ts",
-    "./backends": "./src/backends.ts"
+    "./backends": "./src/backends.ts",
+    "./background": "./src/background.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

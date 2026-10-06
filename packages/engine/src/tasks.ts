@@ -1,4 +1,4 @@
-import { isLive, returnedAtOf, taskNotice, type Asking, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
+import { isLive, returnedAtOf, taskNotice, type Asking, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
 
 /** How many ended top-level tasks the list keeps, newest first; running ones always stay. */
 const KEPT_ENDED = 20;
@@ -33,6 +33,12 @@ export class Tasks {
   update(sessionId: string, patch: Partial<Pick<TaskRecord, 'title' | 'usage' | 'lane'>>): void {
     const record = this.records.get(sessionId);
     if (record !== undefined && isLive(record.status)) this.put({ ...record, ...patch });
+  }
+
+  /** The session's background commands that run now, which outlive its turn. */
+  jobs(sessionId: string, jobs: readonly TaskJob[]): void {
+    const record = this.records.get(sessionId);
+    if (record !== undefined) this.put({ ...record, jobs: jobs.length === 0 ? undefined : jobs });
   }
 
   /** The turn ended; a task ends once. */

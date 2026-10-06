@@ -121,6 +121,8 @@ export type TaskRow = {
   readonly stop: boolean;
   /** The session the panel shows. */
   readonly current: boolean;
+  /** Its background commands that run now, by job id and in words. */
+  readonly jobs: readonly { readonly id: string; readonly label: string }[];
 };
 
 /** A row in Needs you says what the user is to do, which may be a child's question on a running parent. */
@@ -162,6 +164,7 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     live: isLiveStatus(task.status),
     stop: isLiveStatus(task.status) && task.kind !== 'arena',
     current: task.sessionId === shown,
+    jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: job.description ?? job.command })),
   };
 }
 

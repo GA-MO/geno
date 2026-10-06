@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import {
   asSessionId,
   childEndWords,
+  jobEndText,
   hasPendingPrompt,
   isEmptyContext,
   isEffort,
@@ -290,6 +291,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...deleted.map((file) => `  deleted ${file}`),
     ...conflicts.map((conflict) => `  conflict ${conflict.path}: ${conflict.reason}`),
   ],
+  'background-end': ({ seq, job, tail }) => [`#${seq} background ${job.id} ${jobEndText(job.state)}: ${job.command}`, ...(tail === '' ? [] : tail.split('\n').map((line) => `  ${line}`))],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>
