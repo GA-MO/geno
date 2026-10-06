@@ -9,6 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/messages';
 import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
 import { fileItem, imageBlock, NO_ATTACHMENTS, type Attachment, type FileAttachment, type ImageAttachment, type StoredAttachments } from './attachments.js';
+import { backgroundEndNotice, type BackgroundEndEvent } from './background.js';
 import type { Invocation } from './commands.js';
 import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedContext } from './context.js';
 import type { HunkStatus } from './hunks.js';
@@ -165,13 +166,14 @@ export type TurnEvent =
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   /** A lane applied into this session's workspace, its changes put under review like an edit's. */
   | ({ readonly kind: 'lane-apply'; readonly seq: number; readonly at: string; readonly changes: readonly FileChange[] } & LaneApplyRecord)
+  | BackgroundEndEvent
   | WaitEvent
   | ChildEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints, restores, review decisions, retries, waits, titles and child events record what happened around the conversation; the loop steps over them. */
+/** Checkpoints, restores, review decisions, retries, waits, titles, child events and background ends record what happened around the conversation; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -188,6 +190,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'child-start': false,
   'child-end': false,
   'lane-apply': false,
+  'background-end': false,
   wait: false,
 };
 
@@ -288,6 +291,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     }
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
+    if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event, stored));
     if (event.kind === 'assistant') {

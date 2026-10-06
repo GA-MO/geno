@@ -1,5 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
-import { AGENT_TOOL_NAMES, type AgentToolName } from './agent.js';
+import { CHILD_TOOL_NAMES, type AgentToolName } from './agent.js';
 import { pendingToolUses, type DoneReason } from './loop.js';
 import { EFFORTS, IN_CONVERSATION, nextSeq, type Effort, type SessionId, type TurnEvent } from './session.js';
 import { TOOL_NAMES } from './tools.js';
@@ -58,7 +58,7 @@ const CLAUDE_TOOLS: Readonly<Record<string, AgentToolName>> = {
   Skill: 'skill',
 };
 
-const isAgentTool = (raw: string): raw is AgentToolName => (AGENT_TOOL_NAMES as readonly string[]).includes(raw);
+const isAgentTool = (raw: string): raw is AgentToolName => (CHILD_TOOL_NAMES as readonly string[]).includes(raw);
 
 const KNOWN_FIELDS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'maxTurns', 'isolation', 'maxCost']);
 
@@ -99,7 +99,7 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
     return tool;
   };
   const named = list(fields['tools']);
-  const granted = named.length === 0 ? [...AGENT_TOOL_NAMES] : named.flatMap((raw) => toGeno(raw) ?? []);
+  const granted = named.length === 0 ? [...CHILD_TOOL_NAMES] : named.flatMap((raw) => toGeno(raw) ?? []);
   const denied = new Set(list(fields['disallowedTools']).flatMap((raw) => toGeno(raw) ?? []));
   const tools = [...new Set(granted)].filter((tool) => !denied.has(tool)).toSorted();
   if (tools.length === 0) return { kind: 'skipped', reason: 'it leaves no tool Geno has' };
@@ -203,7 +203,7 @@ Answer with findings, most severe first. Each finding is one line: the severity 
   builtin({
     name: 'worker',
     description: 'May edit files and run commands. Runs one at a time in the main tree.',
-    tools: AGENT_TOOL_NAMES.toSorted(),
+    tools: CHILD_TOOL_NAMES.toSorted(),
     effort: undefined,
     maxTurns: 30,
     maxCostUsd: 0.2,
