@@ -14,6 +14,7 @@ import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
+import { verbOf } from './verbs.js';
 import { commandStepOf } from './command-step.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
@@ -48,21 +49,6 @@ const STATUS_ICONS: Readonly<Record<ToolStatus, { readonly name: string; readonl
   failed: { name: 'error', label: 'Failed' },
   cancelled: { name: 'circle-slash', label: 'Cancelled' },
 };
-
-/** What each engine tool is doing, and did. */
-const VERBS: Readonly<Record<string, readonly [running: string, finished: string]>> = {
-  read: ['Reading', 'Read'],
-  grep: ['Searching for', 'Searched for'],
-  glob: ['Finding', 'Found'],
-  list: ['Listing', 'Listed'],
-  edit: ['Editing', 'Edited'],
-  bash: ['Running', 'Ran'],
-  check: ['Checking for problems', 'Checked for problems'],
-  agent: ['Delegating to', 'Delegated to'],
-};
-
-/** An MCP call reads as its tool's own name, with its server beside it. */
-const verbOf = (name: string, running: boolean): string => VERBS[name]?.[running ? 0 : 1] ?? mcpCall(name)?.tool ?? name;
 
 const mcpServerChip = (name: string): HTMLElement | undefined => {
   const call = mcpCall(name);

@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import type { ComposerView, ModelMenu, RunningChild } from './composer-model.js';
+import type { ComposerView, ModelMenu } from './composer-model.js';
 import { h, icon } from './dom.js';
 import type { FromView } from './messages.js';
 
@@ -133,91 +133,35 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
 }
 
 /**
- * The agents pill, while subagents run: one opens straight into its transcript, several open a short menu of them,
- * with the mode menu's keys. The pill is in the row only while it shows, so an idle row is as U36 left it.
+ * The row's one pill and its label, as Claude Code's running line has them: "2 running · 1 needs you", then the one
+ * thing most worth a look. The pill opens Tasks at Needs you. Both are in the row only while they show, so an idle
+ * row with nothing beside it is as U36 left it.
  */
-function agentsPill(openChild: (id: string) => void) {
-  const count = h('span', { class: 'agents-count' });
-  const noun = h('span', { class: 'agents-noun' });
-  const label = h('span', { class: 'agents-label' }, count, noun);
-  const pill = h('button', { type: 'button', class: 'agents-pill', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'agents-menu' }, icon('agent'), label);
-  const menu = h('ul', { class: 'model-menu agents-menu', id: 'agents-menu', role: 'menu', 'aria-label': 'Running subagents', hidden: true });
-  let children: readonly RunningChild[] = [];
-
-  const items = () => [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-  function draw(): void {
-    menu.replaceChildren(
-      h('li', { class: 'menu-heading', role: 'presentation' }, 'Running'),
-      ...children.map((child) =>
-        h(
-          'li',
-          { class: 'model-option', role: 'menuitem', tabindex: '-1', 'data-child': child.id, onclick: () => (close(), openChild(child.id)) },
-          h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, child.role), h('span', { class: 'model-option-detail' }, child.model)),
-          h('span', { class: 'agents-elapsed' }, child.elapsed),
-        ),
-      ),
-    );
-  }
-  function close(): void {
-    if (menu.hidden) return;
-    menu.hidden = true;
-    pill.setAttribute('aria-expanded', 'false');
-    if (pill.isConnected) pill.focus();
-  }
-  pill.addEventListener('click', () => {
-    if (children.length === 1) {
-      close();
-      return openChild(children[0]!.id);
-    }
-    if (!menu.hidden) return close();
-    draw();
-    menu.hidden = false;
-    pill.setAttribute('aria-expanded', 'true');
-    items()[0]?.focus();
-  });
-  menu.addEventListener('keydown', (event) => {
-    const all = items();
-    const at = all.indexOf(document.activeElement as HTMLElement);
-    const moves: Readonly<Record<string, () => void>> = {
-      ArrowDown: () => all[(at + 1) % all.length]?.focus(),
-      ArrowUp: () => all[(at - 1 + all.length) % all.length]?.focus(),
-      Enter: () => all[at]?.click(),
-      ' ': () => all[at]?.click(),
-      Escape: close,
-    };
-    // Tab closes the menu onto the pill and goes on from there, so it leaves the menu as it would leave any control.
-    if (event.key === 'Tab') return close();
-    const move = moves[event.key];
-    if (move === undefined) return;
-    event.preventDefault();
-    event.stopPropagation();
-    move();
-  });
-  document.addEventListener('mousedown', (event) => {
-    if (!menu.hidden && !menu.contains(event.target as Node) && !pill.contains(event.target as Node)) close();
-  });
-
+function activityPill(openTasks: () => void) {
+  const running = h('span', { class: 'pill-part pill-running' }, h('span', { class: 'pill-count' }), h('span', { class: 'pill-noun' }, ' running'));
+  const separator = h('span', { class: 'pill-separator', 'aria-hidden': 'true' }, ' · ');
+  const needs = h('span', { class: 'pill-part pill-needs' }, h('span', { class: 'pill-count' }), h('span', { class: 'pill-noun' }));
+  const pill = h('button', { type: 'button', class: 'activity-pill', onclick: openTasks }, icon('pulse', 'pill-icon'), running, separator, needs);
+  const label = h('span', { class: 'activity-label' });
+  const element = h('span', { class: 'run-activity' }, pill, label);
   return {
-    pill,
-    menu,
-    show(agents: NonNullable<ComposerView['running']>['agents'], status: HTMLElement): void {
-      children = agents?.children ?? [];
-      if (agents === undefined) {
-        close();
-        menu.hidden = true;
-        pill.remove();
-        return;
-      }
-      count.textContent = String(agents.count);
-      noun.textContent = ` ${agents.noun}`;
-      pill.title = agents.title;
-      pill.setAttribute('aria-label', agents.title);
-      if (pill.parentElement !== status) status.append(pill);
-      if (!menu.hidden) {
-        const focused = (document.activeElement as HTMLElement | null)?.dataset['child'];
-        draw();
-        (items().find((item) => item.dataset['child'] === focused) ?? items()[0])?.focus();
-      }
+    element,
+    show(activity: ComposerView['activity'], into: HTMLElement, before: Element): void {
+      if (activity === undefined) return void element.remove();
+      running.hidden = activity.running === 0;
+      needs.hidden = activity.needsYou === 0;
+      separator.hidden = running.hidden || needs.hidden;
+      running.querySelector('.pill-count')!.textContent = String(activity.running);
+      needs.querySelector('.pill-count')!.textContent = String(activity.needsYou);
+      needs.querySelector('.pill-noun')!.textContent = activity.needsYou === 1 ? ' needs you' : ' need you';
+      pill.dataset['needsYou'] = String(activity.needsYou > 0);
+      pill.title = `${activity.text}. Open Tasks`;
+      pill.setAttribute('aria-label', `${activity.text}. Open Tasks`);
+      label.hidden = activity.label === undefined;
+      label.textContent = activity.label?.text ?? '';
+      label.title = activity.label?.text ?? '';
+      label.dataset['tone'] = activity.label?.tone ?? '';
+      if (element.parentElement !== into) into.insertBefore(element, before);
     },
   };
 }
@@ -230,7 +174,7 @@ export type ComposerControls = ReturnType<typeof composerControls>;
  */
 export function composerControls(
   post: (message: FromView) => void,
-  hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly openChild: (id: string) => void; readonly unqueue: () => void },
+  hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly openTasks: () => void; readonly unqueue: () => void },
 ) {
   const browserLabel = h('span', { class: 'tray-label' });
   const browser = h(
@@ -265,7 +209,7 @@ export function composerControls(
   );
   const wait = h('span', { class: 'run-wait', hidden: true }, waitIcons.offline, waitIcons.limited, waitText, retryNow);
   const status = h('span', { class: 'run-status', hidden: true, role: 'status' }, wait, time, cost);
-  const agents = agentsPill(hooks.openChild);
+  const activity = activityPill(hooks.openTasks);
 
   const ring = contextRing();
   const modelName = h('span', { class: 'model-name' });
@@ -285,7 +229,6 @@ export function composerControls(
     left: [add, commands] as const,
     right: [status, ring.element, modelButton] as const,
     menu: menu.menu,
-    agentsMenu: agents.menu,
     show(view: ComposerView): void {
       browser.hidden = view.browser === undefined;
       browserLabel.textContent = view.browser?.label ?? '';
@@ -298,7 +241,7 @@ export function composerControls(
       effort.hidden = view.model.effort === undefined;
       menu.show(view.menu);
       status.hidden = view.running === undefined;
-      agents.show(view.running?.agents, status);
+      activity.show(view.activity, status.parentElement!, ring.element);
       const waiting = view.running?.wait;
       wait.hidden = waiting === undefined;
       time.hidden = waiting !== undefined;

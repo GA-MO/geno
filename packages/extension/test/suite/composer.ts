@@ -219,7 +219,7 @@ export async function run(): Promise<void> {
   check(await shown('button.stop'), 'Stop replaces Send');
   check(!(await shown('button.send')), 'and Send hides');
   check((await attr('textarea', 'placeholder')) === 'Queue a follow-up…', 'the placeholder offers a queued follow-up', await attr('textarea', 'placeholder'));
-  check((await count('.agents-pill')) === 0, 'no agents pill while only the chat itself runs', await count('.agents-pill'));
+  check((await count('.activity-pill')) === 0, 'no pill while only the chat itself runs', await count('.activity-pill'));
   const first = await textOf('.run-elapsed');
   await waitFor('the clock to tick', async () => (await textOf('.run-elapsed')) !== first, 5000);
   check(/^0:0\d$/.test((await textOf('.run-elapsed'))!), 'the clock reads minutes and seconds', await textOf('.run-elapsed'));
