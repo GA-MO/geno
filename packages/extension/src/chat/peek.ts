@@ -65,6 +65,8 @@ export function peek(onShown: (shown: boolean) => void) {
   function run(): void {
     // Without frames, a move is over as soon as it starts.
     while (motion === 'still' && state.act !== 'away' && state.act !== 'typing') state = peekNext(state, { kind: 'played' });
+    // A duck with no ticks to play it would stay up beside the working dino, so it is down at once.
+    if (motion !== 'moving' && state.act === 'duck') state = peekNext(state, { kind: 'played' });
     onShown(state.act !== 'away');
     draw();
     if (motion === 'moving' && state.act !== 'away') timer ??= setInterval(tick, TICK_MS);

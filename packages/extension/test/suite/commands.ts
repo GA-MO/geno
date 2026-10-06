@@ -136,6 +136,7 @@ export async function run(): Promise<void> {
   await waitFor('the permission card', async () => (await count('.permission-open')) === 1);
   check((await textOf('.permission-open .permission-description')) === REMOVE[0]!.input['description'], 'the card shows what the command is for', await textOf('.permission-open .permission-description'));
   check((await textOf('.permission-open .permission-command')) === 'rm -rf build', 'and the full command', await textOf('.permission-open .permission-command'));
+  check((await panel<string>(`doc.querySelector('.peek').dataset.state`)) === 'away', 'one Noodle while the turn runs: the peek is down even when the window has no focus', await panel<string>(`doc.querySelector('.peek').dataset.state`));
   await screenshots('permission', scrollTo('.permission-open'));
   await click('.permission-open button', 'Deny');
   await waitFor('the denied turn to finish', async () => (await count('.turn-footer')) === 2);
