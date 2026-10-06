@@ -74,6 +74,8 @@ export class SteerInbox {
 /** Every running session's inbox in the engine process, children's included, by session id. */
 export class Steers {
   private readonly inboxes = new Map<string, SteerInbox>();
+  // Children whose run ended, so a late steer to one is told so rather than treated as an unknown session.
+  private readonly endedChildren = new Set<string>();
 
   open(sessionId: string, parentId: SessionId | undefined): SteerInbox {
     this.inboxes.get(sessionId)?.close();
@@ -89,7 +91,12 @@ export class Steers {
   /** Closes the run's inbox, if it is still the session's, so that nothing waits on a run that is gone. */
   release(sessionId: string, inbox: SteerInbox): void {
     inbox.close();
+    if (inbox.parentId !== undefined) this.endedChildren.add(sessionId);
     if (this.inboxes.get(sessionId) === inbox) this.inboxes.delete(sessionId);
+  }
+
+  isEndedChild(sessionId: string): boolean {
+    return this.endedChildren.has(sessionId) && !this.inboxes.has(sessionId);
   }
 }
 
@@ -104,6 +111,6 @@ export async function steerRunning(steers: Steers, sessionId: string, blocks: re
   if (text === '') throw acp.RequestError.invalidParams({ sessionId }, 'the steer has no text');
   const inbox = steers.of(sessionId);
   const outcome = (await inbox?.push({ text, from: 'user' })) ?? { kind: 'next-turn' };
-  if (outcome.kind === 'next-turn' && inbox?.parentId !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'the subagent already finished');
+  if (outcome.kind === 'next-turn' && (inbox?.parentId !== undefined || steers.isEndedChild(sessionId))) throw acp.RequestError.invalidRequest({ sessionId }, 'the subagent already finished');
   return outcome;
 }
