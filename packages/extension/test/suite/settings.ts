@@ -72,7 +72,7 @@ export async function run(): Promise<void> {
 
   await vscode.commands.executeCommand('gcode.chat.settings');
   await waitFor('the settings page', () => visible('.settings'));
-  check((await count('.provider-card')) === 15, 'every provider has a card', await count('.provider-card'));
+  check((await count('.provider-card[data-provider]')) === 15, 'every provider has a card', await count('.provider-card[data-provider]'));
   check((await stateOf('modelstudio')) === 'ready', 'Model Studio, the chat provider, is ready on the key in the environment', await stateOf('modelstudio'));
   check(await visible(field('modelstudio', 'apiKey')), 'the chat provider starts open');
   check((await panel<string>(`doc.querySelector(${JSON.stringify(field('modelstudio', 'apiKey'))}).placeholder`)) === 'Set in the environment', 'a key from the environment reads as set, never shown');
