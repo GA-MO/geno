@@ -103,7 +103,6 @@ export function todoLine(list: TodoList): string {
   return current === undefined ? `${done} of ${total} done` : `${done} of ${total} done · ${lowerFirst(current.text)}`;
 }
 
-/** What the model reads back after a call. */
 export function todoResult(list: TodoList): string {
   if (list.length === 0) return 'Cleared the todo list.';
   const { done, total, current } = todoProgress(list);
