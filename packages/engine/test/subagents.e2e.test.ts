@@ -136,6 +136,7 @@ describe('gcode serve: subagents', () => {
     expect(new Set(seqs).size, 'every logged event has its own number').toBe(seqs.length);
     expect(notices.map((n) => [n.role, n.status.kind])).toEqual(expect.arrayContaining([['explore', 'running'], ['explore', 'done']]));
     expect(notices).toHaveLength(4);
+    expect(notices.map((n) => n.toolUseId).toSorted(), "each notice names the parent's agent call").toEqual(['tu_a', 'tu_a', 'tu_b', 'tu_b']);
   });
 
   it('stops a child at its cost cap and returns what it had, marked partial', async () => {

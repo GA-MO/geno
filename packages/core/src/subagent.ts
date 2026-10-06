@@ -437,6 +437,8 @@ export const SUBAGENT_METHOD = '_gcode/subagent';
 export type SubagentNotice = {
   readonly sessionId: string;
   readonly child: string;
+  /** The parent's tool call that started the child, so an editor can show the child under that call. */
+  readonly toolUseId: string;
   readonly role: string;
   readonly task: string;
   readonly model: string;
