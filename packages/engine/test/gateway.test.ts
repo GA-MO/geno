@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, type Session, type StreamMarks, type TurnEvent } from '@g-code/core';
+import { asSessionId, type ResumeAfterLimit, type Session, type StreamMarks, type TurnEvent, type Waiting, type WaitPolicy } from '@g-code/core';
 import { gatewayFor } from '../src/gateway.js';
-import { answer, fakeTransport, httpError, type Reply } from './fake-transport.js';
+import { modelSlots } from '../src/model-slots.js';
+import { Wake } from '../src/waits.js';
+import { answer, fakeTransport, httpError, OFFLINE, type Reply } from './fake-transport.js';
 
 const session: Session = {
   id: asSessionId('sess-1'),
@@ -143,11 +145,11 @@ describe('gatewayFor retries', () => {
     expect(retries.map((r) => (r as { delayMs: number }).delayMs)).toEqual([1, 2, 4]);
   });
 
-  it('waits as long as retry-after asks', async () => {
-    const limited = httpError(429, { type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }, { 'retry-after': '0.05' });
-    const { result, retries } = await turnOver([limited, answer('Ok.', usage)]);
+  it('waits as long as a 503’s retry-after asks', async () => {
+    const unavailable = httpError(503, { type: 'error', error: { type: 'api_error', message: 'Service temporarily unavailable' } }, { 'retry-after': '0.05' });
+    const { result, retries } = await turnOver([unavailable, answer('Ok.', usage)]);
     expect(result).toMatchObject({ kind: 'answer' });
-    expect(retries).toEqual([{ attempt: 1, delayMs: 50, message: expect.stringContaining('429') }]);
+    expect(retries).toEqual([{ attempt: 1, delayMs: 50, message: expect.stringContaining('503') }]);
   });
 
   it('does not retry an exhausted quota', async () => {
@@ -182,6 +184,123 @@ describe('gatewayFor retries', () => {
     expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
     expect(requests).toBe(1);
     expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  describe('waits', () => {
+    const policy: WaitPolicy = {
+      offline: { firstMs: 5, maxMs: 20, giveUpMs: 2000 },
+      limited: { firstMs: 5, maxMs: 20, giveUpMs: 2000, jitterMs: 0, autoMaxMs: 1000 },
+    };
+    const rateLimited = (headers: Record<string, string> = {}) => httpError(429, { type: 'error', error: { type: 'rate_limit_error', message: 'slow down' } }, headers);
+
+    async function waitThrough(replies: readonly Reply[], opts: { up?: () => boolean; policy?: WaitPolicy; resume?: ResumeAfterLimit; waiting?: Waiting; wake?: Wake; signal?: AbortSignal; onWait?: (wait: Waiting | null) => void } = {}) {
+      const transport = fakeTransport(replies, opts.up);
+      const waits: (Waiting | null)[] = [];
+      const marks: StreamMarks[] = [];
+      const started = Date.now();
+      const result = await gatewayFor('openrouter', env, transport.fetch, fast, modelSlots(4), { policy: opts.policy ?? policy, resume: opts.resume ?? 'short', random: () => 0 }).turn({
+        session,
+        events,
+        signal: opts.signal ?? new AbortController().signal,
+        tools: [],
+        onText: () => {},
+        onRetry: () => {},
+        onWait: (wait) => {
+          waits.push(wait);
+          opts.onWait?.(wait);
+        },
+        onMarks: (m) => marks.push(m),
+        waiting: opts.waiting,
+        wake: opts.wake,
+      });
+      return { result, waits, marks, requests: transport.requests, probes: transport.probes, tookMs: Date.now() - started };
+    }
+
+    it('waits offline, probing with no tokens until the host answers, then sends the same call once', async () => {
+      let probes = 0;
+      const { result, waits, marks, requests } = await waitThrough([OFFLINE, OFFLINE, answer('Back.', usage)], { up: () => ++probes > 2 });
+      expect(result).toMatchObject({ kind: 'answer', turn: { content: [{ type: 'thinking' }, { type: 'text', text: 'Back.' }] } });
+      expect(requests).toHaveLength(3);
+      expect(probes).toBe(4);
+      const held = waits.filter((w): w is Waiting => w !== null);
+      expect(held.every((w) => w.kind === 'offline' && w.since === held[0]!.since && w.resetAt === null && /ECONNREFUSED/.test(w.message))).toBe(true);
+      expect(waits.at(-1)).toBeNull();
+      expect(marks).toEqual([expect.objectContaining({ waitMs: expect.any(Number) })]);
+      expect(marks[0]!.waitMs).toBeGreaterThanOrEqual(5);
+    });
+
+    it('backs its probes off and gives up once the host has not answered for the give-up time', async () => {
+      const { result, waits, probes } = await waitThrough([OFFLINE], { up: () => false, policy: { ...policy, offline: { firstMs: 5, maxMs: 20, giveUpMs: 120 } } });
+      expect(result).toEqual({ kind: 'error', error: 'transport', message: expect.stringContaining('the provider has not answered for') });
+      const gaps = probes.slice(1).map((at, i) => at - probes[i]!);
+      expect(gaps.slice(0, 2).every((gap) => gap >= 8)).toBe(true);
+      expect(waits.at(-1)).toBeNull();
+    });
+
+    it('waits for a 429 until the reset its retry-after names, and tries the call again then', async () => {
+      const { result, waits, requests, tookMs } = await waitThrough([rateLimited({ 'retry-after': '0.15' }), answer('Ok.', usage)]);
+      expect(result).toMatchObject({ kind: 'answer' });
+      expect(requests).toHaveLength(2);
+      expect(tookMs).toBeGreaterThanOrEqual(140);
+      expect(waits[0]).toMatchObject({ kind: 'limited', resetAt: expect.any(Number), retryAt: waits[0]!.resetAt, message: expect.stringContaining('429') });
+      expect(waits.at(-1)).toBeNull();
+    });
+
+    it('holds a limit longer than the setting allows until the user retries now', async () => {
+      const wake = new Wake();
+      const { result, waits } = await waitThrough([rateLimited({ 'retry-after': '3600' }), answer('Ok.', usage)], {
+        wake,
+        onWait: (wait) => {
+          if (wait !== null) setTimeout(() => wake.wake(), 20);
+        },
+      });
+      expect(result).toMatchObject({ kind: 'answer' });
+      expect(waits[0]).toMatchObject({ kind: 'limited', retryAt: null });
+    });
+
+    it('waits out a limit the setting allows, however long', async () => {
+      const { waits } = await waitThrough([rateLimited({ 'retry-after': '0.05' }), answer('Ok.', usage)], { resume: 'always', policy: { ...policy, limited: { ...policy.limited, autoMaxMs: 1 } } });
+      expect(waits[0]).toMatchObject({ kind: 'limited', retryAt: expect.any(Number) });
+    });
+
+    it('backs off a limit with no reset, then gives up', async () => {
+      const { result, requests } = await waitThrough([rateLimited(), rateLimited(), rateLimited(), rateLimited(), rateLimited(), rateLimited(), rateLimited(), rateLimited()], {
+        policy: { ...policy, limited: { ...policy.limited, giveUpMs: 60 } },
+      });
+      expect(result).toEqual({ kind: 'error', error: 'transport', message: expect.stringContaining('without saying when its limit resets') });
+      expect(requests.length).toBeGreaterThan(2);
+    });
+
+    it('ends as an abort when stopped during a wait', async () => {
+      const stop = new AbortController();
+      const { result, waits, tookMs } = await waitThrough([rateLimited({ 'retry-after': '3600' }), answer('Never.', usage)], {
+        resume: 'always',
+        signal: stop.signal,
+        onWait: (wait) => {
+          if (wait !== null) setTimeout(() => stop.abort(), 20);
+        },
+      });
+      expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
+      expect(waits.at(-1)).toBeNull();
+      expect(tookMs).toBeLessThan(2000);
+    });
+
+    it('waits out a limit a stopped engine left in the log before the first try', async () => {
+      const now = Date.now();
+      const waiting: Waiting = { kind: 'limited', since: now - 1000, retryAt: now + 150, resetAt: now + 150, message: '429 slow down' };
+      const { result, requests, tookMs } = await waitThrough([answer('Ok.', usage)], { waiting });
+      expect(result).toMatchObject({ kind: 'answer' });
+      expect(requests).toHaveLength(1);
+      expect(tookMs).toBeGreaterThanOrEqual(140);
+    });
+
+    it('probes at once for an offline wait a stopped engine left', async () => {
+      const waiting: Waiting = { kind: 'offline', since: Date.now() - 1000, retryAt: Date.now() + 60_000, resetAt: null, message: 'fetch failed' };
+      const { result, probes, tookMs } = await waitThrough([answer('Ok.', usage)], { waiting });
+      expect(result).toMatchObject({ kind: 'answer' });
+      expect(probes).toHaveLength(1);
+      expect(tookMs).toBeLessThan(1000);
+    });
   });
 
   describe('stream marks', () => {

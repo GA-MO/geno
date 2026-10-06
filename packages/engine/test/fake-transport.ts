@@ -8,7 +8,15 @@ export type Reply = {
   readonly dropAfter?: number;
   /** Answer with this HTTP error instead of a stream. */
   readonly failure?: { readonly status: number; readonly body: unknown; readonly headers?: Record<string, string> };
+  /** Fail before any answer, as fetch does when nothing listens at the provider's address. */
+  readonly offline?: true;
 };
+
+/** A request that never reaches the provider: undici's refused connection. */
+export const OFFLINE: Reply = { events: [], offline: true };
+
+export const refusedConnection = (): TypeError =>
+  new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), { code: 'ECONNREFUSED' }) });
 
 /** An HTTP error response, such as a 529 overload, with the provider's JSON error body. */
 export const httpError = (status: number, body: unknown, headers: Record<string, string> = {}): Reply => ({
@@ -146,10 +154,19 @@ function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStr
   });
 }
 
-/** A fetch that serves replies in order and records every request it receives. */
-export function fakeTransport(replies: readonly Reply[]) {
+/**
+ * A fetch that serves replies in order and records every request it receives. A HEAD request is a reachability probe,
+ * answered by `up` without taking a reply; it counts in `probes`.
+ */
+export function fakeTransport(replies: readonly Reply[], up: () => boolean = () => true) {
   const requests: RecordedRequest[] = [];
+  const probes: number[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (init?.method === 'HEAD') {
+      probes.push(Date.now());
+      if (!up()) throw refusedConnection();
+      return new Response(null, { status: 404 });
+    }
     const reply = replies[requests.length];
     requests.push({
       url: String(input),
@@ -157,6 +174,7 @@ export function fakeTransport(replies: readonly Reply[]) {
       body: JSON.parse(String(init?.body)),
     });
     if (reply === undefined) throw new Error(`fake transport has no reply for request ${requests.length}`);
+    if (reply.offline) throw refusedConnection();
     if (reply.failure !== undefined) {
       const { status, body: json, headers } = reply.failure;
       return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json', ...headers } });
@@ -166,5 +184,5 @@ export function fakeTransport(replies: readonly Reply[]) {
       headers: { 'content-type': 'text/event-stream' },
     });
   };
-  return { fetch, requests };
+  return { fetch, requests, probes };
 }

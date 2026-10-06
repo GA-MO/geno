@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, type ProviderName, type Session, type TurnEvent, type TurnResult } from '@g-code/core';
-import { gatewayFor } from '../src/gateway.js';
+import { asSessionId, type ProviderName, type Session, type TurnEvent, type TurnResult, type Waiting } from '@g-code/core';
+import { gatewayFor, waitOptionsOf } from '../src/gateway.js';
+import { sharedSlots } from '../src/model-slots.js';
 import { wireFor } from '../src/wire.js';
 import { chatAnswer, chatFailure, chatSse, chatToolCall, type ChatReply } from './fake-openai.js';
 import { answer, fakeTransport } from './fake-transport.js';
@@ -39,16 +40,18 @@ function chatTransport(replies: readonly ChatReply[]) {
 async function turn(provider: ProviderName, model: string, env: Record<string, string>, fetch: typeof globalThis.fetch) {
   const deltas: string[] = [];
   const retries: string[] = [];
+  const waits: (Waiting | null)[] = [];
   const session = sessionOn(provider, model);
-  const result: TurnResult = await gatewayFor(provider, env, fetch, { maxRetries: 2, baseDelayMs: 1, maxDelayMs: 5 }).turn({
+  const result: TurnResult = await gatewayFor(provider, env, fetch, { maxRetries: 2, baseDelayMs: 1, maxDelayMs: 5 }, sharedSlots(provider, env), { ...waitOptionsOf(env), random: () => 0 }).turn({
     session,
     events: events(session),
     tools: [{ name: 'read', description: 'Read a file', input_schema: { type: 'object', properties: { path: { type: 'string' } } } }],
     signal: new AbortController().signal,
     onText: (d) => deltas.push(d),
     onRetry: (r) => void retries.push(r.message),
+    onWait: (w) => void waits.push(w),
   });
-  return { result, deltas, retries };
+  return { result, deltas, retries, waits };
 }
 
 const OPENAI_KEY = 'sk-openai-canary-0123456789';
@@ -95,14 +98,13 @@ describe('the OpenAI-compatible adapter', () => {
     expect(transport.requests[0]?.headers.get('authorization')).toBeNull();
   });
 
-  it('retries a 429 after its retry-after, then answers', async () => {
+  it('waits out a 429 until its retry-after, then answers', async () => {
     const transport = chatTransport([
       chatFailure(429, { error: { message: 'Rate limit reached', type: 'rate_limit_error' } }, { 'retry-after-ms': '1' }),
       chatAnswer('Second try.', { prompt: 5, completion: 2, cached: 0 }),
     ]);
-    const { result, retries } = await turn('groq', 'llama-fake', { GROQ_API_KEY: 'gsk-0123456789' }, transport.fetch);
-    expect(retries).toHaveLength(1);
-    expect(retries[0]).toMatch(/Rate limit reached/);
+    const { result, waits } = await turn('groq', 'llama-fake', { GROQ_API_KEY: 'gsk-0123456789' }, transport.fetch);
+    expect(waits).toEqual([expect.objectContaining({ kind: 'limited', message: expect.stringMatching(/Rate limit reached/) }), null]);
     expect(result).toMatchObject({ kind: 'answer', turn: { content: [{ type: 'thinking' }, { type: 'text', text: 'Second try.' }] } });
   });
 
