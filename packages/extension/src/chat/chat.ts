@@ -1172,7 +1172,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     });
   }
 
-  /** Searches the text of the scope's sessions, as the History's search field asks. */
   async searchSessions(scope: HistoryScope, query: string): Promise<HistoryHit[]> {
     const { agent, cwd } = await this.engine.connection();
     const raw = await agent.request<unknown, SearchSessionsRequest>(SEARCH_SESSIONS_METHOD, scope === 'project' ? { query, cwd } : { query });
