@@ -10,7 +10,7 @@ import {
 } from '@g-code/core';
 import { EngineError } from './errors.js';
 import { openaiWire } from './wire-openai.js';
-import { redactor, type Wire, type WireConfig } from './wire-shape.js';
+import { probeHost, redactor, type Wire, type WireConfig } from './wire-shape.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -64,9 +64,10 @@ function anthropicWire(config: WireConfig): Wire {
   let pending: ReturnType<typeof anthropicClient> | undefined;
   const clientOf = () => (pending ??= anthropicClient(config));
   return {
-    async stream(params, { signal, headers, onEvent }) {
+    async stream(params, { signal, headers, onEvent, onAnswered }) {
       const client = await clientOf();
       const stream = client.messages.stream(params, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
+      if (onAnswered !== undefined) stream.on('connect', onAnswered);
       stream.on('streamEvent', onEvent);
       return stream.finalMessage();
     },
@@ -77,6 +78,7 @@ function anthropicWire(config: WireConfig): Wire {
       return page.data.map((model) => model.id);
     },
     redact: redactor(config),
+    probe: async (signal) => probeHost(config.baseUrl ?? (await clientOf()).baseURL, config.fetch, signal),
   };
 }
 

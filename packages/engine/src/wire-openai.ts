@@ -1,6 +1,6 @@
 import { AnthropicError, APIConnectionError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import { chatStream, toChatRequest, type ChatChunk } from '@g-code/core';
-import { redactor, type Wire, type WireConfig } from './wire-shape.js';
+import { probeHost, redactor, type Wire, type WireConfig } from './wire-shape.js';
 
 /** The headers that carry the key, as the row says; a local server with no key gets none. */
 function authHeaders({ spec, values }: WireConfig): Record<string, string> {
@@ -59,13 +59,14 @@ async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<string
 
 export function openaiWire(config: WireConfig): Wire {
   return {
-    async stream(params, { signal, headers, onEvent }) {
+    async stream(params, { signal, headers, onEvent, onAnswered }) {
       const response = await send(config, 'chat/completions', {
         method: 'POST',
         signal,
         headers: { 'content-type': 'application/json', accept: 'text/event-stream', ...headers },
         body: JSON.stringify(toChatRequest(params)),
       });
+      onAnswered?.();
       const translator = chatStream();
       let finished = false;
       try {
@@ -98,5 +99,6 @@ export function openaiWire(config: WireConfig): Wire {
     },
 
     redact: redactor(config),
+    probe: (signal) => probeHost(config.baseUrl!, config.fetch, signal),
   };
 }

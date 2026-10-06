@@ -3,8 +3,9 @@ import { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { Message, MessageStreamEvent, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
-  classifyModelError,
+  classifyFailure,
   costOf,
+  planWait,
   RETRY_POLICY,
   retryDelayMs,
   specOf,
@@ -12,7 +13,11 @@ import {
   type ModelFailure,
   type ModelRetry,
   type ProviderName,
+  type ResumeAfterLimit,
   type RetryPolicy,
+  type WaitKind,
+  type Waiting,
+  type WaitPolicy,
   type Session,
   type StoredAttachments,
   type StreamMarks,
@@ -21,6 +26,7 @@ import {
   type TurnResult,
 } from '@g-code/core';
 import { sharedSlots, type ModelSlots } from './model-slots.js';
+import { nap, resumeAfterLimitOf, waitPolicyOf, type Wake } from './waits.js';
 import { wireFor } from './wire.js';
 
 export type TurnInput = {
@@ -37,6 +43,12 @@ export type TurnInput = {
   onToolInput?(draft: ToolInputDraft): void;
   /** A transient failure about to be retried; the wait starts once this settles. */
   onRetry(retry: ModelRetry): void | Promise<void>;
+  /** The call waits offline or for a rate limit, or its next try moved; null once the wait is over. The wait starts once this settles. */
+  onWait?(wait: Waiting | null): void | Promise<void>;
+  /** The wait the session's log ended in, left by an engine that stopped; the call waits it out before its first try. */
+  readonly waiting?: Waiting | undefined;
+  /** Retry now: cuts a wait short. */
+  readonly wake?: Wake | undefined;
   /** When the attempt that produced the result reached each point of its stream; called once, before the result returns. */
   onMarks?(marks: StreamMarks): void;
 };
@@ -70,11 +82,16 @@ const THINKING_BLOCKS: ReadonlySet<string> = new Set(['thinking', 'redacted_thin
 function streamClock() {
   const requestAt = Date.now();
   const thinkingBlocks = new Set<number>();
+  let streamed = false;
   let firstTokenAt: number | null = null;
   let firstAnswerAt: number | null = null;
   let lastTokenAt: number | null = null;
   return {
+    answered() {
+      streamed = true;
+    },
     observe(event: MessageStreamEvent) {
+      streamed = true;
       if (event.type === 'content_block_start' && THINKING_BLOCKS.has(event.content_block.type)) thinkingBlocks.add(event.index);
       if (event.type !== 'content_block_start' && event.type !== 'content_block_delta') return;
       const now = Date.now();
@@ -83,6 +100,7 @@ function streamClock() {
       lastTokenAt = now;
     },
     marks: (): StreamMarks => ({ requestAt, firstTokenAt, firstAnswerAt, lastTokenAt, endAt: Date.now() }),
+    streamed: () => streamed,
   };
 }
 
@@ -92,9 +110,12 @@ type StreamClock = ReturnType<typeof streamClock>;
 export const messagesOf = (error: unknown): string[] =>
   error instanceof Error ? [error.message, ...messagesOf(error.cause)] : error === undefined ? [] : [String(error)];
 
-const failureOf = (error: AnthropicError, redact: (text: string) => string): ModelFailure => ({
+const failureOf = (error: AnthropicError, redact: (text: string) => string, streamed: boolean): ModelFailure => ({
   status: error instanceof APIError ? error.status : undefined,
   message: redact(messagesOf(error).join(': ')),
+  streamed,
+  ...(error instanceof APIError && error.headers !== undefined ? { headers: Object.fromEntries(error.headers) } : {}),
+  ...(error instanceof APIError ? { body: error.error } : {}),
 });
 
 function retryAfterMs(error: AnthropicError): number | undefined {
@@ -108,12 +129,20 @@ function retryAfterMs(error: AnthropicError): number | undefined {
   return Number.isNaN(wait) ? undefined : Math.max(0, Math.round(wait));
 }
 
+/** How a gateway waits: its schedules, the limit setting, and the jitter source, which tests fix. */
+export type WaitOptions = { readonly policy: WaitPolicy; readonly resume: ResumeAfterLimit; readonly random: () => number };
+
+export const waitOptionsOf = (env: Env): WaitOptions => ({ policy: waitPolicyOf(env), resume: resumeAfterLimitOf(env), random: Math.random });
+
+type Held = { readonly kind: 'go' } | { readonly kind: 'aborted' } | { readonly kind: 'give-up'; readonly message: string };
+
 export function gatewayFor(
   providerName: ProviderName,
   env: Env,
   fetch?: typeof globalThis.fetch,
   retry: RetryPolicy = RETRY_POLICY,
   slots: ModelSlots = sharedSlots(providerName, env),
+  waits: WaitOptions = waitOptionsOf(env),
 ): Gateway {
   const wire = wireFor(providerName, env, fetch);
   const sessionHeader = specOf(providerName).sessionHeader;
@@ -128,6 +157,7 @@ export function gatewayFor(
     const message = await wire.stream(buildRequest(session, events, tools, system, stored), {
       signal,
       headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
+      onAnswered: () => clock.answered(),
       onEvent: (event) => {
         clock.observe(event);
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
@@ -158,29 +188,101 @@ export function gatewayFor(
   return {
     async turn(input) {
       const { signal } = input;
-      for (let attempt = 1; ; attempt++) {
-        // The clock starts once the call has its slot, so a queued call does not read as a slow first token.
-        let clock = streamClock();
-        const settled = (result: TurnResult): TurnResult => {
-          input.onMarks?.(clock.marks());
-          return result;
-        };
+      let waiting: Waiting | undefined;
+      // Failed tries within the current wait, which its schedule backs off by.
+      let tries = 0;
+      let waitedMs = 0;
+      let clock = streamClock();
+      const settled = (result: TurnResult): TurnResult => {
+        input.onMarks?.({ ...clock.marks(), ...(waitedMs > 0 ? { waitMs: waitedMs } : {}) });
+        return result;
+      };
+      const endWait = async () => {
+        if (waiting === undefined) return;
+        waiting = undefined;
+        tries = 0;
+        await input.onWait?.(null);
+      };
+      const plan = (kind: WaitKind, since: number, resetAt: number | null) =>
+        planWait(waits.policy, { kind, since, tries, resetAt }, Date.now(), waits.resume, waits.random());
+
+      // Sleeps to the wait's next try. Offline, a probe of the host decides whether the call goes out, and one that
+      // finds nothing schedules the next. Retry now sends the call at once.
+      const holdOn = async (): Promise<Held> => {
+        for (;;) {
+          const wait = waiting!;
+          await input.onWait?.(wait);
+          const began = Date.now();
+          const woke = await nap(wait.retryAt === null ? Infinity : wait.retryAt - began, signal, input.wake);
+          waitedMs += Date.now() - began;
+          if (woke === 'aborted') return { kind: 'aborted' };
+          if (woke === 'woken' || wait.kind === 'limited') return { kind: 'go' };
+          const probing = Date.now();
+          const up = await wire.probe(signal);
+          waitedMs += Date.now() - probing;
+          if (signal.aborted) return { kind: 'aborted' };
+          if (up) return { kind: 'go' };
+          tries++;
+          const next = plan('offline', wait.since, null);
+          if (next.kind === 'give-up') return next;
+          waiting = { ...wait, retryAt: next.kind === 'at' ? next.at : null };
+        }
+      };
+      // Undefined when the call should go out; otherwise how the turn ends.
+      const waitOut = async (): Promise<TurnResult | undefined> => {
+        const outcome = await holdOn();
+        if (outcome.kind === 'go') return undefined;
+        const message = outcome.kind === 'aborted' ? undefined : `${waiting!.message} (${outcome.message})`;
+        await endWait();
+        return settled(message === undefined ? ABORTED : { kind: 'error', error: 'transport', message });
+      };
+
+      if (input.waiting !== undefined) {
+        // An offline wait from an engine that stopped probes at once; a limit keeps the time it was to resume at.
+        waiting = input.waiting.kind === 'offline' ? { ...input.waiting, retryAt: Date.now() } : input.waiting;
+        const ended = await waitOut();
+        if (ended !== undefined) return ended;
+      }
+      for (let attempt = 1; ; ) {
         try {
-          return settled(
-            await slots.run(() => {
-              clock = streamClock();
-              return call(input, clock);
-            }, signal),
-          );
+          // The clock starts once the call has its slot, so a queued call does not read as a slow first token.
+          const result = await slots.run(() => {
+            clock = streamClock();
+            return call(input, clock);
+          }, signal);
+          await endWait();
+          return settled(result);
         } catch (error) {
-          if (error instanceof APIUserAbortError || signal.aborted) return settled(ABORTED);
+          if (error instanceof APIUserAbortError || signal.aborted) {
+            await endWait();
+            return settled(ABORTED);
+          }
           if (!(error instanceof AnthropicError)) throw error;
-          const failure = failureOf(error, wire.redact);
-          const kind = classifyModelError(failure);
-          const delayMs = kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
-          if (delayMs !== undefined && error instanceof APIError && error.status === 429) slots.pause(delayMs);
-          if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[kind], message: failure.message });
+          const failure = failureOf(error, wire.redact, clock.streamed());
+          const failed = classifyFailure(failure, Date.now());
+          if (failed.kind === 'offline' || failed.kind === 'limited') {
+            const same = waiting?.kind === failed.kind;
+            tries = same ? tries + 1 : 0;
+            const since = same ? waiting!.since : Date.now();
+            const resetAt = failed.kind === 'limited' ? (failed.resetAt ?? null) : null;
+            const next = plan(failed.kind, since, resetAt);
+            if (next.kind === 'give-up') {
+              await endWait();
+              return settled({ kind: 'error', error: 'transport', message: `${failure.message} (${next.message})` });
+            }
+            waiting = { kind: failed.kind, since, retryAt: next.kind === 'at' ? next.at : null, resetAt, message: failure.message };
+            // A short limit holds back the other sessions' calls as well, as U26's shared pause did before limits waited.
+            const pauseMs = (waiting.retryAt === null ? Infinity : (resetAt ?? waiting.retryAt)) - Date.now();
+            if (failed.kind === 'limited' && pauseMs <= retry.maxDelayMs) slots.pause(pauseMs);
+            const ended = await waitOut();
+            if (ended !== undefined) return ended;
+            continue;
+          }
+          await endWait();
+          const delayMs = failed.kind === 'transient' ? retryDelayMs(retry, attempt, retryAfterMs(error)) : undefined;
+          if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[failed.kind], message: failure.message });
           await input.onRetry({ attempt, delayMs, message: failure.message });
+          attempt++;
           try {
             await sleep(delayMs, undefined, { signal });
           } catch (sleepError) {

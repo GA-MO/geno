@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { asSessionId, type Session, type TurnEvent } from '@g-code/core';
-import { gatewayFor } from '../src/gateway.js';
+import { gatewayFor, waitOptionsOf } from '../src/gateway.js';
 import { modelSlots } from '../src/model-slots.js';
 import { answer, httpError, sseBody, type Reply } from './fake-transport.js';
 
@@ -61,6 +61,7 @@ const events: TurnEvent[] = [
 ];
 const env = { DASHSCOPE_API_KEY: 'sk-test', DASHSCOPE_BASE_URL: 'https://ws-1.ap-southeast-1.maas.aliyuncs.com/apps/anthropic' };
 const policy = { maxRetries: 3, baseDelayMs: 10, maxDelayMs: 1000 };
+const noJitter = { ...waitOptionsOf({}), random: () => 0 };
 
 /** A fake endpoint that answers 429 while more than `limit` requests are open, as a rate limit keyed on concurrency would. */
 function crowdedServer(limit: number, latencyMs: number) {
@@ -90,7 +91,7 @@ describe('gateway with shared slots', () => {
     const server = crowdedServer(2, 30);
     const slots = modelSlots(2);
     let retries = 0;
-    const results = await Promise.all(Array.from({ length: 6 }, () => gatewayFor('modelstudio', env, server.fetch, policy, slots).turn(turnInput(() => void retries++))));
+    const results = await Promise.all(Array.from({ length: 6 }, () => gatewayFor('modelstudio', env, server.fetch, policy, slots, noJitter).turn(turnInput(() => void retries++))));
     expect(results.every((r) => r.kind === 'answer')).toBe(true);
     expect(server.rejected()).toBe(0);
     expect(retries).toBe(0);
@@ -101,7 +102,7 @@ describe('gateway with shared slots', () => {
     const slots = modelSlots(3);
     const retries: number[] = [];
     const t0 = Date.now();
-    const results = await Promise.all(Array.from({ length: 3 }, () => gatewayFor('modelstudio', env, server.fetch, policy, slots).turn(turnInput(() => void retries.push(Date.now() - t0)))));
+    const results = await Promise.all(Array.from({ length: 3 }, () => gatewayFor('modelstudio', env, server.fetch, policy, slots, noJitter).turn(turnInput(() => void retries.push(Date.now() - t0)))));
     expect(results.every((r) => r.kind === 'answer')).toBe(true);
     expect(server.rejected()).toBeGreaterThan(0);
     expect(slots.stats().pauses).toBe(server.rejected());
