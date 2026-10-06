@@ -47,6 +47,10 @@ import {
   type TaskRecord,
   WAIT_KINDS,
   WAITING_META,
+  BACKGROUND_META,
+  BACKGROUND_STOP_METHOD,
+  isJobId,
+  type BackgroundStopRequest,
   RETRY_NOW_METHOD,
   type RetryNowRequest,
   type RetryNowResponse,
@@ -162,6 +166,17 @@ const replayedChange = z.object({
 });
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
 const waitingSchema = z.object({ kind: z.enum(WAIT_KINDS), since: z.number(), retryAt: z.number().nullable(), resetAt: z.number().nullable(), message: z.string() });
+const killCause = z.enum(['session-deleted', 'lane-discarded', 'engine-exit']);
+const stopBy = z.enum(['model', 'user']);
+const jobState = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('running'), ending: z.discriminatedUnion('kind', [z.object({ kind: z.literal('stop'), by: stopBy }), z.object({ kind: z.literal('kill'), cause: killCause })]).optional() }),
+  z.object({ status: z.literal('exited'), exitCode: z.number().nullable(), signal: z.string().nullable() }),
+  z.object({ status: z.literal('stopped'), by: stopBy }),
+  z.object({ status: z.literal('killed'), cause: killCause }),
+]);
+const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), state: jobState, tail: z.string() });
+const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number() });
+
 const taskUpdate = z.object({
   task: z.object({
     sessionId: z.string(),
@@ -173,6 +188,7 @@ const taskUpdate = z.object({
     endedAt: z.number().nullable(),
     usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).optional(),
     waiting: waitingSchema.optional(),
+    jobs: z.array(taskJob).optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
@@ -584,6 +600,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       this.replay.end = replayedEnd(update);
       return;
     }
+    const job = update.sessionUpdate === 'tool_call_update' ? backgroundView.safeParse(update._meta?.[BACKGROUND_META]) : undefined;
+    if (job?.success === true) {
+      const { id, state, tail } = job.data;
+      return this.dispatch({ type: 'background', toolId: job.data.toolUseId, job: { id, state, tail } });
+    }
     const at = timeOf(update);
     const action = actionOf(update, at);
     if (action !== undefined) this.dispatch(action);
@@ -725,6 +746,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const turn = this.turn;
     if (turn === undefined) return;
     await turn.connection.agent.request<RetryNowResponse, RetryNowRequest>(RETRY_NOW_METHOD, { sessionId: turn.sessionId });
+  }
+
+  /** Stops a background command of the shown session; its step hears the end from the engine. */
+  async stopBackground(id: string): Promise<void> {
+    if (this.shown === undefined) return;
+    const { agent } = await this.engine.connection();
+    await agent.request<unknown, BackgroundStopRequest>(BACKGROUND_STOP_METHOD, { sessionId: this.shown, id });
   }
 
   /** Stops one subagent of the running turn by its session id; the engine ends it, and the parent goes on. */
@@ -1069,6 +1097,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       stop: () => void this.stop(),
       'retry-now': () => void this.retryNow().catch(warn),
       'cancel-child': ({ id }) => void this.cancelChild(id).catch(warn),
+      'stop-background': ({ id }) => void this.stopBackground(id).catch(warn),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),

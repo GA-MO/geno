@@ -106,6 +106,8 @@ export type TaskRow = {
   readonly live: boolean;
   /** The session the panel shows. */
   readonly current: boolean;
+  /** Its background commands that run now, by job id and in words. */
+  readonly jobs: readonly { readonly id: string; readonly label: string }[];
 };
 
 export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number, clock: (ms: number) => string = clockOf): TaskRow {
@@ -118,6 +120,7 @@ export function taskRowOf(task: TaskRecord, shown: string | undefined, now: numb
     cost: task.usage?.costUsd == null ? undefined : formatCost(task.usage.costUsd),
     live: isLiveStatus(task.status),
     current: task.sessionId === shown,
+    jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: job.description ?? job.command })),
   };
 }
 

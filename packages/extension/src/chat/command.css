@@ -96,3 +96,64 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   border-color: var(--glass-edge);
   background: var(--glass-well);
 }
+
+/* A background command keeps its newest lines when folded, so the fade sits at the top. */
+.command-output.truncated.from-end {
+  -webkit-mask-image: linear-gradient(to top, #000 40%, transparent);
+  mask-image: linear-gradient(to top, #000 40%, transparent);
+}
+
+.command-job {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.command-job .job-icon {
+  flex: none;
+  font-size: 12px;
+}
+
+.job-line {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.job-stop {
+  flex: none;
+}
+
+.job-running .job-icon,
+.job-ended .job-icon {
+  color: var(--ok);
+}
+
+.job-running .job-icon {
+  animation: job-pulse 1.6s ease-in-out infinite;
+}
+
+.job-failed .job-icon {
+  color: var(--vscode-errorForeground);
+}
+
+@keyframes job-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-running .job-icon {
+    animation: none;
+  }
+}
+
+.vscode-high-contrast .command-job,
+.vscode-high-contrast-light .command-job {
+  color: var(--vscode-foreground);
+}

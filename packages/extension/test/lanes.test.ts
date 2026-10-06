@@ -68,9 +68,21 @@ describe('the task rows', () => {
       cost: undefined,
       live: true,
       current: true,
+      jobs: [],
     });
     const ended = taskRowOf(task({ lane: null, status: 'failed', endedAt: 4000, usage: { model: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0.5 } }), 'other', 99_000);
     expect(ended).toMatchObject({ where: 'Main checkout', time: '3.0s', cost: '$0.50', live: false, current: false, state: { tone: 'failed' } });
+  });
+
+  it('list the background commands a session runs, in its own words where it gave them', () => {
+    const jobs = [
+      { id: 'bg-1' as const, command: 'pnpm dev', description: 'Start the dev server', startedAt: 1000 },
+      { id: 'bg-2' as const, command: 'pnpm test --watch', startedAt: 2000 },
+    ];
+    expect(taskRowOf(task({ status: 'done', endedAt: 3000, jobs }), undefined, 9000).jobs).toEqual([
+      { id: 'bg-1', label: 'Start the dev server' },
+      { id: 'bg-2', label: 'pnpm test --watch' },
+    ]);
   });
 
   it('say what a waiting task waits for, as a live task that wants attention', () => {

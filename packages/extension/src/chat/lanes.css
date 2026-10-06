@@ -48,6 +48,42 @@
   border-color: var(--mark, var(--border));
 }
 
+.task-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--small);
+  color: var(--muted);
+}
+
+.task-job {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.task-job .job-icon {
+  flex: none;
+  font-size: 10px;
+  color: var(--ok);
+}
+
+.task-job-id {
+  flex: none;
+  font-family: var(--vscode-editor-font-family);
+}
+
+.task-job-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lane-head {
   display: flex;
   align-items: center;

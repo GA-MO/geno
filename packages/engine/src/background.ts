@@ -230,6 +230,7 @@ export class BackgroundJobs {
     const first = entry.job.state.ending === undefined;
     this.step(entry, input);
     if (!first) return;
+    this.hooks.changed(entry.job, viewOf(entry));
     entry.shell.signal('SIGTERM');
     const force = setTimeout(() => entry.shell.signal('SIGKILL'), STOP_GRACE_MS);
     void entry.done.then(() => clearTimeout(force));

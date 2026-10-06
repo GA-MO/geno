@@ -14,7 +14,7 @@ import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
-import { commandStepOf } from './command-step.js';
+import { commandStepOf, type CommandJob } from './command-step.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -229,13 +229,32 @@ function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
           { class: 'command-out' },
           h(
             'pre',
-            { class: step.truncated ? 'command-output truncated' : 'command-output' },
-            step.output.length === 0 ? h('span', { class: 'command-empty' }, 'No output') : step.output.join('\n'),
+            { class: `command-output${step.truncated ? ' truncated' : ''}${step.job === undefined ? '' : ' from-end'}` },
+            step.output.length === 0 ? h('span', { class: 'command-empty' }, step.job?.running === true ? 'No output yet' : 'No output') : step.output.join('\n'),
           ),
           step.truncated &&
             h('button', { class: 'link-button show-all', 'data-focus': `unfold:${unfold}`, onclick: () => ui.unfold(unfold) }, `Show all ${step.lines} lines`),
         ),
     ),
+    step.job !== undefined && jobRow(step.job, ui),
+  );
+}
+
+const JOB_ICONS: Readonly<Record<CommandJob['tone'], string>> = { running: 'circle-filled', ended: 'pass', failed: 'error', stopped: 'circle-slash' };
+
+/** Under a background command's box: that it runs, with Stop, or how it ended, which is the notice the model gets. */
+function jobRow(job: CommandJob, ui: Ui): HTMLElement {
+  return h(
+    'div',
+    { class: `command-job job-${job.tone}`, 'data-job': job.id, role: 'status' },
+    icon(JOB_ICONS[job.tone], 'job-icon'),
+    h('span', { class: 'job-line' }, job.line),
+    job.running &&
+      h(
+        'button',
+        { class: 'button secondary small job-stop', 'data-focus': `stop-job:${job.id}`, title: `Stop ${job.id}: SIGTERM, then SIGKILL`, onclick: () => ui.post({ type: 'stop-background', id: job.id }) },
+        'Stop',
+      ),
   );
 }
 
