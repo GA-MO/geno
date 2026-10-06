@@ -440,3 +440,69 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     background: var(--glass-hover);
   }
 }
+
+.rules-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  list-style: none;
+}
+
+.rules-list:empty {
+  display: none;
+}
+
+.rule-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 0;
+}
+
+.rule-row + .rule-row {
+  border-top: 1px solid var(--border);
+}
+
+.rule-effect {
+  flex: none;
+  min-width: 3.2em;
+  font-weight: 600;
+}
+
+.rule-pattern {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rule-remove {
+  flex: none;
+}
+
+.rules-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rules-add .rules-effect {
+  flex: 0 0 auto;
+}
+
+.rules-note,
+.rules-refused {
+  margin: 0 2px;
+}

@@ -3,6 +3,8 @@ import type { ProviderName } from '@g-code/core';
 import { agentCard, CONFIRMS_IN, type Confirming } from './agents-panel.js';
 import { EXTERNAL_AGENTS, type AgentId, type AgentState } from './agents-model.js';
 import { h, icon, reconcile } from './dom.js';
+import type { PermissionsFromView } from './permissions-model.js';
+import { permissionsSection } from './permissions-panel.js';
 import {
   providerBadge,
   type FieldView,
@@ -165,7 +167,8 @@ function roleRow(role: RoleView, providers: readonly ProviderView[], post: (mess
  * Geno's providers, keys and roles, in the transcript's place while open, styled as the MCP panel is. Keys are
  * write-only: a field takes one and empties, and the page only ever hears whether each is set.
  */
-export function settingsPanel(post: (message: SettingsFromView) => void, onToggle: (open: boolean) => void) {
+export function settingsPanel(post: (message: SettingsFromView | PermissionsFromView) => void, onToggle: (open: boolean) => void) {
+  const permissions = permissionsSection(post);
   let open = false;
   let listing: SettingsListing | undefined;
   let expanded: Set<ProviderName> | undefined;
@@ -196,6 +199,7 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     h('h3', { class: 'settings-heading' }, 'Providers'),
     h('p', { class: 'settings-intro' }, 'Keys go to VS Code’s secret storage and are never shown again. Base URLs are kept in your user settings, never a workspace’s.'),
     providers,
+    permissions.element,
   );
 
   function renderAgents(): void {
@@ -253,6 +257,7 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     onToggle(true);
     post({ type: 'settings-list' });
     post({ type: 'agents-check' });
+    permissions.refresh();
     render();
     requestAnimationFrame(() => element.querySelector<HTMLElement>('.history-back')?.focus());
   }
@@ -287,6 +292,7 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
       models.set(provider, state);
       render();
     },
+    permissionsListed: permissions.listed,
     agentChanged(id: AgentId, state: AgentState): void {
       agentStates.set(id, state);
       render();

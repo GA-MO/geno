@@ -408,8 +408,12 @@ export function turnChangesRow(changes: TurnChanges, later: boolean, ui: Ui): HT
   return h('div', { class: 'turn-changes', role: 'group', 'aria-label': 'Files changed in this turn' }, icon('diff-multiple', 'kind'), h('span', { class: 'turn-changes-line' }, changesLine(changes), ' · ', undo));
 }
 
-/** Option kinds as the panel names their buttons; the first allow is the default the card focuses. */
+/** The engine's option that saves the command's rule for the workspace. */
+const WORKSPACE_OPTION = 'allow-workspace';
+
+/** Option ids, then kinds, as the panel names their buttons; the first allow is the default the card focuses. */
 const CHOICE_LABELS: Readonly<Record<string, string>> = {
+  [WORKSPACE_OPTION]: 'Always allow in this workspace',
   allow_once: 'Allow',
   allow_always: 'Always Allow',
   reject_once: 'Deny',
@@ -436,7 +440,7 @@ const choiceButtons = (block: PermissionBlock, ui: Ui, labels: Readonly<Record<s
           'data-focus': `choose:${block.id}:${option.optionId}`,
           onclick: () => ui.post({ type: 'permission', id: block.id, optionId: option.optionId }),
         },
-        labels[option.kind] ?? option.name,
+        labels[option.optionId] ?? labels[option.kind] ?? option.name,
       ),
     ),
   );
@@ -475,30 +479,25 @@ const COMMAND_FACE: CardFace = {
     h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
     h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
     block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
+    block.rule !== undefined &&
+      block.outcome.kind === 'open' &&
+      h('p', { class: 'permission-reason permission-rule' }, 'Always allow saves the rule ', h('code', {}, block.rule), ' for this workspace. Settings lists its rules.'),
   ],
   actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
   settled: (block) => [
-    block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied'),
+    block.outcome.kind === 'cancelled'
+      ? outcomeLine(false, 'circle-slash', 'Cancelled')
+      : block.outcome.kind === 'chosen' && block.outcome.optionId === WORKSPACE_OPTION
+        ? outcomeLine(true, 'check', `Allowed, and from now on in this workspace: ${block.rule ?? block.command}`)
+        : allowedOf(block)
+          ? outcomeLine(true, 'check', 'Allowed')
+          : outcomeLine(false, 'close', 'Denied'),
   ],
 };
 
 const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFace>> = {
   edit: { ...COMMAND_FACE, label: 'Geno asks to change a file', glyph: 'edit', title: 'Change this file?' },
-  command: {
-    label: 'Geno asks to run a command',
-    glyph: 'shield',
-    title: 'Run this command?',
-    body: (block) => [
-      block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
-      h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
-      h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
-      block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
-    ],
-    actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
-    settled: (block) => [
-      block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied'),
-    ],
-  },
+  command: COMMAND_FACE,
   memory: {
     label: 'Geno asks to remember a note',
     glyph: 'bookmark',

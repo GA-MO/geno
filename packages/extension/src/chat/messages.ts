@@ -4,6 +4,7 @@ import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
+import type { PermissionsFromView, PermissionsToView } from './permissions-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { RewindFromView, RewindToView } from './rewind-model.js';
@@ -187,6 +188,8 @@ export type PermissionBlock = {
   readonly toolId?: string | undefined;
   /** An edit, which an external agent asks about, reads as one; any other call as a command. */
   readonly toolKind?: ToolKind | undefined;
+  /** The pattern "Always allow in this workspace" saves, when the engine offers one. */
+  readonly rule?: string | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -248,6 +251,7 @@ export type Action =
       readonly ask?: PermissionAsk | undefined;
       readonly toolId?: string | undefined;
       readonly toolKind?: ToolKind | undefined;
+      readonly rule?: string | undefined;
     }
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }
@@ -329,6 +333,7 @@ export type ToView =
   | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
   | McpToView
   | SettingsToView
+  | PermissionsToView
   | ContextToView
   | ComposerToView
   | LanesToView
@@ -431,6 +436,7 @@ export type FromView =
   | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
   | McpFromView
   | SettingsFromView
+  | PermissionsFromView
   | ContextFromView
   | ComposerFromView
   | LanesFromView

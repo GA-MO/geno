@@ -543,6 +543,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   }
   if (message.type === 'show-mcp') return mcp.open();
   if (message.type === 'settings') return settings.listed(message.listing);
+  if (message.type === 'permissions') return settings.permissionsListed(message.listing);
   if (message.type === 'show-settings') return settings.open();
   if (message.type === 'settings-tested') return settings.tested(message.provider, message.state);
   if (message.type === 'settings-models') return settings.modelsListed(message.provider, message.state);
