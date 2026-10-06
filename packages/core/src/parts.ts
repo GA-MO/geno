@@ -2,9 +2,10 @@ import type { TokenUsage } from './session.js';
 
 /**
  * Where a model request's tokens went. A request's input parts are listed in the order the request sends them,
- * then the answer. `unsplit` is a request logged before Geno split requests, which has only its total.
+ * then the answer. `compaction` is the summary a compacted request opens with, and the input of the calls that wrote
+ * it (U47). `unsplit` is a request logged before Geno split requests, which has only its total.
  */
-export const PARTS = ['tools', 'system', 'context', 'user', 'assistant', 'toolResults', 'files', 'attachments', 'prompt', 'output', 'unsplit'] as const;
+export const PARTS = ['tools', 'system', 'context', 'compaction', 'user', 'assistant', 'toolResults', 'files', 'attachments', 'prompt', 'output', 'unsplit'] as const;
 export type Part = (typeof PARTS)[number];
 export type InputPart = Exclude<Part, 'output' | 'unsplit'>;
 export const INPUT_PARTS = PARTS.filter((p): p is InputPart => p !== 'output' && p !== 'unsplit');
@@ -14,6 +15,7 @@ export const PART_NAMES: Readonly<Record<Part, { readonly label: string; readonl
   tools: { label: 'Tool definitions', subject: 'tool definitions are' },
   system: { label: 'System prompt', subject: 'the system prompt is' },
   context: { label: 'Rules, memory, skills', subject: 'rules, memory and skills are' },
+  compaction: { label: 'Compaction', subject: 'compaction is' },
   user: { label: 'Earlier messages', subject: 'your earlier messages are' },
   assistant: { label: 'Earlier replies', subject: 'earlier replies are' },
   toolResults: { label: 'Tool results', subject: 'tool results are' },

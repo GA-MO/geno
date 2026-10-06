@@ -1,8 +1,9 @@
 import { addBreakdowns, EMPTY_BREAKDOWN, requestBreakdown } from './breakdown.js';
-import { tokensOf, type Breakdown } from './parts.js';
+import { inputOf, tokensOf, type Breakdown } from './parts.js';
 import { EXTERNAL_BACKENDS } from './backends.js';
 import { ratesOf } from './cost.js';
 import type { ProviderName } from './providers.js';
+import type { CompactEvent } from './compact.js';
 import type { TurnEvent } from './session.js';
 import { startsTurn } from './steer.js';
 import { childrenOf } from './subagent.js';
@@ -49,7 +50,14 @@ const sumCost = (costs: readonly (number | null)[]): number | null => costs.redu
 /** A turn's tokens, for ranking when nothing is priced. */
 const weightOf = (turn: TurnSpend): number => (turn.kind === 'model' ? tokensOf(turn.breakdown.total.usage) : 0);
 
-/** Where a session's tokens went, turn by turn, from its log. */
+/** A turn as the panel draws it: a prompt, or a /compact between turns, whose summary call is its only request. */
+const turnStartOf = (event: TurnEvent): { readonly seq: number; readonly prompt: string }[] => {
+  if (startsTurn(event)) return [{ seq: event.seq, prompt: event.content }];
+  if (event.kind === 'compact' && event.trigger === 'manual') return [{ seq: event.seq, prompt: event.focus === undefined ? '/compact' : `/compact ${event.focus}` }];
+  return [];
+};
+
+/** Where a session's tokens went, turn by turn, from its log. A compaction's summary call counts in the turn it ran in. */
 export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
   const start = events.find((e) => e.kind === 'session-start');
   if (start === undefined) throw new Error('the log has no session-start');
@@ -57,18 +65,19 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
   const rates = ratesOf(session.provider, session.model);
   const children = childrenOf(events);
   const childSeq = new Map(events.flatMap((e) => (e.kind === 'child-start' ? [[e.child, e.seq] as const] : [])));
-  const prompts = events.filter(startsTurn);
-  const turns = prompts.map((prompt, i): TurnSpend => {
-    const end = prompts[i + 1]?.seq ?? Infinity;
-    const within = (seq: number | undefined) => seq !== undefined && seq >= prompt.seq && seq < end;
+  const starts = events.flatMap(turnStartOf);
+  const turns = starts.map((start, i): TurnSpend => {
+    const end = starts[i + 1]?.seq ?? Infinity;
+    const within = (seq: number | undefined) => seq !== undefined && seq >= start.seq && seq < end;
     const calls = events.filter((e): e is Extract<TurnEvent, { kind: 'assistant' }> => e.kind === 'assistant' && within(e.seq));
+    const compactions = events.filter((e): e is CompactEvent => e.kind === 'compact' && within(e.seq));
     if (session.backend !== undefined) {
       const reported = calls.flatMap((c) => (c.costUsd === null ? [] : [c.costUsd]));
-      return { kind: 'external', seq: prompt.seq, prompt: prompt.content, plan: EXTERNAL_BACKENDS[session.backend.id].plan, costUsd: reported.length === 0 ? null : reported.reduce((a, b) => a + b, 0) };
+      return { kind: 'external', seq: start.seq, prompt: start.prompt, plan: EXTERNAL_BACKENDS[session.backend.id].plan, costUsd: reported.length === 0 ? null : reported.reduce((a, b) => a + b, 0) };
     }
-    const breakdown = calls.reduce((sum, c) => addBreakdowns(sum, requestBreakdown(c.promptParts, c.usage, rates)), EMPTY_BREAKDOWN);
+    const breakdown = [...calls.map((c) => requestBreakdown(c.promptParts, c.usage, rates)), ...compactions.map((c) => requestBreakdown([['compaction', inputOf(c.usage)]], c.usage, rates))].reduce(addBreakdowns, EMPTY_BREAKDOWN);
     const own = children.filter((c) => within(childSeq.get(c.child))).map((c): ChildSpend => ({ child: c.child, role: c.role, turns: c.turns, costUsd: c.costUsd }));
-    return { kind: 'model', seq: prompt.seq, prompt: prompt.content, breakdown, children: own, costUsd: addCost(breakdown.total.costUsd, sumCost(own.map((c) => c.costUsd))) };
+    return { kind: 'model', seq: start.seq, prompt: start.prompt, breakdown, children: own, costUsd: addCost(breakdown.total.costUsd, sumCost(own.map((c) => c.costUsd))) };
   });
   const breakdown = turns.reduce((sum, t) => (t.kind === 'model' ? addBreakdowns(sum, t.breakdown) : sum), EMPTY_BREAKDOWN);
   const spent = children.map((c): ChildSpend => ({ child: c.child, role: c.role, turns: c.turns, costUsd: c.costUsd }));

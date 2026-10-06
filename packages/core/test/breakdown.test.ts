@@ -4,6 +4,7 @@ import {
   asSessionId,
   buildRequest,
   costOf,
+  EMPTY_KEPT,
   estimateTokens,
   MEMORY_PREAMBLE,
   PARTS,
@@ -232,6 +233,48 @@ describe('sessionSpend', () => {
     const external = sessionSpend(cursor);
     expect(turnSpendView(external.turns[0]!, 33)).toEqual({ kind: 'external', text: 'Cursor plan, no token data', cost: undefined });
     expect(sessionSpendView(external, 33).external).toBe('Cursor plan, no token data');
+  });
+
+  it("counts a compaction's summary call in the turn it ran in, and /compact as a turn of its own", () => {
+    const compaction = (seq: number, trigger: 'auto' | 'manual', u: TokenUsage): TurnEvent => ({
+      kind: 'compact',
+      seq,
+      at,
+      trigger,
+      keptFrom: 1,
+      summary: 'S',
+      ...(trigger === 'manual' ? { focus: 'the parser' } : {}),
+      kept: EMPTY_KEPT,
+      tokensBefore: 9000,
+      tokensAfter: 2000,
+      usage: u,
+      costUsd: costOf('modelstudio', 'qwen3.8-flash', u),
+      model: 'qwen3.8-flash',
+    });
+    const log: TurnEvent[] = [
+      { kind: 'session-start', session },
+      { kind: 'user', seq: 1, at, content: 'go' },
+      compaction(2, 'auto', usage({ input: 8000, output: 500 })),
+      call(3, [['compaction', 600], ['prompt', 100]], usage({ input: 700, output: 10 })),
+      compaction(4, 'manual', usage({ input: 3000, output: 400 })),
+      { kind: 'user', seq: 5, at, content: 'next' },
+      call(6, [['prompt', 10]], usage({ input: 10, output: 1 })),
+    ];
+    const spent = sessionSpend(log);
+    expect(spent.turns.map((t) => [t.seq, t.prompt])).toEqual([[1, 'go'], [4, '/compact the parser'], [5, 'next']]);
+    const [go, manual] = spent.turns;
+    if (go?.kind !== 'model' || manual?.kind !== 'model') throw new Error('model turns');
+    expect(go.breakdown.requests).toBe(2);
+    expectSums(go.breakdown, usage({ input: 8700, output: 510 }));
+    expect(go.breakdown.parts.compaction.usage.input).toBe(8600);
+    expectSums(manual.breakdown, usage({ input: 3000, output: 400 }));
+    expect(spent.costUsd).toBeCloseTo(costOf('modelstudio', 'qwen3.8-flash', usage({ input: 11_710, output: 911 }))!, 12);
+  });
+
+  it('labels the compacted text a request opens with as the compaction', () => {
+    const compact: TurnEvent = { kind: 'compact', seq: 8, at, trigger: 'auto', keptFrom: 5, summary: 'S', kept: EMPTY_KEPT, tokensBefore: 9000, tokensAfter: 2000, usage: ZERO_USAGE, costUsd: 0, model: 'm' };
+    const events = [...LOG, compact];
+    expect(requestRuns(buildRequest(session, events), events, 'anthropic').map(([part]) => part)).toEqual(['system', 'context', 'compaction', 'prompt', 'attachments', 'context', 'assistant', 'files']);
   });
 
   it('prints the same strings the views hold', () => {
