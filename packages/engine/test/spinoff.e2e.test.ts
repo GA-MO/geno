@@ -10,6 +10,7 @@ import {
   SPINOFF_CAPABILITY,
   SPINOFF_DISMISS_METHOD,
   SPINOFF_META,
+  SPINOFF_NOTE,
   SPINOFF_START_METHOD,
   spinoffIdOf,
   spinoffsOf,
@@ -109,6 +110,7 @@ describe('gcode serve: spin-off tasks', () => {
     await prompt(agent, chat, 'plan the parser fix');
     expect(offeredTools(model.requests[0]!.body), 'Plan offers both tools').toEqual(expect.arrayContaining(['spawn_task', 'dismiss_task']));
     expect(model.requests[0]!.body.tools.map((tool: { name: string }) => tool.name), 'both are deferred, by name in tool_search').not.toContain('spawn_task');
+    expect(model.requests.every((request) => JSON.stringify(request.body.system).includes(SPINOFF_NOTE)), 'every call says when to suggest a task').toBe(true);
     expect(shown(updates, chat), 'each offer reaches the panel live, open').toEqual({ [A]: 'offered on tu_a', [B]: 'offered on tu_b', [C]: 'offered on tu_c' });
     expect(textOf(resultOf(updates, 'tu_a'))).toBe(`Suggested ${A} "Remove the unused helper". The user sees it as a card and can start it in its own lane; nothing was started. Go on with the current task. If it stops being worth doing, withdraw it with dismiss_task.`);
     expect(asked, 'no suggestion asks for approval, in Plan too').toBe(0);

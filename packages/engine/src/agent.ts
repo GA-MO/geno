@@ -12,6 +12,8 @@ import {
   DEFERRED_TOOLS_NOTE,
   describeServerState,
   editorActionToolDefinitions,
+  SPINOFF_MODES,
+  SPINOFF_NOTE,
   spinoffsOf,
   spinoffToolDefinitions,
   isSessionMode,
@@ -267,6 +269,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const system = [
       AGENT_MODE_SYSTEM_PROMPTS[startMode],
       ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
+      ...(spinoffs && SPINOFF_MODES[startMode] ? [SPINOFF_NOTE] : []),
       ...(genoTools === undefined ? [] : [pstackNote(genoTools)]),
       ...(notes === undefined ? [] : [notes]),
     ].join('\n\n');
