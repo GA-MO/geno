@@ -10,6 +10,7 @@ import {
   AGENT_MODE_TOOL_DEFINITIONS,
   DEFERRED_TOOLS_NOTE,
   toolRoster,
+  webToolDefinitions,
   APPROVAL_META,
   ATTACHMENT_META,
   asSessionId,
@@ -457,9 +458,9 @@ describe('gcode serve', () => {
       return sessionId;
     });
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
-    expect(transport.requests[0]!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.plan);
+    expect(transport.requests[0]!.body.tools).toEqual([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]);
     expect(transport.requests[0]!.body.system[0].text, 'Plan has too little to defer').toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
-    expect(transport.requests[1]!.body.tools).toEqual(toolRoster(AGENT_MODE_TOOL_DEFINITIONS.ask).offered);
+    expect(transport.requests[1]!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.ask, ...webToolDefinitions(false)]).offered);
 
     editor.updates.length = 0;
     const resumed = await connect(async (ctx) => {
