@@ -19,6 +19,8 @@ import {
   MEMORY_SCOPES,
   REMEMBER_META,
   RENAME_SESSION_METHOD,
+  SEARCH_SESSIONS_METHOD,
+  type SearchSessionsRequest,
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
@@ -101,6 +103,7 @@ import {
   type FileDiff,
   type FromView,
   type Header,
+  type HistoryHit,
   type HistoryRow,
   type HistoryScope,
   type Modes,
@@ -209,6 +212,16 @@ const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), 
 
 const wakeMark = z.object({ seq: z.number(), label: z.string() });
 const forkOrigin = z.object({ sessionId: z.string().transform(asSessionId), turnSeq: z.number(), title: z.string() });
+const searchHits = z.object({
+  hits: z.array(
+    z.object({
+      sessionId: z.string(),
+      turn: z.object({ turn: z.number(), seq: z.number(), at: z.string() }).nullable(),
+      snippet: z.object({ text: z.string(), marks: z.array(z.tuple([z.number(), z.number()])) }),
+      matchingTurns: z.number(),
+    }),
+  ),
+});
 const wakeId = z.string().refine(isWakeId);
 const jobId = z.string().refine(isJobId);
 const wakeSource = z.discriminatedUnion('kind', [
@@ -1159,19 +1172,33 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     });
   }
 
+  /** Searches the text of the scope's sessions, as the History's search field asks. */
+  async searchSessions(scope: HistoryScope, query: string): Promise<HistoryHit[]> {
+    const { agent, cwd } = await this.engine.connection();
+    const raw = await agent.request<unknown, SearchSessionsRequest>(SEARCH_SESSIONS_METHOD, scope === 'project' ? { query, cwd } : { query });
+    return searchHits.parse(raw).hits.map((hit) => ({
+      id: hit.sessionId,
+      turn: hit.turn === null ? null : { number: hit.turn.turn, seq: hit.turn.seq, at: Date.parse(hit.turn.at) },
+      snippet: hit.snippet,
+      matchingTurns: hit.matchingTurns,
+    }));
+  }
+
   /**
-   * Loads a session of this project into the panel, where the chat continues from it. Another project's session
-   * opens in that project's window, since its tools run in its own workspace.
+   * Loads a session of this project into the panel, where the chat continues from it, scrolled to the turn at
+   * `turnSeq` when given. Another project's session opens in that project's window, since its tools run in its own
+   * workspace, and there it opens at its end.
    */
-  async openChat(sessionId: string, workspace: string): Promise<void> {
+  async openChat(sessionId: string, workspace: string, turnSeq?: number): Promise<void> {
     const { cwd } = await this.engine.connection();
     const main = await realpath(cwd).catch(() => cwd);
     const lane = isLaneOf(workspace, main);
     if (workspace !== main && !lane) return this.openElsewhere(workspace, sessionId);
     void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
     void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
-    if (sessionId === this.shown) return;
-    await this.moveTo((connection) => this.load(connection, sessionId, lane ? workspace : undefined).then(() => sessionId));
+    if (sessionId !== this.shown) await this.moveTo((connection) => this.load(connection, sessionId, lane ? workspace : undefined).then(() => sessionId));
+    const turn = turnSeq === undefined || sessionId !== this.shown ? undefined : this.transcript.turns.find((t) => t.seq === turnSeq)?.id;
+    if (turn !== undefined) void this.view?.webview.postMessage({ type: 'reveal-turn', turn } satisfies ToView);
   }
 
   async renameChat(sessionId: string, title: string): Promise<void> {
@@ -1313,7 +1340,12 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'start-building': () => void this.startBuilding().catch(warn),
       'list-sessions': ({ scope }) => this.postHistory(view, scope),
-      'open-session': ({ id, workspace }) => void this.openChat(id, workspace).catch(warn),
+      'search-sessions': ({ scope, query }) =>
+        void this.searchSessions(scope, query).then(
+          (hits) => view.webview.postMessage({ type: 'history-hits', scope, query, hits } satisfies ToView),
+          (error: unknown) => view.webview.postMessage({ type: 'history-hits-failed', scope, query, message: messageOf(error) } satisfies ToView),
+        ),
+      'open-session': ({ id, workspace, turnSeq }) => void this.openChat(id, workspace, turnSeq).catch(warn),
       'rename-session': ({ id, title, scope }) => void this.renameChat(id, title).then(() => this.postHistory(view, scope), warn),
       'delete-session': ({ id, scope }) => void this.deleteChat(id).then(() => this.postHistory(view, scope), warn),
       ...this.mcp.handlers,

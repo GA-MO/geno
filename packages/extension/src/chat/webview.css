@@ -2373,6 +2373,50 @@ body.diagram-tab {
   white-space: nowrap;
 }
 
+/* Where a search found the session: the turn and its day, then two lines of the turn around the match. */
+.history-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 3px;
+  min-width: 0;
+  font-size: var(--small);
+}
+
+.history-hit-place {
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+}
+
+.history-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.history-snippet mark {
+  border-radius: 2px;
+  background: var(--vscode-editor-findMatchHighlightBackground, color-mix(in srgb, var(--vscode-focusBorder) 30%, transparent));
+  color: var(--vscode-foreground);
+  outline: 1px solid var(--vscode-editor-findMatchHighlightBorder, transparent);
+}
+
+.vscode-high-contrast .history-snippet mark,
+.vscode-high-contrast-light .history-snippet mark {
+  outline-color: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));
+}
+
+/* The turn a search result opened at, marked for a moment so the eye finds it. */
+.turn.turn-found {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder);
+  transition: box-shadow 0.4s;
+}
+
 /* Rename and delete show while the pointer or the focus is on the row. */
 .history-actions {
   display: flex;

@@ -1,20 +1,47 @@
 /// <reference lib="dom" />
 import { h, icon, reconcile, type Keyed } from './dom.js';
 import { formatCost } from './format.js';
-import { CLOSED, formatAgo, historyReduce, matching, type HistoryEvent, type HistoryState, type RowMode } from './history-state.js';
-import type { FromView, HistoryRow, HistoryScope } from './messages.js';
+import type { Snippet } from '@g-code/core';
+import { CLOSED, formatAgo, hitPlace, historyReduce, shownRows, type HistoryEvent, type HistoryState, type RowMode } from './history-state.js';
+import type { FromView, HistoryHit, HistoryRow, HistoryScope } from './messages.js';
 
 const SCOPES: readonly { readonly scope: HistoryScope; readonly label: string }[] = [
   { scope: 'project', label: 'This project' },
   { scope: 'all', label: 'All projects' },
 ];
 
+/** Typing waits this long for the next key before the engine searches the sessions' text. */
+const SEARCH_PAUSE_MS = 120;
+
+/** The excerpt as text with its matches in `mark`s; the text is the session's, so it is never parsed as HTML. */
+function snippetNodes({ text, marks }: Snippet): (string | HTMLElement)[] {
+  const nodes: (string | HTMLElement)[] = [];
+  let at = 0;
+  for (const [from, to] of marks) {
+    if (from > at) nodes.push(text.slice(at, from));
+    nodes.push(h('mark', {}, text.slice(from, to)));
+    at = to;
+  }
+  if (at < text.length) nodes.push(text.slice(at));
+  return nodes;
+}
+
 /**
- * The history list, which takes the transcript's place while open: search, the project or all-projects toggle,
- * and rows that open, rename or trash a session. `onToggle` hears when it opens or closes.
+ * The history list, which takes the transcript's place while open: search over the titles and the sessions' text,
+ * the project or all-projects toggle, and rows that open, rename or trash a session. A row the search found opens at
+ * the turn it found. `onToggle` hears when it opens or closes.
  */
 export function historyPanel(post: (message: FromView) => void, onToggle: (open: boolean) => void) {
   let state: HistoryState = CLOSED;
+  let pause: ReturnType<typeof setTimeout> | undefined;
+
+  /** Asks the engine to search the text for the query as it stands, once typing pauses. */
+  function searchSoon(): void {
+    clearTimeout(pause);
+    if (state.kind !== 'open' || state.found.kind !== 'searching') return;
+    const { scope, found } = state;
+    pause = setTimeout(() => post({ type: 'search-sessions', scope, query: found.query }), SEARCH_PAUSE_MS);
+  }
 
   const search = h('input', {
     type: 'search',
@@ -22,7 +49,11 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
     placeholder: 'Search chats',
     'aria-label': 'Search chats',
     'data-focus': 'history-search',
-    oninput: () => apply({ type: 'query', query: search.value }),
+    oninput: () => {
+      const before = state;
+      apply({ type: 'query', query: search.value });
+      if (state.kind === 'open' && before.kind === 'open' && state.found !== before.found) searchSoon();
+    },
   });
   const scopes = SCOPES.map(({ scope, label }) =>
     h('button', { type: 'button', class: 'scope-option', role: 'radio', 'data-scope': scope, onclick: () => choose(scope) }, label),
@@ -48,7 +79,9 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
   function choose(scope: HistoryScope): void {
     const before = state;
     apply({ type: 'scope', scope });
-    if (state !== before) post({ type: 'list-sessions', scope });
+    if (state === before) return;
+    post({ type: 'list-sessions', scope });
+    searchSoon();
   }
 
   function apply(event: HistoryEvent): void {
@@ -69,33 +102,37 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
 
   function render(): void {
     if (state.kind === 'closed') return;
-    const { scope, listing, query, row } = state;
+    const { scope, listing, query, found, row } = state;
     for (const option of scopes) option.setAttribute('aria-checked', String(option.dataset['scope'] === scope));
-    const rows = listing.kind === 'loaded' ? matching(listing.rows, query) : [];
+    const rows = shownRows(state);
     note.textContent =
       listing.kind === 'loading'
         ? 'Loading chats…'
         : listing.kind === 'failed'
           ? `Could not list the chats: ${listing.message}`
-          : rows.length > 0
-            ? ''
-            : query.trim() !== ''
-              ? `No chats match “${query.trim()}”.`
-              : scope === 'project'
-                ? 'No chats in this project yet.'
-                : 'No chats yet.';
+          : found.kind === 'failed'
+            ? `Could not search the chats’ text: ${found.message}`
+            : rows.length > 0
+              ? ''
+              : found.kind === 'searching'
+                ? 'Searching chats…'
+                : query.trim() !== ''
+                  ? `No chats match “${query.trim()}”.`
+                  : scope === 'project'
+                    ? 'No chats in this project yet.'
+                    : 'No chats yet.';
     note.hidden = note.textContent === '';
     const now = Date.now();
     reconcile(
       list,
-      rows.map((r): Keyed => {
+      rows.map(({ row: r, hit }): Keyed => {
         const mode = row.kind !== 'browsing' && row.id === r.id ? row.kind : 'browsing';
-        return { key: r.id, deps: [r, mode, scope, Math.floor(now / 60_000)], build: () => rowItem(r, mode, scope, now) };
+        return { key: r.id, deps: [r, hit, mode, scope, Math.floor(now / 60_000)], build: () => rowItem(r, hit, mode, scope, now) };
       }),
     );
   }
 
-  function rowItem(row: HistoryRow, mode: RowMode['kind'], scope: HistoryScope, now: number): HTMLElement {
+  function rowItem(row: HistoryRow, hit: HistoryHit | undefined, mode: RowMode['kind'], scope: HistoryScope, now: number): HTMLElement {
     const label = h('span', { class: 'history-row-title' }, row.title);
     if (mode === 'renaming') {
       const input = h('input', { type: 'text', class: 'history-rename', value: row.title, 'aria-label': `New title for ${row.title}`, 'data-focus': `rename:${row.id}` });
@@ -166,11 +203,18 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
           type: 'button',
           class: 'history-open',
           'data-focus': `open:${row.id}`,
-          title: row.here ? 'Open this chat' : `Open in the ${row.project} window`,
-          onclick: () => post({ type: 'open-session', id: row.id, workspace: row.workspace }),
+          title: !row.here ? `Open in the ${row.project} window` : hit?.turn != null ? `Open this chat at turn ${hit.turn.number}` : 'Open this chat',
+          onclick: () => post({ type: 'open-session', id: row.id, workspace: row.workspace, turnSeq: hit?.turn?.seq }),
         },
         h('span', { class: 'history-row-head' }, label, row.current && h('span', { class: 'history-current' }, 'Current'), !row.here && icon('link-external', 'history-elsewhere')),
         h('span', { class: 'history-meta' }, meta.join(' · ')),
+        hit !== undefined &&
+          h(
+            'span',
+            { class: 'history-hit' },
+            h('span', { class: 'history-hit-place' }, hitPlace(hit, now)),
+            h('span', { class: 'history-snippet' }, ...snippetNodes(hit.snippet)),
+          ),
       ),
       h(
         'span',
@@ -202,5 +246,7 @@ export function historyPanel(post: (message: FromView) => void, onToggle: (open:
     close: () => apply({ type: 'close' }),
     listed: (scope: HistoryScope, rows: readonly HistoryRow[]) => apply({ type: 'listed', scope, rows }),
     failed: (scope: HistoryScope, message: string) => apply({ type: 'failed', scope, message }),
+    found: (scope: HistoryScope, query: string, hits: readonly HistoryHit[]) => apply({ type: 'hits', scope, query, hits }),
+    searchFailed: (scope: HistoryScope, query: string, message: string) => apply({ type: 'hits-failed', scope, query, message }),
   };
 }

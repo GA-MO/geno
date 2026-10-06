@@ -466,15 +466,25 @@ function tick(running: boolean): void {
 const answerControl = (card: Element): HTMLElement | null => card.querySelector<HTMLElement>('[data-keyboard]') ?? card.querySelector<HTMLElement>('textarea, button');
 
 /**
- * What a task opened from the Tasks list asked to show. A loaded session's card or wait can arrive after the replay,
- * so the ask stands for a few seconds until it finds its target.
+ * What a task opened from the Tasks list, or a search result opened from the History, asked to show. A loaded
+ * session's card, wait or turn can arrive after the replay, so the ask stands for a few seconds until it finds its target.
  */
-let revealing: { readonly reveal: Reveal; readonly until: number } | undefined;
+let revealing: { readonly reveal: Reveal | { readonly turn: string }; readonly until: number } | undefined;
 const REVEAL_WAIT_MS = 5000;
+const FOUND_TURN_MS = 2000;
 
 function revealAsked(): void {
   if (revealing === undefined || document.body.dataset['view'] !== 'chat') return;
   if (Date.now() > revealing.until) return void (revealing = undefined);
+  if (typeof revealing.reveal === 'object') {
+    const turn = log.querySelector<HTMLElement>(`[data-turn="${CSS.escape(revealing.reveal.turn)}"]`);
+    if (turn === null) return void setTimeout(schedule, 100);
+    revealing = undefined;
+    turn.scrollIntoView({ block: 'start' });
+    turn.classList.add('turn-found');
+    setTimeout(() => turn.classList.remove('turn-found'), FOUND_TURN_MS);
+    return;
+  }
   if (revealing.reveal === 'end') {
     log.scrollTop = log.scrollHeight;
     revealing = undefined;
@@ -544,6 +554,12 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     return history.listed(message.scope, message.rows);
   }
   if (message.type === 'history-failed') return history.failed(message.scope, message.message);
+  if (message.type === 'history-hits') return history.found(message.scope, message.query, message.hits);
+  if (message.type === 'history-hits-failed') return history.searchFailed(message.scope, message.query, message.message);
+  if (message.type === 'reveal-turn') {
+    revealing = { reveal: { turn: message.turn }, until: Date.now() + REVEAL_WAIT_MS };
+    return schedule();
+  }
   if (message.type === 'mcp') {
     mcpListing = message.listing;
     schedule();
