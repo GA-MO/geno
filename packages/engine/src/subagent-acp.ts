@@ -29,6 +29,7 @@ const STOP_REASONS: { readonly [K in ChildEnd['kind']]: acp.StopReason } = {
 const noticeOf = (parentId: string, child: ChildView, status: ChildStatus, spent: ChildSpent): SubagentNotice => ({
   sessionId: parentId,
   child: child.id,
+  toolUseId: child.toolUseId,
   role: child.agent.name,
   task: child.task,
   model: child.model,
