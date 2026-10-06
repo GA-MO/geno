@@ -661,6 +661,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.composer.turnStarted();
     // The turn this call runs; the panel may leave it for another session, and it then ends in the background.
     let mine: SessionLink | undefined;
+    let stopped = false;
     const left = () => mine === undefined || this.turn !== mine;
     try {
       mine = await this.link();
@@ -672,6 +673,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
           prompt: [{ type: 'text', text }, ...(await attachments())],
           ...(meta === undefined ? {} : { _meta: meta }),
         }));
+      stopped = response.stopReason === 'cancelled';
       if (left()) return response.stopReason;
       const ending = ENDINGS[response.stopReason];
       if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
@@ -686,7 +688,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (mine === undefined || this.turn === mine) {
         this.turn = undefined;
         this.mcp.refresh();
-        if (mine !== undefined) this.steers.turnEnded(mine);
+        if (mine !== undefined) this.steers.turnEnded(mine, stopped);
       }
     }
   }

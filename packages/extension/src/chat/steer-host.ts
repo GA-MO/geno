@@ -67,10 +67,14 @@ export class SteerHost {
     steer: ({ target, text }) => (target.kind === 'chat' ? this.steerChat(text) : void this.steerSession(target, text)),
   };
 
-  /** The turn `link` ran ended. A steer it did not take is now the next turn, so it shows as one. */
-  turnEnded(link: SteerLink): void {
+  /**
+   * The turn `link` ran ended. A steer it did not take is now the next turn, so it shows as one, unless the user
+   * stopped the turn: the engine then gives the steer back, and so does the panel.
+   */
+  turnEnded(link: SteerLink, stopped: boolean): void {
     const pending = this.pending;
     if (pending === undefined || pending.link !== link || pending.settled) return;
+    if (stopped) return this.settle(pending, { kind: 'failed', message: 'The turn was stopped, so this did not send' });
     this.settle(pending, { kind: 'next-turn' });
     void this.chat.adopt(pending.text, pending.response).catch(() => {});
   }
