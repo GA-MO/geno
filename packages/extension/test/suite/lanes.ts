@@ -18,7 +18,7 @@ export async function run(): Promise<void> {
   await click('.send-more');
   await waitFor('the send menu', async () => await shown('#send-menu'));
   const offered = await panel<string[]>(`[...doc.querySelectorAll('#send-menu [role="menuitem"]')].map((e) => e.textContent)`);
-  check(offered.join('|') === 'SendEnter|Run in a new lanein the background', 'the menu offers Send and Run in a new lane', offered);
+  check(offered.join('|') === 'SendEnter|Run in a new lanebackground', 'the menu offers Send and Run in a new lane', offered);
   check((await panel<string | null>('doc.activeElement?.dataset.action ?? null')) === 'send', 'the first item takes the keyboard');
   await press('ArrowDown');
   check((await panel<string | null>('doc.activeElement?.dataset.action ?? null')) === 'lane', 'the arrows move to the lane item');
