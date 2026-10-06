@@ -117,6 +117,11 @@ describe('what has not woken the session yet', () => {
     expect(unwokenOf(wokenFor).triggers).toEqual([]);
   });
 
+  it('leaves out a command the user stopped', () => {
+    const stopped: TurnEvent = { ...(jobEnd(3, NOW - 4000) as Extract<TurnEvent, { kind: 'background-end' }>), job: { id: 'bg-1', toolUseId: 'toolu_bash', command: 'npm run dev', state: { status: 'stopped', by: 'user' } } };
+    expect(unwokenOf([start, prompt(1, NOW - 9000), answered(2, NOW - 8000), stopped]).triggers).toEqual([]);
+  });
+
   it('is nothing after the user cancelled the pending wakes', () => {
     const events = [start, prompt(1, NOW - 9000), answered(2, NOW - 8000), jobEnd(3, NOW - 4000), note(4, NOW - 3000, { kind: 'cancelled' })];
     expect(unwokenOf(events).triggers).toEqual([]);

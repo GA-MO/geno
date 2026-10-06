@@ -1,5 +1,7 @@
 import type { TaskRecord } from '@g-code/core';
-import { isLive, placeTasks, type NeedsYouReason, type PlacedTask } from '@g-code/core/attention';
+import { isLive, isWaking, placeTasks, type NeedsYouReason, type PlacedTask } from '@g-code/core/attention';
+import { waitsForText } from '@g-code/core/wake';
+import { clockOf } from './format.js';
 import type { SeenMarkers } from './lanes-model.js';
 import type { ToolBlock, Transcript } from './messages.js';
 import { runningChildren } from './transcript.js';
@@ -38,6 +40,7 @@ const NEEDS_YOU_LABELS: { readonly [R in NeedsYouReason]: (where: string) => str
   question: (where) => `Waiting for your answer in ${where}`,
   failed: (where) => `Failed in ${where}`,
   limited: (where) => `Held at a rate limit in ${where}`,
+  paused: (where) => `Wake-ups paused in ${where}`,
 };
 
 const runningTool = (blocks: Transcript['turns'][number]['blocks']): ToolBlock | undefined =>
@@ -69,13 +72,19 @@ function latestStep(transcript: Transcript): string | undefined {
 
 const workingLabel = (text: string | undefined): ActivityView['label'] => (text === undefined ? undefined : { text, tone: 'working' });
 
-const isAtWork = (placed: PlacedTask): boolean => placed.attention.kind === 'working' && (isLive(placed.task.status) || placed.children.some((child) => isLive(child.status)));
+/** A session whose turn ended and that waits for its background work to wake it, which counts as running. */
+const waitsToWake = (task: TaskRecord): boolean => !isLive(task.status) && isWaking(task.wake);
+
+const isAtWork = (placed: PlacedTask): boolean =>
+  placed.attention.kind === 'working' && (isLive(placed.task.status) || placed.children.some((child) => isLive(child.status)) || waitsToWake(placed.task));
 
 /** The pill and its label; undefined while nothing runs beside the chat and nothing waits on the user. */
 export function activityOf(transcript: Transcript, { tasks, seen, shown }: Background): ActivityView | undefined {
   const placed = placeTasks(tasks, seen);
   const others = placed.filter((p) => p.task.sessionId !== shown && isAtWork(p));
-  const running = others.length + runningChildren(transcript).length;
+  // The shown chat has no clock while it waits to be woken, so the pill counts it; its subagents count themselves.
+  const here = placed.find((p) => p.task.sessionId === shown && waitsToWake(p.task));
+  const running = others.length + Math.max(runningChildren(transcript).length, here === undefined ? 0 : 1);
   const asking = placed.filter((p) => p.attention.kind === 'needs-you');
   if (running === 0 && asking.length === 0) return undefined;
   const text = [running > 0 ? `${running} running` : undefined, asking.length > 0 ? needWord(asking.length) : undefined].filter(Boolean).join(' · ');
@@ -83,6 +92,6 @@ export function activityOf(transcript: Transcript, { tasks, seen, shown }: Backg
   const label: ActivityView['label'] =
     top?.attention.kind === 'needs-you'
       ? { text: NEEDS_YOU_LABELS[top.attention.reason](whereOf(top.task, shown)), tone: 'needs-you' }
-      : workingLabel(latestStep(transcript) ?? (others[0] === undefined ? undefined : `${whereOf(others[0].task, shown)}: running`));
+      : workingLabel(latestStep(transcript) ?? (here !== undefined ? waitsForText(here.task.wake!.waitsFor, clockOf) : others[0] === undefined ? undefined : `${whereOf(others[0].task, shown)}: running`));
   return { running, needsYou: asking.length, text, label };
 }

@@ -1,4 +1,5 @@
 import type { Attention, NeedsYouReason, TaskNotice, TaskRecord } from '@g-code/core';
+import { WAKE_CAP } from '@g-code/core/wake';
 
 /** How a task's notice reaches the user. */
 
@@ -40,6 +41,7 @@ export const ATTENTION_NOTICES: { readonly [K in NeedsYouReason | 'ready']: Atte
   question: { kind: 'needs-input', severity: 'warning', verb: 'needs your answer', os: true },
   failed: { kind: 'failed', severity: 'error', verb: 'failed', os: true },
   limited: { kind: 'needs-input', severity: 'warning', verb: 'is held at a rate limit until you retry', os: true },
+  paused: { kind: 'needs-input', severity: 'warning', verb: `paused its wake-ups after ${WAKE_CAP} in an hour`, os: true },
   ready: { kind: 'done', severity: 'info', verb: 'finished', os: false },
 };
 

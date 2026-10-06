@@ -51,6 +51,8 @@ export type Turn = {
   readonly command?: SentCommand | undefined;
   /** The subagents the turn started, by their own session ids, in the order they started. */
   readonly children?: Readonly<Record<string, Child>> | undefined;
+  /** Why Geno started the turn by itself, such as "woke: 2 tasks finished"; undefined for a turn the user sent. */
+  readonly wake?: string | undefined;
 };
 
 /**
@@ -215,6 +217,7 @@ export type Action =
       readonly mode?: string | undefined;
       readonly command?: SentCommand | undefined;
       readonly seq?: number | undefined;
+      readonly wake?: string | undefined;
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
@@ -406,6 +409,8 @@ export type FromView =
   | { readonly type: 'cancel-child'; readonly id: string }
   /** Stops a background command of the shown session by its job id. */
   | { readonly type: 'stop-background'; readonly id: string }
+  /** The composer gained or lost a draft, which holds back a turn Geno would start by itself. */
+  | { readonly type: 'drafting'; readonly typing: boolean }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
   /** The user's answers to a question card, or their refusal. */
   | { readonly type: 'answer'; readonly id: string; readonly answer: AskUserAnswer }

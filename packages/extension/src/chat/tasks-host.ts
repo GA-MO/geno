@@ -19,6 +19,8 @@ import {
   type TaskRecord,
   type TasksResponse,
   type TaskUpdate,
+  WAKE_CANCEL_METHOD,
+  type WakeCancelRequest,
 } from '@g-code/core';
 import type { Connection } from './engine.js';
 import { revealOf, type LanesFromView, type SeenMarkers, type LanesListing, type LanesToView } from './lanes-model.js';
@@ -225,6 +227,10 @@ export class TaskHost implements vscode.Disposable {
     'task-stop': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.notify(acp.methods.agent.session.cancel, { sessionId }))
+        .catch(warn),
+    'task-wake-cancel': ({ sessionId }) =>
+      void this.connection()
+        .then(({ agent }) => agent.request<unknown, WakeCancelRequest>(WAKE_CANCEL_METHOD, { sessionId }))
         .catch(warn),
   };
 }

@@ -148,6 +148,9 @@ export function resumeEnvOf(settings: Settings): Record<string, string> {
   return typeof value === 'string' && isResumeAfterLimit(value) ? { GCODE_RESUME_AFTER_LIMIT: value } : {};
 }
 
+/** The `gcode.wake.auto` setting as the engine reads it: only off needs saying. */
+export const wakeEnvOf = (settings: Settings): Record<string, string> => (settings.get<unknown>('wake.auto', true) === false ? { GCODE_AUTO_WAKE: 'off' } : {});
+
 /** For the output channel: everything about the runtime except the key itself. */
 export const describeRuntime = (runtime: ModelRuntime): string =>
   `${runtime.provider}, model ${runtime.model ?? 'default'}, key from ${runtime.key?.source ?? 'nowhere'}`;

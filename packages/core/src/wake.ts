@@ -86,9 +86,12 @@ const NOTE_TRIGGERS: { readonly [K in WakeNote['kind']]: (note: Extract<WakeNote
   cancelled: () => undefined,
 };
 
-/** The trigger an event stands for, if it is something that reported. */
+/**
+ * The trigger an event stands for, if it is something that reported. A command the user stopped wakes nothing: they
+ * know, and its end joins their next turn.
+ */
 export function triggerOf(event: TurnEvent): WakeTrigger | undefined {
-  if (event.kind === 'background-end') return { kind: 'jobs', job: event.job.id };
+  if (event.kind === 'background-end') return event.job.state.status === 'exited' ? { kind: 'jobs', job: event.job.id } : undefined;
   if (event.kind === 'user' && event.steer === true && event.from === 'child') return { kind: 'children' };
   if (event.kind === 'wake') return (NOTE_TRIGGERS[event.note.kind] as (note: WakeNote) => WakeTrigger | undefined)(event.note);
   return undefined;

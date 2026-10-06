@@ -21,6 +21,9 @@ import {
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
+  WAKE_META,
+  DRAFT_METHOD,
+  type DraftNotice,
   SESSION_SUMMARY_META,
   TOOL_CALL_META,
   TURN_USAGE_META,
@@ -52,6 +55,7 @@ import {
   BACKGROUND_META,
   BACKGROUND_STOP_METHOD,
   isJobId,
+  isWakeId,
   type BackgroundStopRequest,
   RETRY_NOW_METHOD,
   type RetryNowRequest,
@@ -199,7 +203,17 @@ const jobState = z.discriminatedUnion('status', [
 const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), state: jobState, tail: z.string() });
 const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number() });
 
+const wakeMark = z.object({ seq: z.number(), label: z.string() });
 const forkOrigin = z.object({ sessionId: z.string().transform(asSessionId), turnSeq: z.number(), title: z.string() });
+const wakeId = z.string().refine(isWakeId);
+const jobId = z.string().refine(isJobId);
+const wakeSource = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('children'), child: z.string(), agent: z.string() }),
+  z.object({ kind: z.literal('jobs'), job: jobId }),
+  z.object({ kind: z.literal('monitor'), id: wakeId, job: jobId, pattern: z.string() }),
+  z.object({ kind: z.literal('schedule'), id: wakeId, dueAt: z.number() }),
+]);
+const wakeView = z.object({ waitsFor: z.array(wakeSource), paused: z.enum(['cap', 'limit', 'stopped', 'failed']).optional() });
 
 const taskUpdate = z.object({
   task: z.object({
@@ -219,6 +233,7 @@ const taskUpdate = z.object({
     backend: z.enum(EXTERNAL_BACKEND_IDS).optional(),
     jobs: z.array(taskJob).optional(),
     forkedFrom: forkOrigin.optional(),
+    wake: wakeView.optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
@@ -492,8 +507,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly rewinds: RewindHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
-  /** The running turn of the shown session that another window started, which the panel took over on load. */
+  /** The running turn of the shown session that another window started, or Geno woke it for, which the panel took over. */
   private adopted: string | undefined;
+  /** The composer holds a draft. */
+  private typing = false;
 
   constructor(
     settings: () => Promise<EngineSettings>,
@@ -689,6 +706,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (update.sessionUpdate === 'user_message_chunk') {
       const steer = steerActionOf(update);
       if (steer !== undefined) return this.dispatch(steer);
+      const woke = wakeMark.safeParse(update._meta?.[WAKE_META]);
+      if (this.replay === undefined && woke.success && sessionId === this.shown) return this.woken(sessionId, woke.data.label);
       if (this.replay === undefined || update.content.type !== 'text') return;
       if (this.replay.end !== undefined) this.dispatch(this.replay.end);
       const start = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
@@ -699,7 +718,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         prompt: update.content.text,
         mode: start.success ? start.data.mode : undefined,
         command: start.success ? this.sentCommand(start.data.command) : undefined,
-        seq: start.success ? start.data.seq : undefined,
+        // A woken turn has no message of the user's to rewind to.
+        seq: start.success && !woke.success ? start.data.seq : undefined,
+        wake: woke.success ? woke.data.label : undefined,
       });
       this.replay.end = replayedEnd(update);
       return;
@@ -818,6 +839,35 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (this.shownCwd !== undefined) throw new Error('Open a chat of the main checkout to graft a lane into it.');
     const prompt = laneGraftPrompt(name, hunks.length);
     return this.prompt(prompt, prompt, { [LANE_GRAFT_META]: { lane: name, hunks } }, async () => []);
+  }
+
+  /** The composer's draft, which the engine hears of for the shown session: no woken turn starts while the user types. */
+  private drafting(typing: boolean): void {
+    if (this.typing === typing) return;
+    this.typing = typing;
+    this.tellDraft(this.shown, typing);
+  }
+
+  private tellDraft(sessionId: string | undefined, typing: boolean): void {
+    if (sessionId === undefined) return;
+    void this.engine
+      .connection()
+      .then(({ agent }) => agent.notify(DRAFT_METHOD, { sessionId, typing } satisfies DraftNotice))
+      .catch(() => {});
+  }
+
+  /**
+   * Geno woke the shown session for a turn of its own. The panel shows it as a turn it took over, as after a reload:
+   * Stop stops it, and its task's end ends it.
+   */
+  private woken(sessionId: string, label: string): void {
+    if (this.turn !== undefined || this.adopted !== undefined) return;
+    this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: '', mode: this.modes.current, wake: label });
+    this.adopted = sessionId;
+    this.composer.turnStarted();
+    void this.engine.connection().then((connection) => {
+      if (this.adopted === sessionId && this.turn === undefined) this.turn = { connection, sessionId };
+    });
   }
 
   /** The adopted turn ended: its end shows as a sent one's would, with the usage the task reports. */
@@ -971,6 +1021,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Makes the session the panel's: remembered for the next window, its transcript and title shown. */
   private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes, options: acp.NewSessionResponse['configOptions'], cwd?: string): Promise<void> {
+    // The draft stays in the composer, so it now holds back this session's wake instead of the last one's.
+    if (this.typing && this.shown !== sessionId) {
+      this.tellDraft(this.shown, false);
+      this.tellDraft(sessionId, true);
+    }
     this.shown = sessionId;
     this.shownCwd = cwd;
     this.background.reshow();
@@ -1226,6 +1281,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'retry-now': () => void this.retryNow().catch(warn),
       'cancel-child': ({ id }) => void this.cancelChild(id).catch(warn),
       'stop-background': ({ id }) => void this.stopBackground(id).catch(warn),
+      drafting: ({ typing }) => this.drafting(typing),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
