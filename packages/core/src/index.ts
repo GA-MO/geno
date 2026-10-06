@@ -47,6 +47,7 @@ export * from './editor-actions.js';
 export * from './redact.js';
 export * from './terminal.js';
 export * from './todo.js';
+export * from './spinoff.js';
 export * from './lanes.js';
 export * from './subagent.js';
 export * from './attention.js';
