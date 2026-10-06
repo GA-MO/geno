@@ -1,5 +1,3 @@
-/** How the panel writes numbers: short enough for a footer, precise where small values matter. */
-
 export { formatTokens, formatUsd as formatCost } from '@g-code/core/spend-view';
 
 /** A time of day as the user's clock reads it, such as 14:05. */

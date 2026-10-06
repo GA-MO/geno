@@ -8,20 +8,16 @@ import { startsTurn } from './steer.js';
 import { inputOf, PARTS, type Breakdown, type InputPart, type Part, type PartRun, type PartUsage, type TokenBasis } from './parts.js';
 
 /**
- * The tokenizer approximation, used wherever the provider gives no count. Text splits into pieces the way BPE
- * pre-tokenizers split it: runs of letters, single digits (Qwen and Llama tokenize digits one by one), runs of other
- * symbols, and whitespace. A run of Latin letters costs one token per wordChars letters, rounded up; a letter
- * outside Latin costs one token; a symbol run one per symbolChars; any other whitespace run one; and a lone space
- * nothing, since BPE merges it into the next word. Messages, tool calls and tool definitions add fixed framing. Calibrated against qwen3.8-flash's counts (docs/u61.md).
+ * The one tokenizer approximation, for wherever the provider gives no count. Qwen and Llama tokenize digits one at a
+ * time, and BPE merges a lone space into the next word. The constants are calibrated against qwen3.8-flash (docs/u61.md).
  */
 export const TOKENIZER = {
   wordChars: 8,
   symbolChars: 3,
   messageOverhead: 4,
-  /** A tool call or a tool result: its id and framing. */
   toolCallOverhead: 8,
-  /** A tool definition's framing, and the tool-calling instructions the chat template adds once when any tool is offered. */
   toolDefinitionOverhead: 15,
+  /** The tool-calling instructions the chat template adds once when any tool is offered. */
   toolsPreamble: 190,
   imageTokens: 1600,
 } as const;
