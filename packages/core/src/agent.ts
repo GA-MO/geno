@@ -22,6 +22,11 @@ const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL
       type: 'object',
       properties: {
         command: { type: 'string', description: 'The shell command, for example npx vitest run src/foo.test.ts.' },
+        description: {
+          type: 'string',
+          description:
+            'What the command does, in 5 to 10 words and active voice, such as "Run the tests for the parser" or "Show disk usage of each folder". The user sees it as the title of the step. It does not change what runs or whether it is allowed.',
+        },
         timeout_seconds: {
           type: 'integer',
           minimum: 1,

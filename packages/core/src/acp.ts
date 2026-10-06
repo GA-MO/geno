@@ -35,8 +35,8 @@ export type TurnUsage = { readonly model: string; readonly costUsd: number | nul
 /** Key in a bash call's closing tool_call_update `_meta`: the ApprovalRecord of a command a rule flagged, for the step to show. */
 export const APPROVAL_META = 'gcode/approval';
 
-/** session/request_permission's `toolCall.rawInput`: the command asked about and why it needs asking. */
-export type PermissionInput = { readonly command: string; readonly reason: string };
+/** session/request_permission's `toolCall.rawInput`: the command asked about, why it needs asking, and the bash call's own description, for display only. */
+export type PermissionInput = { readonly command: string; readonly reason: string; readonly description?: string };
 
 /** The JSON-RPC error a client answers fs/write_text_file with when the file no longer holds that text. */
 export const STALE_BASE_ERROR = { code: -32010, reason: 'stale-base' } as const;

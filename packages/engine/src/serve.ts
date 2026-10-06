@@ -304,6 +304,11 @@ function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '
   return { usage, _meta: { [TURN_USAGE_META]: meta } };
 }
 
+const bashDescriptionOf = (input: unknown): string | undefined => {
+  const description = (input as { readonly description?: unknown } | null)?.description;
+  return typeof description === 'string' && description.trim() !== '' ? description : undefined;
+};
+
 /**
  * One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. `session`
  * is known once the turn opened the log, before its first model call.
@@ -314,6 +319,7 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
   const drafts = new Map<string, string>();
   // Only a tool that runs alone in its batch asks or writes, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
+  let runningDescription: string | undefined;
   let spent: Spent | undefined;
   return {
     updates: sent,
@@ -325,6 +331,7 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
         text: (delta) => sent.send(textUpdate(delta)),
         toolStart(use, title) {
           running = use.id;
+          runningDescription = use.name === 'bash' ? bashDescriptionOf(use.input) : undefined;
           sent.send({ sessionUpdate: 'tool_call', toolCallId: use.id, title, kind: TOOL_KINDS[use.name] ?? 'other', status: 'in_progress', rawInput: use.input });
         },
         toolEnd(use, status) {
@@ -362,7 +369,8 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
     },
     async approve(denial, classifier, asker) {
       await sent.flush();
-      const rawInput: PermissionInput = { command: denial.command, reason: denial.reason };
+      const description = asker === undefined ? runningDescription : undefined;
+      const rawInput: PermissionInput = { command: denial.command, reason: denial.reason, ...(description === undefined ? {} : { description }) };
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
         sessionId,
