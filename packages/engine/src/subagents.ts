@@ -156,6 +156,8 @@ export type Subagents = {
   readonly executor: Executor;
   /** `message_agent`, offered with `agent` and only with it. */
   readonly message: Executor;
+  /** Cancels the background children still running, once the parent's run ended with nobody left to take their reports. */
+  stopBackground(): void;
   /** Settles once every child started so far has ended and logged its end. */
   settled(): Promise<void>;
 };
@@ -198,6 +200,7 @@ export function subagents(env: SubagentEnv): Subagents {
   const byName = (name: string) => agents.find((agent) => agent.name === name);
   // Every child this run started, running or not, so message_agent can tell a finished one from a wrong id.
   const started = new Set<string>();
+  const inBackground = new Set<AbortController>();
 
   const runChild = async (
     agent: AgentDefinition,
@@ -299,11 +302,15 @@ export function subagents(env: SubagentEnv): Subagents {
       started.add(id);
       // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
       const inbox = env.steers.open(id, parent.log.session.id);
-      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, ctx, id, inbox));
+      const stop = new AbortController();
+      if (background === true) inBackground.add(stop);
+      const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
+      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox));
       running.add(child);
       void child
         .finally(() => {
           running.delete(child);
+          inBackground.delete(stop);
           env.steers.release(id, inbox);
         })
         .catch(() => {});
@@ -335,6 +342,9 @@ export function subagents(env: SubagentEnv): Subagents {
     tool,
     executor: run,
     message,
+    stopBackground: () => {
+      for (const stop of inBackground) stop.abort();
+    },
     settled: async () => {
       while (running.size > 0) await Promise.allSettled([...running]);
     },
