@@ -195,7 +195,7 @@ export type ComposerControls = ReturnType<typeof composerControls>;
  */
 export function composerControls(
   post: (message: FromView) => void,
-  hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly openTasks: () => void; readonly unqueue: () => void },
+  hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly openTasks: () => void; readonly unqueue: () => void; readonly compact: () => void },
 ) {
   const browserLabel = h('span', { class: 'tray-label' });
   const browser = h(
@@ -235,6 +235,7 @@ export function composerControls(
   const activity = activityPill(hooks.openTasks);
 
   const ring = contextRing();
+  const compact = h('button', { type: 'button', class: 'compact-offer', hidden: true, onclick: () => compact.getAttribute('aria-disabled') !== 'true' && hooks.compact() }, icon('fold'), h('span', {}, 'Compact'));
   const modelBackend = h('span', { class: 'model-backend', hidden: true });
   const modelName = h('span', { class: 'model-name' });
   const effort = h('span', { class: 'model-effort' });
@@ -252,7 +253,7 @@ export function composerControls(
   return {
     tray: [browser, queued] as const,
     left: [add, commands] as const,
-    right: [status, ring.element, modelButton] as const,
+    right: [status, ring.element, compact, modelButton] as const,
     menu: menu.menu,
     /** Whether the follow-up waits for the turn's end or was sent to land at its next tool round (U44). */
     followup(pill: PillState | undefined): void {
@@ -267,6 +268,12 @@ export function composerControls(
       queued.hidden = view.queued === undefined;
       queuedLabel.textContent = view.queued ?? '';
       ring.show(view.ring);
+      const offer = view.ring.compact;
+      compact.hidden = offer === undefined;
+      compact.title = offer?.held ?? 'Summarize the older turns to free context (/compact)';
+      compact.setAttribute('aria-label', offer?.held === undefined ? 'Compact the context' : `Compact the context. ${offer.held}`);
+      if (offer?.held === undefined) compact.removeAttribute('aria-disabled');
+      else compact.setAttribute('aria-disabled', 'true');
       modelName.textContent = view.model.name;
       modelBackend.textContent = view.model.backend ?? '';
       modelBackend.hidden = view.model.backend === undefined;
