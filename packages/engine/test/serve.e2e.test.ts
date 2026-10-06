@@ -808,7 +808,7 @@ describe('gcode serve', () => {
     expect(first).toEqual({
       sessionUpdate: 'user_message_chunk',
       content: { type: 'text', text: 'Flip   the flag\nplease' },
-      _meta: { [REPLAYED_TURN_META]: { mode: 'ask', startedAt: expect.any(Number), endedAt: expect.any(Number), status: 'done', usage: expect.objectContaining({ inputTokens: 3000, costUsd: expect.any(Number) }) } },
+      _meta: { [REPLAYED_TURN_META]: { seq: 1, mode: 'ask', startedAt: expect.any(Number), endedAt: expect.any(Number), status: 'done', usage: expect.objectContaining({ inputTokens: 3000, costUsd: expect.any(Number) }) } },
     });
     expect(rest.map((u) => u.sessionUpdate)).toEqual([
       ...['agent_message_chunk', 'tool_call', 'tool_call_update'],
