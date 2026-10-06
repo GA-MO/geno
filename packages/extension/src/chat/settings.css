@@ -506,3 +506,8 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 .rules-refused {
   margin: 0 2px;
 }
+
+.rules-note[hidden],
+.rules-refused[hidden] {
+  display: none;
+}
