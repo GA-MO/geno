@@ -164,6 +164,8 @@ export class TaskHost implements vscode.Disposable {
     const at = attention.kind === 'needs-you' ? attention.at : root;
     const task = this.tasks.get(at);
     if (task === undefined) return;
+    // Opening from the list is the user looking, whether or not the window has the focus.
+    if (this.markSeen(root)) this.changed();
     if (task.kind === 'arena') return this.chat.openArena(at);
     void this.chat
       .openTask(at, task.workspace)
