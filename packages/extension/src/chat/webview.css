@@ -2066,6 +2066,11 @@ body.diagram-tab {
   white-space: nowrap;
 }
 
+.turn-head:has(.turn-wake) > .turn-meta {
+  flex: none;
+  white-space: nowrap;
+}
+
 .start-building {
   margin: 8px 0 0 var(--rail-indent);
 }
