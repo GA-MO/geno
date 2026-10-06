@@ -30,6 +30,32 @@ export async function capturePanel(window: Window, file: string, scale = 2): Pro
   await writeFile(file, Buffer.from(data, 'base64'));
 }
 
+/** Drags the side bar's edge until the Geno webview is `width` CSS px wide, as a user narrows the panel; its width after. */
+export async function resizeSideBar(w: Window, width: number): Promise<number> {
+  const measure = async () =>
+    (
+      await w.page.send<{ result: { value: { right: number; mid: number; panel: number } } }>('Runtime.evaluate', {
+        expression: `(() => {
+          const bar = document.querySelector('.part.sidebar').getBoundingClientRect();
+          const frame = [...document.querySelectorAll('iframe')].find((f) => f.src.includes('extensionId=g-code.g-code') && f.getBoundingClientRect().width > 0);
+          return { right: bar.right, mid: bar.top + bar.height / 2, panel: frame.getBoundingClientRect().width };
+        })()`,
+        returnByValue: true,
+      })
+    ).result.value;
+  for (let i = 0; i < 4; i++) {
+    const { right, mid, panel } = await measure();
+    if (Math.abs(panel - width) < 2) return panel;
+    const to = right + (width - panel);
+    await w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: right, y: mid });
+    await w.page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: right, y: mid, button: 'left', clickCount: 1 });
+    for (let step = 1; step <= 8; step++) await w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: right + ((to - right) * step) / 8, y: mid, button: 'left', buttons: 1 });
+    await w.page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to, y: mid, button: 'left', clickCount: 1 });
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return (await measure()).panel;
+}
+
 /** The rainbow's running animations in the panel, paused at `t` of their cycle (0 to 1), or all resumed. */
 const RAINBOW = `doc.getAnimations().filter((a) => a.animationName === 'rainbow-run')`;
 export const seekRainbow = (view: Webview, t: number) =>

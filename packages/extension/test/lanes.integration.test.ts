@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { buildSuite, cachePath, root, setUp } from './launch.js';
-import { capturePanel } from './media.js';
+import { capturePanel, resizeSideBar } from './media.js';
 import { captureWindow, freePort } from './screenshot.js';
 import { ANSWERS, EDIT, FILES, MARKERS } from './suite/lanes-fixture.js';
 
@@ -69,31 +69,6 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   },
 };
 
-/** Drags the side bar's edge until the Geno webview is `width` CSS px wide, as a user narrows the panel; its width after. */
-async function resizeSideBar(w: Window, width: number): Promise<number> {
-  const measure = async () =>
-    (
-      await w.page.send<{ result: { value: { right: number; mid: number; panel: number } } }>('Runtime.evaluate', {
-        expression: `(() => {
-          const bar = document.querySelector('.part.sidebar').getBoundingClientRect();
-          const frame = [...document.querySelectorAll('iframe')].find((f) => f.src.includes('extensionId=g-code.g-code') && f.getBoundingClientRect().width > 0);
-          return { right: bar.right, mid: bar.top + bar.height / 2, panel: frame.getBoundingClientRect().width };
-        })()`,
-        returnByValue: true,
-      })
-    ).result.value;
-  for (let i = 0; i < 4; i++) {
-    const { right, mid, panel } = await measure();
-    if (Math.abs(panel - width) < 2) return panel;
-    const to = right + (width - panel);
-    await w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: right, y: mid });
-    await w.page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: right, y: mid, button: 'left', clickCount: 1 });
-    for (let step = 1; step <= 8; step++) await w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: right + ((to - right) * step) / 8, y: mid, button: 'left', buttons: 1 });
-    await w.page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to, y: mid, button: 'left', clickCount: 1 });
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  return (await measure()).panel;
-}
 
 const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
   'POST /v1/messages': async (req, res) => {
