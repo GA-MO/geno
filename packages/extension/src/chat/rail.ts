@@ -2,7 +2,7 @@ import type { ChangedFile } from './fold.js';
 import type { WaitKind } from '@g-code/core';
 import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
-import type { Child, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
+import type { Child, CompactBlock, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 import type { EditorTool } from './editor-step.js';
 
@@ -18,6 +18,8 @@ export type Step =
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
   /** A message that joined the turn while it ran, where it landed. */
   | { readonly kind: 'steer'; readonly key: string; readonly block: SteerBlock }
+  /** Where the context was compacted: a divider that opens to the summary. */
+  | { readonly kind: 'compact'; readonly key: string; readonly block: CompactBlock }
   /** An `agent` call, with the subagents it started nested under it. */
   | { readonly kind: 'agent'; readonly key: string; readonly tool: ToolBlock; readonly children: readonly Child[] }
   /** An open_file, reveal or show_diff call that ran: one row that shows its target again. */
@@ -84,6 +86,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
+    else if (block.kind === 'compact') steps.push({ kind: 'compact', key: block.id, block });
     else if (block.editorAction !== undefined) steps.push({ kind: 'editor', key: `editor:${block.id}`, tool: block as EditorTool });
     else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
     else if (block.name === AGENT_CALL) steps.push({ kind: 'agent', key: `agent:${block.id}`, tool: block, children: childrenUnder(turn, block.id) });
@@ -122,6 +125,7 @@ export function nodeOf(step: Step): NodeState {
       return 'failed';
     case 'editor':
     case 'spinoff':
+    case 'compact':
       return 'done';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';

@@ -133,8 +133,8 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 /** What a compact turn keeps in view while folded, widgets included, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  // What the user said mid-turn shapes the answer below it, as a decided question does.
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'todo' || step.kind === 'spinoff');
+  // What the user said mid-turn shapes the answer below it, as a decided question does; a compaction marks where the model stopped reading the chat word for word.
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'compact' || step.kind === 'todo' || step.kind === 'spinoff');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => (step.kind !== 'text' || step === narration) && step.kind !== 'todo').slice(-RECENT));

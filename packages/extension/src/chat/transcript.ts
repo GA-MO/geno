@@ -2,6 +2,7 @@ import type { AskUserAnswer, ChildEnd } from '@g-code/core';
 import type { Action, Block, Child, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn, TurnStatus } from './messages.js';
 import { withSteer } from './steer-model.js';
 import { withSpinoff } from './spinoff-model.js';
+import { withCompact } from './compact-model.js';
 
 export const emptyTranscript = (model: string): Transcript => ({ model, turns: [] });
 
@@ -181,6 +182,8 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),
   steer: (transcript, { seq, shown }) => onLast(transcript, (turn) => withSteer(turn, seq, shown)),
+  // The divider ends the "Compacting the context" notice the summary call showed.
+  compact: (transcript, { mark }) => onLast(transcript, (turn) => withCompact(quiet(turn), mark)),
   'turn-end': (transcript, { at, status, usage, seq }) =>
     onLast(transcript, (turn) => {
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.

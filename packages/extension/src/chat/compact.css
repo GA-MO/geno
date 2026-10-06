@@ -1,0 +1,115 @@
+/* Context compaction (U47): a divider on the rail where the context was compacted, which opens to the summary. */
+
+.compact {
+  margin: 2px 0 4px;
+  font-size: var(--small);
+}
+
+.compact-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.compact-head:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.compact-rule {
+  flex: 1 1 12px;
+  min-width: 12px;
+  border-top: 1px dashed var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 28%, transparent));
+}
+
+.compact-label {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: 6px;
+  min-width: 0;
+  text-align: center;
+}
+
+.compact-title {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.compact-head:hover .compact-title {
+  text-decoration: underline;
+}
+
+.compact-numbers {
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-label .codicon {
+  font-size: 14px;
+}
+
+.compact-label .chevron {
+  font-size: 12px;
+}
+
+.compact-body {
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  overflow-wrap: anywhere;
+}
+
+.compact-body[hidden] {
+  display: none;
+}
+
+.compact-reason,
+.compact-focus {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.compact-summary {
+  font-size: var(--vscode-font-size);
+}
+
+.compact-files {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.compact-files-label {
+  margin-right: 6px;
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.compact-files ul {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compact-files li {
+  display: inline;
+}
+
+.compact-files li:not(:last-child)::after {
+  content: ', ';
+}
