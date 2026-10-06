@@ -1,4 +1,6 @@
-import { isLive, returnedAtOf, taskNotice, type Asking, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
+import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
+
+const emptyless = (wake: WakeView | undefined): WakeView | undefined => (wake === undefined || (wake.waitsFor.length === 0 && wake.paused === undefined) ? undefined : wake);
 
 /** How many ended top-level tasks the list keeps, newest first; running ones always stay. */
 const KEPT_ENDED = 20;
@@ -20,7 +22,7 @@ export class Tasks {
   start(task: Omit<TaskRecord, 'status' | 'endedAt' | 'usage' | 'returnedAt'>): void {
     this.asking.delete(task.sessionId);
     const before = this.records.get(task.sessionId);
-    this.put({ parent: before?.parent, kind: before?.kind, jobs: before?.jobs, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined });
+    this.put({ parent: before?.parent, kind: before?.kind, jobs: before?.jobs, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined, wake: undefined });
   }
 
   /** The session's task rolls up into `parent`'s, from its next start on if it has not started yet. */
@@ -41,12 +43,25 @@ export class Tasks {
     if (record !== undefined) this.put({ ...record, jobs: jobs.length === 0 ? undefined : jobs });
   }
 
-  /** The turn ended; a task ends once. */
-  end(sessionId: string, status: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>, usage: TaskRecord['usage']): void {
+  /** The turn ended; a task ends once. `wake` is what will wake the session again, given with the end so no notice says it finished. */
+  end(sessionId: string, status: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>, usage: TaskRecord['usage'], wake?: WakeView): void {
     const record = this.records.get(sessionId);
     if (record === undefined || !isLive(record.status)) return;
     this.asking.delete(sessionId);
-    this.put({ ...record, status, endedAt: Date.now(), usage: usage ?? record.usage, waiting: undefined, asking: undefined });
+    this.put({ ...record, status, endedAt: Date.now(), usage: usage ?? record.usage, waiting: undefined, asking: undefined, wake: emptyless(wake) });
+  }
+
+  /** What will wake the session after its turn, or why its wakes wait for the user; a running turn shows none. */
+  wake(sessionId: string, wake: WakeView | undefined): void {
+    const record = this.records.get(sessionId);
+    const next = emptyless(wake);
+    if (record === undefined || isLive(record.status) || JSON.stringify(record.wake) === JSON.stringify(next)) return;
+    this.put({ ...record, wake: next });
+  }
+
+  /** A card of the session's, or of one of its subagents', waits for the user. */
+  asks(sessionId: string): boolean {
+    return [...this.records.values()].some((record) => (record.sessionId === sessionId || record.parent === sessionId) && record.status === 'needs-input');
   }
 
   /** A model call of the turn waits offline or for a limit, or its next try moved; null when it went out. */
@@ -112,7 +127,8 @@ export class Tasks {
     this.records.delete(task.sessionId);
     this.records.set(task.sessionId, task);
     this.prune();
-    const notice = taskNotice(before?.status, task.status);
+    // A turn that ended while its background work will wake the session has not finished yet.
+    const notice = isWaking(task.wake) ? undefined : taskNotice(before?.status, task.status);
     if (notice !== undefined && this.listeners.size === 0) this.missed.set(task.sessionId, notice.kind);
     const update: TaskUpdate = { task, notice: notice?.kind ?? null };
     for (const listener of this.listeners) listener(update);

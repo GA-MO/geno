@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, ChildNote, FileChange, ImageAttachment, TurnEvent, WidgetRef } from '@g-code/core';
+import type { ApprovalRecord, ChildNote, FileChange, ImageAttachment, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -27,8 +27,8 @@ export type ToolContext = {
   readonly earlierCalls: () => Promise<void>;
   /** The model's id for the call being run; absent outside a run. */
   readonly toolUseId?: string | undefined;
-  /** Logs a subagent starting or ending in this session's log; absent outside a run, where no subagent starts. */
-  readonly logChild?: ((note: ChildNote) => Promise<void>) | undefined;
+  /** Logs a subagent starting or ending, or a wake-up being scheduled, in this session's log; absent outside a run. */
+  readonly logNote?: ((note: ChildNote | WakeArrival) => Promise<void>) | undefined;
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */

@@ -1,14 +1,14 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
+import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
 import type { ToolInputDraft } from './gateway.js';
-import { loggedArrival, type Arrival } from './inbox.js';
+import { arrivalEvents, type Arrival } from './inbox.js';
 import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
@@ -33,7 +33,11 @@ export type Mode = {
   readonly arrivals?: () => readonly Arrival[];
 };
 
-export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number };
+/**
+ * `countFrom` counts the limits from an earlier event than this run's first: a woken turn shares the limits of the
+ * user's prompt that started the background work.
+ */
+export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number; readonly countFrom?: number | undefined };
 
 /** How a run shows what it does as it happens. */
 export type Watcher = {
@@ -63,6 +67,8 @@ export type Surface = {
   readonly wake?: Wake | undefined;
   readonly waiter?: Waiter | undefined;
   readonly steers?: SteerInbox | undefined;
+  /** The engine wakes the session when background work reports, so a turn the model ends need not wait for it. */
+  readonly wakeLater?: boolean | undefined;
 };
 
 const CLASSIFIED: Readonly<Record<ApprovalRecord['verdict'], string>> = { allow: 'allowed', deny: 'denied' };
@@ -191,11 +197,13 @@ export async function drive(
     );
     return written;
   };
-  const run: Run = { firstSeq: nextSeq(events), ...limits };
+  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd };
   if (prompt !== '') {
     await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });
-  } else if (loopStep(events, run).kind === 'done') {
-    throw new UsageError('the session has nothing left to answer; pass a question');
+  } else {
+    // A woken turn may start at its limits already; the loop then ends it with the limit's message.
+    const step = loopStep(events, run);
+    if (step.kind === 'done' && !isLimit(step.reason)) throw new UsageError('the session has nothing left to answer; pass a question');
   }
 
   const signal = io.interrupts();
@@ -209,8 +217,8 @@ export async function drive(
     files: surface.files,
     events: () => events,
     earlierCalls: async () => {},
-    logChild: async (note) => {
-      await record({ ...note, seq: 0 });
+    logNote: async (note) => {
+      await record({ ...note, seq: 0 } as TurnEvent);
     },
   };
 
@@ -318,8 +326,8 @@ export async function drive(
   const deliver = async (): Promise<boolean> => {
     const arrived = mode.arrivals?.() ?? [];
     for (const arrival of arrived) {
-      const logged = await record(loggedArrival(arrival, 0));
-      if (arrival.kind === 'steer') arrival.settle({ kind: 'delivered', seq: logged.seq });
+      if (arrival.kind !== 'steer') for (const event of arrivalEvents(arrival)) await record(event);
+      else arrival.settle({ kind: 'delivered', seq: (await record(steerEvent(arrival.steer, 0, new Date().toISOString()))).seq });
     }
     return arrived.length > 0;
   };
@@ -331,8 +339,9 @@ export async function drive(
 
   for (;;) {
     const step = loopStep(events, run);
-    // A turn the model ended stays open while a background child owes its report: it waits, then takes what arrived.
-    const held = step.kind === 'done' && step.reason === 'end_turn' && inbox !== undefined && holdsTurnOpen(inbox.owed, inbox.queued()) ? inbox : undefined;
+    // Where nothing wakes the session later, a turn the model ended stays open while a background child owes its
+    // report: it waits, then takes what arrived.
+    const held = step.kind === 'done' && step.reason === 'end_turn' && inbox !== undefined && surface.wakeLater !== true && holdsTurnOpen(inbox.owed, inbox.reports()) ? inbox : undefined;
     if (held !== undefined) {
       await held.arrival(signal);
       if (signal.aborted) {

@@ -24,6 +24,7 @@ import {
   type SessionMode,
   type TurnEvent,
   TELLS_MODEL,
+  type Waiter,
 } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -51,6 +52,7 @@ import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentH
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
+import type { Wakes } from './wakes.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -111,7 +113,10 @@ export type AgentOptions = {
   readonly engine?: RunEngine | undefined;
 };
 
-export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers };
+export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers; readonly wakes?: RunWakes | undefined };
+
+/** What wakes the session after its turn ends: present only in the engine process, with auto-wake on. */
+export type RunWakes = { readonly registry: Wakes; readonly waiter: Waiter };
 
 /** Background commands and steers that live as long as one run, what arrives from them delivered to its loop. */
 function runEngine(): RunEngine {
@@ -144,8 +149,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   if (lane !== undefined) await bindSession(lane, session.id);
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
   let children: Subagents | undefined;
-  const { jobs, steers } = options.engine ?? runEngine();
+  const { jobs, steers, wakes } = options.engine ?? runEngine();
   const inbox = steers.open(session.id, undefined);
+  let result: DriveResult | undefined;
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -170,6 +176,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         lane: lane?.bounds,
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
+        wakes: own && wakes !== undefined ? { registry: wakes.registry, sessionId: session.id, waiter: wakes.waiter } : undefined,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
@@ -209,6 +216,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       externals: options.externals,
       keyOf: options.keyOf,
       steers,
+      waits: wakes?.registry,
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const mode = {
@@ -221,14 +229,23 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(issued === undefined ? {} : { issued }),
     };
-    return await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox });
+    result = await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
+    return result;
   } finally {
     steers.release(session.id, inbox);
-    children?.stopBackground();
-    await children?.settled();
-    if (options.engine === undefined) await jobs.kill('engine-exit', { sessionId: session.id });
-    await sandbox.close();
-    await rm(tempDir, { recursive: true, force: true });
+    // A turn the model ended leaves its background children running to wake the session; any other end has nobody
+    // left to take their reports.
+    const wakeLater = wakes !== undefined && result?.reason === 'end_turn';
+    if (wakeLater) children?.detach();
+    else children?.stopBackground();
+    const cleanUp = async () => {
+      await children?.settled();
+      if (options.engine === undefined) await jobs.kill('engine-exit', { sessionId: session.id });
+      await sandbox.close();
+      await rm(tempDir, { recursive: true, force: true });
+    };
+    if (wakeLater) void cleanUp().catch((error: unknown) => io.err(`could not clean up after ${session.id}'s background children: ${String(error)}`));
+    else await cleanUp();
   }
 }
 

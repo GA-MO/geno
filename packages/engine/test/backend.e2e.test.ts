@@ -104,6 +104,8 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
     DASHSCOPE_API_KEY: 'sk-fake',
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     ...(sandbox ? {} : { GCODE_BACKEND_SANDBOX: 'off' }),
+    // A background child here holds its parent's turn open, as it does where nothing wakes a session.
+    GCODE_AUTO_WAKE: 'off',
   };
   const io: Io = { env, cwd: repo, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: model ?? transport.fetch };
   const store = openStore(env);

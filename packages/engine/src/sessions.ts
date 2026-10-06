@@ -30,6 +30,9 @@ import {
   type LaneConflictReason,
   isJobId,
   type JobId,
+  isWakeId,
+  MONITOR_OUTCOMES,
+  type WakeId,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
 import { EngineError } from './errors.js';
@@ -176,6 +179,22 @@ const childEndSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('capped'), cap: z.enum(CHILD_CAPS) }),
 ]);
 
+const waiterSchema = z.strictObject({ pid: z.number().int().positive(), cwd: z.string().min(1) });
+const jobId = z.string().refine(isJobId, 'not a job id').transform((raw) => raw as JobId);
+const wakeId = z.string().refine(isWakeId, 'not a wake id').transform((raw) => raw as WakeId);
+const wakeTriggerSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('children') }),
+  z.strictObject({ kind: z.literal('jobs'), job: jobId }),
+  z.strictObject({ kind: z.literal('monitor'), id: wakeId, outcome: z.enum(MONITOR_OUTCOMES) }),
+  z.strictObject({ kind: z.literal('schedule'), id: wakeId }),
+]);
+const wakeNoteSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('scheduled'), id: wakeId, toolUseId: z.string().min(1), dueAt: z.number().int().nonnegative(), reason: z.string(), by: waiterSchema.optional() }),
+  z.strictObject({ kind: z.literal('due'), id: wakeId, toolUseId: z.string().min(1), reason: z.string() }),
+  z.strictObject({ kind: z.literal('monitor'), id: wakeId, toolUseId: z.string().min(1), job: jobId, pattern: z.string(), outcome: z.enum(MONITOR_OUTCOMES), line: z.string().optional() }),
+  z.strictObject({ kind: z.literal('cancelled') }),
+]);
+
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
 const turnEventSchema = z.union([
   z.discriminatedUnion('kind', [
@@ -194,7 +213,8 @@ const turnEventSchema = z.union([
       attachments: z.array(attachmentSchema).optional(),
       command: z.strictObject({ name: z.string().min(1), args: z.string() }).optional(),
       steer: z.literal(true).optional(),
-      from: z.enum(['parent', 'child']).optional(),
+      from: z.enum(['parent', 'child', 'wake']).optional(),
+      wake: z.array(wakeTriggerSchema).optional(),
     }),
     z.strictObject({
       kind: z.literal('assistant'),
@@ -235,7 +255,8 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('cut'), ...seqFields, turnSeq: seqFields.seq }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
-    z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: z.strictObject({ pid: z.number().int().positive(), cwd: z.string().min(1) }).optional() }),
+    z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: waiterSchema.optional() }),
+    z.strictObject({ kind: z.literal('wake'), ...seqFields, note: wakeNoteSchema }),
     z.strictObject({ kind: z.literal('mode'), seq: seqFields.seq.optional(), at: seqFields.at, mode: z.enum(SESSION_MODES) }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
@@ -264,7 +285,7 @@ const turnEventSchema = z.union([
       kind: z.literal('background-end'),
       ...seqFields,
       job: z.strictObject({
-        id: z.string().refine(isJobId, 'not a job id').transform((raw) => raw as JobId),
+        id: jobId,
         toolUseId: z.string(),
         command: z.string().min(1),
         state: endedJobStateSchema,

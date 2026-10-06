@@ -1,24 +1,36 @@
-import { steerEvent, type Steer, type SteerOutcome, type TurnEvent } from '@g-code/core';
+import { steerEvent, type ChildEndEvent, type Steer, type SteerOutcome, type TurnEvent, type WakeArrival } from '@g-code/core';
 import type { JobEnd } from './background.js';
 
 /** A steer for the session's running run, settled with the seq the run logged it at, or `next-turn` if the run ended first. */
 export type SteerArrival = { readonly kind: 'steer'; readonly steer: Steer; readonly settle: (outcome: SteerOutcome) => void };
 
 /**
+ * A background child ended: its end, then its report, fenced already by `childReport`, as the child's steer. A child
+ * stopped with nobody to hear it has no report.
+ */
+export type ChildReport = { readonly kind: 'child-report'; readonly end?: Omit<ChildEndEvent, 'seq'> | undefined; readonly report?: string | undefined };
+
+/**
  * What reaches a session from outside its turn's own loop, logged at the turn's next safe point: after the tool batch
  * that runs, before the next model call. drive.ts takes every kind at that one point.
  */
-export type Arrival = JobEnd | SteerArrival;
+export type Arrival = JobEnd | SteerArrival | ChildReport | WakeArrival;
 
-/** An arrival as the session log numbers it. */
-export const loggedArrival = (arrival: Arrival, seq: number): Extract<TurnEvent, { kind: 'user' | 'background-end' }> =>
-  arrival.kind === 'steer' ? steerEvent(arrival.steer, seq, new Date().toISOString()) : { ...arrival, seq };
+/** The log events an arrival other than a steer stands for, in order; the log numbers them. */
+export const arrivalEvents = (arrival: Exclude<Arrival, SteerArrival>): TurnEvent[] =>
+  arrival.kind === 'child-report'
+    ? [
+        ...(arrival.end === undefined ? [] : [{ ...arrival.end, seq: 0 }]),
+        ...(arrival.report === undefined ? [] : [steerEvent({ text: arrival.report, from: 'child' }, 0, arrival.end?.at ?? new Date().toISOString())]),
+      ]
+    : [{ ...arrival, seq: 0 }];
 
 /**
- * Whether the engine logs an arrival while no turn runs. A background end joins the next prompt. A steer does not: one
- * its run missed is settled `next-turn`, and the caller runs it as a prompt of its own.
+ * Whether the engine logs an arrival while no turn runs. A background end, a child's report and a wake note join the
+ * next turn, which may be a woken one. A steer does not: one its run missed is settled `next-turn`, and the caller
+ * runs it as a prompt of its own.
  */
-const LOGGED_WHILE_IDLE: { readonly [K in Arrival['kind']]: boolean } = { 'background-end': true, steer: false };
+const LOGGED_WHILE_IDLE: { readonly [K in Arrival['kind']]: boolean } = { 'background-end': true, 'child-report': true, wake: true, steer: false };
 
 const isSteer = (arrival: Arrival): arrival is SteerArrival => arrival.kind === 'steer';
 
@@ -44,8 +56,13 @@ export class Inbox {
   }
 
   /** What may be logged while no turn runs; steers stay for their run to take or to send to the next turn. */
-  takeIdle(sessionId: string): Arrival[] {
-    return this.takeWhere(sessionId, (arrival) => LOGGED_WHILE_IDLE[arrival.kind]);
+  takeIdle(sessionId: string): Exclude<Arrival, SteerArrival>[] {
+    return this.takeWhere(sessionId, (arrival): arrival is Exclude<Arrival, SteerArrival> => LOGGED_WHILE_IDLE[arrival.kind]);
+  }
+
+  /** Background children's reports waiting for the session's run. */
+  reports(sessionId: string): number {
+    return (this.pending.get(sessionId) ?? []).filter((arrival) => arrival.kind === 'child-report' && arrival.report !== undefined).length;
   }
 
   /** The session's steers, which its run's end sends to the next turn. */

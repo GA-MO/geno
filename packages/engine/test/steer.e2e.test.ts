@@ -113,6 +113,8 @@ async function fixture() {
     DASHSCOPE_API_KEY: 'sk-fake',
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     GCODE_RG: rgCommand(),
+    // U44's background child holds its parent's turn open, as it does where nothing wakes a session.
+    GCODE_AUTO_WAKE: 'off',
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
   };
   return { workspace, env, store: openStore(env) };

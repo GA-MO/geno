@@ -106,7 +106,8 @@ const woke = (seq: number, ms: number): TurnEvent => ({ kind: 'user', seq, at: a
 describe('what has not woken the session yet', () => {
   it('is what reported after the model last answered, with the newest arrival time', () => {
     const events = [start, prompt(1, NOW - 9000), answered(2, NOW - 8000), childEnd(3, NOW - 4000, 'c1'), report(4, NOW - 4000), jobEnd(5, NOW - 3000)];
-    expect(unwokenOf(events)).toEqual({ triggers: [{ kind: 'children', child: 'c1' }, { kind: 'jobs', job: 'bg-1' }], lastAt: NOW - 3000 });
+    expect(unwokenOf(events)).toEqual({ triggers: [{ kind: 'children' }, { kind: 'jobs', job: 'bg-1' }], lastAt: NOW - 3000 });
+    expect(unwokenOf(events, (t) => t.kind !== 'jobs')).toEqual({ triggers: [{ kind: 'children' }], lastAt: NOW - 4000 });
   });
 
   it('is nothing once a turn took it, a woken one included', () => {
@@ -162,7 +163,7 @@ describe('when wakes pause for the user', () => {
 
 describe('the woken turn', () => {
   it('names why it woke for its head', () => {
-    expect(wakeLabel([{ kind: 'children', child: 'c1' }, { kind: 'jobs', job: 'bg-1' }])).toBe('woke: 2 tasks finished');
+    expect(wakeLabel([{ kind: 'children' }, { kind: 'jobs', job: 'bg-1' }])).toBe('woke: 2 tasks finished');
     expect(wakeLabel([{ kind: 'jobs', job: 'bg-1' }])).toBe('woke: 1 task finished');
     expect(wakeLabel([{ kind: 'monitor', id: 'wake-1', outcome: 'matched' }])).toBe('woke: monitor matched');
     expect(wakeLabel([{ kind: 'schedule', id: 'wake-2' }])).toBe('woke: scheduled');

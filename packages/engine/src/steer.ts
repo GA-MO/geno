@@ -32,6 +32,11 @@ export class SteerInbox {
     return this.inbox.steers(this.sessionId);
   }
 
+  /** Background children's reports that wait for this run. */
+  reports(): number {
+    return this.inbox.reports(this.sessionId);
+  }
+
   get owed(): number {
     return this.owing;
   }
@@ -50,7 +55,7 @@ export class SteerInbox {
 
   /** Settles once a steer is queued or a debt is paid, or on abort. */
   async arrival(signal: AbortSignal): Promise<void> {
-    if (this.queued().length > 0 || signal.aborted) return;
+    if (this.queued().length > 0 || this.reports() > 0 || signal.aborted) return;
     await new Promise<void>((resolve) => {
       const done = () => {
         this.wake = undefined;
