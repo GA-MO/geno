@@ -75,20 +75,26 @@ export const toolSearchDefinition = (deferred: ReadonlyMap<string, DeferredTool>
   },
 });
 
-/** Splits `tools` into the core and the deferred, and sends tool_search last in place of the deferred. */
-export function toolRoster(tools: readonly Tool[], minSavedTokens: number = MIN_SAVED_TOKENS): ToolRoster {
-  const full: ToolRoster = { offered: tools, deferred: new Map() };
-  const deferrable = tools.filter((tool) => !CORE_TOOL_NAMES.has(tool.name));
-  if (deferrable.length === 0) return full;
-  const deferred = new Map(
-    deferrable
+const deferredOf = (tools: readonly Tool[]): ReadonlyMap<string, DeferredTool> =>
+  new Map(
+    tools
+      .filter((tool) => !CORE_TOOL_NAMES.has(tool.name))
       .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
       .map((definition): [string, DeferredTool] => [definition.name, { definition, hint: hintOf(definition.description) }]),
   );
-  const search = toolSearchDefinition(deferred);
-  const saved = deferrable.reduce((sum, tool) => sum + toolTokens(tool), 0) - toolTokens(search) - textTokens(DEFERRED_TOOLS_NOTE);
-  if (saved < minSavedTokens) return full;
-  return { offered: [...tools.filter((tool) => CORE_TOOL_NAMES.has(tool.name)), search], deferred };
+
+/** The tokens deferring `tools` would take out of every call, net of tool_search and the note, by the roster's estimate. */
+export function deferredSavings(tools: readonly Tool[]): number {
+  const deferred = deferredOf(tools);
+  if (deferred.size === 0) return 0;
+  return [...deferred.values()].reduce((sum, { definition }) => sum + toolTokens(definition), 0) - toolTokens(toolSearchDefinition(deferred)) - textTokens(DEFERRED_TOOLS_NOTE);
+}
+
+/** Splits `tools` into the core and the deferred, and sends tool_search last in place of the deferred. */
+export function toolRoster(tools: readonly Tool[], minSavedTokens: number = MIN_SAVED_TOKENS): ToolRoster {
+  const deferred = deferredOf(tools);
+  if (deferred.size === 0 || deferredSavings(tools) < minSavedTokens) return { offered: tools, deferred: new Map() };
+  return { offered: [...tools.filter((tool) => CORE_TOOL_NAMES.has(tool.name)), toolSearchDefinition(deferred)], deferred };
 }
 
 /** The tools tool_search loaded so far, from the log, so a resumed or replayed session can call the same ones. */
