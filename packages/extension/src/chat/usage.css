@@ -1,8 +1,3 @@
-/*
- * Where the tokens went (U61): the turn footer's usage line as a button, and the card it opens with the turn's parts
- * and the session's totals. Each row is two lines, so it fits a 300px panel.
- */
-
 .turn-footer .turn-usage {
   display: inline-flex;
   flex-wrap: wrap;
@@ -108,7 +103,7 @@
 
 .usage-row {
   display: grid;
-  /* Fixed number columns, so every row's bar is the same length and the shares compare. */
+  /* Two lines per row fit a 300px panel; fixed number columns keep every bar the same length, so the shares compare. */
   grid-template-columns: minmax(0, 1fr) 4.4em 4.4em;
   grid-template-areas: 'label tokens percent' 'bar cost cost';
   gap: 1px 8px;
@@ -230,7 +225,6 @@
   color: var(--muted);
 }
 
-/* High contrast draws the bars in its border color, with no tints. */
 body.vscode-high-contrast .usage-bar-fill,
 body.vscode-high-contrast-light .usage-bar-fill {
   background: var(--vscode-contrastActiveBorder, var(--vscode-foreground));

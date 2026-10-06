@@ -12,7 +12,7 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-/** A turn on a cheap model costs a fraction of a cent, so small amounts keep four decimals. */
+/** A turn on a cheap model costs a fraction of a cent, so small amounts keep four decimals, with a floor below that. */
 export const formatUsd = (usd: number): string => (usd > 0 && usd < 0.00005 ? '<$0.0001' : usd > 0 && usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`);
 
 export const formatBaht = (usd: number, bahtPerUsd: number): string => {

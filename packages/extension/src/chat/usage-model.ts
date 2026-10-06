@@ -1,8 +1,6 @@
 import type { SessionSpend } from '@g-code/core';
 import { sessionSpendView, turnSpendView, type SessionSpendView, type TurnSpendView } from '@g-code/core/spend-view';
 
-/** Where the tokens went (U61): the breakdown a turn's usage line opens, with the session's beside it. */
-
 export type UsageTab = 'turn' | 'session';
 
 export type UsageFromView = { readonly type: 'usage'; readonly turn: string };
