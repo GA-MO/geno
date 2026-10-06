@@ -48,7 +48,7 @@ export function pane(label: string, heading: string, onToggle: (open: boolean) =
 }
 
 const LANES_NOTE =
-  'A lane is a copy of the repository on its own branch, where a task runs without touching your files. Start one with Run in a new lane in the send menu, then apply what it made for review.';
+  'A lane is a copy of the repository on its own branch, where a task runs without touching your files. Start one with Run in a new lane in the send menu, then apply what it made.';
 
 function laneItem(row: LaneRow, confirming: boolean, post: (message: LanesFromView) => void, confirm: (name: string | undefined) => void, done: () => void): HTMLElement {
   const { name, actions } = row;
@@ -83,7 +83,7 @@ function laneItem(row: LaneRow, confirming: boolean, post: (message: LanesFromVi
           h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', disabled: !actions.open, title: 'Show the lane’s chat', onclick: () => (done(), post({ type: 'lane-open', name })) }, 'Open'),
           h(
             'button',
-            { type: 'button', class: 'button small', 'data-action': 'apply', disabled: !actions.apply, title: 'Apply the lane’s changes to your files, for review', onclick: () => (done(), post({ type: 'lane-apply', name })) },
+            { type: 'button', class: 'button small', 'data-action': 'apply', disabled: !actions.apply, title: 'Apply the lane’s changes to your files', onclick: () => (done(), post({ type: 'lane-apply', name })) },
             'Apply',
           ),
           h('button', { type: 'button', class: 'button small ghost', 'data-action': 'discard', 'data-focus': `lane-discard:${name}`, disabled: actions.discard === 'off', title: 'Delete the lane', onclick: discard }, 'Discard'),

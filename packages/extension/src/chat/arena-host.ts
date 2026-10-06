@@ -191,7 +191,7 @@ export class ArenaHost {
       const { run } = await agent.request<ArenaNewResponse, ArenaPickRequest>(ARENA_PICK_METHOD, { cwd, id, lane });
       this.upsert(run, true);
       await this.chat.applyLane(lane);
-      this.notice(id, { tone: 'ok', text: `Lane ${letter} is applied in the chat, for review. Tick hunks of another lane below to graft them over it.` });
+      this.notice(id, { tone: 'ok', text: `Lane ${letter} is applied in the chat. Tick hunks of another lane below to graft them over it.` });
     } catch (error) {
       this.notice(id, { tone: 'failed', text: messageOf(error) });
     }
@@ -200,7 +200,7 @@ export class ArenaHost {
   private async graft(id: string, lane: string, hunks: readonly string[]): Promise<void> {
     try {
       await this.chat.graftLane(lane, hunks);
-      this.notice(id, { tone: 'ok', text: `Grafted from lane ${lane} in the chat, for review.` });
+      this.notice(id, { tone: 'ok', text: `Grafted from lane ${lane} in the chat.` });
     } catch (error) {
       this.notice(id, { tone: 'failed', text: messageOf(error) });
     }

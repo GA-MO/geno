@@ -176,7 +176,7 @@ function rankItem(row: RankRow, run: ArenaRun, post: Post, lead: boolean): HTMLE
         row.pick &&
           h(
             'button',
-            { type: 'button', class: `button small${lead ? '' : ' secondary'}`, 'data-action': 'pick', 'data-focus': `arena-pick:${row.lane}`, title: 'Make it the winner and apply it in the chat, for review', onclick: () => post({ type: 'arena-pick', id: run.id, lane: row.lane }) },
+            { type: 'button', class: `button small${lead ? '' : ' secondary'}`, 'data-action': 'pick', 'data-focus': `arena-pick:${row.lane}`, title: 'Make it the winner and apply it in the chat', onclick: () => post({ type: 'arena-pick', id: run.id, lane: row.lane }) },
             `Pick ${row.letter}`,
           ),
         row.cost !== undefined && h('span', { class: 'lane-cost rank-cost' }, row.cost),
@@ -289,7 +289,7 @@ function compareCard(compare: CompareView, post: Post, local: { focus: (lane: st
             },
             graftLabel(compare.selected, compare.selected === undefined ? undefined : letterOf(compare.selected.lane)),
           ),
-          h('span', { class: 'arena-muted' }, 'One lane at a time. Each lands in the chat for review.'),
+          h('span', { class: 'arena-muted' }, 'One lane at a time. Each lands in the chat.'),
         ),
     ),
   );
