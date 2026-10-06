@@ -334,6 +334,14 @@
     display: none;
   }
 
+  /*
+   * An idle row has room for the model button's effort or its name, not both, and only once the mode keeps just its
+   * icon. The name goes, as in the running rows; the turn footer and the menu still give it.
+   */
+  .input-toolbar :is(.mode-name, .composer-model:has(.model-effort:not([hidden])) .model-name) {
+    display: none;
+  }
+
   .input-toolbar:has(.round-button.stop:not([hidden])) .toolbar-left {
     gap: 2px;
   }
