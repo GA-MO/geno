@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, FileChange, ImageAttachment, TurnEvent, WidgetRef } from '@g-code/core';
+import type { ApprovalRecord, ChildNote, FileChange, ImageAttachment, TurnEvent, WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -25,6 +25,8 @@ export type ToolContext = {
    * it touches state they share, so that state changes in the turn's order.
    */
   readonly earlierCalls: () => Promise<void>;
+  /** Logs a subagent starting or ending in this session's log; absent outside a run, where no subagent starts. */
+  readonly logChild?: ((note: ChildNote) => Promise<void>) | undefined;
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
@@ -55,7 +57,7 @@ export type ToolReply =
 export type ToolDef<I> = {
   readonly input: z.ZodType<I>;
   /** Whether a call may run beside others of its turn: it changes nothing and asks nobody. Absent means never. */
-  readonly concurrent?: () => boolean;
+  readonly concurrent?: (input: I) => boolean;
   /** The one-line form printed when the model calls the tool. */
   describe(input: I): string;
   run(input: I, ctx: ToolContext): Promise<ToolReply>;
@@ -64,7 +66,7 @@ export type ToolDef<I> = {
 /** An executor that takes the model's raw input. */
 export type Executor = {
   readonly input: z.ZodType;
-  readonly concurrent?: () => boolean;
+  readonly concurrent?: (raw: unknown) => boolean;
   describe(raw: unknown): string;
   run(raw: unknown, ctx: ToolContext): Promise<ToolReply>;
 };
@@ -72,7 +74,14 @@ export type Executor = {
 export function executor<I>(def: ToolDef<I>): Executor {
   return {
     input: def.input,
-    ...(def.concurrent === undefined ? {} : { concurrent: def.concurrent }),
+    ...(def.concurrent === undefined
+      ? {}
+      : {
+          concurrent: (raw: unknown) => {
+            const parsed = def.input.safeParse(raw);
+            return parsed.success && def.concurrent!(parsed.data);
+          },
+        }),
     describe(raw) {
       const parsed = def.input.safeParse(raw);
       return parsed.success ? def.describe(parsed.data) : JSON.stringify(raw);

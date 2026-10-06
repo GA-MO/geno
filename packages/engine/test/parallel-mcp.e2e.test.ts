@@ -101,7 +101,7 @@ describe('read-only MCP tools of one turn', () => {
     expect(asked, 'env goes to the classifier, which sends it on to the user').toEqual(['mcp__fake__env']);
     const [first, second, third] = logged.map((e) => e.timing!);
     expect(Math.max(first!.startAt, second!.startAt, third!.startAt)).toBeLessThan(Math.min(first!.endAt, second!.endAt, third!.endAt) + 1);
-    expect(executors['mcp__fake__echo']!.concurrent?.()).toBe(true);
-    expect(executors['mcp__fake__env']!.concurrent?.() ?? false).toBe(false);
+    expect(executors['mcp__fake__echo']!.concurrent?.({})).toBe(true);
+    expect(executors['mcp__fake__env']!.concurrent?.({}) ?? false).toBe(false);
   });
 });
