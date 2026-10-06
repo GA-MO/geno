@@ -109,10 +109,11 @@ function adapterValue(agent: ExternalAgent, cli: CliFound): [Child, ...Child[]] 
 /** The separate adapter Geno speaks ACP through; when it is missing, how the user installs it, since Geno does not. */
 function adapterHelp(agent: ExternalAgent, cli: CliFound, post: (message: AgentsFromView) => void): Child[] {
   if (agent.adapter.kind !== 'separate') return [];
-  const name = agent.adapter.binaries[0];
-  if (cli.adapter.kind !== 'missing') return [h('p', { class: 'agent-text agent-adapter-note' }, `Geno runs ${agent.label} through its ACP adapter, ${name}.`)];
+  const name = h('code', { class: 'agent-name' }, agent.adapter.binaries[0] ?? '');
+  const runs = `Geno runs ${agent.label} through its ACP adapter, `;
+  if (cli.adapter.kind !== 'missing') return [h('p', { class: 'agent-text agent-adapter-note' }, runs, name, '.')];
   return [
-    h('p', { class: 'agent-text agent-adapter-note' }, `Geno runs ${agent.label} through its ACP adapter, ${name}. Geno does not install it; install it yourself:`),
+    h('p', { class: 'agent-text agent-adapter-note' }, runs, name, '. Geno does not install it; install it yourself:'),
     commandToCopy(agent, 'adapter', agent.adapter.install, post),
   ];
 }

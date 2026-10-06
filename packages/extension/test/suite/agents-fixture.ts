@@ -12,6 +12,58 @@ export const FAKE = {
   key: 'crsr-key-canary-3e9a71c2',
 } as const;
 
+/** The fake Claude Code's values: its version before and after Update, its account, and the key the suite types in. */
+export const CLAUDE = {
+  version: '2.1.291',
+  updated: '2.1.300',
+  account: 'claude.user@example.com',
+  plan: 'max',
+  key: 'sk-ant-key-canary-5d20b7e1',
+} as const;
+
+/** What `claude auth status --json` prints, signed out and signed in, in Claude Code 2.1.291's shape. */
+export const claudeStatus = (signedIn: boolean): string =>
+  JSON.stringify(
+    signedIn
+      ? { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', analyticsDisabled: false, email: CLAUDE.account, orgName: 'Example', subscriptionType: CLAUDE.plan }
+      : { loggedIn: false, authMethod: 'none', apiProvider: 'firstParty', analyticsDisabled: false },
+    null,
+    2,
+  );
+
+/**
+ * A stand-in for Claude Code. `--version` and `auth status --json` print files the suite writes, `update` bumps the
+ * version, and every call is logged with its arguments and whether an API key was in its env, never the key.
+ */
+export function fakeClaudeScript(state: string): string {
+  return `#!/bin/sh
+S='${state}'
+echo "$* key=\${ANTHROPIC_API_KEY:+present}" >> "$S/claude-calls.log"
+[ "\${ANTHROPIC_API_KEY:-}" = '${CLAUDE.key}' ] && echo "$*" >> "$S/claude-keyed.log"
+case "$1 $2" in
+  '--version ')
+    printf '%s (Claude Code)\\n' "$(cat "$S/claude-version")"
+    ;;
+  'auth status')
+    cat "$S/claude-status.json"
+    ;;
+  'update ')
+    echo 'Checking for updates...'
+    sleep 1
+    printf '%s' '${CLAUDE.updated}' > "$S/claude-version"
+    echo 'Successfully updated to ${CLAUDE.updated}'
+    ;;
+  *)
+    echo "unknown command $*" >&2
+    exit 2
+    ;;
+esac
+`;
+}
+
+/** A stand-in for the ACP adapter, which the card only looks for: it records that it ran, which it never should. */
+export const fakeAdapterScript = (state: string): string => `#!/bin/sh\necho "$*" >> '${state}/adapter.log'\n`;
+
 /** Environment the launcher gives the extension host. */
 export const ENV = {
   /** The folder first on PATH, where the fake `agent` appears once the suite installs it. */
