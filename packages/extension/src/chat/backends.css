@@ -1,0 +1,92 @@
+/* U33: a chat on an external agent. Its name rides beside Geno's, in the model button and on its task's row. */
+
+.turn-backend,
+.task-backend {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.task-backend {
+  color: var(--vscode-foreground);
+}
+
+.model-backend {
+  flex: none;
+  color: var(--muted);
+}
+
+.model-backend::after {
+  content: ' ·';
+}
+
+.model-backend[hidden] {
+  display: none;
+}
+
+/* A backend row names the agent over a muted line: what choosing it does, or why it cannot run. */
+.model-option-text.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.model-option-text .model-option-name,
+.model-option-text .model-option-detail {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option[aria-disabled='true'] {
+  cursor: default;
+}
+
+.model-option[aria-disabled='true'] .model-option-name {
+  color: var(--muted);
+}
+
+.model-option[aria-disabled='true'] .model-option-detail {
+  color: var(--vscode-disabledForeground, var(--muted));
+}
+
+/* Under the last turn that left changes in the agent's lane: bring them back for review. */
+.apply-lane {
+  display: flex;
+  min-width: 0;
+  margin: 8px 0 0 var(--rail-indent);
+}
+
+.apply-lane .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.apply-lane-label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) :is(.turn-backend, .task-backend) {
+  border-color: var(--glass-edge-hi);
+  background: var(--glass-pane-raised);
+}
+
+body.vscode-high-contrast :is(.turn-backend, .task-backend),
+body.vscode-high-contrast-light :is(.turn-backend, .task-backend) {
+  border-color: var(--vscode-contrastBorder);
+  color: var(--vscode-foreground);
+}
