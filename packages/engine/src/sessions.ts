@@ -186,6 +186,8 @@ const turnEventSchema = z.union([
       context: z.array(contextItemSchema).optional(),
       attachments: z.array(attachmentSchema).optional(),
       command: z.strictObject({ name: z.string().min(1), args: z.string() }).optional(),
+      steer: z.literal(true).optional(),
+      from: z.enum(['parent', 'child']).optional(),
     }),
     z.strictObject({
       kind: z.literal('assistant'),

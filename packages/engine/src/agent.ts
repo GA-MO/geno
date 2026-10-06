@@ -11,6 +11,8 @@ import {
   approvalQuestion,
   describeServerState,
   isSessionMode,
+  MESSAGE_AGENT_TOOL,
+  MESSAGE_AGENT_TOOL_DEFINITION,
   pstackNote,
   renderMemory,
   sessionModeOf,
@@ -32,7 +34,8 @@ import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
-import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { drive, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { Steers } from './steer.js';
 import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
@@ -47,7 +50,6 @@ import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentH
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
-import { Inbox } from './inbox.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -101,22 +103,25 @@ export type AgentOptions = {
   readonly externals?: ExternalAgents | undefined;
   readonly keyOf?: KeyOf | undefined;
   /**
-   * The engine's background commands and where their ends arrive. Undefined runs them for this run alone: they are
-   * killed when it ends, as a CLI run's process ends with it.
+   * What outlives this run in the engine process: its background commands, and the steers of it and its children,
+   * which arrive in one inbox with the commands' ends. Undefined keeps both to this run, and its commands are killed
+   * when it ends, as a CLI run's process ends with it.
    */
-  readonly background?: { readonly jobs: BackgroundJobs; readonly inbox: Inbox } | undefined;
+  readonly engine?: RunEngine | undefined;
 };
 
-/** Background commands that live as long as one run, their ends delivered to its loop. */
-function runBackground(): { readonly jobs: BackgroundJobs; readonly inbox: Inbox } {
-  const inbox = new Inbox();
+export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers };
+
+/** Background commands and steers that live as long as one run, what arrives from them delivered to its loop. */
+function runEngine(): RunEngine {
+  const steers = new Steers();
   const jobs = new BackgroundJobs({
     changed: () => {},
     ended(end, job) {
-      if (TELLS_MODEL(end.job.state)) inbox.put(job.sessionId, end);
+      if (TELLS_MODEL(end.job.state)) steers.inbox.put(job.sessionId, end);
     },
   });
-  return { inbox, jobs };
+  return { jobs, steers };
 }
 
 export const askOnTerminal =
@@ -138,7 +143,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   if (lane !== undefined) await bindSession(lane, session.id);
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
   let children: Subagents | undefined;
-  const background = options.background ?? runBackground();
+  const { jobs, steers } = options.engine ?? runEngine();
+  const inbox = steers.open(session.id, undefined);
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -160,7 +166,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         rules: ruleAttacher(opened.log.events),
         commands,
         lane: lane?.bounds,
-        background: own ? { jobs: background.jobs, sessionId: session.id } : undefined,
+        background: own ? { jobs, sessionId: session.id } : undefined,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
@@ -199,22 +205,25 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       readRoots,
       externals: options.externals,
       keyOf: options.keyOf,
+      steers,
     });
-    if (agentTool) tools = [...tools, children.tool];
+    if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const mode = {
       tools,
-      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...executors },
+      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}), ...executors },
       system,
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
-      arrivals: () => background.inbox.take(session.id),
+      arrivals: () => steers.inbox.take(session.id),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(issued === undefined ? {} : { issued }),
     };
-    return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
+    return await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox });
   } finally {
+    steers.release(session.id, inbox);
+    children?.stopBackground();
     await children?.settled();
-    if (options.background === undefined) await background.jobs.kill('engine-exit', { sessionId: session.id });
+    if (options.engine === undefined) await jobs.kill('engine-exit', { sessionId: session.id });
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });
   }

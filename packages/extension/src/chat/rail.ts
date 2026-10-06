@@ -1,6 +1,6 @@
 import type { ChangedFile } from './fold.js';
 import type { WaitKind } from '@g-code/core';
-import type { Child, ErrorBlock, PermissionBlock, TextBlock, ToolBlock, Turn } from './messages.js';
+import type { Child, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 
 /**
@@ -13,6 +13,8 @@ export type Step =
   | { readonly kind: 'calls'; readonly key: string; readonly name: string; readonly tools: readonly ToolBlock[] }
   | { readonly kind: 'permission'; readonly key: string; readonly block: PermissionBlock }
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
+  /** A message that joined the turn while it ran, where it landed. */
+  | { readonly kind: 'steer'; readonly key: string; readonly block: SteerBlock }
   /** An `agent` call, with the subagents it started nested under it. */
   | { readonly kind: 'agent'; readonly key: string; readonly tool: ToolBlock; readonly children: readonly Child[] }
   /** A show_widget call: the widget itself, never folded into a run of calls. */
@@ -48,6 +50,7 @@ export function railOf(turn: Turn): Step[] {
     if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
+    else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
     else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
     else if (block.name === AGENT_CALL) steps.push({ kind: 'agent', key: `agent:${block.id}`, tool: block, children: childrenUnder(turn, block.id) });
     else if (last?.kind === 'calls' && last.name === block.name && FILE_TOOLS.has(block.name)) steps[steps.length - 1] = { ...last, tools: [...last.tools, block] };
@@ -72,6 +75,7 @@ export const isWaiting = (turn: Turn): boolean => turn.blocks.some((b) => b.kind
 export function nodeOf(step: Step): NodeState {
   switch (step.kind) {
     case 'text':
+    case 'steer':
       return 'text';
     case 'calls':
       if (step.tools.some((t) => t.status === 'running')) return 'live';

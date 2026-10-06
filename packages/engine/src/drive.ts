@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
+import { changesCourse, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -13,6 +13,7 @@ import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
+import type { SteerInbox } from './steer.js';
 import type { Wake } from './waits.js';
 
 export type Mode = {
@@ -28,7 +29,7 @@ export type Mode = {
   readonly effortPolicy?: EffortPolicy;
   /** A tool call the user typed, such as `@explore`: logged in place of the first model call, and the run ends once its tools ran. */
   readonly issued?: AssistantTurn;
-  /** What reached the session from outside the loop since the last call, logged at the safe point before each model call. */
+  /** What reached the session from outside the loop since the last call: taken at the one safe point, before each model call. */
   readonly arrivals?: () => readonly Arrival[];
 };
 
@@ -53,8 +54,16 @@ export type Watcher = {
  * Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. `wake` is
  * the editor's Retry now, which cuts a wait short.
  * `waiter` names the engine process in the waits it logs, so another engine can take them up once it is gone.
+ * `steers` is the run's door for steers: what a background child still owes it, and the end that sends what the run
+ * did not take to the next turn. The steers themselves arrive through `Mode.arrivals`.
  */
-export type Surface = { readonly files: Files; readonly watcher: Watcher; readonly wake?: Wake | undefined; readonly waiter?: Waiter | undefined };
+export type Surface = {
+  readonly files: Files;
+  readonly watcher: Watcher;
+  readonly wake?: Wake | undefined;
+  readonly waiter?: Waiter | undefined;
+  readonly steers?: SteerInbox | undefined;
+};
 
 const CLASSIFIED: Readonly<Record<ApprovalRecord['verdict'], string>> = { allow: 'allowed', deny: 'denied' };
 
@@ -168,14 +177,18 @@ export async function drive(
   const events: TurnEvent[] = [...log.events];
   // Subagents log beside the loop while their tool runs, so writes take turns and each takes its number as it is written.
   let writing = Promise.resolve();
-  const record = (event: TurnEvent): Promise<void> => {
+  const record = <E extends TurnEvent>(event: E): Promise<E> => {
     const written = writing.then(async () => {
-      const numbered = event.kind === 'session-start' ? event : ({ ...event, seq: nextSeq(events) } as TurnEvent);
+      const numbered = event.kind === 'session-start' ? event : ({ ...event, seq: nextSeq(events) } as E);
       events.push(numbered);
       await appendEvent(file, numbered);
       watcher.logged(numbered);
+      return numbered;
     });
-    writing = written.catch(() => {});
+    writing = written.then(
+      () => {},
+      () => {},
+    );
     return written;
   };
   const run: Run = { firstSeq: nextSeq(events), ...limits };
@@ -196,7 +209,9 @@ export async function drive(
     files: surface.files,
     events: () => events,
     earlierCalls: async () => {},
-    logChild: (note) => record({ ...note, seq: 0 }),
+    logChild: async (note) => {
+      await record({ ...note, seq: 0 });
+    },
   };
 
   const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.(use.input) === true;
@@ -259,7 +274,6 @@ export async function drive(
     // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
     const left = openWaitOf(events);
     let lastWait = left;
-    for (const arrival of mode.arrivals?.() ?? []) await record(loggedArrival(arrival, 0));
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
@@ -298,20 +312,43 @@ export async function drive(
     await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn, ...timing });
   };
 
+  const inbox = surface.steers;
+  // The one safe point: whatever reached the session from outside the loop, a background command's end or a steer, is
+  // logged after the last tool results and before the model next sees the log. True when anything was.
+  const deliver = async (): Promise<boolean> => {
+    const arrived = mode.arrivals?.() ?? [];
+    for (const arrival of arrived) {
+      const logged = await record(loggedArrival(arrival, 0));
+      if (arrival.kind === 'steer') arrival.settle({ kind: 'delivered', seq: logged.seq });
+    }
+    return arrived.length > 0;
+  };
+  const end = async (reason: DoneReason): Promise<DriveResult> => {
+    inbox?.close();
+    const exitCode = await finish(io, events, run, reason, record);
+    return { reason, exitCode, events, run };
+  };
+
   for (;;) {
     const step = loopStep(events, run);
-    if (step.kind === 'done') {
-      const exitCode = await finish(io, events, run, step.reason, record);
-      return { reason: step.reason, exitCode, events, run };
+    // A turn the model ended stays open while a background child owes its report: it waits, then takes what arrived.
+    const held = step.kind === 'done' && step.reason === 'end_turn' && inbox !== undefined && holdsTurnOpen(inbox.owed, inbox.queued()) ? inbox : undefined;
+    if (held !== undefined) {
+      await held.arrival(signal);
+      if (signal.aborted) {
+        await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user' });
+        continue;
+      }
     }
+    if (step.kind === 'done' && held === undefined) return end(step.reason);
     if (step.kind === 'call-model' && issued !== undefined) {
       await record({ kind: 'assistant', seq: nextSeq(events), at: new Date().toISOString(), ...issued, issuedBy: 'user' });
       issued = undefined;
-    } else if (step.kind === 'call-model' && mode.issued !== undefined) {
-      const exitCode = await finish(io, events, run, 'end_turn', record);
-      return { reason: 'end_turn', exitCode, events, run };
-    } else if (step.kind === 'call-model') await callModel();
-    else {
+    } else if (step.kind === 'call-model' && mode.issued !== undefined) return end('end_turn');
+    else if (step.kind === 'call-model' || held !== undefined) {
+      // A delivery changed the log, so the loop looks at it again, and a limit still applies.
+      if (!(await deliver()) && step.kind === 'call-model') await callModel();
+    } else if (step.kind === 'run-tools') {
       const interrupted = await runTools(step.toolUses);
       if (interrupted !== undefined) {
         await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user', tools: interrupted });
@@ -326,7 +363,7 @@ async function finish(
   events: readonly TurnEvent[],
   run: Run,
   reason: DoneReason,
-  record: (event: TurnEvent) => Promise<void>,
+  record: (event: TurnEvent) => Promise<unknown>,
 ): Promise<number> {
   const thisRun = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
   const total = totalOf(thisRun);

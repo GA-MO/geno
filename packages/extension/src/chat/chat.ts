@@ -109,6 +109,7 @@ import { pageHtml } from './page.js';
 import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from './slash-route.js';
 import type { CommandOption, SentCommand } from './slash.js';
 import { isChildAction, subagentAction } from './subagent-host.js';
+import { SteerHost, steerActionOf } from './steer-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
@@ -270,6 +271,7 @@ function outputOf(content: readonly acp.ToolCallContent[] | null | undefined): s
 type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.SessionUpdate, { sessionUpdate: K }>;
 
 const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
+  user_message_chunk: (update) => steerActionOf(update),
   agent_message_chunk: ({ content }) => (content.type === 'text' ? { type: 'text', text: content.text } : undefined),
   notice: ({ title, _meta }, at) => {
     if (_meta == null || !(WAITING_META in _meta)) return { type: 'notice', text: title };
@@ -469,6 +471,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private needsYou = 0;
   /** This folder's best-of-n runs, for the Arena pane. */
   private readonly arena: ArenaHost;
+  /** Messages for a running turn, a subagent or a task, which land at its next tool round. */
+  private readonly steers: SteerHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
   /** The running turn of the shown session that another window started, which the panel took over on load. */
@@ -531,6 +535,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       applyLane: (name) => this.applyLane(name),
       graftLane: (name, hunks) => this.graftLane(name, hunks),
       defaultMode,
+    });
+    this.steers = new SteerHost({
+      running: () => this.turn,
+      connection: () => this.engine.connection(),
+      send: (text) => this.send(text),
+      adopt: (text, response) => this.prompt(text, text, undefined, async () => [], [], undefined, response),
+      post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
@@ -637,6 +648,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       return;
     }
     if (update.sessionUpdate === 'user_message_chunk') {
+      const steer = steerActionOf(update);
+      if (steer !== undefined) return this.dispatch(steer);
       if (this.replay === undefined || update.content.type !== 'text') return;
       if (this.replay.end !== undefined) this.dispatch(this.replay.end);
       const start = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
@@ -712,22 +725,27 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     attachments: () => Promise<acp.ContentBlock[]>,
     attached: readonly AttachmentView[] = [],
     command?: SentCommand,
+    /** A steer's own answer, for the turn it runs as when the turn it was sent to ended first. */
+    sent?: Promise<acp.PromptResponse>,
   ): Promise<acp.StopReason> {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
     this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current, command });
     this.composer.turnStarted();
     // The turn this call runs; the panel may leave it for another session, and it then ends in the background.
     let mine: SessionLink | undefined;
+    let stopped = false;
     const left = () => mine === undefined || this.turn !== mine;
     try {
       mine = await this.link();
       this.turn = mine;
       this.lastSession = mine.sessionId;
-      const response = await mine.connection.agent.request(acp.methods.agent.session.prompt, {
-        sessionId: mine.sessionId,
-        prompt: [{ type: 'text', text }, ...(await attachments())],
-        ...(meta === undefined ? {} : { _meta: meta }),
-      });
+      const response = await (sent ??
+        mine.connection.agent.request(acp.methods.agent.session.prompt, {
+          sessionId: mine.sessionId,
+          prompt: [{ type: 'text', text }, ...(await attachments())],
+          ...(meta === undefined ? {} : { _meta: meta }),
+        }));
+      stopped = response.stopReason === 'cancelled';
       if (left()) return response.stopReason;
       const ending = ENDINGS[response.stopReason];
       if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
@@ -742,6 +760,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (mine === undefined || this.turn === mine) {
         this.turn = undefined;
         this.mcp.refresh();
+        if (mine !== undefined) this.steers.turnEnded(mine, stopped);
       }
     }
   }
@@ -1185,6 +1204,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.widgets.handlers,
       ...this.background.handlers,
       ...this.arena.handlers,
+      ...this.steers.handlers,
     };
   }
 

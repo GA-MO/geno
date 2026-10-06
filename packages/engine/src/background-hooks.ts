@@ -31,7 +31,7 @@ export function backgroundShared<P>(viewers: Viewers<P>, tasks: Tasks): { readon
 
 /** Logs what reached a session while no turn ran, so the next turn's first request carries it. */
 export async function logArrivals(store: Store, io: Io, inbox: Inbox, sessionId: string): Promise<void> {
-  const arrivals = inbox.take(sessionId);
+  const arrivals = inbox.takeIdle(sessionId);
   if (arrivals.length === 0) return;
   const log = await openSessionLog(store, sessionId, io);
   await dropTornTail(log);
