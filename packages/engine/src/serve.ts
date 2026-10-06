@@ -123,8 +123,10 @@ import {
   RETRY_NOW_METHOD,
   type RetryNowResponse,
   type Waiting,
+  STEER_META,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
+import { Steers, steerRunning } from './steer.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
 import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
 import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
@@ -148,7 +150,7 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logEffort, logMode, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
@@ -289,6 +291,7 @@ const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) 
 
 const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
   'tool-result': (event) => toolResultUpdate(event),
+  user: (event) => (event.steer === true ? steerUpdate(event) : undefined),
   error: (event) => textUpdate(errorText(event)),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>
@@ -700,6 +703,10 @@ export function engineShared(io: Io) {
     wakes: new Map<string, Wake>(),
     // Whether a connection already took up the waits an engine that stopped left in the logs; the first one does.
     leftWaits: { taken: false },
+    // Each running session's steers, children's included.
+    steers: new Steers(),
+    // Each running turn's end, which a steer that missed the turn waits for before it runs as the next one.
+    turnEnds: new Map<string, Promise<void>>(),
   };
 }
 
@@ -746,7 +753,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, steers, turnEnds } = shared;
   const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -855,6 +862,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
     const controller = new AbortController();
     turns.set(sessionId, controller);
+    let turnEnded = () => {};
+    turnEnds.set(sessionId, new Promise<void>((resolve) => (turnEnded = resolve)));
     let session: Session | undefined;
     const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
@@ -909,6 +918,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 mcp: await mcp.toolset(sessionId, approval),
                 user: shown.user,
                 widgets: from.peer.widgets,
+                steers,
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,
@@ -929,12 +939,30 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       ended = TASK_ENDS[response.stopReason];
       return response;
     } finally {
+      turnEnds.delete(sessionId);
+      turnEnded();
       live.delete(sessionId);
       tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
       // A session closed during its turn stays closed.
       if (turns.has(sessionId)) turns.set(sessionId, undefined);
       release(sessionId);
     }
+  };
+
+  const prompt = (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
+    known(params.sessionId);
+    if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
+    return runTurn(params.sessionId, params.prompt, params._meta, self());
+  };
+
+  /** A prompt for the running turn, at its next tool round; one the turn ended without taking runs as the next turn. */
+  const steer = async (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
+    const outcome = await steerRunning(steers, params.sessionId, params.prompt);
+    if (outcome.kind === 'delivered') return { stopReason: 'end_turn', _meta: { [STEER_META]: outcome } };
+    await turnEnds.get(params.sessionId);
+    const { [STEER_META]: _, ...meta } = params._meta ?? {};
+    const response = await prompt({ ...params, _meta: meta });
+    return { ...response, _meta: { ...response._meta, [STEER_META]: outcome } };
   };
 
   /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
@@ -1146,9 +1174,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { configOptions: effortConfigOptions(effort) };
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
-      known(params.sessionId);
-      if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
-      return runTurn(params.sessionId, params.prompt, params._meta, self());
+      if (params._meta?.[STEER_META] === true) return steer(params);
+      return prompt(params);
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();
