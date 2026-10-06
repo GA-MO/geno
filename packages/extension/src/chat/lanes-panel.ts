@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import type { TaskRecord } from '@g-code/core';
 import { h, icon, reconcile } from './dom.js';
-import { laneRowOf, taskOrder, taskRowOf, type Badge, type LaneRow, type LanesFromView, type LanesListing, type TaskRow, type BackendLabels } from './lanes-model.js';
+import { laneRowOf, taskOrder, taskRowOf, type Badge, type LaneRow, type LanesFromView, type LanesListing, type TaskRow } from './lanes-model.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -166,7 +166,6 @@ const TASKS_NOTE = 'No tasks yet. A chat or lane that runs a turn shows here, an
 export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (open: boolean) => void) {
   let tasks: readonly TaskRecord[] = [];
   let shown: string | undefined;
-  let backends: BackendLabels = {};
   let ticking: ReturnType<typeof setInterval> | undefined;
   const list = h('ul', { class: 'lane-list', 'aria-label': 'Tasks' });
   const note = h('p', { class: 'history-note lanes-note', role: 'status' });
@@ -183,7 +182,7 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     if (!frame.isOpen()) return;
     note.textContent = tasks.length === 0 ? TASKS_NOTE : '';
     note.hidden = tasks.length !== 0;
-    const rows = taskOrder(tasks).map((task) => taskRowOf(task, shown, Date.now(), backends));
+    const rows = taskOrder(tasks).map((task) => taskRowOf(task, shown, Date.now()));
     reconcile(list, rows.map((row) => ({ key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close()) })));
     const live = rows.some((row) => row.live);
     if (live && ticking === undefined) ticking = setInterval(render, 1000);
@@ -198,10 +197,9 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     isOpen: frame.isOpen,
     open: frame.open,
     close: frame.close,
-    listed(next: readonly TaskRecord[], showing: string | undefined, labels: BackendLabels): void {
+    listed(next: readonly TaskRecord[], showing: string | undefined): void {
       tasks = next;
       shown = showing;
-      backends = labels;
       render();
     },
   };
