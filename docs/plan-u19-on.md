@@ -9,16 +9,17 @@ The user approved this order:
 Every unit follows "Shared rules for every unit" in `docs/plan-u11-u14.md`. That includes its Verification rule: run the `unit` project, plus only the VS Code integration files your unit adds or touches. The coordinator runs the full suite before each merge.
 
 ## สถานะ (updated 2026-10-06)
-ทำแล้ว: U13–U14, U17–U21, U34–U38, U18a/b, Allow-focus, sandbox ใช้ร่วมหลายแชต (b99c95d), test flakes; ติดตั้ง 0.11.0 แล้ว (6585656); full suite ล่าสุด 131 files / 1460 tests ผ่าน
+ทำแล้ว: U13–U14, U17–U26, U34–U39, U18a/b, Auto แบบ Claude Code, mode/effort ไม่หาย, กันอ่าน credential, test temp cleanup, sticky request; full suite ล่าสุด 152 files / 1664 tests ผ่าน (05bf3fc)
 ค้าง: ไม่มีงานครึ่งทางใน tree (worktree เหลือแค่ vigilant-kalam-d976c6 ของ user — ห้ามลบ)
 ค้าง: ยังไม่ได้พิสูจน์ด้วยมือ: คลิกปุ่มใน widget จริง (เทสแก้โดยยิง CDP เข้า frame target; เหตุผลว่ามือจริงไม่โดน = inference)
 ค้าง: รอ user ยืนยัน: bahtPerUsd=33 (เดา), ความถี่ peek, ไดโนเกาะ input 2x
-ค้าง: ยังไม่เริ่ม: U15 (Claude Code backend ผ่าน ACP), U22–U26 (subagents, lanes, arena) + Backlog ท้ายไฟล์
+ค้าง: กำลังทำ U40 (sign in agent ภายนอก); ยังไม่เริ่ม: U15+U33 (Claude Code และ Cursor เป็น backend, research/cursor-backend-2026-10.md) + Backlog ท้ายไฟล์
 ค้นพบ: เปลี่ยน effort กลางแชต = Model Studio cache แยกตาม effort → stepped effort แพงขึ้น 24%; default flat (docs/results/u21-effort.md)
 ค้นพบ: เวลาไปที่ thinking 36% + decode 25%; read แทบ 0 → parallel reads ไม่ช่วยความเร็ว (u19/u20 results); lever ถัดไป = checker ที่รันค้าง
 ค้นพบ: sandbox-runtime config+proxy เป็น global ต่อ process → fs rules ต่อ command ได้ แต่ network allowlist ต้องเหมือนกันทุก sandbox → lanes/arena ที่ต้องการ network ต่างกันใน process เดียวทำไม่ได้ (แก้ U24–U26 ให้ใช้ allowlist เดียว หรือแยก process)
 ค้นพบ: กฎ "agent รันเฉพาะ integration file ตัวเอง" พลาด regression (U36 modes) → เพิ่มกฎให้รันไฟล์ที่ drive UI ที่แก้ด้วย (plan-u11-u14.md)
-ถัดไป: /go phase U22 ตาม docs/plan-u19-on.md
+ค้นพบ: Arena ช่วยงานง่ายแต่ไม่ช่วยงานยาก (pass@3 1/3, pick 0/3 บน E5 ที่ fail); review child หมด 8 turn ก่อนจัดอันดับ 2/4 ครั้ง (docs/u26.md)
+ถัดไป: merge U40 แล้ว U15+U33 (Cursor ต้อง login ก่อน)
 
 ## U34: boundary lint
 
