@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { h, icon, type Child } from './dom.js';
-import { ACTIONS, type AgentAction, type AgentState, type AgentsFromView, type ExternalAgent, type Outcome } from './agents-model.js';
+import { offeredActions, type AgentAction, type AgentState, type AgentsFromView, type CliFound, type CopyTarget, type ExternalAgent, type Outcome } from './agents-model.js';
 
 type Badge = { readonly label: string; readonly tone: 'ok' | 'wait' | 'quiet' | 'busy' | 'failed' };
 
@@ -49,25 +49,44 @@ export type Confirming = 'logout';
 /** The state a question belongs to; once the agent leaves it, the question is gone. */
 export const CONFIRMS_IN: Readonly<Record<Confirming, AgentState['kind']>> = { logout: 'signed-in' };
 
-/** What the user does to install the CLI: Geno shows the official command and its page, and runs nothing. */
-function installHelp(agent: ExternalAgent, post: (message: AgentsFromView) => void, check: Child): Child[] {
+const COPY_TITLES: Readonly<Record<CopyTarget, string>> = {
+  install: 'Copy the install command',
+  adapter: 'Copy the adapter’s install command',
+  login: 'Copy the sign-in command',
+  logout: 'Copy the sign-out command',
+  update: 'Copy the update command',
+};
+
+/** A command for the user to run themselves, with Copy; the host copies it from its own table. */
+function commandToCopy(agent: ExternalAgent, what: CopyTarget, command: string, post: (message: AgentsFromView) => void): HTMLElement {
   const copy = h(
     'button',
     {
       type: 'button',
       class: 'button small secondary agent-copy',
-      'data-action': 'copy-install',
-      title: 'Copy the install command',
+      'data-action': `copy-${what}`,
+      title: COPY_TITLES[what],
       onclick: () => {
-        post({ type: 'agents-copy-install', id: agent.id });
+        post({ type: 'agents-copy', id: agent.id, what });
         copy.textContent = 'Copied';
       },
     },
     'Copy',
   );
+  return h('div', { class: 'agent-command', 'data-command': what }, h('code', { class: 'agent-install' }, command), copy);
+}
+
+const COPY_INTROS: Readonly<Record<AgentAction, string>> = {
+  login: 'Sign in from a terminal with this command. Geno looks again when this window gets the focus back.',
+  logout: 'To sign out, run this in a terminal:',
+  update: 'To update, run this in a terminal:',
+};
+
+/** What the user does to install the CLI: Geno shows the official command and its page, and runs nothing. */
+function installHelp(agent: ExternalAgent, post: (message: AgentsFromView) => void, check: Child): Child[] {
   return [
     h('p', { class: 'agent-text' }, `Geno needs ${agent.label}’s CLI to sign in to ${agent.label} and use its agent. Install it yourself with ${agent.label}’s official installer:`),
-    h('div', { class: 'agent-command' }, h('code', { class: 'agent-install' }, agent.install.command), copy),
+    commandToCopy(agent, 'install', agent.install.command, post),
     h('p', { class: 'agent-text' }, 'Geno looks again when this window gets the focus back.'),
     h(
       'div',
@@ -75,6 +94,26 @@ function installHelp(agent: ExternalAgent, post: (message: AgentsFromView) => vo
       h('button', { type: 'button', class: 'button small', 'data-action': 'guide', onclick: () => post({ type: 'agents-open', id: agent.id, target: 'install' }) }, 'Open the install page'),
       check,
     ),
+  ];
+}
+
+/** `max` as the card names it: "Max plan". */
+const planLabel = (plan: string): string => `${plan.charAt(0).toUpperCase()}${plan.slice(1)} plan`;
+
+function adapterValue(agent: ExternalAgent, cli: CliFound): [Child, ...Child[]] {
+  if (agent.adapter.kind === 'built-in') return [h('code', { class: 'agent-path agent-adapter' }, agent.adapter.command), h('span', { class: 'agent-note' }, 'built in')];
+  if (cli.adapter.kind === 'found') return [h('code', { class: 'agent-path agent-adapter', title: cli.adapter.path }, cli.adapter.path)];
+  return [h('span', { class: 'agent-adapter agent-note' }, 'Not installed')];
+}
+
+/** The separate adapter Geno speaks ACP through; when it is missing, how the user installs it, since Geno does not. */
+function adapterHelp(agent: ExternalAgent, cli: CliFound, post: (message: AgentsFromView) => void): Child[] {
+  if (agent.adapter.kind !== 'separate') return [];
+  const name = agent.adapter.binaries[0];
+  if (cli.adapter.kind !== 'missing') return [h('p', { class: 'agent-text agent-adapter-note' }, `Geno runs ${agent.label} through its ACP adapter, ${name}.`)];
+  return [
+    h('p', { class: 'agent-text agent-adapter-note' }, `Geno runs ${agent.label} through its ACP adapter, ${name}. Geno does not install it; install it yourself:`),
+    commandToCopy(agent, 'adapter', agent.adapter.install, post),
   ];
 }
 
@@ -99,7 +138,7 @@ function keyForm(agent: ExternalAgent, post: (message: AgentsFromView) => void):
     { class: 'provider-field agent-key', onsubmit: submit },
     h('label', { class: 'provider-field-label' }, 'Use an API key', h('span', { class: 'provider-field-note' }, 'instead of the browser')),
     h('div', { class: 'provider-field-row' }, input, h('button', { type: 'submit', class: 'button secondary small', 'data-action': 'save-key' }, 'Save')),
-    h('p', { class: 'agent-text agent-billing' }, icon('info'), h('span', {}, 'May bill by usage instead of your plan')),
+    h('p', { class: 'agent-text agent-billing' }, icon('info'), h('span', {}, agent.key.billing)),
   );
 }
 
@@ -131,9 +170,9 @@ export function agentCard(
   const badge = BADGES[state.kind];
   const run = (action: AgentAction) => post({ type: 'agents-run', id: agent.id, action });
   const keyed = state.kind === 'signed-in' && state.auth.kind === 'api-key';
-  const offered = (ACTIONS[state.kind] ?? []).filter((action) => !(action === 'logout' && keyed));
+  const offered = offeredActions(agent, state);
   const button = (action: AgentAction): Child =>
-    offered.includes(action) &&
+    offered.some(([offer, way]) => offer === action && way.kind === 'run') &&
     h(
       'button',
       {
@@ -171,12 +210,18 @@ export function agentCard(
         fact(
           'Account',
           h('span', { class: 'agent-account' }, account),
+          signedIn && state.auth.kind === 'browser' && state.auth.plan !== undefined && h('span', { class: 'agent-plan' }, planLabel(state.auth.plan)),
           confirming === 'logout' ? undefined : button('login'),
           confirming === 'logout' ? undefined : button('logout'),
           keyed && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'remove-key', onclick: () => post({ type: 'agents-remove-key', id: agent.id }) }, 'Remove key'),
         ),
+        fact('ACP', ...adapterValue(agent, state.cli)),
       ),
     );
+    for (const [action, way] of offered) {
+      if (way.kind === 'copy') body.push(h('p', { class: 'agent-text' }, COPY_INTROS[action]), commandToCopy(agent, action, way.command, post));
+    }
+    body.push(...adapterHelp(agent, state.cli, post));
     if (confirming === 'logout' && signedIn) {
       body.push(
         confirmBox(
