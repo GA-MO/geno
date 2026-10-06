@@ -86,6 +86,8 @@ export type ToolBlock = {
   readonly name: string;
   /** What it acts on: a path, a pattern or a command. */
   readonly target: string;
+  /** A bash call's own words for what its command does, shown as the step's title. */
+  readonly description?: string | undefined;
   readonly toolKind: ToolKind;
   readonly status: ToolStatus;
   /** Milliseconds since the epoch, stamped by the extension as the updates arrive. */
@@ -153,6 +155,8 @@ export type PermissionBlock = {
   readonly id: string;
   readonly command: string;
   readonly reason: string;
+  /** The asking bash call's description, when it gave one. */
+  readonly description?: string | undefined;
   readonly options: readonly PermissionChoice[];
   readonly outcome: PermissionOutcome;
   /** Why the classifier would not decide, when Auto asked it first. */
@@ -189,6 +193,7 @@ export type Action =
       readonly at: number;
       readonly name?: string;
       readonly target?: string;
+      readonly description?: string;
       readonly toolKind?: ToolKind;
       readonly status?: ToolStatus;
       readonly output?: string;
@@ -204,6 +209,7 @@ export type Action =
       readonly id: string;
       readonly command: string;
       readonly reason: string;
+      readonly description?: string | undefined;
       readonly options: readonly PermissionChoice[];
       readonly classifier?: string | undefined;
       readonly ask?: PermissionAsk | undefined;

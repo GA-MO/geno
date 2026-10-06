@@ -1,0 +1,98 @@
+/* A command step: its title in plain words, then one box with the command (IN) and the start of its output (OUT). */
+
+.command-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding: 1px 6px 1px 0;
+  color: var(--muted);
+}
+
+.command-head .codicon {
+  flex: none;
+  font-size: 14px;
+}
+
+.command-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--vscode-foreground);
+  overflow-wrap: anywhere;
+}
+
+.command-box {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 2px 0 4px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--vscode-textCodeBlock-background, var(--surface));
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  font-size: var(--small);
+}
+
+.command-label {
+  padding-top: 1px;
+  color: var(--muted);
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 1px);
+  letter-spacing: 0.06em;
+}
+
+.command-in,
+.command-output {
+  margin: 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+  line-height: 1.45;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.command-in {
+  color: var(--vscode-foreground);
+}
+
+.command-output {
+  max-height: 320px;
+  overflow: auto;
+  color: var(--muted);
+}
+
+/* The last preview lines fade out, so the cut reads as more to come rather than the end. */
+.command-output.truncated {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+
+.command-empty {
+  font-style: italic;
+}
+
+.command-out .show-all {
+  margin-top: 2px;
+}
+
+.permission-description {
+  margin: 6px 0 0;
+  color: var(--vscode-foreground);
+}
+
+/* High contrast keeps every line at full strength: a fade would drop below the theme's contrast. */
+.vscode-high-contrast .command-output,
+.vscode-high-contrast-light .command-output {
+  color: var(--vscode-foreground);
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .command-box {
+  border-color: var(--glass-edge);
+  background: var(--glass-well);
+}
