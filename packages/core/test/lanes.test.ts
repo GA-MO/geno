@@ -33,6 +33,7 @@ describe('mergeStepOf', () => {
     [{ base: 'a', ours: 'b', theirs: null }, { kind: 'conflict', reason: 'deleted-in-lane' }],
     [{ base: 'a', ours: null, theirs: 'c' }, { kind: 'conflict', reason: 'deleted-in-main' }],
     [{ base: 'a\0', ours: 'b\0', theirs: 'c\0' }, { kind: 'conflict', reason: 'binary' }],
+    [{ base: null, ours: null, theirs: 'png\0' }, { kind: 'conflict', reason: 'binary' }],
   ] as const)('%j -> %j', (input, step) => {
     expect(mergeStepOf(input)).toEqual(step);
   });

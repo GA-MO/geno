@@ -51,7 +51,8 @@ export const LANE_CONFLICT_REASONS = {
   'added-in-both': 'the lane and the main checkout both added this file',
   'deleted-in-lane': 'the lane deleted a file the main checkout changed',
   'deleted-in-main': 'the main checkout deleted a file the lane changed',
-  binary: 'a binary file changed on both sides',
+  binary: 'a binary file, which lanes do not apply yet',
+  special: 'a symlink or submodule, which lanes do not apply yet',
 } as const;
 export type LaneConflictReason = keyof typeof LANE_CONFLICT_REASONS;
 export type LaneConflict = { readonly path: string; readonly reason: LaneConflictReason };
@@ -89,10 +90,10 @@ export type MergeStep =
 const isBinary = (text: string | null): boolean => text !== null && text.includes('\0');
 
 export function mergeStepOf({ base, ours, theirs }: MergeInput): MergeStep {
-  if (ours === theirs) return { kind: 'same' };
-  if (ours === base) return { kind: 'take', after: theirs };
-  if (theirs === base) return { kind: 'same' };
+  if (ours === theirs || theirs === base) return { kind: 'same' };
+  // A review hunk is text, so a binary file is left to the user even when only the lane changed it.
   if (isBinary(base) || isBinary(ours) || isBinary(theirs)) return { kind: 'conflict', reason: 'binary' };
+  if (ours === base) return { kind: 'take', after: theirs };
   if (base === null) return { kind: 'conflict', reason: 'added-in-both' };
   if (theirs === null) return { kind: 'conflict', reason: 'deleted-in-lane' };
   if (ours === null) return { kind: 'conflict', reason: 'deleted-in-main' };
