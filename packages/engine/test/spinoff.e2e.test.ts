@@ -7,6 +7,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import {
   parseSpinoffShown,
+  REPLAYED_TURN_META,
   SPINOFF_CAPABILITY,
   SPINOFF_DISMISS_METHOD,
   SPINOFF_META,
@@ -150,6 +151,11 @@ describe('gcode serve: spin-off tasks', () => {
     const later = await open(engineShared(io));
     await later.request(acp.methods.agent.session.load, { sessionId: chat, cwd: repo, mcpServers: [] });
     expect(shown(updates.slice(seen), chat), 'a reload on a fresh engine replays each card where it ended').toEqual({ [A]: 'started on tu_a', [B]: 'withdrawn', [C]: 'dismissed on tu_c' });
+    const firstTurn = updates.slice(seen).find(({ update }) => update.sessionUpdate === 'user_message_chunk')?.update._meta?.[REPLAYED_TURN_META] as { endedAt: number } | undefined;
+    const events = await log(chat);
+    const secondPrompt = events.findLastIndex((e) => e.kind === 'user');
+    const answered = events.slice(0, secondPrompt).findLast((e) => e.kind === 'assistant');
+    expect(firstTurn?.endedAt, 'the first turn ends at its answer, not at the decisions logged after it').toBe(Date.parse(answered!.at));
     const replayedA = parseSpinoffShown(resultOf(updates.slice(seen), 'tu_a')?._meta?.[SPINOFF_META]);
     expect(replayedA).toEqual({ kind: 'offer', spinoff: expect.objectContaining({ state: { kind: 'started', sessionId: task, lane: 'remove-the-unused-helper' } }) });
   });
