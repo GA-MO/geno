@@ -91,6 +91,12 @@ export const SPINOFF_SPECS: Readonly<Record<(typeof SPINOFF_TOOLS)[number], Tool
   },
 };
 
+/**
+ * Follows the mode's system prompt in a run that offers the spin-off tools; fixed text, so the cached prefix holds. A
+ * small model rarely reaches for a tool listed by name only unless the prompt says when.
+ */
+export const SPINOFF_NOTE = `When you notice a real issue outside the current change, such as dead code, stale docs, a missing test or a TODO you confirmed, do not fix it and do not leave it unsaid: suggest it as a separate task with ${SPAWN_TASK_TOOL}, which the user starts with one click, and go on with the current task.`;
+
 /** The spin-off tools a run offers: none unless the mode allows them and a client shows the cards. Sorted, for a stable prefix. */
 export const spinoffToolDefinitions = (mode: ApprovalMode, attached: boolean): readonly Tool[] =>
   attached && SPINOFF_MODES[mode] ? [SPINOFF_SPECS[DISMISS_TASK_TOOL], SPINOFF_SPECS[SPAWN_TASK_TOOL]] : [];
