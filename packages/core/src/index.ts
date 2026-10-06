@@ -50,3 +50,4 @@ export * from './backends.js';
 export * from './backend-permissions.js';
 export * from './background.js';
 export * from './rewind.js';
+export * from './wake.js';

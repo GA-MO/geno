@@ -48,17 +48,22 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   'lane-apply': false,
   'background-end': false,
   wait: false,
+  wake: false,
   'backend-start': false,
   cut: false,
 };
 
-/** What a fork leaves out of the turns it takes: a wait would be taken up again, and the source's cuts are already applied. */
-const SKIPPED_BY_FORK: ReadonlySet<TurnEventKind> = new Set(['wait', 'cut']);
+/**
+ * What a fork leaves out of the turns it takes: a wait or a pending wake-up would be taken up again, and the source's
+ * cuts are already applied.
+ */
+const skippedByFork = (event: TurnEvent): boolean => event.kind === 'wait' || event.kind === 'cut' || (event.kind === 'wake' && event.note.kind === 'scheduled');
 
 /** The tool call an event belongs to, for the events that answer or report on one. */
 function toolUseOf(event: TurnEvent): string | undefined {
   if (event.kind === 'tool-result' || event.kind === 'child-start' || event.kind === 'child-end') return event.toolUseId;
   if (event.kind === 'background-end') return event.job.toolUseId;
+  if (event.kind === 'wake' && 'toolUseId' in event.note) return event.note.toolUseId;
   return undefined;
 }
 
@@ -133,7 +138,7 @@ export function forkEvents(events: readonly TurnEvent[], turnSeq: number, fork: 
   const session: Session = { ...head.session, id: fork.id, createdAt: fork.createdAt };
   const origin: ForkOrigin = { sessionId: head.session.id, turnSeq, title: fork.title };
   const copied = view.slice(1, upTo + 1).flatMap((e): TurnEvent[] => {
-    if (SKIPPED_BY_FORK.has(e.kind)) return [];
+    if (skippedByFork(e)) return [];
     return [e.kind === 'checkpoint' ? { ...e, sessionId: fork.id } : e];
   });
   return [{ kind: 'session-start', session, ...(head.context === undefined ? {} : { context: head.context }), fork: origin }, ...copied];

@@ -4,6 +4,7 @@ import { BACKGROUND_TAIL_LINES, MAX_BACKGROUND_JOBS } from './background.js';
 import { EDIT_FORMAT_SPECS } from './edit.js';
 import { SYSTEM_PROMPT } from './request.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
+import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
 import type { EditFormat } from './types.js';
 
 /** docs/e3-results.md: str_replace had the lowest first-try failure rate of the diff formats on Model Studio Qwen. */
@@ -12,11 +13,14 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'skill', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', 'schedule_wakeup', 'skill', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
-/** A subagent ends with its call, so it starts no background command and has none to read or stop. */
-export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => name !== 'bash_output' && name !== 'bash_stop');
+/** What only a session that outlives its call can use: background commands to read or stop, and wakes. */
+const OUTLIVES_ITS_CALL: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', 'schedule_wakeup']);
+
+/** A subagent ends with its call, so it starts no background command, has none to read or stop, and is never woken. */
+export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !OUTLIVES_ITS_CALL.has(name));
 
 const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL_SPECS>, Tool>> = {
   bash: {
@@ -76,6 +80,8 @@ const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   edit: EDIT_FORMAT_SPECS[AGENT_EDIT_FORMAT].tool,
+  monitor: MONITOR_TOOL_DEFINITION,
+  schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
   skill: {
     name: 'skill',
     description:
@@ -97,18 +103,19 @@ export const AGENT_TOOL_DEFINITIONS: readonly Tool[] = Object.freeze(AGENT_TOOL_
 export const AGENT_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
 You are running as an agent that changes the code itself. How to work in this mode:
-- Your tools are read, grep, glob and list to look around, edit to change files, bash to run commands, bash_output and bash_stop for commands bash started in the background, check to run the project's check command, and skill to load a skill's instructions by name.
+- Your tools are read, grep, glob and list to look around, edit to change files, bash to run commands, bash_output and bash_stop for commands bash started in the background, monitor and schedule_wakeup to be woken later, check to run the project's check command, and skill to load a skill's instructions by name.
 - When you need several reads, searches or listings that do not depend on each other, ask for all of them in one turn; they run at the same time.
 - Read a file before you edit it. edit refuses a file you have not read in this session, or one that changed since you last read it; read it again and retry.
 - edit replaces one exact piece of text that appears once in the file. Copy old_str from what read showed you, without the line numbers and the tab after them. To make a new file, pass create: true with the whole content as new_str. Several separate changes to one file are several edit calls.
 - When the project has a check command, it runs after every successful edit and its result is appended to the edit's result. If it fails because of your change, fix that before moving on. Failures that were there before your change are not yours to fix unless the task asks.
 - For a dev server, a watcher or a long build, run bash with run_in_background: true, go on with other work, read its output with bash_output, and stop it with bash_stop when you no longer need it.
+- When nothing is left to do but wait for background work, end your turn instead of polling: Geno starts your next turn when a background command ends or a background subagent reports. monitor wakes you when a command prints a matching line, and schedule_wakeup wakes you after a delay, such as to check CI again.
 - bash runs in a sandbox with no network beyond localhost and writes only inside the workspace. Dependencies are already installed; do not try to install packages. If a command is denied, do not retry it; find another way or explain what you could not do.
 - Before you finish, run the relevant tests or type checker with bash or check and read the result.
 - Work until the task is done without stopping to ask questions; when something is ambiguous, choose the reading that best fits the codebase and say which you chose. End your turn with a short report of what you changed and how you checked it.`;
 
-// Plan starts nothing that outlives a call, so it has no background commands to read or stop.
-const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'bash_stop']);
+// Plan starts nothing that outlives a call, so it has no background commands to read or stop, and nothing wakes it.
+const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'bash_stop', 'monitor', 'schedule_wakeup']);
 
 /** What a mode lets the agent change: everything, or in Plan nothing, with bash held to the safe list by the rules. */
 export const AGENT_MODE_TOOLS: Readonly<Record<ApprovalMode, readonly AgentToolName[]>> = {

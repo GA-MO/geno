@@ -12,7 +12,8 @@
     "./waiting": "./src/waiting.ts",
     "./attention": "./src/attention.ts",
     "./backends": "./src/backends.ts",
-    "./background": "./src/background.ts"
+    "./background": "./src/background.ts",
+    "./wake": "./src/wake.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

@@ -82,7 +82,7 @@ export const isUsersOwn = (event: TurnEvent): event is UserEvent => event.kind =
 /** What a steer chunk's `_meta[STEER_META]` carries, live and in a replay. */
 export type SteerMark = { readonly seq: number; readonly from: SteerSource };
 
-export const steerMarkOf = (event: UserEvent): SteerMark => ({ seq: event.seq, from: event.from ?? 'user' });
+export const steerMarkOf = (event: UserEvent): SteerMark => ({ seq: event.seq, from: event.from === 'parent' || event.from === 'child' ? event.from : 'user' });
 
 export const MESSAGE_AGENT_TOOL = 'message_agent';
 
