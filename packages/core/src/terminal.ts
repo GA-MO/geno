@@ -199,7 +199,7 @@ function readText(read: TerminalRead): string {
       }
       const of = read.terminal.commands > read.commands.length ? ` of ${read.terminal.commands} recorded` : '';
       return [
-        `Terminal ${labelOf(read.terminal)}: the last ${read.commands.length === 1 ? 'command' : `${read.commands.length} commands`}${of}, oldest first.`,
+        `Terminal ${labelOf(read.terminal)}: ${read.commands.length === 1 ? `the last command${of}` : `the last ${read.commands.length} commands${of}, oldest first`}.`,
         `<${TAG}>`,
         read.commands.map((command, i) => commandText(command, i + 1)).join('\n\n'),
         `</${TAG}>`,

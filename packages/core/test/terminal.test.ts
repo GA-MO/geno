@@ -159,9 +159,11 @@ describe('terminalReadText', () => {
     );
   });
 
-  it('leaves the list out when the model named the terminal', () => {
+  it('leaves the list out when the model named the terminal, and reads one command without an order', () => {
     const commands = [terminalCommand(captured('x'))];
-    expect(terminalReadText({ terminals: [zsh, node], read: { kind: 'commands', terminal: zsh, commands } }, true)).not.toContain('The open terminals');
+    const text = terminalReadText({ terminals: [zsh, node], read: { kind: 'commands', terminal: zsh, commands } }, true);
+    expect(text).not.toContain('The open terminals');
+    expect(text.split('\n')[0]).toBe('Terminal 1 "zsh": the last command of 5 recorded.');
   });
 
   it('says what the user can do in a terminal without shell integration', () => {
