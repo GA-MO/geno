@@ -20,8 +20,12 @@ export function spinoffCard(card: Exclude<SpinoffCard, { kind: 'hidden' }>, ui: 
         'div',
         { class: 'spinoff-started' },
         icon('git-branch', 'spinoff-icon'),
-        h('span', { class: 'spinoff-started-text', title: spinoff.title }, h('span', { class: 'spinoff-verb' }, 'Started'), ' ', spinoff.title),
-        h('span', { class: 'spinoff-lane', title: `Runs in lane ${card.lane}` }, card.lane),
+        h(
+          'span',
+          { class: 'spinoff-started-body' },
+          h('span', { class: 'spinoff-started-text' }, h('span', { class: 'spinoff-verb' }, 'Started'), ' ', spinoff.title),
+          h('span', { class: 'spinoff-where', title: `Runs in lane ${card.lane}` }, 'in lane ', h('code', { class: 'spinoff-lane' }, card.lane)),
+        ),
         h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', 'data-focus': focus('open'), title: 'Open the task in the panel', onclick: () => ui.post({ type: 'spinoff-open', id: spinoff.id }) }, 'Open'),
       ),
     );

@@ -99,34 +99,40 @@
 .spinoff-started {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
 }
 
 .spinoff-started .spinoff-icon {
+  align-self: flex-start;
+  margin-top: 2px;
   color: var(--ok);
 }
 
-.spinoff-started-text {
+.spinoff-started-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.spinoff-started-text {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .spinoff-verb {
   color: var(--muted);
 }
 
-.spinoff-lane {
-  flex: none;
-  max-width: 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--vscode-editor-font-family);
+.spinoff-where {
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.spinoff-lane {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
 }
 
 .spinoff-list {
