@@ -17,12 +17,13 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | Find files (`Glob`) | `glob`. To search a skill's folder, pass its absolute path as `directory`. |
 | List a directory (`ls`) | `list`. |
 | Run the project's checks | `check`, or the test command through `bash`. |
-| Track tasks (`TaskCreate`, `TaskUpdate`, `TodoWrite`) | Keep a `todo.md` checklist in the workspace root and update it with `edit`. Do not commit it. In Plan mode you cannot write files, so put the checklist in your reply. |
+| Track tasks (`TaskCreate`, `TaskUpdate`, `TodoWrite`) | `todo` with the whole list each time. The user sees it pinned in the chat. Do not keep a `todo.md` file. |
 | Ask the user a question (`AskUserQuestion`) | Ask in plain text at the end of your reply, then end your turn. Give the options and say which one you recommend. In a non-interactive run nobody can answer, so choose the default, say which one you chose, and continue. |
 | Start a subagent (`Agent`, `Task`), or start N agents in parallel | Not available. Do the work yourself in one sequential pass. Where a skill starts a panel (`how`, `why`, `interrogate`, `arena`, `architect`, `swarm`, `reflect`), take each role in turn, keep the roles' notes separate, and say in your reply that the panel ran as one model in one pass. |
 | Continue, list or stop a subagent (`SendMessage`, `TaskStop`) | Not available. There are no subagents. |
 | Run a command in the background (`Bash` with `run_in_background`, `BashOutput`, `KillShell`) | `bash` with `run_in_background: true` returns a job id such as `bg-1`. Read its output with `bash_output` and stop it with `bash_stop`. You are told when it ends, at your next request. At most 4 run at once. |
-| Wait for a notice, or schedule a wakeup (`Monitor`, `ScheduleWakeup`, `/loop`) | Not available. Run each command in the foreground with `bash`, and give it a `timeout_seconds` value if it is slow. |
+| Wait for a notice (`Monitor`) | `monitor` with a `pattern` and either a `command` to start in the background or the `background_job_id` of one `bash` already started. It returns at once. End your turn, and Geno starts your next turn with the matching line, the command's end, or the timeout. Not available in Plan mode. |
+| Schedule a wakeup (`ScheduleWakeup`, `/loop`) | `schedule_wakeup` with `delay_s` and a one-line `reason`. It returns at once. End your turn, and Geno starts your next turn with the reason after the delay. For a `/loop`, schedule the next wakeup at the end of each pass. Not available in Plan mode. |
 | `gh`, `git push`, a pull request, CI logs | Not available, because the sandbox has no network. Do the local part. Then give the user the exact command to run. |
 | Fetch a URL or search the web (`WebFetch`, `WebSearch`, `curl`) | Not available, because the sandbox has no network. An MCP server that the user configured can give network access. Its tools are named `mcp__<server>__<tool>`. |
 | Read Claude Code transcripts (`~/.claude/projects/`) | Not available. Geno cannot read them. |
