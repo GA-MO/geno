@@ -76,8 +76,9 @@ const seqOf = (event: TurnEvent): number | undefined => (event.kind === 'session
 
 /**
  * The events the model's context is built from. Without a compaction, all of them. With one, the session start (the
- * loaded context opens the first message), then the latest compaction, then every event from the one it kept from.
- * Idempotent: the view of a view is itself.
+ * loaded context opens the first message), then the latest compaction, then every event from the one it kept from
+ * but earlier compactions: a compaction logged mid-turn can sit after the next one's cut, and the next one's summary
+ * already covers it. Idempotent: the view of a view is itself.
  */
 export function contextView(events: readonly TurnEvent[]): readonly TurnEvent[] {
   const at = events.findLastIndex((event) => event.kind === 'compact');
@@ -85,7 +86,7 @@ export function contextView(events: readonly TurnEvent[]): readonly TurnEvent[] 
   if (compact?.kind !== 'compact') return events;
   const from = events.findIndex((event) => seqOf(event) === compact.keptFrom);
   if (from === -1 || from > at) return events;
-  return [events[0]!, compact, ...events.slice(from).filter((event) => event !== compact)];
+  return [events[0]!, compact, ...events.slice(from).filter((event) => event.kind !== 'compact')];
 }
 
 const TODO_MARKS: Readonly<Record<TodoStatus, string>> = { pending: '[ ]', in_progress: '[~]', done: '[x]' };
