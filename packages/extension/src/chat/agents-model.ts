@@ -21,8 +21,11 @@ export type ExternalAgent = {
   readonly status: readonly string[];
   readonly commands: Readonly<Record<AgentAction, readonly string[]>>;
   readonly parseStatus: (output: string) => StatusReport | undefined;
-  /** The official install instruction, shown as text and never run by Geno. */
-  readonly install: { readonly command: string; readonly url: string };
+  /**
+   * The official installer, from the agent's docs. Geno runs it only in a terminal the user sees, after a confirm
+   * that names the command, where it downloads from and where it puts the CLI.
+   */
+  readonly install: { readonly command: string; readonly source: string; readonly location: string; readonly url: string };
 };
 
 export type CliFound = { readonly path: string; readonly version: string | undefined };
@@ -33,6 +36,8 @@ export type Outcome = { readonly ok: boolean; readonly text: string; readonly ou
 export type AgentState =
   | { readonly kind: 'checking'; readonly last?: Outcome }
   | { readonly kind: 'missing' }
+  /** The installer runs in a terminal; closing it checks again. */
+  | { readonly kind: 'installing' }
   | { readonly kind: 'signed-out'; readonly cli: CliFound; readonly last?: Outcome }
   | { readonly kind: 'signed-in'; readonly cli: CliFound; readonly account: string | undefined; readonly last?: Outcome }
   /** `link` names the sign-in page the CLI printed; the address itself stays in the extension. */
@@ -49,6 +54,7 @@ export type CheckResult =
 
 export type AgentEvent =
   | { readonly type: 'check' }
+  | { readonly type: 'install' }
   | { readonly type: 'checked'; readonly result: CheckResult }
   | { readonly type: 'start'; readonly action: AgentAction }
   | { readonly type: 'output'; readonly output: string; readonly link?: string }
@@ -60,6 +66,7 @@ export type AgentsFromView =
   | { readonly type: 'agents-check' }
   | { readonly type: 'agents-run'; readonly id: string; readonly action: AgentAction }
   | { readonly type: 'agents-cancel'; readonly id: string }
+  | { readonly type: 'agents-install'; readonly id: string }
   | { readonly type: 'agents-open'; readonly id: string; readonly target: 'sign-in' | 'install' };
 
 // The terminal's cursor and erase codes, which the CLI draws its spinner with.
@@ -138,7 +145,7 @@ export const EXTERNAL_AGENTS: readonly ExternalAgent[] = [
     status: ['about'],
     commands: { login: ['login'], logout: ['logout'], update: ['update'] },
     parseStatus: parseCursorAbout,
-    install: { command: 'curl https://cursor.com/install -fsS | bash', url: 'https://cursor.com/docs/cli/installation' },
+    install: { command: 'curl https://cursor.com/install -fsS | bash', source: 'cursor.com', location: '~/.local/bin', url: 'https://cursor.com/docs/cli/installation' },
   },
 ];
 
@@ -163,7 +170,9 @@ const ENDED: Readonly<Record<(typeof RUNNING)[AgentAction], { readonly ok: strin
 export function agentReducer(state: AgentState, event: AgentEvent): AgentState {
   switch (event.type) {
     case 'check':
-      return state.kind === 'signing-in' || state.kind === 'signing-out' || state.kind === 'updating' ? state : { kind: 'checking' };
+      return state.kind === 'checking' || state.kind === 'signing-in' || state.kind === 'signing-out' || state.kind === 'updating' ? state : { kind: 'checking' };
+    case 'install':
+      return state.kind === 'missing' ? { kind: 'installing' } : state;
     case 'checked': {
       if (state.kind !== 'checking') return state;
       const last = state.last === undefined ? {} : { last: state.last };
