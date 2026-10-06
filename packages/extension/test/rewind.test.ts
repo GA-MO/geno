@@ -82,9 +82,9 @@ function host(connection: Connection, idle = true) {
     connection: async () => connection,
     idle: () => (idle ? { sessionId: 's1', cwd: undefined } : undefined),
     seqOf: (turn) => (turn === 't2' ? 5 : undefined),
+    turnAt: (seq) => (seq === 5 ? 't7' : undefined),
     reload: async () => void reloads++,
     open: async (sessionId) => void shown.push(sessionId),
-    shown: (file) => file.replace('/ws/', ''),
     post: (message) => void posted.push(message),
   });
   return { rewinds, posted, shown, reloads: () => reloads };
@@ -93,10 +93,10 @@ function host(connection: Connection, idle = true) {
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('the host running the menu', () => {
-  it('lists the files before restoring them, then restores on the yes', async () => {
+  it('lists the files before restoring them, then restores on the yes and loads the session again', async () => {
     const { connection, asked } = fakeEngine({
-      [REWIND_PREVIEW_METHOD]: { files: ['/ws/a.ts', '/ws/b.ts'], unsaved: ['/ws/b.ts'] },
-      [REWIND_TURN_METHOD]: { files: ['/ws/a.ts', '/ws/b.ts'], prompt: 'make it three' },
+      [REWIND_PREVIEW_METHOD]: { files: ['a.ts', 'b.ts'], unsaved: ['b.ts'] },
+      [REWIND_TURN_METHOD]: { files: ['a.ts', 'b.ts'], prompt: 'make it three' },
     });
     const { rewinds, posted, reloads } = host(connection);
     rewinds.handlers.rewind({ type: 'rewind', turn: 't2', kind: 'files', confirmed: false });
@@ -107,8 +107,8 @@ describe('the host running the menu', () => {
     rewinds.handlers.rewind({ type: 'rewind', turn: 't2', kind: 'files', confirmed: true });
     await flush();
     expect(asked.at(-1)).toEqual({ method: REWIND_TURN_METHOD, params: { sessionId: 's1', turnSeq: 5, choice: { kind: 'files' } } });
-    expect(posted.at(-1)).toEqual({ type: 'rewind-state', turn: 't2', state: { kind: 'restored', files: ['a.ts', 'b.ts'] } });
-    expect(reloads(), 'the conversation stays as it is').toBe(0);
+    expect(reloads(), 'the session loads again, with the restored hunks undone').toBe(1);
+    expect(posted.at(-1), 'on the same message under its new id').toEqual({ type: 'rewind-state', turn: 't7', state: { kind: 'restored', files: ['a.ts', 'b.ts'] } });
   });
 
   it('rewinds the conversation at once, reloads the session and puts the prompt back in the composer', async () => {

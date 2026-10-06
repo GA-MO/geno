@@ -17,12 +17,12 @@ export type RewindChat = {
   /** The session the panel shows and the folder it works in, undefined while a turn runs in it. */
   readonly idle: () => { readonly sessionId: string; readonly cwd: string | undefined } | undefined;
   readonly seqOf: (turn: string) => number | undefined;
-  /** Loads the shown session again, so the transcript shows it as of the cut. */
+  /** The turn whose prompt is `seq` in the transcript shown now, whose ids a reload renews. */
+  readonly turnAt: (seq: number) => string | undefined;
+  /** Loads the shown session again, so the transcript shows the cut and the hunks a restore undid. */
   readonly reload: () => Promise<void>;
   /** Shows the new fork in the panel. */
   readonly open: (sessionId: string) => Promise<void>;
-  /** A path as the panel shows it, relative to the workspace. */
-  readonly shown: (file: string) => string;
   readonly post: (message: RewindToView) => void;
 };
 
@@ -57,12 +57,12 @@ export class RewindHost {
       if (RESTORES_FILES[kind] && !confirmed) {
         this.state(turn, { kind: 'working', action: kind });
         const preview = await agent.request<RewindPreviewResponse, RewindPreviewRequest>(REWIND_PREVIEW_METHOD, { sessionId, turnSeq });
-        return this.state(turn, { kind: 'confirm', action: kind, files: preview.files.map(this.chat.shown), unsaved: preview.unsaved.map(this.chat.shown) });
+        return this.state(turn, { kind: 'confirm', action: kind, files: preview.files, unsaved: preview.unsaved });
       }
       this.state(turn, { kind: 'working', action: kind });
       const done = await agent.request<RewindTurnResponse, RewindTurnRequest>(REWIND_TURN_METHOD, { sessionId, turnSeq, choice: { kind } });
-      if (kind === 'files') return this.state(turn, { kind: 'restored', files: done.files.map(this.chat.shown) });
       await this.chat.reload();
+      if (kind === 'files') return this.state(this.chat.turnAt(turnSeq) ?? turn, { kind: 'restored', files: done.files });
       this.chat.post({ type: 'rewind-prompt', text: done.prompt });
     } catch (error) {
       this.state(turn, { kind: 'failed', message: messageOf(error) });

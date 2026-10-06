@@ -1520,9 +1520,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       known(sessionId);
       return serially(sessionId, async () => {
         const log = await openSessionLog(store, sessionId, io);
-        const { files, unsaved } = await rewindPreview(store, log, turnSeq).catch(refused({ turnSeq }));
-        const absolute = (file: string) => path.join(log.session.workspace, file);
-        return { files: files.map(absolute), unsaved: unsaved.map(absolute) };
+        return rewindPreview(store, log, turnSeq).catch(refused({ turnSeq }));
       });
     })
     .onRequest(REWIND_TURN_METHOD, rewindTurnRequest, async ({ params }): Promise<RewindTurnResponse> => {
@@ -1536,8 +1534,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           const cut = toolUsesFrom(log.events, turnSeq);
           for (const job of jobs.views(sessionId)) if (cut.has(job.toolUseId)) await jobs.stop(sessionId, job.id, 'user').catch(() => {});
         }
-        const { files, prompt } = await rewindSession(store, log, turnSeq, choice).catch(refused({ turnSeq }));
-        return { files: files.map((file) => path.join(log.session.workspace, file)), prompt };
+        return rewindSession(store, log, turnSeq, choice).catch(refused({ turnSeq }));
       });
     })
     .onRequest(acp.methods.agent.session.fork, async ({ params }): Promise<acp.ForkSessionResponse> => {
