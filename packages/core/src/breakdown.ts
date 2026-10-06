@@ -1,4 +1,5 @@
 import type { ContentBlockParam, MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
+import { compactedText } from './compact.js';
 import { renderContextItems, renderLoadedContext, type ContextItem } from './context.js';
 import { costAt, type Rates } from './cost.js';
 import { MEMORY_PREAMBLE } from './memory.js';
@@ -65,6 +66,7 @@ function labelsOf(events: readonly TurnEvent[], adapter: Adapter): Labels {
       const items = event.context ?? [];
       if (items.length > 0 || files.length > 0) itemBlocks.set(renderContextItems(items), items);
     }
+    if (event.kind === 'compact') texts.set(compactedText(event), 'compaction');
     if (event.kind === 'tool-result') results.set(event.toolUseId, event.name === READ_TOOL && event.seq > turnStart ? 'files' : 'toolResults');
   }
   return { texts, itemBlocks, results, thinking: adapter === 'anthropic' };
