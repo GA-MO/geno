@@ -39,6 +39,7 @@ import {
   NOT_SHOWN_ERROR,
   RUNNING_META,
   TASK_STATUSES,
+  TASK_KINDS,
   TASK_UPDATE_METHOD,
   ARENA_UPDATE_METHOD,
   LANE_GRAFT_META,
@@ -174,9 +175,16 @@ const taskUpdate = z.object({
     endedAt: z.number().nullable(),
     usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).optional(),
     waiting: waitingSchema.optional(),
+    asking: z.enum(['permission', 'question']).optional(),
+    parent: z.string().nullable().optional(),
+    kind: z.enum(TASK_KINDS).optional(),
+    returnedAt: z.number().nullable().optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
+// The parse drops a field it does not name, so a field TaskRecord gains must be named above; U43 lost `parent` that way.
+const namesEveryTaskField: Exclude<keyof TaskRecord, keyof z.infer<typeof taskUpdate>['task']> extends never ? true : never = true;
+void namesEveryTaskField;
 
 /** How a turn the panel adopted after a reload ends, by the status its task ended in. */
 const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 'streaming'> | undefined>> = {
@@ -1069,6 +1077,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         if (this.paneAsked !== undefined) void view.webview.postMessage({ type: this.paneAsked } satisfies ToView);
         this.paneAsked = undefined;
         view.description = totalsLabel(this.transcript);
+        // The count can come before the view does, as after a reload.
+        view.badge = needsYouBadge(this.needsYou);
         this.view = view;
       },
       send: ({ text, attachments }) => void this.send(text, attachments).catch(() => {}),
@@ -1132,7 +1142,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       this.background.reshow();
     });
     const visible = view.onDidChangeVisibility(() => this.background.reshow());
-    view.badge = needsYouBadge(this.needsYou);
     view.onDidDispose(() => {
       focus.dispose();
       visible.dispose();
