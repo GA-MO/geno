@@ -122,7 +122,7 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
     if (event.kind === 'mode') mode = event.mode;
     if (event.kind === 'user') runs.push({ prompt: event, mode, events: [] });
     // A lane apply is a turn of its own in the panel, as the prompt that asked for it showed live.
-    else if (event.kind === 'lane-apply') runs.push({ prompt: { kind: 'user', seq: event.seq, at: event.at, content: laneApplyPrompt(event.lane) }, mode, events: [event] });
+    else if (event.kind === 'lane-apply') runs.push({ prompt: { kind: 'user', seq: event.seq, at: event.at, content: laneApplyPrompt(event.lane, event.grafted) }, mode, events: [event] });
     else runs.at(-1)?.events.push(event);
   }
   return runs;

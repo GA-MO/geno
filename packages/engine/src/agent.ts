@@ -17,6 +17,7 @@ import {
   userToolDefinitions,
   WIDGET_TOOL,
   widgetToolDefinitions,
+  type AssistantTurn,
   type EffortPolicy,
   type SessionMode,
   type TurnEvent,
@@ -90,6 +91,8 @@ export type AgentOptions = {
   readonly childHost?: SubagentHost | undefined;
   /** Lets a non-interactive run start subagents that may change files. */
   readonly allowWorker?: boolean | undefined;
+  /** A subagent call the caller issues as the user's own, as an `@` mention would; the Arena's review is one. */
+  readonly issued?: AssistantTurn | undefined;
 };
 
 export const askOnTerminal =
@@ -152,7 +155,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // A prompt logged before the run, with its attachments, is the newest event.
     const logged = opened.log.events.at(-1);
     const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
-    const issued = await mentionedCall(asked, scan.agents, session);
+    const issued = options.issued ?? (await mentionedCall(asked, scan.agents, session));
     const agentTool = config.agentTool?.includes(startMode) === true;
     let tools = mcp === undefined ? own : [...own, ...mcp.tools];
     children = subagents({

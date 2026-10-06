@@ -8,6 +8,7 @@ import {
   nextSeq,
   summarizeSession,
   type LaneInfo,
+  type LaneName,
   type LaneRecord,
   type TurnEvent,
 } from '@g-code/core';
@@ -22,6 +23,7 @@ import {
   cloneDeps,
   copyIncluded,
   createLane,
+  graftLane,
   isSetupApproved,
   laneDiffStat,
   listLanes,
@@ -63,9 +65,8 @@ export async function laneInfos(repo: LaneRepo, store: Store, io: Io, tasks: Tas
  * copy-on-write clone of the dependencies. Setup commands run only when the user already approved them through
  * `gcode lane new`; the panel cannot ask that question outside the sandbox.
  */
-export async function laneFor(repo: LaneRepo, prompt: string, store: Store, io: Io): Promise<LaneRecord> {
-  const taken = new Set((await listLanes(repo)).map((lane) => lane.name as string));
-  const lane = await createLane(repo, laneNameFor(prompt, taken), 'head');
+export async function laneFor(repo: LaneRepo, prompt: string, store: Store, io: Io, name?: LaneName): Promise<LaneRecord> {
+  const lane = await createLane(repo, name ?? laneNameFor(prompt, await takenLaneNames(repo)), 'head');
   await copyIncluded(repo, lane);
   const deps = await cloneDeps(repo, lane);
   if (deps.kind === 'failed') io.err(`lane ${lane.name}: node_modules clone of ${deps.folder} failed: ${deps.detail}`);
@@ -81,6 +82,8 @@ export async function laneFor(repo: LaneRepo, prompt: string, store: Store, io: 
   return lane;
 }
 
+export const takenLaneNames = async (repo: LaneRepo): Promise<Set<string>> => new Set((await listLanes(repo)).map((lane) => lane.name as string));
+
 /** Refuses to touch a lane whose session is still working in it. */
 export function idleLane(lane: LaneRecord, tasks: Tasks): void {
   const task = lane.session === null ? undefined : tasks.get(lane.session);
@@ -90,9 +93,19 @@ export function idleLane(lane: LaneRecord, tasks: Tasks): void {
 /**
  * Applies a lane into the session's workspace, the main checkout, as one turn of the session. Each file is written
  * through `files` as an edit step, so the editor puts its hunks under review as it does an agent's edit. A checkpoint
- * before the writes lets Undo All take the apply back. A conflict writes nothing and lists every conflict.
+ * before the writes lets Undo All take the apply back. A conflict writes nothing and lists every conflict. With
+ * `hunks`, the turn is a graft: only those of the lane's hunks go in, the same way.
  */
-export async function applyLaneTurn(store: Store, opened: OpenSession, repo: LaneRepo, name: string, files: Files, watcher: Watcher, tasks: Tasks): Promise<void> {
+export async function applyLaneTurn(
+  store: Store,
+  opened: OpenSession,
+  repo: LaneRepo,
+  name: string,
+  files: Files,
+  watcher: Watcher,
+  tasks: Tasks,
+  hunks?: readonly string[],
+): Promise<void> {
   const { session, file } = opened.log;
   if (repo.main !== session.workspace) throw new EngineError(`apply lane ${name} from a chat in ${repo.main}`);
   const lane = await requireLane(repo, name);
@@ -103,11 +116,12 @@ export async function applyLaneTurn(store: Store, opened: OpenSession, repo: Lan
     await appendEvent(file, event);
     watcher.logged(event);
   };
-  const result = await applyLane(repo, lane, files);
+  const result = hunks === undefined ? await applyLane(repo, lane, files) : await graftLane(repo, lane, hunks, files);
+  const grafted = hunks === undefined ? {} : { grafted: hunks.length };
   const at = () => new Date().toISOString();
   if (result.kind === 'conflicts') {
-    await record({ kind: 'lane-apply', seq: nextSeq(events), at: at(), lane: name, changes: [], conflicts: result.conflicts, deleted: [] });
-    watcher.text(laneApplyText({ lane: name, conflicts: result.conflicts, deleted: [] }, 0));
+    await record({ kind: 'lane-apply', seq: nextSeq(events), at: at(), lane: name, changes: [], conflicts: result.conflicts, deleted: [], ...grafted });
+    watcher.text(laneApplyText({ lane: name, conflicts: result.conflicts, deleted: [], ...grafted }, 0));
     return;
   }
   await record(await takeCheckpoint(shadowRepoFor(store, session.workspace), session.id, events));
@@ -129,6 +143,6 @@ export async function applyLaneTurn(store: Store, opened: OpenSession, repo: Lan
   await writeLaneChanges(repo, result.changes, stepped);
   const written = result.changes.filter((change) => change.after !== null).map((change) => ({ ...change.change, path: path.join(repo.main, change.change.path) }));
   const deleted = result.changes.filter((change) => change.after === null).map((change) => change.change.path);
-  await record({ kind: 'lane-apply', seq: nextSeq(events), at: at(), lane: name, changes: written, conflicts: [], deleted });
-  watcher.text(laneApplyText({ lane: name, conflicts: [], deleted }, written.length));
+  await record({ kind: 'lane-apply', seq: nextSeq(events), at: at(), lane: name, changes: written, conflicts: [], deleted, ...grafted });
+  watcher.text(laneApplyText({ lane: name, conflicts: [], deleted, ...grafted }, written.length));
 }
