@@ -29,12 +29,12 @@ fi
 
 # The engine sandbox runs commands in bubblewrap. Docker's default seccomp profile refuses it a user namespace, and its masked
 # /proc paths stop it mounting a fresh /proc; both options lift only that, with no added capabilities and no --privileged.
-# The container name holds one run per checkout, since the checkout's volume is not safe to share.
+# One work volume serves every checkout: the lock above lets only one run use it at a time, so it never piles up per worktree.
 # shellcheck disable=SC2086
 docker run --rm --init --name "gcode-vscode-$key" \
   --security-opt seccomp=unconfined --security-opt systempaths=unconfined --shm-size=2g \
   -v "$repo:/src:ro" \
-  -v "gcode-vscode-work-$key:/work" \
+  -v gcode-vscode-work:/work \
   -v gcode-vscode-download:/work/.vscode-test \
   -v gcode-vscode-pnpm:/pnpm-store \
   -e GCODE_VSCODE_VERSION="${GCODE_VSCODE_VERSION:-}" \
