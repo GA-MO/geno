@@ -74,8 +74,11 @@ export type SendNow = { readonly kind: 'hidden' } | { readonly kind: 'ready'; re
 
 const EXTRAS_WAIT = 'Attachments and @ mentions go with the next turn, so this one waits in the queue';
 
+const ONE_AT_A_TIME = 'One message at a time: this one can go once the last one lands';
+
 export function sendNowOf(running: boolean, followup: Followup | undefined, draft: Draft): SendNow {
-  if (!running || followup?.state === 'steering') return { kind: 'hidden' };
+  if (!running) return { kind: 'hidden' };
+  if (followup?.state === 'steering') return draft.text === '' && draft.extras === 0 ? { kind: 'hidden' } : { kind: 'blocked', reason: ONE_AT_A_TIME };
   if (followup !== undefined) return followup.attachments.length > 0 || followup.text === '' ? { kind: 'blocked', reason: EXTRAS_WAIT } : { kind: 'ready', steers: 'queued' };
   if (draft.text === '' && draft.extras === 0) return { kind: 'hidden' };
   return draft.extras > 0 || draft.text === '' ? { kind: 'blocked', reason: EXTRAS_WAIT } : { kind: 'ready', steers: 'draft' };

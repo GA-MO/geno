@@ -127,7 +127,8 @@ describe("the composer's follow-up", () => {
     expect(sendNowOf(true, undefined, { text: '', extras: 0 })).toEqual({ kind: 'hidden' });
     expect(sendNowOf(true, undefined, draft)).toEqual({ kind: 'ready', steers: 'draft' });
     expect(sendNowOf(true, queued, draft)).toEqual({ kind: 'ready', steers: 'queued' });
-    expect(sendNowOf(true, steering, draft), 'one follow-up at a time').toEqual({ kind: 'hidden' });
+    expect(sendNowOf(true, steering, { text: '', extras: 0 })).toEqual({ kind: 'hidden' });
+    expect(sendNowOf(true, steering, draft), 'one follow-up at a time').toMatchObject({ kind: 'blocked', reason: expect.stringMatching(/^One message at a time/) });
     expect(sendNowOf(true, undefined, { text: 'and this', extras: 1 }).kind).toBe('blocked');
     const blocked = sendNowOf(true, { ...queued, attachments: [image] }, { text: '', extras: 0 });
     expect(blocked.kind === 'blocked' && blocked.reason).toMatch(/Attachments and @ mentions go with the next turn/);
