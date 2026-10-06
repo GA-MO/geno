@@ -8,7 +8,8 @@
     "./tab": "./src/tab/index.ts",
     "./attachments": "./src/attachments.ts",
     "./widget": "./src/widget.ts",
-    "./arena": "./src/arena.ts"
+    "./arena": "./src/arena.ts",
+    "./waiting": "./src/waiting.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

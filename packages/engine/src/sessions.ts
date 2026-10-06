@@ -17,6 +17,7 @@ import {
   sessionModeOf,
   TOOL_STATUSES,
   TURN_ERROR_KINDS,
+  WAIT_KINDS,
   type Effort,
   type HunkId,
   type Session,
@@ -42,6 +43,15 @@ const modelMarksSchema = z.strictObject({
   firstAnswerAt: epochMs.nullable(),
   lastTokenAt: epochMs.nullable(),
   endAt: epochMs,
+  waitMs: z.number().int().nonnegative().optional(),
+});
+
+const waitingSchema = z.strictObject({
+  kind: z.enum(WAIT_KINDS),
+  since: epochMs,
+  retryAt: epochMs.nullable(),
+  resetAt: epochMs.nullable(),
+  message: z.string(),
 });
 
 const sessionSchema = z.strictObject({
@@ -204,6 +214,7 @@ const turnEventSchema = z.union([
     }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
+    z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema }),
     z.strictObject({ kind: z.literal('mode'), seq: seqFields.seq.optional(), at: seqFields.at, mode: z.enum(SESSION_MODES) }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),

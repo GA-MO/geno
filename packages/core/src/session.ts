@@ -19,6 +19,7 @@ import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { ProviderName } from './providers.js';
 import type { ChildEvent, ChildOf } from './subagent.js';
+import type { WaitEvent } from './waiting.js';
 import type { LaneApplyRecord } from './tasks.js';
 import type { Brand } from './types.js';
 import type { WidgetRef } from './widget.js';
@@ -164,12 +165,13 @@ export type TurnEvent =
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   /** A lane applied into this session's workspace, its changes put under review like an edit's. */
   | ({ readonly kind: 'lane-apply'; readonly seq: number; readonly at: string; readonly changes: readonly FileChange[] } & LaneApplyRecord)
+  | WaitEvent
   | ChildEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints, restores, review decisions, retries, titles and child events record what happened around the conversation; the loop steps over them. */
+/** Checkpoints, restores, review decisions, retries, waits, titles and child events record what happened around the conversation; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -186,6 +188,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'child-start': false,
   'child-end': false,
   'lane-apply': false,
+  wait: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

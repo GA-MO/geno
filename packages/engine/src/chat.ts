@@ -18,6 +18,8 @@ import {
   type TokenUsage,
   type TurnErrorKind,
   type TurnEvent,
+  type Waiting,
+  waitLabel,
 } from '@g-code/core';
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { gatewayFor, type Gateway } from './gateway.js';
@@ -40,7 +42,11 @@ export const EXIT_CODES: Record<TurnErrorKind, number> = {
 export const formatRetry = ({ attempt, delayMs, message }: ModelRetry): string =>
   `retry ${attempt} in ${(delayMs / 1000).toFixed(1)}s: ${message}`;
 
-export const formatCost = (costUsd: number | null): string =>
+/** A wait as the CLI prints it, with the times it names in UTC. */
+export const formatWait = (wait: Waiting, now: number): string =>
+  `${waitLabel(wait, now, (ms) => `${new Date(ms).toISOString().slice(11, 16)} UTC`).toLowerCase()}${wait.retryAt === null ? ', until you retry or stop' : ''}: ${wait.message}`;
+
+export const formatCost =(costUsd: number | null): string =>
   costUsd === null ? 'cost=unknown' : `cost=$${costUsd.toFixed(6)}`;
 
 export const formatUsage = (usage: TokenUsage, costUsd: number | null): string =>
@@ -256,6 +262,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   ],
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
+  wait: ({ seq, at, wait }) => [`#${seq} ${formatWait(wait, Date.parse(at))}`],
   mode: ({ seq, mode }) => [`${seq === undefined ? '' : `#${seq} `}mode: ${mode}`],
   effort: ({ seq, effort }) => [`${seq === undefined ? '' : `#${seq} `}effort: ${effort}`],
   title: ({ seq, title }) => [`#${seq} renamed: ${title}`],
