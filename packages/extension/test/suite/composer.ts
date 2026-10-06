@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PROMPTS, THEMES } from './composer-fixture.js';
+import { panelWidth, rowFits } from './lanes-ui.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -41,6 +42,19 @@ const turns = () => count('.turn');
 const footers = () => count('.turn-footer');
 const trayChips = () =>
   panel<string[]>(`[...doc.querySelectorAll('.tray .tray-chip:not([hidden]), .tray .attachment-chip')].map((c) => c.classList.contains('browser-chip') ? 'browser' : c.classList.contains('queued-chip') ? 'queued' : c.dataset.attachment)`);
+
+/** Narrows the panel to about 300px, screenshots the row as `name`, checks nothing in it overlaps, and widens it again. */
+async function rowAt300(name: string): Promise<void> {
+  const before = await panel<number>('doc.defaultView.innerWidth');
+  const narrow = await panelWidth(300);
+  check(Math.abs(narrow - 300) <= 4, 'the panel narrows to about 300px', narrow);
+  await sleep(300);
+  await screenshots(name);
+  const row = await rowFits();
+  check(row.fits, `nothing in the ${name} row overlaps or leaves it at ${narrow}px`, row);
+  await panelWidth(before);
+  await sleep(300);
+}
 
 async function useTheme(theme: string): Promise<void> {
   await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
@@ -189,6 +203,7 @@ export async function run(): Promise<void> {
   await ui({ do: 'press', key: 'Escape' });
   await waitFor('the chat again', async () => (await panel<string>('doc.body.dataset.view')) === 'chat');
   await screenshots('idle');
+  await rowAt300('idle-300');
 
   // The browser and attachments in the tray.
   await typeDraft(PROMPTS.browse);
@@ -232,6 +247,7 @@ export async function run(): Promise<void> {
   await waitFor('the queued chip', async () => (await textOf('.queued-chip:not([hidden]) .tray-label')) === PROMPTS.queued);
   check((await draft()) === '' && (await turns()) === 2, 'queuing empties the composer and starts no turn', { draft: await draft(), turns: await turns() });
   await screenshots('running');
+  await rowAt300('running-300');
   await ui({ do: 'release' });
   await waitFor('the queued follow-up to go once the turn finishes', async () => (await turns()) === 3 && (await footers()) === 3);
   check((await textOf('.turn:last-of-type .request-bubble')) === PROMPTS.queued, 'the follow-up was sent as typed', await textOf('.turn:last-of-type .request-bubble'));

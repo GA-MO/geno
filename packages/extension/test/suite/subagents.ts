@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ANSWERS, MARKERS, PROMPTS, THEMES } from './subagents-fixture.js';
+import { rowFits } from './lanes-ui.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -80,20 +81,6 @@ async function screenshots(name: string): Promise<void> {
 
 /** Drags the side bar's edge until the panel is `target` px wide; the width it got. */
 const panelWidth = (target: number) => ui<number>({ do: 'resize', width: target });
-
-/** Whether every shown control of the composer's bottom row stays inside it, and the row scrolls nothing. */
-const rowFits = () =>
-  panel<{ fits: boolean; scroll: number; client: number; outside: string[] }>(
-    `(() => {
-      const bar = doc.querySelector('.input-toolbar');
-      const box = bar.getBoundingClientRect();
-      const outside = [...bar.querySelectorAll('*')].filter((e) => e.getClientRects().length > 0).filter((e) => {
-        const r = e.getBoundingClientRect();
-        return r.right > box.right + 0.5 || r.left < box.left - 0.5;
-      }).map((e) => e.className || e.tagName);
-      return { fits: outside.length === 0 && bar.scrollWidth <= bar.clientWidth, scroll: bar.scrollWidth, client: bar.clientWidth, outside };
-    })()`,
-  );
 
 /** The pill's shown words, its hidden parts left out. */
 const pillText = () => panel<string | null>(`doc.querySelector('.activity-pill')?.innerText.trim() ?? null`);

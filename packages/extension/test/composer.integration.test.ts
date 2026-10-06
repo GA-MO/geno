@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
-import { capturePanel } from './media.js';
+import { capturePanel, resizeSideBar } from './media.js';
 import { captureWindow, freePort } from './screenshot.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -57,6 +57,7 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   press: async ({ key, modifiers }, w) => press(await webview(w, EXTENSION, READY), key, modifiers),
   pointerAway: async (_action, w) => w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 300 }),
   release: async () => release(),
+  resize: async ({ width }, w) => resizeSideBar(w, width),
   screenshot: async ({ name }, w) => {
     if (shots === undefined) return;
     await captureWindow(debugPort, path.resolve(shots, `${name}.png`));

@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { ANSWERS, MARKERS, PROMPTS, RELEASES, SENT, THEMES } from './steer-fixture.js';
+import { rowFits } from './lanes-ui.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -49,20 +50,6 @@ const railOf = (turn: number) =>
   panel<string[]>(`[...doc.querySelectorAll('.transcript .turn:nth-of-type(${turn}) > .rail > li')].map((li) => [...li.classList].find((c) => c.startsWith('step-') && c !== 'step'))`);
 
 const release = (file: string) => writeFile(path.join(vscode.workspace.workspaceFolders![0]!.uri.fsPath, file), '');
-
-/** Whether every shown control of the composer's bottom row stays inside it, and the row scrolls nothing. */
-const rowFits = () =>
-  panel<{ fits: boolean; scroll: number; client: number; outside: string[] }>(
-    `(() => {
-      const bar = doc.querySelector('.input-toolbar');
-      const box = bar.getBoundingClientRect();
-      const outside = [...bar.querySelectorAll('*')].filter((e) => e.getClientRects().length > 0).filter((e) => {
-        const r = e.getBoundingClientRect();
-        return r.right > box.right + 0.5 || r.left < box.left - 0.5;
-      }).map((e) => e.className || e.tagName);
-      return { fits: outside.length === 0 && bar.scrollWidth <= bar.clientWidth, scroll: bar.scrollWidth, client: bar.clientWidth, outside };
-    })()`,
-  );
 
 async function useTheme(theme: string): Promise<void> {
   await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
