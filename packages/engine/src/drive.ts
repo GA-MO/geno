@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, withTurnEffort, type ApprovalRecord, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -24,6 +24,8 @@ export type Mode = {
   readonly beforeCall?: (events: readonly TurnEvent[]) => Promise<TurnEvent>;
   /** How each call's effort follows from the session's; undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy;
+  /** A tool call the user typed, such as `@explore`: logged in place of the first model call, and the run ends once its tools ran. */
+  readonly issued?: AssistantTurn;
 };
 
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number };
@@ -154,10 +156,17 @@ export async function drive(
   const { session, file } = log;
   const { watcher } = surface;
   const events: TurnEvent[] = [...log.events];
-  const record = async (event: TurnEvent) => {
-    events.push(event);
-    await appendEvent(file, event);
-    watcher.logged(event);
+  // Subagents log beside the loop while their tool runs, so writes take turns and each takes its number as it is written.
+  let writing = Promise.resolve();
+  const record = (event: TurnEvent): Promise<void> => {
+    const written = writing.then(async () => {
+      const numbered = event.kind === 'session-start' ? event : ({ ...event, seq: nextSeq(events) } as TurnEvent);
+      events.push(numbered);
+      await appendEvent(file, numbered);
+      watcher.logged(numbered);
+    });
+    writing = written.catch(() => {});
+    return written;
   };
   const run: Run = { firstSeq: nextSeq(events), ...limits };
   if (prompt !== '') {
@@ -177,9 +186,10 @@ export async function drive(
     files: surface.files,
     events: () => events,
     earlierCalls: async () => {},
+    logChild: (note) => record({ ...note, seq: 0 }),
   };
 
-  const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.() === true;
+  const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.(use.input) === true;
 
   // Batch by batch (see ToolBatch): an edit or command runs alone, after every call before it and before every call after.
   // Returns the tools of a batch the user interrupted, timed up to the interruption, or undefined when all ran.
@@ -231,6 +241,7 @@ export async function drive(
     return undefined;
   };
 
+  let issued = mode.issued;
   const loaded = new Map<Sha256, string>();
   const callModel = async (): Promise<void> => {
     const startAt = Date.now();
@@ -269,7 +280,13 @@ export async function drive(
       const exitCode = await finish(io, events, run, step.reason, record);
       return { reason: step.reason, exitCode, events, run };
     }
-    if (step.kind === 'call-model') await callModel();
+    if (step.kind === 'call-model' && issued !== undefined) {
+      await record({ kind: 'assistant', seq: nextSeq(events), at: new Date().toISOString(), ...issued, issuedBy: 'user' });
+      issued = undefined;
+    } else if (step.kind === 'call-model' && mode.issued !== undefined) {
+      const exitCode = await finish(io, events, run, 'end_turn', record);
+      return { reason: 'end_turn', exitCode, events, run };
+    } else if (step.kind === 'call-model') await callModel();
     else {
       const interrupted = await runTools(step.toolUses);
       if (interrupted !== undefined) {
