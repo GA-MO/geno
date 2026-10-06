@@ -225,6 +225,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   const bash = executor({
     input: z.strictObject({
       command: z.string().min(1),
+      description: optional(z.string()),
       timeout_seconds: optional(z.number().int().positive().max(MAX_BASH_TIMEOUT_SECONDS)),
     }),
     describe: ({ command }) => `bash ${command}`,
