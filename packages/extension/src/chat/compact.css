@@ -5,19 +5,23 @@
   font-size: var(--small);
 }
 
+/* A dashed rule across the step marks the cut; the counts wrap under the title on a narrow panel. */
 .compact-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   width: 100%;
-  min-height: 24px;
-  padding: 2px 0;
+  padding: 5px 0 2px;
   border: none;
-  border-radius: 4px;
+  border-top: 1px dashed var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 28%, transparent));
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.compact-head:hover {
+  color: var(--vscode-foreground);
 }
 
 .compact-head:focus-visible {
@@ -25,41 +29,23 @@
   outline-offset: 1px;
 }
 
-.compact-rule {
-  flex: 1 1 12px;
-  min-width: 12px;
-  border-top: 1px dashed var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 28%, transparent));
-}
-
-.compact-label {
-  display: inline-flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  column-gap: 6px;
-  min-width: 0;
-  text-align: center;
-}
-
 .compact-title {
   color: var(--vscode-foreground);
   font-weight: 600;
 }
 
-.compact-head:hover .compact-title {
-  text-decoration: underline;
-}
-
 .compact-numbers {
+  margin-left: 6px;
   font-variant-numeric: tabular-nums;
 }
 
-.compact-label .codicon {
-  font-size: 14px;
+.chevron-slot {
+  display: inline-flex;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
-.compact-label .chevron {
+.compact-head .chevron {
   font-size: 12px;
 }
 

@@ -12,38 +12,42 @@ const fileList = (label: string, files: readonly string[]): HTMLElement | false 
     h('ul', {}, ...files.map((file) => h('li', { title: file }, h('code', {}, file)))),
   );
 
-/** The divider where the context was compacted: a line with the counts that opens to the summary and the files. */
+/**
+ * The divider where the context was compacted: a line with the counts that opens to the summary and the files. It opens
+ * and folds in place, so the button keeps the keyboard's focus; the summary renders the first time it opens.
+ */
 export function compactStep(block: CompactBlock, ui: Ui): HTMLElement {
   const id = compactFoldId(block);
-  const open = ui.isOpen(id);
   const look = compactLook(block.mark);
-  const body = `compact-body-${block.mark.seq}`;
+  const bodyId = `compact-body-${block.mark.seq}`;
   const { read, changed } = block.mark.files;
-  return h(
-    'section',
-    { class: 'compact', 'data-open': String(open), 'data-trigger': block.mark.trigger, 'aria-label': `${look.title}, ${look.numbers}` },
-    h(
-      'button',
-      { type: 'button', class: 'compact-head', 'aria-expanded': String(open), 'aria-controls': body, 'data-focus': id, title: open ? 'Hide the summary' : 'Show the summary', onclick: () => ui.toggle(id) },
-      h('span', { class: 'compact-rule', 'aria-hidden': 'true' }),
-      h(
-        'span',
-        { class: 'compact-label' },
-        icon('fold', 'compact-icon'),
-        h('span', { class: 'compact-title' }, look.title),
-        h('span', { class: 'compact-numbers' }, look.numbers),
-        icon(open ? 'chevron-down' : 'chevron-right', 'chevron'),
-      ),
-      h('span', { class: 'compact-rule', 'aria-hidden': 'true' }),
-    ),
-    h(
-      'div',
-      { class: 'compact-body', id: body, ...(open ? {} : { hidden: true }) },
-      look.reason !== undefined && h('p', { class: 'compact-reason' }, look.reason),
-      look.focus !== undefined && h('p', { class: 'compact-focus' }, h('span', { class: 'compact-files-label' }, 'Focus'), look.focus),
-      open && h('div', { class: 'compact-summary' }, textBlock(block.mark.summary, false, ui)),
-      fileList('Read', read),
-      fileList('Changed', changed),
-    ),
+  const chevron = h('span', { class: 'chevron-slot' });
+  const summary = h('div', { class: 'compact-summary' });
+  const body = h(
+    'div',
+    { class: 'compact-body', id: bodyId },
+    look.reason !== undefined && h('p', { class: 'compact-reason' }, look.reason),
+    look.focus !== undefined && h('p', { class: 'compact-focus' }, h('span', { class: 'compact-files-label' }, 'Focus'), look.focus),
+    summary,
+    fileList('Read', read),
+    fileList('Changed', changed),
   );
+  const head = h(
+    'button',
+    { type: 'button', class: 'compact-head', 'aria-controls': bodyId, 'data-focus': id, onclick: () => (ui.toggle(id), show(ui.isOpen(id))) },
+    h('span', { class: 'compact-title' }, look.title),
+    h('span', { class: 'compact-numbers' }, look.numbers),
+    chevron,
+  );
+  const section = h('section', { class: 'compact', 'data-trigger': block.mark.trigger, 'aria-label': `${look.title}, ${look.numbers}` }, head, body);
+  const show = (open: boolean): void => {
+    section.dataset['open'] = String(open);
+    head.setAttribute('aria-expanded', String(open));
+    head.title = open ? 'Hide the summary' : 'Show the summary';
+    chevron.replaceChildren(icon(open ? 'chevron-down' : 'chevron-right', 'chevron'));
+    body.hidden = !open;
+    if (open && summary.childElementCount === 0) summary.append(textBlock(block.mark.summary, false, ui));
+  };
+  show(ui.isOpen(id));
+  return section;
 }
