@@ -73,6 +73,11 @@ export async function run(): Promise<void> {
   await send(PROMPTS.seen);
   await waitFor('the watched answer', async () => (await transcript()).includes(ANSWERS.seen));
   await waitFor('the watched turn to end', async () => !(await shown('button.stop')));
+  // Opening it from the list counts as seeing it, even in a window without the focus, as on a busy test machine.
+  await openTasks();
+  await waitFor('the watched turn in the list', async () => (await count(rowOf(MARKERS.seen))) === 1);
+  await click(`${rowOf(MARKERS.seen)} .task-title`);
+  await waitFor('the chat again', async () => (await view()) === 'chat');
 
   // Working: a turn the model holds; it goes on in the background.
   await newChat();
@@ -196,7 +201,9 @@ export async function run(): Promise<void> {
   await waitFor('the parent’s answer', async () => (await transcript()).includes(ANSWERS.parent), 60_000, transcript);
   await waitFor('the badge to count one', async () => (await badge()) === '1', 10_000, badge);
   await openTasks();
-  await waitFor('the parent in Done', async () => (await sectionOf(MARKERS.parent)) === 'done', 10_000, listed);
+  // The chat in view counts as seen only in a window with the focus; a test machine's window may not have it.
+  const watched = vscode.window.state.focused ? 'done' : 'ready';
+  await waitFor(`the parent in ${watched}`, async () => (await sectionOf(MARKERS.parent)) === watched, 10_000, listed);
   check((await sectionOf(MARKERS.ask)) === 'needs-you', 'the other card still needs the user');
   await press('Escape');
 }
