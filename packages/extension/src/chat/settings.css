@@ -320,6 +320,12 @@
   overflow-wrap: anywhere;
 }
 
+.agent-plan,
+.agent-note {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
 .agent-install {
   display: block;
   padding: 6px 8px;
