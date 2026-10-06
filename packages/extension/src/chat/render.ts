@@ -613,6 +613,7 @@ export function turnHead(turn: Turn, backend: BackendShown | undefined): HTMLEle
       headerOf(turn, formatDuration),
     ),
     turn.mode === 'plan' && h('span', { class: 'turn-mode', title: 'This turn ran in Plan mode, which changes nothing' }, icon('checklist'), 'Plan'),
+    turn.wake !== undefined && h('span', { class: 'turn-wake', title: `Geno started this turn by itself: ${turn.wake.replace(/^woke: /, '')}` }, icon('bell'), h('span', { class: 'turn-wake-text' }, turn.wake)),
   );
 }
 

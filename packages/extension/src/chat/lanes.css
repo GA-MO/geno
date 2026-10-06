@@ -153,6 +153,28 @@
   color: var(--muted);
 }
 
+.task-wakes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--small);
+  color: var(--muted);
+}
+
+.task-wakes .wake-icon {
+  flex: none;
+  font-size: 12px;
+}
+
+.task-wakes-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .task-job {
   display: flex;
   align-items: center;

@@ -1,7 +1,8 @@
 import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, Section, TaskRecord, TaskStatus } from '@g-code/core';
-import { placeTasks, SECTIONS } from '@g-code/core/attention';
+import { isWaking, placeTasks, SECTIONS } from '@g-code/core/attention';
 import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
+import { WAKE_PAUSE_TEXT, waitsForText } from '@g-code/core/wake';
 import { clockOf, formatCost, formatDuration } from './format.js';
 
 /**
@@ -36,6 +37,8 @@ export type LanesFromView =
   /** The user looked at an Arena run in its pane. */
   | { readonly type: 'task-seen'; readonly id: string }
   | { readonly type: 'task-stop'; readonly sessionId: string }
+  /** The session stops waiting to be woken. */
+  | { readonly type: 'task-wake-cancel'; readonly sessionId: string }
   /** Opens the session a fork came from, from the fork's row. */
   | { readonly type: 'task-origin'; readonly sessionId: string; readonly workspace: string };
 
@@ -127,6 +130,8 @@ export type TaskRow = {
   readonly jobs: readonly { readonly id: string; readonly label: string }[];
   /** The session it was forked from, which the row links to. */
   readonly forkedFrom: { readonly id: string; readonly title: string; readonly workspace: string } | undefined;
+  /** What will wake the session after its turn, in words, with Cancel; undefined while it waits on nothing. */
+  readonly wakes: string | undefined;
 };
 
 /** A row in Needs you says what the user is to do, which may be a child's question on a running parent. */
@@ -134,12 +139,17 @@ const NEEDS_YOU_BADGES: { readonly [R in Exclude<NeedsYouReason, 'limited'>]: Ba
   permission: { label: 'Needs permission', tone: 'wait' },
   question: { label: 'Needs your answer', tone: 'wait' },
   failed: { label: 'Failed', tone: 'failed' },
+  paused: { label: 'Wake-ups paused', tone: 'wait' },
 };
+
+/** A turn that ended and waits for its background work to wake the session. */
+const WAKING: Badge = { label: 'Waiting to wake', tone: 'busy' };
 
 function stateOf(task: TaskRecord, attention: Attention, now: number, clock: (ms: number) => string): Badge {
   if (task.status === 'waiting' && task.waiting !== undefined) return { label: waitLabel(task.waiting, now, clock), tone: 'wait' };
   if (attention.kind === 'needs-you' && attention.reason !== 'limited') return NEEDS_YOU_BADGES[attention.reason];
   if (attention.kind === 'needs-you') return { label: 'Limited', tone: 'wait' };
+  if (!isLiveStatus(task.status) && isWaking(task.wake)) return WAKING;
   return TASK_BADGES[task.status];
 }
 
@@ -170,7 +180,15 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     current: task.sessionId === shown,
     jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: job.description ?? job.command })),
     forkedFrom: task.forkedFrom === undefined ? undefined : { id: task.forkedFrom.sessionId, title: task.forkedFrom.title, workspace: task.workspace },
+    wakes: wakesOf(task, clock),
   };
+}
+
+/** What a session waits on to be woken, or why its wake-ups wait for the user. */
+function wakesOf(task: TaskRecord, clock: (ms: number) => string): string | undefined {
+  if (isLiveStatus(task.status) || task.wake === undefined) return undefined;
+  if (task.wake.paused !== undefined) return task.wake.waitsFor.length === 0 && task.wake.paused !== 'cap' ? undefined : WAKE_PAUSE_TEXT[task.wake.paused];
+  return task.wake.waitsFor.length === 0 ? undefined : waitsForText(task.wake.waitsFor, clock);
 }
 
 /** How many Done rows show before "Show more". */

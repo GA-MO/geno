@@ -183,6 +183,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
         { class: 'task-jobs', 'aria-label': 'Background commands' },
         ...row.jobs.map((job) => h('li', { class: 'task-job', 'data-job': job.id, title: job.label }, icon('circle-filled', 'job-icon'), h('span', { class: 'task-job-id' }, job.id), h('span', { class: 'task-job-label' }, job.label))),
       ),
+    row.wakes !== undefined && h('p', { class: 'task-wakes', title: row.wakes }, icon('bell', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.wakes)),
     h(
       'div',
       { class: 'lane-actions' },
@@ -191,6 +192,12 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
         : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', 'data-focus': `task-open:${row.id}`, onclick: open }, 'Open'),
       row.stop && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
       row.stop && !row.current && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'message', title: 'Send it a message that lands at its next tool round', onclick: message }, 'Message'),
+      row.wakes !== undefined &&
+        h(
+          'button',
+          { type: 'button', class: 'button small ghost', 'data-action': 'wake-cancel', title: 'Stop waiting: nothing wakes this chat until you send it a message', onclick: () => post({ type: 'task-wake-cancel', sessionId: row.id }) },
+          'Cancel',
+        ),
     ),
   );
 }

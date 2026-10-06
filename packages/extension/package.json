@@ -365,6 +365,11 @@
           "default": "auto",
           "description": "How you review the edits Geno has made. Approval modes (Ask, Auto, Plan) decide what Geno may do; this decides what happens after."
         },
+        "gcode.wake.auto": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let a turn end while the background work it started still runs, and start a turn by itself when that work reports: a background subagent's report, a background command's end, a `monitor` match or a `schedule_wakeup`. It never starts one while you type, while a card waits for you, or while a turn runs, and pauses after 12 such turns in an hour. Off, a turn waits for its background subagents, and the rest waits for your next message. A change applies to the turns that start after it."
+        },
         "gcode.ui.showChanges": {
           "type": "boolean",
           "default": false,

@@ -314,7 +314,8 @@ function turnShell(turn: Turn): HTMLElement {
   return h(
     'article',
     { class: 'turn', 'data-turn': turn.id },
-    userMessage(turn.prompt, turn.attachments, ui, turn.command),
+    // A woken turn has no message of the user's; its head says why it started.
+    turn.wake === undefined && userMessage(turn.prompt, turn.attachments, ui, turn.command),
     h('div', { class: 'rewind-slot' }),
     h('div', { class: 'head-slot' }),
     h('ol', { class: 'rail' }),
@@ -663,6 +664,17 @@ function redraft(): void {
     ),
   );
   showTray();
+  reportDraft();
+}
+
+let drafting = false;
+
+/** Tells the host when the composer gains or loses a draft: while the user types, Geno wakes no turn. */
+function reportDraft(): void {
+  const typing = input.value.trim() !== '';
+  if (typing === drafting) return;
+  drafting = typing;
+  host.postMessage({ type: 'drafting', typing } satisfies FromView);
 }
 
 /** Replaces the draft, putting the caret at `caret` or the end, and keeps the focus in the composer. */

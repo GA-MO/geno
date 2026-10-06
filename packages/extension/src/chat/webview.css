@@ -2040,6 +2040,32 @@ body.diagram-tab {
   font-size: 11px;
 }
 
+/* Why Geno woke the session for this turn. It is the one part of the head that gives way at a narrow panel. */
+.turn-wake {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: calc(var(--small) - 1px);
+  line-height: 16px;
+}
+
+.turn-wake .codicon {
+  flex: none;
+  font-size: 11px;
+}
+
+.turn-wake-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .start-building {
   margin: 8px 0 0 var(--rail-indent);
 }
@@ -2769,7 +2795,8 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     background: var(--glass-hover);
   }
 
-  & .turn-mode {
+  & .turn-mode,
+  & .turn-wake {
     border-color: var(--glass-edge-hi);
     background: var(--glass-pane-raised);
   }
