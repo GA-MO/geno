@@ -31,6 +31,17 @@ import {
   type HunkStatus,
   type InlineEditTarget,
   type RenameSessionRequest,
+  DETACH_METHOD,
+  isLive,
+  LANE_APPLY_META,
+  LANE_ROOT,
+  laneApplyPrompt,
+  NOT_SHOWN_ERROR,
+  RUNNING_META,
+  TASK_STATUSES,
+  TASK_UPDATE_METHOD,
+  type DetachRequest,
+  type TaskRecord,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -46,6 +57,7 @@ import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
+import { TaskHost } from './tasks-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
 import {
@@ -83,6 +95,8 @@ export const STOP_COMMAND = 'gcode.chat.stop';
 export const NEW_CHAT_COMMAND = 'gcode.chat.new';
 export const HISTORY_COMMAND = 'gcode.chat.history';
 export const MCP_COMMAND = 'gcode.chat.mcp';
+export const LANES_COMMAND = 'gcode.chat.lanes';
+export const TASKS_COMMAND = 'gcode.chat.tasks';
 /** The settings the panel's look comes from. */
 export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail'] as const;
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
@@ -138,6 +152,29 @@ const replayedChange = z.object({
   hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
 });
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable() });
+const taskUpdate = z.object({
+  task: z.object({
+    sessionId: z.string(),
+    title: z.string(),
+    workspace: z.string(),
+    lane: z.string().nullable(),
+    status: z.enum(TASK_STATUSES),
+    startedAt: z.number(),
+    endedAt: z.number().nullable(),
+    usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).optional(),
+  }),
+  notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
+});
+
+/** How a turn the panel adopted after a reload ends, by the status its task ended in. */
+const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 'streaming'> | undefined>> = {
+  running: undefined,
+  'needs-input': undefined,
+  done: 'done',
+  failed: 'failed',
+  stopped: 'stopped',
+};
+
 const approvalRecord = z.object({
   decidedBy: z.enum(['rule', 'classifier', 'user']),
   verdict: z.enum(['allow', 'deny']),
@@ -273,6 +310,10 @@ function totalsLabel(transcript: Transcript): string {
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 const warn = (error: unknown): void => void vscode.window.showWarningMessage(messageOf(error));
 
+/** An open question of a session the panel left; the engine asks the next window that shows the session. */
+const NOT_SHOWN = Symbol('not shown');
+const notShown = (sessionId: string) => new acp.RequestError(NOT_SHOWN_ERROR.code, `the panel no longer shows ${sessionId}`, { reason: NOT_SHOWN_ERROR.reason });
+
 /** The engine session that chat turns, inline edits and review share. */
 export type SessionLink = { readonly connection: Connection; readonly sessionId: string };
 
@@ -285,17 +326,28 @@ export type WriteListener = (document: vscode.TextDocument, change: FileChange) 
  * extension tests, so a test could not reload into it.
  */
 export function sessionMemory(storage: vscode.Uri | undefined) {
-  if (storage === undefined) return { load: async (): Promise<string | undefined> => undefined, save: async (_id: string) => {} };
+  if (storage === undefined) return { load: async (): Promise<StoredSession | undefined> => undefined, save: async (_id: string, _cwd?: string) => {} };
   const file = vscode.Uri.joinPath(storage, 'session-id');
   return {
-    load: async (): Promise<string | undefined> =>
-      (await vscode.workspace.fs.readFile(file).then((bytes) => new TextDecoder().decode(bytes).trim(), () => '')) || undefined,
-    async save(id: string): Promise<void> {
+    /** The id, and on a second line the folder the session works in when that is one of the folder's lanes. */
+    async load(): Promise<StoredSession | undefined> {
+      const [id, cwd] = (await vscode.workspace.fs.readFile(file).then((bytes) => new TextDecoder().decode(bytes), () => '')).trim().split('\n');
+      return id === undefined || id === '' ? undefined : { id, cwd: cwd || undefined };
+    },
+    async save(id: string, cwd?: string): Promise<void> {
       await vscode.workspace.fs.createDirectory(storage);
-      await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(id));
+      await vscode.workspace.fs.writeFile(file, new TextEncoder().encode(cwd === undefined ? id : `${id}\n${cwd}`));
     },
   };
 }
+
+export type StoredSession = { readonly id: string; readonly cwd: string | undefined };
+
+/** Whether `folder` is one of `main`'s lanes, whose sessions this window shows as its own. */
+export const isLaneOf = (folder: string, main: string): boolean => {
+  const relative = path.relative(path.join(main, LANE_ROOT), folder);
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative) && !relative.includes(path.sep);
+};
 
 export type SessionMemory = ReturnType<typeof sessionMemory>;
 
@@ -308,9 +360,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private nextTurn = 0;
   private readonly sessions = new WeakMap<Connection, Promise<string>>();
   private turn: SessionLink | undefined;
-  private readonly permissions = new Map<string, (optionId: string | undefined) => void>();
+  private readonly permissions = new Map<string, (optionId: string | undefined | typeof NOT_SHOWN) => void>();
   /** Open question cards, each settled with the user's answers or refusal, or undefined when cancelled. */
-  private readonly questions = new Map<string, (answer: AskUserAnswer | undefined) => void>();
+  private readonly questions = new Map<string, (answer: AskUserAnswer | undefined | typeof NOT_SHOWN) => void>();
   private nextPermission = 0;
   private readonly mentions = new Mentions();
   /** The session of the latest turn, whose attachments folder a pasted image opens from. */
@@ -338,14 +390,22 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly settingsPage: SettingsPage;
   /** The settings action ran before the webview was ready; it opens the page once it is. */
   private settingsAsked = false;
+  /** The Lanes or Tasks action ran before the webview was ready; it opens that pane once it is. */
+  private paneAsked: 'show-lanes' | 'show-tasks' | undefined;
   /** The composer's effort, context, running cost and model choices. */
   private readonly composer: ComposerHost;
   private readonly widgets: ReturnType<typeof widgetHost>;
+  /** The engine's tasks and this folder's lanes, for their panes and their notices. */
+  private readonly background: TaskHost;
+  /** The folder the shown session works in, when it is one of the folder's lanes. */
+  private shownCwd: string | undefined;
+  /** The running turn of the shown session that another window started, which the panel took over on load. */
+  private adopted: string | undefined;
 
   constructor(
     settings: () => Promise<EngineSettings>,
     private readonly extensionUri: vscode.Uri,
-    output: vscode.OutputChannel,
+    private readonly output: vscode.OutputChannel,
     private readonly memory: SessionMemory,
     private readonly onWrite: WriteListener,
     private readonly modelName: () => string,
@@ -370,12 +430,27 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       modelName,
       (provider, model) => setRole('chat', provider, model),
     );
+    this.background = new TaskHost(
+      () => this.engine.connection(),
+      (message) => void this.view?.webview.postMessage(message satisfies ToView),
+      {
+        shown: () => this.shown,
+        panelVisible: () => this.view?.visible === true,
+        openTask: (sessionId, workspace) => this.openChat(sessionId, workspace),
+        applyLane: (name) => this.applyLane(name),
+        ended: (task) => this.adoptedEnded(task),
+        defaultMode,
+      },
+      (running) => {
+        if (this.view !== undefined) this.view.badge = running === 0 ? undefined : { value: running, tooltip: running === 1 ? '1 task running in the background' : `${running} tasks running in the background` };
+      },
+    );
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
 
-  /** The session id a previous window left, if any. */
-  storedSession(): Promise<string | undefined> {
+  /** The session a previous window left, if any. */
+  storedSession(): Promise<StoredSession | undefined> {
     return this.memory.load();
   }
 
@@ -421,6 +496,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(acp.methods.client.fs.readTextFile, ({ params }) => readTextFile(params))
       .onRequest(acp.methods.client.fs.writeTextFile, ({ params }) =>
         writeTextFile(params, (document, change) => {
+          if (!this.isOurs(params.sessionId)) return;
           this.onWrite(document, change);
           const toolId = params._meta?.[TOOL_CALL_META];
           if (typeof toolId !== 'string') return;
@@ -432,10 +508,18 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(acp.methods.client.elicitation.create, ({ params, signal }) => this.askQuestion(params, signal))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
-      .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update));
+      .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
+      .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params));
+  }
+
+  /** The shown session, the one being loaded, or one of the shown session's subagents. */
+  private isOurs(sessionId: string): boolean {
+    return sessionId === this.shown || this.replay?.id === sessionId || childOf(this.transcript, sessionId) !== undefined;
   }
 
   private updated(sessionId: string, update: acp.SessionUpdate): void {
+    // A session the panel just left can still send what was on its way; it belongs to that session's log, not here.
+    if (!this.isOurs(sessionId) && update.sessionUpdate !== 'available_commands_update') return;
     if (update.sessionUpdate === 'subagent_update') {
       const action = subagentAction(update, Date.now());
       if (action !== undefined && sessionId === this.shown) this.dispatch(action);
@@ -535,26 +619,64 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (this.turn !== undefined) throw new Error('a turn is already running; stop it first');
     this.dispatch({ type: 'turn-start', id: `t${this.nextTurn++}`, at: Date.now(), prompt: shown, attachments: attached, mode: this.modes.current, command });
     this.composer.turnStarted();
+    // The turn this call runs; the panel may leave it for another session, and it then ends in the background.
+    let mine: SessionLink | undefined;
+    const left = () => mine === undefined || this.turn !== mine;
     try {
-      this.turn = await this.link();
-      this.lastSession = this.turn.sessionId;
-      const response = await this.turn.connection.agent.request(acp.methods.agent.session.prompt, {
-        sessionId: this.turn.sessionId,
+      mine = await this.link();
+      this.turn = mine;
+      this.lastSession = mine.sessionId;
+      const response = await mine.connection.agent.request(acp.methods.agent.session.prompt, {
+        sessionId: mine.sessionId,
         prompt: [{ type: 'text', text }, ...(await attachments())],
         ...(meta === undefined ? {} : { _meta: meta }),
       });
+      if (left()) return response.stopReason;
       const ending = ENDINGS[response.stopReason];
       if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
       this.dispatch({ type: 'turn-end', at: Date.now(), status: ending.status, usage: usageOf(response) });
       return response.stopReason;
     } catch (error) {
+      if (mine !== undefined && left()) throw error;
       this.dispatch({ type: 'error', message: error instanceof Error ? error.message : String(error) });
       this.dispatch({ type: 'turn-end', at: Date.now(), status: 'failed', usage: undefined });
       throw error;
     } finally {
-      this.turn = undefined;
-      this.mcp.refresh();
+      if (mine === undefined || this.turn === mine) {
+        this.turn = undefined;
+        this.mcp.refresh();
+      }
     }
+  }
+
+  /** Applies a lane into the main checkout as a turn of the shown chat, whose edit steps put each file's hunks under review. */
+  async applyLane(name: string): Promise<acp.StopReason> {
+    if (this.shownCwd !== undefined) throw new Error('Open a chat of the main checkout to apply a lane into it.');
+    const prompt = laneApplyPrompt(name);
+    return this.prompt(prompt, prompt, { [LANE_APPLY_META]: name }, async () => []);
+  }
+
+  /** The adopted turn ended: its end shows as a sent one's would, with the usage the task reports. */
+  private adoptedEnded(task: TaskRecord): void {
+    const status = ADOPTED_ENDS[task.status];
+    if (this.adopted !== task.sessionId || status === undefined) return;
+    this.adopted = undefined;
+    this.turn = undefined;
+    this.dispatch({ type: 'turn-end', at: task.endedAt ?? Date.now(), status, usage: task.usage });
+    this.mcp.refresh();
+  }
+
+  /**
+   * The panel moves away from a session whose turn still runs: the turn goes on in the background, and the questions
+   * it waits on go back to the engine, which asks again when a window shows the session.
+   */
+  private leaveRunning(): SessionLink | undefined {
+    const running = this.turn;
+    this.turn = undefined;
+    this.adopted = undefined;
+    for (const answer of this.permissions.values()) answer(NOT_SHOWN);
+    for (const answer of this.questions.values()) answer(NOT_SHOWN);
+    return running;
   }
 
   async stop(): Promise<void> {
@@ -576,6 +698,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private sessionFor(connection: Connection): Promise<string> {
     let session = this.sessions.get(connection);
     if (session === undefined) {
+      void this.background.connected(connection).catch((error: unknown) => this.output.appendLine(`tasks: ${messageOf(error)}`));
       session = this.openSession(connection);
       this.sessions.set(connection, session);
       session.catch(() => this.sessions.delete(connection));
@@ -588,7 +711,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
    * loaded, its transcript drawn. A new session starts when there is none or the engine no longer has it.
    */
   private async openSession(connection: Connection): Promise<string> {
-    const { cwd } = connection;
+    const cwd = this.shownCwd ?? connection.cwd;
     if (this.shown !== undefined) {
       try {
         const { modes, configOptions } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
@@ -602,8 +725,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const stored = this.shown === undefined ? await this.storedSession() : undefined;
     if (stored !== undefined) {
       try {
-        await this.load(connection, stored);
-        return stored;
+        await this.load(connection, stored.id, stored.cwd);
+        return stored.id;
       } catch {
         // A log deleted or from another machine; start over.
       }
@@ -625,34 +748,53 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     return sessionId;
   }
 
-  /** Loads a session the engine logged, replaying its turns into a transcript the panel then shows. */
-  private async load(connection: Connection, sessionId: string): Promise<void> {
+  /**
+   * Loads a session the engine logged, replaying its turns into a transcript the panel then shows. `cwd` is the lane
+   * the session works in, if it is a lane's. A turn still running, such as one sent before the window reloaded, stays
+   * open: its updates follow the replay, and its task's end ends it.
+   */
+  private async load(connection: Connection, sessionId: string, cwd?: string): Promise<void> {
     let finished = () => {};
     const tail = new Promise<void>((resolve) => (finished = resolve));
     const replay: Replay = { id: sessionId, transcript: emptyTranscript(this.modelName()), end: undefined, title: undefined, finished };
     this.replay = replay;
     let modes: Modes | undefined;
     let options: acp.LoadSessionResponse['configOptions'];
+    let running = false;
     try {
-      const loaded = await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+      const loaded = await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: cwd ?? connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
       modes = modesOf(loaded.modes);
       options = loaded.configOptions;
+      running = loaded._meta?.[RUNNING_META] === true;
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
     }
-    const transcript = replay.end === undefined ? replay.transcript : reduce(replay.transcript, replay.end);
-    await this.show(sessionId, transcript, replay.title, modes ?? { current: 'ask', available: MODE_FALLBACK }, options);
+    const transcript = replay.end === undefined || running ? replay.transcript : reduce(replay.transcript, replay.end);
+    // The engine may have ended the turn between its answer and now; its task says so.
+    const task = this.background.get(sessionId);
+    const adopt = running && (task === undefined || isLive(task.status));
+    await this.show(sessionId, transcript, replay.title, modes ?? { current: 'ask', available: MODE_FALLBACK }, options, cwd);
+    if (running && !adopt && task !== undefined) {
+      this.adopted = sessionId;
+      this.adoptedEnded(task);
+    } else if (adopt) {
+      this.adopted = sessionId;
+      this.turn = { connection, sessionId };
+      this.composer.turnStarted();
+    }
   }
 
   /** Makes the session the panel's: remembered for the next window, its transcript and title shown. */
-  private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes, options: acp.NewSessionResponse['configOptions']): Promise<void> {
+  private async show(sessionId: string, transcript: Transcript, title: string | undefined, modes: Modes, options: acp.NewSessionResponse['configOptions'], cwd?: string): Promise<void> {
     this.shown = sessionId;
+    this.shownCwd = cwd;
+    this.background.reshow();
     this.composer.switched(sessionId, options);
     this.dispatch({ type: 'reset', transcript });
     this.retitle(title);
     this.remode(modes);
-    await this.memory.save(sessionId);
+    await this.memory.save(sessionId, cwd);
     this.switched.fire();
     this.mcp.refresh();
   }
@@ -694,16 +836,25 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private async moveTo(open: (connection: Connection) => Promise<string>): Promise<void> {
     const connection = await this.engine.connection();
     const left = this.shown;
+    // A turn still running goes on in the background; the engine stops sending it here before the next session loads.
+    const running = this.turn !== undefined && this.turn.sessionId === left ? this.leaveRunning() : undefined;
+    if (running !== undefined) await connection.agent.request<unknown, DetachRequest>(DETACH_METHOD, { sessionId: running.sessionId }).catch(() => {});
     const session = open(connection);
     this.sessions.set(connection, session);
     const now = await session;
-    if (left !== undefined && left !== now) void connection.agent.request(acp.methods.agent.session.close, { sessionId: left }).catch(() => {});
+    if (left !== undefined && left !== now && running === undefined) void connection.agent.request(acp.methods.agent.session.close, { sessionId: left }).catch(() => {});
   }
 
   /** Opens the MCP servers panel. */
   showMcp(): void {
     if (this.view === undefined) this.mcpAsked = true;
     else void this.view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
+  }
+
+  /** Opens the Lanes or the Tasks pane. */
+  showPane(pane: 'show-lanes' | 'show-tasks'): void {
+    if (this.view === undefined) this.paneAsked = pane;
+    else void this.view.webview.postMessage({ type: pane } satisfies ToView);
   }
 
   /** Opens the providers, keys and roles page. */
@@ -714,7 +865,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   /** Starts a fresh session; the current one stays on disk. A chat with no turns yet is already fresh. */
   async newChat(): Promise<void> {
-    this.idle();
     void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
     if (this.shown !== undefined && this.transcript.turns.length === 0) return;
     await this.moveTo((connection) => this.fresh(connection));
@@ -751,11 +901,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
    */
   async openChat(sessionId: string, workspace: string): Promise<void> {
     const { cwd } = await this.engine.connection();
-    if (workspace !== (await realpath(cwd).catch(() => cwd))) return this.openElsewhere(workspace, sessionId);
-    this.idle();
+    const main = await realpath(cwd).catch(() => cwd);
+    const lane = isLaneOf(workspace, main);
+    if (workspace !== main && !lane) return this.openElsewhere(workspace, sessionId);
     void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
+    void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     if (sessionId === this.shown) return;
-    await this.moveTo((connection) => this.load(connection, sessionId).then(() => sessionId));
+    await this.moveTo((connection) => this.load(connection, sessionId, lane ? workspace : undefined).then(() => sessionId));
   }
 
   async renameChat(sessionId: string, title: string): Promise<void> {
@@ -771,9 +923,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (sessionId === this.shown) await this.moveTo((connection) => this.fresh(connection));
   }
 
-  private async askPermission({ toolCall, options }: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+  private async askPermission({ sessionId, toolCall, options }: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+    if (!this.isOurs(sessionId)) throw notShown(sessionId);
     const id = String(this.nextPermission++);
-    const optionId = await new Promise<string | undefined>((resolve) => {
+    const optionId = await new Promise<string | undefined | typeof NOT_SHOWN>((resolve) => {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
       const { command, reason, description } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined };
@@ -792,6 +945,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.permissions.delete(id);
+    if (optionId === NOT_SHOWN) throw notShown(sessionId);
     this.dispatch({ type: 'permission-done', id, optionId });
     return { outcome: optionId === undefined ? { outcome: 'cancelled' } : { outcome: 'selected', optionId } };
   }
@@ -804,15 +958,19 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private async askQuestion(params: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {
     const parsed = parseAskUser(params._meta?.[ASK_USER_META], 'wire');
     if (params.mode !== 'form' || !parsed.ok) return { action: 'decline' };
+    const scoped = (params as { readonly sessionId?: unknown }).sessionId;
+    const sessionId = typeof scoped === 'string' ? scoped : undefined;
+    if (sessionId !== undefined && !this.isOurs(sessionId)) throw notShown(sessionId);
     const request = parsed.value;
     const id = String(this.nextPermission++);
-    const answer = await new Promise<AskUserAnswer | undefined>((resolve) => {
+    const answer = await new Promise<AskUserAnswer | undefined | typeof NOT_SHOWN>((resolve) => {
       this.questions.set(id, resolve);
       signal.addEventListener('abort', () => resolve(undefined), { once: true });
       this.dispatch({ type: 'permission', id, command: askUserTitle(request), reason: '', options: [], ask: { kind: 'question', request } });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.questions.delete(id);
+    if (answer === NOT_SHOWN) throw notShown(sessionId ?? 'the session');
     this.dispatch({ type: 'permission-done', id, optionId: undefined, ...(answer === undefined ? {} : { answer }) });
     if (answer === undefined) return { action: 'cancel' };
     if (answer.kind === 'declined') return { action: 'decline' };
@@ -844,11 +1002,16 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'commands', commands: this.commands } satisfies ToView);
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
         void view.webview.postMessage({ type: 'composer', facts: this.composer.current() } satisfies ToView);
+        const background = this.background.current();
+        void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown } satisfies ToView);
+        void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
         this.composer.refreshModels();
         if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
         this.mcpAsked = false;
         if (this.settingsAsked) void view.webview.postMessage({ type: 'show-settings' } satisfies ToView);
         this.settingsAsked = false;
+        if (this.paneAsked !== undefined) void view.webview.postMessage({ type: this.paneAsked } satisfies ToView);
+        this.paneAsked = undefined;
         view.description = totalsLabel(this.transcript);
         this.view = view;
       },
@@ -883,6 +1046,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.settingsPage.handlers,
       ...this.composer.handlers,
       ...this.widgets.handlers,
+      ...this.background.handlers,
     };
   }
 

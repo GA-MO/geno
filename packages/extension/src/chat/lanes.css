@@ -1,0 +1,188 @@
+/* The Lanes and Tasks panes, in the transcript's place while open, and the send menu's chevron beside Send. */
+
+.lanes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px var(--gap) 12px;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.lanes[hidden],
+.lanes-note[hidden] {
+  display: none;
+}
+
+.lanes-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lane-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lane-row,
+.task-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px 10px 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.task-row.current {
+  border-color: var(--mark, var(--border));
+}
+
+.lane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lane-head .kind {
+  flex: none;
+  color: var(--muted);
+}
+
+.lane-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lane-head .spacer {
+  flex: 1;
+}
+
+.lane-head .mcp-state {
+  flex: none;
+}
+
+.lane-task {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.lane-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-meta .mcp-state {
+  line-height: 16px;
+}
+
+.lane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.lane-actions .button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lane-actions .button.ghost:disabled:hover {
+  background: transparent;
+}
+
+.task-here {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.lane-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--vscode-errorForeground) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-errorForeground) 6%, var(--surface));
+}
+
+.lane-confirm-text {
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.button.danger {
+  border-color: var(--vscode-button-border, transparent);
+  color: #ffffff;
+  background: var(--vscode-statusBarItem-errorBackground, #c72e2e);
+}
+
+.button.danger:hover {
+  background: color-mix(in srgb, var(--vscode-statusBarItem-errorBackground, #c72e2e) 85%, #000000);
+}
+
+/* High contrast keeps the theme's own button colors and borders. */
+body.vscode-high-contrast .button.danger,
+body.vscode-high-contrast-light .button.danger {
+  border-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder));
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+/* The send menu's chevron: as narrow as the row allows, so the 300px row keeps its controls. */
+.input-box .send-more {
+  width: 16px;
+  margin-right: -6px;
+  border-radius: 5px;
+}
+
+.input-box .send-more[hidden] {
+  display: none;
+}
+
+.input-box .send-more .codicon {
+  font-size: 12px;
+}
+
+.composer .send-menu {
+  left: auto;
+  right: var(--gap);
+  width: min(260px, calc(100% - 2 * var(--gap)));
+}
+
+.send-menu .send-option-icon {
+  flex: none;
+  margin-right: 6px;
+  color: var(--muted);
+}
+
+.send-menu [aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}

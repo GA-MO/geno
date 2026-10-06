@@ -14,7 +14,9 @@ import { shownSteps } from './fold.js';
 import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } from './messages.js';
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
+import { lanesPanel, tasksPanel } from './lanes-panel.js';
 import { mcpPanel } from './mcp-panel.js';
+import { sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
@@ -115,6 +117,7 @@ const controls = composerControls((message) => host.postMessage(message), {
     schedule();
   },
 });
+const more = sendMenu({ send: () => submit(), runInLane: () => runInLane(), hasDraft: () => input.value.trim() !== '', running: () => isRunning(transcript) });
 let mode = '';
 const picker = modePicker((modeId) => host.postMessage({ type: 'set-mode', modeId }), (modes: Modes) => {
   // Auto marks the whole composer, so it shows wherever the user looks to type.
@@ -137,7 +140,7 @@ const inputBox = h(
     'div',
     { class: 'input-toolbar' },
     h('span', { class: 'toolbar-left' }, ...controls.left, picker.element),
-    h('span', { class: 'toolbar-right' }, ...controls.right, stop, send),
+    h('span', { class: 'toolbar-right' }, ...controls.right, more.button, stop, send),
   ),
 );
 const slash = slashPicker(input, {
@@ -151,7 +154,7 @@ const slash = slashPicker(input, {
 const peek = peekOver((shown) => peekGate.set('shown', shown));
 const peekGate = motionGate((motion) => peek.setMotion(motion));
 peek.setMotion(peekGate.motion());
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, controls.agentsMenu, peek.element, inputBox);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, controls.agentsMenu, more.menu, peek.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
 const gate = motionGate((motion) => start.setMotion(motion));
 const working = workingDino();
@@ -203,6 +206,8 @@ const mcp = mcpPanel(post, (open) => showPane('mcp', open));
 const rules = rulesPanel(post, (open) => showPane('rules', open));
 const memory = memoryPanel(post, (open) => showPane('memory', open));
 const settings = settingsPanel(post, (open) => showPane('settings', open));
+const lanes = lanesPanel(post, (open) => showPane('lanes', open));
+const tasks = tasksPanel(post, (open) => showPane('tasks', open));
 const child: Pane = {
   isOpen: () => focus.kind === 'child',
   close: () => {
@@ -211,10 +216,10 @@ const child: Pane = {
     showPane('child', false);
   },
 };
-const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, child };
+const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, lanes, tasks, child };
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, childView, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, lanes.element, tasks.element, childView, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
 tray.insertBefore(attachments.element, chips);
 inputBox.insertBefore(attachments.note, input);
@@ -352,6 +357,9 @@ function render(): void {
   controls.show(view);
   showTray();
   send.hidden = view.action !== 'send';
+  // The send menu goes with Send: while a turn runs, Enter queues, and the running row keeps its room.
+  more.button.hidden = view.action !== 'send';
+  if (more.button.hidden) more.close();
   stop.hidden = view.action !== 'stop';
   input.placeholder = view.placeholder;
   tick(running);
@@ -486,6 +494,10 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-rules') return rules.open();
   if (message.type === 'memory') return memory.listed(message.listing);
   if (message.type === 'show-memory') return memory.open();
+  if (message.type === 'lanes') return lanes.listed(message.listing);
+  if (message.type === 'show-lanes') return lanes.open();
+  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown);
+  if (message.type === 'show-tasks') return tasks.open();
   transcript = reduce(transcript, message);
   // A reset rebuilds a view that missed the stream, so its text shows in full rather than replaying.
   if (message.type === 'reset') for (const turn of transcript.turns) for (const b of turn.blocks) if (b.kind === 'text') revealed.set(b.id, b.text.length);
@@ -664,6 +676,16 @@ function renderMenu(): void {
   input.setAttribute('aria-expanded', String(items.length > 0));
 }
 
+/** The send menu's Run in a new lane: the draft becomes a lane's task, which runs in the background, and the Lanes pane shows it. */
+function runInLane(): void {
+  const text = input.value.trim();
+  if (text === '') return;
+  host.postMessage({ type: 'lane-new', text });
+  peek.sent();
+  fill('');
+  lanes.open();
+}
+
 /** Sends the draft, or while a turn runs queues it to send when the turn finishes; one follow-up waits at a time. */
 function submit(): void {
   const text = input.value.trim();
@@ -731,7 +753,8 @@ document.addEventListener('keydown', (event) => {
     closeChild();
     return;
   }
-  if (event.key === 'Escape' && isRunning(transcript) && !anyPaneOpen()) {
+  // A pane that closed on this Escape took it, so the turn goes on.
+  if (event.key === 'Escape' && !event.defaultPrevented && isRunning(transcript) && !anyPaneOpen()) {
     event.preventDefault();
     host.postMessage({ type: 'stop' });
   }

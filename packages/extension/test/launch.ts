@@ -30,6 +30,8 @@ export async function makeWorkspace(files: Readonly<Record<string, string>>, set
     // VS Code's chat panel otherwise opens at startup and takes keyboard focus from the editor under test.
     'chat.disableAIFeatures': true,
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
+    // A task's macOS notification would show on the machine running the tests.
+    'gcode.tasks.osNotifications': false,
   };
   await writeFile(path.join(workspace, '.vscode', 'settings.json'), JSON.stringify({ ...quiet, ...settings }));
   await mkdir(path.join(work, 'ud', 'User'), { recursive: true });

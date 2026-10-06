@@ -46,6 +46,18 @@
         "icon": "$(history)"
       },
       {
+        "command": "gcode.chat.lanes",
+        "title": "Lanes",
+        "category": "Geno",
+        "icon": "$(repo-forked)"
+      },
+      {
+        "command": "gcode.chat.tasks",
+        "title": "Tasks",
+        "category": "Geno",
+        "icon": "$(tasklist)"
+      },
+      {
         "command": "gcode.chat.mcp",
         "title": "MCP Servers",
         "category": "Geno",
@@ -320,6 +332,11 @@
           "exclusiveMinimum": 0,
           "description": "Baht to one US dollar, for the cost the composer shows while a turn runs. The tooltip gives the cost in US dollars."
         },
+        "gcode.tasks.osNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also show a macOS notification when a task finishes, fails or needs your answer while the VS Code window is not in front. Geno always shows its own notification inside VS Code."
+        },
         "gcode.ui.showChanges": {
           "type": "boolean",
           "default": false,
@@ -396,14 +413,24 @@
           "group": "navigation@2"
         },
         {
-          "command": "gcode.chat.mcp",
+          "command": "gcode.chat.lanes",
           "when": "view == gcode.chat",
           "group": "navigation@3"
         },
         {
-          "command": "gcode.chat.settings",
+          "command": "gcode.chat.tasks",
           "when": "view == gcode.chat",
           "group": "navigation@4"
+        },
+        {
+          "command": "gcode.chat.mcp",
+          "when": "view == gcode.chat",
+          "group": "navigation@5"
+        },
+        {
+          "command": "gcode.chat.settings",
+          "when": "view == gcode.chat",
+          "group": "navigation@6"
         },
         {
           "command": "gcode.review.undoSession",

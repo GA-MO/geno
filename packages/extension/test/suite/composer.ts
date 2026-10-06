@@ -125,7 +125,7 @@ export async function run(): Promise<void> {
     `({ left: [...doc.querySelectorAll('.toolbar-left > *')].map((e) => e.className.split(' ').at(-1)), right: [...doc.querySelectorAll('.toolbar-right > *:not([hidden])')].map((e) => e.className.split(' ').at(-1)) })`,
   );
   check(row.left.join() === 'context-add,slash-button,mode-picker', '+, / and the mode sit bottom left', row.left);
-  check(row.right.join() === 'context-ring,composer-model,send', 'the ring, the model and Send sit bottom right', row.right);
+  check(row.right.join() === 'context-ring,composer-model,send-more,send', 'the ring, the model, the send menu and Send sit bottom right', row.right);
   check(!(await shown('.tray')), 'the tray hides while it holds nothing');
   check((await attr('textarea', 'placeholder')) === 'Describe the change you want, @ to add context, / for commands', 'the empty chat asks for a change');
   check((await attr('.context-ring', 'aria-label')) === 'Context: nothing yet', 'the ring is empty before any call', await attr('.context-ring', 'aria-label'));
