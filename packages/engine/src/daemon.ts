@@ -49,8 +49,8 @@ async function listen(server: Server, socket: string): Promise<void> {
 export async function serveSocket(io: Io, store: Store, limits: Limits, socket: string, idleMs = IDLE_EXIT_MS): Promise<number> {
   const mcp = mcpSessions(store, io.env, io.err, browserLauncherOf(io.env));
   const shared = engineShared(io);
-  // A crash cannot wait for a grace period; a command left running would outlive the engine that owns it.
-  const killJobs = () => shared.jobs.killAllNow();
+  // A crash cannot wait for a grace period; a command or an external agent left running would outlive the engine that owns it.
+  const killJobs = () => (shared.jobs.killAllNow(), shared.externals.closeAll());
   process.once('exit', killJobs);
   const open = new Set<Socket>();
   let idle: ReturnType<typeof setTimeout> | undefined;
@@ -93,6 +93,7 @@ export async function serveSocket(io: Io, store: Store, limits: Limits, socket: 
   io.err('gcode serve: idle, exiting');
   server.close();
   await shared.jobs.kill('engine-exit', 'all');
+  shared.externals.closeAll();
   process.off('exit', killJobs);
   await mcp.stopAll();
   await rm(socket, { force: true });
@@ -120,11 +121,12 @@ export const serve: Command = async (args, { io, store }) => {
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
   const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env));
   const shared = engineShared(quiet);
-  process.once('exit', () => shared.jobs.killAllNow());
+  process.once('exit', () => (shared.jobs.killAllNow(), shared.externals.closeAll()));
   const connection = gcodeAgent(quiet, store, limitsOf(values), mcp, shared).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
   await connection.closed;
   await shared.jobs.kill('engine-exit', 'all');
+  shared.externals.closeAll();
   await mcp.stopAll();
   return 0;
 };
