@@ -37,6 +37,7 @@ export * from './web.js';
 export * from './html-markdown.js';
 export * from './browser-tools.generated.js';
 export * from './history.js';
+export * from './session-search.js';
 export * from './memory.js';
 export * from './user-tools.js';
 export * from './ask-user.js';
