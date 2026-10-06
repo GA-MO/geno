@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TASK_NOTICES, type LaneInfo, type TaskRecord } from '@g-code/core';
+import { NEEDS_ATTENTION, TASK_NOTICES, type LaneInfo, type TaskRecord } from '@g-code/core';
 import { socketPathOf } from '../src/chat/engine.js';
 import { laneRowOf, taskOrder, taskRowOf } from '../src/chat/lanes-model.js';
 import { channelsOf, noticeText, osNotification } from '../src/chat/notices.js';
@@ -71,6 +71,17 @@ describe('the task rows', () => {
     });
     const ended = taskRowOf(task({ lane: null, status: 'failed', endedAt: 4000, usage: { model: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0.5 } }), 'other', 99_000);
     expect(ended).toMatchObject({ where: 'Main checkout', time: '3.0s', cost: '$0.50', live: false, current: false, state: { tone: 'failed' } });
+  });
+
+  it('say what a waiting task waits for, as a live task that wants attention', () => {
+    const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+    const offline = taskRowOf(task({ status: 'waiting', waiting: { kind: 'offline', since: 1000, retryAt: 13_000, resetAt: null, message: 'fetch failed' } }), undefined, 1000, clock);
+    expect(offline).toMatchObject({ state: { label: 'Offline, retrying in 12s', tone: 'wait' }, live: true });
+    const resetAt = Date.parse('2026-10-06T14:05:00Z');
+    const limited = taskRowOf(task({ status: 'waiting', waiting: { kind: 'limited', since: 1000, retryAt: resetAt, resetAt, message: '429' } }), undefined, 1000, clock);
+    expect(limited.state).toEqual({ label: 'Limited until 14:05', tone: 'wait' });
+    expect(NEEDS_ATTENTION.waiting).toBe(true);
+    expect(laneRowOf(lane({ task: 'waiting' })).actions).toMatchObject({ apply: false, discard: 'off' });
   });
 
   it('lists running tasks first, then the rest, newest first', () => {

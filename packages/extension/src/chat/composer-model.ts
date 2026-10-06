@@ -1,7 +1,9 @@
-import type { ContextUse } from '@g-code/core';
+import type { ContextUse, WaitKind } from '@g-code/core';
+import { waitLabel } from '@g-code/core/waiting';
+import { clockOf } from './format.js';
 import type { McpListing } from './mcp-model.js';
 import type { Transcript } from './messages.js';
-import { isRunning, runningChildren } from './transcript.js';
+import { isRunning, runningChildren, workedMs } from './transcript.js';
 
 /**
  * The composer's view model: a pure function from what the panel knows about the session to what each slot of the
@@ -61,8 +63,14 @@ export type ModelMenu = {
 /** A running subagent as the agents pill offers it. */
 export type RunningChild = { readonly id: string; readonly role: string; readonly model: string; readonly elapsed: string };
 
+/** A model call the turn waits on: "Offline, retrying in 12s" or "Limited until 14:05", with the failure as its title. */
+export type WaitView = { readonly kind: WaitKind; readonly text: string; readonly title: string };
+
 export type RunningView = {
+  /** The time the turn has worked, its waits left out. */
   readonly elapsed: string;
+  /** Undefined while no call waits. */
+  readonly wait: WaitView | undefined;
   /** Undefined before the turn's first model call. */
   readonly cost: { readonly text: string; readonly title: string } | undefined;
   /** The pill for the turn's running subagents; undefined while none runs. */
@@ -149,7 +157,7 @@ function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView
   return { text: baht > 0 && baht < 0.01 ? '<฿0.01' : `฿${baht.toFixed(2)}`, title: `$${usd.toFixed(4)} at ฿${bahtPerUsd} to the US dollar` };
 }
 
-export function composerView({ transcript, facts, mcp, queued, now }: ComposerInput): ComposerView {
+export function composerView({ transcript, facts, mcp, queued, now }: ComposerInput, clock: (ms: number) => string = clockOf): ComposerView {
   const running = isRunning(transcript);
   const turn = transcript.turns.at(-1);
   const name = transcript.model === '' ? 'Default model' : transcript.model;
@@ -172,7 +180,12 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
     action: running ? 'stop' : 'send',
     running:
       running && turn !== undefined
-        ? { elapsed: formatElapsed(now - turn.startedAt), cost: costOf(facts.turnCostUsd, facts.bahtPerUsd), agents: agentsOf(transcript, now) }
+        ? {
+            elapsed: formatElapsed(workedMs(turn, now)),
+            wait: turn.waiting === undefined ? undefined : { kind: turn.waiting.kind, text: waitLabel(turn.waiting, now, clock), title: turn.waiting.message },
+            cost: costOf(facts.turnCostUsd, facts.bahtPerUsd),
+            agents: agentsOf(transcript, now),
+          }
         : undefined,
   };
 }

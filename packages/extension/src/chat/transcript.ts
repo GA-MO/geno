@@ -47,6 +47,17 @@ function withTool(turn: Turn, id: string, at: number, change: (tool: ToolBlock) 
 const ended = (tool: ToolBlock, status: ToolBlock['status'] | undefined, at: number): number | undefined =>
   tool.endedAt ?? (status === undefined || status === 'running' ? undefined : at);
 
+/** The turn with its wait, if any, ended at `at` and counted in `waitedMs`. */
+function settleWait(turn: Turn, at: number): Turn {
+  const was = turn.waiting;
+  if (was === undefined) return turn;
+  return { ...turn, waiting: undefined, waitedMs: (turn.waitedMs ?? 0) + Math.max(0, at - was.since) };
+}
+
+/** How long the turn has worked by `now`: its time so far without its waits offline or for a limit. */
+export const workedMs = (turn: Turn, now: number): number =>
+  (turn.endedAt ?? now) - turn.startedAt - (turn.waitedMs ?? 0) - (turn.waiting === undefined ? 0 : Math.max(0, now - turn.waiting.since));
+
 /** The turn without its passing status, which any new output replaces. */
 const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...turn, notice: undefined });
 
@@ -108,6 +119,13 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       return { ...turn, blocks: [...turn.blocks, { kind: 'text', id: nextId(turn), text }] };
     }),
   notice: (transcript, { text }) => onLast(transcript, (turn) => (turn.status !== 'streaming' || turn.notice === text ? turn : { ...turn, notice: text })),
+  waiting: (transcript, { at, waiting }) =>
+    onLast(transcript, (turn) => {
+      if (turn.status !== 'streaming') return turn;
+      const was = turn.waiting;
+      if (waiting !== null && was !== undefined && was.kind === waiting.kind && was.since === waiting.since) return { ...turn, waiting };
+      return { ...settleWait(turn, at), waiting: waiting ?? undefined };
+    }),
   tool: (transcript, { id, at, type: _type, ...fields }) =>
     onLast(transcript, (turn) =>
       withTool(quiet(turn), id, at, (tool) => {
@@ -150,7 +168,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
       const children = Object.keys(settled.children ?? {}).reduce((t, id) => withChild(t, id, (child) => (child.status.kind === 'running' ? { ...endChild(child, at, { kind: 'cancelled' }, { turns: child.turns, costUsd: child.costUsd }), endedByParent: true } : child)), settled);
-      return { ...quiet(children), status, endedAt: at, usage };
+      return { ...settleWait(quiet(children), at), status, endedAt: at, usage };
     }),
   'child-start': (transcript, { id, toolId, role, task, model, at }) =>
     onLast(transcript, (turn) => {

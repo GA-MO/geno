@@ -48,6 +48,8 @@ import {
   WAIT_KINDS,
   WAITING_META,
   RETRY_NOW_METHOD,
+  type RetryNowRequest,
+  type RetryNowResponse,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -225,7 +227,11 @@ type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.Sessio
 
 const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
   agent_message_chunk: ({ content }) => (content.type === 'text' ? { type: 'text', text: content.text } : undefined),
-  notice: ({ title }) => ({ type: 'notice', text: title }),
+  notice: ({ title, _meta }, at) => {
+    if (_meta == null || !(WAITING_META in _meta)) return { type: 'notice', text: title };
+    const waiting = waitingSchema.nullable().safeParse(_meta[WAITING_META]);
+    return waiting.success ? { type: 'waiting', at, waiting: waiting.data } : undefined;
+  },
   tool_call: ({ toolCallId, title, kind, status, rawInput }, at) => {
     const call = callOf(title);
     return { type: 'tool', id: toolCallId, at, ...call, ...descriptionOf(call.name, rawInput), toolKind: kindOf(kind), status: TOOL_STATUSES[status ?? 'pending'] };
@@ -714,6 +720,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     await turn.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: turn.sessionId });
   }
 
+  /** Sends the running turn's waiting model call at once. */
+  async retryNow(): Promise<void> {
+    const turn = this.turn;
+    if (turn === undefined) return;
+    await turn.connection.agent.request<RetryNowResponse, RetryNowRequest>(RETRY_NOW_METHOD, { sessionId: turn.sessionId });
+  }
+
   /** Stops one subagent of the running turn by its session id; the engine ends it, and the parent goes on. */
   async cancelChild(id: string): Promise<void> {
     const turn = this.turn;
@@ -1054,6 +1067,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         ),
       'want-commands': () => void this.link().catch(() => {}),
       stop: () => void this.stop(),
+      'retry-now': () => void this.retryNow().catch(warn),
       'cancel-child': ({ id }) => void this.cancelChild(id).catch(warn),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),

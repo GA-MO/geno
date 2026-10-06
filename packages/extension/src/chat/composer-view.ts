@@ -254,7 +254,17 @@ export function composerControls(
 
   const elapsed = h('span', { class: 'run-elapsed' });
   const cost = h('span', { class: 'run-cost' });
-  const status = h('span', { class: 'run-status', hidden: true, role: 'status' }, h('span', { class: 'run-time', title: 'Time this turn has run' }, icon('clock'), elapsed), cost);
+  const time = h('span', { class: 'run-time', title: 'Time this turn has worked, its waits left out' }, icon('clock'), elapsed);
+  const waitIcons = { offline: icon('debug-disconnect', 'wait-icon'), limited: icon('watch', 'wait-icon') };
+  const waitText = h('span', { class: 'wait-text' });
+  const retryNow = h(
+    'button',
+    { type: 'button', class: 'retry-now', title: 'Send the model call again now', 'aria-label': 'Retry now', onclick: () => post({ type: 'retry-now' }) },
+    icon('refresh', 'retry-icon'),
+    h('span', { class: 'retry-label' }, 'Retry now'),
+  );
+  const wait = h('span', { class: 'run-wait', hidden: true }, waitIcons.offline, waitIcons.limited, waitText, retryNow);
+  const status = h('span', { class: 'run-status', hidden: true, role: 'status' }, wait, time, cost);
   const agents = agentsPill(hooks.openChild);
 
   const ring = contextRing();
@@ -289,6 +299,16 @@ export function composerControls(
       menu.show(view.menu);
       status.hidden = view.running === undefined;
       agents.show(view.running?.agents, status);
+      const waiting = view.running?.wait;
+      wait.hidden = waiting === undefined;
+      time.hidden = waiting !== undefined;
+      if (waiting !== undefined) {
+        wait.dataset['kind'] = waiting.kind;
+        wait.title = waiting.title;
+        waitText.textContent = waiting.text;
+        waitIcons.offline.hidden = waiting.kind !== 'offline';
+        waitIcons.limited.hidden = waiting.kind !== 'limited';
+      }
       if (view.running !== undefined) {
         elapsed.textContent = view.running.elapsed;
         cost.hidden = view.running.cost === undefined;

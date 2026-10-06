@@ -1,5 +1,7 @@
 import type { ChangedFile } from './fold.js';
+import type { WaitKind } from '@g-code/core';
 import type { Child, ErrorBlock, PermissionBlock, TextBlock, ToolBlock, Turn } from './messages.js';
+import { workedMs } from './transcript.js';
 
 /**
  * A turn as the panel draws it: one rail of steps from the prompt to the answer. Runs of reads or edits fold
@@ -93,9 +95,11 @@ export function nodeOf(step: Step): NodeState {
   }
 }
 
-/** The line beside the avatar: what the turn is doing now, or how long it worked. */
+const WAIT_HEADERS: Readonly<Record<WaitKind, string>> = { offline: 'waiting for the network', limited: 'waiting for the rate limit' };
+
+/** The line beside the avatar: what the turn is doing now, or how long it worked, its waits left out. */
 export function headerOf(turn: Turn, format: (ms: number) => string): string {
-  if (turn.status === 'streaming') return isWaiting(turn) ? 'waiting for you' : 'working';
-  const took = turn.endedAt === undefined ? '' : ` ${turn.status === 'done' ? 'for' : 'after'} ${format(turn.endedAt - turn.startedAt)}`;
+  if (turn.status === 'streaming') return isWaiting(turn) ? 'waiting for you' : turn.waiting !== undefined ? WAIT_HEADERS[turn.waiting.kind] : 'working';
+  const took = turn.endedAt === undefined ? '' : ` ${turn.status === 'done' ? 'for' : 'after'} ${format(workedMs(turn, turn.endedAt))}`;
   return { done: `worked${took}`, stopped: `stopped${took}`, failed: `failed${took}` }[turn.status];
 }

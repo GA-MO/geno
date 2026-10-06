@@ -1,5 +1,7 @@
 import {
+  DEFAULT_RESUME_AFTER_LIMIT,
   isProviderName,
+  isResumeAfterLimit,
   missingField,
   ROLE_SPECS,
   specOf,
@@ -138,6 +140,12 @@ export function engineEnv(runtime: ModelRuntime): Record<string, string> {
   if (runtime.model !== undefined) env['GCODE_MODEL'] = runtime.model;
   for (const [id, value] of Object.entries(valuesOf(runtime))) env[spec.fields.find((field) => field.id === id)!.env] = value.value;
   return env;
+}
+
+/** The `gcode.resume.afterLimit` setting as the engine reads it; a value the engine would refuse leaves its default. */
+export function resumeEnvOf(settings: Settings): Record<string, string> {
+  const value = settings.get<unknown>('resume.afterLimit', DEFAULT_RESUME_AFTER_LIMIT);
+  return typeof value === 'string' && isResumeAfterLimit(value) ? { GCODE_RESUME_AFTER_LIMIT: value } : {};
 }
 
 /** For the output channel: everything about the runtime except the key itself. */

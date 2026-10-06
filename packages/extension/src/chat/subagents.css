@@ -278,4 +278,17 @@
   .input-toolbar:has(.round-button.stop:not([hidden])) .toolbar-right {
     gap: 4px;
   }
+
+  /* A wait keeps its words and gives up the mode's name and Retry now's label; the button keeps its icon and its name. */
+  .input-toolbar:has(.run-wait:not([hidden])) :is(.mode-name, .retry-label, .context-ring) {
+    display: none;
+  }
+
+  .input-toolbar:has(.run-wait:not([hidden])) .retry-now {
+    padding: 0 4px;
+  }
+
+  .input-toolbar:has(.run-wait:not([hidden])) .retry-now .retry-icon {
+    display: inline-block;
+  }
 }

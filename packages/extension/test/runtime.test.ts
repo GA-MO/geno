@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, secretName, settingKey, setupProblem } from '../src/runtime.js';
+import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, secretName, settingKey, setupProblem } from '../src/runtime.js';
 
 /** Settings as the user set them; `workspace` holds what a workspace's settings.json says, which may differ. */
 const settingsOf = (values: Record<string, unknown>, workspace: Record<string, unknown> = {}) => ({
@@ -153,5 +153,13 @@ describe('every provider’s runtime', () => {
 
   it('refuses a role on a provider it does not know', async () => {
     await expect(readEngineRuntime(settingsOf({ roles: { classifier: { provider: 'nope' } } }), secretsOf({}), {})).rejects.toThrow('gcode.roles.classifier names nope');
+  });
+});
+
+describe('the limit resume setting', () => {
+  it('passes gcode.resume.afterLimit to the engine, short by default, and drops a value the engine would refuse', () => {
+    expect(resumeEnvOf(settingsOf({}))).toEqual({ GCODE_RESUME_AFTER_LIMIT: 'short' });
+    expect(resumeEnvOf(settingsOf({ 'resume.afterLimit': 'always' }))).toEqual({ GCODE_RESUME_AFTER_LIMIT: 'always' });
+    expect(resumeEnvOf(settingsOf({ 'resume.afterLimit': 'sometimes' }))).toEqual({});
   });
 });
