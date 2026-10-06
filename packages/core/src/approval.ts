@@ -82,6 +82,8 @@ export type Denial = {
   readonly reason: string;
   readonly command: string;
   readonly verdict: Exclude<RuleVerdict, 'allow'>;
+  /** The workspace allow rule the question offers to save: a program and its fixed arguments. */
+  readonly offer?: readonly string[];
 };
 
 // What cannot be undone: Auto still asks.
@@ -394,8 +396,11 @@ export type McpRuleId = (typeof MCP_RULE_IDS)[number];
 /** An external agent's permission requests, which backends.ts maps. */
 export const EXTERNAL_RULE_IDS = ['external-read', 'external-write', 'external-command', 'external-other'] as const;
 export type ExternalRuleId = (typeof EXTERNAL_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | ExternalRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...EXTERNAL_RULE_IDS] as const;
+/** A deny rule the user set for the workspace, which permission-rules.ts matches. */
+export const WORKSPACE_RULE_IDS = ['workspace-deny'] as const;
+export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | ExternalRuleId | WorkspaceRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS] as const;
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
@@ -670,34 +675,78 @@ function variants(words: readonly string[], vars: Bindings): readonly (readonly 
   return expanded.reduce<string[][]>((combos, values) => combos.flatMap((combo) => values.map((v) => [...combo, v])), [[]]);
 }
 
-/**
- * The first command in the line a rule denies in this mode. Else a question about every flagged command when any rule
- * asks, since the classifier must never let a line through that a rule keeps for the user. Else the flagged commands
- * for the classifier.
- */
-export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
+/** One simple command of a line: its words as written, and every value they may take once variables expand. */
+export type ParsedCommand = { readonly words: readonly string[]; readonly variants: readonly SimpleCommand[] };
+
+export function parseCommandLine(command: string, scope: CommandScope): readonly ParsedCommand[] {
   const commands = splitCommand(command);
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
   const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
-  const flagged: Denial[] = [];
-  for (const words of commands) {
-    for (const variant of variants(words, vars)) {
-      const simple = simpleCommand(variant, cwd);
+  return commands.map((words) => ({ words, variants: variants(words, vars).map((variant) => simpleCommand(variant, cwd)) }));
+}
+
+/** A rule that flags one simple command of the line, which `at` indexes. */
+export type Flag = Denial & { readonly rule: DenyRuleId; readonly at: number };
+
+/** A rule that denies outright in this mode ends the scan; else every rule that asks or classifies. */
+export type Flags = { readonly kind: 'deny'; readonly denial: Denial } | { readonly kind: 'flagged'; readonly flags: readonly Flag[] };
+
+export function flagsOf(parsed: readonly ParsedCommand[], scope: CommandScope, mode: ApprovalMode): Flags {
+  const flags: Flag[] = [];
+  for (const [at, { words, variants }] of parsed.entries()) {
+    for (const simple of variants) {
       for (const rule of DENY_RULE_IDS) {
         const { reason, verdicts, matches } = DENY_RULES[rule];
         const verdict = verdicts[mode];
         if (verdict === 'allow' || !matches(simple, scope)) continue;
         const denial = { rule, reason, command: words.join(' '), verdict };
-        if (verdict === 'deny') return denial;
-        flagged.push(denial);
+        if (verdict === 'deny') return { kind: 'deny', denial };
+        flags.push({ ...denial, at });
       }
     }
   }
-  const [first] = flagged;
+  return { kind: 'flagged', flags };
+}
+
+/**
+ * A question about every flagged command when any rule asks, since the classifier must never let a line through that
+ * a rule keeps for the user. Else the flagged commands for the classifier.
+ */
+export function mergedDenial(command: string, flags: readonly Flag[]): Denial | undefined {
+  const [first] = flags;
   if (first === undefined) return undefined;
-  const lead = flagged.find((d) => d.verdict === 'ask') ?? first;
+  const { at: _at, ...lead } = flags.find((d) => d.verdict === 'ask') ?? first;
   // One yes runs the whole line, so a question about several flagged commands must show all of them.
-  if (new Set(flagged.map((d) => d.command)).size === 1) return lead;
-  return { ...lead, command: command.trim(), reason: [...new Set(flagged.map((d) => d.reason))].join('; ') };
+  if (new Set(flags.map((d) => d.command)).size === 1) return lead;
+  return { ...lead, command: command.trim(), reason: [...new Set(flags.map((d) => d.reason))].join('; ') };
+}
+
+/** The first command in the line a rule denies in this mode, else the merged question or classification. */
+export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
+  const flags = flagsOf(parseCommandLine(command, scope), scope, mode);
+  return flags.kind === 'deny' ? flags.denial : mergedDenial(command, flags.flags);
+}
+
+/** The rules that flag one simple command on its own in this mode. */
+export const flaggingRules = (simple: SimpleCommand, scope: CommandScope, mode: ApprovalMode): ReadonlySet<DenyRuleId> =>
+  new Set(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts[mode] !== 'allow' && DENY_RULES[rule].matches(simple, scope)));
+
+const PUSH_REWRITES = /^(?:-f|--force|--force-with-lease(?:=.*)?|--force-if-includes|--mirror|--delete|-d|--prune|--all|--tags)$/;
+// A push to a URL or an scp-style address rather than a named remote can send the repository anywhere.
+const PUSH_ADDRESS = /:\/\/|^[^/\s]+@[^/\s]+:/;
+const HARD_WORDS = [SECRET_PATH, HIDDEN_GLOB, GIT_DIR];
+
+/**
+ * What no workspace rule may pre-allow: an `rm -rf` the workspace cannot spare, a push that rewrites or deletes remote
+ * history or goes to an address, and any command that names credentials, a hidden glob or a path under .git.
+ */
+export function isHardAsk(simple: SimpleCommand, scope: CommandScope): boolean {
+  if (removes(simple, scope, 'protected')) return true;
+  // An option's value counts as its own word, so `--out=.git/hooks/x` names .git.
+  const values = simple.words.flatMap((word) => (word.includes('=') ? [word, word.slice(word.indexOf('=') + 1)] : [word]));
+  if (values.some((word) => HARD_WORDS.some((pattern) => pattern.test(word)))) return true;
+  if (simple.program !== 'git') return false;
+  const { name, rest } = gitSubcommand(simple.args);
+  return name === 'push' && rest.some((arg) => PUSH_REWRITES.test(arg) || /^[+:]/.test(arg) || PUSH_ADDRESS.test(arg));
 }
