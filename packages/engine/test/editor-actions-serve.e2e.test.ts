@@ -20,7 +20,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, offeredTools, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -67,16 +67,16 @@ const call = (id: string, name: string, input: unknown): FakeToolUse => ({ id, n
 const outputOf = (result: Extract<TurnEvent, { kind: 'tool-result' }>) => ('output' in result ? result.output : '');
 
 describe('gcode serve: editor actions', () => {
-  it('are offered, sorted after the other tools, only to an editor that carries them out', async () => {
+  it('are offered, deferred behind tool_search, only to an editor that carries them out', async () => {
     const attached = await setup([answer('a', usage)]);
     await attached.connect(async (ctx) => attached.say(ctx, await attached.open(ctx), 'hi'));
-    const names = toolNames(attached.transport.requests[0]!.body);
-    expect(names.filter((name) => EDITOR_TOOLS.includes(name))).toEqual(EDITOR_TOOLS);
-    expect(names.slice(names.indexOf('open_file'), names.indexOf('open_file') + 3), 'one sorted block').toEqual(EDITOR_TOOLS);
+    const body = attached.transport.requests[0]!.body;
+    expect(offeredTools(body).filter((name) => EDITOR_TOOLS.includes(name))).toEqual(EDITOR_TOOLS);
+    expect(toolNames(body).filter((name) => EDITOR_TOOLS.includes(name)), 'by name only, in the tool_search block').toEqual([]);
 
     const headless = await setup([answer('a', usage)], false);
     await headless.connect(async (ctx) => headless.say(ctx, await headless.open(ctx), 'hi'));
-    expect(toolNames(headless.transport.requests[0]!.body).filter((name) => EDITOR_TOOLS.includes(name))).toEqual([]);
+    expect(offeredTools(headless.transport.requests[0]!.body).filter((name) => EDITOR_TOOLS.includes(name))).toEqual([]);
   });
 
   it('are never offered to a run with nobody watching, whatever the caller passes', async () => {
@@ -120,6 +120,7 @@ describe('gcode serve: editor actions', () => {
     const outside = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-outside-')));
     await writeFile(path.join(outside, 'secret.ts'), 'secret\n');
     const { connect, open, say, actions, results, workspace } = await setup([
+      toolCall('', [loadTools('open_file', 'reveal', 'show_diff')], usage),
       toolCall(
         '',
         [
@@ -139,7 +140,7 @@ describe('gcode serve: editor actions', () => {
       await say(ctx, sessionId, 'open the secret');
       return sessionId;
     });
-    const refused = await results(id);
+    const refused = (await results(id)).filter((r) => r.name !== 'tool_search');
     expect(refused.map((r) => r.status)).toEqual(['error', 'error', 'error', 'error', 'error']);
     expect(refused.slice(0, 4).map(outputOf)).toEqual([
       '../secret.ts is outside the workspace',
@@ -158,7 +159,7 @@ describe('gcode serve: editor actions', () => {
       toolCall('', [call('tu_ea', 'edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
       answer('Changed a.', usage),
       toolCall('', [call('tu_rb', 'read', { path: 'b.ts' })], usage),
-      toolCall('', [call('tu_eb', 'edit', { path: 'b.ts', old_str: 'b = 1', new_str: 'b = 2' })], usage),
+      toolCall('', [call('tu_eb', 'edit', { path: 'b.ts', old_str: 'b = 1', new_str: 'b = 2' }), loadTools('show_diff')], usage),
       toolCall('', [call('tu_db', 'show_diff', { path: 'b.ts' }), call('tu_da', 'show_diff', { path: 'a.ts' })], usage),
       answer('Here are both.', usage),
     ]);
@@ -192,7 +193,7 @@ describe('gcode serve: editor actions', () => {
   });
 
   it('replays the action with the step when the session is loaded', async () => {
-    const { connect, open, say, updates, workspace } = await setup([toolCall('', [call('tu_o', 'open_file', { path: 'b.ts', line: 1 })], usage), answer('Done.', usage)]);
+    const { connect, open, say, updates, workspace } = await setup([toolCall('', [loadTools('open_file')], usage), toolCall('', [call('tu_o', 'open_file', { path: 'b.ts', line: 1 })], usage), answer('Done.', usage)]);
     const id = await connect(async (ctx) => {
       const sessionId = await open(ctx);
       await say(ctx, sessionId, 'open b');

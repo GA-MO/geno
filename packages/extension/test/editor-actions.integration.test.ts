@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -21,7 +21,7 @@ const asModel = (reply: Reply): Reply => ({
 });
 
 const replies: readonly Reply[] = [
-  toolCall('Reading a.ts.', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }], usage),
+  toolCall('Reading a.ts.', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }, loadTools('open_file', 'reveal', 'show_diff')], usage),
   toolCall('Raising one.', [{ id: 'tu_edit', name: 'edit', input: EDIT }], usage),
   toolCall('Here is the diff.', [{ id: 'tu_diff', name: 'show_diff', input: { path: 'a.ts' } }], usage),
   toolCall('It lives in src.', [{ id: 'tu_reveal', name: 'reveal', input: { path: 'src' } }], usage),
@@ -114,7 +114,7 @@ describe('editor actions in VS Code', () => {
     });
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
-    const offered = requests[0]!.tools.map((tool) => tool.name);
+    const offered = offeredTools(requests[0]!);
     expect(offered.filter((name) => ['open_file', 'reveal', 'show_diff'].includes(name)), 'the editor advertises the capability').toEqual(['open_file', 'reveal', 'show_diff']);
   }, 600_000);
 });
