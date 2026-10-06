@@ -137,7 +137,9 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
  * with the mode menu's keys. The pill is in the row only while it shows, so an idle row is as U36 left it.
  */
 function agentsPill(openChild: (id: string) => void) {
-  const label = h('span', { class: 'agents-label' });
+  const count = h('span', { class: 'agents-count' });
+  const noun = h('span', { class: 'agents-noun' });
+  const label = h('span', { class: 'agents-label' }, count, noun);
   const pill = h('button', { type: 'button', class: 'agents-pill', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'agents-menu' }, icon('agent'), label);
   const menu = h('ul', { class: 'model-menu agents-menu', id: 'agents-menu', role: 'menu', 'aria-label': 'Running subagents', hidden: true });
   let children: readonly RunningChild[] = [];
@@ -202,7 +204,8 @@ function agentsPill(openChild: (id: string) => void) {
         pill.remove();
         return;
       }
-      label.textContent = agents.label;
+      count.textContent = String(agents.count);
+      noun.textContent = ` ${agents.noun}`;
       pill.title = agents.title;
       pill.setAttribute('aria-label', agents.title);
       if (pill.parentElement !== status) status.append(pill);

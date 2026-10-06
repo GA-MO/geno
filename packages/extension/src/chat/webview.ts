@@ -26,7 +26,7 @@ import { startPage } from './start-page.js';
 import { childOf, emptyTranscript, isRunning, reduce, runningChildren } from './transcript.js';
 import { workingDino } from './working-dino.js';
 import { helperDinos } from './helper-dino.js';
-import { agentStep, childHead } from './subagent-view.js';
+import { agentStep, childHead, tickClocks } from './subagent-view.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -163,7 +163,7 @@ helpers.setMotion(helperGate.motion());
 
 const childSlot = h('div', { class: 'child-head-slot' });
 const childRail = h('ol', { class: 'rail child-rail' });
-const childView = h('section', { class: 'child-view', 'aria-label': 'Subagent transcript', hidden: true }, childSlot, h('div', { class: 'turn child-turn' }, childRail));
+const childView = h('section', { class: 'child-view', 'aria-label': 'Subagent transcript', hidden: true }, childSlot, h('div', { class: 'child-turn' }, childRail));
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -261,14 +261,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
-    case 'agent': {
-      // A running child's clock moves each second.
-      const second = step.children.some((c) => c.status.kind === 'running') ? Math.floor(Date.now() / 1000) : 0;
-      return {
-        deps: [quiet, step.tool, second, ...step.children, '|', ...state.open],
-        build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()),
-      };
-    }
+    case 'agent':
+      return { deps: [quiet, step.tool, ...step.children, '|', ...state.open], build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()) };
     case 'notice':
       return { deps: [step.text], build: () => turnNotice(step.text) };
     case 'thinking':
@@ -342,7 +336,8 @@ function render(): void {
     });
   }
 
-  renderChild();
+  animating ||= renderChild();
+  tickClocks(document, Date.now());
   const running = isRunning(transcript);
   if (empty && !wasEmpty) start.refresh();
   wasEmpty = empty;
@@ -389,16 +384,19 @@ function closeChild(): void {
   log.querySelector<HTMLElement>(`[data-focus="child:${CSS.escape(id)}"]`)?.focus();
 }
 
-/** The side view: the open child's head, and its own turn drawn with the same rail as the chat's. */
-function renderChild(): void {
-  if (focus.kind === 'parent') return;
+/** The side view: the open child's head, and its own turn drawn with the same rail as the chat's. True while its text still streams in. */
+function renderChild(): boolean {
+  if (focus.kind === 'parent') return false;
   const shown = childOf(transcript, focus.id);
-  if (shown === undefined) return child.close();
-  const second = shown.status.kind === 'running' ? Math.floor(Date.now() / 1000) : 0;
-  reconcile(childSlot, [{ key: shown.id, deps: [shown.status, shown.costUsd, shown.turns, second], build: () => childHead(shown, ui, Date.now(), closeChild) }]);
+  if (shown === undefined) {
+    child.close();
+    return false;
+  }
+  reconcile(childSlot, [{ key: shown.id, deps: [shown.status, shown.costUsd, shown.turns], build: () => childHead(shown, ui, Date.now(), closeChild) }]);
   const own = shown.turn;
   const lastText = own.blocks.at(-1)?.kind === 'text' ? own.blocks.at(-1)!.id : undefined;
   reconcile(childRail, railOf(own).map((step) => stepItem(own, step, step.kind === 'text' && step.block.id === lastText, false)));
+  return own.status === 'streaming' && pendingText(own);
 }
 
 /** The running turn's clock, redrawn each second while it runs. */
