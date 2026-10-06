@@ -373,7 +373,8 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
       if (output !== '') call.output = output;
       if (update.status === 'completed' || update.status === 'failed') await endCall(update.toolCallId, TOOL_END[update.status]);
     },
-    usage_update: ({ cost }) => {
+    usage_update: ({ used, size, cost }) => {
+      io.err(`backend: ${backend.id} usage_update used=${used} size=${size}${cost == null ? '' : ` cost=${cost.amount} ${cost.currency}`}`);
       if (cost != null && cost.currency.toUpperCase() === 'USD') reportedCostUsd = cost.amount;
     },
     config_option_update: ({ configOptions }) => {
@@ -445,6 +446,7 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
       killed,
     ]);
     await serial(async () => {});
+    if (response.usage != null) io.err(`backend: ${backend.id} prompt usage ${JSON.stringify(response.usage)}`);
     for (const id of calls.keys()) await endCall(id, 'error');
     if (response.stopReason === 'cancelled' || signal.aborted) {
       if (text !== '') await append(assistant([{ type: 'text', text, citations: null }], true));
