@@ -413,6 +413,10 @@ export function agentToolDefinition(agents: readonly AgentDefinition[]): Tool {
         agent: { type: 'string', enum: agents.map((agent) => agent.name), description: 'Which subagent to start.' },
         task: { type: 'string', description: 'Everything the subagent needs to know: the question or change, and the files or names it concerns.' },
         fork: { type: 'boolean', description: 'Start from a copy of this conversation instead of a fresh session. Use it only when the task depends on what was said here.' },
+        background: {
+          type: 'boolean',
+          description: 'Read-only subagents only: return at once with the subagent session id, and get the report as a message when it finishes. message_agent can steer it meanwhile.',
+        },
       },
       required: ['agent', 'task'],
       additionalProperties: false,

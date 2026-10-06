@@ -114,7 +114,8 @@ const textOf = (event: Extract<TurnEvent, { kind: 'assistant' }>): string =>
 
 /** The classifier's input for a command the newest assistant turn asked to run. */
 export function classifierInputOf(events: readonly TurnEvent[], command: string, denial: Denial): ClassifierInput {
-  const user = events.findLast((e) => e.kind === 'user');
+  // A parent's message or a child's report is data, so it never stands in for what the user asked.
+  const user = events.findLast((e) => e.kind === 'user' && e.from === undefined);
   const assistant = events.findLast((e) => e.kind === 'assistant');
   return {
     request: user?.kind === 'user' ? user.content : '',
