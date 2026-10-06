@@ -30,6 +30,7 @@ import {
   type Reachable,
   type SearchConfig,
   type SearchHit,
+  type TokenUsage,
   type WebAction,
   type WebTarget,
   type WebTool,
@@ -47,7 +48,7 @@ type Address = { readonly address: string; readonly family: number };
 export type Resolve = (hostname: string) => Promise<readonly Address[]>;
 
 /** One helper call, for whoever counts what the tool spent. */
-export type ReadRun = { readonly model: string; readonly costUsd: number | null; readonly latencyMs: number };
+export type ReadRun = { readonly model: string; readonly usage: TokenUsage; readonly costUsd: number | null; readonly latencyMs: number };
 
 export type WebDeps = {
   readonly approval: Approval;
@@ -97,7 +98,8 @@ type Response = {
   readonly truncated: boolean;
 };
 
-const ACCEPT = 'text/html,application/xhtml+xml,text/markdown;q=0.9,text/plain;q=0.8,*/*;q=0.1';
+// Markdown first: some docs sites, Next.js's among them, serve it on request, which is cleaner than converted HTML.
+const ACCEPT = 'text/markdown,text/html;q=0.9,application/xhtml+xml;q=0.9,text/plain;q=0.8,*/*;q=0.1';
 
 function decoded(res: http.IncomingMessage): Readable {
   const encoding = String(res.headers['content-encoding'] ?? '').trim().toLowerCase();
@@ -180,6 +182,13 @@ function textOf(body: Buffer, charset: string): string {
   }
 }
 
+/** A markdown page's front matter title, else its first heading. */
+function markdownTitle(text: string): string | undefined {
+  const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1];
+  const named = front === undefined ? undefined : /^title:\s*(.+?)\s*$/m.exec(front)?.[1]?.replace(/^(["'])(.*)\1$/, '$2');
+  return named || /^#\s+(.+?)\s*$/m.exec(text)?.[1];
+}
+
 /** The page as markdown. HTML is converted; other text is read as it is; anything else is refused. */
 export function pageOf(url: string, response: Response): FetchedPage {
   const type = response.contentType.split(';')[0]!.trim().toLowerCase();
@@ -190,7 +199,8 @@ export function pageOf(url: string, response: Response): FetchedPage {
     return { url, title, markdown, truncated: response.truncated || markdown.length > WEB_LIMITS.maxPageChars };
   }
   if ((type !== '' && !TEXT_TYPES.test(type)) || text.includes('\u0000')) throw new ToolError(`web_fetch reads text pages, and ${url} is ${type || 'binary'}`);
-  return { url, title: undefined, markdown: text, truncated: response.truncated || text.length > WEB_LIMITS.maxPageChars };
+  const title = type === 'text/markdown' ? markdownTitle(text) : undefined;
+  return { url, title, markdown: text, truncated: response.truncated || text.length > WEB_LIMITS.maxPageChars };
 }
 
 type Choice = { readonly provider: ProviderName; readonly model: string; readonly role: 'explore' | 'classifier' | 'session' };
@@ -232,7 +242,8 @@ function reader(deps: WebDeps): Read {
       const started = performance.now();
       try {
         const message = await wire.stream(request(choice.model), { signal, onEvent: () => {} });
-        deps.onRead?.({ model: choice.model, costUsd: costOf(choice.provider, choice.model, usageOf(message)), latencyMs: Math.round(performance.now() - started) });
+        const usage = usageOf(message);
+        deps.onRead?.({ model: choice.model, usage, costUsd: costOf(choice.provider, choice.model, usage), latencyMs: Math.round(performance.now() - started) });
         return message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('');
       } catch (error) {
         if (signal.aborted) throw error;
@@ -295,7 +306,8 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
         } catch (error) {
           if (ctx.signal.aborted || error instanceof ToolError) throw error;
           if (limit.timedOut()) throw new ToolError(`${here.url} did not answer within ${WEB_LIMITS.timeoutMs / 1000} seconds`);
-          throw new ToolError(`could not fetch ${here.url}: ${messagesOf(error).join(': ')}`);
+          const why = messagesOf(error).filter((m) => m !== '').join(': ') || ((error as NodeJS.ErrnoException).code ?? 'the connection failed');
+          throw new ToolError(`could not fetch ${here.url}: ${why}`);
         }
         if (response.location === undefined) break;
         if (redirects.length >= WEB_LIMITS.maxRedirects) throw new ToolError(`${url} redirected more than ${WEB_LIMITS.maxRedirects} times`);
