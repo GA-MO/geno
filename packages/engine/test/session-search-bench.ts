@@ -3,7 +3,7 @@
 // a call, which the index skips), then times the History through SessionIndex: the first use, which reads every log,
 // warm searches, and a search after one log grew. For comparison it also times what listing the History cost before
 // U57, reading and summarizing every log on each list. Prints the medians and ranges over the runs.
-import { appendFile, mkdir, mkdtemp, readdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -130,3 +130,4 @@ console.log(`listing before U57 (reads every log on each list): ${show(listing)}
 console.log(`first search or list (reads every log): ${show(cold)}`);
 console.log(`warm search, ${QUERIES.length} queries x ${RUNS}: ${show(warm)}`);
 console.log(`search after one log grew: ${show(grown)}`);
+await rm(home, { recursive: true, force: true });
