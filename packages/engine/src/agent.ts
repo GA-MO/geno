@@ -116,7 +116,7 @@ export type AgentOptions = {
 export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers; readonly wakes?: RunWakes | undefined };
 
 /** What wakes the session after its turn ends: present only in the engine process, with auto-wake on. */
-export type RunWakes = { readonly registry: Wakes; readonly waiter: Waiter };
+export type RunWakes = { readonly registry: Wakes; readonly waiter: Waiter; readonly secondMs: number };
 
 /** Background commands and steers that live as long as one run, what arrives from them delivered to its loop. */
 function runEngine(): RunEngine {
@@ -176,7 +176,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         lane: lane?.bounds,
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
-        wakes: own && wakes !== undefined ? { registry: wakes.registry, sessionId: session.id, waiter: wakes.waiter } : undefined,
+        wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);

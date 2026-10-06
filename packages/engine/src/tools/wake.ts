@@ -20,6 +20,8 @@ export type SessionWakes = {
   readonly sessionId: string;
   /** This engine process, named in a wake-up's record so that another engine takes it up only once this one is gone. */
   readonly waiter: Waiter;
+  /** How long one second of a delay or a timeout lasts: 1000, but for the tests. */
+  readonly secondMs: number;
 };
 
 /** Starts a command in the background under bash's approval and sandbox. */
@@ -46,7 +48,7 @@ export function wakeExecutors(wakes: SessionWakes | undefined, background: Sessi
       }),
       describe: ({ command, background_job_id, pattern }) => `monitor ${command ?? background_job_id ?? ''} for /${pattern}/`,
       async run({ command, background_job_id, pattern, timeout_s = MONITOR_DEFAULT_S, description }, ctx) {
-        const { registry, sessionId } = own();
+        const { registry, sessionId, secondMs } = own();
         if ((command === undefined) === (background_job_id === undefined)) throw new ToolError('give command or background_job_id, one of the two');
         let regex: RegExp;
         try {
@@ -59,7 +61,7 @@ export function wakeExecutors(wakes: SessionWakes | undefined, background: Sessi
         const job = started?.job ?? (background_job_id as JobId);
         const head = started === undefined ? '' : `${started.text}\n`;
         const id = registry.nextId(sessionId, ctx.events());
-        const watched = registry.monitor(sessionId, { id, job, pattern: regex, toolUseId: ctx.toolUseId ?? `toolu_gcode_${id}`, timeoutMs: timeout_s * 1000, ownsJob: started !== undefined });
+        const watched = registry.monitor(sessionId, { id, job, pattern: regex, toolUseId: ctx.toolUseId ?? `toolu_gcode_${id}`, timeoutMs: timeout_s * secondMs, ownsJob: started !== undefined });
         if (watched.kind === 'matched') return withApproval(`${head}${job} already printed a matching line, so nothing was set up to wait for:\n${watched.line}`, started?.approval);
         if (watched.kind === 'ended') return withApproval(`${head}${job} already ended, so nothing was set up to wait for. Read its output with bash_output.`, started?.approval);
         return withApproval(
@@ -72,10 +74,10 @@ export function wakeExecutors(wakes: SessionWakes | undefined, background: Sessi
       input: z.strictObject({ delay_s: z.number().int().min(SCHEDULE_MIN_S).max(SCHEDULE_MAX_S), reason: z.string().trim().min(1) }),
       describe: ({ delay_s, reason }) => `schedule_wakeup in ${delay_s}s: ${reason}`,
       async run({ delay_s, reason }, ctx) {
-        const { registry, sessionId, waiter } = own();
+        const { registry, sessionId, waiter, secondMs } = own();
         if (ctx.logNote === undefined) throw new ToolError('a wake-up can be scheduled only inside an agent run');
         const id = registry.nextId(sessionId, ctx.events());
-        const dueAt = Date.now() + delay_s * 1000;
+        const dueAt = Date.now() + delay_s * secondMs;
         const note: Extract<WakeNote, { kind: 'scheduled' }> = { kind: 'scheduled', id, toolUseId: ctx.toolUseId ?? `toolu_gcode_${id}`, dueAt, reason, by: waiter };
         await ctx.logNote({ kind: 'wake', at: new Date().toISOString(), note });
         registry.schedule(sessionId, note);
