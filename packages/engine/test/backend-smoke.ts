@@ -22,6 +22,9 @@ const PROMPTS = [
   'Add the line `export const four = 4;` at the end of a.ts. Change nothing else.',
   'Run `ls -la` in a terminal and tell me only the first line of its output. Do not change anything.',
 ] as const;
+// GCODE_LIVE_ONLY=2 sends prompt 2 alone, to confirm one behavior without spending the other two.
+const only = Number(process.env['GCODE_LIVE_ONLY'] ?? 0);
+const chosen = only >= 1 && only <= PROMPTS.length ? [PROMPTS[only - 1]!] : PROMPTS;
 
 const redact = (text: string) => text.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>');
 const say = (line: string) => console.log(redact(line));
@@ -76,7 +79,7 @@ say(`session ${started.sessionId}, backend ${JSON.stringify(started._meta?.[BACK
 say(`models: ${models?.type === 'select' ? `${models.options.length} offered, current ${String(models.currentValue)}` : 'none'}`);
 
 let spent = 0;
-for (const text of PROMPTS) {
+for (const text of chosen) {
   if (++spent > 3) throw new Error('the smoke sends at most three prompts');
   const from = updates.length;
   const t0 = Date.now();
