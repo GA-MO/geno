@@ -47,10 +47,17 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
   let shown: ModelMenu = { backends: [], models: [], efforts: [], note: undefined };
 
   const items = () => [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
-  const option = (attrs: Record<string, string>, label: string, checked: boolean | undefined, run: () => void, detail?: string, stacked = false) =>
+  /** An option without `run` is disabled: it keeps its place in the keys' path, and choosing it does nothing. */
+  const option = (attrs: Record<string, string>, label: string, checked: boolean | undefined, run: (() => void) | undefined, detail?: string, stacked = false) =>
     h(
       'li',
-      { class: 'model-option', tabindex: '-1', ...attrs, ...(checked === undefined ? {} : { 'aria-checked': String(checked) }), onclick: () => (close(), run()) },
+      {
+        class: 'model-option',
+        tabindex: '-1',
+        ...attrs,
+        ...(checked === undefined ? {} : { 'aria-checked': String(checked) }),
+        ...(run === undefined ? { 'aria-disabled': 'true' } : { onclick: () => (close(), run()) }),
+      },
       h(
         'span',
         { class: stacked ? 'model-option-text stacked' : 'model-option-text' },
@@ -59,14 +66,10 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
       ),
       checked === true && icon('check', 'model-check'),
     );
-  // A missing backend stays in the list, and in the keys' path, with its reason; choosing it does nothing.
-  const backendOption = (b: BackendRow) => {
-    const row = option({ role: 'menuitemradio', 'data-backend': b.id, ...(b.disabled ? { 'aria-disabled': 'true' } : {}) }, b.label, b.current, () => {
+  const backendOption = (b: BackendRow) =>
+    option({ role: 'menuitemradio', 'data-backend': b.id }, b.label, b.current, b.disabled ? undefined : () => {
       if (!b.current) post({ type: 'set-backend', backend: b.id });
     }, b.detail, true);
-    if (b.disabled) row.onclick = null;
-    return row;
-  };
   const heading = (text: string) => h('li', { class: 'menu-heading', role: 'presentation' }, text);
 
   function open(): void {
