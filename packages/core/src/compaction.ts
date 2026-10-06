@@ -14,7 +14,7 @@ import { wakeNoteText } from './wake.js';
  * call. The data shape is `compact.ts`.
  */
 
-/** About what an image costs in context; the providers count 1,000 to 1,600 for a screenshot. */
+/** An estimate of what one image costs in context. */
 export const IMAGE_TOKENS = 1_600;
 
 /** A kept message longer than this is cut, and the kept messages together stay within MESSAGES_CHARS, newest first. */
