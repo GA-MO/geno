@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -10,6 +10,7 @@ import type { RewindFromView, RewindToView } from './rewind-model.js';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
+import type { ReviewMode } from '../review/mode.js';
 
 /**
  * The chat transcript, the one model the panel renders. The extension owns it and sends every change as an
@@ -137,8 +138,8 @@ export type ToolImage = { readonly path: string; readonly name: string };
 
 export type AutoDecision = { readonly verdict: 'allow' | 'deny'; readonly reason: string };
 
-/** A file an edit changed, as hunks the review controller tracks by the same ids. */
-export type FileDiff = { readonly path: string; readonly hunks: readonly DiffHunk[] };
+/** A file an edit changed, as hunks the review controller tracks by the same ids. `change` is the engine's id for the edit. */
+export type FileDiff = { readonly path: string; readonly change: string; readonly hunks: readonly DiffHunk[] };
 
 export type DiffHunk = {
   readonly id: string;
@@ -266,8 +267,8 @@ export type UiStyle = (typeof UI_STYLES)[number];
 export const CHAT_DETAILS = ['compact', 'full'] as const;
 export type ChatDetail = (typeof CHAT_DETAILS)[number];
 
-/** The panel's look from settings, which the page carries as `data-style` and `data-detail` on its body. */
-export type Look = { readonly style: UiStyle; readonly detail: ChatDetail };
+/** The panel's look from settings, which the page carries as `data-style`, `data-detail` and `data-review` on its body. */
+export type Look = { readonly style: UiStyle; readonly detail: ChatDetail; readonly review: ReviewMode };
 
 /** An approval mode the session can be in, as the engine advertises it through ACP. */
 export type ModeOption = { readonly id: string; readonly name: string; readonly description: string | undefined };
@@ -408,6 +409,10 @@ export type FromView =
   | { readonly type: 'undo'; readonly hunks: readonly string[] }
   /** Opens the file a hunk is in, at the hunk. */
   | { readonly type: 'reveal'; readonly hunk: string }
+  /** Auto review: restores the checkpoint before a turn. `later` when turns after it changed files too, which it undoes as well. */
+  | { readonly type: 'undo-turn'; readonly checkpoint: CheckpointRef; readonly later: boolean }
+  /** Auto review: a file a turn changed, in a diff against the checkpoint before that turn. */
+  | { readonly type: 'open-change'; readonly path: string; readonly checkpoint: CheckpointRef }
   | { readonly type: 'copy'; readonly text: string }
   /** Opens the Models and Keys page. */
   | { readonly type: 'choose-model' }

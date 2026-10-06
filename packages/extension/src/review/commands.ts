@@ -1,10 +1,12 @@
+import path from 'node:path';
 import * as vscode from 'vscode';
-import type { HunkId, InlineEditTarget } from '@g-code/core';
+import type { CheckpointRef, HunkId, InlineEditTarget } from '@g-code/core';
 import { realOrSelf } from '../chat/bridge.js';
 import type { Chat } from '../chat/chat.js';
 import { CheckpointDocuments, CHECKPOINT_SCHEME, openDiff } from './checkpoint.js';
-import { KEEP_COMMAND, ReviewController, UNDO_COMMAND, type Tracked } from './controller.js';
+import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, ReviewController, UNDO_COMMAND, UNDO_TURN_COMMAND, type Tracked } from './controller.js';
 import { REVIEW_DOCUMENTS, ReviewDecorations, ReviewLenses } from './editor.js';
+import { REVIEW_MODE_SETTING } from './mode.js';
 import { CHANGES_VIEW, ChangesView, REVEAL_COMMAND } from './tree.js';
 
 export const KEEP_FILE_COMMAND = 'gcode.review.keepFile';
@@ -22,6 +24,25 @@ export async function selectionTarget(editor: vscode.TextEditor): Promise<Inline
   const { start, end } = editor.selection;
   const endLine = end.character === 0 && end.line > start.line ? end.line : end.line + 1;
   return { path: await realOrSelf(editor.document.uri.fsPath), startLine: start.line + 1, endLine };
+}
+
+/** A path as the chat shows it, relative to the workspace unless the file is outside it. */
+function workspaceFile(shown: string): vscode.Uri {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  return path.isAbsolute(shown) || folder === undefined ? vscode.Uri.file(shown) : vscode.Uri.joinPath(folder.uri, ...shown.split('/'));
+}
+
+/** Undo under a turn: its checkpoint comes back at once, unless that also takes back the turns after it. */
+async function undoTurn(chat: Chat, review: ReviewController, checkpoint: CheckpointRef, later: boolean): Promise<void> {
+  if (later) {
+    const answer = await vscode.window.showWarningMessage(
+      'Undo this turn and every turn after it?',
+      { modal: true, detail: 'The workspace goes back to the checkpoint before this turn, so the changes of the turns after it are undone too.' },
+      'Undo',
+    );
+    if (answer !== 'Undo') return;
+  }
+  chat.reviewed(await review.undoTurn(checkpoint));
 }
 
 function fileOf(uri: vscode.Uri | undefined): vscode.Uri {
@@ -79,6 +100,11 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
       return answer === 'Undo All' ? review.undoSession() : undefined;
     }),
     vscode.commands.registerCommand(OPEN_DIFF_COMMAND, (uri?: vscode.Uri) => openDiff(fileOf(uri))),
+    vscode.commands.registerCommand(UNDO_TURN_COMMAND, (checkpoint: CheckpointRef, later?: boolean) => undoTurn(chat, review, checkpoint, later === true)),
+    vscode.commands.registerCommand(OPEN_CHANGE_COMMAND, (shown: string, checkpoint: CheckpointRef) => openDiff(workspaceFile(shown), checkpoint)),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(REVIEW_MODE_SETTING)) void review.reset();
+    }),
     vscode.commands.registerCommand(REVEAL_COMMAND, async (id: HunkId) => {
       const hunk = review.get(id);
       if (hunk === undefined) return;

@@ -7,6 +7,7 @@ const run = (actions: readonly Action[], start: Transcript = emptyTranscript('qw
 
 const DIFF: FileDiff = {
   path: 'a.ts',
+  change: 'c1',
   hunks: [
     { id: 'c1:0', line: 2, removed: ['  return a + b;'], added: ['  return b + a;'], status: 'pending' },
     { id: 'c1:1', line: 7, removed: [], added: ['export const four = 4;'], status: 'pending' },

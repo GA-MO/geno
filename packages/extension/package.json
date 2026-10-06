@@ -352,6 +352,19 @@
           "default": "short",
           "markdownDescription": "When the provider rate-limits a turn, whether Geno sends the call again by itself once the limit resets. A turn that loses the network always resumes by itself. A change applies to the turns that start after it."
         },
+        "gcode.review.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "review"
+          ],
+          "enumDescriptions": [
+            "Save Geno's edits as they are made, with nothing to keep. Each turn that changed files ends in one line with Undo, which puts back every file as it was before the turn.",
+            "Put each of Geno's edits under review: Keep and Undo on every hunk, in the editor and in the chat."
+          ],
+          "default": "auto",
+          "description": "How you review the edits Geno has made. Approval modes (Ask, Auto, Plan) decide what Geno may do; this decides what happens after."
+        },
         "gcode.ui.showChanges": {
           "type": "boolean",
           "default": false,

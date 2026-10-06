@@ -1397,6 +1397,29 @@ body.diagram-tab {
   display: none;
 }
 
+/* Auto review: the files a turn changed and its Undo, on one line under the turn. */
+.turn-changes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0 var(--rail-indent);
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-changes .kind {
+  color: var(--muted);
+}
+
+.turn-changes .turn-undone {
+  color: var(--muted);
+}
+
+.turn-changes .turn-undo:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
 .turn-footer .model {
   color: var(--vscode-foreground);
   opacity: 0.8;

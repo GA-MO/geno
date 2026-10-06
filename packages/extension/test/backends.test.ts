@@ -29,7 +29,7 @@ const laneEdit = (id: string): Action => ({ type: 'tool', id, at, name: 'edit', 
 const read = (id: string): Action => ({ type: 'tool', id, at, name: 'read', target: 'a.ts', toolKind: 'read', status: 'completed' });
 const applied = (id: string): Action[] => [
   { type: 'tool', id, at, name: 'edit', target: 'a.ts', toolKind: 'edit', status: 'completed' },
-  { type: 'diff', toolId: id, at, diff: { path: 'a.ts', hunks: [{ id: 'h1', line: 2, removed: ['two'], added: ['TWO'], status: 'pending' }] } },
+  { type: 'diff', toolId: id, at, diff: { path: 'a.ts', change: 'c1', hunks: [{ id: 'h1', line: 2, removed: ['two'], added: ['TWO'], status: 'pending' }] } },
 ];
 
 const facts = (more: Partial<ComposerFacts> = {}): ComposerFacts => ({ ...NO_FACTS, provider: 'modelstudio', models: GENO_MODELS, backends: BACKENDS, bahtPerUsd: 33, ...more });

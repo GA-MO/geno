@@ -67,7 +67,8 @@ import {
   type ExternalBackendId,
   asSessionId,
 } from '@g-code/core';
-import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
+import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, UNDO_COMMAND, UNDO_TURN_COMMAND } from '../review/controller.js';
+import { DEFAULT_REVIEW_MODE, REVIEW_MODE_SETTING, REVIEW_MODES, type ReviewMode } from '../review/mode.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { currentBranch } from '../git-branch.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
@@ -126,7 +127,7 @@ export const MCP_COMMAND = 'gcode.chat.mcp';
 export const LANES_COMMAND = 'gcode.chat.lanes';
 export const TASKS_COMMAND = 'gcode.chat.tasks';
 /** The settings the panel's look comes from. */
-export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail'] as const;
+export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail', REVIEW_MODE_SETTING] as const;
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
 
 /** What Start building sends once the session has left Plan. */
@@ -147,11 +148,15 @@ export function approvalModeOf(configuration: vscode.WorkspaceConfiguration): 'a
 const known = <T extends string>(values: readonly T[], value: string | undefined, fallback: T): T =>
   (values as readonly (string | undefined)[]).includes(value) ? (value as T) : fallback;
 
-/** The panel's look from settings; an unknown value falls back to the default, glass and compact. */
+/** The panel's look from settings; an unknown value falls back to the default, glass, compact and auto review. */
 export const lookOf = (configuration: vscode.WorkspaceConfiguration): Look => ({
   style: known<UiStyle>(UI_STYLES, configuration.get<string>('ui.style'), 'glass'),
   detail: known<ChatDetail>(CHAT_DETAILS, configuration.get<string>('chat.detail'), 'compact'),
+  review: reviewModeOf(configuration),
 });
+
+export const reviewModeOf = (configuration: vscode.WorkspaceConfiguration): ReviewMode =>
+  known<ReviewMode>(REVIEW_MODES, configuration.get<string>('review.mode'), DEFAULT_REVIEW_MODE);
 
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
@@ -341,6 +346,7 @@ function diffOf(file: vscode.Uri, change: FileChange): FileDiff {
   const lines = afterLines(change);
   return {
     path: vscode.workspace.asRelativePath(file),
+    change: change.id,
     hunks: change.hunks.map((hunk, i) => ({ id: hunkIdOf(change, i), line: lines[i]!, removed: linesOf(hunk.oldText), added: linesOf(hunk.newText), status: hunk.status })),
   };
 }
@@ -1217,6 +1223,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
+      'undo-turn': ({ checkpoint, later }) => void vscode.commands.executeCommand(UNDO_TURN_COMMAND, checkpoint, later).then(undefined, warn),
+      'open-change': ({ path, checkpoint }) => void vscode.commands.executeCommand(OPEN_CHANGE_COMMAND, path, checkpoint),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
       'choose-model': () => this.showSettings(),
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),

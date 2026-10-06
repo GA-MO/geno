@@ -17,6 +17,8 @@ import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
 import { verbOf } from './verbs.js';
 import { commandStepOf, type CommandJob } from './command-step.js';
+import type { ReviewMode } from '../review/mode.js';
+import { changesLine, type TurnChanges } from '../review/summary.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -27,6 +29,7 @@ export type Ui = {
   readonly unfold: (id: string) => void;
   /** Opens a subagent's transcript in the side view. */
   readonly openChild: (id: string) => void;
+  readonly review: () => ReviewMode;
 };
 
 /** The avatar's markup, baked in by the build from the one dino named in src/dino.ts. */
@@ -250,25 +253,61 @@ const DECISIONS: Readonly<Record<Exclude<DiffHunk['status'], 'pending'>, { reado
   undone: { icon: 'discard', label: 'Undone' },
 };
 
-function hunkControls(hunk: DiffHunk, ui: Ui): HTMLElement {
-  if (hunk.status !== 'pending') {
-    const decision = DECISIONS[hunk.status];
-    return h('span', { class: `decision decision-${hunk.status}` }, icon(decision.icon), decision.label);
-  }
-  return h(
-    'span',
-    { class: 'hunk-actions' },
-    h('button', { class: 'button ghost small', 'data-focus': `undo:${hunk.id}`, onclick: () => ui.post({ type: 'undo', hunks: [hunk.id] }) }, 'Undo'),
-    h('button', { class: 'button secondary small', 'data-focus': `keep:${hunk.id}`, onclick: () => ui.post({ type: 'keep', hunks: [hunk.id] }) }, 'Keep'),
-  );
+function decision(status: Exclude<DiffHunk['status'], 'pending'>): HTMLElement {
+  const { icon: glyph, label } = DECISIONS[status];
+  return h('span', { class: `decision decision-${status}` }, icon(glyph), label);
 }
+
+/** Where a file the chat names opens: `first` is its first hunk, `checkpoint` the one before its turn. */
+type OpenedFile = Pick<ChangedFile, 'path' | 'first' | 'checkpoint'>;
+
+/**
+ * What the chat offers for edits in each review mode. Review asks Keep or Undo of each hunk and of the turn's
+ * pending ones, and opens a file at its hunk. Auto has nothing to decide, and opens a file in a diff against the
+ * checkpoint before its turn; its Undo is the turn's, under the turn.
+ */
+type EditControls = {
+  readonly hunk: (hunk: DiffHunk, ui: Ui) => Child;
+  readonly pending: (hunks: readonly string[], ui: Ui) => Child;
+  readonly open: (file: OpenedFile) => FromView;
+};
+
+const CONTROLS: Readonly<Record<ReviewMode, EditControls>> = {
+  review: {
+    hunk: (hunk, ui) =>
+      hunk.status !== 'pending'
+        ? decision(hunk.status)
+        : h(
+            'span',
+            { class: 'hunk-actions' },
+            h('button', { class: 'button ghost small', 'data-focus': `undo:${hunk.id}`, onclick: () => ui.post({ type: 'undo', hunks: [hunk.id] }) }, 'Undo'),
+            h('button', { class: 'button secondary small', 'data-focus': `keep:${hunk.id}`, onclick: () => ui.post({ type: 'keep', hunks: [hunk.id] }) }, 'Keep'),
+          ),
+    pending: (hunks, ui) =>
+      hunks.length > 0 &&
+      h(
+        'span',
+        { class: 'changes-actions' },
+        h('button', { class: 'button ghost small', 'data-focus': 'undo-all', onclick: () => ui.post({ type: 'undo', hunks }) }, 'Undo all'),
+        h('button', { class: 'button small', 'data-focus': 'keep-all', onclick: () => ui.post({ type: 'keep', hunks }) }, 'Keep all'),
+      ),
+    open: (file) => ({ type: 'reveal', hunk: file.first }),
+  },
+  auto: {
+    hunk: (hunk) => hunk.status !== 'pending' && decision(hunk.status),
+    pending: () => false,
+    open: (file) => ({ type: 'open-change', path: file.path, checkpoint: file.checkpoint }),
+  },
+};
+
+const controls = (ui: Ui): EditControls => CONTROLS[ui.review()];
 
 function hunkView(hunk: DiffHunk, ui: Ui): HTMLElement {
   const lines = [...hunk.removed.map((text) => ['removed', text] as const), ...hunk.added.map((text) => ['added', text] as const)];
   return h(
     'div',
     { class: `hunk hunk-${hunk.status}`, 'data-hunk': hunk.id },
-    h('div', { class: 'hunk-head' }, h('span', { class: 'hunk-line' }, `Line ${hunk.line}`), h('span', { class: 'spacer' }), hunkControls(hunk, ui)),
+    h('div', { class: 'hunk-head' }, h('span', { class: 'hunk-line' }, `Line ${hunk.line}`), h('span', { class: 'spacer' }), controls(ui).hunk(hunk, ui)),
     h(
       'div',
       { class: 'hunk-lines' },
@@ -284,6 +323,7 @@ function editCard(tool: EditTool, ui: Ui): HTMLElement {
   const slash = diff.path.lastIndexOf('/');
   const dir = slash === -1 ? '' : diff.path.slice(0, slash);
   const first = diff.hunks.find((hunk) => hunk.status === 'pending') ?? diff.hunks[0];
+  const file: OpenedFile = { path: diff.path, first: first?.id ?? '', checkpoint: { before: diff.change } };
   return h(
     'section',
     { class: 'edit-card', 'data-edit': tool.id, 'aria-label': `Edit to ${diff.path}` },
@@ -292,7 +332,7 @@ function editCard(tool: EditTool, ui: Ui): HTMLElement {
       { class: 'edit-head' },
       h(
         'button',
-        { class: 'link-button file-name', title: `Open ${diff.path}`, 'data-focus': `open:${tool.id}`, onclick: () => first !== undefined && ui.post({ type: 'reveal', hunk: first.id }) },
+        { class: 'link-button file-name', title: `Open ${diff.path}`, 'data-focus': `open:${tool.id}`, onclick: () => first !== undefined && ui.post(controls(ui).open(file)) },
         basename(diff.path),
       ),
       dir !== '' && h('span', { class: 'file-dir' }, dir),
@@ -304,7 +344,7 @@ function editCard(tool: EditTool, ui: Ui): HTMLElement {
   );
 }
 
-/** Every edit of a turn in one card at the end of its rail, with Keep all and Undo all while any hunk waits. */
+/** Every edit of a turn in one card at the end of its rail, with Keep all and Undo all while any hunk waits for review. */
 export function changesCard(edits: readonly EditTool[], ui: Ui): HTMLElement {
   const files = new Set(edits.map((tool) => tool.diff.path)).size;
   const total = edits.map((tool) => counts(tool.diff)).reduce((a, b) => ({ added: a.added + b.added, removed: a.removed + b.removed }), { added: 0, removed: 0 });
@@ -319,13 +359,7 @@ export function changesCard(edits: readonly EditTool[], ui: Ui): HTMLElement {
       h('span', { class: 'changes-title' }, files === 1 ? '1 file changed' : `${files} files changed`),
       lineCounts(total),
       h('span', { class: 'spacer' }),
-      pending.length > 0 &&
-        h(
-          'span',
-          { class: 'changes-actions' },
-          h('button', { class: 'button ghost small', 'data-focus': 'undo-all', onclick: () => ui.post({ type: 'undo', hunks: pending }) }, 'Undo all'),
-          h('button', { class: 'button small', 'data-focus': 'keep-all', onclick: () => ui.post({ type: 'keep', hunks: pending }) }, 'Keep all'),
-        ),
+      controls(ui).pending(pending, ui),
     ),
     ...edits.map((tool) => editCard(tool, ui)),
   );
@@ -343,7 +377,7 @@ export const foldRow = (step: Extract<Step, { readonly kind: 'fold' }>, ui: Ui):
     icon(step.open ? 'chevron-down' : 'chevron-right', 'chevron'),
   );
 
-/** The files a turn changed, one chip each that opens the file at its first hunk, with Keep all and Undo all while any hunk waits. */
+/** The files a turn changed, one chip each that opens the file, with Keep all and Undo all while any hunk waits for review. */
 export function filesRow(files: readonly ChangedFile[], ui: Ui): HTMLElement {
   const pending = files.flatMap((file) => file.pending);
   return h(
@@ -352,20 +386,26 @@ export function filesRow(files: readonly ChangedFile[], ui: Ui): HTMLElement {
     ...files.map((file) =>
       h(
         'button',
-        { type: 'button', class: 'file-chip changed-file', title: `Open ${file.path}`, 'data-focus': `file:${file.first}`, onclick: () => ui.post({ type: 'reveal', hunk: file.first }) },
+        { type: 'button', class: 'file-chip changed-file', title: `Open ${file.path}`, 'data-focus': `file:${file.first}`, onclick: () => ui.post(controls(ui).open(file)) },
         icon('file-code'),
         h('span', { class: 'chip-name' }, basename(file.path)),
         lineCounts(file),
       ),
     ),
-    pending.length > 0 &&
-      h(
-        'span',
-        { class: 'changes-actions' },
-        h('button', { class: 'button ghost small', 'data-focus': 'undo-all', onclick: () => ui.post({ type: 'undo', hunks: pending }) }, 'Undo all'),
-        h('button', { class: 'button small', 'data-focus': 'keep-all', onclick: () => ui.post({ type: 'keep', hunks: pending }) }, 'Keep all'),
-      ),
+    controls(ui).pending(pending, ui),
   );
+}
+
+/** Auto review's line under a turn that edited files: how many, and Undo, which restores the checkpoint before the turn. */
+export function turnChangesRow(changes: TurnChanges, later: boolean, ui: Ui): HTMLElement {
+  const undo = changes.undone
+    ? h('span', { class: 'turn-undone' }, 'Undone')
+    : h(
+        'button',
+        { type: 'button', class: 'link-button turn-undo', 'data-focus': `undo-turn:${changes.checkpoint.before}`, title: 'Put back every file as it was before this turn', onclick: () => ui.post({ type: 'undo-turn', checkpoint: changes.checkpoint, later }) },
+        'Undo',
+      );
+  return h('div', { class: 'turn-changes', role: 'group', 'aria-label': 'Files changed in this turn' }, icon('diff-multiple', 'kind'), h('span', { class: 'turn-changes-line' }, changesLine(changes), ' · ', undo));
 }
 
 /** Option kinds as the panel names their buttons; the first allow is the default the card focuses. */
@@ -589,14 +629,14 @@ const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { read
   failed: { icon: 'error', label: 'Failed' },
 };
 
-/** Under an external agent's turn that left changes in its lane: bring them into the main checkout for review. */
+/** Under an external agent's turn that left changes in its lane: bring them into the main checkout. */
 export const applyLaneButton = (lane: string, ui: Ui): HTMLElement =>
   h(
     'div',
     { class: 'apply-lane' },
     h(
       'button',
-      { type: 'button', class: 'button secondary', 'data-focus': `apply-lane:${lane}`, title: `Apply changes from lane ${lane} to the main checkout, for review`, onclick: () => ui.post({ type: 'lane-apply', name: lane }) },
+      { type: 'button', class: 'button secondary', 'data-focus': `apply-lane:${lane}`, title: `Apply changes from lane ${lane} to the main checkout`, onclick: () => ui.post({ type: 'lane-apply', name: lane }) },
       icon('git-pull-request-go-to-changes'),
       h('span', { class: 'apply-lane-label' }, `Apply changes from lane ${lane}`),
     ),
