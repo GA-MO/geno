@@ -7,6 +7,9 @@ import {
   afterLines,
   DIAGNOSTICS_METHOD,
   EDITOR_ACTION_METHOD,
+  READ_TERMINAL_METHOD,
+  type ReadTerminalRequest,
+  type ReadTerminalResponse,
   HUNK_STATUSES,
   hunkIdOf,
   APPROVAL_META,
@@ -128,6 +131,7 @@ import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
 import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
+import { readTerminalRequest } from './terminals.js';
 import { todoOfUpdate } from './todo-model.js';
 
 export const CHAT_VIEW = 'gcode.chat';
@@ -550,6 +554,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     seen: SeenStore,
     /** What the user chose for an external agent, such as its API key, for the engine that starts it. */
     private readonly backendEnv: (backend: ExternalBackendId) => Promise<BackendEnvResponse>,
+    /** The user's terminals as the recorder holds them, redacted and capped, for read_terminal. */
+    private readonly readTerminal: (request: Omit<ReadTerminalRequest, 'sessionId'>) => ReadTerminalResponse,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
@@ -692,6 +698,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         await runEditorAction(params.action);
         return {};
       })
+      .onRequest(READ_TERMINAL_METHOD, readTerminalRequest, ({ params }) => this.readTerminal(params))
       .onRequest(BACKEND_ENV_METHOD, backendEnvRequest, ({ params }) => this.backendEnv(params.backend))
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
       .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))

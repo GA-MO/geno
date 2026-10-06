@@ -21,6 +21,7 @@ import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
 import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, resumeEnvOf, wakeEnvOf, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
 import { SettingsPage } from './chat/settings-host.js';
+import { TerminalRecorder } from './chat/terminals.js';
 import { seenStore } from './chat/seen.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
@@ -107,6 +108,8 @@ function registerChat(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Geno engine');
   const review = new ReviewController(() => chat.link(), output, () => reviewModeOf(vscode.workspace.getConfiguration('gcode')));
   const memory = sessionMemory(context.storageUri);
+  // From activation on, so a command the user ran before opening the chat can still be read.
+  const terminals = new TerminalRecorder(vscode.window);
   const chat = new Chat(
     () => engineSettings(context, output),
     context.extensionUri,
@@ -130,10 +133,12 @@ function registerChat(context: vscode.ExtensionContext): void {
     (post) => new SettingsPage(context.secrets, engineCli(context), output, post),
     seenStore(context.storageUri),
     (backend) => backendEnv(context.secrets, backend),
+    (request) => terminals.read(request),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(
     output,
+    terminals,
     chat,
     review.onDidChange(() => chat.reviewed(review.all())),
     vscode.commands.registerCommand(SET_KEY_COMMAND, (key?: string, provider?: string, field?: FieldId) => setApiKey(context.secrets, key, provider, field)),
