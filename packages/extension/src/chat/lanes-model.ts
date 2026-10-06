@@ -1,4 +1,5 @@
-import type { CheckOutcome, ExternalBackendId, LaneInfo, LaneStatus, TaskRecord, TaskStatus } from '@g-code/core';
+import type { CheckOutcome, LaneInfo, LaneStatus, TaskRecord, TaskStatus } from '@g-code/core';
+import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
 import { clockOf, formatCost, formatDuration } from './format.js';
 
@@ -13,8 +14,8 @@ export type LanesListing = { readonly kind: 'loading' } | { readonly kind: 'load
 export type LanesToView =
   | { readonly type: 'lanes'; readonly listing: LanesListing }
   | { readonly type: 'show-lanes' }
-  /** Every task the engine knows, the session the panel shows, and the names of the agents a task can run on. */
-  | { readonly type: 'tasks'; readonly tasks: readonly TaskRecord[]; readonly shown: string | undefined; readonly backends: BackendLabels }
+  /** Every task the engine knows, and the session the panel shows. */
+  | { readonly type: 'tasks'; readonly tasks: readonly TaskRecord[]; readonly shown: string | undefined }
   | { readonly type: 'show-tasks' };
 
 export type LanesFromView =
@@ -29,9 +30,6 @@ export type LanesFromView =
   | { readonly type: 'lane-discard'; readonly name: string; readonly discardChanges: boolean }
   | { readonly type: 'task-open'; readonly sessionId: string }
   | { readonly type: 'task-stop'; readonly sessionId: string };
-
-/** Each external agent's name, as the engine's registry gives it. */
-export type BackendLabels = Readonly<Partial<Record<ExternalBackendId, string>>>;
 
 export type Tone = 'ok' | 'wait' | 'busy' | 'failed' | 'quiet';
 export type Badge = { readonly label: string; readonly tone: Tone };
@@ -116,12 +114,12 @@ export type TaskRow = {
 /** Where a task works: its lane, or the main checkout. An external agent always works in a lane, made on its first turn. */
 const whereOf = (task: TaskRecord): string => (task.lane !== null ? `Lane ${task.lane}` : task.backend !== undefined ? 'New lane' : 'Main checkout');
 
-export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number, backends: BackendLabels, clock: (ms: number) => string = clockOf): TaskRow {
+export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number, clock: (ms: number) => string = clockOf): TaskRow {
   return {
     id: task.sessionId,
     title: task.title,
     where: whereOf(task),
-    backend: task.backend === undefined ? undefined : (backends[task.backend] ?? task.backend),
+    backend: task.backend === undefined ? undefined : EXTERNAL_BACKENDS[task.backend].label,
     state: task.status === 'waiting' && task.waiting !== undefined ? { label: waitLabel(task.waiting, now, clock), tone: 'wait' } : TASK_BADGES[task.status],
     time: formatDuration((task.endedAt ?? now) - task.startedAt),
     cost: task.usage?.costUsd == null ? undefined : formatCost(task.usage.costUsd),

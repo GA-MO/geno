@@ -21,7 +21,6 @@ import {
 } from '@g-code/core';
 import type { Connection } from './engine.js';
 import type { LanesFromView, LanesListing, LanesToView } from './lanes-model.js';
-import { BACKEND_LABELS } from './backends-host.js';
 import { channelsOf, noticeText, osNotification } from './notices.js';
 
 export const OS_NOTIFICATIONS_SETTING = 'gcode.tasks.osNotifications';
@@ -101,7 +100,7 @@ export class TaskHost implements vscode.Disposable {
   }
 
   private changed(): void {
-    this.post({ type: 'tasks', tasks: [...this.tasks.values()], shown: this.chat.shown(), backends: BACKEND_LABELS });
+    this.post({ type: 'tasks', tasks: [...this.tasks.values()], shown: this.chat.shown() });
     this.badge([...this.tasks.values()].filter((task) => isLive(task.status) && task.sessionId !== this.chat.shown()).length);
   }
 

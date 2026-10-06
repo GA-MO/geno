@@ -503,7 +503,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-memory') return memory.open();
   if (message.type === 'lanes') return lanes.listed(message.listing);
   if (message.type === 'show-lanes') return lanes.open();
-  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown, message.backends);
+  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown);
   if (message.type === 'show-tasks') return tasks.open();
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();

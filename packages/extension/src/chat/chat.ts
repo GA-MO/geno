@@ -74,7 +74,6 @@ import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
-import { BACKEND_LABELS } from './backends-host.js';
 import { TaskHost } from './tasks-host.js';
 import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
@@ -1084,7 +1083,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
         void view.webview.postMessage({ type: 'composer', facts: this.composer.current() } satisfies ToView);
         const background = this.background.current();
-        void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown, backends: BACKEND_LABELS } satisfies ToView);
+        void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown } satisfies ToView);
         void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
         void view.webview.postMessage({ type: 'arena', state: this.arena.current() } satisfies ToView);
         this.composer.refreshModels();

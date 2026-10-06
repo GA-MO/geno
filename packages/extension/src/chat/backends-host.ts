@@ -1,9 +1,5 @@
 import type * as vscode from 'vscode';
-import { EXTERNAL_BACKEND_IDS, EXTERNAL_BACKENDS, type BackendEnvResponse, type ExternalBackendId } from '@g-code/core';
-import type { BackendLabels } from './lanes-model.js';
-
-/** Each external agent's name, from the engine's registry, for the panes the webview draws without it. */
-export const BACKEND_LABELS: BackendLabels = Object.fromEntries(EXTERNAL_BACKEND_IDS.map((id) => [id, EXTERNAL_BACKENDS[id].label]));
+import { EXTERNAL_BACKENDS, type BackendEnvResponse, type ExternalBackendId } from '@g-code/core';
 
 /** Where the settings keep the API key the user chose for an agent, as the Agents section stores it. */
 export const backendKeyName = (id: ExternalBackendId): string => `gcode.agents.${id}.apiKey`;

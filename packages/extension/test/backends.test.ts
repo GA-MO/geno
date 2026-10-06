@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EXTERNAL_BACKENDS, backendShown, type BackendInfo } from '@g-code/core';
+import { backendShown, type BackendInfo } from '@g-code/core';
 import { laneOffer, planCost, showsTokens, turnCost } from '../src/chat/backend-model.js';
-import { BACKEND_LABELS, backendEnv } from '../src/chat/backends-host.js';
+import { backendEnv } from '../src/chat/backends-host.js';
 import { composerView, NO_FACTS, STARTS_NEW_CHAT, type ComposerFacts, type ComposerInput } from '../src/chat/composer-model.js';
 import type { Action, Transcript } from '../src/chat/messages.js';
 import { emptyTranscript, reduce } from '../src/chat/transcript.js';
@@ -115,10 +115,6 @@ describe('the Apply offer', () => {
 });
 
 describe('what the extension tells the engine and the panes of a backend', () => {
-  it('names each agent as the registry does', () => {
-    expect(BACKEND_LABELS).toEqual({ cursor: EXTERNAL_BACKENDS.cursor.label, 'claude-code': EXTERNAL_BACKENDS['claude-code'].label });
-  });
-
   it('answers the env request with the stored key under the agent’s own variable, and nothing without one', async () => {
     const stored: Record<string, string> = { 'gcode.agents.cursor.apiKey': 'crsr-1', 'gcode.agents.claude-code.apiKey': 'sk-ant-2' };
     const secrets = { get: async (key: string) => stored[key] };
