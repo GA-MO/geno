@@ -18,13 +18,13 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { registerTabServer } from './tab/status.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
-import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
+import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, resumeEnvOf, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
 import { SettingsPage } from './chat/settings-host.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
 const engineCli = (context: vscode.ExtensionContext): string => path.join(context.extensionPath, 'dist', 'engine', 'cli.js');
 
-const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles'];
+const ENGINE_SETTINGS = ['gcode.provider', 'gcode.baseUrl', 'gcode.model', 'gcode.providers', 'gcode.roles', 'gcode.resume.afterLimit'];
 
 async function engineSettings(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<EngineSettings> {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -42,7 +42,7 @@ async function engineSettings(context: vscode.ExtensionContext, output: vscode.O
   return {
     cliPath: engineCli(context),
     cwd: folder.uri.fsPath,
-    env: { ...engineEnvOf(runtime), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
+    env: { ...engineEnvOf(runtime), ...resumeEnvOf(vscode.workspace.getConfiguration('gcode')), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
   };
 }
 

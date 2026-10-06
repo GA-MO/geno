@@ -191,6 +191,61 @@
   gap: 3px;
 }
 
+.run-time[hidden],
+.run-wait[hidden],
+.wait-icon[hidden] {
+  display: none;
+}
+
+/* A model call that waits offline or for a rate limit takes the clock's place, with Retry now beside it. */
+.run-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--vscode-foreground);
+}
+
+.run-wait .wait-icon {
+  font-size: 13px;
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.input-box .retry-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  margin-left: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  backdrop-filter: none;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.input-box .retry-now:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.input-box .retry-now:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.retry-now .retry-icon {
+  display: none;
+  font-size: 12px;
+}
+
+body.vscode-high-contrast .input-box .retry-now,
+body.vscode-high-contrast-light .input-box .retry-now {
+  border-color: var(--vscode-contrastBorder);
+}
+
 /* The model menu opens over the model button, on the right, one line per row. It shares the mode menu's frame. */
 .composer .model-menu {
   left: auto;

@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -28,6 +28,10 @@ export type Turn = {
   readonly usage: Usage | undefined;
   /** A passing status while the turn runs, such as a retry; the next output or the turn's end clears it. */
   readonly notice?: string | undefined;
+  /** The model call the turn waits on, offline or for a rate limit; undefined once it went out. */
+  readonly waiting?: Waiting | undefined;
+  /** Time the turn spent in waits that ended, which its clock leaves out. */
+  readonly waitedMs?: number | undefined;
   /** Images and files the user sent with the prompt. */
   readonly attachments?: readonly AttachmentView[] | undefined;
   /** The session's approval mode when the prompt was sent; undefined for a turn replayed from an older log. */
@@ -188,6 +192,8 @@ export type Action =
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
+  /** The turn's model call waits, or its wait moved on; null once the call goes out. */
+  | { readonly type: 'waiting'; readonly at: number; readonly waiting: Waiting | null }
   /** Starts a tool call or updates one; an absent field keeps its value. */
   | {
       readonly type: 'tool';
@@ -357,6 +363,8 @@ export type FromView =
    */
   | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
+  /** Cuts the running turn's wait short: its model call goes out at once. */
+  | { readonly type: 'retry-now' }
   /** Stops one running subagent; its parent goes on with what the child had. */
   | { readonly type: 'cancel-child'; readonly id: string }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }

@@ -1,6 +1,6 @@
 import type { CheckOutcome, LaneInfo, LaneStatus, TaskRecord, TaskStatus } from '@g-code/core';
 import { waitLabel } from '@g-code/core/waiting';
-import { formatCost, formatDuration } from './format.js';
+import { clockOf, formatCost, formatDuration } from './format.js';
 
 /**
  * The Lanes and Tasks panes' view models: pure functions from what the engine reports to what each row shows. The
@@ -74,9 +74,6 @@ export type LaneRow = {
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 
 const isLiveStatus = (status: TaskStatus | null): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
-
-/** A time of day as the user's clock reads it, such as 14:05. */
-export const clockOf = (ms: number): string => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 export function laneRowOf(lane: LaneInfo): LaneRow {
   const live = isLiveStatus(lane.task);

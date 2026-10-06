@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { composerView, NO_FACTS, type ComposerFacts, type ComposerInput } from '../src/chat/composer-model.js';
 import type { McpListing } from '../src/chat/mcp-model.js';
 import type { Action, Transcript } from '../src/chat/messages.js';
+import { headerOf } from '../src/chat/rail.js';
 import { emptyTranscript, reduce } from '../src/chat/transcript.js';
 
 const STARTED = 1_000_000;
@@ -134,5 +135,38 @@ describe('composerView, running', () => {
   it('shows a cost under a satang as such, and hours past the hour', () => {
     const view = composerView(input({ transcript: running, now: STARTED + 3_725_000, facts: facts({ turnCostUsd: 0.0001 }) }));
     expect(view.running).toMatchObject({ elapsed: '1:02:05', cost: { text: '<฿0.01' } });
+  });
+});
+
+describe('composerView, waiting', () => {
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+  const offline = { kind: 'offline', since: STARTED + 10_000, retryAt: STARTED + 22_000, resetAt: null, message: 'Connection error.: fetch failed: connect ECONNREFUSED' } as const;
+  const waitsOffline: Action = { type: 'waiting', at: STARTED + 10_000, waiting: offline };
+
+  it('shows the wait in place of the clock, with its failure as the title, and stops the clock while it waits', () => {
+    const waiting = transcriptOf(start, waitsOffline);
+    expect(composerView(input({ transcript: waiting, now: STARTED + 10_000 }), clock).running).toMatchObject({
+      elapsed: '0:10',
+      wait: { kind: 'offline', text: 'Offline, retrying in 12s', title: offline.message },
+    });
+    expect(composerView(input({ transcript: waiting, now: STARTED + 50_000 }), clock).running?.elapsed).toBe('0:10');
+  });
+
+  it('keeps an ended wait out of the clock once the call went out', () => {
+    const resumed = transcriptOf(start, waitsOffline, { type: 'waiting', at: STARTED + 70_000, waiting: null });
+    expect(composerView(input({ transcript: resumed, now: STARTED + 80_000 }), clock).running).toMatchObject({ elapsed: '0:20', wait: undefined });
+  });
+
+  it('names the time a limit resets', () => {
+    const resetAt = Date.parse('2026-10-06T14:05:00Z');
+    const limited = transcriptOf(start, { type: 'waiting', at: STARTED + 1000, waiting: { kind: 'limited', since: STARTED + 1000, retryAt: null, resetAt, message: '429' } });
+    expect(composerView(input({ transcript: limited, now: STARTED + 2000 }), clock).running?.wait).toEqual({ kind: 'limited', text: 'Limited until 14:05', title: '429' });
+  });
+
+  it('leaves the waits out of the time a turn worked, once it ended', () => {
+    const ended = transcriptOf(start, waitsOffline, { type: 'turn-end', at: STARTED + 70_000, status: 'done', usage: undefined });
+    expect(ended.turns[0]).toMatchObject({ waiting: undefined, waitedMs: 60_000 });
+    expect(headerOf(ended.turns[0]!, (ms) => `${ms / 1000}s`)).toBe('worked for 10s');
+    expect(headerOf(transcriptOf(start, waitsOffline).turns[0]!, String)).toBe('waiting for the network');
   });
 });
