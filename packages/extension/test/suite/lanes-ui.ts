@@ -63,17 +63,33 @@ export async function screenshots(name: string, keep = false): Promise<void> {
 /** Drags the side bar's edge until the panel is `target` px wide; the width it got. */
 export const panelWidth = (target: number) => ui<number>({ do: 'resize', width: target });
 
-/** Whether every shown control of the composer's bottom row stays inside it, and the row scrolls nothing. */
+/**
+ * Whether the composer's bottom row fits: every shown control stays inside the row, the row scrolls nothing, and no two
+ * controls draw over each other. A control's box takes in its shown descendants, so text that spills out of a shrunken
+ * button counts as that button's.
+ */
 export const rowFits = () =>
-  panel<{ fits: boolean; scroll: number; client: number; outside: string[] }>(
+  panel<{ fits: boolean; scroll: number; client: number; outside: string[]; overlaps: string[][] }>(
     `(() => {
       const bar = doc.querySelector('.input-toolbar');
       const box = bar.getBoundingClientRect();
-      const outside = [...bar.querySelectorAll('*')].filter((e) => e.getClientRects().length > 0).filter((e) => {
+      const visible = (e) => e.getClientRects().length > 0;
+      const outside = [...bar.querySelectorAll('*')].filter(visible).filter((e) => {
         const r = e.getBoundingClientRect();
         return r.right > box.right + 0.5 || r.left < box.left - 0.5;
       }).map((e) => e.className || e.tagName);
-      return { fits: outside.length === 0 && bar.scrollWidth <= bar.clientWidth, scroll: bar.scrollWidth, client: bar.clientWidth, outside };
+      const controls = [...bar.querySelectorAll('.toolbar-left > *, .toolbar-right > *')].filter(visible)
+        .flatMap((e) => (e.matches('.run-status, .run-activity') ? [...e.children].filter(visible) : [e]));
+      const ink = (e) => [e, ...e.querySelectorAll('*')].filter(visible).map((d) => d.getBoundingClientRect())
+        .reduce((a, r) => ({ left: Math.min(a.left, r.left), right: Math.max(a.right, r.right), top: Math.min(a.top, r.top), bottom: Math.max(a.bottom, r.bottom) }));
+      const boxes = controls.map((e) => ({ name: e.className.split(' ').at(-1) || e.tagName, box: ink(e) }));
+      const overlaps = [];
+      for (let i = 0; i < boxes.length; i++)
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i].box, b = boxes[j].box;
+          if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5) overlaps.push([boxes[i].name, boxes[j].name]);
+        }
+      return { fits: outside.length === 0 && overlaps.length === 0 && bar.scrollWidth <= bar.clientWidth, scroll: bar.scrollWidth, client: bar.clientWidth, outside, overlaps };
     })()`,
   );
 
