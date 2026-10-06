@@ -116,7 +116,8 @@
   outline: none;
 }
 
-.provider-card {
+.provider-card,
+.agent-card {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -253,9 +254,127 @@
   background: var(--surface-2);
 }
 
+/* An external agent's card: its CLI, version and account, then whatever its running command prints. */
+
+.agent-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  padding: 8px 12px 4px;
+}
+
+.agent-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px 12px;
+}
+
+.agent-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.agent-fact {
+  display: contents;
+}
+
+.agent-fact dt {
+  color: var(--muted);
+  font-size: var(--small);
+  line-height: 22px;
+}
+
+.agent-fact dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  margin: 0;
+  line-height: 22px;
+}
+
+.agent-path,
+.agent-install {
+  min-width: 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 0.5px);
+  overflow-wrap: anywhere;
+}
+
+.agent-path {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  line-height: 1.5;
+}
+
+.agent-account {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-install {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  user-select: all;
+}
+
+.agent-text {
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.agent-output {
+  max-height: 10em;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 0.5px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.agent-last {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Installing is not destructive, so its question is not tinted as a sign-out's is. */
+.agent-confirm[data-tone='ask'] {
+  border-color: var(--vscode-focusBorder);
+  background: var(--surface);
+}
+
+.agent-footer {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+.agent-check {
+  font-size: var(--small);
+}
+
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
   & .settings-roles,
-  & .provider-card {
+  & .provider-card,
+  & .agent-card {
     border-color: var(--glass-edge);
     background: var(--glass-pane);
     box-shadow: var(--glass-lift);
@@ -273,6 +392,12 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   & .provider-input,
   & .role-provider {
     border-color: var(--glass-edge-hi);
+    background: var(--glass-well);
+  }
+
+  & .agent-output,
+  & .agent-install {
+    border-color: var(--glass-edge);
     background: var(--glass-well);
   }
 

@@ -492,6 +492,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-settings') return settings.open();
   if (message.type === 'settings-tested') return settings.tested(message.provider, message.state);
   if (message.type === 'settings-models') return settings.modelsListed(message.provider, message.state);
+  if (message.type === 'agent') return settings.agentChanged(message.id, message.state);
   if (message.type === 'rules') return rules.listed(message.listing);
   if (message.type === 'show-rules') return rules.open();
   if (message.type === 'memory') return memory.listed(message.listing);
