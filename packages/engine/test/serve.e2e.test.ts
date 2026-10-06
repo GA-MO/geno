@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_MODE_SYSTEM_PROMPTS,
   AGENT_MODE_TOOL_DEFINITIONS,
+  DEFERRED_TOOLS_NOTE,
+  toolRoster,
   APPROVAL_META,
   ATTACHMENT_META,
   asSessionId,
@@ -456,8 +458,8 @@ describe('gcode serve', () => {
     });
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
     expect(transport.requests[0]!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.plan);
-    expect(transport.requests[0]!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
-    expect(transport.requests[1]!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.ask);
+    expect(transport.requests[0]!.body.system[0].text, 'Plan has too little to defer').toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
+    expect(transport.requests[1]!.body.tools).toEqual(toolRoster(AGENT_MODE_TOOL_DEFINITIONS.ask).offered);
 
     editor.updates.length = 0;
     const resumed = await connect(async (ctx) => {

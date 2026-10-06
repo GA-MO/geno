@@ -9,7 +9,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { attachmentFileName, MCP_CALL_TOOL, MCP_DESCRIBE_TOOL, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
+import { attachmentFileName, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
 import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
 import { openStore } from '../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
@@ -295,18 +295,14 @@ describe('MCP stdio servers', () => {
     expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: false, reason: expect.stringContaining('ENOENT') });
   });
 
-  it('switches to lazy listing past 40 tools, with mcp_describe returning one schema before mcp_call', async () => {
+  it('declares every tool directly past 40 tools, for the run to defer, and each one runs', async () => {
     const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer({ TOOL_COUNT: '40' }) } } });
     const hub = await open();
     const { tools, executors } = await toolsetOf(hub, approval('auto', 'allow').value);
 
-    expect(tools.map((tool) => tool.name)).toEqual([MCP_CALL_TOOL, MCP_DESCRIBE_TOOL]);
-    expect(tools[1]!.description).toContain('- fake: mcp__fake__crash, mcp__fake__echo');
-    expect(tools[1]!.description).toContain('mcp__fake__extra_39');
-    const described = JSON.parse(textOf(await executors[MCP_DESCRIBE_TOOL]!.run({ name: 'mcp__fake__extra_07' }, ctx(workspace))));
-    expect(described).toMatchObject({ name: 'mcp__fake__extra_07', input_schema: { properties: { n: { type: 'number' } } } });
-    expect(textOf(await executors[MCP_CALL_TOOL]!.run({ name: 'mcp__fake__extra_07', arguments: { n: 3 } }, ctx(workspace)))).toBe('extra 7 got 3');
-    await expect(executors[MCP_DESCRIBE_TOOL]!.run({ name: 'mcp__fake__nope' }, ctx(workspace))).rejects.toThrow(/no MCP tool mcp__fake__nope/);
+    expect(tools.map((tool) => tool.name)).toContain('mcp__fake__extra_39');
+    expect(tools.find((tool) => tool.name === 'mcp__fake__extra_07')).toMatchObject({ input_schema: { properties: { n: { type: 'number' } } } });
+    expect(textOf(await executors['mcp__fake__extra_07']!.run({ n: 3 }, ctx(workspace)))).toBe('extra 7 got 3');
   });
 });
 

@@ -171,15 +171,6 @@ export function mcpToolName(server: string, tool: string, isTaken: (name: string
   return `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`;
 }
 
-/** Past this many MCP tools, the request lists them by name and the model asks for one schema at a time. */
-export const MCP_LAZY_THRESHOLD = 40;
-
-export const MCP_DESCRIBE_TOOL = 'mcp_describe';
-export const MCP_CALL_TOOL = 'mcp_call';
-
-/** Characters of the catalog in lazy mode; tool names that do not fit are counted in a closing line. */
-export const MAX_CATALOG_CHARS = 8192;
-
 /** Every MCP tool by its model-facing name, which is unique and sorted. */
 export type McpCatalog = ReadonlyMap<string, McpToolInfo>;
 
@@ -197,63 +188,11 @@ const directDefinition = (name: string, info: McpToolInfo): Tool => ({
 });
 
 /**
- * The servers and their tool names, one server per line, within MAX_CATALOG_CHARS. Lines past the budget are left out
- * and counted, so the description never grows without bound.
- */
-export function catalogText(catalog: McpCatalog): string {
-  const byServer = new Map<string, string[]>();
-  for (const [name, info] of catalog) byServer.set(info.server, [...(byServer.get(info.server) ?? []), name]);
-  const lines: string[] = [];
-  let size = 0;
-  let omitted = 0;
-  for (const [server, names] of byServer) {
-    const line = `- ${server}: ${names.join(', ')}`;
-    if (size + line.length + 1 > MAX_CATALOG_CHARS) omitted += names.length;
-    else {
-      lines.push(line);
-      size += line.length + 1;
-    }
-  }
-  if (omitted > 0) lines.push(`- ... ${omitted} more tools not listed`);
-  return lines.join('\n');
-}
-
-const lazyDefinitions = (catalog: McpCatalog): Tool[] => [
-  {
-    name: MCP_CALL_TOOL,
-    description:
-      'Call a tool of a connected MCP server by its full name, with the arguments its schema asks for. Get the schema with mcp_describe first.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'The full tool name, such as mcp__server__tool.' },
-        arguments: { type: 'object', description: 'The arguments, matching the schema mcp_describe returned.' },
-      },
-      required: ['name'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: MCP_DESCRIBE_TOOL,
-    description: `Return the description and input schema of one MCP tool. Call it before the first mcp_call of a tool. The connected MCP servers and their tools:\n${catalogText(catalog)}`,
-    input_schema: {
-      type: 'object',
-      properties: { name: { type: 'string', description: 'The full tool name, such as mcp__server__tool.' } },
-      required: ['name'],
-      additionalProperties: false,
-    },
-  },
-];
-
-/**
  * The request's MCP tool definitions, sorted, for after the built-in ones. They change only when the set of servers or
- * their tools does, so the cached prefix holds across turns.
+ * their tools does, so the cached prefix holds across turns. However many there are, the run's tool roster defers them
+ * behind tool_search (`deferred-tools.ts`).
  */
-export const mcpToolDefinitions = (catalog: McpCatalog): readonly Tool[] =>
-  catalog.size > MCP_LAZY_THRESHOLD ? lazyDefinitions(catalog) : [...catalog].map(([name, info]) => directDefinition(name, info));
-
-export const describeMcpTool = (name: string, info: McpToolInfo): string =>
-  JSON.stringify({ name, server: info.server, description: info.description, readOnly: info.readOnly, input_schema: info.inputSchema }, null, 2);
+export const mcpToolDefinitions = (catalog: McpCatalog): readonly Tool[] => [...catalog].map(([name, info]) => directDefinition(name, info));
 
 /** One block of an MCP tool result, as far as the model's text needs it. */
 export type McpContent =

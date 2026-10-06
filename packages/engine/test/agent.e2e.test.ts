@@ -4,7 +4,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_MODE_SYSTEM_PROMPTS, AGENT_MODE_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DENY_RULE_IDS, DENY_RULES, type TurnEvent } from '@g-code/core';
+import { AGENT_MODE_SYSTEM_PROMPTS, AGENT_MODE_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, asSessionId, CLASSIFIER_TOOL, DEFERRED_TOOLS_NOTE, DENY_RULE_IDS, DENY_RULES, toolRoster, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -56,7 +56,7 @@ describe('gcode agent', () => {
     const opening = (i: number) => transport.requests[i]!.body.messages[0].content[0].text as string;
     expect(opening(0)).toContain('<project_instructions path="AGENTS.md">\nRun tests with pnpm test.\n\n</project_instructions>');
     expect(opening(0)).toContain('- .cursor/rules/ts.mdc (*.ts)');
-    expect(transport.requests[0]!.body.system[0].text).toBe(AGENT_SYSTEM_PROMPT);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(opening(2)).toBe(opening(0));
     expect(toolResult(transport.requests[1]!.body)).toContain('<project_rule path=".cursor/rules/ts.mdc" matched="a.ts">\nNo default exports.\n</project_rule>');
     const log = await readSessionLog(sessionFile(store, asSessionId(id)));
@@ -90,8 +90,8 @@ describe('gcode agent', () => {
     expect(existsSync(path.join(workspace, 'src', 'c.ts'))).toBe(true);
 
     const [first] = transport.requests;
-    expect(first!.body.tools).toEqual(AGENT_TOOL_DEFINITIONS);
-    expect(first!.body.system[0].text).toBe(AGENT_SYSTEM_PROMPT);
+    expect(first!.body.tools).toEqual(toolRoster(AGENT_TOOL_DEFINITIONS).offered);
+    expect(first!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
 
     const id = sessionIdOf(result.stdout);
     const log = await readSessionLog(sessionFile(store, asSessionId(id)));

@@ -9,7 +9,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -353,7 +353,7 @@ describe('gcode serve: steering a running turn', () => {
     let childId = '';
     const model = models({
       '[parent]': async (n, body) => {
-        if (n === 0) return { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }], usage) };
+        if (n === 0) return { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }, loadTools('message_agent')], usage) };
         if (n === 1) {
           childId = /session ([0-9a-f-]{36})/.exec(JSON.stringify(lastContent(body)))![1]!;
           return { reply: toolCall('Narrowing it.', [{ id: 'tu_m', name: 'message_agent', input: { agent_session: childId, text: 'only look at b.ts' } }], usage) };
@@ -429,7 +429,7 @@ describe('gcode serve: steering a running turn', () => {
     let childId = '';
     const model = models({
       '[parent]': async (n, body) => {
-        if (n === 0) return { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }], usage) };
+        if (n === 0) return { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }, loadTools('message_agent')], usage) };
         if (n === 1) {
           childId = /session ([0-9a-f-]{36})/.exec(JSON.stringify(lastContent(body)))![1]!;
           await inner(childDone.opened, 'the user to steer the finished child');

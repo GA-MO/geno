@@ -52,6 +52,18 @@ function messageStart(usage: CacheUsage): SseEvent {
 
 export type FakeToolUse = { readonly id: string; readonly name: string; readonly input: unknown };
 
+/** Every tool a request offers: those it defines, and those listed by name in tool_search's description. */
+export function offeredTools(body: { readonly tools?: readonly { readonly name: string; readonly description?: string }[] }): string[] {
+  const tools = body.tools ?? [];
+  const block = tools.find((tool) => tool.name === 'tool_search')?.description?.split('The tools:\n')[1] ?? '';
+  const deferred = block.split('\n').flatMap((line) => /^- ([A-Za-z0-9_-]+): /.exec(line)?.[1] ?? []);
+  return [...tools.map((tool) => tool.name), ...deferred];
+}
+
+let loads = 0;
+/** A tool_search call that loads deferred tools, for a turn before their first call. */
+export const loadTools = (...names: string[]): FakeToolUse => ({ id: `tu_load_${loads++}`, name: 'tool_search', input: { select: names } });
+
 /** A Messages stream that says `text`, then asks for each tool use with its input streamed as JSON fragments. */
 export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage): Reply {
   const blocks = uses.flatMap((use, i): SseEvent[] => {

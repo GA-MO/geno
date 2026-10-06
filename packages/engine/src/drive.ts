@@ -240,13 +240,13 @@ export async function drive(
       const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
-      const { status, text, change, approval, images, widget, editorAction, todo } = await runTool(use, toolCtx, mode.executors);
+      const { status, text, change, approval, images, widget, editorAction, todo, loaded } = await runTool(use, toolCtx, mode.executors);
       watcher.toolEnd(use, status, todo);
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
       const timing = { startAt: started.startAt, endAt: Date.now() };
       ran.set(i, { ...started, ...timing });
       running.delete(i);
-      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, ...output, timing };
+      results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, loaded, ...output, timing };
     };
     const work = (async () => {
       for (let start = 0; start < toolUses.length; ) {

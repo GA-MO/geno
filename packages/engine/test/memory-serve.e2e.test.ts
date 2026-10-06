@@ -22,7 +22,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -98,7 +98,7 @@ async function setup(replies: readonly Reply[], capable = true) {
   return { workspace, home, transport, editor, connect, say, events };
 }
 
-const toolNames = (body: { tools: { name: string }[] }) => body.tools.map((t) => t.name);
+const toolNames = offeredTools;
 const systemOf = (body: { system: { text: string }[] }) => body.system[0]!.text;
 const toolResults = (body: { messages: { content: unknown }[] }) => JSON.stringify(body.messages.at(-1)!.content);
 
@@ -108,6 +108,7 @@ describe('gcode serve: remember and memory', () => {
     const { transport, editor, connect, say, home } = await setup([
       answer('Hello.', usage),
       answer('Hello again.', usage),
+      toolCall('', [loadTools('remember')], usage),
       toolCall('Noting that.', [{ id: 'tu_r', name: 'remember', input: { text, scope: 'project' } }], usage),
       answer('Noted.', usage),
       answer('Done.', usage),
@@ -121,8 +122,8 @@ describe('gcode serve: remember and memory', () => {
       await say(ctx, sessionId, 'next');
     });
 
-    const [first, second, third, , fifth] = transport.requests.map((r) => r.body);
-    expect(toolNames(first).slice(-2), 'a client that shows both cards is offered both tools in Ask').toEqual(['ask_user', 'remember']);
+    const [first, second, third, , , sixth] = transport.requests.map((r) => r.body);
+    expect(toolNames(first), 'a client that shows both cards is offered both tools in Ask').toEqual(expect.arrayContaining(['ask_user', 'remember']));
     expect(toolNames(third), 'Auto offers remember but not ask_user').toContain('remember');
     expect(toolNames(third)).not.toContain('ask_user');
     expect(systemOf(second), 'unchanged memory, same prompt bytes').toBe(systemOf(first));
@@ -133,12 +134,13 @@ describe('gcode serve: remember and memory', () => {
     expect(asked.toolCall._meta?.[REMEMBER_META], 'Auto still asks, showing the exact text').toEqual({ text, scope: 'project' });
     expect(asked.toolCall.title).toBe('Remember this in this project?');
     expect(asked.options.map((o) => o.name)).toEqual(['Remember', "Don't remember"]);
-    expect(systemOf(fifth)).toContain(`<note scope="project">${text}</note>`);
+    expect(systemOf(sixth)).toContain(`<note scope="project">${text}</note>`);
     expect(JSON.stringify(await readFile(path.join(home, 'memory', 'global.json'), 'utf8').catch(() => 'none'))).toBe('"none"');
   });
 
   it('saves nothing when the user declines', async () => {
     const { transport, editor, connect, say } = await setup([
+      toolCall('', [loadTools('remember')], usage),
       toolCall('Noting that.', [{ id: 'tu_r', name: 'remember', input: { text: 'Never ask before pushing.', scope: 'global' } }], usage),
       answer('Fine.', usage),
     ]);
@@ -148,11 +150,12 @@ describe('gcode serve: remember and memory', () => {
       return (await ctx.request<MemoryResponse>(MEMORY_METHOD, { sessionId })).entries;
     });
     expect(entries).toEqual([]);
-    expect(toolResults(transport.requests[1]!.body)).toContain('The user declined. Nothing was saved');
+    expect(toolResults(transport.requests[2]!.body)).toContain('The user declined. Nothing was saved');
   });
 
   it('lists, edits and deletes memory for the pane', async () => {
     const { connect, say, home } = await setup([
+      toolCall('', [loadTools('remember')], usage),
       toolCall('Noting.', [{ id: 'tu_r', name: 'remember', input: { text: 'Tabs.', scope: 'global' } }], usage),
       answer('Ok.', usage),
     ]);

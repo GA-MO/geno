@@ -3,11 +3,11 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_MODE_SYSTEM_PROMPTS, asSessionId, toolResultText, type TurnEvent } from '@g-code/core';
+import { AGENT_MODE_SYSTEM_PROMPTS, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, type TurnEvent } from '@g-code/core';
 import { GENO_TOOLS } from '../src/geno-tools.generated.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, toolCall, type FakeToolUse } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -53,6 +53,7 @@ describe('pstack through gcode agent', () => {
     const { workspace, env, home, pluginRoot, store } = await setup('pstack');
     const escaped = path.join(pluginRoot, 'escaped.txt');
     const transport = fakeTransport([
+      toolCall('', [loadTools('skill')], usage),
       toolCall('Loading the skill.', [use('skill', { name: 'pstack:how' })], usage),
       toolCall('Reading its reference.', [use('read', { path: path.join(pluginRoot, 'skills', 'how', 'references', 'explorer.md') })], usage),
       toolCall('Writing there.', [use('bash', { command: `echo escaped > '${escaped}'` })], usage),
@@ -66,11 +67,11 @@ describe('pstack through gcode agent', () => {
     const system = transport.requests[0]!.body.system[0].text as string;
     expect(system.startsWith(AGENT_MODE_SYSTEM_PROMPTS.ask)).toBe(true);
     expect(system.slice(AGENT_MODE_SYSTEM_PROMPTS.ask.length)).toBe(
-      `\n\npstack skills are installed. They are written for Claude Code; before you follow one, read ${genoTools}, which maps their tools to yours.`,
+      `\n\n${DEFERRED_TOOLS_NOTE}\n\npstack skills are installed. They are written for Claude Code; before you follow one, read ${genoTools}, which maps their tools to yours.`,
     );
 
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(run.stdout))));
-    const [skill, read, bash] = results(log.events);
+    const [, skill, read, bash] = results(log.events);
     expect(skill).toEqual({ name: 'skill', status: 'ok', output: expect.stringContaining('# How\n\nRead references/explorer.md first.') });
     expect(read).toEqual({ name: 'read', status: 'ok', output: '1\tExplore with grep.' });
     expect(bash).toMatchObject({ name: 'bash', status: 'ok', output: expect.stringMatching(/Operation not permitted[\s\S]*\[exit code 1\]/) });
@@ -81,7 +82,7 @@ describe('pstack through gcode agent', () => {
     const { workspace, env, home } = await setup('other');
     const transport = fakeTransport([answer('Hi.', usage)]);
     expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Hi'], env, { fetch: transport.fetch })).code).toBe(0);
-    expect(transport.requests[0]!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS['non-interactive']);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_MODE_SYSTEM_PROMPTS['non-interactive']}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(existsSync(path.join(home, 'geno-tools.md'))).toBe(false);
   });
 });

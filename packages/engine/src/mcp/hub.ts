@@ -9,12 +9,8 @@ import {
   BROWSER_TOOLS,
   classifierInputOf,
   definitionHash,
-  describeMcpTool,
   isTrusted,
-  MCP_CALL_TOOL,
   mcpDefinitionView,
-  MCP_DESCRIBE_TOOL,
-  MCP_LAZY_THRESHOLD,
   MCP_SOURCE_LABELS,
   mcpCatalog,
   mcpDenialFor,
@@ -22,7 +18,6 @@ import {
   mcpToolDefinitions,
   MAX_MESSAGE_BYTES,
   type ImageAttachment,
-  type McpCatalog,
   type McpContent,
   type McpPromptInfo,
   type McpResourceInfo,
@@ -34,7 +29,7 @@ import type { Env } from '../child-env.js';
 import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
 import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
-import { ALWAYS, executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { browserExecutor, browserServerConfig, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
@@ -78,8 +73,6 @@ export type McpHubOptions = {
 };
 
 const argumentsSchema = z.record(z.string(), z.unknown());
-const nameSchema = z.strictObject({ name: z.string().min(1) });
-const callSchema = z.strictObject({ name: z.string().min(1), arguments: argumentsSchema.nullish() });
 
 /**
  * Stores each image of a result as an attachment, which the next request shows the model, and puts a line naming it
@@ -112,9 +105,6 @@ async function withImages(name: string, content: readonly McpContent[], ctx: Too
   }
   return { content: shown, images };
 }
-
-const unknownTool = (name: string, catalog: McpCatalog) =>
-  new ToolError(`no MCP tool ${name}; the tools are listed in the ${MCP_DESCRIBE_TOOL} description${catalog.size === 0 ? ', and there are none now' : ''}`);
 
 export async function openMcpHub({ store, env, workspace, acp, browser }: McpHubOptions): Promise<McpHub> {
   const loaded = await loadMcpConfig(store, env, workspace, acp);
@@ -241,26 +231,6 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       const catalog = mcpCatalog([...handles.values()].flatMap(offered));
       const executors: Record<string, Executor> = {};
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
-      if (catalog.size > MCP_LAZY_THRESHOLD) {
-        executors[MCP_DESCRIBE_TOOL] = executor({
-          concurrent: ALWAYS,
-          input: nameSchema,
-          describe: ({ name }) => `${MCP_DESCRIBE_TOOL} ${name}`,
-          async run({ name }) {
-            const info = catalog.get(name);
-            if (info === undefined) throw unknownTool(name, catalog);
-            return describeMcpTool(name, info);
-          },
-        });
-        executors[MCP_CALL_TOOL] = executor({
-          input: callSchema,
-          describe: ({ name, arguments: args }) => `${name} ${JSON.stringify(args ?? {})}`,
-          async run({ name, arguments: args }, ctx) {
-            if (!catalog.has(name)) throw unknownTool(name, catalog);
-            return executors[name]!.run(args ?? {}, ctx);
-          },
-        });
-      }
       return { tools: mcpToolDefinitions(catalog), executors };
     },
     prompts: async () => (await Promise.all(ready().map((handle) => handle.connection?.prompts() ?? []))).flat(),

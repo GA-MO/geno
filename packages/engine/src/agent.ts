@@ -9,6 +9,7 @@ import {
   APPROVAL_MODES,
   AGENT_MODE_TOOL_DEFINITIONS,
   approvalQuestion,
+  DEFERRED_TOOLS_NOTE,
   describeServerState,
   editorActionToolDefinitions,
   isSessionMode,
@@ -16,6 +17,7 @@ import {
   MESSAGE_AGENT_TOOL_DEFINITION,
   pstackNote,
   renderMemory,
+  toolRoster,
   sessionModeOf,
   userToolDefinitions,
   WIDGET_TOOL,
@@ -50,6 +52,7 @@ import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type D
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { showWidget } from './tools/widget.js';
+import { rosterExecutors } from './tools/tool-search.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
@@ -201,7 +204,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     ];
     const notes = renderMemory(await memory.list());
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
-    const system = [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n');
     const scan = await loadAgents(workspace, homes, plugins);
     for (const problem of scan.problems) io.err(`agents: ${problem}`);
     // A prompt logged before the run, with its attachments, is the newest event.
@@ -221,7 +223,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       files: options.surface?.files ?? DISK_FILES,
       host: options.childHost ?? terminalChildHost(io),
       executors: executorsFor,
-      parentMode: () => ({ tools, system }),
+      parentMode: () => ({ tools: mode.tools, system: mode.system }),
       readRoots,
       externals: options.externals,
       keyOf: options.keyOf,
@@ -229,9 +231,16 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       waits: wakes?.registry,
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
+    const roster = toolRoster(tools);
+    const system = [
+      AGENT_MODE_SYSTEM_PROMPTS[startMode],
+      ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
+      ...(genoTools === undefined ? [] : [pstackNote(genoTools)]),
+      ...(notes === undefined ? [] : [notes]),
+    ].join('\n\n');
     const mode = {
-      tools,
-      executors: {
+      tools: roster.offered,
+      executors: rosterExecutors(roster, {
         ...mcp?.executors,
         ...user,
         ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
@@ -239,7 +248,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
         ...executors,
-      },
+      }),
       system,
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
