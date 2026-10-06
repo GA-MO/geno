@@ -200,7 +200,7 @@ U19 measured tools at 24% of agent time. Almost all of it was `bash` (94.9 s ove
 - **Budget overshoot.** The engine checks `--max-cost` only after each model call, so a run can end slightly over its cap (U13 saw $0.0509 against $0.05).
 - **Approval card order.** An approval card can draw above its own step when it arrives first (U17). Counts no longer depend on it; only the display order does.
 - **Flaky widget height wait.** `widget.integration` timed out waiting for a widget to take its content's height twice under load (host 2026-10-06, Docker beside another container); alone it passes.
-- **Compact.** There is no compact action yet, so the context ring offers only the numbers (U36).
+- **Compact.** Done in U47 ([u47.md](u47.md)): auto compaction, the overflow retry, `/compact` and the ring's Compact action.
 
 ## U22: subagent engine (next; replaces U16)
 
