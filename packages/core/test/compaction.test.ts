@@ -361,10 +361,21 @@ describe("the compaction's spend", () => {
 });
 
 describe('the transcript the summary call reads', () => {
-  it('cuts long tool results and names the tool each result answers', () => {
+  it('keeps every result whole while the transcript fits, and names the tool each result answers', () => {
     const text = transcriptOf(replayMessages(log.slice(0, 5)));
     expect(text).toContain('[Assistant called read]: {"path":"src/date.ts"}');
-    expect(text).toMatch(/\[Result of read\]: x{2000}\n\[\.\.\. 7500 characters left out of this transcript only; the agent saw them \.\.\.\]\nx{1000}\n/);
+    expect(text).toContain(`[Result of read]: ${big(3_000)}\n`);
+    expect(text).not.toContain('left out');
+  });
+
+  it('cuts the longest results first, to their start and end, so the short ones stay whole', () => {
+    const long = 'L'.repeat(10_000);
+    const short = 'S'.repeat(2_500);
+    const messages = replayMessages([start, user(1, 'go'), assistant(2, 'a', [['tu_l', 'read', {}], ['tu_s', 'read', {}]]), result(3, 'tu_l', long, 'read'), result(4, 'tu_s', short, 'read')]);
+    const text = transcriptOf(messages, 8_000);
+    expect(text.length).toBeLessThanOrEqual(8_000 + 200);
+    expect(text).toContain(`[Result of read]: ${short}`);
+    expect(text).toMatch(/\[Result of read\]: L+\n\[\.\.\. \d+ characters left out of this transcript only; the agent saw them \.\.\.\]\nL{1000}/);
   });
 
   it('drops the oldest lines past its budget and keeps an earlier compacted context at the top', () => {

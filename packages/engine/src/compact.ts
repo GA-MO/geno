@@ -8,6 +8,7 @@ import {
   nextSeq,
   planCompaction,
   sessionEffortOf,
+  SUMMARY_INPUT_CHARS,
   SUMMARY_SYSTEM,
   summaryEvents,
   summaryPrompt,
@@ -59,7 +60,7 @@ export async function compactContext(gateway: Gateway, session: Session, events:
   const plan = request.plan ?? planCompaction(events, keepTailTokens(request.compactAt));
   if (plan === undefined) return { kind: 'nothing' };
   const at = new Date().toISOString();
-  const maxChars = request.compactAt === undefined ? undefined : Math.floor(request.compactAt * CHARS_PER_TOKEN);
+  const maxChars = Math.min(SUMMARY_INPUT_CHARS, request.compactAt === undefined ? Number.POSITIVE_INFINITY : Math.floor(request.compactAt * CHARS_PER_TOKEN));
   const result = await gateway.turn({
     session: { ...session, effort: sessionEffortOf(session, events) },
     events: summaryEvents(session, summaryPrompt(plan, request.focus, request.stored, maxChars), at),
