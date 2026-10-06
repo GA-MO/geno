@@ -73,7 +73,7 @@ export const EXTERNAL_BACKENDS: Readonly<Record<ExternalBackendId, ExternalBacke
     mention: 'claude-code',
     binaries: ['claude-agent-acp', 'claude-code-acp'],
     args: [],
-    keyEnv: undefined,
+    keyEnv: 'ANTHROPIC_API_KEY',
     install: 'Claude Code speaks ACP through its adapter: npm install -g @agentclientprotocol/claude-agent-acp',
     sandbox: undefined,
   },
@@ -325,10 +325,13 @@ export const modelNameOf = (models: AgentModels | undefined, id: string): string
 /** Key in `session/new` params' `_meta`: `{ id }`, the backend the new session runs on. In its response: `BackendShown`. */
 export const BACKEND_META = 'gcode/backend';
 
-/** What a session/new, load or resume response says of its backend, absent for Geno's own loop. */
-export type BackendShown = { readonly id: ExternalBackendId; readonly label: string; readonly plan: string };
+/**
+ * What a session/new, load or resume response says of its backend, absent for Geno's own loop. `lane` is the lane the
+ * agent works in, null until its first turn makes one; a `session_info_update` carries it again then, under the same key.
+ */
+export type BackendShown = { readonly id: ExternalBackendId; readonly label: string; readonly plan: string; readonly lane: string | null };
 
-export const backendShown = (id: ExternalBackendId): BackendShown => ({ id, label: EXTERNAL_BACKENDS[id].label, plan: EXTERNAL_BACKENDS[id].plan });
+export const backendShown = (id: ExternalBackendId, lane: string | null = null): BackendShown => ({ id, label: EXTERNAL_BACKENDS[id].label, plan: EXTERNAL_BACKENDS[id].plan, lane });
 
 /** Extension method: the backend registry with what the engine found for each. */
 export const BACKENDS_METHOD = '_gcode/backends';

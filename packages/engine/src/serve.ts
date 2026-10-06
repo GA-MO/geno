@@ -484,6 +484,10 @@ function editorTurn(
         },
         logged(event) {
           live.events.push(event);
+          if (event.kind === 'backend-start' && backend !== undefined && event.lane !== null) {
+            route.tasks.update(route.sessionId, { lane: event.lane });
+            sent.send({ sessionUpdate: 'session_info_update', _meta: { [BACKEND_META]: backendShown(backend, event.lane) } });
+          }
           if (event.kind === 'assistant' || event.kind === 'error') live.text = '';
           if (event.kind === 'assistant') {
             spent = {
@@ -863,7 +867,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         io.err(`backend: ${binding.id} for ${sessionId} did not start: ${error instanceof Error ? error.message : String(error)}`);
         return undefined;
       });
-    return { configOptions: modelConfigOptions(setup, chosenModelOf(events)), meta: { [BACKEND_META]: backendShown(binding.id) } };
+    const lane = events.findLast((e) => e.kind === 'backend-start')?.lane ?? null;
+    return { configOptions: modelConfigOptions(setup, chosenModelOf(events)), meta: { [BACKEND_META]: backendShown(binding.id, lane) } };
   };
 
   /**
