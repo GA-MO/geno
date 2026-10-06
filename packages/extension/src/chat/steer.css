@@ -1,0 +1,164 @@
+/*
+ * Steering a running session (U44): Send now and the follow-up's state in the composer, a message on the rail where
+ * it landed, and the message fields of the side view and the Tasks pane.
+ */
+
+.queued-state {
+  flex: none;
+  font-weight: 600;
+}
+
+.queued-chip[data-state='steering'] {
+  border-color: var(--mark);
+  color: var(--vscode-foreground);
+}
+
+/* The chip's clock says it waits; a steer is on its way, so it points up instead. */
+.queued-chip[data-state='steering'] .codicon-clock::before {
+  content: '\eaa1';
+}
+
+.round-button.send-now[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.send-now {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: var(--primary-sheen);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.send-now:not([aria-disabled='true']):hover {
+  background: var(--primary-hover);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .input-box .round-button.send-now[aria-disabled='true'] {
+  opacity: 1;
+  background: var(--primary-disabled);
+  color: var(--primary-disabled-ink);
+  box-shadow: none;
+}
+
+/* On the rail: the user's own message as a smaller bubble, marked as sent mid-turn. */
+.steer {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.steer-bubble {
+  align-items: flex-end;
+}
+
+.steer-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.steer-label .codicon {
+  font-size: 12px;
+}
+
+.steer-text {
+  max-width: 85%;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 14px 14px 4px 14px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.steer-message .steer-text {
+  max-width: 100%;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+body[data-style='glass'] .steer-bubble .steer-text {
+  border-color: var(--bubble-edge);
+  background: var(--bubble-fill);
+}
+
+.steer-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+/* The side view's and the Tasks pane's message field. */
+.child-steer {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 0 2px;
+  background: var(--bg);
+}
+
+.child-steer[hidden],
+.steer-row[hidden],
+.steer-status[hidden] {
+  display: none;
+}
+
+.task-steer {
+  margin-top: -4px;
+}
+
+.steer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.steer-row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.steer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 6px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  outline: none;
+}
+
+.steer-input:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.steer-send {
+  flex: none;
+}
+
+.steer-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.steer-status[data-tone='ok'] {
+  color: var(--ok);
+}
+
+.steer-status[data-tone='failed'] {
+  color: var(--vscode-errorForeground);
+}
