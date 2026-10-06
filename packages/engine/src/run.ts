@@ -13,6 +13,7 @@ import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { evalRunCommand } from './eval-run.js';
 import { evalSpeedCommand } from './eval-speed.js';
+import { laneCommands } from './lane-cli.js';
 import { mcpCommands } from './mcp/cli.js';
 import { listSessionsCommand } from './history.js';
 import { mine } from './mine.js';
@@ -31,6 +32,11 @@ export const USAGE = `usage:
   gcode session list [--all]
   gcode rewind --session <id> --to <turn>
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
+  gcode lane new <name> [--from head|main] [--approve-setup] [--workspace <dir>]
+  gcode lane list [--json] [--workspace <dir>]
+  gcode lane apply <name> [--dry-run] [--workspace <dir>]
+  gcode lane discard <name> [--discard-changes] [--workspace <dir>]
+  gcode lane sweep [--workspace <dir>]
   gcode mcp list [--workspace <dir>]
   gcode mcp trust <name> [--workspace <dir>]
   gcode providers list
@@ -175,6 +181,7 @@ const commands: Record<string, Command> = {
   chat,
   commands: group({ list: commandsList }),
   eval: group(evalCommands),
+  lane: group(laneCommands),
   mcp: group(mcpCommands),
   providers: group(providerCommands),
   rewind,

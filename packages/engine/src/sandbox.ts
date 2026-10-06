@@ -45,13 +45,15 @@ export type PolicyInput = {
   readonly tempDir: string;
   readonly allowedDomains?: readonly string[];
   readonly denyRead?: readonly string[];
+  /** More places commands may write, such as a lane's part of the git folder its main checkout shares. */
+  readonly writable?: readonly string[];
 };
 
 /** Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. */
 export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> {
   const repos = (await readTasks(input.store)).map((task) => task.repo);
   return {
-    writable: await withRealPaths([input.workspace, input.tempDir]),
+    writable: await withRealPaths([input.workspace, input.tempDir, ...(input.writable ?? [])]),
     denyRead: await withRealPaths([
       input.store.evalsDir,
       path.join(input.home, '.ssh'),
