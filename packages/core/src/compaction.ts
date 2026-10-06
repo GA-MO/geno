@@ -21,8 +21,12 @@ export const IMAGE_TOKENS = 1_600;
 const MESSAGE_CHARS = 8_000;
 const MESSAGES_CHARS = 40_000;
 
-/** A tool result or a tool call's input is cut to this in the transcript the summary call reads. */
-const SERIALIZED_CHARS = 2_000;
+/**
+ * A tool result or a tool call's input is cut to its start and end in the transcript the summary call reads, at about
+ * this many characters, since results are what fills a context and the summary needs what they showed, not all of them.
+ */
+const SERIALIZED_CHARS = 3_000;
+const SERIALIZED_TAIL_CHARS = 1_000;
 
 type EventOf<K extends TurnEventKind> = Extract<TurnEvent, { kind: K }>;
 
@@ -243,6 +247,8 @@ const summaryInstructions = (focus: string | undefined): string =>
   [
     'Summarize the conversation above, so that you can continue the work from the summary alone. The user\'s messages, the todo list, the files read and changed, and the tools you loaded are kept apart, word for word, so do not copy them out; refer to them where they matter. If the conversation opens with an earlier compacted context, merge its summary in: keep what still holds and update the rest.',
     '',
+    'The session goes on after this transcript: its newest turns are kept as they are and follow your summary, so describe where the work stood at the end of the transcript. Long tool results are shortened here to their start and end; the agent saw them whole, so do not report them as cut or unread.',
+    '',
     'Use exactly these sections:',
     '',
     '## Goal',
@@ -263,7 +269,12 @@ const summaryInstructions = (focus: string | undefined): string =>
     ...(focus === undefined ? [] : ['', `The user asked the summary to focus on: ${focus}`]),
   ].join('\n');
 
-const cut = (text: string, limit: number = SERIALIZED_CHARS): string => (text.length <= limit ? text : `${text.slice(0, limit)} [... ${text.length - limit} more characters]`);
+// The marker says the cut is the transcript's: a first live summary read a cut result as one the agent never saw whole.
+const cut = (text: string): string => {
+  if (text.length <= SERIALIZED_CHARS) return text;
+  const head = SERIALIZED_CHARS - SERIALIZED_TAIL_CHARS;
+  return `${text.slice(0, head)}\n[... ${text.length - SERIALIZED_CHARS} characters left out of this transcript only; the agent saw them ...]\n${text.slice(-SERIALIZED_TAIL_CHARS)}`;
+};
 
 function resultText(block: ToolResultBlockParam): string {
   if (typeof block.content === 'string') return block.content;

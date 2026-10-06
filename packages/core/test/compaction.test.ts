@@ -352,7 +352,7 @@ describe('the transcript the summary call reads', () => {
   it('cuts long tool results and names the tool each result answers', () => {
     const text = transcriptOf(replayMessages(log.slice(0, 5)));
     expect(text).toContain('[Assistant called read]: {"path":"src/date.ts"}');
-    expect(text).toMatch(/\[Result of read\]: x{2000} \[\.\.\. 8500 more characters\]/);
+    expect(text).toMatch(/\[Result of read\]: x{2000}\n\[\.\.\. 7500 characters left out of this transcript only; the agent saw them \.\.\.\]\nx{1000}\n/);
   });
 
   it('drops the oldest lines past its budget and keeps an earlier compacted context at the top', () => {
