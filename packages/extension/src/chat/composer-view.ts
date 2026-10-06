@@ -136,7 +136,7 @@ export type ComposerControls = ReturnType<typeof composerControls>;
 
 /**
  * The composer's own controls around the text field: the tray's browser and queued chips, and the bottom row's
- * `+`, `/`, the running time, cost and agents, the context ring and the model button. `show` draws a ComposerView.
+ * `+`, `/`, the running time and cost, the context ring and the model button. `show` draws a ComposerView.
  */
 export function composerControls(post: (message: FromView) => void, hooks: { readonly addContext: () => void; readonly openCommands: () => void; readonly unqueue: () => void }) {
   const browserLabel = h('span', { class: 'tray-label' });
@@ -161,8 +161,7 @@ export function composerControls(post: (message: FromView) => void, hooks: { rea
 
   const elapsed = h('span', { class: 'run-elapsed' });
   const cost = h('span', { class: 'run-cost' });
-  const agents = h('span', { class: 'agents-pill' }, icon('agent'), h('span', { class: 'agents-label' }));
-  const status = h('span', { class: 'run-status', hidden: true, role: 'status' }, h('span', { class: 'run-time', title: 'Time this turn has run' }, icon('clock'), elapsed), cost, agents);
+  const status = h('span', { class: 'run-status', hidden: true, role: 'status' }, h('span', { class: 'run-time', title: 'Time this turn has run' }, icon('clock'), elapsed), cost);
 
   const ring = contextRing();
   const modelName = h('span', { class: 'model-name' });
@@ -199,8 +198,6 @@ export function composerControls(post: (message: FromView) => void, hooks: { rea
         cost.hidden = view.running.cost === undefined;
         cost.textContent = view.running.cost?.text ?? '';
         cost.title = view.running.cost?.title ?? '';
-        agents.querySelector('.agents-label')!.textContent = view.running.agents.label;
-        agents.title = `${view.running.agents.count} running`;
       }
     },
   };

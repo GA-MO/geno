@@ -62,7 +62,6 @@ export type RunningView = {
   readonly elapsed: string;
   /** Undefined before the turn's first model call. */
   readonly cost: { readonly text: string; readonly title: string } | undefined;
-  readonly agents: { readonly count: number; readonly label: string };
 };
 
 export type ComposerView = {
@@ -159,10 +158,9 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
       note: EFFORT_NOTES[facts.provider],
     },
     action: running ? 'stop' : 'send',
-    // One session runs today; subagents will add theirs.
     running:
       running && turn !== undefined
-        ? { elapsed: formatElapsed(now - turn.startedAt), cost: costOf(facts.turnCostUsd, facts.bahtPerUsd), agents: { count: 1, label: '1 agent' } }
+        ? { elapsed: formatElapsed(now - turn.startedAt), cost: costOf(facts.turnCostUsd, facts.bahtPerUsd) }
         : undefined,
   };
 }
