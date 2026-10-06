@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentEnv,
+  agentOf,
   agentReducer,
+  checksOnFocus,
+  copyText,
   EXTERNAL_AGENTS,
   firstLink,
   linkLabel,
+  npmGlobalBins,
+  offeredActions,
+  parseClaudeAuthStatus,
+  parseClaudeVersion,
   parseCursorAbout,
   plainText,
   redact,
+  searchDirs,
   shownOutput,
+  type AdapterFound,
   type AgentEvent,
   type AgentState,
 } from '../src/chat/agents-model.js';
@@ -84,11 +93,11 @@ describe('what of a command’s output reaches the page', () => {
   });
 });
 
-const CLI = { path: '/Users/me/.local/bin/agent', version: '2026.01.23-916f423' };
+const CLI = { path: '/Users/me/.local/bin/agent', version: '2026.01.23-916f423', adapter: { kind: 'built-in' } } as const;
 const run = (state: AgentState, ...events: AgentEvent[]) => events.reduce(agentReducer, state);
 const found = (signedIn: boolean, apiKey = false): AgentEvent => ({
   type: 'checked',
-  result: { kind: 'found', path: CLI.path, apiKey, report: signedIn ? { version: CLI.version, signedIn: true, account: 'user@example.com' } : { version: CLI.version, signedIn: false } },
+  result: { kind: 'found', path: CLI.path, adapter: CLI.adapter, apiKey, report: signedIn ? { version: CLI.version, signedIn: true, account: 'user@example.com' } : { version: CLI.version, signedIn: false } },
 });
 const browser = { kind: 'browser', account: 'user@example.com' } as const;
 
@@ -97,9 +106,9 @@ describe('an agent’s account state', () => {
     expect(run({ kind: 'checking' }, { type: 'checked', result: { kind: 'missing' } })).toEqual({ kind: 'missing' });
     expect(run({ kind: 'checking' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI });
     expect(run({ kind: 'checking' }, found(true))).toEqual({ kind: 'signed-in', cli: CLI, auth: browser });
-    expect(run({ kind: 'checking' }, { type: 'checked', result: { kind: 'failed', path: CLI.path, text: 'timed out', output: '' } })).toEqual({
+    expect(run({ kind: 'checking' }, { type: 'checked', result: { kind: 'failed', path: CLI.path, adapter: CLI.adapter, text: 'timed out', output: '' } })).toEqual({
       kind: 'error',
-      cli: { path: CLI.path, version: undefined },
+      cli: { path: CLI.path, version: undefined, adapter: CLI.adapter },
       text: 'timed out',
       output: '',
     });
@@ -170,5 +179,98 @@ describe('the env of the CLI’s processes', () => {
     expect(agentEnv(cursor, base, undefined)).toEqual({ PATH: '/bin' });
     agentEnv(cursor, base, 'crsr-key');
     expect(base).toEqual({ PATH: '/bin' });
+  });
+});
+
+/** `claude auth status --json` from Claude Code 2.1.291, signed in, with the account and ids replaced. */
+const CLAUDE_SIGNED_IN = JSON.stringify({
+  loggedIn: true,
+  authMethod: 'claude.ai',
+  apiProvider: 'firstParty',
+  analyticsDisabled: false,
+  projectsDirectory: '/Users/me/.claude/projects',
+  configDirectory: '/Users/me/.claude',
+  email: 'user@example.com',
+  orgId: '00000000-0000-0000-0000-000000000000',
+  orgName: 'Example',
+  subscriptionType: 'max',
+});
+
+describe('reading Claude Code', () => {
+  const claude = agentOf('claude-code')!;
+  const cursor = agentOf('cursor')!;
+
+  it('reads a signed-in account and its plan from `claude auth status --json`', () => {
+    expect(parseClaudeAuthStatus(CLAUDE_SIGNED_IN)).toEqual({ version: undefined, signedIn: true, account: 'user@example.com', plan: 'max' });
+  });
+
+  it('reads `loggedIn: false` as signed out', () => {
+    expect(parseClaudeAuthStatus(JSON.stringify({ loggedIn: false, authMethod: 'none', apiProvider: 'firstParty' }))).toEqual({ version: undefined, signedIn: false });
+  });
+
+  it('knows nothing from output that is not that object, which the card shows as an error', () => {
+    for (const garbage of ['', 'Not logged in', '{"loggedIn": "yes"}', '[]', 'null', '{"email": "user@example.com"}', '{loggedIn: true']) expect(parseClaudeAuthStatus(garbage)).toBeUndefined();
+    const failed: AgentEvent = { type: 'checked', result: { kind: 'failed', path: '/bin/claude', adapter: { kind: 'missing' }, text: 'unreadable', output: 'Not logged in' } };
+    expect(run({ kind: 'checking' }, failed)).toMatchObject({ kind: 'error', text: 'unreadable' });
+  });
+
+  it('reads the version `claude --version` prints', () => {
+    expect(parseClaudeVersion('2.1.291 (Claude Code)\n')).toBe('2.1.291');
+    expect(parseClaudeVersion('command not found')).toBeUndefined();
+  });
+
+  it('shows sign-in and sign-out as commands to copy, and runs only Update', () => {
+    const cli = { path: '/Users/me/.local/bin/claude', version: '2.1.291', adapter: { kind: 'missing' } } as const;
+    const ways = (state: AgentState) => offeredActions(claude, state).map(([action, way]) => `${action}:${way.kind}`);
+    expect(ways({ kind: 'signed-out', cli })).toEqual(['login:copy', 'update:run']);
+    expect(ways({ kind: 'signed-in', cli, auth: { kind: 'browser', account: 'user@example.com' } })).toEqual(['logout:copy', 'update:run']);
+    expect(ways({ kind: 'signed-in', cli, auth: { kind: 'api-key' } })).toEqual(['update:run']);
+    expect(copyText(claude, 'login')).toBe('claude auth login');
+    expect(copyText(claude, 'logout')).toBe('claude auth logout');
+    expect(copyText(claude, 'update')).toBeUndefined();
+    expect(copyText(claude, 'install')).toBe('curl -fsSL https://claude.ai/install.sh | bash');
+    expect(copyText(claude, 'adapter')).toBe('npm install -g @agentclientprotocol/claude-agent-acp');
+    expect(offeredActions(cursor, { kind: 'signed-out', cli: CLI }).every(([, way]) => way.kind === 'run')).toBe(true);
+    expect(copyText(cursor, 'login')).toBeUndefined();
+    expect(copyText(cursor, 'adapter')).toBeUndefined();
+  });
+
+  it('carries the adapter it found, or that it is missing, into the state', () => {
+    const at = (adapter: AdapterFound): AgentEvent => ({ type: 'checked', result: { kind: 'found', path: '/bin/claude', adapter, apiKey: false, report: { version: '2.1.291', signedIn: false } } });
+    expect(run({ kind: 'checking' }, at({ kind: 'missing' }))).toEqual({ kind: 'signed-out', cli: { path: '/bin/claude', version: '2.1.291', adapter: { kind: 'missing' } } });
+    expect(run({ kind: 'checking' }, at({ kind: 'found', path: '/bin/claude-agent-acp' }))).toEqual({
+      kind: 'signed-out',
+      cli: { path: '/bin/claude', version: '2.1.291', adapter: { kind: 'found', path: '/bin/claude-agent-acp' } },
+    });
+    const signedIn: AgentEvent = { type: 'checked', result: { kind: 'found', path: '/bin/claude', adapter: { kind: 'missing' }, apiKey: false, report: { version: undefined, signedIn: true, account: 'user@example.com', plan: 'max' } } };
+    expect(run({ kind: 'checking' }, signedIn)).toMatchObject({ auth: { kind: 'browser', account: 'user@example.com', plan: 'max' } });
+  });
+
+  it('looks again on focus only where the user went to a terminal: missing, a command to copy, or no adapter', () => {
+    const found = { path: '/bin/claude', version: '2.1.291', adapter: { kind: 'found', path: '/bin/claude-agent-acp' } } as const;
+    const keyed: AgentState = { kind: 'signed-in', cli: found, auth: { kind: 'api-key' } };
+    expect(checksOnFocus(claude, { kind: 'missing' })).toBe(true);
+    expect(checksOnFocus(claude, { kind: 'signed-out', cli: found })).toBe(true);
+    expect(checksOnFocus(claude, keyed)).toBe(false);
+    expect(checksOnFocus(claude, { ...keyed, cli: { ...found, adapter: { kind: 'missing' } } })).toBe(true);
+    expect(checksOnFocus(claude, { kind: 'updating', cli: found, output: '' })).toBe(false);
+    expect(checksOnFocus(cursor, { kind: 'signed-out', cli: CLI })).toBe(false);
+  });
+
+  it('carries a stored key as ANTHROPIC_API_KEY, and none without one', () => {
+    expect(agentEnv(claude, { PATH: '/bin' }, 'sk-ant-key', claude.statusEnv)).toEqual({ PATH: '/bin', ANTHROPIC_API_KEY: 'sk-ant-key' });
+    expect(agentEnv(claude, { PATH: '/bin' }, undefined, claude.statusEnv)).toEqual({ PATH: '/bin' });
+  });
+
+  it('looks for the CLI and its adapter in ~/.local/bin and npm’s global bin folders, without running npm', () => {
+    expect(searchDirs(claude, { NPM_CONFIG_PREFIX: '/opt/npm', NVM_BIN: '/Users/me/.nvm/versions/node/v22/bin' }, '/Users/me', '/usr/local/bin')).toEqual([
+      '/Users/me/.local/bin',
+      '/opt/npm/bin',
+      '/Users/me/.nvm/versions/node/v22/bin',
+      '/Users/me/.npm-global/bin',
+      '/usr/local/bin',
+    ]);
+    expect(npmGlobalBins({ npm_config_prefix: '/p', NPM_CONFIG_PREFIX: '/p' }, '/h', undefined)).toEqual(['/p/bin', '/h/.npm-global/bin']);
+    expect(searchDirs(cursor, { NPM_CONFIG_PREFIX: '/opt/npm' }, '/Users/me', '/usr/local/bin')).toEqual(['/Users/me/.local/bin']);
   });
 });
