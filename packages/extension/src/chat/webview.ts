@@ -27,7 +27,6 @@ import { isWaiting, nodeOf, railOf, todoListOf, type Step } from './rail.js';
 import { todoOpen, todoStep } from './todo-view.js';
 import { openSpinoffs, spinoffCardOf, type SpinoffPending } from './spinoff-model.js';
 import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
-import { compactFoldId } from './compact-model.js';
 import { compactStep } from './compact-view.js';
 import type { TodoList } from '@g-code/core/todo';
 import { laneOffer } from './backend-model.js';
@@ -305,7 +304,7 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     case 'steer':
       return { deps: [step.block], build: () => steerStep(step.block) };
     case 'compact':
-      return { deps: [step.block, ui.isOpen(compactFoldId(step.block))], build: () => compactStep(step.block, ui) };
+      return { deps: [step.block], build: () => compactStep(step.block, ui) };
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
