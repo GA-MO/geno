@@ -17,6 +17,8 @@ export type AcpChildren = {
   /** Where `session/cancel` finds a running child by its session id. */
   readonly cancels: Map<string, () => void>;
   readonly err: (line: string) => void;
+  /** The child's own task, which rolls up into the parent's, so a question it asks shows on the parent's row. */
+  readonly tasks: { started(child: ChildView): void; ended(child: ChildView, end: ChildEnd): void };
 };
 
 const STOP_REASONS: { readonly [K in ChildEnd['kind']]: acp.StopReason } = {
@@ -65,6 +67,7 @@ export function acpChildHost(acpChildren: AcpChildren): SubagentHost {
   return {
     async started(child, cancel) {
       cancels.set(child.id, cancel);
+      acpChildren.tasks.started(child);
       await tell(child, { kind: 'running' }, { turns: 0, costUsd: 0 }).catch(failed);
       if (!native) return { text: () => {}, toolStart: () => {}, toolEnd: () => {}, logged: () => {} };
       const stream = acpChildren.streamOf(child.id);
@@ -73,6 +76,7 @@ export function acpChildHost(acpChildren: AcpChildren): SubagentHost {
     },
     async ended(child, end, spent) {
       cancels.delete(child.id);
+      acpChildren.tasks.ended(child, end);
       await streams.get(child.id)?.flush();
       streams.delete(child.id);
       await tell(child, end, spent).catch(failed);

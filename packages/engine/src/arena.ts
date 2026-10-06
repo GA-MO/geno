@@ -54,7 +54,8 @@ import { CHECK_TIMEOUT_MS, NON_INTERACTIVE } from './tools/agent.js';
  * How one lane's session runs: as a background turn of the engine over ACP, or in-process for an eval. It resolves once
  * the session exists, and `ended` once its turn is over.
  */
-export type LaneRunner = (lane: LaneRecord, variant: VariantSpec, prompt: string) => Promise<{ readonly sessionId: string; readonly ended: Promise<LaneEnd> }>;
+/** `run` is the Arena run the lane belongs to. */
+export type LaneRunner = (lane: LaneRecord, variant: VariantSpec, prompt: string, run: ArenaId) => Promise<{ readonly sessionId: string; readonly ended: Promise<LaneEnd> }>;
 
 export type ArenaDeps = {
   readonly repo: LaneRepo;
@@ -220,7 +221,7 @@ export async function startArena(deps: ArenaDeps, task: string, variants: readon
   // One at a time: `git worktree add` of one repository is not safe to run in parallel.
   const records: LaneRecord[] = [];
   for (const [i, variant] of variants.entries()) records.push(await laneFor(repo, variantPrompt(task, variant), store, io, names[i]!));
-  const started = await Promise.all(records.map((record, i) => deps.runLane(record, variants[i]!, variantPrompt(task, variants[i]!))));
+  const started = await Promise.all(records.map((record, i) => deps.runLane(record, variants[i]!, variantPrompt(task, variants[i]!), id)));
 
   let run: ArenaRun = {
     id,
