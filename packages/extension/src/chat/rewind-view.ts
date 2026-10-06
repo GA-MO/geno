@@ -36,14 +36,15 @@ function rewindMenu(turn: string, post: (message: RewindFromView) => void): HTML
     post(item.action === 'fork' ? { type: 'fork', turn } : { type: 'rewind', turn, kind: item.action, confirmed: false });
   };
   menu.append(
-    ...REWIND_ITEMS.map((item) =>
+    ...REWIND_ITEMS.flatMap((item) => [
+      ...(item.action === 'fork' ? [h('li', { class: 'rewind-separator', role: 'separator' })] : []),
       h(
         'li',
-        { class: `model-option${item.action === 'fork' ? ' rewind-fork' : ''}`, role: 'menuitem', tabindex: '-1', 'data-action': item.action, onclick: () => choose(item) },
+        { class: 'model-option', role: 'menuitem', tabindex: '-1', 'data-action': item.action, onclick: () => choose(item) },
         icon(ITEM_ICONS[item.action], 'send-option-icon'),
         h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, item.label), h('span', { class: 'model-option-detail' }, item.detail)),
       ),
-    ),
+    ]),
   );
   const wrap = h('div', { class: 'rewind' }, button, menu);
 

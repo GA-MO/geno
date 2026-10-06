@@ -65,10 +65,10 @@
   margin-top: 2px;
 }
 
-.rewind-menu .rewind-fork {
-  margin-top: 4px;
-  border-top: 1px solid var(--vscode-editorSuggestWidget-border, var(--border));
-  padding-top: 7px;
+.rewind-menu .rewind-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--vscode-editorSuggestWidget-border, var(--border));
 }
 
 .rewind-confirm {

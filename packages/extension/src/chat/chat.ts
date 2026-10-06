@@ -556,9 +556,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       connection: () => this.engine.connection(),
       idle: () => (this.shown === undefined || this.turn !== undefined ? undefined : { sessionId: this.shown, cwd: this.shownCwd }),
       seqOf: (turn) => this.transcript.turns.find((t) => t.id === turn)?.seq,
+      turnAt: (seq) => this.transcript.turns.find((t) => t.seq === seq)?.id,
       reload: () => this.reshow(),
       open: (sessionId) => this.moveTo((connection) => this.load(connection, sessionId, this.shownCwd).then(() => sessionId)),
-      shown: (file) => vscode.workspace.asRelativePath(file),
       post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
     this.transcript = emptyTranscript(modelName());

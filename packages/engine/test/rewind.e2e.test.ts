@@ -138,8 +138,7 @@ describe('gcode serve: rewind to here', () => {
     await serve([answer('Back at two.', usage)], async (editor) => {
       writeFileSync(path.join(editor.workspace, 'b.ts'), 'export const b = 2;\n');
       const preview = await editor.ctx.request<RewindPreviewResponse>(REWIND_PREVIEW_METHOD, { sessionId: editor.sessionId, turnSeq: editor.turn2 });
-      const abs = (file: string) => path.join(editor.workspace, file);
-      expect(preview).toEqual({ files: [abs('a.ts'), abs('b.ts')], unsaved: [abs('b.ts')] });
+      expect(preview).toEqual({ files: ['a.ts', 'b.ts'], unsaved: ['b.ts'] });
 
       const rewound = await editor.rewind(editor.turn2, { kind: 'files' });
       expect(rewound).toEqual({ files: preview.files, prompt: 'make it three' });
@@ -183,7 +182,7 @@ describe('gcode serve: rewind to here', () => {
   it('restores both, and the next turn sends neither the cut turn nor a restore notice about it', async () => {
     await serve([answer('Made it 3.', usage)], async (editor) => {
       const rewound = await editor.rewind(editor.turn2, { kind: 'both' });
-      expect(rewound).toEqual({ files: [path.join(editor.workspace, 'a.ts')], prompt: 'make it three' });
+      expect(rewound).toEqual({ files: ['a.ts'], prompt: 'make it three' });
       expect(fileOf(editor.workspace)).toContain('"two"');
       expect(prompts(await editor.log())).toEqual(['make it two']);
       await editor.prompt('make it 3');

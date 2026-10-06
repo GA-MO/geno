@@ -79,7 +79,7 @@ export const REWIND_METHOD = '_gcode/rewind';
 export type RewindRequest = { readonly sessionId: string };
 export type RewindResponse = { readonly files: readonly string[] };
 
-/** Extension method, sent by the editor: what restoring the files before the turn at `turnSeq` would change. Paths are absolute. */
+/** Extension method, sent by the editor: what restoring the files before the turn at `turnSeq` would change. Paths are relative to the session's workspace. */
 export const REWIND_PREVIEW_METHOD = '_gcode/rewindPreview';
 
 export type RewindPreviewRequest = { readonly sessionId: string; readonly turnSeq: number };
@@ -88,7 +88,7 @@ export type RewindPreviewResponse = { readonly files: readonly string[]; readonl
 
 /**
  * Extension method, sent by the editor: "Rewind to here" on the prompt at `turnSeq`. ACP has no rewind, so it is ours.
- * `files` are the absolute paths it rewrote or deleted. `prompt` is the text as the user typed it, for the composer.
+ * `files` are the paths it rewrote or deleted, relative to the session's workspace. `prompt` is the text as the user typed it, for the composer.
  */
 export const REWIND_TURN_METHOD = '_gcode/rewindTurn';
 
