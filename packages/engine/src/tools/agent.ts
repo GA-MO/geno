@@ -53,6 +53,7 @@ import {
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
+import { recallExecutor, type Recall } from './recall.js';
 import { skillExecutor } from './skill.js';
 import { wakeExecutors, type SessionWakes } from './wake.js';
 import { todo } from './todo.js';
@@ -176,6 +177,8 @@ export type AgentToolEnv = {
   readonly permissions?: PermissionStore | undefined;
   /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
   readonly wakes?: SessionWakes | undefined;
+  /** Searches the workspace's earlier sessions; undefined for a subagent, which is not offered recall. */
+  readonly recall?: Recall | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -325,6 +328,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       return { job: job.id, text, approval };
     }),
     check,
+    recall: recallExecutor(tools.recall),
     skill: skillExecutor(tools.commands),
     todo,
   };

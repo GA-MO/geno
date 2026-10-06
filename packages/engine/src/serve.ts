@@ -37,6 +37,8 @@ import {
   UNSAVED_BUFFERS_METHOD,
   addUsage,
   RENAME_SESSION_METHOD,
+  SEARCH_SESSIONS_METHOD,
+  type SearchSessionsResponse,
   SESSION_SUMMARY_META,
   summarizeSession,
   titleFrom,
@@ -208,6 +210,7 @@ import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
 import { wakeMetaOf, backgroundUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
+import { sessionIndex } from './session-index.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
@@ -697,6 +700,10 @@ function sessionInfoOf(summary: SessionSummary): acp.SessionInfo {
 }
 
 const renameRequest = z.object({ sessionId: z.string(), title: z.string() });
+const searchRequest = z.object({ query: z.string().max(500), cwd: z.string().optional() });
+
+/** How the history's search answers: every word the user typed must occur, and a row shows a short line of it. */
+const HISTORY_SEARCH = { match: 'all', limit: 50, snippetLength: 120 } as const;
 
 /** The task's link back to the session it was forked from, if it was. */
 const forkOf = (events: readonly TurnEvent[]): { readonly forkedFrom?: ForkOrigin } => {
@@ -1473,6 +1480,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const scope: SessionScope = params.cwd == null ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
       const sessions = await listSessions(store, io, scope);
       return { sessions: sessions.map(sessionInfoOf) };
+    })
+    .onRequest(SEARCH_SESSIONS_METHOD, searchRequest, async ({ params }): Promise<SearchSessionsResponse> => {
+      const scope: SessionScope = params.cwd === undefined ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
+      return { hits: await sessionIndex(store, io.err).search(params.query, scope, HISTORY_SEARCH) };
     })
     .onRequest(acp.methods.agent.session.delete, async ({ params }) => {
       const { sessionId } = params;

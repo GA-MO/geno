@@ -47,9 +47,9 @@ describe('tool roster', () => {
     expect(toolRoster(tools).offered).toBe(tools);
   });
 
-  it('defers what eval runs offer beyond the core: background reads and stops, wakes and skill', () => {
+  it('defers what eval runs offer beyond the core: background reads and stops, recall, wakes and skill', () => {
     const roster = toolRoster(AGENT_MODE_TOOL_DEFINITIONS['non-interactive']);
-    expect([...roster.deferred.keys()]).toEqual(['bash_output', 'bash_stop', 'monitor', 'schedule_wakeup', 'skill']);
+    expect([...roster.deferred.keys()]).toEqual(['bash_output', 'bash_stop', 'monitor', 'recall', 'schedule_wakeup', 'skill']);
     expect(names(roster.offered)).toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo', TOOL_SEARCH_TOOL]);
   });
 

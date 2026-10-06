@@ -3,6 +3,7 @@ import type { ApprovalMode } from './approval.js';
 import { BACKGROUND_TAIL_LINES, MAX_BACKGROUND_JOBS } from './background.js';
 import { EDIT_FORMAT_SPECS } from './edit.js';
 import { SYSTEM_PROMPT } from './request.js';
+import { RECALL_SPEC } from './session-search.js';
 import { TODO_SPEC } from './todo.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
 import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
@@ -14,11 +15,14 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', 'schedule_wakeup', 'skill', 'todo', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', 'recall', 'schedule_wakeup', 'skill', 'todo', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
-/** What a subagent cannot use: it ends with its call, so it has no background command to read or stop and is never woken; its own todo list would show nowhere. */
-const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', 'schedule_wakeup', 'todo']);
+/**
+ * What a subagent cannot use: it ends with its call, so it has no background command to read or stop and is never
+ * woken; its own todo list would show nowhere; and its task comes from its parent, which can recall for it.
+ */
+const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', 'recall', 'schedule_wakeup', 'todo']);
 
 export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !CHILD_LEAVES_OUT.has(name));
 
@@ -81,6 +85,7 @@ const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL
   },
   edit: EDIT_FORMAT_SPECS[AGENT_EDIT_FORMAT].tool,
   monitor: MONITOR_TOOL_DEFINITION,
+  recall: RECALL_SPEC,
   schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
   todo: TODO_SPEC,
   skill: {

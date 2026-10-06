@@ -16,6 +16,7 @@ import {
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
   pstackNote,
+  RECALL_SEARCH,
   renderMemory,
   toolRoster,
   searchConfigOf,
@@ -27,6 +28,7 @@ import {
   type AssistantTurn,
   type EffortPolicy,
   type SessionMode,
+  type SessionScope,
   type TurnEvent,
   TELLS_MODEL,
   type Waiter,
@@ -48,6 +50,7 @@ import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { memoryStore } from './memory.js';
 import { permissionStore } from './permissions.js';
 import { logMode } from './sessions.js';
+import { sessionIndex } from './session-index.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
@@ -174,6 +177,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const config = await workspaceConfig(workspace);
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
     const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
+    const project: SessionScope = { kind: 'project', workspace: lane?.repo.main ?? session.workspace };
+    const recall = (query: string) => sessionIndex(store, io.err).search(query, project, { ...RECALL_SEARCH, exclude: session.id });
     const executorsFor = (approval: Approval, own = false) =>
       agentExecutors({
         sandbox,
@@ -189,6 +194,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
+        recall: own ? recall : undefined,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
