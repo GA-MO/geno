@@ -132,11 +132,17 @@ export async function run(): Promise<void> {
   check(!opened.truncated && opened.more === null, 'the opened output shows every line without a fade', opened);
 
 
+  const stuck = await panel<{ gap: number; clipped: boolean }>(
+    `(() => { const t = doc.querySelector('.transcript'); t.scrollTop = t.scrollHeight; const r = doc.querySelector('[data-turn="t0"] > .request'); const b = r.querySelector('.request-bubble'); return { gap: Math.round(r.getBoundingClientRect().top - t.getBoundingClientRect().top), clipped: getComputedStyle(b).overflow === 'hidden' }; })()`,
+  );
+  check(stuck.gap === 0 && stuck.clipped, 'scrolled to the end of a long turn, its request stays at the top, cut to a few lines', stuck);
+  await screenshots('sticky-request', () => panel(`(() => { const t = doc.querySelector('.transcript'); t.scrollTop = t.scrollHeight; })()`));
+
   await send(PROMPTS.remove);
   await waitFor('the permission card', async () => (await count('.permission-open')) === 1);
   check((await textOf('.permission-open .permission-description')) === REMOVE[0]!.input['description'], 'the card shows what the command is for', await textOf('.permission-open .permission-description'));
   check((await textOf('.permission-open .permission-command')) === 'rm -rf build', 'and the full command', await textOf('.permission-open .permission-command'));
-  check((await panel<string>(`doc.querySelector('.peek').dataset.state`)) === 'away', 'one Noodle while the turn runs: the peek is down even when the window has no focus', await panel<string>(`doc.querySelector('.peek').dataset.state`));
+  await waitFor('one Noodle while the turn runs: the peek down, even when the window has no focus to play its duck', async () => (await panel<string>(`doc.querySelector('.peek').dataset.state`)) === 'away', 3000);
   await screenshots('permission', scrollTo('.permission-open'));
   await click('.permission-open button', 'Deny');
   await waitFor('the denied turn to finish', async () => (await count('.turn-footer')) === 2);

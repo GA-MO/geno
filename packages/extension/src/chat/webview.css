@@ -191,6 +191,8 @@ button {
   overflow-y: auto;
   padding: 6px var(--gap) 8px;
   scrollbar-gutter: stable;
+  /* What is scrolled into view lands below the stuck request, which is at most three lines tall. */
+  scroll-padding-top: calc(3lh + 36px);
 }
 
 .turn {
@@ -205,6 +207,28 @@ button {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 14px;
+}
+
+/*
+ * A turn's request stays at the top while its steps scroll under it, so a long chat still shows what was last asked;
+ * the next turn's request pushes it off. Its gap is padding over the page color, so steps fade out beneath it.
+ */
+.turn > .request {
+  position: sticky;
+  top: -6px;
+  z-index: 3;
+  margin: -6px 0 0;
+  padding: 6px 0 14px;
+  background: linear-gradient(var(--bg) calc(100% - 14px), transparent);
+  container-type: scroll-state;
+}
+
+@container scroll-state(stuck: top) {
+  .request-bubble {
+    max-height: calc(3lh + 16px);
+    overflow: hidden;
+    mask-image: linear-gradient(black 65%, transparent);
+  }
 }
 
 .request-bubble {
