@@ -124,6 +124,7 @@ import {
   type RetryNowResponse,
   type Waiting,
   STEER_META,
+  startsTurn,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -878,7 +879,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => e.kind === 'user')?.content ?? '') : text)),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast(startsTurn)?.content ?? '') : text)),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
