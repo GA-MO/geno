@@ -11,6 +11,8 @@ import {
   approvalQuestion,
   describeServerState,
   isSessionMode,
+  MESSAGE_AGENT_TOOL,
+  MESSAGE_AGENT_TOOL_DEFINITION,
   pstackNote,
   renderMemory,
   sessionModeOf,
@@ -31,7 +33,8 @@ import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
-import { drive, openForPrompt, positiveNumber, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { drive, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { Steers } from './steer.js';
 import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
@@ -93,6 +96,8 @@ export type AgentOptions = {
   readonly allowWorker?: boolean | undefined;
   /** A subagent call the caller issues as the user's own, as an `@` mention would; the Arena's review is one. */
   readonly issued?: AssistantTurn | undefined;
+  /** The engine's inboxes, where this run and its children take messages sent while they work; undefined keeps them to this run. */
+  readonly steers?: Steers | undefined;
 };
 
 export const askOnTerminal =
@@ -114,6 +119,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   if (lane !== undefined) await bindSession(lane, session.id);
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
   let children: Subagents | undefined;
+  const steers = options.steers ?? new Steers();
+  const inbox = steers.open(session.id, undefined);
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -171,19 +178,21 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       executors: executorsFor,
       parentMode: () => ({ tools, system }),
       readRoots,
+      steers,
     });
-    if (agentTool) tools = [...tools, children.tool];
+    if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const mode = {
       tools,
-      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...executors },
+      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}), ...executors },
       system,
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(issued === undefined ? {} : { issued }),
     };
-    return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
+    return await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox });
   } finally {
+    steers.release(session.id, inbox);
     await children?.settled();
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });
