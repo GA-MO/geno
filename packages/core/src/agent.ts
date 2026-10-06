@@ -3,6 +3,7 @@ import type { ApprovalMode } from './approval.js';
 import { BACKGROUND_TAIL_LINES, MAX_BACKGROUND_JOBS } from './background.js';
 import { EDIT_FORMAT_SPECS } from './edit.js';
 import { SYSTEM_PROMPT } from './request.js';
+import { TODO_SPEC } from './todo.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
 import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
 import type { EditFormat } from './types.js';
@@ -13,14 +14,13 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', 'schedule_wakeup', 'skill', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', 'schedule_wakeup', 'skill', 'todo', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
-/** What only a session that outlives its call can use: background commands to read or stop, and wakes. */
-const OUTLIVES_ITS_CALL: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', 'schedule_wakeup']);
+/** What a subagent cannot use: it ends with its call, so it has no background command to read or stop and is never woken; its own todo list would show nowhere. */
+const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', 'schedule_wakeup', 'todo']);
 
-/** A subagent ends with its call, so it starts no background command, has none to read or stop, and is never woken. */
-export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !OUTLIVES_ITS_CALL.has(name));
+export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !CHILD_LEAVES_OUT.has(name));
 
 const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL_SPECS>, Tool>> = {
   bash: {
@@ -82,6 +82,7 @@ const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL
   edit: EDIT_FORMAT_SPECS[AGENT_EDIT_FORMAT].tool,
   monitor: MONITOR_TOOL_DEFINITION,
   schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
+  todo: TODO_SPEC,
   skill: {
     name: 'skill',
     description:
@@ -145,6 +146,7 @@ You are in Plan mode, which is read-only. You cannot change anything: there is n
 - a concrete, numbered step-by-step plan for the change;
 - the files you would change or create, and what changes in each;
 - the risks and open questions, and how you would check the result.
+Also write the steps with the todo tool, all pending, since that same list is the one you tick off once the user starts building.
 Do not ask to switch modes; the user starts building when the plan looks right.`;
 
 /** The system prompt in each mode, fixed per mode so its cached prefix stays byte-stable. */

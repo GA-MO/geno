@@ -55,6 +55,7 @@ import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { skillExecutor } from './skill.js';
 import { wakeExecutors, type SessionWakes } from './wake.js';
+import { todo } from './todo.js';
 
 /**
  * The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session.
@@ -325,6 +326,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     check,
     skill: skillExecutor(tools.commands),
+    todo,
   };
   return Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
 }
