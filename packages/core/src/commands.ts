@@ -40,6 +40,7 @@ export const BUILTIN_COMMANDS = {
   mode: { description: 'Switch the approval mode', hint: 'plan | ask | auto', runs: 'engine' },
   model: { description: 'Choose the model', runs: 'client' },
   clear: { description: 'Clear the chat and start fresh', runs: 'client' },
+  compact: { description: 'Summarize the older turns to free context', hint: '[focus]', runs: 'engine' },
   rules: { description: 'Show the project rules', runs: 'client' },
   memory: { description: 'Show what Geno remembers', runs: 'client' },
   init: { description: 'Create or update AGENTS.md for this project', runs: 'engine', turn: initPrompt },

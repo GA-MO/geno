@@ -70,8 +70,10 @@ import {
   type McpServersResponse,
   SESSION_MODES,
   sessionEffortOf,
-  contextUseOf,
   lastContextUse,
+  spendOf,
+  type CompactEvent,
+  type Spend,
   type Session,
   sessionModeOf,
   type AutoState,
@@ -200,7 +202,7 @@ import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lan
 import { Tasks } from './tasks.js';
 import { backgroundShared, backgroundStopRequest, logArrivals } from './background-hooks.js';
 import { Viewers, type Viewer } from './viewers.js';
-import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
+import { AttachmentError, attachmentsDir, incomingAttachments, loadAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
 import { openSessionLog, resumeSession, startExternalSession, startSession, type OpenSession } from './chat.js';
 import { backendInfos, findBackend } from './backends.js';
 import { chosenModelOf, ExternalAgents, modelConfigOptions, runExternalTurn, type KeyOf } from './external.js';
@@ -221,7 +223,8 @@ import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
-import { wakeMetaOf, backgroundUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { compactAtOf, compactContext, numbered } from './compact.js';
+import { wakeMetaOf, backgroundUpdate, compactUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import { sessionIndex } from './session-index.js';
 import type { Store } from './store.js';
@@ -394,6 +397,7 @@ const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Pe
   'tool-result': (event) => toolResultUpdate(event),
   user: (event) => (event.steer === true ? steerUpdate(event) : undefined),
   error: (event) => textUpdate(errorText(event)),
+  compact: (event) => compactUpdate(event),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>
     peer.notices
@@ -508,6 +512,12 @@ type Turn = {
 
 type Spent = { readonly tokens: TokenUsage; readonly model: string; readonly costUsd: number | null };
 
+const addSpend = (spent: Spent | undefined, { usage, model, costUsd }: Spend): Spent => ({
+  tokens: spent === undefined ? usage : addUsage(spent.tokens, usage),
+  model,
+  costUsd: spent?.costUsd === null || costUsd === null ? null : (spent?.costUsd ?? 0) + costUsd,
+});
+
 function usageOf(spent: Spent | undefined, backend: ExternalBackendId | undefined): Pick<acp.PromptResponse, 'usage' | '_meta'> {
   if (spent === undefined) return {};
   const { tokens, model, costUsd } = spent;
@@ -600,12 +610,9 @@ function editorTurn(
             sent.send({ sessionUpdate: 'session_info_update', _meta: { [BACKEND_META]: backendShown(backend, event.lane) } });
           }
           if (event.kind === 'assistant' || event.kind === 'error') live.text = '';
-          if (event.kind === 'assistant') {
-            spent = {
-              tokens: spent === undefined ? event.usage : addUsage(spent.tokens, event.usage),
-              model: event.model,
-              costUsd: spent?.costUsd === null || event.costUsd === null ? null : (spent?.costUsd ?? 0) + event.costUsd,
-            };
+          const spend = spendOf(event);
+          if (spend !== undefined) {
+            spent = addSpend(spent, spend);
             route.tasks.update(route.sessionId, { usage: taskUsageOf(spent) });
           }
           const update =
@@ -615,9 +622,13 @@ function editorTurn(
           if (update !== undefined) sent.send(update);
           const opened = session();
           // An external agent's window and token counts are its own; it reports them itself when it does.
-          if (event.kind === 'assistant' && opened !== undefined && spent !== undefined && backend === undefined) {
-            sent.send(usageUpdate(contextUseOf(opened.provider, opened.model, event.usage), { model: spent.model, costUsd: spent.costUsd }));
+          if (spend !== undefined && opened !== undefined && spent !== undefined && backend === undefined) {
+            const context = lastContextUse(opened, [event]);
+            if (context !== undefined) sent.send(usageUpdate(context, { model: spent.model, costUsd: spent.costUsd }));
           }
+        },
+        compacting() {
+          if (peer.notices) sent.send({ sessionUpdate: 'notice', severity: 'info', title: 'Compacting the context' });
         },
       },
     },
@@ -1100,6 +1111,41 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   };
 
   /**
+   * `/compact` between turns: it holds the session as a turn does, so no prompt starts while the summary is written, and
+   * Stop stops it. Every editor showing the session gets the divider and the smaller context. A string is the reply.
+   */
+  const compactBetweenTurns = async (sessionId: string, focus: string): Promise<CompactEvent | string> => {
+    if (turns.get(sessionId) !== undefined) return 'A turn is running. /compact runs between turns; Geno also compacts on its own when the context fills.';
+    const controller = new AbortController();
+    turns.set(sessionId, controller);
+    const notify = (update: acp.SessionUpdate) => viewers.notify(sessionId, acp.methods.client.session.update, { sessionId, update });
+    try {
+      return await serially(sessionId, async () => {
+        const { log, gateway } = await resumeSession(store, io, sessionId);
+        if (log.session.backend !== undefined) return `${EXTERNAL_BACKENDS[log.session.backend.id].label} keeps its own context, so /compact works on Geno's own sessions only.`;
+        notify({ sessionUpdate: 'notice', severity: 'info', title: 'Compacting the context' });
+        const outcome = await compactContext(gateway, log.session, log.events, {
+          trigger: 'manual',
+          focus,
+          compactAt: compactAtOf(io.env, log.session),
+          stored: await loadAttachments(attachmentsDir(store, log.session.id), log.events),
+          signal: controller.signal,
+        });
+        if (outcome.kind === 'nothing') return 'Nothing to compact yet: the conversation is short enough to keep as it is.';
+        if (outcome.kind === 'failed') return controller.signal.aborted ? 'Stopped. The context is as it was.' : `Could not compact, so the context is as it was: ${outcome.message}`;
+        const event = numbered(outcome.event, log.events);
+        await appendEvent(log.file, event);
+        notify(compactUpdate(event));
+        const context = lastContextUse(log.session, [event]);
+        if (context !== undefined) notify(usageUpdate(context, { model: event.model, costUsd: event.costUsd }));
+        return event;
+      });
+    } finally {
+      if (turns.get(sessionId) === controller) turns.set(sessionId, undefined);
+    }
+  };
+
+  /**
    * One turn of a session, for a prompt from `from`, the editor that asked. It runs to its end whether or not any
    * editor still shows the session; the tasks list follows it. A `resume` turn has no prompt: it takes up the wait an
    * engine that stopped left in the log. A `wake` turn has none either: the engine starts it with what arrived.
@@ -1127,9 +1173,18 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
     const slash = target === undefined && rawLane === undefined ? await commands.expand(sessionId, text) : undefined;
     if (slash?.kind === 'builtin') {
-      const reply = await runBuiltin(slash, { setMode: (mode) => switchMode(from.client, sessionId, mode) });
-      await from.client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
-      return { stopReason: 'end_turn' };
+      let spent: Spent | undefined;
+      const reply = await runBuiltin(slash, {
+        setMode: (mode) => switchMode(from.client, sessionId, mode),
+        compact: async (focus) => {
+          const outcome = await compactBetweenTurns(sessionId, focus);
+          if (typeof outcome === 'string') return outcome;
+          spent = addSpend(undefined, outcome);
+          return '';
+        },
+      });
+      if (reply !== '') await from.client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
+      return { stopReason: 'end_turn', ...usageOf(spent, undefined) };
     }
     if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
 

@@ -1,8 +1,9 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, shouldCompact, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
+import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -55,6 +56,8 @@ export type Watcher = {
   toolInput?(draft: ToolInputDraft): void;
   /** A model call waits offline or for a rate limit, or its next try moved; null once it goes out. */
   waiting?(wait: Waiting | null): void;
+  /** The context is being summarized before the next model call; the compaction is logged when it is done. */
+  compacting?(): void;
 };
 
 /**
@@ -279,14 +282,34 @@ export async function drive(
 
   let issued = mode.issued;
   const loaded = new Map<Sha256, string>();
+  const compactAt = compactAtOf(io.env, session);
+  // True when a compaction was logged; a failed or empty one leaves the context as it was.
+  const compact = async (trigger: CompactTrigger): Promise<boolean> => {
+    watcher.compacting?.();
+    const outcome = await compactContext(gateway, session, events, {
+      trigger,
+      compactAt,
+      stored: await loadAttachments(ctx.attachmentsDir, events, loaded),
+      signal,
+      onRetry: (retry) => io.err(formatRetry(retry)),
+    });
+    if (outcome.kind === 'compacted') {
+      const event = await record(outcome.event);
+      io.err(`compact (${trigger}): ${event.tokensBefore} -> about ${event.tokensAfter} tokens`);
+      return true;
+    }
+    if (outcome.kind === 'failed' && !signal.aborted) io.err(`compact: ${outcome.message}`);
+    return false;
+  };
   const callModel = async (): Promise<void> => {
+    if (shouldCompact(events, compactAt)) await compact('auto');
     const startAt = Date.now();
     let marks: StreamMarks | undefined;
     // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
     const left = openWaitOf(events);
     let lastWait = left;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
-    const result = await gateway.turn({
+    const send = async () => gateway.turn({
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
       events,
       tools: mode.tools,
@@ -313,6 +336,9 @@ export async function drive(
         watcher.waiting?.(wait);
       },
     });
+    let result = await send();
+    // A request the provider refused as too long compacts once and goes again once.
+    if (result.kind === 'error' && result.error === 'overflow' && (await compact('overflow'))) result = await send();
     const at = new Date().toISOString();
     const timing = marks === undefined ? {} : { timing: { startAt, ...marks } };
     if (result.kind === 'error') {

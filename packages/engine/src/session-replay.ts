@@ -3,6 +3,10 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  COMPACT_META,
+  compactMarkOf,
+  compactNotice,
+  spendOf,
   isWakePrompt,
   triggerOf,
   WAKE_META,
@@ -125,6 +129,22 @@ export const titleOf = (use: ToolUseBlock): string => {
 
 export const textUpdate = (text: string): acp.SessionUpdate => ({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } });
 
+/** A compaction as the divider the panel draws, live and replayed; its text says the same in words for other clients. */
+export const compactUpdate = (event: EventOf<'compact'>): acp.SessionUpdate => ({
+  sessionUpdate: 'agent_message_chunk',
+  content: { type: 'text', text: compactNotice(event) },
+  _meta: { [COMPACT_META]: compactMarkOf(event) },
+});
+
+/** What the user typed to compact by hand, as its turn shows it: `/compact` and the focus. */
+export const compactPrompt = (event: EventOf<'compact'>): EventOf<'user'> => ({
+  kind: 'user',
+  seq: event.seq,
+  at: event.at,
+  content: event.focus === undefined ? '/compact' : `/compact ${event.focus}`,
+  command: { name: 'compact', args: event.focus ?? '' },
+});
+
 /** A failure belongs in the transcript, and a notice is live status only, so it goes as agent text, live and replayed. */
 export const errorText = (event: EventOf<'error'>): string => `\n\n[${event.error}] ${event.message}`;
 
@@ -182,6 +202,8 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
     if (event.kind === 'user' && event.steer !== true) runs.push({ prompt: event, mode, events: [] });
     // A lane apply is a turn of its own in the panel, as the prompt that asked for it showed live.
     else if (event.kind === 'lane-apply') runs.push({ prompt: { kind: 'user', seq: event.seq, at: event.at, content: laneApplyPrompt(event.lane, event.grafted) }, mode, events: [event] });
+    // So is /compact between turns; a compaction inside a turn stays in that turn, where it happened.
+    else if (event.kind === 'compact' && event.trigger === 'manual') runs.push({ prompt: compactPrompt(event), mode, events: [event] });
     else runs.at(-1)?.events.push(event);
   }
   return runs;
@@ -190,14 +212,17 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
 /** What is logged after a turn ended without being part of it: background reports, and the user's settings and decisions. */
 const LOGGED_AROUND_TURNS: ReadonlySet<TurnEvent['kind']> = new Set(['background-end', 'child-end', 'wake', 'mode', 'effort', 'backend-model', 'title', 'review', 'spinoff']);
 
+/** A turn the user started with a prompt, as opposed to a lane apply or a /compact, which have no prompt to rewind to. */
+const isPromptRun = (events: readonly TurnEvent[]): boolean => events[0]?.kind !== 'lane-apply' && !(events[0]?.kind === 'compact' && events[0].trigger === 'manual');
+
 function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
-  const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
+  const answers = events.flatMap((e) => spendOf(e) ?? []);
   const error = events.findLast((e) => e.kind === 'error');
   // Background work may report long after its turn ended, for a woken turn to take, and the user decides things between
   // turns; the turn ended with its own last event.
   const last = events.findLast((e) => !LOGGED_AROUND_TURNS.has(e.kind) && triggerOf(e) === undefined);
   return {
-    ...(events[0]?.kind === 'lane-apply' ? {} : { seq: prompt.seq }),
+    ...(isPromptRun(events) ? { seq: prompt.seq } : {}),
     mode,
     startedAt: ms(prompt.at),
     endedAt: ms(last === undefined || last.kind === 'session-start' ? prompt.at : last.at),
@@ -278,6 +303,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
         updates.push(textUpdate(laneApplyText(event, event.changes.length)));
       }
       if (event.kind === 'user') updates.push(steerUpdate(event));
+      if (event.kind === 'compact') updates.push(compactUpdate(event));
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
       if (event.kind === 'background-end') {
         const { id, toolUseId, command, state } = event.job;
