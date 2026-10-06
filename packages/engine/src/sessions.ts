@@ -35,6 +35,7 @@ import {
   type WakeId,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
+import { editorActionSchema } from './tools/editor.js';
 import { EngineError } from './errors.js';
 import { isMissing, StoreError, type Store } from './store.js';
 
@@ -157,6 +158,7 @@ const toolResultFields = {
   approval: approvalSchema.optional(),
   images: z.array(imageAttachmentSchema).optional(),
   widget: widgetRefSchema.optional(),
+  editorAction: editorActionSchema.optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 

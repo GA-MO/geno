@@ -10,6 +10,7 @@ import {
   AGENT_MODE_TOOL_DEFINITIONS,
   approvalQuestion,
   describeServerState,
+  editorActionToolDefinitions,
   isSessionMode,
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
@@ -47,6 +48,7 @@ import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
+import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { showWidget } from './tools/widget.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
@@ -92,6 +94,8 @@ export type AgentOptions = {
   readonly mcp?: McpToolset | undefined;
   /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
   readonly user?: UserChannel | undefined;
+  /** The editor that opens files, diffs and Explorer items for the model; a non-interactive run ignores it. */
+  readonly editor?: Editor | undefined;
   /** Whether the editor draws widgets; a non-interactive run ignores it, having nobody to show them to. */
   readonly widgets?: boolean | undefined;
   /** Undefined uses the default policy. */
@@ -188,7 +192,13 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const channel = options.approval.kind === 'interactive' ? (options.user ?? {}) : {};
     const user = userExecutors({ channel, mode: () => modeOf(options.approval), memory, sessionId: session.id });
     const widgets = options.approval.kind === 'interactive' && options.widgets === true;
-    const own = [...AGENT_MODE_TOOL_DEFINITIONS[startMode], ...userToolDefinitions(startMode, shownUserTools(channel)), ...widgetToolDefinitions(startMode, widgets)];
+    const editor = options.approval.kind === 'interactive' ? options.editor : undefined;
+    const own = [
+      ...AGENT_MODE_TOOL_DEFINITIONS[startMode],
+      ...userToolDefinitions(startMode, shownUserTools(channel)),
+      ...widgetToolDefinitions(startMode, widgets),
+      ...editorActionToolDefinitions(startMode, editor !== undefined),
+    ];
     const notes = renderMemory(await memory.list());
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const system = [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n');
@@ -221,7 +231,15 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const mode = {
       tools,
-      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}), ...executors },
+      executors: {
+        ...mcp?.executors,
+        ...user,
+        ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
+        ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
+        ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
+        ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
+        ...executors,
+      },
       system,
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
