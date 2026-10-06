@@ -15,8 +15,8 @@ import {
   childReport,
   childSummary,
   childSystemPrompt,
+  forkOpening,
   forkTask,
-  IN_CONVERSATION,
   isReadOnly,
   mergeAgents,
   parseAgentDefinition,
@@ -171,12 +171,6 @@ function semaphore(size: number) {
   };
 }
 
-/** The parent's conversation before its newest model call, which a fork starts from. */
-function forkedEvents(events: readonly TurnEvent[]): TurnEvent[] {
-  const last = events.findLastIndex((e) => e.kind === 'assistant');
-  return events.slice(1, last === -1 ? events.length : last).filter((e) => IN_CONVERSATION[e.kind]);
-}
-
 const reportOf = (events: readonly TurnEvent[]): string =>
   events
     .flatMap((e) => (e.kind === 'assistant' ? e.content.flatMap((block) => (block.type === 'text' && block.text.trim() !== '' ? [block.text.trim()] : [])) : []))
@@ -219,7 +213,7 @@ export function subagents(env: SubagentEnv): Subagents {
         context: header?.kind === 'session-start' ? header.context : undefined,
         child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start },
       },
-      ...(start === 'fork' ? forkedEvents(parentEvents) : []),
+      ...(start === 'fork' ? forkOpening(parentEvents, use.id, session.createdAt) : []),
     ];
     for (const event of opening) await appendEvent(file, event);
     const view: ChildView = { id: session.id, parentId: parentSession.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };

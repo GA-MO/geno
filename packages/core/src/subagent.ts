@@ -1,7 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { AGENT_TOOL_NAMES, type AgentToolName } from './agent.js';
-import type { DoneReason } from './loop.js';
-import { EFFORTS, type Effort, type SessionId, type TurnEvent } from './session.js';
+import { pendingToolUses, type DoneReason } from './loop.js';
+import { EFFORTS, IN_CONVERSATION, nextSeq, type Effort, type SessionId, type TurnEvent } from './session.js';
 import { TOOL_NAMES } from './tools.js';
 
 /**
@@ -223,6 +223,28 @@ export const forkTask = (agent: AgentDefinition, task: string): string =>
 ${agent.prompt}
 
 Task: ${task}`;
+
+/**
+ * A fork's conversation before its task: the parent's, through the model turn that asked for the fork, with that
+ * turn's calls answered. The parent's next request repeats every message before those answers, so the two share a
+ * cached prefix.
+ */
+export function forkOpening(parent: readonly TurnEvent[], toolUseId: string, at: string): TurnEvent[] {
+  const copied = parent.filter((e) => e.kind !== 'session-start' && IN_CONVERSATION[e.kind]);
+  let seq = nextSeq(copied);
+  const answers = pendingToolUses(copied).map(
+    (use): TurnEvent => ({
+      kind: 'tool-result',
+      seq: seq++,
+      at,
+      toolUseId: use.id,
+      name: use.name,
+      status: 'ok',
+      output: use.id === toolUseId ? 'This call started you, a forked subagent. Your task follows.' : 'This call runs outside your fork; you will not see its result.',
+    }),
+  );
+  return [...copied, ...answers];
+}
 
 /** What one child may use, settled when it starts. */
 export type ChildCaps = { readonly maxTurns: number; readonly maxCostUsd: number };
