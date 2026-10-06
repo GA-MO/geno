@@ -23,6 +23,8 @@ import {
   type SessionId,
   type SessionMode,
   type TurnEvent,
+  LANE_CONFLICT_REASONS,
+  type LaneConflictReason,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
 import { EngineError } from './errors.js';
@@ -225,6 +227,14 @@ const turnEventSchema = z.union([
       turns: count,
       costUsd: z.number().nonnegative().nullable(),
       summary: z.string(),
+    }),
+    z.strictObject({
+      kind: z.literal('lane-apply'),
+      ...seqFields,
+      lane: z.string().min(1),
+      changes: z.array(fileChangeSchema),
+      conflicts: z.array(z.strictObject({ path: z.string(), reason: z.enum(Object.keys(LANE_CONFLICT_REASONS) as [LaneConflictReason, ...LaneConflictReason[]]) })),
+      deleted: z.array(z.string()),
     }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),

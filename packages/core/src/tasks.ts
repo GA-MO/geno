@@ -1,5 +1,4 @@
-import type { TurnUsage } from './acp.js';
-import type { LaneConflict, LaneStatus } from './lanes.js';
+import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
 
 /**
@@ -25,9 +24,12 @@ export type TaskRecord = {
   readonly status: TaskStatus;
   readonly startedAt: number;
   readonly endedAt: number | null;
-  /** The turn's model calls so far; undefined before the first, null for a model with no price. */
-  readonly usage: TurnUsage | undefined;
+  /** The turn's model calls so far; undefined before the first. */
+  readonly usage: TaskUsage | undefined;
 };
+
+/** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
+export type TaskUsage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };
 
 /** What a status change tells the user, when it tells anything. */
 export type TaskNoticeKind = 'done' | 'needs-input' | 'failed';
@@ -46,6 +48,9 @@ export const TASK_NOTICES: { readonly [S in TaskStatus]: TaskNotice | undefined 
 };
 
 export const taskNotice = (from: TaskStatus | undefined, to: TaskStatus): TaskNotice | undefined => (from === to ? undefined : TASK_NOTICES[to]);
+
+/** Key in the client capabilities' `_meta`, true when the client takes TASK_UPDATE_METHOD notifications. */
+export const TASKS_CAPABILITY = 'gcode/tasks';
 
 /** Lists the engine's tasks, newest first. `missed` are the notices no editor was connected to hear, each given once. */
 export const TASKS_METHOD = '_gcode/tasks';
@@ -117,3 +122,19 @@ export const LANE_APPLY_META = 'gcode/laneApply';
 
 /** What an apply wrote, or why it wrote nothing, as the apply step's result in the session log. */
 export type LaneApplyRecord = { readonly lane: string; readonly conflicts: readonly LaneConflict[]; readonly deleted: readonly string[] };
+
+/** The prompt an apply shows as, in the panel and in a replay. */
+export const laneApplyPrompt = (lane: string): string => `Apply lane ${lane}`;
+
+/** What a lane apply says in the chat, live and replayed; `written` is how many files it wrote. */
+export function laneApplyText({ lane, conflicts, deleted }: LaneApplyRecord, written: number): string {
+  if (conflicts.length > 0) {
+    const lines = conflicts.map((conflict) => `- \`${conflict.path}\`: ${LANE_CONFLICT_REASONS[conflict.reason]}`);
+    const count = conflicts.length === 1 ? '1 file conflicts' : `${conflicts.length} files conflict`;
+    return [`Nothing from lane ${lane} was applied: ${count} with the main checkout.`, ...lines].join('\n');
+  }
+  const files = written + deleted.length;
+  if (files === 0) return `Lane ${lane} has nothing to apply.`;
+  const gone = deleted.length === 0 ? '' : ` Deleted ${deleted.map((file) => `\`${file}\``).join(', ')}.`;
+  return `Applied ${files === 1 ? '1 file' : `${files} files`} from lane ${lane}. Keep or undo each change.${gone}`;
+}

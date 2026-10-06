@@ -7,7 +7,7 @@ import type { ChildSpent, ChildView, SubagentHost } from './subagents.js';
 export type ChildStream = { readonly watcher: Watcher; flush(): Promise<void> };
 
 export type AcpChildren = {
-  readonly client: acp.AgentContext;
+  readonly client: { notify(method: string, params: unknown): Promise<void> };
   readonly parentId: string;
   /** The editor advertised ACP's `subagents`, so children are announced natively and stream under their own ids. */
   readonly native: boolean;

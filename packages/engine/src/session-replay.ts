@@ -1,7 +1,10 @@
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  laneApplyPrompt,
+  laneApplyText,
   askUserTitle,
   DEFAULT_SESSION_MODE,
   parseAskUser,
@@ -118,6 +121,8 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
   for (const event of events) {
     if (event.kind === 'mode') mode = event.mode;
     if (event.kind === 'user') runs.push({ prompt: event, mode, events: [] });
+    // A lane apply is a turn of its own in the panel, as the prompt that asked for it showed live.
+    else if (event.kind === 'lane-apply') runs.push({ prompt: { kind: 'user', seq: event.seq, at: event.at, content: laneApplyPrompt(event.lane) }, mode, events: [event] });
     else runs.at(-1)?.events.push(event);
   }
   return runs;
@@ -158,6 +163,8 @@ const reviewed = (change: FileChange, status: ReadonlyMap<HunkId, HunkStatus>): 
  */
 export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: WidgetRef) => ShownWidget = NO_WIDGETS): acp.SessionUpdate[] {
   const status = new Map(reviewState(events).map((hunk) => [hunk.id, hunk.status]));
+  const start = events[0];
+  const workspace = start?.kind === 'session-start' ? start.session.workspace : undefined;
   return runsOf(events).flatMap((run) => {
     const meta: ReplayedTurn = turnOf(run);
     const updates: acp.SessionUpdate[] = [
@@ -191,6 +198,17 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
             event.widget === undefined ? undefined : widgetOf(event.widget),
           ),
         );
+      }
+      if (event.kind === 'lane-apply') {
+        event.changes.forEach((change, i) => {
+          const toolCallId = `lane-${event.seq}-${i}`;
+          const title = `edit ${workspace === undefined ? change.path : path.relative(workspace, change.path)}`;
+          updates.push(
+            { sessionUpdate: 'tool_call', toolCallId, title, kind: 'edit', status: 'in_progress', _meta: { [REPLAYED_AT_META]: ms(event.at) } },
+            { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', _meta: { [REPLAYED_AT_META]: ms(event.at), [REPLAYED_CHANGE_META]: reviewed(change, status) } },
+          );
+        });
+        updates.push(textUpdate(laneApplyText(event, event.changes.length)));
       }
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
     }

@@ -1,8 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Readable } from 'node:stream';
-import { parseArgs } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
@@ -90,8 +88,27 @@ import {
   widgetDraftOf,
   SUBAGENT_META,
   type WidgetRef,
+  DETACH_METHOD,
+  isLive,
+  LANE_APPLY_META,
+  LANE_DISCARD_METHOD,
+  LANE_NEW_METHOD,
+  LANES_METHOD,
+  RUNNING_META,
+  TASK_UPDATE_METHOD,
+  TASKS_CAPABILITY,
+  TASKS_METHOD,
+  type LaneNewResponse,
+  type LanesResponse,
+  type TaskStatus,
+  type TaskUsage,
+  type TasksResponse,
 } from '@g-code/core';
-import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
+import { runAgent } from './agent.js';
+import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
+import { discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
+import { Tasks } from './tasks.js';
+import { Viewers, type Viewer } from './viewers.js';
 import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
 import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
@@ -99,23 +116,23 @@ import { commandClassifier } from './classifier.js';
 import { homeOf, homesOf, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
-import { UsageError, type Command, type Io } from './command.js';
+import { UsageError, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
-import { browserLauncherOf, browserSettingsOf } from './mcp/browser.js';
+import { browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logEffort, logMode, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
-import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
+import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import type { UserChannel } from './tools/user.js';
@@ -186,20 +203,47 @@ type Peer = {
   readonly widgets: boolean;
   /** It understands ACP's subagent sessions. */
   readonly subagents: boolean;
+  /** It takes task updates. */
+  readonly tasks: boolean;
 };
+
+const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false };
+
+/**
+ * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
+ * loaded the session after a window reload, or none while it runs in the background. `signal` is the turn's own.
+ */
+type Route = { readonly viewers: Viewers<Peer>; readonly tasks: Tasks; readonly sessionId: string; readonly signal: AbortSignal };
+
+/** The editor showing the route's session, when it can do what `can` asks. */
+const viewerThat = (route: Route, can: (peer: Peer) => boolean): Viewer<Peer> | undefined => {
+  const viewer = route.viewers.of(route.sessionId);
+  return viewer !== undefined && can(viewer.peer) ? viewer : undefined;
+};
+
+/** Asks whichever editor shows the session, waiting for one; the task reads needs-input until it answers. */
+async function askEditor<T>(route: Route, signal: AbortSignal | undefined, request: (viewer: Viewer<Peer>) => Promise<T>): Promise<T> {
+  const answered = route.tasks.ask(route.sessionId);
+  try {
+    return await route.viewers.ask(route.sessionId, signal ?? route.signal, request);
+  } finally {
+    answered();
+  }
+}
 
 type Updates = { send(update: acp.SessionUpdate | Promise<acp.SessionUpdate>): void; flush(): Promise<void> };
 
 /**
  * Session updates in order. Notifications are fire-and-forget for the loop, but must all precede the turn's response.
- * An update still being built, such as one that reads a stored widget, holds back the ones after it.
+ * An update still being built, such as one that reads a stored widget, holds back the ones after it. `sessionId` is
+ * the one an update names, a subagent's own for its stream.
  */
-function updates(client: acp.AgentContext, sessionId: string, io: Io): Updates {
+function updates(route: Route, sessionId: string, io: Io): Updates {
   let sent = Promise.resolve();
   return {
     send(update) {
       sent = sent
-        .then(async () => client.notify(acp.methods.client.session.update, { sessionId, update: await update }))
+        .then(async () => route.viewers.notify(route.sessionId, acp.methods.client.session.update, { sessionId, update: await update }))
         .catch((error: unknown) => io.err(`session/update failed: ${String(error)}`));
     },
     flush: () => sent,
@@ -233,22 +277,31 @@ function loggedUpdate<K extends TurnEvent['kind']>(event: EventOf<K>, peer: Peer
   return (LOGGED[event.kind] as ((e: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined) | undefined)?.(event, peer);
 }
 
-/** The editor's buffers, through ACP's client file system. `writer` names the tool call a write belongs to. */
-function editorFiles(client: acp.AgentContext, sessionId: string, peer: Peer, writer: () => acp.ToolCallId): Files {
+/**
+ * The editor's buffers, through ACP's client file system, while an editor that has them shows the session; the disk
+ * while none does. `writer` names the tool call a write belongs to.
+ */
+function editorFiles(route: Route, writer: () => acp.ToolCallId): Files {
+  const { sessionId } = route;
   const failure = (verb: string, file: string, error: unknown) =>
     new ToolError(`the editor could not ${verb} ${file}: ${error instanceof Error ? error.message : String(error)}`);
+  const editor = () => viewerThat(route, (peer) => peer.files);
   return {
     async read(file) {
+      const viewer = editor();
+      if (viewer === undefined) return DISK_FILES.read(file);
       try {
-        return (await client.request(acp.methods.client.fs.readTextFile, { sessionId, path: file })).content;
+        return (await viewer.client.request(acp.methods.client.fs.readTextFile, { sessionId, path: file })).content;
       } catch (error) {
         if (error instanceof acp.RequestError && error.code === RESOURCE_NOT_FOUND) return null;
         throw failure('read', file, error);
       }
     },
     async write(file, text, baseHash) {
+      const viewer = editor();
+      if (viewer === undefined) return DISK_FILES.write(file, text, baseHash);
       try {
-        await client.request(acp.methods.client.fs.writeTextFile, {
+        await viewer.client.request(acp.methods.client.fs.writeTextFile, {
           sessionId,
           path: file,
           content: text,
@@ -261,8 +314,9 @@ function editorFiles(client: acp.AgentContext, sessionId: string, peer: Peer, wr
       }
     },
     async unsaved() {
-      if (!peer.unsaved) return [];
-      const raw = await client.request<unknown, UnsavedBuffersRequest>(UNSAVED_BUFFERS_METHOD, { sessionId });
+      const viewer = viewerThat(route, (peer) => peer.files && peer.unsaved);
+      if (viewer === undefined) return [];
+      const raw = await viewer.client.request<unknown, UnsavedBuffersRequest>(UNSAVED_BUFFERS_METHOD, { sessionId });
       const parsed = unsavedBuffersResponse.safeParse(raw);
       if (!parsed.success) throw new ToolError(`the editor sent malformed buffers: ${z.prettifyError(parsed.error)}`);
       return parsed.data.buffers;
@@ -270,22 +324,33 @@ function editorFiles(client: acp.AgentContext, sessionId: string, peer: Peer, wr
   };
 }
 
-function editorDiagnostics(client: acp.AgentContext, sessionId: string): Diagnostics {
+/** The problems the editor showing the session reports; none while no such editor shows it. */
+function editorDiagnostics(route: Route): Diagnostics {
   return async (paths) => {
-    const raw = await client.request<unknown, DiagnosticsRequest>(DIAGNOSTICS_METHOD, { sessionId, paths });
+    const viewer = viewerThat(route, (peer) => peer.diagnostics);
+    if (viewer === undefined) return [];
+    const raw = await viewer.client.request<unknown, DiagnosticsRequest>(DIAGNOSTICS_METHOD, { sessionId: route.sessionId, paths });
     const parsed = diagnosticsResponse.safeParse(raw);
     if (!parsed.success) throw new ToolError(`the editor sent malformed diagnostics: ${z.prettifyError(parsed.error)}`);
     return parsed.data.diagnostics;
   };
 }
 
+/**
+ * What a load needs of a running turn to show it whole: every event logged so far, and the text the model is still
+ * writing, which is logged only once its call ends.
+ */
+type LiveTurn = { readonly events: TurnEvent[]; text: string };
+
 type Turn = {
   readonly surface: Surface;
   readonly approve: Approver;
   readonly user: UserChannel;
   readonly updates: Updates;
+  readonly live: LiveTurn;
   /** What the turn's model calls used so far, for the prompt response; nothing before the first call. */
   usage(): Pick<acp.PromptResponse, 'usage' | '_meta'>;
+  taskUsage(): TaskUsage | undefined;
 };
 
 type Spent = { readonly tokens: TokenUsage; readonly model: string; readonly costUsd: number | null };
@@ -309,26 +374,46 @@ const bashDescriptionOf = (input: unknown): string | undefined => {
   return typeof description === 'string' && description.trim() !== '' ? description : undefined;
 };
 
+const taskUsageOf = (spent: Spent | undefined): TaskUsage | undefined =>
+  spent === undefined
+    ? undefined
+    : { model: spent.model, inputTokens: spent.tokens.input + spent.tokens.cacheRead + spent.tokens.cacheWrite, outputTokens: spent.tokens.output, costUsd: spent.costUsd };
+
 /**
- * One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. `session`
- * is known once the turn opened the log, before its first model call.
+ * One prompt turn's view of the editor: what the loop shows, reads and writes, and asks permission for. `peer` is what
+ * the editor that started it can do; the editor that shows the session decides each call. `disk` keeps the turn's
+ * files on disk, as a lane session's are. `session` is known once the turn opened the log, before its first model call.
  */
-function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io: Io, session: () => Session | undefined, widgetOf: (widget: WidgetRef) => Promise<ShownWidget>): Turn {
-  const sent = updates(client, sessionId, io);
+function editorTurn(
+  route: Route,
+  sessionId: string,
+  peer: Peer,
+  io: Io,
+  session: () => Session | undefined,
+  widgetOf: (widget: WidgetRef) => Promise<ShownWidget>,
+  disk = false,
+): Turn {
+  const sent = updates(route, sessionId, io);
   // What each widget's step last showed while the model wrote it, so a piece of html that changes nothing sends nothing.
   const drafts = new Map<string, string>();
   // Only a tool that runs alone in its batch asks or writes, so the last one started is the one asking or writing.
   let running: acp.ToolCallId = '';
   let runningDescription: string | undefined;
   let spent: Spent | undefined;
+  const live: LiveTurn = { events: [], text: '' };
   return {
     updates: sent,
-    user: editorUser(client, sessionId, peer, () => sent.flush(), () => running),
+    live,
+    user: editorUser(route, peer, () => sent.flush(), () => running),
     usage: () => usageOf(spent),
+    taskUsage: () => taskUsageOf(spent),
     surface: {
-      files: peer.files ? editorFiles(client, sessionId, peer, () => running) : DISK_FILES,
+      files: peer.files && !disk ? editorFiles(route, () => running) : DISK_FILES,
       watcher: {
-        text: (delta) => sent.send(textUpdate(delta)),
+        text(delta) {
+          live.text += delta;
+          sent.send(textUpdate(delta));
+        },
         toolStart(use, title) {
           running = use.id;
           runningDescription = use.name === 'bash' ? bashDescriptionOf(use.input) : undefined;
@@ -348,12 +433,15 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
           sent.send({ sessionUpdate: update, toolCallId: id, title, kind: 'other', status: 'pending', _meta: { [WIDGET_DRAFT_META]: draft } });
         },
         logged(event) {
+          live.events.push(event);
+          if (event.kind === 'assistant' || event.kind === 'error') live.text = '';
           if (event.kind === 'assistant') {
             spent = {
               tokens: spent === undefined ? event.usage : addUsage(spent.tokens, event.usage),
               model: event.model,
               costUsd: spent?.costUsd === null || event.costUsd === null ? null : (spent?.costUsd ?? 0) + event.costUsd,
             };
+            route.tasks.update(route.sessionId, { usage: taskUsageOf(spent) });
           }
           const update =
             event.kind === 'tool-result' && event.widget !== undefined
@@ -372,13 +460,22 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
       const description = asker === undefined ? runningDescription : undefined;
       const rawInput: PermissionInput = { command: denial.command, reason: denial.reason, ...(description === undefined ? {} : { description }) };
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
-      const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
-        sessionId,
-        toolCall: { toolCallId: running, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
-        ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
-        options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
-      });
-      return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
+      const toolCallId = running;
+      try {
+        const { outcome } = await askEditor(route, undefined, (viewer) =>
+          viewer.client.request(acp.methods.client.session.requestPermission, {
+            sessionId: route.sessionId,
+            toolCall: { toolCallId, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+            ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
+            options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
+          }),
+        );
+        return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
+      } catch (error) {
+        // A turn stopped while its question waited for an editor: as if the editor had cancelled it.
+        if (route.signal.aborted) return 'reject';
+        throw error;
+      }
     },
   };
 }
@@ -400,20 +497,24 @@ function askUserReplyOf(request: AskUserRequest, raw: unknown): AskUserReply {
 }
 
 /** The cards this editor can show: a remember question with its exact text, and an ask_user question as a form. */
-function editorUser(client: acp.AgentContext, sessionId: string, peer: Peer, flush: () => Promise<void>, running: () => acp.ToolCallId): UserChannel {
+function editorUser(route: Route, peer: Peer, flush: () => Promise<void>, running: () => acp.ToolCallId): UserChannel {
+  const { sessionId } = route;
   return {
     ...(peer.memory
       ? {
           async remember(input, signal) {
             await flush();
-            const { outcome } = await client.request(
-              acp.methods.client.session.requestPermission,
-              {
-                sessionId,
-                toolCall: { toolCallId: running(), title: `Remember this ${SCOPE_WORDS[input.scope]}?`, kind: 'other', status: 'pending', rawInput: input, _meta: { [REMEMBER_META]: input } },
-                options: REMEMBER_OPTIONS,
-              },
-              { cancellationSignal: signal },
+            const toolCallId = running();
+            const { outcome } = await askEditor(route, signal, (viewer) =>
+              viewer.client.request(
+                acp.methods.client.session.requestPermission,
+                {
+                  sessionId,
+                  toolCall: { toolCallId, title: `Remember this ${SCOPE_WORDS[input.scope]}?`, kind: 'other', status: 'pending', rawInput: input, _meta: { [REMEMBER_META]: input } },
+                  options: REMEMBER_OPTIONS,
+                },
+                { cancellationSignal: signal },
+              ),
             );
             return outcome.outcome === 'selected' && outcome.optionId === 'allow';
           },
@@ -432,7 +533,10 @@ function editorUser(client: acp.AgentContext, sessionId: string, peer: Peer, flu
               _meta: { [ASK_USER_META]: request },
             };
             try {
-              return askUserReplyOf(request, await client.request(acp.methods.client.elicitation.create, elicitation, { cancellationSignal: signal }));
+              return askUserReplyOf(
+                request,
+                await askEditor(route, signal, (viewer) => viewer.client.request(acp.methods.client.elicitation.create, elicitation, { cancellationSignal: signal })),
+              );
             } catch (error) {
               // An editor that advertised forms but cannot show this one: the model asks in plain words instead.
               if (signal.aborted) throw error;
@@ -540,31 +644,75 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
   for (const { hunk, status } of decisions) await appendEvent(log.file, { kind: 'review', seq: seq++, at, hunk, status });
 }
 
-/** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
-export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env)): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false };
+/**
+ * What outlives one editor connection: the sessions' turns, modes and Auto state, which editor shows each session,
+ * the tasks, and each running turn's live state. One engine process keeps one, shared by every connection to it.
+ */
+export function engineShared(io: Io) {
+  return {
+    turns: new Map<string, AbortController | undefined>(),
+    // Running subagents by their own session ids, which `session/cancel` may name.
+    childCancels: new Map<string, () => void>(),
+    // Each session's Auto state, kept across its turns for as long as the engine runs.
+    autos: new Map<string, { state: AutoState }>(),
+    // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
+    modes: new Map<string, SessionMode>(),
+    // A turn and a review decision both append to the session log and number their events from what they read,
+    // so each session's writers take turns.
+    writers: new Map<string, Promise<unknown>>(),
+    viewers: new Viewers<Peer>(io.err),
+    tasks: new Tasks(),
+    live: new Map<string, LiveTurn>(),
+  };
+}
+
+export type EngineShared = ReturnType<typeof engineShared>;
+
+const lanePrompt = z.object({ cwd: z.string(), prompt: z.string().trim().min(1), mode: z.string().optional() });
+const laneDiscardRequest = z.object({ cwd: z.string(), name: z.string().min(1), discardChanges: z.boolean() });
+const lanesRequest = z.object({ cwd: z.string() });
+
+/** How a turn that ran to its end reads in the tasks list. */
+const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' | 'needs-input'>>> = {
+  end_turn: 'done',
+  max_tokens: 'failed',
+  max_turn_requests: 'failed',
+  refusal: 'failed',
+  cancelled: 'stopped',
+};
+
+/**
+ * The engine as an ACP agent, for one editor connection. Each prompt runs `gcode agent`'s loop on the session's log,
+ * or a one-shot inline edit, or a lane apply. `shared` is the process's, so a turn started over one connection goes on
+ * after it closes and shows in the next editor that loads its session.
+ */
+export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live } = shared;
+  let peer: Peer = NO_PEER;
+  let viewer: Viewer<Peer> | undefined;
+  // This connection itself, as the editor that shows the sessions it opens; known once it connected.
+  const self = (): Viewer<Peer> => {
+    if (viewer === undefined) throw new Error('the connection is not open yet');
+    return viewer;
+  };
   /** A session's stored widget, as an update carries it. */
   const shownWidget = (sessionId: string) => async (widget: WidgetRef): Promise<ShownWidget> => {
     const dir = attachmentsDir(store, asSessionId(sessionId));
     return { uri: pathToFileURL(widgetFile(dir, widget)).href, html: await readWidget(dir, widget) };
   };
-  const turns = new Map<string, AbortController | undefined>();
-  // Running subagents by their own session ids, which `session/cancel` may name.
-  const childCancels = new Map<string, () => void>();
-  // Each session's Auto state, kept across its turns for as long as the engine runs.
-  const autos = new Map<string, { state: AutoState }>();
   const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
-  // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
-  const modes = new Map<string, SessionMode>();
-  // A turn and a review decision both append to the session log and number their events from what they read,
-  // so each session's writers take turns.
-  const writers = new Map<string, Promise<unknown>>();
   const serially = <T>(sessionId: string, work: () => Promise<T>): Promise<T> => {
     const next = (writers.get(sessionId) ?? Promise.resolve()).then(work, work);
     writers.set(sessionId, next.catch(() => {}));
     return next;
   };
   const commands = sessionCommands(homesOf(store, io.env), io);
+  /** A session no editor shows and no turn runs in lets go of its MCP servers; a load or resume opens them again. */
+  const release = (sessionId: string) => {
+    if (viewers.isShown(sessionId) || turns.get(sessionId) !== undefined) return;
+    turns.delete(sessionId);
+    void mcp.close(sessionId);
+  };
   const logSetting = async (sessionId: string, change: SettingChange) => {
     // A running turn holds the log until it ends, which may be never, so the change is logged beside it.
     if (turns.get(sessionId) !== undefined) {
@@ -605,9 +753,143 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (error instanceof MemoryError) throw acp.RequestError.invalidParams({ id }, error.message);
       throw error;
     };
+  const refused = (params: unknown) => (error: unknown): never => {
+    if (error instanceof EngineError) throw acp.RequestError.invalidParams(params, error.message);
+    throw error;
+  };
+  const laneRepo = async (cwd: string) => laneRepoOf(await workspaceDir(io.cwd, cwd)).catch(refused({ cwd }));
+  const runningMeta = (sessionId: string) => (turns.get(sessionId) !== undefined ? { _meta: { [RUNNING_META]: true } } : {});
+
+  /**
+   * One turn of a session, for a prompt from `from`, the editor that asked. It runs to its end whether or not any
+   * editor still shows the session; the tasks list follows it.
+   */
+  const runTurn = async (sessionId: string, blocks: readonly acp.ContentBlock[], meta: Record<string, unknown> | null | undefined, from: Viewer<Peer>): Promise<acp.PromptResponse> => {
+    known(sessionId);
+    if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
+    const text = promptText(blocks);
+    const attached: Attached = { mentions: parsedMentions(sessionId, blocks), attachments: parsedAttachments(sessionId, blocks) };
+    if (text === '' && attached.attachments.length === 0) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
+    const rawTarget = meta?.[INLINE_EDIT_META];
+    const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
+    if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
+    const rawLane = meta?.[LANE_APPLY_META];
+    if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
+    const slash = target === undefined && rawLane === undefined ? await commands.expand(sessionId, text) : undefined;
+    if (slash?.kind === 'builtin') {
+      const reply = await runBuiltin(slash, { setMode: (mode) => switchMode(from.client, sessionId, mode) });
+      await from.client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
+      return { stopReason: 'end_turn' };
+    }
+    if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
+
+    const controller = new AbortController();
+    turns.set(sessionId, controller);
+    let session: Session | undefined;
+    const route: Route = { viewers, tasks, sessionId, signal: controller.signal };
+    let turn: Turn | undefined;
+    let ended: Exclude<TaskStatus, 'running' | 'needs-input'> = 'failed';
+    try {
+      const header = await openSessionLog(store, sessionId, io);
+      const lane = await laneAt(header.session.workspace, undefined).catch(() => undefined);
+      const shown = editorTurn(route, sessionId, from.peer, io, () => session, shownWidget(sessionId), lane !== undefined);
+      turn = shown;
+      live.set(sessionId, shown.live);
+      tasks.start({
+        sessionId,
+        title: titleOf(header.events) ?? (target === undefined ? titleFrom(text) : 'Inline edit'),
+        workspace: header.session.workspace,
+        lane: lane?.record.name ?? null,
+        startedAt: Date.now(),
+      });
+      const turnIo = { ...io, interrupts: () => controller.signal };
+      const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
+      const response = await serially(sessionId, async (): Promise<acp.PromptResponse> => {
+        const resumed = await resumeSession(store, io, sessionId);
+        session = resumed.log.session;
+        shown.live.events.push(...resumed.log.events);
+        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+        if (rawLane !== undefined) {
+          const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
+          await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks).catch(refused({ lane: rawLane }));
+          await shown.updates.flush();
+          return { stopReason: controller.signal.aborted ? 'cancelled' : 'end_turn' };
+        }
+        const opened =
+          target === undefined && (hasAttached(attached) || slash !== undefined)
+            ? await logPrompt(store, resumed, slash?.content ?? text, attached, shown.surface.files, sessionId, slash)
+            : resumed;
+        const prompt = opened === resumed ? text : '';
+        const approval: Approval = {
+          kind: 'interactive',
+          mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
+          approve: shown.approve,
+          classify: commandClassifier(io.env, io.fetch),
+          auto: autoOf(sessionId),
+        };
+        const result =
+          target === undefined
+            ? await runAgent(turnIo, store, opened, prompt, {
+                limits,
+                check: undefined,
+                checkAfterEdit: true,
+                approval,
+                surface: shown.surface,
+                diagnostics,
+                mcp: await mcp.toolset(sessionId, approval),
+                user: shown.user,
+                widgets: from.peer.widgets,
+                childHost: acpChildHost({
+                  client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
+                  parentId: sessionId,
+                  native: from.peer.subagents,
+                  flushParent: () => shown.updates.flush(),
+                  streamOf: (childId) => {
+                    const { surface, updates } = editorTurn(route, childId, from.peer, io, () => undefined, shownWidget(childId));
+                    return { watcher: surface.watcher, flush: () => updates.flush() };
+                  },
+                  cancels: childCancels,
+                  err: io.err,
+                }),
+              })
+            : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: shown.surface, diagnostics });
+        await shown.updates.flush();
+        return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...shown.usage() };
+      });
+      ended = TASK_ENDS[response.stopReason];
+      return response;
+    } finally {
+      live.delete(sessionId);
+      tasks.end(sessionId, controller.signal.aborted ? 'stopped' : ended, turn?.taskUsage());
+      // A session closed during its turn stays closed.
+      if (turns.has(sessionId)) turns.set(sessionId, undefined);
+      release(sessionId);
+    }
+  };
 
   return acp
     .agent({ name: 'gcode' })
+    .onConnect((connection) => {
+      const shows: Viewer<Peer> = {
+        client: connection.client,
+        get peer() {
+          return peer;
+        },
+        closed: connection.signal,
+      };
+      viewer = shows;
+      const unlisten = tasks.listen((update) => {
+        if (peer.tasks) void connection.client.notify(TASK_UPDATE_METHOD, update).catch(() => {});
+      });
+      void connection.closed.then(() => {
+        unlisten();
+        for (const sessionId of viewers.shownBy(shows)) {
+          viewers.hide(sessionId, shows);
+          commands.detach(sessionId);
+          release(sessionId);
+        }
+      });
+    })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
       const { fs, _meta, session, elicitation, subagents } = params.clientCapabilities ?? {};
       peer = {
@@ -619,6 +901,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         memory: _meta?.[MEMORY_CAPABILITY] === true,
         widgets: _meta?.[WIDGET_CAPABILITY] === true,
         subagents: subagents != null,
+        tasks: _meta?.[TASKS_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -637,6 +920,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { id } = opened.log.session;
       turns.set(id, undefined);
       modes.set(id, DEFAULT_SESSION_MODE);
+      viewers.show(id, self());
       commands.attach(client, id, workspace);
       mcp.register(id, workspace, params.mcpServers, browserSettingsOf(params._meta));
       io.err(`session: ${id} log: ${opened.log.file}`);
@@ -647,12 +931,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const id = log.session.id;
       if (!turns.has(id)) turns.set(id, undefined);
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
+      viewers.show(id, self());
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
       const context = lastContextUse(log.session, log.events);
       if (context !== undefined) await client.notify(acp.methods.client.session.update, { sessionId: id, update: usageUpdate(context) });
       io.err(`session: ${id} resumed, log: ${log.file}`);
-      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
+      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)), ...runningMeta(id) };
     })
     .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
       const log = await existing(params.sessionId);
@@ -665,16 +950,27 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers, browserSettingsOf(params._meta));
-      const notify =(update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
-      const dir = attachmentsDir(store, id);
-      const stored = await loadWidgets(dir, log.events);
-      const widgetOf = (widget: WidgetRef): ShownWidget => ({ uri: pathToFileURL(widgetFile(dir, widget)).href, html: stored.get(widget.sha256) });
-      for (const update of replayUpdates(log.events, widgetOf)) await notify(update);
-      const context = lastContextUse(log.session, log.events);
-      if (context !== undefined) await notify(usageUpdate(context));
-      await notify(sessionInfo(summarizeSession(log.session, log.events)));
+      const notify = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId: id, update });
+      // One step, with no await between: what the running turn logged so far is replayed, and what it sends from now on
+      // waits behind the replay, so the editor sees each update once and in order.
+      const running = live.get(id);
+      const events = running === undefined ? log.events : [...running.events];
+      const streaming = running?.text ?? '';
+      const replayed = viewers.show(id, self(), true);
+      try {
+        const dir = attachmentsDir(store, id);
+        const stored = await loadWidgets(dir, events);
+        const widgetOf = (widget: WidgetRef): ShownWidget => ({ uri: pathToFileURL(widgetFile(dir, widget)).href, html: stored.get(widget.sha256) });
+        for (const update of replayUpdates(events, widgetOf)) await notify(update);
+        if (streaming !== '') await notify(textUpdate(streaming));
+        const context = lastContextUse(log.session, events);
+        if (context !== undefined) await notify(usageUpdate(context));
+        await notify(sessionInfo(summarizeSession(log.session, events)));
+      } finally {
+        replayed();
+      }
       io.err(`session: ${id} loaded, log: ${log.file}`);
-      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
+      return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)), ...runningMeta(id) };
     })
     .onRequest(acp.methods.agent.session.list, async ({ params }): Promise<acp.ListSessionsResponse> => {
       const scope: SessionScope = params.cwd == null ? { kind: 'all' } : { kind: 'project', workspace: await workspaceDir(io.cwd, params.cwd) };
@@ -688,6 +984,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const trashed = await serially(sessionId, () => trashSession(store, io, sessionId));
       turns.delete(sessionId);
       modes.delete(sessionId);
+      viewers.hide(sessionId);
       io.err(`session: ${sessionId} moved to ${trashed}`);
       return {};
     })
@@ -696,8 +993,15 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { sessionId } = params;
       turns.get(sessionId)?.abort();
       turns.delete(sessionId);
+      viewers.hide(sessionId);
       commands.detach(sessionId);
       await mcp.close(sessionId);
+      return {};
+    })
+    .onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {
+      viewers.hide(params.sessionId, self());
+      commands.detach(params.sessionId);
+      release(params.sessionId);
       return {};
     })
     .onRequest(RENAME_SESSION_METHOD, renameRequest, async ({ params, client }) => {
@@ -707,6 +1011,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (error instanceof UsageError) throw acp.RequestError.invalidParams({ title: params.title }, error.message);
         throw error;
       });
+      tasks.update(sessionId, { title });
       await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'session_info_update', title } });
       return {};
     })
@@ -724,84 +1029,39 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       await logSetting(sessionId, { kind: 'effort', effort });
       return { configOptions: effortConfigOptions(effort) };
     })
-    .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
-      const { sessionId } = params;
-      known(sessionId);
-      if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
-      const text = promptText(params.prompt);
-      const attached: Attached = { mentions: parsedMentions(sessionId, params.prompt), attachments: parsedAttachments(sessionId, params.prompt) };
-      if (text === '' && attached.attachments.length === 0) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
-      const rawTarget = params._meta?.[INLINE_EDIT_META];
-      const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
-      if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
-      const slash = target === undefined ? await commands.expand(sessionId, text) : undefined;
-      if (slash?.kind === 'builtin') {
-        const reply = await runBuiltin(slash, { setMode: (mode) => switchMode(client, sessionId, mode) });
-        await client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
-        return { stopReason: 'end_turn' };
-      }
-      if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
-
-      const controller = new AbortController();
-      turns.set(sessionId, controller);
-      let session: Session | undefined;
-      const turn = editorTurn(client, sessionId, peer, io, () => session, shownWidget(sessionId));
-      const turnIo = { ...io, interrupts: () => controller.signal };
-      const diagnostics = peer.diagnostics ? editorDiagnostics(client, sessionId) : undefined;
-      try {
-        return await serially(sessionId, async () => {
-          const resumed = await resumeSession(store, io, sessionId);
-          session = resumed.log.session;
-          if (titleOf(resumed.log.events) === undefined && target === undefined) turn.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
-          const opened =
-            target === undefined && (hasAttached(attached) || slash !== undefined)
-              ? await logPrompt(store, resumed, slash?.content ?? text, attached, turn.surface.files, sessionId, slash)
-              : resumed;
-          const prompt = opened === resumed ? text : '';
-          const approval: Approval = {
-            kind: 'interactive',
-            mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
-            approve: turn.approve,
-            classify: commandClassifier(io.env, io.fetch),
-            auto: autoOf(sessionId),
-          };
-          const result =
-            target === undefined
-              ? await runAgent(turnIo, store, opened, prompt, {
-                  limits,
-                  check: undefined,
-                  checkAfterEdit: true,
-                  approval,
-                  surface: turn.surface,
-                  diagnostics,
-                  mcp: await mcp.toolset(sessionId, approval),
-                  user: turn.user,
-                  widgets: peer.widgets,
-                  childHost: acpChildHost({
-                    client,
-                    parentId: sessionId,
-                    native: peer.subagents,
-                    flushParent: () => turn.updates.flush(),
-                    streamOf: (childId) => {
-                      const { surface, updates } = editorTurn(client, childId, peer, io, () => undefined, shownWidget(childId));
-                      return { watcher: surface.watcher, flush: () => updates.flush() };
-                    },
-                    cancels: childCancels,
-                    err: io.err,
-                  }),
-                })
-              : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
-          await turn.updates.flush();
-          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...turn.usage() };
-        });
-      } finally {
-        // A session closed during its turn stays closed.
-        if (turns.has(sessionId)) turns.set(sessionId, undefined);
-      }
+    .onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
+      known(params.sessionId);
+      if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
+      return runTurn(params.sessionId, params.prompt, params._meta, self());
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();
       childCancels.get(params.sessionId)?.();
+    })
+    .onRequest(TASKS_METHOD, z.object({}).loose(), async (): Promise<TasksResponse> => tasks.list())
+    .onRequest(LANES_METHOD, lanesRequest, async ({ params }): Promise<LanesResponse> => ({ lanes: await laneInfos(await laneRepo(params.cwd), store, io, tasks) }))
+    .onRequest(LANE_NEW_METHOD, lanePrompt, async ({ params }): Promise<LaneNewResponse> => {
+      const repo = await laneRepo(params.cwd);
+      const lane = await laneFor(repo, params.prompt, store, io).catch(refused({ cwd: params.cwd }));
+      const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: undefined, effort: undefined });
+      const { id } = opened.log.session;
+      const mode = params.mode !== undefined && isSessionMode(params.mode) ? params.mode : DEFAULT_SESSION_MODE;
+      turns.set(id, undefined);
+      modes.set(id, mode);
+      if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
+      mcp.register(id, lane.path, [], undefined);
+      io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
+      void runTurn(id, [{ type: 'text', text: params.prompt }], undefined, self()).catch((error: unknown) => io.err(`lane ${lane.name}: ${String(error)}`));
+      return { name: lane.name, sessionId: id };
+    })
+    .onRequest(LANE_DISCARD_METHOD, laneDiscardRequest, async ({ params }) => {
+      const repo = await laneRepo(params.cwd);
+      const lane = await requireLane(repo, params.name).catch(refused({ name: params.name }));
+      await Promise.resolve()
+        .then(() => idleLane(lane, tasks))
+        .catch(refused({ name: params.name }));
+      await discardLane(repo, lane, params.discardChanges).catch(refused({ name: params.name }));
+      return {};
     })
     .onRequest(REVIEW_METHOD, reviewRequest, async ({ params }): Promise<ReviewResponse> => {
       known(params.sessionId);
@@ -867,17 +1127,3 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       });
     });
 }
-
-export const serve: Command = async (args, { io, store }) => {
-  const { values } = parseArgs({ args, strict: true, options: { stdio: { type: 'boolean', default: false }, ...LIMIT_FLAGS } });
-  if (!values.stdio) throw new UsageError('serve needs --stdio, the only transport');
-  // stdout carries the protocol, so everything the engine prints goes to stderr, and so does anything a dependency prints.
-  const quiet: Io = { ...io, out: io.err, write: () => {} };
-  const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
-  const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env));
-  const connection = gcodeAgent(quiet, store, limitsOf(values), mcp).connect(stream);
-  quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
-  await connection.closed;
-  await mcp.stopAll();
-  return 0;
-};
