@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, secretName, settingKey, setupProblem } from '../src/runtime.js';
+import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, searchSecretName, secretName, settingKey, setupProblem } from '../src/runtime.js';
 
 /** Settings as the user set them; `workspace` holds what a workspace's settings.json says, which may differ. */
 const settingsOf = (values: Record<string, unknown>, workspace: Record<string, unknown> = {}) => ({
@@ -149,6 +149,18 @@ describe('every provider’s runtime', () => {
     });
     expect(setupProblem(runtime, { GCODE_MODEL: 'gpt-x' })).toBeUndefined();
     expect(setupProblem({ ...runtime, model: 'gpt-x' })).toBeUndefined();
+  });
+
+  it('passes a search key from SecretStorage, else from the environment, and never names it', async () => {
+    const settings = settingsOf({ baseUrl: URL });
+    expect(searchSecretName('brave')).toBe('gcode.apiKey.search.brave');
+    const stored = await readEngineRuntime(settings, secretsOf({ 'gcode.apiKey.modelstudio': STORED, 'gcode.apiKey.search.brave': 'brave-stored' }), { BRAVE_SEARCH_API_KEY: 'brave-env' });
+    expect(engineEnvOf(stored)).toMatchObject({ BRAVE_SEARCH_API_KEY: 'brave-stored', GCODE_PROVIDER: 'modelstudio' });
+    expect(describeEngineRuntime(stored)).toBe('modelstudio, model default, key from secret-storage; search: brave, key from secret-storage');
+    const inherited = await readEngineRuntime(settings, secretsOf({ 'gcode.apiKey.modelstudio': STORED }), { BRAVE_SEARCH_API_KEY: 'brave-env' });
+    expect(engineEnvOf(inherited)['BRAVE_SEARCH_API_KEY']).toBe('brave-env');
+    const none = await readEngineRuntime(settings, secretsOf({ 'gcode.apiKey.modelstudio': STORED }), {});
+    expect(Object.keys(engineEnvOf(none))).not.toContain('BRAVE_SEARCH_API_KEY');
   });
 
   it('refuses a role on a provider it does not know', async () => {

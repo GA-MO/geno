@@ -1,4 +1,4 @@
-import type { Adapter, FieldId, ProviderName, Role } from '@g-code/core';
+import type { Adapter, FieldId, ProviderName, Role, SearchProviderName } from '@g-code/core';
 import type { AgentsFromView, AgentsToView } from './agents-model.js';
 
 /**
@@ -30,7 +30,20 @@ export type RoleView =
   | { readonly role: Role; readonly label: string; readonly kind: 'provider'; readonly provider: ProviderName | undefined; readonly model: string }
   | { readonly role: Role; readonly label: string; readonly kind: 'fixed'; readonly text: string };
 
-export type SettingsListing = { readonly providers: readonly ProviderView[]; readonly roles: readonly RoleView[]; readonly chat: ProviderName };
+/** A web search provider: one write-only key, which turns web_search on. */
+export type SearchView = {
+  readonly id: SearchProviderName;
+  readonly label: string;
+  readonly signUp: string;
+  readonly key: Extract<FieldView, { secret: true }>;
+};
+
+export type SettingsListing = {
+  readonly providers: readonly ProviderView[];
+  readonly roles: readonly RoleView[];
+  readonly chat: ProviderName;
+  readonly search: readonly SearchView[];
+};
 
 export type TestState =
   | { readonly kind: 'running' }
@@ -49,9 +62,11 @@ export type SettingsToView =
 /** What the page asks of the extension; each change is answered with a fresh listing. */
 export type SettingsFromView =
   | { readonly type: 'settings-list' }
-  /** The only message that carries a secret, toward SecretStorage and never back. */
+  /** Carries a secret, toward SecretStorage and never back, as settings-search-key does. */
   | { readonly type: 'settings-secret'; readonly provider: string; readonly field: string; readonly value: string }
   | { readonly type: 'settings-clear'; readonly provider: string; readonly field: string }
+  | { readonly type: 'settings-search-key'; readonly provider: string; readonly value: string }
+  | { readonly type: 'settings-search-clear'; readonly provider: string }
   | { readonly type: 'settings-value'; readonly provider: string; readonly field: string; readonly value: string }
   | { readonly type: 'settings-role'; readonly role: string; readonly provider: string; readonly model: string }
   | { readonly type: 'settings-test'; readonly provider: string }

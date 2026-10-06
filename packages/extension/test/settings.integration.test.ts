@@ -10,7 +10,7 @@ import { leaksOf } from '../../engine/test/no-leak.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
-import { ANSWER, ENV, MODEL, OPENAI_KEY } from './suite/settings-fixture.js';
+import { ANSWER, ENV, MODEL, OPENAI_KEY, SEARCH_KEY } from './suite/settings-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
 const READY = '.transcript';
@@ -123,10 +123,11 @@ describe('the Geno settings page', () => {
     expect(openai.every((r) => r.authorization === `Bearer ${OPENAI_KEY}`), 'the key from SecretStorage reaches the provider').toBe(true);
     expect(openai[1]!.body).toMatchObject({ model: MODEL, messages: [{ role: 'user', content: 'Reply with the word OK.' }] });
     expect(openai[2]!.body.messages.at(-1).content).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('Say hello') })]));
+    expect(openai[2]!.body.tools.map((tool: { function: { name: string } }) => tool.function.name), 'the stored search key turns web_search on').toEqual(expect.arrayContaining(['web_fetch', 'web_search']));
 
     // The user data folder holds VS Code's logs, the output channels among them, and the webview's storage.
     const userData = path.join(work, 'ud');
     expect(named(userData, 'Geno engine').length, 'the output channel is on disk, so the scan covers it').toBeGreaterThan(0);
-    expect(leaksOf([OPENAI_KEY], { dirs: [userData, workspace, home] })).toEqual([]);
+    expect(leaksOf([OPENAI_KEY, SEARCH_KEY], { dirs: [userData, workspace, home] })).toEqual([]);
   }, 600_000);
 });

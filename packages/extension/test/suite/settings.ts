@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ANSWER, ENV, MODEL, OPENAI_KEY, PROMPT, THEMES } from './settings-fixture.js';
+import { ANSWER, ENV, MODEL, OPENAI_KEY, PROMPT, SEARCH_KEY, THEMES } from './settings-fixture.js';
 
 const fake = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -80,6 +80,16 @@ export async function run(): Promise<void> {
   check((await stateOf('ollama')) === 'ready', 'a local server needs no key', await stateOf('ollama'));
   check((await panel<string>(`doc.querySelector(${JSON.stringify(field('modelstudio', 'apiKey'))}).type`)) === 'password', 'the key field is a password field');
   await screenshots('settings');
+
+  const search = '.search-card[data-search="brave"]';
+  check((await panel<string | null>(`doc.querySelector(${JSON.stringify(search)})?.dataset.state ?? null`)) === 'needs', 'Brave Search waits for its key');
+  await panel(`doc.querySelector(${JSON.stringify(search)}).scrollIntoView({ block: 'center' })`);
+  await fill(`${search} input`, SEARCH_KEY);
+  await waitFor('Brave Search to be ready once its key is set', async () => (await panel<string | null>(`doc.querySelector(${JSON.stringify(search)})?.dataset.state ?? null`)) === 'ready');
+  check((await panel<string>(`doc.querySelector(${JSON.stringify(`${search} input`)}).placeholder`)) === 'Set', 'the search key reads only “Set”');
+  check(!(await panel<string>('doc.documentElement.outerHTML')).includes(SEARCH_KEY), 'the search key is nowhere in the page');
+  await screenshots('settings-search');
+  await panel(`doc.querySelector('.settings').scrollTop = 0`);
 
   await click(`${card('openai')} .provider-head`);
   await waitFor('the OpenAI card to open', () => visible(field('openai', 'apiKey')));

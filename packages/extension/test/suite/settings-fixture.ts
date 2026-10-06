@@ -3,6 +3,9 @@
 /** Typed into the page's key field; it must never show up in a file, a log or the page afterwards. */
 export const OPENAI_KEY = 'sk-settings-canary-4c1d9e7b2a';
 
+/** Typed into the Brave Search key field, with the same rules. */
+export const SEARCH_KEY = 'brave-settings-canary-81f0c2d3';
+
 export const MODEL = 'gpt-fake';
 
 export const PROMPT = 'Say hello through OpenAI.';
