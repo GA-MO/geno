@@ -92,6 +92,7 @@ describe('gcode serve: editor actions', () => {
 
   it('run in Plan mode without asking, and the step carries the action to repeat', async () => {
     const { connect, open, say, actions, permissions, results, updates, workspace } = await setup([
+      toolCall('', [loadTools('open_file', 'reveal')], usage),
       toolCall('', [call('tu_o', 'open_file', { path: 'a.ts', line: 1, column: 8 }), call('tu_r', 'reveal', { path: 'src' })], usage),
       answer('There.', usage),
     ]);
@@ -101,7 +102,8 @@ describe('gcode serve: editor actions', () => {
       await say(ctx, id, 'where is a defined? open it for me');
       return id;
     }).then(async (id) => {
-      const [opened, revealed] = await results(id);
+      const [loaded, opened, revealed] = await results(id);
+      expect(loaded!.loaded, 'Plan in an editor defers the editor tools once web_fetch joins them').toEqual(['open_file', 'reveal']);
       expect(opened!.status).toBe('ok');
       expect(outputOf(opened!)).toBe("Opened a.ts:1:8 in the user's editor.");
       expect(revealed!.status).toBe('ok');
