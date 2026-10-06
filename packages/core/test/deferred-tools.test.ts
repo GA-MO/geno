@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_MODE_TOOL_DEFINITIONS } from '../src/agent.js';
 import { BROWSER_TOOLS } from '../src/browser-tools.generated.js';
 import {
+  coerceToSchema,
   hintOf,
   loadedTools,
   MAX_BLOCK_CHARS,
@@ -134,5 +135,34 @@ describe('loaded tools', () => {
     );
     expect(unloadedCallError(deferred, new Set(['mcp__browser__click']), 'mcp__browser__click')).toBeUndefined();
     expect(unloadedCallError(deferred, new Set(), 'read')).toBeUndefined();
+  });
+});
+
+describe("input typed by a deferred tool's schema", () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      pageId: { type: 'number' },
+      count: { type: 'integer' },
+      verbose: { type: 'boolean' },
+      url: { type: 'string' },
+      ids: { type: 'array', items: { type: 'number' } },
+      nested: { type: 'object', properties: { on: { type: 'boolean' } } },
+    },
+  };
+  it.each([
+    { case: 'a number written as a string', input: { pageId: '2' }, typed: { pageId: 2 } },
+    { case: 'a boolean in any case', input: { verbose: 'False' }, typed: { verbose: false } },
+    { case: 'an integer', input: { count: ' 7 ' }, typed: { count: 7 } },
+    { case: 'not an integer stays as written', input: { count: '7.5' }, typed: { count: '7.5' } },
+    { case: 'not a number stays as written', input: { pageId: 'two' }, typed: { pageId: 'two' } },
+    { case: 'an empty string stays', input: { pageId: '' }, typed: { pageId: '' } },
+    { case: 'a string field is left alone', input: { url: '2' }, typed: { url: '2' } },
+    { case: 'array items', input: { ids: ['1', 2] }, typed: { ids: [1, 2] } },
+    { case: 'nested objects', input: { nested: { on: 'true' } }, typed: { nested: { on: true } } },
+    { case: 'unknown fields stay', input: { other: '3' }, typed: { other: '3' } },
+    { case: 'right types stay', input: { pageId: 2, verbose: true }, typed: { pageId: 2, verbose: true } },
+  ])('$case', ({ input, typed }) => {
+    expect(coerceToSchema(schema, input)).toEqual(typed);
   });
 });
