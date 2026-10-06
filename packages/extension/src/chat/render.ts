@@ -14,6 +14,7 @@ import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
+import { commandStepOf } from './command-step.js';
 
 /** What a block needs from the panel around it: the extension, and the view's own fold state. */
 export type Ui = {
@@ -174,6 +175,7 @@ const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
  */
 export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui, quiet = false): HTMLElement {
   const first = tools[0]!;
+  if (name === 'bash') return commandStep(first, ui, quiet);
   const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
   const failed = tools.filter((t) => t.status === 'failed').length;
@@ -196,6 +198,44 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
     ...tools.filter(isAuto).filter((tool) => !(quiet && AUTO_BADGES[tool.auto.verdict].quiet)).map(autoNote),
     toolImages(tools, (target) => ui.post({ type: 'open', target })),
     open && h('div', { class: 'call-list' }, ...tools.map((tool) => toolRow(tool, ui))),
+  );
+}
+
+/** A bash call as one step: its title in plain words, then one box with the command in full and the first lines of its output. */
+function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
+  const unfold = `out:${tool.id}`;
+  const step = commandStepOf(tool, ui.isUnfolded(unfold));
+  return h(
+    'div',
+    { class: 'calls command-step', 'data-step': 'bash', 'data-tool': tool.id },
+    h(
+      'div',
+      { class: 'command-head' },
+      icon(KIND_ICONS.execute, 'kind'),
+      h('span', { class: 'command-title', title: step.title }, step.title),
+      step.status === 'running' && icon('loading', 'codicon-modifier-spin step-status'),
+      step.status === 'failed' && h('span', { class: 'step-failed' }, icon('error'), 'Failed'),
+    ),
+    ...(isAuto(tool) && !(quiet && AUTO_BADGES[tool.auto.verdict].quiet) ? [autoNote(tool)] : []),
+    h(
+      'div',
+      { class: 'command-box' },
+      h('span', { class: 'command-label' }, 'IN'),
+      h('pre', { class: 'command-in' }, h('code', {}, step.command)),
+      step.output !== undefined && h('span', { class: 'command-label' }, 'OUT'),
+      step.output !== undefined &&
+        h(
+          'div',
+          { class: 'command-out' },
+          h(
+            'pre',
+            { class: step.truncated ? 'command-output truncated' : 'command-output' },
+            step.output.length === 0 ? h('span', { class: 'command-empty' }, 'No output') : step.output.join('\n'),
+          ),
+          step.truncated &&
+            h('button', { class: 'link-button show-all', 'data-focus': `unfold:${unfold}`, onclick: () => ui.unfold(unfold) }, `Show all ${step.lines} lines`),
+        ),
+    ),
   );
 }
 
@@ -386,6 +426,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command', CardFace>> = {
     glyph: 'shield',
     title: 'Run this command?',
     body: (block) => [
+      block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
       h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
       h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
       block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),

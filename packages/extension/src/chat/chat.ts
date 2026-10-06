@@ -114,7 +114,15 @@ export const lookOf = (configuration: vscode.WorkspaceConfiguration): Look => ({
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
-const permissionInput = z.object({ command: z.string(), reason: z.string() });
+const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional() });
+
+const bashInput = z.object({ description: z.string() });
+
+/** A bash call's description, from the model's own input; display only. */
+const descriptionOf = (name: string, rawInput: unknown): { readonly description?: string } => {
+  const input = name === 'bash' ? bashInput.safeParse(rawInput) : undefined;
+  return input?.success === true ? { description: input.data.description } : {};
+};
 const rememberInput = z.object({ text: z.string(), scope: z.enum(MEMORY_SCOPES) });
 const replayedTurn = z.object({
   mode: z.string().optional(),
@@ -171,14 +179,10 @@ type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.Sessio
 const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
   agent_message_chunk: ({ content }) => (content.type === 'text' ? { type: 'text', text: content.text } : undefined),
   notice: ({ title }) => ({ type: 'notice', text: title }),
-  tool_call: ({ toolCallId, title, kind, status }, at) => ({
-    type: 'tool',
-    id: toolCallId,
-    at,
-    ...callOf(title),
-    toolKind: kindOf(kind),
-    status: TOOL_STATUSES[status ?? 'pending'],
-  }),
+  tool_call: ({ toolCallId, title, kind, status, rawInput }, at) => {
+    const call = callOf(title);
+    return { type: 'tool', id: toolCallId, at, ...call, ...descriptionOf(call.name, rawInput), toolKind: kindOf(kind), status: TOOL_STATUSES[status ?? 'pending'] };
+  },
   tool_call_update: ({ toolCallId, title, status, content, _meta }, at) => {
     const output = outputOf(content);
     const images = imagesOf(content);
@@ -772,13 +776,14 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const optionId = await new Promise<string | undefined>((resolve) => {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
-      const { command, reason } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '' };
+      const { command, reason, description } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined };
       const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
       this.dispatch({
         type: 'permission',
         id,
         command: memory.success ? memory.data.text : command,
         reason,
+        ...(description === undefined ? {} : { description }),
         options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),
         classifier: classifierReasonOf(toolCall.title),
         ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
