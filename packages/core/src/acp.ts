@@ -4,6 +4,7 @@ import type { ExternalBackendId } from './backends.js';
 import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
 import type { HunkId, ReviewHunk } from './review.js';
+import type { ForkOrigin, RewindChoice } from './rewind.js';
 
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
 export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
@@ -78,6 +79,28 @@ export const REWIND_METHOD = '_gcode/rewind';
 export type RewindRequest = { readonly sessionId: string };
 export type RewindResponse = { readonly files: readonly string[] };
 
+/** Extension method, sent by the editor: what restoring the files before the turn at `turnSeq` would change. Paths are absolute. */
+export const REWIND_PREVIEW_METHOD = '_gcode/rewindPreview';
+
+export type RewindPreviewRequest = { readonly sessionId: string; readonly turnSeq: number };
+/** `unsaved` are the files edited since the session's last checkpoint, which no checkpoint holds, so a restore loses those edits. */
+export type RewindPreviewResponse = { readonly files: readonly string[]; readonly unsaved: readonly string[] };
+
+/**
+ * Extension method, sent by the editor: "Rewind to here" on the prompt at `turnSeq`. ACP has no rewind, so it is ours.
+ * `files` are the absolute paths it rewrote or deleted. `prompt` is the text as the user typed it, for the composer.
+ */
+export const REWIND_TURN_METHOD = '_gcode/rewindTurn';
+
+export type RewindTurnRequest = { readonly sessionId: string; readonly turnSeq: number; readonly choice: RewindChoice };
+export type RewindTurnResponse = { readonly files: readonly string[]; readonly prompt: string };
+
+/** Key in session/fork's `_meta`: fork up to and including the turn whose prompt is this event. Without it the fork takes every turn. */
+export const FORK_AT_META = 'gcode/forkAt';
+
+/** Key in session/prompt's response `_meta`: the event number of the prompt the turn logged, which rewind and fork name it by. */
+export const TURN_SEQ_META = 'gcode/turnSeq';
+
 /** Key in session/prompt's `_meta`: run the prompt as a one-shot edit of a selection instead of an agent turn. */
 export const INLINE_EDIT_META = 'gcode/inlineEdit';
 
@@ -95,7 +118,7 @@ export type SelectionLines = { readonly startLine: number; readonly endLine: num
 /** Key in session/list's `SessionInfo._meta`: what the history shows besides ACP's title and time. */
 export const SESSION_SUMMARY_META = 'gcode/summary';
 
-export type SessionSummaryMeta = { readonly turns: number; readonly costUsd: number | null; readonly createdAt: string };
+export type SessionSummaryMeta = { readonly turns: number; readonly costUsd: number | null; readonly createdAt: string; readonly forkedFrom?: ForkOrigin | undefined };
 
 /** Extension method, sent by the editor: names a session. The engine logs the title and sends `session_info_update`. */
 export const RENAME_SESSION_METHOD = '_gcode/renameSession';
@@ -109,6 +132,8 @@ export type RenameSessionRequest = { readonly sessionId: string; readonly title:
 export const REPLAYED_TURN_META = 'gcode/turn';
 
 export type ReplayedTurn = {
+  /** The event number of the prompt, which rewind and fork name the turn by. */
+  readonly seq: number;
   /** The session's mode when the prompt was sent. */
   readonly mode: string;
   readonly startedAt: number;

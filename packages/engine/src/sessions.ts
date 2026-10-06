@@ -7,6 +7,7 @@ import {
   asSessionId,
   CHILD_CAPS,
   CHILD_STARTS,
+  cutView,
   APPROVAL_RULE_IDS,
   EXTERNAL_BACKEND_IDS,
   EFFORTS,
@@ -178,7 +179,13 @@ const childEndSchema = z.discriminatedUnion('kind', [
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
 const turnEventSchema = z.union([
   z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('session-start'), session: sessionSchema, context: loadedContextSchema.optional(), child: childOfSchema.optional() }),
+    z.strictObject({
+      kind: z.literal('session-start'),
+      session: sessionSchema,
+      context: loadedContextSchema.optional(),
+      child: childOfSchema.optional(),
+      fork: z.strictObject({ sessionId: childId, turnSeq: seqFields.seq, title: z.string() }).optional(),
+    }),
     z.strictObject({
       kind: z.literal('user'),
       ...seqFields,
@@ -225,6 +232,7 @@ const turnEventSchema = z.union([
       sha: z.string().min(1),
       files: z.array(z.string()),
     }),
+    z.strictObject({ kind: z.literal('cut'), ...seqFields, turnSeq: seqFields.seq }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
     z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: z.strictObject({ pid: z.number().int().positive(), cwd: z.string().min(1) }).optional() }),
@@ -285,7 +293,7 @@ const turnEventSchema = z.union([
 export type SessionLog = {
   readonly file: string;
   readonly session: Session;
-  /** Every parsed event, starting with the session-start header. */
+  /** The session as of its cuts (`cutView`), starting with the session-start header; the file keeps every event. */
   readonly events: readonly TurnEvent[];
   /** 1-based line number of a torn trailing line that was skipped. */
   readonly tornLine: number | undefined;
@@ -342,7 +350,7 @@ export async function readSessionLog(file: string): Promise<SessionLog> {
   }
   const header = events[0];
   if (header?.kind !== 'session-start') throw new StoreError(file, 'line 1: missing session-start');
-  return { file, session: header.session, events, tornLine, goodBytes };
+  return { file, session: header.session, events: cutView(events), tornLine, goodBytes };
 }
 
 /** Logs a switch of the session's approval mode. Switching to the mode it already has logs nothing. */
