@@ -19,7 +19,7 @@ import { listSessionsCommand } from './history.js';
 import { mine } from './mine.js';
 import { providerCommands } from './providers.js';
 import { rewind } from './rewind.js';
-import { serve } from './serve.js';
+import { serve } from './daemon.js';
 import { tabCommands } from './tab.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
@@ -32,6 +32,7 @@ export const USAGE = `usage:
   gcode session list [--all]
   gcode rewind --session <id> --to <turn>
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
+  gcode serve --socket <path> [--idle-ms 10000] [--max-turns 40] [--max-cost 0.40]
   gcode lane new <name> [--from head|main] [--approve-setup] [--workspace <dir>]
   gcode lane list [--json] [--workspace <dir>]
   gcode lane apply <name> [--dry-run] [--workspace <dir>]

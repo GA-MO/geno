@@ -26,6 +26,7 @@ import {
   type LaneName,
   type LaneRecord,
   type LaneStatus,
+  type DiffStat,
   type SessionId,
   type SetupApproval,
 } from '@g-code/core';
@@ -422,6 +423,27 @@ export async function applyLane(repo: LaneRepo, lane: LaneRecord, files: Files =
       changes.push({ change: changeOf(file, ours ?? '', after ?? ''), after, baseHash: hashText(ours) });
     }
     return conflicts.length > 0 ? { kind: 'conflicts', conflicts } : { kind: 'clean', changes };
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/** Lines the lane added and removed since its base, uncommitted and untracked files included. A binary file counts as a file only. */
+export async function laneDiffStat(lane: LaneRecord): Promise<DiffStat> {
+  if (!existsSync(lane.path)) return { files: 0, added: 0, removed: 0 };
+  const scratch = await mkdtemp(path.join(tmpdir(), 'gcode-lane-'));
+  try {
+    const tree = await workingTree(lane, scratch);
+    // With -z, numstat ends each row's counts with a tab and its path with a NUL.
+    const rows = nulList(await git(lane.path, ['diff-tree', '-r', '-z', '--no-renames', '--numstat', lane.base.commit, tree]));
+    let added = 0;
+    let removed = 0;
+    for (const row of rows) {
+      const [plus = '', minus = ''] = row.split('\t');
+      added += Number(plus) || 0;
+      removed += Number(minus) || 0;
+    }
+    return { files: rows.length, added, removed };
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
