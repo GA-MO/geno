@@ -152,7 +152,7 @@ function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
   // A background command may end long after its turn did; the turn ended with its own last event.
   const last = events.findLast((e) => e.kind !== 'background-end');
   return {
-    seq: prompt.seq,
+    ...(events[0]?.kind === 'lane-apply' ? {} : { seq: prompt.seq }),
     mode,
     startedAt: ms(prompt.at),
     endedAt: ms(last === undefined || last.kind === 'session-start' ? prompt.at : last.at),

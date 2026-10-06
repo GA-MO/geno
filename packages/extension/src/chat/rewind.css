@@ -1,0 +1,155 @@
+/*
+ * Rewind and fork from a message (U50): the menu button under the bubble's corner, its menu, the confirm a restore of
+ * files asks, and the line that says how it went. The forked-from links of History and Tasks are here too.
+ */
+
+.rewind-slot-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin: -12px 0 10px;
+}
+
+.rewind-slot-body:empty {
+  display: none;
+}
+
+.rewind {
+  position: relative;
+  z-index: 4;
+}
+
+/* Out of sight until the message is pointed at or the keyboard reaches it, as the bubble's own corner. */
+.rewind-button {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.turn:hover .rewind-button,
+.rewind-button:focus-visible,
+.rewind.open .rewind-button {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rewind-button {
+    transition: none;
+  }
+}
+
+.rewind .rewind-menu {
+  top: calc(100% + 2px);
+  right: 0;
+  bottom: auto;
+  left: auto;
+  width: min(300px, calc(100vw - 2 * var(--gap)));
+}
+
+.rewind-menu .model-option {
+  align-items: flex-start;
+  padding: 5px 8px;
+}
+
+.rewind-menu .model-option-text {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+}
+
+.rewind-menu .model-option-detail {
+  white-space: normal;
+}
+
+.rewind-menu .send-option-icon {
+  margin-top: 2px;
+}
+
+.rewind-menu .rewind-fork {
+  margin-top: 4px;
+  border-top: 1px solid var(--vscode-editorSuggestWidget-border, var(--border));
+  padding-top: 7px;
+}
+
+.rewind-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 420px);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.rewind-confirm.loses {
+  border-color: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 55%, var(--border));
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 7%, var(--surface));
+}
+
+.rewind-confirm p {
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.rewind-confirm-loses {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.rewind-confirm-loses .codicon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.rewind-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.rewind-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.rewind-line.failed {
+  color: var(--vscode-errorForeground);
+}
+
+.history-row.forked {
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+}
+
+.history-fork,
+.task-fork {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  font-size: var(--small);
+}
+
+.history-fork {
+  flex-basis: 100%;
+  margin-left: 10px;
+}
+
+.history-fork span,
+.task-fork span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

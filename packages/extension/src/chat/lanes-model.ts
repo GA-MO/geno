@@ -35,7 +35,9 @@ export type LanesFromView =
   | { readonly type: 'task-open'; readonly sessionId: string }
   /** The user looked at an Arena run in its pane. */
   | { readonly type: 'task-seen'; readonly id: string }
-  | { readonly type: 'task-stop'; readonly sessionId: string };
+  | { readonly type: 'task-stop'; readonly sessionId: string }
+  /** Opens the session a fork came from, from the fork's row. */
+  | { readonly type: 'task-origin'; readonly sessionId: string; readonly workspace: string };
 
 export type Tone = 'ok' | 'wait' | 'busy' | 'failed' | 'quiet';
 export type Badge = { readonly label: string; readonly tone: Tone };
@@ -123,6 +125,8 @@ export type TaskRow = {
   readonly current: boolean;
   /** Its background commands that run now, by job id and in words. */
   readonly jobs: readonly { readonly id: string; readonly label: string }[];
+  /** The session it was forked from, which the row links to. */
+  readonly forkedFrom: { readonly id: string; readonly title: string; readonly workspace: string } | undefined;
 };
 
 /** A row in Needs you says what the user is to do, which may be a child's question on a running parent. */
@@ -165,6 +169,7 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     stop: isLiveStatus(task.status) && task.kind !== 'arena',
     current: task.sessionId === shown,
     jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: job.description ?? job.command })),
+    forkedFrom: task.forkedFrom === undefined ? undefined : { id: task.forkedFrom.sessionId, title: task.forkedFrom.title, workspace: task.workspace },
   };
 }
 

@@ -221,6 +221,7 @@ export class TaskHost implements vscode.Disposable {
         .finally(() => void this.listLanes()),
     'task-open': ({ sessionId }) => this.open(this.tasks.has(sessionId) ? this.rootOf(this.tasks.get(sessionId)!) : sessionId),
     'task-seen': ({ id }) => this.saw(id),
+    'task-origin': ({ sessionId, workspace }) => void this.chat.openTask(sessionId, workspace).catch(warn),
     'task-stop': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.notify(acp.methods.agent.session.cancel, { sessionId }))
