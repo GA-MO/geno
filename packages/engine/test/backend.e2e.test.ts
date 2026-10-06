@@ -16,6 +16,7 @@ import {
   ARENA_UPDATE_METHOD,
   CLASSIFIER_TOOL,
   LANE_APPLY_META,
+  STEER_META,
   TASK_UPDATE_METHOD,
   TASKS_CAPABILITY,
   TURN_USAGE_META,
@@ -37,6 +38,7 @@ const FIXTURE = fileURLToPath(new URL('./fake-acp-agent.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
 const FILE = 'one\ntwo\nthree\n';
 const KEY = 'ck-test-key-1234';
+const RELEASE = path.join(mkdtempSync(path.join(tmpdir(), 'gcode-release-')), 'release');
 const USER_CURSOR_CONFIG = '{ "version": 1, "approvalMode": "unrestricted", "permissions": { "allow": ["Shell(*)"], "deny": [] } }\n';
 
 /** The steps of each scripted prompt, keyed by a word in it. */
@@ -75,10 +77,11 @@ const TURNS: Record<string, readonly FakeStep[]> = {
   priced: [{ text: 'Cheap.' }, { cost: 0.0123 }],
   oddid: [{ tool: { id: 'call_1\nfc_2', kind: 'read', title: 'Read a.ts', locations: ['a.ts'] } }, { done: { id: 'call_1\nfc_2', status: 'completed', output: FILE } }, { text: 'Read.' }],
   loud: [{ tool: { id: 'd1', kind: 'edit', title: 'Edit a.ts', locations: ['a.ts'] } }, { write: { path: 'a.ts', text: 'one\nTWO\nthree\n' } }, { done: { id: 'd1', status: 'completed' } }, { text: 'Two is loud now.' }],
+  hold: [{ text: 'Holding. ' }, { waitFile: RELEASE }, { text: 'Released.' }],
   escape: [{ write: { path: 'inside.txt', text: 'in the lane\n' } }, { text: 'Wrote inside. ' }, { write: { path: '../../../escaped.txt', text: 'out\n' } }, { text: 'Wrote outside.' }],
 };
 
-async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = [], sandbox = false, files: Record<string, string> = {}) {
+async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = [], sandbox = false, files: Record<string, string> = {}, model?: typeof globalThis.fetch) {
   const repo = await realpath(makeRepo('main', [{ message: 'start', files: { 'a.ts': FILE, ...files } }]));
   const home = await realpath(mkdtempSync(path.join(tmpdir(), 'gcode-home-')));
   const bin = mkdtempSync(path.join(tmpdir(), 'gcode-bin-'));
@@ -102,7 +105,7 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     ...(sandbox ? {} : { GCODE_BACKEND_SANDBOX: 'off' }),
   };
-  const io: Io = { env, cwd: repo, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
+  const io: Io = { env, cwd: repo, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: model ?? transport.fetch };
   const store = openStore(env);
   const shared = engineShared(io);
   const updates: acp.SessionNotification[] = [];
@@ -329,6 +332,51 @@ describe('an external ACP agent as a backend', () => {
     expect(events.find((e) => e.kind === 'child-end')).toMatchObject({ end: { kind: 'done' }, costUsd: null });
     // The child's process was its own, and it is gone with the child.
     expect(t.shared.externals.live(chat)).toBeUndefined();
+  });
+
+  it('refuses at once a message to a subagent running on Cursor, from the parent and from the user, and the child runs on unsteered', async () => {
+    const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
+    let childId = '';
+    let messaged!: () => void;
+    const parentMessaged = new Promise<void>((resolve) => (messaged = resolve));
+    const replies = [
+      toolCall('Starting a peek.', [{ id: 'tu_a', name: 'agent', input: { agent: 'peek', task: 'hold on and look', background: true } }], usage),
+      undefined,
+      answer('Waiting for the peek.', usage),
+      answer('The peek is back.', usage),
+    ];
+    let calls = 0;
+    const model: typeof globalThis.fetch = async (input, init) => {
+      const n = calls++;
+      const body = JSON.parse(String(init?.body)) as { messages: { content: unknown }[] };
+      if (n === 1) childId = /session ([0-9a-f-]{36})/.exec(JSON.stringify(body.messages.at(-1)!.content))![1]!;
+      if (n === 2) messaged();
+      const reply = replies[n] ?? toolCall('Narrowing it.', [{ id: 'tu_m', name: 'message_agent', input: { agent_session: childId, text: 'only look at a.ts' } }], usage);
+      return fakeTransport([reply]).fetch(input, init);
+    };
+    const t = await setup([], false, { '.gcode.json': '{ "agentTool": ["plan", "ask", "auto"] }\n', '.claude/agents/peek.md': '---\nname: peek\ndescription: Looks around on Cursor.\ntools: Read\nbackend: cursor\n---\nLook around.\n' }, model);
+    const agent = await t.open();
+    const { sessionId: chat } = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [] });
+    const turn = t.prompt(agent, chat, 'find alpha with a peek in the background');
+    await parentMessaged;
+    const refused = await t.prompt(agent, childId, 'use b.ts too', { [STEER_META]: true }).then(
+      () => 'answered',
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    writeFileSync(RELEASE, '');
+    expect((await turn).stopReason).toBe('end_turn');
+
+    const events = await t.events(chat);
+    const result = events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_m');
+    expect(result !== undefined && 'output' in result ? result.output : '').toBe('not delivered: peek runs on Cursor, which cannot take a message mid-turn');
+    expect(refused).toBe('Invalid request: peek runs on Cursor, which cannot take a message mid-turn, so it was not delivered');
+    // Both came back while the child still held its turn: it ends only once the file is written.
+    expect(events.find((e) => e.kind === 'child-end')).toMatchObject({ end: { kind: 'done' } });
+    const report = events.find((e) => e.kind === 'user' && e.from === 'child');
+    expect(report?.kind === 'user' && report.content).toContain('Holding. Released.');
+    const child = await t.events(childId);
+    expect(child.filter((e) => e.kind === 'user').map((e) => e.kind === 'user' && e.steer === true), 'no steer reached its log').not.toContain(true);
+    expect(t.agentCalls().filter((c) => c['method'] === 'session/prompt'), 'Cursor got its task and nothing more').toHaveLength(1);
   });
 
   it('runs an Arena lane on Cursor beside a Geno lane', async () => {

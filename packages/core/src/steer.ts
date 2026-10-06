@@ -18,10 +18,13 @@ export type SteerSource = 'user' | 'parent' | 'child';
 export type Steer = { readonly text: string; readonly from: SteerSource };
 
 /**
- * Where a steer ended up: logged at `seq` in the running turn, or left for the next turn because the run ended first.
- * While neither, it is queued.
+ * Where a steer ended up: logged at `seq` in the running turn, left for the next turn because the run ended first, or
+ * refused at once by a run that cannot take one, with the reason. While none, it is queued.
  */
-export type SteerOutcome = { readonly kind: 'delivered'; readonly seq: number } | { readonly kind: 'next-turn' };
+export type SteerOutcome =
+  | { readonly kind: 'delivered'; readonly seq: number }
+  | { readonly kind: 'next-turn' }
+  | { readonly kind: 'refused'; readonly reason: string };
 
 export type SteerState = { readonly kind: 'queued' } | SteerOutcome;
 
@@ -102,6 +105,7 @@ export const MESSAGE_AGENT_TOOL_DEFINITION: Tool = {
 const MESSAGE_RESULTS: { readonly [K in SteerOutcome['kind']]: (outcome: Extract<SteerOutcome, { kind: K }>) => string } = {
   delivered: ({ seq }) => `delivered at next tool round (event ${seq} of the subagent's log)`,
   'next-turn': () => 'child already finished: it ended before its next tool round, so the message was not delivered',
+  refused: ({ reason }) => `not delivered: ${reason}`,
 };
 
 export const messageAgentResult = (outcome: SteerOutcome): string => (MESSAGE_RESULTS[outcome.kind] as (o: SteerOutcome) => string)(outcome);

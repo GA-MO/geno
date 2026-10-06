@@ -1,7 +1,7 @@
 // A scripted external ACP agent, standing in for Cursor's `agent acp` in tests. FAKE_ACP_SCRIPT names a JSON file:
 // what session/new offers, and per prompt the steps to play. Every call it gets goes to the script's log as JSON lines.
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
@@ -17,6 +17,8 @@ export type FakeStep =
    */
   | { readonly ask: { readonly id: string; readonly kind?: acp.ToolKind; readonly title?: string; readonly rawInput?: unknown; readonly options?: readonly acp.PermissionOption[] } }
   | { readonly waitCancel: true }
+  /** Holds the turn until a file at this absolute path exists, so a test can act while the agent is mid-turn. */
+  | { readonly waitFile: string }
   | { readonly crash: number }
   | { readonly cost: number };
 
@@ -150,6 +152,7 @@ const main = async () => {
           if (!allowed) await update({ sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed', content: [{ type: 'content', content: { type: 'text', text: 'rejected' } }] });
         }
         if ('waitCancel' in step) await cancelledNow;
+        if ('waitFile' in step) while (!existsSync(step.waitFile)) await new Promise((resolve) => setTimeout(resolve, 20));
         if ('crash' in step) {
           process.stderr.write('fake agent: boom\n');
           process.exit(step.crash);

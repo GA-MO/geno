@@ -16,11 +16,13 @@ export class SteerInbox {
     private readonly inbox: Inbox,
     readonly sessionId: string,
     readonly parentId: SessionId | undefined,
+    private readonly refusal: string | undefined,
   ) {}
 
-  /** Queues a steer until the run takes it; undefined once the run ended. */
+  /** Queues a steer until the run takes it; undefined once the run ended. A run with a refusal refuses it at once. */
   push(steer: Steer): Promise<SteerOutcome> | undefined {
     if (!this.open) return undefined;
+    if (this.refusal !== undefined) return Promise.resolve({ kind: 'refused', reason: this.refusal });
     const outcome = new Promise<SteerOutcome>((settle) => this.inbox.put(this.sessionId, { kind: 'steer', steer, settle }));
     this.wake?.();
     return outcome;
@@ -79,9 +81,10 @@ export class Steers {
 
   constructor(readonly inbox: Inbox = new Inbox()) {}
 
-  open(sessionId: string, parentId: SessionId | undefined): SteerInbox {
+  /** `refusal` says why this run takes no steer, for one with no safe point to deliver it at. */
+  open(sessionId: string, parentId: SessionId | undefined, refusal?: string): SteerInbox {
     this.inboxes.get(sessionId)?.close();
-    const inbox = new SteerInbox(this.inbox, sessionId, parentId);
+    const inbox = new SteerInbox(this.inbox, sessionId, parentId, refusal);
     this.inboxes.set(sessionId, inbox);
     return inbox;
   }
@@ -105,7 +108,7 @@ export class Steers {
 /**
  * The user's steer over ACP, for the session's running turn: delivered there, or `next-turn` when no turn takes it,
  * which the caller then runs as a prompt once the turn ends. A steer is text only. A child that finished has no next
- * turn, so a steer for it is refused.
+ * turn, so a steer for it is refused, as is one for a run that takes none.
  */
 export async function steerRunning(steers: Steers, sessionId: string, blocks: readonly acp.ContentBlock[]): Promise<SteerOutcome> {
   if (blocks.some((block) => block.type !== 'text')) throw acp.RequestError.invalidParams({ sessionId }, 'a steer is text only; queue attachments and mentions for the next turn');
@@ -113,6 +116,7 @@ export async function steerRunning(steers: Steers, sessionId: string, blocks: re
   if (text === '') throw acp.RequestError.invalidParams({ sessionId }, 'the steer has no text');
   const inbox = steers.of(sessionId);
   const outcome = (await inbox?.push({ text, from: 'user' })) ?? { kind: 'next-turn' };
+  if (outcome.kind === 'refused') throw acp.RequestError.invalidRequest({ sessionId }, `${outcome.reason}, so it was not delivered`);
   if (outcome.kind === 'next-turn' && (inbox?.parentId !== undefined || steers.isEndedChild(sessionId))) throw acp.RequestError.invalidRequest({ sessionId }, 'the subagent already finished');
   return outcome;
 }
