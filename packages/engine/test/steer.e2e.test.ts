@@ -3,7 +3,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { STEER_META, type SteerOutcome, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -14,6 +14,41 @@ import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
+
+/**
+ * Every wait in these tests is bounded, so a steer that never lands fails fast and names the step it waited on. The
+ * fake model's and the editor's own waits give up first and are listed in the test's failure, since they fail inside
+ * the engine rather than in the test.
+ */
+const INNER_MS = 2000;
+const OUTER_MS = 4000;
+const stalls: string[] = [];
+beforeEach(() => {
+  stalls.length = 0;
+});
+
+function within<T>(work: Promise<T>, step: string, ms = OUTER_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      stalls.push(step);
+      const inner = stalls.length > 1 ? ` (stalled first: ${stalls.slice(0, -1).join('; ')})` : '';
+      reject(new Error(`timed out after ${ms}ms waiting for ${step}${inner}`));
+    }, ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** A wait inside the fake model or the editor. */
+const inner = <T>(work: Promise<T>, step: string): Promise<T> => within(work, step, INNER_MS);
+
+async function until(done: () => boolean, step: string): Promise<void> {
+  const deadline = Date.now() + OUTER_MS;
+  while (!done()) {
+    if (Date.now() > deadline) return within(new Promise<void>(() => {}), step, 0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 type Gate = { readonly opened: Promise<void>; open(): void };
 function gate(): Gate {
@@ -51,7 +86,7 @@ function models(scripts: Readonly<Record<string, Script>>) {
     let sent = 0;
     const held = new ReadableStream<Uint8Array>({
       async pull(controller) {
-        if (sent === served.holdAfter) await served.until;
+        if (sent === served.holdAfter) await inner(served.until!, 'the held model stream to be released');
         const { done, value } = await reader.read();
         if (done) return controller.close();
         sent++;
@@ -149,18 +184,18 @@ describe('gcode serve: steering a running turn', () => {
       model.fetch,
       async () => {
         reading.open();
-        await release.opened;
+        await inner(release.opened, 'the held read of a.ts to be released');
       },
       async (editor) => {
         const turn = editor.prompt('[parent] what is alpha?');
-        await reading.opened;
+        await within(reading.opened, 'the read of a.ts to start');
         const steered = editor.steer('also look at b.ts');
         let settled = false;
         void steered.then(() => (settled = true));
         await new Promise((resolve) => setTimeout(resolve, 100));
         const beforeRelease = settled;
         release.open();
-        return { steered: await steered, turn: await turn, beforeRelease };
+        return { steered: await within(steered, 'the steer to be delivered after the tool batch'), turn: await within(turn, 'the turn to end'), beforeRelease };
       },
     );
 
@@ -194,12 +229,12 @@ describe('gcode serve: steering a running turn', () => {
       async () => {},
       async (editor, updates) => {
         const turn = editor.prompt('[parent] what is alpha?');
-        while (!updates.some((u) => u.update.sessionUpdate === 'agent_message_chunk')) await new Promise((resolve) => setTimeout(resolve, 10));
+        await until(() => updates.some((u) => u.update.sessionUpdate === 'agent_message_chunk'), 'the model to start streaming');
         streaming.open();
         const steered = editor.steer('mind b.ts as well');
         await new Promise((resolve) => setTimeout(resolve, 50));
         finish.open();
-        return { steered: await steered, turn: await turn };
+        return { steered: await within(steered, 'the steer sent while streaming to be delivered after the batch'), turn: await within(turn, 'the turn to end') };
       },
     );
 
@@ -224,11 +259,11 @@ describe('gcode serve: steering a running turn', () => {
       async (editor) => {
         const order: string[] = [];
         const turn = editor.prompt('[parent] what is alpha?').then((r) => (order.push('turn'), r));
-        await model.arrived('[parent]', 0);
+        await within(model.arrived('[parent]', 0), 'the first model call');
         const steered = editor.steer('and beta?').then((r) => (order.push('steer'), r));
         await new Promise((resolve) => setTimeout(resolve, 50));
         finish.open();
-        return { turn: await turn, steered: await steered, order };
+        return { turn: await within(turn, 'the first turn to end'), steered: await within(steered, 'the steer to run as the next turn'), order };
       },
     );
 
@@ -265,10 +300,10 @@ describe('gcode serve: steering a running turn', () => {
       '[child]': async (n) => {
         if (n === 0) {
           // The child's first call waits until the parent's message is queued, so it lands after this call's tools.
-          await steered.opened;
+          await inner(steered.opened, "the parent's message to be queued for the child");
           return { reply: toolCall('Reading a.ts.', [read('tu_c', 'a.ts')], usage) };
         }
-        await parentWaits.opened;
+        await inner(parentWaits.opened, "the parent's third model call, after message_agent returned");
         return { reply: answer('b.ts:1 defines beta.', usage) };
       },
     });
@@ -277,11 +312,11 @@ describe('gcode serve: steering a running turn', () => {
       async () => {},
       async (editor) => {
         const turn = editor.prompt('[parent] find alpha, in the background');
-        await model.arrived('[parent]', 1);
+        await within(model.arrived('[parent]', 1), "the parent's second model call");
         // message_agent runs once the parent's second call has streamed.
         await new Promise((resolve) => setTimeout(resolve, 100));
         steered.open();
-        return turn;
+        return within(turn, "the parent's turn to end with the child's report");
       },
     );
 
@@ -311,7 +346,7 @@ describe('gcode serve: steering a running turn', () => {
         if (n === 0) return { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }], usage) };
         if (n === 1) {
           childId = /session ([0-9a-f-]{36})/.exec(JSON.stringify(lastContent(body)))![1]!;
-          await childDone.opened;
+          await inner(childDone.opened, 'the user to steer the finished child');
           return { reply: toolCall('One more thing.', [{ id: 'tu_m', name: 'message_agent', input: { agent_session: childId, text: 'and beta?' } }], usage) };
         }
         return { reply: answer('Done.', usage) };
@@ -324,16 +359,16 @@ describe('gcode serve: steering a running turn', () => {
       async (editor, updates) => {
         const turn = editor.prompt('[parent] find alpha, in the background');
         const ended = () => updates.find((u) => u.update.sessionUpdate === 'subagent_update' && u.update.state?.state === 'idle');
-        while (ended() === undefined) await new Promise((resolve) => setTimeout(resolve, 10));
+        await until(() => ended() !== undefined, 'the background child to end');
         await new Promise((resolve) => setTimeout(resolve, 20));
         const update = ended()!.update;
         const child = update.sessionUpdate === 'subagent_update' ? update.sessionId : '';
-        const refused = await editor.steer('you there?', child).then(
+        const refused = await within(editor.steer('you there?', child), 'the steer to the finished child to be refused').then(
           () => 'answered',
           (error: unknown) => (error instanceof Error ? error.message : String(error)),
         );
         childDone.open();
-        await turn;
+        await within(turn, "the parent's turn to end");
         return { refused };
       },
     );
