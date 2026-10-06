@@ -143,6 +143,11 @@
   cursor: pointer;
 }
 
+/* A search card's head only names it; it opens nothing. */
+.provider-head.static {
+  cursor: default;
+}
+
 .provider-head:focus-visible {
   outline: 2px solid var(--vscode-focusBorder);
   outline-offset: -2px;
@@ -414,7 +419,7 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     border-top-color: var(--glass-edge);
   }
 
-  & .provider-head:hover {
+  & .provider-head:not(.static):hover {
     background: var(--glass-hover);
   }
 

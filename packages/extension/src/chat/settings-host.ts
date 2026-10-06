@@ -1,11 +1,26 @@
 import { spawn } from 'node:child_process';
 import * as vscode from 'vscode';
-import { isProviderName, missingField, PROVIDERS, ROLE_SPECS, ROLES, specOf, type FieldId, type ProviderField, type ProviderName } from '@g-code/core';
+import {
+  isProviderName,
+  isSearchProviderName,
+  missingField,
+  PROVIDERS,
+  ROLE_SPECS,
+  ROLES,
+  SEARCH_PROVIDER_SPECS,
+  SEARCH_PROVIDERS,
+  specOf,
+  type FieldId,
+  type ProviderField,
+  type ProviderName,
+} from '@g-code/core';
 import {
   engineEnv,
   PROVIDER_ROLES,
   providerOf,
   providerRuntime,
+  searchKeys,
+  searchSecretName,
   secretName,
   suppliedValues,
   userValue,
@@ -14,7 +29,7 @@ import {
   type RoleSettings,
 } from '../runtime.js';
 import { AgentsHost } from './agents-host.js';
-import type { FieldView, ProviderView, RoleView, SettingsFromView, SettingsListing, SettingsToView, TestState } from './settings-model.js';
+import type { FieldView, ProviderView, RoleView, SearchView, SettingsFromView, SettingsListing, SettingsToView, TestState } from './settings-model.js';
 
 /** Long enough for a cold model behind the engine's own 30 seconds. */
 const CLI_TIMEOUT_MS = 40_000;
@@ -74,6 +89,13 @@ export class SettingsPage implements vscode.Disposable {
         const target = fieldOf(provider, field, true);
         if (target !== undefined) void this.secrets.delete(secretName(target.provider, target.field.id)).then(undefined, warn);
       },
+      'settings-search-key': ({ provider, value }) => {
+        if (!isSearchProviderName(provider) || value.trim() === '') return;
+        void this.secrets.store(searchSecretName(provider), value.trim()).then(() => this.output.appendLine(`settings: stored the ${SEARCH_PROVIDER_SPECS[provider].label} key`), warn);
+      },
+      'settings-search-clear': ({ provider }) => {
+        if (isSearchProviderName(provider)) void this.secrets.delete(searchSecretName(provider)).then(undefined, warn);
+      },
       'settings-value': ({ provider, field, value }) => {
         const target = fieldOf(provider, field, false);
         if (target !== undefined) void setUserValue(target.provider, target.field.id, value.trim()).then(undefined, warn);
@@ -106,7 +128,21 @@ export class SettingsPage implements vscode.Disposable {
       const provider = typeof choice?.provider === 'string' && isProviderName(choice.provider) ? choice.provider : undefined;
       return { role, label, kind: 'provider', provider, model: typeof choice?.model === 'string' ? choice.model : '' };
     });
-    return { providers, roles, chat };
+    return { providers, roles, chat, search: await this.searchViews() };
+  }
+
+  private async searchViews(): Promise<SearchView[]> {
+    const keys = await searchKeys(this.secrets, process.env);
+    return SEARCH_PROVIDERS.map((id) => {
+      const spec = SEARCH_PROVIDER_SPECS[id];
+      const set = keys.find((key) => key.provider === id)?.key.source;
+      return {
+        id,
+        label: spec.label,
+        signUp: spec.signUp,
+        key: { id: 'apiKey', label: 'API key', hint: `your ${spec.label} API key`, required: true, secret: true, set: set === 'settings' ? undefined : set },
+      };
+    });
   }
 
   private async providerView(id: ProviderName): Promise<ProviderView> {

@@ -11,6 +11,7 @@ import {
   type ModelsState,
   type ProviderView,
   type RoleView,
+  type SearchView,
   type SettingsFromView,
   type SettingsListing,
   type TestState,
@@ -25,13 +26,22 @@ function keyPlaceholder(field: Extract<FieldView, { secret: true }>): string {
   return field.required ? field.hint : `${field.hint} (optional)`;
 }
 
-function fieldRow(provider: ProviderView, field: FieldView, post: (message: SettingsFromView) => void): HTMLElement {
+/** Where a field's value goes: a provider's fields, or a search provider's key. */
+type FieldSink = { readonly secret: (value: string) => void; readonly value: (value: string) => void; readonly clear: () => void };
+
+const providerSink = (provider: ProviderView, field: FieldView, post: (message: SettingsFromView) => void): FieldSink => ({
+  secret: (value) => post({ type: 'settings-secret', provider: provider.id, field: field.id, value }),
+  value: (value) => post({ type: 'settings-value', provider: provider.id, field: field.id, value }),
+  clear: () => post({ type: 'settings-clear', provider: provider.id, field: field.id }),
+});
+
+function fieldRow(owner: string, field: FieldView, sink: FieldSink): HTMLElement {
   const input = h('input', {
     class: 'provider-input',
     type: field.secret ? 'password' : 'text',
     autocomplete: 'off',
     spellcheck: 'false',
-    'aria-label': `${provider.label} ${field.label}`,
+    'aria-label': `${owner} ${field.label}`,
     placeholder: field.secret ? keyPlaceholder(field) : field.fromEnv ? 'Set in the environment' : field.hint,
   });
   if (!field.secret) input.value = field.value;
@@ -39,12 +49,12 @@ function fieldRow(provider: ProviderView, field: FieldView, post: (message: Sett
     event.preventDefault();
     if (field.secret) {
       if (input.value.trim() === '') return;
-      post({ type: 'settings-secret', provider: provider.id, field: field.id, value: input.value });
+      sink.secret(input.value);
       // The key goes to SecretStorage only; the page keeps no copy.
       input.value = '';
       input.placeholder = 'Set';
     } else {
-      post({ type: 'settings-value', provider: provider.id, field: field.id, value: input.value });
+      sink.value(input.value);
     }
   };
   return h(
@@ -57,7 +67,7 @@ function fieldRow(provider: ProviderView, field: FieldView, post: (message: Sett
       input,
       h('button', { type: 'submit', class: 'button secondary small' }, 'Save'),
       field.secret && field.set === 'secret-storage'
-        ? h('button', { type: 'button', class: 'link-button provider-clear', onclick: () => post({ type: 'settings-clear', provider: provider.id, field: field.id }) }, 'Remove')
+        ? h('button', { type: 'button', class: 'link-button provider-clear', onclick: sink.clear }, 'Remove')
         : undefined,
     ),
   );
@@ -85,7 +95,7 @@ function providerCard(view: ProviderView, chat: ProviderName, state: CardState, 
       h(
         'div',
         { class: 'provider-body' },
-        ...view.fields.map((field) => fieldRow(view, field, post)),
+        ...view.fields.map((field) => fieldRow(view.label, field, providerSink(view, field, post))),
         h(
           'div',
           { class: 'provider-actions' },
@@ -120,6 +130,32 @@ function providerCard(view: ProviderView, chat: ProviderName, state: CardState, 
             ),
           ),
       ),
+  );
+}
+
+/** A search provider's card: always open, since it holds one key. With no key, Geno does not offer web_search. */
+function searchCard(view: SearchView, post: (message: SettingsFromView) => void): HTMLElement {
+  const ready = view.key.set !== undefined;
+  return h(
+    'li',
+    { class: 'provider-card search-card', 'data-search': view.id, 'data-state': ready ? 'ready' : 'needs' },
+    h(
+      'div',
+      { class: 'provider-head static' },
+      h('span', { class: 'provider-name' }, view.label),
+      h('span', { class: 'spacer' }),
+      h('span', { class: `provider-state mcp-state tone-${ready ? 'ok' : 'quiet'}` }, ready ? 'Ready' : 'Needs API key'),
+    ),
+    h(
+      'div',
+      { class: 'provider-body' },
+      fieldRow(view.label, view.key, {
+        secret: (value) => post({ type: 'settings-search-key', provider: view.id, value }),
+        value: () => {},
+        clear: () => post({ type: 'settings-search-clear', provider: view.id }),
+      }),
+      h('p', { class: 'provider-note' }, h('span', {}, 'Get a key at ', h('a', { href: view.signUp }, view.signUp.replace(/^https:\/\//, '').replace(/\/$/, '')), '.')),
+    ),
   );
 }
 
@@ -180,6 +216,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
   const roles = h('ul', { class: 'settings-roles', 'aria-label': 'Roles' });
   const providers = h('ul', { class: 'provider-list', 'aria-label': 'Providers' });
   const agents = h('ul', { class: 'provider-list agent-list', 'aria-label': 'Agents' });
+  const search = h('ul', { class: 'provider-list search-list', 'aria-label': 'Web search' });
   const note = h('p', { class: 'history-note' }, 'Loading…');
   const element = h(
     'section',
@@ -199,6 +236,9 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
     h('h3', { class: 'settings-heading' }, 'Providers'),
     h('p', { class: 'settings-intro' }, 'Keys go to VS Code’s secret storage and are never shown again. Base URLs are kept in your user settings, never a workspace’s.'),
     providers,
+    h('h3', { class: 'settings-heading' }, 'Web search'),
+    h('p', { class: 'settings-intro' }, 'A search key lets Geno search the web with web_search. Without one, Geno does not offer search; web_fetch still reads pages.'),
+    search,
     permissions.element,
   );
 
@@ -233,6 +273,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
     expanded ??= new Set([listing.chat]);
     const { chat } = listing;
     reconcile(roles, listing.roles.map((role) => ({ key: role.role, deps: [JSON.stringify(role)], build: () => roleRow(role, listing!.providers, post) })));
+    reconcile(search, listing.search.map((view) => ({ key: view.id, deps: [JSON.stringify(view)], build: () => searchCard(view, post) })));
     reconcile(
       providers,
       listing.providers.map((view) => {

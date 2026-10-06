@@ -4,11 +4,14 @@ import {
   isResumeAfterLimit,
   missingField,
   ROLE_SPECS,
+  SEARCH_PROVIDER_SPECS,
+  SEARCH_PROVIDERS,
   specOf,
   type FieldId,
   type ProviderField,
   type ProviderName,
   type Role,
+  type SearchProviderName,
 } from '@g-code/core';
 
 export const SET_KEY_COMMAND = 'gcode.setApiKey';
@@ -37,6 +40,9 @@ export const ENGINE_SECRETS = 'gcode.apiKey.';
 /** Where SecretStorage keeps a secret field; a provider's API key keeps the name it had before the registry. */
 export const secretName = (provider: ProviderName, field: FieldId = 'apiKey'): string =>
   field === 'apiKey' ? `${ENGINE_SECRETS}${provider}` : `${ENGINE_SECRETS}${provider}.${field}`;
+
+/** Where SecretStorage keeps a search provider's key, under ENGINE_SECRETS so a change restarts the engine. */
+export const searchSecretName = (provider: SearchProviderName): string => `${ENGINE_SECRETS}search.${provider}`;
 
 /** The setting a non-secret field lives in: Model Studio's endpoint keeps `gcode.baseUrl`, the rest share `gcode.providers`. */
 export const settingKey = (provider: ProviderName, field: FieldId): string =>
@@ -161,10 +167,26 @@ export type ProviderRole = (typeof PROVIDER_ROLES)[number];
 
 export type RoleSettings = Readonly<Partial<Record<ProviderRole, { readonly provider?: unknown; readonly model?: unknown }>>>;
 
+/** A search provider with a key, which turns web_search on. */
+export type SearchRuntime = { readonly provider: SearchProviderName; readonly key: Supplied };
+
 export type EngineRuntime = {
   readonly chat: ModelRuntime;
   readonly roles: readonly { readonly role: ProviderRole; readonly runtime: ModelRuntime }[];
+  readonly search: readonly SearchRuntime[];
 };
+
+/** Each search provider's key, from SecretStorage, else the environment VS Code was started with. */
+export async function searchKeys(secrets: Secrets, env: Env): Promise<SearchRuntime[]> {
+  const found: SearchRuntime[] = [];
+  for (const provider of SEARCH_PROVIDERS) {
+    const stored = await secrets.get(searchSecretName(provider));
+    const inherited = env[SEARCH_PROVIDER_SPECS[provider].keyEnv];
+    const key: Supplied | undefined = stored ? { source: 'secret-storage', value: stored } : inherited ? { source: 'environment', value: inherited } : undefined;
+    if (key !== undefined) found.push({ provider, key });
+  }
+  return found;
+}
 
 /** The chat runtime, and one for each role `gcode.roles` maps; a role it leaves out keeps the engine's default. */
 export async function readEngineRuntime(settings: Settings, secrets: Secrets, env: Env): Promise<EngineRuntime> {
@@ -179,12 +201,12 @@ export async function readEngineRuntime(settings: Settings, secrets: Secrets, en
     const model = typeof choice.model === 'string' && choice.model !== '' ? choice.model : undefined;
     roles.push({ role, runtime: await providerRuntime(provider, model, settings, secrets, env) });
   }
-  return { chat, roles };
+  return { chat, roles, search: await searchKeys(secrets, env) };
 }
 
 /** The engine's variables for every role: each role's provider values, its provider and model, then chat's. */
-export function engineEnvOf({ chat, roles }: EngineRuntime): Record<string, string> {
-  const env: Record<string, string> = {};
+export function engineEnvOf({ chat, roles, search }: EngineRuntime): Record<string, string> {
+  const env: Record<string, string> = Object.fromEntries(search.map(({ provider, key }) => [SEARCH_PROVIDER_SPECS[provider].keyEnv, key.value]));
   for (const { role, runtime } of roles) {
     const { GCODE_PROVIDER: _provider, GCODE_MODEL: _model, ...values } = engineEnv(runtime);
     const names = ROLE_SPECS[role].env!;
@@ -193,5 +215,9 @@ export function engineEnvOf({ chat, roles }: EngineRuntime): Record<string, stri
   return { ...env, ...engineEnv(chat) };
 }
 
-export const describeEngineRuntime = ({ chat, roles }: EngineRuntime): string =>
-  [describeRuntime(chat), ...roles.map(({ role, runtime }) => `${role}: ${describeRuntime(runtime)}`)].join('; ');
+export const describeEngineRuntime = ({ chat, roles, search }: EngineRuntime): string =>
+  [
+    describeRuntime(chat),
+    ...roles.map(({ role, runtime }) => `${role}: ${describeRuntime(runtime)}`),
+    ...search.map(({ provider, key }) => `search: ${provider}, key from ${key.source}`),
+  ].join('; ');
