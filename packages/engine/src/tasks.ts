@@ -1,4 +1,4 @@
-import { isLive, taskNotice, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskStatus, type TaskUpdate } from '@g-code/core';
+import { isLive, taskNotice, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
 
 /** How many ended tasks the list keeps, newest first; running ones always stay. */
 const KEPT_ENDED = 20;
@@ -27,11 +27,19 @@ export class Tasks {
   }
 
   /** The turn ended. */
-  end(sessionId: string, status: Exclude<TaskStatus, 'running' | 'needs-input'>, usage: TaskRecord['usage']): void {
+  end(sessionId: string, status: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>, usage: TaskRecord['usage']): void {
     const record = this.records.get(sessionId);
     if (record === undefined) return;
     this.asking.delete(sessionId);
-    this.put({ ...record, status, endedAt: Date.now(), usage: usage ?? record.usage });
+    this.put({ ...record, status, endedAt: Date.now(), usage: usage ?? record.usage, waiting: undefined });
+  }
+
+  /** A model call of the turn waits offline or for a limit, or its next try moved; null when it went out. */
+  wait(sessionId: string, waiting: Waiting | null): void {
+    const record = this.records.get(sessionId);
+    if (record === undefined || !isLive(record.status)) return;
+    if (waiting !== null) return this.put({ ...record, status: 'waiting', waiting });
+    if (record.status === 'waiting') this.put({ ...record, status: this.asking.has(sessionId) ? 'needs-input' : 'running', waiting: undefined });
   }
 
   /** The turn waits on the user until the returned function runs; several questions at once count as one wait. */

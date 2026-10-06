@@ -177,6 +177,9 @@ export const chat: Command = async (args, { io, store }) => {
       await record({ kind: 'retry', seq: nextSeq(events), at: new Date().toISOString(), ...retry });
       io.err(formatRetry(retry));
     },
+    onWait: (wait) => {
+      if (wait !== null) io.err(formatWait(wait, Date.now()));
+    },
   });
   if (streamed) io.write('\n');
 

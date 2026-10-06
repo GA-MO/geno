@@ -120,6 +120,9 @@ import {
   type TaskStatus,
   type TaskUsage,
   type TasksResponse,
+  RETRY_NOW_METHOD,
+  type RetryNowResponse,
+  type Waiting,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
@@ -153,6 +156,8 @@ import { ToolError } from './tools/context.js';
 import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
+import { waitsLeft, waitUpdate } from './wait-hooks.js';
+import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 
 const RESOURCE_NOT_FOUND = -32002;
@@ -231,7 +236,8 @@ const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notice
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
  * loaded the session after a window reload, or none while it runs in the background. `signal` is the turn's own.
  */
-type Route = { readonly viewers: Viewers<Peer>; readonly tasks: Tasks; readonly sessionId: string; readonly signal: AbortSignal };
+/** `wake` is the session's Retry now. */
+type Route = { readonly viewers: Viewers<Peer>; readonly tasks: Tasks; readonly sessionId: string; readonly signal: AbortSignal; readonly wake?: Wake | undefined };
 
 /** The editor showing the route's session, when it can do what `can` asks. */
 const viewerThat = (route: Route, can: (peer: Peer) => boolean): Viewer<Peer> | undefined => {
@@ -358,7 +364,7 @@ function editorDiagnostics(route: Route): Diagnostics {
  * What a load needs of a running turn to show it whole: every event logged so far, and the text the model is still
  * writing, which is logged only once its call ends.
  */
-type LiveTurn = { readonly events: TurnEvent[]; text: string };
+type LiveTurn = { readonly events: TurnEvent[]; text: string; waiting: Waiting | null };
 
 type Turn = {
   readonly surface: Surface;
@@ -418,7 +424,7 @@ function editorTurn(
   let running: acp.ToolCallId = '';
   let runningDescription: string | undefined;
   let spent: Spent | undefined;
-  const live: LiveTurn = { events: [], text: '' };
+  const live: LiveTurn = { events: [], text: '', waiting: null };
   return {
     updates: sent,
     live,
@@ -427,7 +433,15 @@ function editorTurn(
     taskUsage: () => taskUsageOf(spent),
     surface: {
       files: peer.files && !disk ? editorFiles(route, () => running) : DISK_FILES,
+      wake: route.wake,
+      // The engine's own waits are for a later engine to take up; a subagent's wait goes with its parent's call.
+      ...(route.wake === undefined ? {} : { waiter: { pid: process.pid, cwd: io.cwd } }),
       watcher: {
+        waiting(wait) {
+          live.waiting = wait;
+          route.tasks.wait(route.sessionId, wait);
+          if (peer.notices) sent.send(waitUpdate(wait));
+        },
         text(delta) {
           live.text += delta;
           sent.send(textUpdate(delta));
@@ -683,6 +697,10 @@ export function engineShared(io: Io) {
     live: new Map<string, LiveTurn>(),
     // Each connection's way to hear of an Arena run's steps.
     arenaWatchers: new Set<(update: ArenaUpdate) => void>(),
+    // Each session's Retry now, which cuts a wait of its running turn short.
+    wakes: new Map<string, Wake>(),
+    // Whether a connection already took up the waits an engine that stopped left in the logs; the first one does.
+    leftWaits: { taken: false },
   };
 }
 
@@ -715,7 +733,7 @@ const ARENA_ENDS: Readonly<Record<acp.StopReason, LaneEnd>> = {
 };
 
 /** How a turn that ran to its end reads in the tasks list. */
-const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' | 'needs-input'>>> = {
+const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>>> = {
   end_turn: 'done',
   max_tokens: 'failed',
   max_turn_requests: 'failed',
@@ -729,7 +747,8 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits } = shared;
+  const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
   // This connection itself, as the editor that shows the sessions it opens; known once it connected.
@@ -804,14 +823,21 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
   /**
    * One turn of a session, for a prompt from `from`, the editor that asked. It runs to its end whether or not any
-   * editor still shows the session; the tasks list follows it.
+   * editor still shows the session; the tasks list follows it. A `resume` turn has no prompt: it takes up the wait an
+   * engine that stopped left in the log.
    */
-  const runTurn = async (sessionId: string, blocks: readonly acp.ContentBlock[], meta: Record<string, unknown> | null | undefined, from: Viewer<Peer>): Promise<acp.PromptResponse> => {
+  const runTurn = async (
+    sessionId: string,
+    blocks: readonly acp.ContentBlock[],
+    meta: Record<string, unknown> | null | undefined,
+    from: Viewer<Peer>,
+    resume = false,
+  ): Promise<acp.PromptResponse> => {
     known(sessionId);
     if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
     const text = promptText(blocks);
     const attached: Attached = { mentions: parsedMentions(sessionId, blocks), attachments: parsedAttachments(sessionId, blocks) };
-    if (text === '' && attached.attachments.length === 0) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
+    if (text === '' && attached.attachments.length === 0 && !resume) throw acp.RequestError.invalidParams({ sessionId }, 'the prompt has no text');
     const rawTarget = meta?.[INLINE_EDIT_META];
     const target = rawTarget === undefined ? undefined : inlineEditTarget.safeParse(rawTarget);
     if (target?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${INLINE_EDIT_META}: ${z.prettifyError(target.error)}`);
@@ -831,9 +857,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const controller = new AbortController();
     turns.set(sessionId, controller);
     let session: Session | undefined;
-    const route: Route = { viewers, tasks, sessionId, signal: controller.signal };
+    const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
-    let ended: Exclude<TaskStatus, 'running' | 'needs-input'> = 'failed';
+    let ended: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'> = 'failed';
     try {
       const header = await openSessionLog(store, sessionId, io);
       const lane = await laneAt(header.session.workspace, undefined).catch(() => undefined);
@@ -842,7 +868,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target === undefined ? titleFrom(text) : 'Inline edit'),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => e.kind === 'user')?.content ?? '') : text)),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
@@ -853,7 +879,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const resumed = await resumeSession(store, io, sessionId);
         session = resumed.log.session;
         shown.live.events.push(...resumed.log.events);
-        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
         if (rawLane !== undefined) {
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
           await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
@@ -930,6 +956,23 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return { id, turn };
   };
 
+  /** Runs on in the background each turn an engine that stopped left waiting, as the first editor connects. */
+  const takeUpWaits = async () => {
+    const left = await waitsLeft(store, io.cwd).catch((error: unknown) => {
+      io.err(`could not look for waits to take up: ${String(error)}`);
+      return [];
+    });
+    for (const id of left) {
+      const log = await existing(id).catch(() => undefined);
+      if (log === undefined || turns.get(id) !== undefined) continue;
+      turns.set(id, undefined);
+      if (!modes.has(id)) modes.set(id, sessionModeOf(log.events));
+      mcp.register(id, log.session.workspace, [], undefined);
+      io.err(`session: ${id} takes up the wait its last engine left`);
+      void runTurn(id, [], undefined, self(), true).catch((error: unknown) => io.err(`session ${id}: ${String(error)}`));
+    }
+  };
+
   return acp
     .agent({ name: 'gcode' })
     .onConnect((connection) => {
@@ -959,6 +1002,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       });
     })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
+      if (!leftWaits.taken) {
+        leftWaits.taken = true;
+        void takeUpWaits();
+      }
       const { fs, _meta, session, elicitation, subagents } = params.clientCapabilities ?? {};
       peer = {
         files: fs?.readTextFile === true && fs.writeTextFile === true,
@@ -1031,6 +1078,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const widgetOf = (widget: WidgetRef): ShownWidget => ({ uri: pathToFileURL(widgetFile(dir, widget)).href, html: stored.get(widget.sha256) });
         for (const update of replayUpdates(events, widgetOf)) await notify(update);
         if (streaming !== '') await notify(textUpdate(streaming));
+        if (running?.waiting != null && self().peer.notices) await notify(waitUpdate(running.waiting));
         const context = lastContextUse(log.session, events);
         if (context !== undefined) await notify(usageUpdate(context));
         await notify(sessionInfo(summarizeSession(log.session, events)));
@@ -1066,6 +1114,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       await mcp.close(sessionId);
       return {};
     })
+    .onRequest(RETRY_NOW_METHOD, sessionRequest, async ({ params }): Promise<RetryNowResponse> => ({ retried: wakes.get(params.sessionId)?.wake() ?? false }))
     .onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {
       viewers.hide(params.sessionId, self());
       commands.detach(params.sessionId);
