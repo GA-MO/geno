@@ -19,6 +19,7 @@ import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { ProviderName } from './providers.js';
 import type { ChildEvent, ChildOf } from './subagent.js';
+import type { LaneApplyRecord } from './tasks.js';
 import type { Brand } from './types.js';
 import type { WidgetRef } from './widget.js';
 
@@ -161,6 +162,8 @@ export type TurnEvent =
   | { readonly kind: 'effort'; readonly seq?: number | undefined; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
+  /** A lane applied into this session's workspace, its changes put under review like an edit's. */
+  | ({ readonly kind: 'lane-apply'; readonly seq: number; readonly at: string; readonly changes: readonly FileChange[] } & LaneApplyRecord)
   | ChildEvent
   | ToolResultEvent;
 
@@ -182,6 +185,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   title: false,
   'child-start': false,
   'child-end': false,
+  'lane-apply': false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

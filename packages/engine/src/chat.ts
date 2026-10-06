@@ -263,6 +263,12 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     `#${seq} child-start ${role} ${child} (${start}, ${model}, effort ${effort}, caps ${caps.maxTurns} turns $${caps.maxCostUsd})`,
   ],
   'child-end': ({ seq, child, end, turns, costUsd, summary }) => [`#${seq} child-end ${child} ${childEndWords(end)} turns=${turns} ${formatCost(costUsd)}: ${summary}`],
+  'lane-apply': ({ seq, lane, changes, conflicts, deleted }) => [
+    `#${seq} lane-apply ${lane}: ${conflicts.length > 0 ? `${conflicts.length} conflicts, nothing applied` : `${changes.length + deleted.length} files`}`,
+    ...changes.map((change) => `  changed ${change.path} (${change.hunks.length} hunks)`),
+    ...deleted.map((file) => `  deleted ${file}`),
+    ...conflicts.map((conflict) => `  conflict ${conflict.path}: ${conflict.reason}`),
+  ],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>

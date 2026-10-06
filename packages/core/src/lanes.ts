@@ -13,6 +13,22 @@ export function parseLaneName(raw: string): LaneName | undefined {
   return raw as LaneName;
 }
 
+/** A name for a lane started from a prompt: its first words as a slug, numbered when that name is taken. */
+export function laneNameFor(prompt: string, taken: ReadonlySet<string>): LaneName {
+  const words = prompt.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  let slug = '';
+  for (const word of words) {
+    const next = slug === '' ? word : `${slug}-${word}`;
+    if (next.length > 32) break;
+    slug = next;
+  }
+  const base = slug === '' ? 'lane' : slug;
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base}-${n}`;
+    if (!taken.has(name)) return parseLaneName(name)!;
+  }
+}
+
 /** Where lanes live, relative to the main checkout. */
 export const LANE_ROOT = path.join('.geno', 'worktrees');
 /** The line the repository's `.git/info/exclude` gets, so lanes never show as untracked files. */
