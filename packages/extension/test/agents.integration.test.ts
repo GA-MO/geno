@@ -24,6 +24,13 @@ async function bodyOf(req: IncomingMessage): Promise<string> {
 }
 
 const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unknown>>> = {
+  closeOtherWindows: async (_action, w) => {
+    const { targetInfos } = await w.browser.send<{ targetInfos: { targetId: string; type: string; url: string; attached: boolean }[] }>('Target.getTargets');
+    const pages = targetInfos.filter((t) => t.type === 'page' && t.url.includes('workbench'));
+    const mine = (await w.page.send<{ targetInfo: { targetId: string } }>('Target.getTargetInfo')).targetInfo.targetId;
+    for (const page of pages) if (page.targetId !== mine) await w.browser.send('Target.closeTarget', { targetId: page.targetId });
+    return pages.length;
+  },
   eval: async ({ expression }, w) => evaluate(await webview(w, EXTENSION, READY), expression),
   click: async ({ selector }, w) => click(await webview(w, EXTENSION, READY), selector),
   type: async ({ text }, w) => typeText(await webview(w, EXTENSION, READY), text),
@@ -64,14 +71,9 @@ afterAll(() => {
 });
 
 describe('the Agents section of the settings page', () => {
-  it('finds no Cursor CLI, then a fake one: signs in with a link, cancels, updates, and signs out after a confirm', async () => {
+  it('finds no Cursor CLI and shows how to install it, then a fake one: signs in by browser and by API key, updates, and signs out', async () => {
     const state = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-agent-')), 'state');
-    const { work, home, suite, launchArgs } = await setUp('agents', { 'a.ts': 'export const a = 1;\n' }, {}, {
-      // The default shell only records what it is sent, so the installer's command is seen and never run.
-      'terminal.integrated.profiles.osx': { record: { path: '/bin/sh', args: ['-c', `cat > '${state}/terminal-input'`] } },
-      'terminal.integrated.defaultProfile.osx': 'record',
-      'terminal.integrated.shellIntegration.enabled': false,
-    });
+    const { work, home, suite, launchArgs } = await setUp('agents', { 'a.ts': 'export const a = 1;\n' }, {});
     const bin = path.join(work, 'bin');
     // An empty home, so the user's own ~/.local/bin/agent is never found.
     const userHome = path.join(work, 'user-home');
