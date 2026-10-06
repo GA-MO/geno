@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { childEnv } from '../src/child-env.js';
 import { EngineError } from '../src/errors.js';
-import { openSandbox, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
+import { CREDENTIAL_PATHS, openSandbox, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 
@@ -28,6 +28,10 @@ beforeAll(async () => {
     path.join(store.tasksDir, 'task.json'),
     JSON.stringify({ id: 'task', repo: sourceRepo, baseCommit: 'HEAD', prompt: '', setup: 'true', verify: 'true' }),
   );
+  for (const file of [...CREDENTIAL_PATHS.map((p) => path.join(p, 'secret')), path.join('.config', 'other', 'secret')]) {
+    await mkdir(path.dirname(path.join(home, file)), { recursive: true });
+    await writeFile(path.join(home, file), `secret in ${file}\n`);
+  }
   const tempDir = path.join(root, 'tmp');
   await mkdir(tempDir);
   sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir }));
@@ -53,6 +57,17 @@ describe('the bash sandbox', () => {
     expect(result.code).not.toBe(0);
     expect(result.output).toContain('Operation not permitted');
     await expect(readFile(target, 'utf8')).rejects.toThrow(/ENOENT/);
+  });
+
+  it.each(CREDENTIAL_PATHS)('refuses to read the credentials under ~/%s', async (place) => {
+    const result = await run(`cat '${path.join(root, 'home', place, 'secret')}'`);
+    expect(result.code).not.toBe(0);
+    expect(result.output).not.toContain('secret in');
+  });
+
+  it('still reads the rest of the home folder', async () => {
+    const result = await run(`cat '${path.join(root, 'home', '.config', 'other', 'secret')}'`);
+    expect(result.output).toContain('secret in .config/other/secret');
   });
 
   it("refuses to read a task's source repo", async () => {
