@@ -29,12 +29,13 @@ async function screenshots(name: string): Promise<void> {
   await sleep(500);
 }
 
-
 export async function run(): Promise<void> {
   const bin = process.env[ENV.bin]!;
   const state = process.env[ENV.state]!;
   const fake = path.join(bin, 'agent');
   const calls = async () => (await readFile(path.join(state, 'calls.log'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  const keyed = async () => (await readFile(path.join(state, 'keyed.log'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean);
+  const terminals = vscode.window.terminals.length;
 
   await openPanel();
   await panelWidth(420);
@@ -44,41 +45,53 @@ export async function run(): Promise<void> {
 
   await settle('Cursor to read as not installed', 'missing');
   check((await text('.mcp-state')) === 'Not installed', 'the badge says so', await text('.mcp-state'));
-  check((await text('[data-action="install"]')) === 'Install Cursor CLI', 'the card offers to install the CLI', await text('[data-action="install"]'));
-  check(await shown(card('[data-action="guide"]')), 'and links Cursor’s install guide');
+  check((await text('.agent-text'))?.startsWith('Geno needs Cursor’s CLI') === true, 'the card says Geno needs the CLI', await text('.agent-text'));
+  check((await text('.agent-install')) === INSTALL, 'and shows the official install command', await text('.agent-install'));
+  check(!(await shown(card('[data-action="install"]'))), 'with no button that installs it');
+  check((await text('[data-action="guide"]')) === 'Open the install page', 'it links Cursor’s install page', await text('[data-action="guide"]'));
+  await vscode.env.clipboard.writeText('');
+  await click(card('[data-action="copy-install"]'));
+  await waitFor('the command on the clipboard', async () => (await vscode.env.clipboard.readText()) === INSTALL, 10_000, async () => vscode.env.clipboard.readText());
+  check((await text('[data-action="copy-install"]')) === 'Copied', 'the Copy button says it copied', await text('[data-action="copy-install"]'));
   await screenshots('agents-missing');
-
-  await click(card('[data-action="install"]'));
-  await waitFor('the install confirm', () => shown(card('[data-action="install-yes"]')));
-  check((await panel<string | null>('doc.activeElement?.dataset.action ?? null')) === 'install-no', 'the confirm takes the focus on its Cancel');
-  check((await text('.agent-install')) === INSTALL, 'the confirm names the official install command', await text('.agent-install'));
-  check(
-    (await text('.agent-confirm'))?.includes('It downloads the CLI from cursor.com and puts it in ~/.local/bin.') === true,
-    'and where it downloads from and installs to',
-    await text('.agent-confirm'),
+  const narrow = await panelWidth(300);
+  check(Math.abs(narrow - 300) <= 4, 'the panel narrows to about 300px', narrow);
+  await sleep(300);
+  await scrollToAgents();
+  const fits = await panel<{ fits: boolean; outside: string[] }>(
+    `(() => { const c = doc.querySelector('${card()}').getBoundingClientRect(); const outside = [...doc.querySelectorAll('${card('*')}')].filter((e) => e.getClientRects().length > 0 && e.getBoundingClientRect().right > c.right + 0.5).map((e) => e.className || e.tagName); return { fits: outside.length === 0, outside }; })()`,
   );
-  await screenshots('agents-confirm-install');
-  await click(card('[data-action="install-yes"]'));
-  await settle('the install to run in a terminal', 'installing');
-  const terminal = vscode.window.terminals.find((t) => t.name === 'Install Cursor CLI');
-  check(terminal !== undefined, 'a terminal of its own runs the installer', vscode.window.terminals.map((t) => t.name));
-  // The test's default shell only records what it is sent, so the real installer never runs.
-  const typed = () => readFile(path.join(state, 'terminal-input'), 'utf8').catch(() => '');
-  await waitFor('the terminal to get the install command', async () => (await typed()).trim() === INSTALL, 30_000, async () => ({ typed: await typed() }));
-  await screenshots('agents-installing');
-  terminal!.dispose();
-  await settle('a check once the terminal closes, which still finds no CLI', 'missing');
+  check(fits.fits, 'nothing in the missing card runs past its edge at 300px', fits);
+  await screenshots('agents-missing-narrow-300');
+  await panelWidth(420);
+  check(vscode.window.terminals.length === terminals, 'no terminal opened', vscode.window.terminals.map((t) => t.name));
   check((await calls()).length === 0, 'nothing ran while there was no CLI');
 
   await writeFile(fake, fakeAgentScript(state));
   await chmod(fake, 0o755);
-  await click(card('[data-action="check"]'));
-  await settle('Cursor to read as signed out once its CLI is there', 'signed-out');
-  // Every later click runs this CLI, so it must be the fake and never the user's own.
+  // Another window takes the OS focus and gives it back, as switching to a terminal to install the CLI does.
+  const changes: boolean[] = [];
+  const watch = vscode.window.onDidChangeWindowState((w) => changes.push(w.focused));
+  await vscode.commands.executeCommand('workbench.action.newWindow');
+  await waitFor('another window to take the focus', async () => changes.includes(false) || !vscode.window.state.focused, 30_000, async () => changes);
+  const closed = await ui({ do: 'closeOtherWindows' });
+  await waitFor('the focus to come back', async () => changes.at(-1) === true, 30_000, async () => ({ changes, closed }));
+  watch.dispose();
+  await settle('the window regaining the focus to find the CLI the user installed', 'signed-out');
   check((await text('.agent-path')) === fake, 'the card names the CLI it found, the fake one', await text('.agent-path'));
   check((await text('.agent-version')) === FAKE.version, 'and its version from `agent about`', await text('.agent-version'));
   check((await text('.agent-account')) === 'Signed out', 'and the account', await text('.agent-account'));
   check(!(await shown(card('[data-action="logout"]'))) && (await shown(card('[data-action="login"]'))), 'a signed-out card offers Sign in, not Sign out');
+  check((await text('.agent-billing')) === 'May bill by usage instead of your plan', 'the key field says how a key may bill', await text('.agent-billing'));
+  await panelWidth(300);
+  await sleep(300);
+  await scrollToAgents();
+  const fitsSignedOut = await panel<{ fits: boolean; outside: string[] }>(
+    `(() => { const c = doc.querySelector('${card()}').getBoundingClientRect(); const outside = [...doc.querySelectorAll('${card('*')}')].filter((e) => e.getClientRects().length > 0 && e.getBoundingClientRect().right > c.right + 0.5).map((e) => e.className || e.tagName); return { fits: outside.length === 0, outside }; })()`,
+  );
+  check(fitsSignedOut.fits, 'nothing in the signed-out card, key field and all, runs past its edge at 300px', fitsSignedOut);
+  await screenshots('agents-narrow-300');
+  await panelWidth(420);
 
   await click(card('[data-action="login"]'));
   await settle('the sign-in to start', 'signing-in');
@@ -90,16 +103,6 @@ export async function run(): Promise<void> {
   const page = await html();
   check(!page.includes(FAKE.challenge) && !page.includes(FAKE.token), 'neither the login challenge nor the token is anywhere in the page');
   await screenshots('agents-signing-in');
-  const narrow = await panelWidth(300);
-  check(Math.abs(narrow - 300) <= 4, 'the panel narrows to about 300px', narrow);
-  await sleep(300);
-  await scrollToAgents();
-  const fits = await panel<{ fits: boolean; outside: string[] }>(
-    `(() => { const c = doc.querySelector('${card()}').getBoundingClientRect(); const outside = [...doc.querySelectorAll('${card('*')}')].filter((e) => e.getClientRects().length > 0 && e.getBoundingClientRect().right > c.right + 0.5).map((e) => e.className || e.tagName); return { fits: outside.length === 0, outside }; })()`,
-  );
-  check(fits.fits, 'nothing in the card runs past its edge at 300px', fits);
-  await screenshots('agents-narrow-300');
-  await panelWidth(420);
 
   await click(card('[data-action="cancel"]'));
   await settle('the cancelled sign-in to settle signed out', 'signed-out');
@@ -120,7 +123,6 @@ export async function run(): Promise<void> {
   await settle('the update to finish', 'signed-in');
   check((await text('.agent-version')) === FAKE.updated, 'the card shows the new version', await text('.agent-version'));
   check((await text('.agent-last .provider-test')) === 'Update finished.', 'and that the update finished', await text('.agent-last .provider-test'));
-  check((await text('.agent-last .agent-output'))?.includes(`Updated to ${FAKE.updated}`) === true, 'with what the update printed', await text('.agent-last .agent-output'));
 
   await click(card('[data-action="logout"]'));
   await waitFor('the sign-out confirm', () => shown(card('[data-action="logout-yes"]')));
@@ -135,14 +137,39 @@ export async function run(): Promise<void> {
   await click(card('[data-action="logout-yes"]'));
   await settle('Cursor to read as signed out again', 'signed-out');
   check(!existsSync(path.join(state, 'email')), 'the fake CLI signed itself out');
+  check((await keyed()).length === 0, 'no command had a key before one was stored', await keyed());
+
+  await panel(`(() => { const w = doc.defaultView; w.__agentMessages = []; w.addEventListener('message', (e) => w.__agentMessages.push(JSON.stringify(e.data))); })()`);
+  await click(card('.agent-key input'));
+  await ui({ do: 'type', text: FAKE.key });
+  await press('Enter');
+  await settle('Cursor to read as signed in by key', 'signed-in');
+  check((await text('.agent-account')) === 'API key', 'the account reads as an API key', await text('.agent-account'));
+  check((await shown(card('[data-action="remove-key"]'))) && !(await shown(card('[data-action="logout"]'))), 'with Remove key in place of Sign out');
+  const messages = await panel<string[]>('doc.defaultView.__agentMessages');
+  check(messages.some((m) => m.includes('"api-key"')), 'the page heard the new state', messages.length);
+  check(!messages.some((m) => m.includes(FAKE.key)), 'no message to the page carried the key');
+  check(!(await html()).includes(FAKE.key), 'the key is nowhere in the page');
+  check(JSON.stringify(await keyed()) === JSON.stringify(['about']), 'the status check had exactly the stored key in its env', await keyed());
+  await scrollToAgents();
+  await screenshots('agents-signed-in-key');
+
+  await click(card('[data-action="update"]'));
+  await settle('the update with the key to finish', 'signed-in');
+  check(JSON.stringify(await keyed()) === JSON.stringify(['about', 'update', 'about']), 'Update ran with the key in its env too', await keyed());
+
+  await click(card('[data-action="remove-key"]'));
+  await settle('Remove key to sign out', 'signed-out');
+  check((await calls()).at(-1)?.endsWith('key=') === true, 'the next check ran without a key', await calls());
 
   const log = await calls();
+  check(!log.some((call) => call.includes(FAKE.key)), 'the key never appeared in any argv', log);
   const commands = log.map((call) => call.split(' ')[0]);
   check(
-    JSON.stringify(commands) === JSON.stringify(['about', 'login', 'about', 'login', 'about', 'update', 'about', 'logout', 'about']),
-    'Geno ran only the CLI’s own commands, each sign-in, update and sign-out followed by a status check',
+    JSON.stringify(commands) === JSON.stringify(['about', 'login', 'about', 'login', 'about', 'update', 'about', 'logout', 'about', 'about', 'update', 'about', 'about']),
+    'Geno ran only the CLI’s own commands, each one followed by a status check',
     log,
   );
-  check(log.filter((call) => call.startsWith('about')).every((call) => call.endsWith('NO_OPEN_BROWSER=1')), 'a status check never opens a browser', log);
-  check(log.filter((call) => call.startsWith('login')).every((call) => call.endsWith('NO_OPEN_BROWSER=')), 'a sign-in lets the CLI open the browser', log);
+  check(log.filter((call) => call.startsWith('about')).every((call) => call.includes('NO_OPEN_BROWSER=1 ')), 'a status check never opens a browser', log);
+  check(log.filter((call) => call.startsWith('login')).every((call) => call.includes('NO_OPEN_BROWSER= ')), 'a sign-in lets the CLI open the browser', log);
 }

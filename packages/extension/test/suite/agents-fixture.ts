@@ -8,6 +8,8 @@ export const FAKE = {
   /** Printed in the sign-in address's query and as a token line; neither may reach the page. */
   challenge: 'challenge-canary-7f3a9c',
   token: 'tok-canary-b81e44d0',
+  /** The API key the suite types in; it may reach only the fake's env. */
+  key: 'crsr-key-canary-3e9a71c2',
 } as const;
 
 /** Environment the launcher gives the extension host. */
@@ -22,12 +24,14 @@ export const THEMES = { dark: 'Default Dark Modern', light: 'Default Light Moder
 
 /**
  * A stand-in for the Cursor CLI. `about` prints the recorded table of the real one, `login` prints an address and
- * waits for `go`, and every call is logged with whether NO_OPEN_BROWSER was set.
+ * waits for `go`, and every call is logged with its arguments, whether NO_OPEN_BROWSER was set, and whether an API
+ * key was in its env. It logs the key's presence, never the key.
  */
 export function fakeAgentScript(state: string): string {
   return `#!/bin/sh
 S='${state}'
-echo "$* NO_OPEN_BROWSER=\${NO_OPEN_BROWSER:-}" >> "$S/calls.log"
+echo "$* NO_OPEN_BROWSER=\${NO_OPEN_BROWSER:-} key=\${CURSOR_API_KEY:+present}" >> "$S/calls.log"
+[ "\${CURSOR_API_KEY:-}" = '${FAKE.key}' ] && echo "$1" >> "$S/keyed.log"
 version=$(cat "$S/version")
 case "$1" in
   about)
