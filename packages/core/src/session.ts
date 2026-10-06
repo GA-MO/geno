@@ -25,7 +25,7 @@ import type { WaitEvent } from './waiting.js';
 import { wakeNoteText, type WakeEvent, type WakeTrigger } from './wake.js';
 import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
-import type { PartRun } from './breakdown.js';
+import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
