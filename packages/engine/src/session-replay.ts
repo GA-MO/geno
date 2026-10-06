@@ -65,6 +65,8 @@ export const TOOL_KINDS: Readonly<Record<string, acp.ToolKind>> = {
   edit: 'edit',
   bash: 'execute',
   check: 'execute',
+  web_fetch: 'fetch',
+  web_search: 'fetch',
 };
 
 export const TOOL_STATUS: Readonly<Record<ToolStatus, acp.ToolCallStatus>> = { ok: 'completed', error: 'failed', denied: 'failed' };

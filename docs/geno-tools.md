@@ -25,7 +25,8 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | Wait for a notice (`Monitor`) | `monitor` with a `pattern` and either a `command` to start in the background or the `background_job_id` of one `bash` already started. It returns at once. End your turn, and Geno starts your next turn with the matching line, the command's end, or the timeout. Not available in Plan mode. |
 | Schedule a wakeup (`ScheduleWakeup`, `/loop`) | `schedule_wakeup` with `delay_s` and a one-line `reason`. It returns at once. End your turn, and Geno starts your next turn with the reason after the delay. For a `/loop`, schedule the next wakeup at the end of each pass. Not available in Plan mode. |
 | `gh`, `git push`, a pull request, CI logs | Not available, because the sandbox has no network. Do the local part. Then give the user the exact command to run. |
-| Fetch a URL or search the web (`WebFetch`, `WebSearch`, `curl`) | Not available, because the sandbox has no network. An MCP server that the user configured can give network access. Its tools are named `mcp__<server>__<tool>`. |
+| Fetch a URL (`WebFetch`) | `web_fetch` with `{ "url": "https://…", "question": "…" }`. A helper model reads the page and returns its answer with the page's title and final URL. A page on another host can need the user's approval. `curl` in `bash` does not work, because the sandbox has no network. |
+| Search the web (`WebSearch`) | `web_search` with `{ "query": "…" }`, which returns titles, URLs and snippets. It exists only when the user set a Brave Search key in Settings under Providers. Without it, search is not available. |
 | Read Claude Code transcripts (`~/.claude/projects/`) | Not available. Geno cannot read them. |
 | Install a package | Not available. The dependencies are already installed. |
 

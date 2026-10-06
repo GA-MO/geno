@@ -18,9 +18,11 @@ import {
   pstackNote,
   renderMemory,
   toolRoster,
+  searchConfigOf,
   sessionModeOf,
   userToolDefinitions,
   WIDGET_TOOL,
+  webToolDefinitions,
   widgetToolDefinitions,
   type AssistantTurn,
   type EffortPolicy,
@@ -53,6 +55,7 @@ import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
+import { webExecutors, type WebDeps } from './tools/web.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
@@ -118,6 +121,8 @@ export type AgentOptions = {
    * when it ends, as a CLI run's process ends with it.
    */
   readonly engine?: RunEngine | undefined;
+  /** Replaces how web_fetch resolves hosts and web_search reaches its provider, and hears each helper call; for tests and smokes. */
+  readonly web?: Pick<WebDeps, 'resolve' | 'searchFetch' | 'onRead'> | undefined;
 };
 
 export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers; readonly wakes?: RunWakes | undefined };
@@ -196,11 +201,14 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const user = userExecutors({ channel, mode: () => modeOf(options.approval), memory, sessionId: session.id });
     const widgets = options.approval.kind === 'interactive' && options.widgets === true;
     const editor = options.approval.kind === 'interactive' ? options.editor : undefined;
+    const search = searchConfigOf(io.env);
+    const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
       ...AGENT_MODE_TOOL_DEFINITIONS[startMode],
       ...userToolDefinitions(startMode, shownUserTools(channel)),
       ...widgetToolDefinitions(startMode, widgets),
       ...editorActionToolDefinitions(startMode, editor !== undefined),
+      ...webToolDefinitions(search !== undefined),
     ];
     const notes = renderMemory(await memory.list());
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
@@ -245,6 +253,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...user,
         ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
         ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
+        ...web,
         ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
         ...executors,
