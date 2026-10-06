@@ -1,3 +1,4 @@
+import { EXTERNAL_BACKENDS, type ExternalBackendId } from './backends.js';
 import type { Hunk } from './hunks.js';
 import type { FileChange } from './review.js';
 import type { Effort } from './session.js';
@@ -27,8 +28,8 @@ export type SeedId = keyof typeof SEEDS;
 export const SEED_IDS = Object.keys(SEEDS) as SeedId[];
 export const isSeedId = (raw: string): raw is SeedId => Object.hasOwn(SEEDS, raw);
 
-/** One lane's variant. A null model or effort runs the lane on the session's own. */
-export type VariantSpec = { readonly seed: SeedId; readonly model: string | null; readonly effort: Effort | null };
+/** One lane's variant. A null model or effort runs the lane on the session's own; a backend runs it on that external agent. */
+export type VariantSpec = { readonly seed: SeedId; readonly model: string | null; readonly effort: Effort | null; readonly backend?: ExternalBackendId | undefined };
 
 /** Where the lanes' variety comes from when the workspace lists no variants of its own. */
 export const VARIETIES = ['seeds', 'effort', 'models'] as const;
@@ -51,8 +52,14 @@ export function variantsFor(n: ArenaSize, variety: Variety, models: readonly str
 }
 
 /** A variant in a few words, such as "Minimal change", "high effort" or "qwen3.7-plus · Test first". */
-export function variantLabel({ seed, model, effort }: VariantSpec): string {
-  const parts = [...(model === null ? [] : [model]), ...(effort === null ? [] : [`${effort} effort`]), ...(seed === 'plain' && (model !== null || effort !== null) ? [] : [SEEDS[seed].label])];
+export function variantLabel({ seed, model, effort, backend }: VariantSpec): string {
+  const named = model !== null || effort !== null || backend !== undefined;
+  const parts = [
+    ...(backend === undefined ? [] : [EXTERNAL_BACKENDS[backend].label]),
+    ...(model === null ? [] : [model]),
+    ...(effort === null ? [] : [`${effort} effort`]),
+    ...(seed === 'plain' && named ? [] : [SEEDS[seed].label]),
+  ];
   return parts.join(' · ');
 }
 

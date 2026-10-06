@@ -44,3 +44,4 @@ export * from './tasks.js';
 export * from './waiting.js';
 export * from './arena.js';
 export * from './backends.js';
+export * from './backend-permissions.js';

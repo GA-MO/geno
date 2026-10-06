@@ -996,6 +996,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 mcp: await mcp.toolset(sessionId, approval),
                 user: shown.user,
                 widgets: from.peer.widgets,
+                externals,
+                keyOf: keyOf(sessionId),
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,
@@ -1026,8 +1028,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
 
   /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
   const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec) => {
-    const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined });
-    const { id } = opened.log.session;
+    const log =
+      variant?.backend !== undefined
+        ? await startExternalSession(store, io, lane.path, { id: variant.backend })
+        : (await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined })).log;
+    const { id } = log.session;
     // Bound now, so the Lanes pane names the task from the first update on.
     const bound = await laneAt(lane.path, undefined);
     if (bound !== undefined) await bindSession(bound, id);
@@ -1035,6 +1040,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     turns.set(id, undefined);
     modes.set(id, mode);
     if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
+    if (variant?.backend !== undefined && variant.model !== null) await logSetting(id, { kind: 'backend-model', model: variant.model });
     mcp.register(id, lane.path, [], undefined);
     io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
     const turn = runTurn(id, [{ type: 'text', text: prompt }], undefined, self());

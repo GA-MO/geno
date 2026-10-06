@@ -30,6 +30,12 @@ const parsed = (fields: Record<string, string | string[]>, body = 'Look around.'
 };
 
 describe('parseAgentDefinition', () => {
+  it('reads backend: cursor, takes geno as no backend, and notes an unknown one', () => {
+    expect(parsed({ description: 'Hard work.', backend: 'cursor' }).agent.backend).toBe('cursor');
+    expect(parsed({ description: 'Ours.', backend: 'geno' })).toMatchObject({ agent: { backend: undefined }, notes: [] });
+    expect(parsed({ description: 'Theirs.', backend: 'devin' })).toMatchObject({ agent: { backend: undefined }, notes: ['backend devin is not one of geno, cursor, claude-code'] });
+  });
+
   it("maps Claude Code's tool names to Geno's and keeps every field Geno uses", () => {
     const { agent, notes } = parsed({
       name: 'scout',
@@ -101,6 +107,8 @@ describe('mergeAgents', () => {
     const mine: AgentDefinition = { ...builtin('explore'), source: 'workspace', path: '.claude/agents/explore.md', description: 'Mine.' };
     const merged = mergeAgents([[mine], BUILTIN_AGENTS]);
     expect(merged.map((a) => [a.name, a.source])).toEqual([
+      ['claude-code', 'builtin'],
+      ['cursor', 'builtin'],
       ['explore', 'workspace'],
       ['plan', 'builtin'],
       ['review', 'builtin'],
@@ -110,12 +118,14 @@ describe('mergeAgents', () => {
 });
 
 describe('the built-ins', () => {
-  it('make explore, plan and review read-only, and worker a writer', () => {
-    expect(BUILTIN_AGENTS.map((a) => [a.name, isReadOnly(a)])).toEqual([
-      ['explore', true],
-      ['plan', true],
-      ['review', true],
-      ['worker', false],
+  it('make explore, plan and review read-only, and worker and the external agents writers', () => {
+    expect(BUILTIN_AGENTS.map((a) => [a.name, isReadOnly(a), a.backend])).toEqual([
+      ['explore', true, undefined],
+      ['plan', true, undefined],
+      ['review', true, undefined],
+      ['worker', false, undefined],
+      ['cursor', false, 'cursor'],
+      ['claude-code', false, 'claude-code'],
     ]);
     expect(builtin('explore')).toMatchObject({ effort: 'low', maxTurns: 4, tools: ['glob', 'grep', 'list', 'read'] });
     expect(builtin('explore').prompt).toContain('path:line');
@@ -202,7 +212,7 @@ describe('agentToolDefinition', () => {
   it('lists the agents by name, marking the read-only ones', () => {
     const tool = agentToolDefinition(BUILTIN_AGENTS);
     expect(tool.name).toBe('agent');
-    expect((tool.input_schema.properties as { agent: { enum: string[] } }).agent.enum).toEqual(['explore', 'plan', 'review', 'worker']);
+    expect((tool.input_schema.properties as { agent: { enum: string[] } }).agent.enum).toEqual(['explore', 'plan', 'review', 'worker', 'cursor', 'claude-code']);
     expect(tool.description).toContain('- explore: Fast read-only search.');
     expect(tool.description).toMatch(/- review: .*\(read-only\)/);
     expect(tool.description).not.toMatch(/- worker: .*\(read-only\)/);
