@@ -707,6 +707,8 @@ export function engineShared(io: Io) {
     steers: new Steers(),
     // Each running turn's end, which a steer that missed the turn waits for before it runs as the next one.
     turnEnds: new Map<string, Promise<void>>(),
+    // Each session's steers that missed their turn, run one turn after another in the order they came.
+    nextTurns: new Map<string, Promise<unknown>>(),
   };
 }
 
@@ -753,7 +755,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, steers, turnEnds } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, steers, turnEnds, nextTurns } = shared;
   const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -959,9 +961,17 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const steer = async (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
     const outcome = await steerRunning(steers, params.sessionId, params.prompt);
     if (outcome.kind === 'delivered') return { stopReason: 'end_turn', _meta: { [STEER_META]: outcome } };
-    await turnEnds.get(params.sessionId);
+    const { sessionId } = params;
     const { [STEER_META]: _, ...meta } = params._meta ?? {};
-    const response = await prompt({ ...params, _meta: meta });
+    const turn = (nextTurns.get(sessionId) ?? Promise.resolve())
+      .then(() => turnEnds.get(sessionId))
+      .then(() => prompt({ ...params, _meta: meta }));
+    const queued = turn.catch(() => {});
+    nextTurns.set(sessionId, queued);
+    void queued.then(() => {
+      if (nextTurns.get(sessionId) === queued) nextTurns.delete(sessionId);
+    });
+    const response = await turn;
     return { ...response, _meta: { ...response._meta, [STEER_META]: outcome } };
   };
 

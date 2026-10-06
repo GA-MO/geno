@@ -280,6 +280,42 @@ describe('gcode serve: steering a running turn', () => {
     expect(model.requests('[parent]')).toHaveLength(2);
   });
 
+  it('runs two steers that missed the turn as two turns, one after the other, and Stop still reaches the second', async () => {
+    const finish = gate();
+    const model = models({
+      '[parent]': (n) =>
+        n === 0
+          ? { reply: answer('alpha is 1.', usage), holdAfter: 6, until: finish.opened }
+          : n === 1
+            ? { reply: answer('answer 1', usage) }
+            : { reply: { ...answer('answer 2', usage), stallAfter: 3 } },
+    });
+    const { log, result } = await serve(
+      model.fetch,
+      async () => {},
+      async (editor) => {
+        const order: string[] = [];
+        const turn = editor.prompt('[parent] what is alpha?').then((r) => (order.push('turn'), r));
+        await within(model.arrived('[parent]', 0), 'the first model call');
+        const first = editor.steer('and beta?').then((r) => (order.push('first'), r));
+        const second = editor.steer('and gamma?').then((r) => (order.push('second'), r));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        finish.open();
+        await within(model.arrived('[parent]', 2), "the second steer's turn to call the model");
+        await editor.ctx.notify(acp.methods.agent.session.cancel, { sessionId: editor.sessionId });
+        await within(Promise.all([turn, first, second]), 'all three turns to end, the last one stopped');
+        return { order, outcomes: [outcomeOf(await first), outcomeOf(await second)], stopped: (await second).stopReason };
+      },
+    );
+
+    expect(result.order).toEqual(['turn', 'first', 'second']);
+    expect(result.outcomes).toEqual([{ kind: 'next-turn' }, { kind: 'next-turn' }]);
+    expect(result.stopped, "Stop reaches the second steer's turn").toBe('cancelled');
+    expect(kinds(log.events)).toEqual(['user', 'checkpoint', 'assistant', 'user', 'checkpoint', 'assistant', 'user', 'checkpoint', 'error']);
+    const third = model.requests('[parent]')[2]!;
+    expect(JSON.stringify(third.messages.at(-2)), 'the second steer ran after the first turn it started had its answer').toContain('answer 1');
+  });
+
   it('message_agent steers a running background child: its next request carries the fenced message', async () => {
     const steered = gate();
     const parentWaits = gate();
