@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
@@ -30,12 +30,13 @@ const asModel = (reply: Reply): Reply => ({
 
 const replies: readonly Reply[] = [
   asModel(answer('I can reach the user server.', usage)),
+  asModel(toolCall('', [loadTools(`mcp__${USER_SERVER}__echo`)], usage)),
   asModel(toolCall('Echoing.', [{ id: 'tu_echo', name: `mcp__${USER_SERVER}__echo`, input: { text: 'hi' } }], usage)),
   asModel(answer('It said hi back.', usage)),
 ];
 
 const requests: { tools: { name: string }[]; messages: unknown[] }[] = [];
-const toolNames = (index: number) => requests[index]!.tools.map((t) => t.name);
+const toolNames = (index: number) => offeredTools(requests[index]!);
 const shots = process.env['GCODE_SCREENSHOTS'];
 let debugPort = 0;
 let window: Window | undefined;
@@ -130,6 +131,6 @@ describe('MCP servers in the chat panel', () => {
     expect(toolNames(0)).toContain(`mcp__${USER_SERVER}__echo`);
     expect(toolNames(0).filter((name) => name.startsWith(`mcp__${WORKSPACE_SERVER}__`)), 'the model never saw the workspace server before Allow').toEqual([]);
     expect(toolNames(1), 'once allowed, its tools join the next turn').toContain(`mcp__${WORKSPACE_SERVER}__echo`);
-    expect(JSON.stringify(requests[2]!.messages)).toContain('echo: hi');
+    expect(JSON.stringify(requests[3]!.messages)).toContain('echo: hi');
   }, 600_000);
 });

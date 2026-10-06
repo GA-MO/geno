@@ -7,6 +7,7 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | pstack / Claude Code action | Geno equivalent |
 |---|---|
 | Invoke a skill (the `Skill` tool, or a `/command` such as `/pstack:how`) | The `skill` tool with `{ "name": "pstack:how" }`. It returns the SKILL.md body and the skill's folder. Resolve each relative path in the skill against that folder. A skill the user typed as a slash command is already attached to the message, so do not load it again. |
+| Load a deferred tool (`ToolSearch`) | `tool_search` with `{ "select": ["<name>"] }` or `{ "query": "<words>" }`. Tools listed by name only in its description must be loaded once before their first call; they then stay callable for the session. |
 | Read a file | `read`. A file in a skill's folder needs its absolute path, for example `<folder>/references/notes.md`. |
 | Edit a file | `edit`. It replaces one exact text that occurs once in the file. Read the file first. |
 | Create a file | `edit` with `create: true` and the whole content as `new_str`. |

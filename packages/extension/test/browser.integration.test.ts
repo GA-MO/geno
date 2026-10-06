@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
@@ -24,6 +24,7 @@ const asModel = (reply: Reply): Reply => ({
 
 let pageUrl = '';
 const replies = (): readonly Reply[] => [
+  asModel(toolCall('Loading the browser tools.', [loadTools('mcp__browser__new_page', 'mcp__browser__take_screenshot')], usage)),
   asModel(toolCall('Opening the page.', [{ id: 'tu_open', name: 'mcp__browser__new_page', input: { url: pageUrl } }], usage)),
   asModel(toolCall('Taking a look.', [{ id: 'tu_shot', name: 'mcp__browser__take_screenshot', input: { pageId: 2 } }], usage)),
   asModel(answer(`The heading says "${HEADING}".`, usage)),
@@ -115,8 +116,8 @@ describe('the browser in the chat panel', () => {
       },
     });
     expect(code).toBe(0);
-    expect(requests).toHaveLength(3);
-    expect(requests[0]!.tools.map((t) => t.name)).toContain('mcp__browser__new_page');
-    expect(JSON.stringify(requests[2]!.messages)).toMatch(/"type":"image","source":\{"type":"base64","media_type":"image\/png"/);
+    expect(requests).toHaveLength(4);
+    expect(offeredTools(requests[0]!)).toContain('mcp__browser__new_page');
+    expect(JSON.stringify(requests[3]!.messages)).toMatch(/"type":"image","source":\{"type":"base64","media_type":"image\/png"/);
   }, 600_000);
 });

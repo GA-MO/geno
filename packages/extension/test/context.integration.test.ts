@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
@@ -19,6 +19,7 @@ const asModel = (reply: Reply): Reply => ({
 });
 
 const replies: readonly Reply[] = [
+  asModel(toolCall('', [loadTools('remember')], usage)),
   asModel(toolCall('I will remember that.', [{ id: 'tu_remember', name: 'remember', input: { text: NOTE, scope: 'project' } }], usage)),
   asModel(answer('Noted.', usage)),
   asModel(toolCall('One question first.', [{ id: 'tu_ask', name: 'ask_user', input: QUESTION }], usage)),
@@ -109,11 +110,11 @@ describe('rules, memory and questions in the chat panel', () => {
     });
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
-    const names = (i: number) => requests[i]!.tools.map((t) => t.name);
+    const names = (i: number) => offeredTools(requests[i]!);
     expect(names(0), 'the panel shows both cards, so Ask offers both tools').toEqual(expect.arrayContaining(['ask_user', 'remember']));
-    expect(JSON.stringify(requests[1]!.messages)).toContain('Saved to project memory.');
+    expect(JSON.stringify(requests[2]!.messages)).toContain('Saved to project memory.');
     expect(requests[0]!.system[0]!.text).not.toContain(NOTE);
-    expect(requests[2]!.system[0]!.text, 'the approved note is in the next prompt').toContain(`<note scope="project">${NOTE}</note>`);
-    expect(JSON.stringify(requests[3]!.messages)).toContain(`The user answered: ${ANSWER}`);
+    expect(requests[3]!.system[0]!.text, 'the approved note is in the next prompt').toContain(`<note scope="project">${NOTE}</note>`);
+    expect(JSON.stringify(requests[4]!.messages)).toContain(`The user answered: ${ANSWER}`);
   }, 600_000);
 });
