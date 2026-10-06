@@ -152,7 +152,7 @@ describe('an external ACP agent as a backend', () => {
     const agent = await t.open();
     const started = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [], _meta: { [BACKEND_META]: { id: 'cursor' } } });
     const chat = started.sessionId;
-    expect(started._meta?.[BACKEND_META]).toEqual({ id: 'cursor', label: 'Cursor', plan: 'Cursor plan' });
+    expect(started._meta?.[BACKEND_META]).toEqual({ id: 'cursor', label: 'Cursor', plan: 'Cursor plan', lane: null });
     expect(started.modes?.availableModes.map((m) => m.id)).toEqual(['plan', 'ask', 'auto']);
     expect(started.configOptions).toEqual([
       expect.objectContaining({ id: 'model', category: 'model', currentValue: 'default[]', options: [expect.objectContaining({ value: 'default[]', name: 'Auto' }), expect.anything(), expect.anything()] }),
@@ -172,6 +172,8 @@ describe('an external ACP agent as a backend', () => {
     expect(t.shown(chat)).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: 'r1', status: 'completed', content: [{ type: 'content', content: { type: 'text', text: FILE } }] }));
     expect(text(t.shown(chat))).toBe('Looking. It counts to three.');
     expect((await t.events(chat)).find((e) => e.kind === 'backend-start')).toMatchObject({ lane: 'please-read-a-ts', sandboxed: false, loadable: false });
+    expect(t.shown(chat)).toContainEqual({ sessionUpdate: 'session_info_update', _meta: { [BACKEND_META]: { id: 'cursor', label: 'Cursor', plan: 'Cursor plan', lane: 'please-read-a-ts' } } });
+    expect(t.tasks.findLast((u) => u.task.sessionId === chat)?.task.lane).toBe('please-read-a-ts');
 
     // An edit in Ask: the user is asked with Geno's options, and the agent gets allow once.
     t.answers.push('allow');
@@ -238,7 +240,7 @@ describe('an external ACP agent as a backend', () => {
     const seen = t.shown(chat).length;
     const later = await t.open();
     const loaded = await later.request(acp.methods.agent.session.load, { sessionId: chat, cwd: t.repo, mcpServers: [] });
-    expect(loaded._meta?.[BACKEND_META]).toMatchObject({ id: 'cursor' });
+    expect(loaded._meta?.[BACKEND_META]).toEqual({ id: 'cursor', label: 'Cursor', plan: 'Cursor plan', lane: 'please-read-a-ts' });
     expect(loaded.configOptions?.[0]).toMatchObject({ currentValue: 'grok-4.7[fast=true]' });
     const replay = t.shown(chat).slice(seen);
     expect(replay).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: 'r1', title: 'read a.ts', kind: 'read' }));

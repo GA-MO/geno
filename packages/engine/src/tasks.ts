@@ -21,7 +21,7 @@ export class Tasks {
     this.put({ ...task, status: 'running', endedAt: null, usage: undefined });
   }
 
-  update(sessionId: string, patch: Partial<Pick<TaskRecord, 'title' | 'usage'>>): void {
+  update(sessionId: string, patch: Partial<Pick<TaskRecord, 'title' | 'usage' | 'lane'>>): void {
     const record = this.records.get(sessionId);
     if (record !== undefined && isLive(record.status)) this.put({ ...record, ...patch });
   }
