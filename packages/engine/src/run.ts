@@ -22,6 +22,7 @@ import { providerCommands } from './providers.js';
 import { rewind } from './rewind.js';
 import { serve } from './daemon.js';
 import { tabCommands } from './tab.js';
+import { usage } from './usage.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
@@ -32,6 +33,7 @@ export const USAGE = `usage:
   gcode commands list [--workspace <dir>]
   gcode session list [--all]
   gcode rewind --session <id> --to <turn>
+  gcode usage --session <id> [--json] [--baht-per-usd 33]
   gcode serve --stdio [--max-turns 40] [--max-cost 0.40]
   gcode serve --socket <path> [--idle-ms 10000] [--max-turns 40] [--max-cost 0.40]
   gcode lane new <name> [--from head|main] [--approve-setup] [--workspace <dir>]
@@ -192,6 +194,7 @@ const commands: Record<string, Command> = {
   serve,
   session: group({ show: showSession, list: listSessionsCommand }),
   tab: group(tabCommands),
+  usage,
 };
 
 export async function run(argv: string[], io: Io): Promise<number> {
