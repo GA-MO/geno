@@ -46,8 +46,14 @@ export const SPINOFF_LIMITS = { title: 60, tldr: 400, prompt: 8000, open: 10 } a
 
 /** Key in the client's capabilities `_meta`: true when it shows suggestions and can start them. */
 export const SPINOFF_CAPABILITY = 'gcode/spinoffs';
-/** Key in a tool_call_update's `_meta`: the Spinoff the call offered or withdrew, as it stands now. */
+/** Key in a tool_call_update's `_meta`: a SpinoffShown. */
 export const SPINOFF_META = 'gcode/spinoff';
+
+/**
+ * What the panel is told about a suggestion: the whole of it from the call that offered it, or a move by id from
+ * anywhere else, such as a dismiss_task call or the user's Start. The panel keeps the card on the offering call's step.
+ */
+export type SpinoffShown = { readonly kind: 'offer'; readonly spinoff: Spinoff } | { readonly kind: 'move'; readonly id: SpinoffId; readonly state: SpinoffState };
 /** Extension methods, sent by the panel: start a suggestion as a lane task, or dismiss it. Each answers with the Spinoff. */
 export const SPINOFF_START_METHOD = '_gcode/spinoffs/start';
 export const SPINOFF_DISMISS_METHOD = '_gcode/spinoffs/dismiss';
@@ -177,11 +183,12 @@ export function moveSpinoff(spinoff: Spinoff, move: SpinoffMove): Parsed<Spinoff
   return { ok: true, value: { ...spinoff, state: (STATE_OF[move.kind] as (move: SpinoffMove) => SpinoffState)(move) } };
 }
 
-/** The suggestion `id` names among `spinoffs`, or a problem that lists the ones there are. */
-export function spinoffNamed(spinoffs: readonly Spinoff[], id: string): Parsed<Spinoff> {
+/** The open suggestion `id` names among `spinoffs`, or why there is none: no such id, or it is settled. */
+export function openSpinoffNamed(spinoffs: readonly Spinoff[], id: string): Parsed<Spinoff> {
   const found = spinoffs.find((spinoff) => spinoff.id === id);
-  if (found !== undefined) return { ok: true, value: found };
-  return fail(spinoffs.length === 0 ? `no task ${id}; nothing was suggested in this session` : `no task ${id}; the suggested ones are ${spinoffs.map((s) => s.id).join(', ')}`);
+  if (found === undefined) return fail(spinoffs.length === 0 ? `no task ${id}; nothing was suggested in this session` : `no task ${id}; the suggested ones are ${spinoffs.map((s) => s.id).join(', ')}`);
+  const why = settledWhy(found.state);
+  return why === undefined ? { ok: true, value: found } : fail(`${found.id} cannot change: ${why}`);
 }
 
 /** The move an event makes, if any: an offer, the agent's withdrawal, or the user's decision. A refused call moves nothing. */
@@ -219,7 +226,27 @@ function parseState(raw: unknown): SpinoffState | undefined {
   return typeof raw['sessionId'] === 'string' && typeof raw['lane'] === 'string' ? { kind: 'started', sessionId: raw['sessionId'], lane: raw['lane'] } : undefined;
 }
 
-/** A Spinoff that crossed a process boundary, such as in a tool update's `_meta`, checked field by field. */
+/**
+ * What a logged spawn_task or dismiss_task result tells the panel. `now` is the session's suggestions as they stand,
+ * which a replay passes so the card shows where it ended; live, an offer is still open.
+ */
+export function spinoffShownOf(toolUseId: string, note: SpinoffNote, now: readonly Spinoff[] = []): SpinoffShown {
+  if (note.kind === 'withdrawn') return { kind: 'move', id: note.id, state: { kind: 'withdrawn' } };
+  return { kind: 'offer', spinoff: now.find((spinoff) => spinoff.id === note.offer.id) ?? { ...note.offer, toolUseId, state: { kind: 'offered' } } };
+}
+
+/** A SpinoffShown from a tool update's `_meta`, checked, since it crossed the process boundary. */
+export function parseSpinoffShown(raw: unknown): SpinoffShown | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (raw['kind'] === 'offer') {
+    const spinoff = parseSpinoff(raw['spinoff']);
+    return spinoff === undefined ? undefined : { kind: 'offer', spinoff };
+  }
+  const state = parseState(raw['state']);
+  return raw['kind'] === 'move' && typeof raw['id'] === 'string' && state !== undefined ? { kind: 'move', id: raw['id'] as SpinoffId, state } : undefined;
+}
+
+/** A Spinoff that crossed a process boundary, such as in a request's answer, checked field by field. */
 export function parseSpinoff(raw: unknown): Spinoff | undefined {
   if (!isRecord(raw)) return undefined;
   const { id, title, tldr, prompt, toolUseId } = raw;

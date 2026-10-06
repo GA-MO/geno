@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import type { ApprovalRecord, EditorAction, FileChange, ImageAttachment, TodoList, ToolName, ToolStatus, WidgetRef } from '@g-code/core';
+import type { ApprovalRecord, EditorAction, FileChange, ImageAttachment, SpinoffNote, TodoList, ToolName, ToolStatus, WidgetRef } from '@g-code/core';
 import { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -22,6 +22,7 @@ export type ToolRun = {
   readonly editorAction?: EditorAction | undefined;
   readonly todo?: TodoList | undefined;
   readonly loaded?: readonly string[] | undefined;
+  readonly spinoff?: SpinoffNote | undefined;
 };
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>

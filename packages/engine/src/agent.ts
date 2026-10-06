@@ -12,6 +12,8 @@ import {
   DEFERRED_TOOLS_NOTE,
   describeServerState,
   editorActionToolDefinitions,
+  spinoffsOf,
+  spinoffToolDefinitions,
   isSessionMode,
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
@@ -35,7 +37,7 @@ import {
   TELLS_MODEL,
   type Waiter,
 } from '@g-code/core';
-import type { OpenSession } from './chat.js';
+import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { checkCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
@@ -59,6 +61,7 @@ import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type D
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
+import { spinoffExecutors } from './tools/spinoff.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { webExecutors, type WebDeps } from './tools/web.js';
@@ -112,6 +115,8 @@ export type AgentOptions = {
   readonly terminal?: TerminalReader | undefined;
   /** Whether the editor draws widgets; a non-interactive run ignores it, having nobody to show them to. */
   readonly widgets?: boolean | undefined;
+  /** Whether the editor shows suggested tasks and starts them; a non-interactive run ignores it. */
+  readonly spinoffs?: boolean | undefined;
   /** Undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy | undefined;
   /** Where subagents show; undefined prints them on the terminal. */
@@ -217,6 +222,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const widgets = options.approval.kind === 'interactive' && options.widgets === true;
     const editor = options.approval.kind === 'interactive' ? options.editor : undefined;
     const terminal = options.approval.kind === 'interactive' ? options.terminal : undefined;
+    const spinoffs = options.approval.kind === 'interactive' && options.spinoffs === true;
     const search = searchConfigOf(io.env);
     const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
@@ -225,6 +231,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...widgetToolDefinitions(startMode, widgets),
       ...editorActionToolDefinitions(startMode, editor !== undefined),
       ...readTerminalToolDefinitions(startMode, terminal !== undefined),
+      ...spinoffToolDefinitions(startMode, spinoffs),
       ...webToolDefinitions(search !== undefined),
     ];
     const notes = renderMemory(await memory.list());
@@ -271,6 +278,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
         ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
         ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
+        ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
         ...web,
         ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),

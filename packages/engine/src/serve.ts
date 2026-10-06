@@ -11,6 +11,16 @@ import {
   DIAGNOSTICS_CAPABILITY,
   EDITOR_ACTION_METHOD,
   EDITOR_ACTIONS_CAPABILITY,
+  SPINOFF_CAPABILITY,
+  SPINOFF_DISMISS_METHOD,
+  SPINOFF_START_METHOD,
+  laneNameFor,
+  moveSpinoff,
+  openSpinoffNamed,
+  spinoffsOf,
+  type Spinoff,
+  type SpinoffDecision,
+  type SpinoffResponse,
   type EditorActionRequest,
   READ_TERMINAL_CAPABILITY,
   READ_TERMINAL_METHOD,
@@ -185,7 +195,7 @@ import {
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
-import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
+import { applyLaneTurn, idleLane, laneFor, laneInfos, takenLaneNames } from './lane-hooks.js';
 import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
 import { Tasks } from './tasks.js';
 import { backgroundShared, backgroundStopRequest, logArrivals } from './background-hooks.js';
@@ -316,9 +326,11 @@ type Peer = {
   readonly editorActions: boolean;
   /** It answers READ_TERMINAL_METHOD, so the model gets read_terminal. */
   readonly terminals: boolean;
+  /** It shows suggested tasks and starts them, so the model gets spawn_task and dismiss_task. */
+  readonly spinoffs: boolean;
 };
 
-const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false, terminals: false };
+const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false, terminals: false, spinoffs: false };
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
@@ -906,6 +918,7 @@ export type EngineShared = ReturnType<typeof engineShared>;
 const lanePrompt = z.object({ cwd: z.string(), prompt: z.string().trim().min(1), mode: z.string().optional() });
 const laneDiscardRequest = z.object({ cwd: z.string(), name: z.string().min(1), discardChanges: z.boolean() });
 const lanesRequest = z.object({ cwd: z.string() });
+const spinoffRequest = z.object({ sessionId: z.string(), id: z.string().min(1), mode: z.string().optional() });
 const arenaSizeOf = (n: number, params: unknown): 2 | 3 | 4 => {
   if (!isArenaSize(n)) throw acp.RequestError.invalidParams(params, `best-of-n runs 2 to 4 lanes, not ${n}`);
   return n;
@@ -1044,6 +1057,23 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     throw error;
   };
   const laneRepo = async (cwd: string) => laneRepoOf(await workspaceDir(io.cwd, cwd)).catch(refused({ cwd }));
+  /** Suggestions being started, by session and id, so a second click does not start a second lane. */
+  const startingSpinoffs = new Set<string>();
+  /** The suggestion `id` of the session as its log has it, still open, with the session's workspace. */
+  const openSpinoff = async (sessionId: string, id: string): Promise<Spinoff & { readonly workspace: string }> => {
+    const log = await existing(sessionId);
+    const open = openSpinoffNamed(spinoffsOf(log.events), id);
+    if (!open.ok) throw acp.RequestError.invalidParams({ sessionId, id }, open.problem);
+    return { ...open.value, workspace: log.session.workspace };
+  };
+  const decideSpinoff = async (sessionId: string, { workspace: _, ...spinoff }: Spinoff & { readonly workspace: string }, decision: SpinoffDecision): Promise<Spinoff> => {
+    const moved = moveSpinoff(spinoff, decision);
+    if (!moved.ok) throw acp.RequestError.invalidParams({ sessionId, id: spinoff.id }, moved.problem);
+    const change = { kind: 'spinoff', id: spinoff.id, decision } as const;
+    // Logged at once, turn or no turn, so the next request reads it; only a torn tail waits for the log's next writer.
+    if (!(await logBesideTurn(await existing(sessionId), change))) await logSetting(sessionId, change);
+    return moved.value;
+  };
   const runningMeta = (sessionId: string) => (turns.get(sessionId) !== undefined ? { _meta: { [RUNNING_META]: true } } : {});
   /** The user's key for an agent, from the window showing the session, or from `asking` before one shows it. */
   const keyOf =
@@ -1212,6 +1242,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 mcp: await mcp.toolset(sessionId, approval),
                 user: shown.user,
                 widgets: from.peer.widgets,
+                spinoffs: from.peer.spinoffs,
                 editor,
                 terminal,
                 externals,
@@ -1290,13 +1321,17 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return { ...response, _meta: { ...response._meta, [STEER_META]: outcome } };
   };
 
-  /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
-  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec, parent?: string) => {
+  /**
+   * A new session in `lane` running `prompt` in the background, as Run in a new lane, each Arena lane and a started
+   * suggestion start one. A `title` names it before its first prompt, so its task shows that title from the start.
+   */
+  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec, parent?: string, title?: string) => {
     const log =
       variant?.backend !== undefined
         ? await startExternalSession(store, io, lane.path, { id: variant.backend })
         : (await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined })).log;
     const { id } = log.session;
+    if (title !== undefined) await renameSession(store, io, id, title);
     // Bound now, so the Lanes pane names the task from the first update on.
     const bound = await laneAt(lane.path, undefined);
     if (bound !== undefined) await bindSession(bound, id);
@@ -1401,6 +1436,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         backendEnv: _meta?.[BACKEND_ENV_CAPABILITY] === true,
         editorActions: _meta?.[EDITOR_ACTIONS_CAPABILITY] === true,
         terminals: _meta?.[READ_TERMINAL_CAPABILITY] === true,
+        spinoffs: _meta?.[SPINOFF_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -1612,6 +1648,24 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { id } = await startLaneSession(lane, params.prompt, params.mode);
       return { name: lane.name, sessionId: id };
     })
+    .onRequest(SPINOFF_START_METHOD, spinoffRequest, async ({ params }): Promise<SpinoffResponse> => {
+      const { sessionId } = params;
+      const spinoff = await openSpinoff(sessionId, params.id);
+      const key = `${sessionId}/${spinoff.id}`;
+      if (startingSpinoffs.has(key)) throw acp.RequestError.invalidParams(params, `${spinoff.id} is already starting`);
+      startingSpinoffs.add(key);
+      try {
+        const repo = await laneRepo(spinoff.workspace);
+        const lane = await laneFor(repo, spinoff.prompt, store, io, laneNameFor(spinoff.title, await takenLaneNames(repo))).catch(refused(params));
+        const { id } = await startLaneSession(lane, spinoff.prompt, params.mode, undefined, undefined, spinoff.title);
+        return { spinoff: await decideSpinoff(sessionId, spinoff, { kind: 'started', sessionId: id, lane: lane.name }) };
+      } finally {
+        startingSpinoffs.delete(key);
+      }
+    })
+    .onRequest(SPINOFF_DISMISS_METHOD, spinoffRequest, async ({ params }): Promise<SpinoffResponse> => ({
+      spinoff: await decideSpinoff(params.sessionId, await openSpinoff(params.sessionId, params.id), { kind: 'dismissed' }),
+    }))
     .onRequest(ARENA_PREVIEW_METHOD, arenaPreviewRequest, async ({ params }): Promise<ArenaPreviewResponse> => {
       const n = arenaSizeOf(params.n, params);
       const repo = await laneRepo(params.cwd);

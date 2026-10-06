@@ -5,6 +5,7 @@ import {
   hintOf,
   moveSpinoff,
   offerOf,
+  openSpinoffNamed,
   parseDismissTask,
   parseSpawnTask,
   parseSpinoff,
@@ -12,7 +13,6 @@ import {
   SPINOFF_LIMITS,
   SPINOFF_SPECS,
   spinoffIdOf,
-  spinoffNamed,
   spinoffsOf,
   spinoffToolDefinitions,
   type Session,
@@ -105,11 +105,12 @@ describe('moveSpinoff, the state machine', () => {
     for (const [, move] of moves) expect(moveSpinoff(spinoff('task_1', 'Remove x', state), move)).toEqual({ ok: false, problem });
   });
 
-  it('names a suggestion by id, or lists the ones there are', () => {
-    const list = [spinoff('task_1', 'A'), spinoff('task_2', 'B')];
-    expect(spinoffNamed(list, 'task_2')).toEqual({ ok: true, value: list[1] });
-    expect(spinoffNamed(list, 'task_3')).toEqual({ ok: false, problem: 'no task task_3; the suggested ones are task_1, task_2' });
-    expect(spinoffNamed([], 'task_3')).toEqual({ ok: false, problem: 'no task task_3; nothing was suggested in this session' });
+  it('names an open suggestion by id, or says why there is none', () => {
+    const list = [spinoff('task_1', 'A', { kind: 'dismissed' }), spinoff('task_2', 'B')];
+    expect(openSpinoffNamed(list, 'task_2')).toEqual({ ok: true, value: list[1] });
+    expect(openSpinoffNamed(list, 'task_1')).toEqual({ ok: false, problem: 'task_1 cannot change: the user already dismissed it' });
+    expect(openSpinoffNamed(list, 'task_3')).toEqual({ ok: false, problem: 'no task task_3; the suggested ones are task_1, task_2' });
+    expect(openSpinoffNamed([], 'task_3')).toEqual({ ok: false, problem: 'no task task_3; nothing was suggested in this session' });
   });
 });
 
