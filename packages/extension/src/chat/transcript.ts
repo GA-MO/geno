@@ -73,6 +73,12 @@ function endChild(child: Child, at: number, end: ChildEnd, spent: Pick<Child, 't
   return { ...childTurn(child, { type: 'turn-end', at, status: CHILD_TURN_ENDS[end.kind], usage: undefined }), status: end, endedAt: at, ...spent };
 }
 
+/** The engine's own end of a child: it replaces the cancel its parent's end assumed, keeping when the child stopped. */
+function settleChild(child: Child, at: number, end: ChildEnd, spent: Pick<Child, 'turns' | 'costUsd'>): Child {
+  if (child.endedByParent !== true) return endChild(child, at, end, spent);
+  return { ...child, status: end, ...spent, endedByParent: undefined, turn: { ...child.turn, status: CHILD_TURN_ENDS[end.kind] } };
+}
+
 const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, action: ActionOf<K>) => Transcript } = {
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
@@ -143,7 +149,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.
       const stopped = mapBlocks(turn, isRunningTool, (tool) => ({ ...tool, status: 'cancelled' }));
       const settled = mapBlocks(stopped, isOpen(), (block) => ({ ...block, outcome: { kind: 'cancelled' } }));
-      const children = Object.keys(settled.children ?? {}).reduce((t, id) => withChild(t, id, (child) => endChild(child, at, { kind: 'cancelled' }, { turns: child.turns, costUsd: child.costUsd })), settled);
+      const children = Object.keys(settled.children ?? {}).reduce((t, id) => withChild(t, id, (child) => (child.status.kind === 'running' ? { ...endChild(child, at, { kind: 'cancelled' }, { turns: child.turns, costUsd: child.costUsd }), endedByParent: true } : child)), settled);
       return { ...quiet(children), status, endedAt: at, usage };
     }),
   'child-start': (transcript, { id, toolId, role, task, model, at }) =>
@@ -153,8 +159,9 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       const child: Child = { id, toolId, role, model, status: { kind: 'running' }, startedAt: at, endedAt: undefined, turns: 0, costUsd: undefined, turn: own };
       return { ...turn, children: { ...turn.children, [id]: child } };
     }),
-  child: (transcript, { id, action }) => onLast(transcript, (turn) => withChild(turn, id, (child) => childTurn(child, action))),
-  'child-end': (transcript, { id, at, end, turns, costUsd }) => onLast(transcript, (turn) => withChild(turn, id, (child) => endChild(child, at, end, { turns, costUsd }))),
+  // Nothing a child streams after its end belongs to its turn.
+  child: (transcript, { id, action }) => onLast(transcript, (turn) => withChild(turn, id, (child) => (child.status.kind === 'running' ? childTurn(child, action) : child))),
+  'child-end': (transcript, { id, at, end, turns, costUsd }) => onLast(transcript, (turn) => withChild(turn, id, (child) => settleChild(child, at, end, { turns, costUsd }))),
 };
 
 /** The transcript after `action`. Parts the action leaves alone keep their identity, so a view can skip them. */
