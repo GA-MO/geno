@@ -37,6 +37,7 @@ const FIXTURE = fileURLToPath(new URL('./fake-acp-agent.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
 const FILE = 'one\ntwo\nthree\n';
 const KEY = 'ck-test-key-1234';
+const USER_CURSOR_CONFIG = '{ "version": 1, "approvalMode": "unrestricted", "permissions": { "allow": ["Shell(*)"], "deny": [] } }\n';
 
 /** The steps of each scripted prompt, keyed by a word in it. */
 const TURNS: Record<string, readonly FakeStep[]> = {
@@ -72,6 +73,7 @@ const TURNS: Record<string, readonly FakeStep[]> = {
   wait: [{ tool: { id: 'w1', kind: 'execute', title: 'sleep', rawInput: { command: 'sleep 100' } } }, { waitCancel: true }, { text: 'never' }],
   crash: [{ text: 'About to fall over. ' }, { crash: 3 }],
   priced: [{ text: 'Cheap.' }, { cost: 0.0123 }],
+  oddid: [{ tool: { id: 'call_1\nfc_2', kind: 'read', title: 'Read a.ts', locations: ['a.ts'] } }, { done: { id: 'call_1\nfc_2', status: 'completed', output: FILE } }, { text: 'Read.' }],
   loud: [{ tool: { id: 'd1', kind: 'edit', title: 'Edit a.ts', locations: ['a.ts'] } }, { write: { path: 'a.ts', text: 'one\nTWO\nthree\n' } }, { done: { id: 'd1', status: 'completed' } }, { text: 'Two is loud now.' }],
   escape: [{ write: { path: 'inside.txt', text: 'in the lane\n' } }, { text: 'Wrote inside. ' }, { write: { path: '../../../escaped.txt', text: 'out\n' } }, { text: 'Wrote outside.' }],
 };
@@ -82,6 +84,8 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
   const bin = mkdtempSync(path.join(tmpdir(), 'gcode-bin-'));
   // Where a sandboxed agent may write its state, so its log survives the sandbox.
   mkdirSync(path.join(home, '.cursor/agents'), { recursive: true });
+  // The user's own Cursor config, which runs everything unasked; Geno must leave it as it is.
+  writeFileSync(path.join(home, '.cursor/cli-config.json'), USER_CURSOR_CONFIG);
   const calls = path.join(home, '.cursor/agents/calls.jsonl');
   const script: FakeScript = { log: calls, setup: CURSOR_SETUP, turns: TURNS };
   const scriptFile = path.join(home, 'script.json');
@@ -168,6 +172,10 @@ describe('an external ACP agent as a backend', () => {
     const [start, probe] = [t.agentCalls().find((c) => c['start']), t.agentCalls().find((c) => c['method'] === 'session/new')];
     expect(start!['start']).toMatchObject({ argv: ['acp'], key: createHash('sha256').update(KEY).digest('hex').slice(0, 12), noOpenBrowser: '1' });
     expect(probe!['params'].cwd).not.toContain(t.repo);
+    // Geno made Cursor ask: its approval mode came from Geno's overlay home, and the user's own config is unchanged.
+    expect(t.agentCalls().filter((c) => c['approvalMode'] !== undefined).map((c) => c['approvalMode'])).toEqual(['allowlist']);
+    expect(t.agentCalls().find((c) => c['home'] !== undefined)!['home']).not.toBe(t.home);
+    expect(readFileSync(path.join(t.home, '.cursor/cli-config.json'), 'utf8')).toBe(USER_CURSOR_CONFIG);
 
     // A read, in a lane made from the prompt.
     const read = await t.prompt(agent, chat, 'Please read a.ts');
@@ -238,6 +246,10 @@ describe('an external ACP agent as a backend', () => {
     expect(restarted.filter((c) => c['method'] === 'session/new').map((c) => c['params'].cwd).at(-1)).toBe(lane);
     expect(restarted.filter((c) => c['method'] === 'session/set_config_option').map((c) => c['params'])).toContainEqual(expect.objectContaining({ configId: 'model', value: 'grok-4.7[fast=true]' }));
     expect(text(t.shown(chat))).toContain('could not take up its earlier session');
+
+    // Every ask step asked: none ran unasked.
+    expect(t.agentCalls().filter((c) => c['unasked'] !== undefined)).toEqual([]);
+    expect(readFileSync(path.join(t.home, '.cursor/cli-config.json'), 'utf8')).toBe(USER_CURSOR_CONFIG);
 
     // Geno never answered allow always, and the task carried the backend.
     expect(t.agentCalls().filter((c) => c['permission']).every((c) => c['permission'].outcome.optionId !== 'allow-always')).toBe(true);
@@ -339,6 +351,19 @@ describe('an external ACP agent as a backend', () => {
     const cursorCalls = t.agentCalls();
     expect(cursorCalls.filter((c) => c['method'] === 'session/new').map((c) => c['params'].cwd)).toContain(path.join(t.repo, '.geno/worktrees', laneB.lane));
     expect(cursorCalls.filter((c) => c['method'] === 'session/set_config_option').map((c) => c['params'])).toContainEqual(expect.objectContaining({ configId: 'model', value: 'composer-2.5[fast=true]' }));
+    t.shared.externals.closeAll();
+  });
+
+  it('gives a tool call whose id holds a newline a clean id of its own', async () => {
+    const t = await setup();
+    const agent = await t.open();
+    const { sessionId: chat } = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [], _meta: { [BACKEND_META]: { id: 'cursor' } } });
+    await t.prompt(agent, chat, 'oddid please');
+    const ids = t.shown(chat).flatMap((u) => (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update' ? [u.toolCallId] : []));
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(1);
+    expect(ids[0]).toMatch(/^ext_[0-9a-f]{16}$/);
+    expect((await t.events(chat)).find((e) => e.kind === 'tool-result')).toMatchObject({ toolUseId: ids[0], status: 'ok' });
     t.shared.externals.closeAll();
   });
 

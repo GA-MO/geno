@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, mkdtemp, realpath } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
@@ -11,6 +11,7 @@ import {
   EXTERNAL_BACKEND_IDS,
   EXTERNAL_BACKENDS,
   type AgentSetup,
+  type AskConfig,
   type BackendAvailability,
   type BackendInfo,
   type ExternalBackend,
@@ -122,12 +123,33 @@ export type StartOptions = {
   readonly err: (line: string) => void;
 };
 
+/**
+ * A home for the agent that is the user's own, every entry linked in, except the ask config, which Geno writes. Only
+ * the names of the entries are read. Its own state files land in the overlay or, through the links, where they were.
+ */
+export async function overlayHome(realHome: string, into: string, ask: AskConfig): Promise<string> {
+  const home = await mkdtemp(path.join(into, 'home-'));
+  const fill = async (real: string, dir: string, parts: readonly string[]): Promise<void> => {
+    const [head, ...tail] = parts;
+    for (const name of await readdir(real).catch(() => [])) if (name !== head) await symlink(path.join(real, name), path.join(dir, name));
+    if (tail.length === 0) return;
+    await mkdir(path.join(dir, head!));
+    await fill(path.join(real, head!), path.join(dir, head!), tail);
+  };
+  await fill(realHome, home, ask.file.split('/'));
+  await writeFile(path.join(home, ask.file), `${JSON.stringify(ask.config, null, 2)}\n`);
+  return home;
+}
+
 /** Starts the agent and initializes it. Its capabilities decide everything later; nothing about it is assumed. */
 export async function startAgent(options: StartOptions): Promise<AgentProcess> {
   const { backend } = options;
   const sandboxed = options.sandbox && backend.sandbox !== undefined;
   const args = [...(sandboxed ? backend.sandbox!.args : []), ...backend.args];
+  const realHome = options.env['HOME'] || homedir();
+  const home = backend.ask === undefined ? undefined : await overlayHome(realHome, options.tempDir, backend.ask);
   const env = childEnv(options.env, {
+    ...(home === undefined ? {} : { HOME: home }),
     TMPDIR: options.tempDir,
     NO_OPEN_BROWSER: '1',
     ...(backend.keyEnv !== undefined && options.key !== undefined ? { [backend.keyEnv]: options.key } : {}),
@@ -136,6 +158,7 @@ export async function startAgent(options: StartOptions): Promise<AgentProcess> {
   if (sandboxed) {
     const host = sandboxHost();
     const spec = await sandboxSpec(backend, [options.command, ...args].map(shellQuote).join(' '), options.cwd, options.tempDir, options.writable, options.env);
+    // The overlay sits in the temp folder, which is writable; through its links the agent reaches only what the spec allows.
     child = spawn(host.command, [...host.args, Buffer.from(JSON.stringify(spec)).toString('base64')], { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
   } else {
     child = spawn(options.command, args, { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });

@@ -21,6 +21,13 @@ export type BackendSandbox = {
   readonly args: readonly string[];
 };
 
+/**
+ * How Geno makes the agent ask before it acts. Cursor reads its approval mode only from its global config, so Geno
+ * runs it with HOME set to an overlay of the user's home in which that one file is Geno's own: the user's global
+ * config is never read or changed.
+ */
+export type AskConfig = { readonly file: string; readonly config: Readonly<Record<string, unknown>> };
+
 /** One row of the backend registry. */
 export type ExternalBackend = {
   readonly id: ExternalBackendId;
@@ -39,6 +46,8 @@ export type ExternalBackend = {
   readonly install: string;
   /** Undefined when it has not been shown to run inside Geno's sandbox, so it runs in its lane without one. */
   readonly sandbox: BackendSandbox | undefined;
+  /** Undefined for an agent that asks through ACP by default. */
+  readonly ask: AskConfig | undefined;
 };
 
 export const EXTERNAL_BACKENDS: Readonly<Record<ExternalBackendId, ExternalBackend>> = {
@@ -65,6 +74,8 @@ export const EXTERNAL_BACKENDS: Readonly<Record<ExternalBackendId, ExternalBacke
       ],
       args: ['--sandbox', 'disabled'],
     },
+    // Allowlist with an empty allowlist: every command and edit asks, and Geno answers by its own mode.
+    ask: { file: '.cursor/cli-config.json', config: { version: 1, editor: { vimMode: false }, permissions: { allow: [], deny: [] }, approvalMode: 'allowlist' } },
   },
   'claude-code': {
     id: 'claude-code',
@@ -76,6 +87,7 @@ export const EXTERNAL_BACKENDS: Readonly<Record<ExternalBackendId, ExternalBacke
     keyEnv: 'ANTHROPIC_API_KEY',
     install: 'Claude Code speaks ACP through its adapter: npm install -g @agentclientprotocol/claude-agent-acp',
     sandbox: undefined,
+    ask: undefined,
   },
 };
 

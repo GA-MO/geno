@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import type { ContentBlock, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import * as acp from '@agentclientprotocol/sdk';
@@ -50,6 +51,9 @@ type Link = {
 
 /** How the engine gets what the user chose for an agent, such as its API key; undefined when nobody can say. */
 export type KeyOf = (backend: ExternalBackend) => Promise<string | undefined>;
+
+/** An agent's tool call id as Geno logs and shows it; Cursor's ids can hold a newline, which a step's id must not. */
+export const genoCallId = (id: string): string => (/^[\w.:-]+$/.test(id) ? id : `ext_${createHash('sha256').update(id).digest('hex').slice(0, 16)}`);
 
 /** Waiting this long after a cancel for the agent to end its turn, before its process is killed. */
 export const CANCEL_GRACE_MS = 5000;
@@ -327,7 +331,7 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
   const startCall = async (toolCallId: string, call: ExternalCall) => {
     if (calls.has(toolCallId)) return;
     const { name, input } = externalToolUse(call, cwd);
-    const use: ToolUseBlock = { type: 'tool_use', id: toolCallId, name, input, caller: { type: 'direct' } };
+    const use: ToolUseBlock = { type: 'tool_use', id: genoCallId(toolCallId), name, input, caller: { type: 'direct' } };
     calls.set(toolCallId, { use, call, output: '', ended: false });
     const content: ContentBlock[] = [...(text === '' ? [] : [{ type: 'text' as const, text, citations: null }]), use];
     text = '';
@@ -346,7 +350,7 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
       kind: 'tool-result',
       seq: stamp.seq(),
       at: at(),
-      toolUseId: toolCallId,
+      toolUseId: call.use.id,
       name: call.use.name,
       status,
       output: call.output === '' ? (status === 'ok' ? 'done' : 'failed') : call.output,
