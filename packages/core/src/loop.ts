@@ -1,5 +1,5 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, toolUsesOf, type TurnErrorKind, type TurnEvent } from './session.js';
+import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type TurnErrorKind, type TurnEvent } from './session.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
 export type DoneReason = (typeof DONE_REASONS)[number];
@@ -39,7 +39,7 @@ const AFTER_STOP: Record<StopReason, LoopStep> = {
   model_context_window_exceeded: done('error'),
 };
 
-type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' | 'mode' | 'effort' | 'title' | 'child-start' | 'child-end' | 'lane-apply' | 'background-end' | 'wait' | 'wake' | 'backend-start' | 'backend-model' | 'spinoff' | 'cut' }>;
+type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' | 'mode' | 'effort' | 'title' | 'child-start' | 'child-end' | 'lane-apply' | 'background-end' | 'wait' | 'wake' | 'backend-start' | 'backend-model' | 'spinoff' | 'cut' | 'compact' }>;
 type EventOf<K extends ConversationEvent['kind']> = Extract<ConversationEvent, { kind: K }>;
 
 const isConversation = (event: TurnEvent): event is ConversationEvent => IN_CONVERSATION[event.kind];
@@ -74,10 +74,10 @@ export function pendingToolUses(events: readonly TurnEvent[]): ToolUseBlock[] {
 }
 
 function limitReached(events: readonly TurnEvent[], run: Run): LoopStep | undefined {
-  const calls = events.filter((e) => e.kind === 'assistant' && e.seq >= run.firstSeq);
-  if (calls.length >= run.maxTurns) return done('max-turns');
-  // An unpriced call counts as free here; its usage line still prints cost=unknown.
-  const cost = calls.reduce((sum, e) => sum + (e.kind === 'assistant' ? (e.costUsd ?? 0) : 0), 0);
+  const ran = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
+  if (ran.filter((e) => e.kind === 'assistant').length >= run.maxTurns) return done('max-turns');
+  // A compaction's summary call counts toward the budget, not the turns. An unpriced call counts as free here; its usage line still prints cost=unknown.
+  const cost = ran.reduce((sum, e) => sum + (spendOf(e)?.costUsd ?? 0), 0);
   if (cost > run.maxCostUsd) return done('budget');
   return undefined;
 }

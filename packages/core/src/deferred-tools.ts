@@ -1,4 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import { textTokens } from './context-window.js';
 import type { TurnEvent } from './session.js';
 
 export const TOOL_SEARCH_TOOL = 'tool_search';
@@ -19,10 +20,6 @@ export type DeferredTool = { readonly definition: Tool; readonly hint: string };
  */
 export type ToolRoster = { readonly offered: readonly Tool[]; readonly deferred: ReadonlyMap<string, DeferredTool> };
 
-/** Measured on Model Studio qwen3.8-flash over Geno's own and the browser's definitions by scripts/prefix-tokens.ts. */
-const CHARS_PER_TOKEN = 3.5;
-
-const textTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);
 const toolTokens = (tool: Tool): number => textTokens(JSON.stringify(tool));
 
 /**

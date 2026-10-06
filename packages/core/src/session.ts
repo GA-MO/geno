@@ -27,6 +27,7 @@ import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
 import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
+import { compactedText, contextView, type CompactEvent } from './compact.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -58,6 +59,9 @@ export type TokenUsage = {
 };
 
 export const ZERO_USAGE: TokenUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+
+/** A model call's spend as the log records it. */
+export type Spend = { readonly usage: TokenUsage; readonly costUsd: number | null; readonly model: string };
 
 export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   input: a.input + b.input,
@@ -205,6 +209,7 @@ export type TurnEvent =
   | SpinoffEvent
   | ChildEvent
   | CutEvent
+  | CompactEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
@@ -233,6 +238,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'backend-model': false,
   spinoff: false,
   cut: false,
+  compact: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
@@ -264,6 +270,10 @@ export const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
   'max-turns': true,
   budget: true,
 };
+
+/** What a model call cost, for the events that record one: a model turn, and a compaction's summary call. */
+export const spendOf = (event: TurnEvent): Spend | undefined =>
+  event.kind === 'assistant' || event.kind === 'compact' ? { usage: event.usage, costUsd: event.costUsd, model: event.model } : undefined;
 
 export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
   content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
@@ -304,7 +314,8 @@ function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredA
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
  * results in the order the model asked for them, then any unanswered prompts. The session's loaded context opens
  * the first user message, after the system prompt, so it is cached with the prefix but never part of it.
- * `stored` holds the bytes of the attachments the events reference; one it lacks is replaced by a note.
+ * `stored` holds the bytes of the attachments the events reference; one it lacks is replaced by a note. After a
+ * compaction, the conversation is its `contextView`: the compaction's text opens it in place of the turns it replaced.
  */
 export function replayMessages(events: readonly TurnEvent[], stored: StoredAttachments = NO_ATTACHMENTS): MessageParam[] {
   const messages: MessageParam[] = [];
@@ -324,13 +335,14 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     results = new Map();
     prompts = [];
   };
-  for (const event of events) {
+  for (const event of contextView(events)) {
     if (event.kind === 'session-start') {
       workspace = event.session.workspace;
       const loaded = event.context === undefined ? undefined : renderLoadedContext(event.context);
       if (loaded !== undefined) opening = [{ type: 'text', text: loaded }];
     }
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
+    if (event.kind === 'compact') prompts.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;

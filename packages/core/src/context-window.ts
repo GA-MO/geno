@@ -36,8 +36,18 @@ export const contextUseOf = (provider: ProviderName, model: string, usage: Token
   window: contextWindowOf(provider, model),
 });
 
-/** After the session's latest model call. The window is the session's model's, the one Geno asked for and prices. */
+/**
+ * After the session's latest model call, or its latest compaction's estimate when that came later. The window is the
+ * session's model's, the one Geno asked for and prices.
+ */
 export function lastContextUse({ provider, model }: Pick<Session, 'provider' | 'model'>, events: readonly TurnEvent[]): ContextUse | undefined {
-  const last = events.findLast((e) => e.kind === 'assistant');
+  const last = events.findLast((e) => e.kind === 'assistant' || e.kind === 'compact');
+  if (last?.kind === 'compact') return { used: last.tokensAfter, window: contextWindowOf(provider, model) };
   return last === undefined ? undefined : contextUseOf(provider, model, last.usage);
 }
+
+/** Measured on Model Studio qwen3.8-flash over Geno's own and the browser's definitions by scripts/prefix-tokens.ts. */
+export const CHARS_PER_TOKEN = 3.5;
+
+/** An estimate for text the API has not counted yet. */
+export const textTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);

@@ -7,6 +7,7 @@ import {
   asSessionId,
   CHILD_CAPS,
   CHILD_STARTS,
+  COMPACT_TRIGGERS,
   cutView,
   APPROVAL_RULE_IDS,
   EXTERNAL_BACKEND_IDS,
@@ -164,6 +165,15 @@ const spinoffDecisionSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('started'), sessionId: z.string().min(1), lane: z.string().min(1) }),
   z.strictObject({ kind: z.literal('dismissed') }),
 ]);
+const usageSchema = z.strictObject({ input: count, cacheRead: count, cacheWrite: count, output: count });
+
+const keptSchema = z.strictObject({
+  messages: z.array(z.strictObject({ seq: z.number().int().positive(), from: z.enum(['user', 'parent']), steer: z.boolean(), text: z.string() })),
+  droppedMessages: count,
+  todo: todoSchema,
+  tools: z.array(z.string()),
+  files: z.strictObject({ read: z.array(z.string()), changed: z.array(z.string()) }),
+});
 
 const toolResultFields = {
   kind: z.literal('tool-result'),
@@ -243,7 +253,7 @@ const turnEventSchema = z.union([
       ...seqFields,
       content: z.array(contentBlock),
       stopReason: z.string().nullable().transform((reason) => reason as StopReason | null),
-      usage: z.strictObject({ input: count, cacheRead: count, cacheWrite: count, output: count }),
+      usage: usageSchema,
       costUsd: z.number().nonnegative().nullable(),
       latencyMs: count,
       model: z.string().min(1),
@@ -276,6 +286,20 @@ const turnEventSchema = z.union([
       files: z.array(z.string()),
     }),
     z.strictObject({ kind: z.literal('cut'), ...seqFields, turnSeq: seqFields.seq }),
+    z.strictObject({
+      kind: z.literal('compact'),
+      ...seqFields,
+      trigger: z.enum(COMPACT_TRIGGERS),
+      keptFrom: seqFields.seq,
+      summary: z.string().min(1),
+      focus: z.string().min(1).optional(),
+      kept: keptSchema,
+      tokensBefore: count,
+      tokensAfter: count,
+      usage: usageSchema,
+      costUsd: z.number().nonnegative().nullable(),
+      model: z.string().min(1),
+    }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
     z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: waiterSchema.optional() }),
