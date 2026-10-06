@@ -20,8 +20,14 @@ export type Waiting = {
   readonly message: string;
 };
 
-/** The log event a wait leaves, written as it begins or changes course, so a restarted engine finds it and waits on. */
-export type WaitEvent = { readonly kind: 'wait'; readonly seq: number; readonly at: string; readonly wait: Waiting };
+/** The engine process that waits, and the folder it serves. Another engine takes a wait up only once this one is gone. */
+export type Waiter = { readonly pid: number; readonly cwd: string };
+
+/**
+ * The log event a wait leaves, written as it begins or changes course, so a restarted engine finds it and waits on.
+ * `by` is absent for a wait in the command line, which no engine takes up.
+ */
+export type WaitEvent = { readonly kind: 'wait'; readonly seq: number; readonly at: string; readonly wait: Waiting; readonly by?: Waiter | undefined };
 
 type Backoff = { readonly firstMs: number; readonly maxMs: number };
 

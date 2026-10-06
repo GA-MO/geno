@@ -214,7 +214,7 @@ const turnEventSchema = z.union([
     }),
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
-    z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema }),
+    z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: z.strictObject({ pid: z.number().int().positive(), cwd: z.string().min(1) }).optional() }),
     z.strictObject({ kind: z.literal('mode'), seq: seqFields.seq.optional(), at: seqFields.at, mode: z.enum(SESSION_MODES) }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),

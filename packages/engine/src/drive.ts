@@ -1,9 +1,9 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent } from '@g-code/core';
+import { changesCourse, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
-import { EXIT_CODES, formatRetry, formatUsage, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
+import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
@@ -12,6 +12,7 @@ import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
+import type { Wake } from './waits.js';
 
 export type Mode = {
   readonly tools: readonly Tool[];
@@ -41,10 +42,16 @@ export type Watcher = {
   logged(event: TurnEvent): void;
   /** A tool call the model is still writing. */
   toolInput?(draft: ToolInputDraft): void;
+  /** A model call waits offline or for a rate limit, or its next try moved; null once it goes out. */
+  waiting?(wait: Waiting | null): void;
 };
 
-/** Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. */
-export type Surface = { readonly files: Files; readonly watcher: Watcher };
+/**
+ * Where a run reads and writes files and shows its progress: disk and the terminal, or an editor over ACP. `wake` is
+ * the editor's Retry now, which cuts a wait short.
+ * `waiter` names the engine process in the waits it logs, so another engine can take them up once it is gone.
+ */
+export type Surface = { readonly files: Files; readonly watcher: Watcher; readonly wake?: Wake | undefined; readonly waiter?: Waiter | undefined };
 
 const CLASSIFIED: Readonly<Record<ApprovalRecord['verdict'], string>> = { allow: 'allowed', deny: 'denied' };
 
@@ -246,6 +253,9 @@ export async function drive(
   const callModel = async (): Promise<void> => {
     const startAt = Date.now();
     let marks: StreamMarks | undefined;
+    // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
+    const left = openWaitOf(events);
+    let lastWait = left;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
@@ -262,6 +272,16 @@ export async function drive(
       onRetry: async (retry) => {
         await record({ kind: 'retry', seq: nextSeq(events), at: new Date().toISOString(), ...retry });
         io.err(formatRetry(retry));
+      },
+      waiting: left,
+      wake: surface.wake,
+      onWait: async (wait) => {
+        if (wait !== null && changesCourse(lastWait, wait)) {
+          await record({ kind: 'wait', seq: nextSeq(events), at: new Date().toISOString(), wait, ...(surface.waiter === undefined ? {} : { by: surface.waiter }) });
+          io.err(formatWait(wait, Date.now()));
+        }
+        lastWait = wait ?? undefined;
+        watcher.waiting?.(wait);
       },
     });
     const at = new Date().toISOString();
