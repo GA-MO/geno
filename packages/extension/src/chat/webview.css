@@ -263,8 +263,21 @@ canvas.dino {
   pointer-events: none;
 }
 
+.turn-head > .turn-working {
+  display: none;
+  width: 24px;
+  font-size: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* The working dino has the stage, so the avatar's place holds a spinner instead of a second Noodle. */
 .turn[data-working] > .head-slot .avatar {
-  visibility: hidden;
+  display: none;
+}
+
+.turn[data-working] > .head-slot .turn-head > .turn-working {
+  display: inline-block;
 }
 
 .turn-name {
@@ -2378,7 +2391,7 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   --vscode-focusBorder: color-mix(in srgb, var(--theme-focus) 55%, white);
   --vscode-textLink-foreground: #7cc4ff;
   --vscode-textLink-activeForeground: #a8d8ff;
-  --vscode-textPreformat-foreground: #f1c98b;
+  --vscode-textPreformat-foreground: #c8c8c8;
   --vscode-textPreformat-background: rgb(255 255 255 / 8%);
   --vscode-textCodeBlock-background: #18181a;
   --vscode-textBlockQuote-border: rgb(255 255 255 / 22%);
@@ -2458,7 +2471,7 @@ body[data-style='glass'].vscode-light:not(.vscode-high-contrast, .vscode-high-co
   --vscode-focusBorder: var(--theme-focus);
   --vscode-textLink-foreground: #0a5fc2;
   --vscode-textLink-activeForeground: #084a99;
-  --vscode-textPreformat-foreground: #9a3d0a;
+  --vscode-textPreformat-foreground: #3d3d3d;
   --vscode-textPreformat-background: rgb(0 0 0 / 6%);
   --vscode-textCodeBlock-background: #ebebeb;
   --vscode-textBlockQuote-border: rgb(0 0 0 / 20%);

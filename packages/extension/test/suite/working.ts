@@ -114,12 +114,12 @@ export async function run(): Promise<void> {
   await send(PROMPTS.work);
   await waitFor('the turn to run', async () => (await count('.turn[aria-busy="true"]')) === 1);
   await waitFor('Noodle to think while the model works', async () => (await pose()) === 'thinking');
-  const placed = await panel<{ width: number; height: number; cols: number; rows: number; rendering: string; inStep: boolean; last: boolean; avatar: string; right: number; turnRight: number }>(
-    `(() => { const c = doc.querySelector('.working-dino'); const r = c.getBoundingClientRect(); const step = c.parentElement; const steps = [...doc.querySelectorAll('.turn[aria-busy="true"] > .rail > .step')]; return { width: r.width, height: r.height, cols: c.width, rows: c.height, rendering: getComputedStyle(c).imageRendering, inStep: step.matches('.turn[aria-busy="true"] > .rail > .step'), last: steps.at(-1) === step, avatar: getComputedStyle(doc.querySelector('.turn[aria-busy="true"] .avatar')).visibility, right: r.right, turnRight: doc.querySelector('.turn[aria-busy="true"]').getBoundingClientRect().right }; })()`,
+  const placed = await panel<{ width: number; height: number; cols: number; rows: number; rendering: string; inStep: boolean; last: boolean; avatar: string; spinner: string; right: number; turnRight: number }>(
+    `(() => { const c = doc.querySelector('.working-dino'); const r = c.getBoundingClientRect(); const step = c.parentElement; const steps = [...doc.querySelectorAll('.turn[aria-busy="true"] > .rail > .step')]; return { width: r.width, height: r.height, cols: c.width, rows: c.height, rendering: getComputedStyle(c).imageRendering, inStep: step.matches('.turn[aria-busy="true"] > .rail > .step'), last: steps.at(-1) === step, avatar: getComputedStyle(doc.querySelector('.turn[aria-busy="true"] .avatar')).display, spinner: getComputedStyle(doc.querySelector('.turn[aria-busy="true"] .turn-working')).display, right: r.right, turnRight: doc.querySelector('.turn[aria-busy="true"]').getBoundingClientRect().right }; })()`,
   );
   check(placed.width === 48 && placed.height === 48 && placed.cols === 24 && placed.rows === 24 && placed.rendering === 'pixelated', 'the working dino is the sprite at 2×, 48 px, pixelated', placed);
   check(placed.inStep && placed.last && Math.abs(placed.right - placed.turnRight) <= 1, 'it stands beside the running turn’s current step, at the right', placed);
-  check(placed.avatar === 'hidden', 'the turn’s 24 px avatar steps aside while the working dino shows', placed);
+  check(placed.avatar === 'none' && placed.spinner !== 'none', 'the turn’s 24 px avatar steps aside for a spinner while the working dino shows', placed);
   check((await framed()).length === 0, 'no dino has a background, border or shadow', await framed());
 
   // The CPU profile: 10 s of a running turn with Noodle thinking, alternated with 10 s of the same turn with Noodle
@@ -154,8 +154,8 @@ export async function run(): Promise<void> {
   await waitFor('the turn-end move to finish', async () => (await pose()) === null, 10_000);
   const work = (await poses()).filter((p) => p !== 'thinking');
   check(JSON.stringify(work) === JSON.stringify(['none', ...WORK.map((c) => c.pose).filter((p, i, all) => all[i - 1] !== p), 'flex', 'none']), 'the dino switched poses with the steps, then flexed once, as the check passed', await poses());
-  const after = await panel<{ avatar: string; working: string | null }>(`(() => { const t = doc.querySelector('.turn:last-child'); return { avatar: getComputedStyle(t.querySelector('.avatar')).visibility, working: t.dataset.working ?? null }; })()`);
-  check(after.avatar === 'visible' && after.working === null, 'the finished turn shows its still 24 px avatar again', after);
+  const after = await panel<{ avatar: string; spinner: string; working: string | null }>(`(() => { const t = doc.querySelector('.turn:last-child'); return { avatar: getComputedStyle(t.querySelector('.avatar')).display, spinner: getComputedStyle(t.querySelector('.turn-working')).display, working: t.dataset.working ?? null }; })()`);
+  check(after.avatar !== 'none' && after.spinner === 'none' && after.working === null, 'the finished turn shows its still 24 px avatar again', after);
   check((await textOf('.turn:last-child .markdown'))?.includes(ANSWERS.work) === true, 'the answer shows');
 
   // A failed read brings sweat; a command Ask holds brings the question mark; a turn without checks hops or rolls.
