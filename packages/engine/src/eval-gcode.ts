@@ -43,7 +43,7 @@ export const gcodeAdapter: AgentAdapter = {
       approval: NON_INTERACTIVE,
     });
     await writeFile(path.join(input.runDir, `${input.task.id}.gcode.log`), [...lines, partial].join('\n'));
-    const thisRun = result.events.filter((e) => e.kind !== 'session-start' && e.seq >= result.run.firstSeq);
+    const thisRun = result.events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= result.run.firstSeq);
     const total = totalOf(thisRun);
     return {
       stop: result.reason,

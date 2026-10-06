@@ -152,8 +152,11 @@ export type TurnEvent =
     }
   | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }
   | ({ readonly kind: 'retry'; readonly seq: number; readonly at: string } & ModelRetry)
-  /** The user switched the session's approval mode; it holds until the next switch, across resumes. */
-  | { readonly kind: 'mode'; readonly seq: number; readonly at: string; readonly mode: SessionMode }
+  /**
+   * The user switched the session's approval mode; it holds until the next switch, across resumes. A switch logged while
+   * a turn runs has no seq, because the turn numbers its own events and is still writing them.
+   */
+  | { readonly kind: 'mode'; readonly seq?: number | undefined; readonly at: string; readonly mode: SessionMode }
   /** The user set the session's effort; it holds from the next model call until the next change, across resumes. */
   | { readonly kind: 'effort'; readonly seq: number; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
@@ -193,8 +196,12 @@ export const sessionEffortOf = (session: Session, events: readonly TurnEvent[]):
   events.findLast((e) => e.kind === 'effort')?.effort ?? session.effort;
 
 export const nextSeq = (events: readonly TurnEvent[]): number => {
-  const last = events.at(-1);
-  return last === undefined || last.kind === 'session-start' ? 1 : last.seq + 1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]!;
+    if (event.kind === 'session-start') return 1;
+    if (event.seq !== undefined) return event.seq + 1;
+  }
+  return 1;
 };
 
 // A refused prompt is dropped so later turns do not resend it; an interrupted or stopped one is answered on the next run.

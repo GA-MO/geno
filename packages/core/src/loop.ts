@@ -55,8 +55,6 @@ const AFTER_EVENT: { [K in ConversationEvent['kind']]: (event: EventOf<K>) => Lo
 const after = <K extends ConversationEvent['kind']>(event: EventOf<K>): LoopStep =>
   (AFTER_EVENT[event.kind] as (e: EventOf<K>) => LoopStep)(event);
 
-const seqOf = (event: TurnEvent): number => (event.kind === 'session-start' ? 0 : event.seq);
-
 // An interruption logged by an earlier run is what this run resumes from, so it does not end this one.
 function lastLiveEvent(events: readonly TurnEvent[], run: Run): ConversationEvent {
   const live = events.findLast(

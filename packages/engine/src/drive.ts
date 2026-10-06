@@ -304,7 +304,7 @@ async function finish(
   reason: DoneReason,
   record: (event: TurnEvent) => Promise<void>,
 ): Promise<number> {
-  const thisRun = events.filter((e) => e.kind !== 'session-start' && e.seq >= run.firstSeq);
+  const thisRun = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
   const total = totalOf(thisRun);
   const last = events.at(-1);
   if (isLimit(reason) && !(last?.kind === 'error' && last.error === reason)) {
