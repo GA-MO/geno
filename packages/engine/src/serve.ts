@@ -149,7 +149,7 @@ const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'
   ask: { name: 'Ask', description: 'Ask before risky commands.' },
   auto: {
     name: 'Auto',
-    description: 'Run safe commands on its own and let a classifier judge the rest. Still asks before deleting the workspace, pushing, downloading, or touching paths outside it.',
+    description: 'Run safe commands on its own and let a classifier judge the rest, without asking. Asks before deleting the workspace or anything outside it, and once the classifier has blocked too many actions.',
   },
 };
 

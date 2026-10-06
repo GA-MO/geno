@@ -7,10 +7,18 @@ The user wants to switch the agent between asking before risky commands and runn
 | Mode | Behavior |
 |---|---|
 | `ask` | Today's interactive behavior. Every flagged command asks the user. This is the default. |
-| `auto` | Commands that cannot be undone still ask the user: deleting the workspace root or its `.git`, touching paths outside the workspace, `git push`, and network downloads to non-local hosts. Commands that are clearly safe run. Everything else goes to the classifier, which answers allow, ask or deny. |
+| `auto` | `rm -rf` of the workspace root, its `.git` or a path outside the workspace still asks the user. Commands that are clearly safe run. Everything else goes to the classifier, which answers allow, ask or deny. Paths outside the workspace, `git push`, network downloads and pages on other hosts go to the classifier too (they asked the user before Auto blocks, below). |
 | `non-interactive` | Eval runs. Unchanged. |
 
-Every bash command still runs inside the sandbox in every mode. Writes stay inside the workspace and temp, and the network is off. Auto never widens the sandbox.
+Every bash command still runs inside the sandbox in every mode. Writes stay inside the workspace and temp, and the network is off. Auto never widens the sandbox. That is why a push or a download can go to the classifier: in the sandbox it fails. A command can still read outside the workspace, except `~/.ssh` and Geno's own secrets, so a read of other credentials, such as `~/.aws/credentials`, is stopped only by the classifier.
+
+### Auto blocks instead of asking
+
+Auto works like Claude Code's auto mode: the classifier reviews actions instead of the user. In Auto, a classifier `ask` blocks the action and asks nobody. The tool result is `denied`, gives the classifier's reason, and tells the model to find another way or to say in its answer what it needs the user to allow. A classifier failure (a timeout, a malformed answer or no verdict) is an `ask`, so it blocks too. A classifier `deny` is refused, as before.
+
+After 3 blocks in a row or 20 in the session, Auto pauses: the next action the classifier would block asks the user, as Ask does. A classifier allow ends a row. A user approval also ends the row, and while Auto is paused it resumes Auto. The total starts over only when its own limit trips. The counts are engine state per session and start over when the engine restarts. The state and its transitions are `packages/core/src/auto.ts`.
+
+Claude Code does not count a classifier failure toward these limits. Geno does, on purpose, so with a dead classifier the fourth gray action in a row asks the user, instead of every gray action being blocked for the rest of the session.
 
 ## U9a: engine, rules and classifier (now, parallel with U7)
 
@@ -33,7 +41,7 @@ Every bash command still runs inside the sandbox in every mode. Writes stay insi
     - the ask rate on the benign set, with a target under 15%;
     - p50 and p90 latency;
     - total cost.
-  - If the false-allow gate fails after one round of prompt fixes, Auto ships with the classifier off. Gray-zone commands then ask, and the report says so.
+  - If the false-allow gate fails after one round of prompt fixes, Auto ships with the classifier off. Gray-zone commands then ask, and the report says so. (With Auto blocks, a classifier that is off blocks gray commands until Auto pauses.)
 - **Tests.**
   - A table test of mode by rule by verdict.
   - Fail-closed on timeout, on a malformed answer and on a gateway error.

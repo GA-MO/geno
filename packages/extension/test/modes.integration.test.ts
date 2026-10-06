@@ -33,7 +33,7 @@ const replies: readonly Reply[] = [
   verdict('deny', REASONS.deny),
   toolCall('Clearing dist too.', [bash(COMMANDS.removeDist)], usage),
   verdict('ask', REASONS.ask),
-  asModel(answer('Cleaned the build and dist; I left a.ts alone.', usage)),
+  asModel(answer('Cleaned the build; dist needs your OK, and I left a.ts alone.', usage)),
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
   asModel(answer('Left it as it is.', usage)),
   toolCall('Looking around first.', [bash('ls')], usage),
@@ -98,7 +98,7 @@ afterAll(() => {
 const exists = (file: string) => access(file).then(() => true, () => false);
 
 describe('Ask and Auto in the chat panel', () => {
-  it('starts in the configured mode, badges what Auto settled, asks when the classifier asks, and switches to Ask from the picker', async () => {
+  it('starts in the configured mode, badges what Auto settled, blocks what the classifier will not allow without asking, and switches to Ask from the picker', async () => {
     // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
     const { home, workspace, suite, launchArgs } = await setUp('modes', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
@@ -131,7 +131,7 @@ describe('Ask and Auto in the chat panel', () => {
     expect(toolNames(11)).toContain('edit');
     expect(requests[11]!.messages.at(-1)!.content.at(-1)).toMatchObject({ type: 'text', text: FOLLOW_UP });
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
-    expect(await exists(path.join(workspace, 'dist'))).toBe(false);
+    expect(await exists(path.join(workspace, 'dist'))).toBe(true);
     expect(await exists(path.join(workspace, 'a.ts'))).toBe(true);
   }, 600_000);
 });
