@@ -40,6 +40,7 @@ export * from './ask-user.js';
 export * from './check.js';
 export * from './widget.js';
 export * from './editor-actions.js';
+export * from './todo.js';
 export * from './lanes.js';
 export * from './subagent.js';
 export * from './attention.js';

@@ -27,6 +27,7 @@ import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import type { Brand } from './types.js';
+import type { TodoList } from './todo.js';
 import type { WidgetRef } from './widget.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
@@ -105,6 +106,8 @@ export type ToolResultEvent = {
   readonly widget?: WidgetRef | undefined;
   /** What an editor tool showed the user, so its step can show it again. */
   readonly editorAction?: EditorAction | undefined;
+  /** The whole list a todo call set (`todo.ts`). */
+  readonly todo?: TodoList | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;
