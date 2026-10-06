@@ -43,6 +43,7 @@ export const BUILTIN_COMMANDS = {
   rules: { description: 'Show the project rules', runs: 'client' },
   memory: { description: 'Show what Geno remembers', runs: 'client' },
   init: { description: 'Create or update AGENTS.md for this project', runs: 'engine', turn: initPrompt },
+  'best-of-n': { description: 'Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models', hint: '<2-4> <task>', runs: 'client' },
 } as const satisfies Record<string, BuiltinSpec>;
 
 export type BuiltinName = keyof typeof BUILTIN_COMMANDS;

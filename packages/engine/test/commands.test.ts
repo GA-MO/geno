@@ -39,7 +39,7 @@ describe('command discovery', () => {
 
     const commands = await loadCommands(workspace, { app: home, user: undefined }, []);
 
-    expect(commands.slice(0, 8).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init']);
+    expect(commands.slice(0, 9).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init', 'best-of-n']);
     expect(summary(commands)).toEqual([
       'prompt ship workspace: Ship it now, carefully and with a changelog entry for every ...',
       'prompt review workspace: Review a file',
@@ -191,6 +191,7 @@ describe('gcode commands list', () => {
       '/rules               built-in, editor    Show the project rules',
       '/memory              built-in, editor    Show what Geno remembers',
       '/init                built-in, engine    Create or update AGENTS.md for this project',
+      '/best-of-n <2-4> <task> built-in, editor    Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models',
       '/review <file>       .claude/commands/review.md    Review a file',
       `/tidy                ${path.join(home, 'skills', 'tidy', 'SKILL.md')}    Tidy the repo`,
     ]);

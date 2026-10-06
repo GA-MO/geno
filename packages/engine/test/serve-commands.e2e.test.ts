@@ -81,7 +81,7 @@ describe('gcode serve slash commands', () => {
       await until(() => listings(updates).length === 3);
     });
 
-    const builtins = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init'];
+    const builtins = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init', 'best-of-n'];
     expect(listings(updates)).toEqual([
       [...builtins, 'review', 'add-i18n'],
       [...builtins, 'ship', 'review', 'add-i18n'],
