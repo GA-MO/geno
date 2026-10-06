@@ -129,7 +129,7 @@ const context = { instructions: [{ path: 'AGENTS.md', text: 'Use pnpm.' }], rule
 const LOG: TurnEvent[] = [
   { kind: 'session-start', session, context },
   { kind: 'user', seq: 1, at, content: 'first question' },
-  { kind: 'assistant', seq: 2, at, content: [{ type: 'tool_use', id: 'tu1', name: 'grep', input: { pattern: 'x' } }], stopReason: 'tool_use', usage: usage({ input: 900, output: 20 }), costUsd: 0, latencyMs: 1, model: 'm' },
+  { kind: 'assistant', seq: 2, at, content: [{ type: 'tool_use', id: 'tu1', name: 'grep', input: { pattern: 'x' }, caller: { type: 'direct' } }], stopReason: 'tool_use', usage: usage({ input: 900, output: 20 }), costUsd: 0, latencyMs: 1, model: 'm' },
   { kind: 'tool-result', seq: 3, at, toolUseId: 'tu1', name: 'grep', status: 'ok', output: 'a.ts:1: x' },
   { kind: 'assistant', seq: 4, at, content: [{ type: 'text', text: 'Found it.', citations: null }], stopReason: 'end_turn', usage: usage({ input: 950, output: 5 }), costUsd: 0, latencyMs: 1, model: 'm' },
   {
@@ -139,7 +139,7 @@ const LOG: TurnEvent[] = [
     content: 'second question',
     context: [{ kind: 'skill', name: 'add-i18n', path: '.agents/skills/add-i18n/SKILL.md', text: 'Add a locale.' }, { kind: 'file', path: 'b.ts', text: 'export const b = 1;' }],
   },
-  { kind: 'assistant', seq: 6, at, content: [{ type: 'tool_use', id: 'tu2', name: 'read', input: { path: 'a.ts' } }], stopReason: 'tool_use', usage: usage({ input: 1000, output: 10 }), costUsd: 0, latencyMs: 1, model: 'm' },
+  { kind: 'assistant', seq: 6, at, content: [{ type: 'tool_use', id: 'tu2', name: 'read', input: { path: 'a.ts' }, caller: { type: 'direct' } }], stopReason: 'tool_use', usage: usage({ input: 1000, output: 10 }), costUsd: 0, latencyMs: 1, model: 'm' },
   { kind: 'tool-result', seq: 7, at, toolUseId: 'tu2', name: 'read', status: 'ok', output: 'export const a = 1;' },
 ];
 
