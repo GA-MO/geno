@@ -17,7 +17,7 @@ import type { BrowserLauncher } from '../src/mcp/browser.js';
 import { mcpSessions, type McpSessions } from '../src/mcp/sessions.js';
 import { gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { rgCommand } from './helpers.js';
 
 const require = createRequire(import.meta.url);
@@ -61,7 +61,7 @@ function launcher(marker: string): BrowserLauncher {
   return { command: process.execPath, args: [SERVER_BIN, `--chromeArg=--gcode-test-marker=${marker}`, `--chromeArg=--host-resolver-rules=MAP ${OFF_HOST} 127.0.0.1`] };
 }
 
-async function setup(replies: readonly Reply[]) {
+async function setup(replies: Reply[]) {
   const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-browser-ws-')));
   await writeFile(path.join(workspace, 'package.json'), JSON.stringify({ scripts: { dev: 'vite' } }));
   await writeFile(path.join(workspace, 'pnpm-lock.yaml'), '');
@@ -76,7 +76,10 @@ async function setup(replies: readonly Reply[]) {
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     HOME: home,
   };
-  const transport = fakeTransport(replies);
+  // Each session first loads the browser tools, in a model call the assertions skip; replies may still be added later.
+  replies.unshift(toolCall('', [loadTools(...BROWSER_TOOLS.map((tool) => `mcp__browser__${tool.tool}`))], usage));
+  const served = fakeTransport(replies);
+  const transport = { fetch: served.fetch, get requests() { return served.requests.slice(1); } };
   const io: Io = {
     env,
     cwd: workspace,
@@ -146,7 +149,7 @@ const userDataDirs = (marker: string): string[] => [...new Set(chromes(marker).f
 
 type Block = { type: string; text?: string; tool_use_id?: string; content?: Block[] | string };
 const toolResults = (body: { messages: { role: string; content: Block[] | string }[] }): Block[] =>
-  body.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content.filter((b) => b.type === 'tool_result')));
+  body.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content.filter((b) => b.type === 'tool_result' && !b.tool_use_id?.startsWith('tu_load_'))));
 const textOf = (block: Block): string =>
   typeof block.content === 'string' ? block.content : (block.content ?? []).flatMap((b) => (b.type === 'text' ? [b.text ?? ''] : [])).join('\n');
 
@@ -186,7 +189,7 @@ describe('the built-in browser', () => {
     expect(before.running, 'no Chrome before the first browser call').toBe(0);
     expect(during?.state.status).toBe('ready');
 
-    const offered = (transport.requests[0]!.body.tools as { name: string }[]).map((tool) => tool.name).filter((name) => name.startsWith('mcp__browser__'));
+    const offered = offeredTools(transport.requests[0]!.body).filter((name) => name.startsWith('mcp__browser__'));
     expect(offered, 'the pinned tools are offered before the server ever ran').toEqual(BROWSER_TOOLS.map((tool) => `mcp__browser__${tool.tool}`));
     expect(permissions, 'a local page and reads of it ask nothing in Auto').toEqual([]);
 

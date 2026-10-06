@@ -31,7 +31,7 @@ import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
 import { CURSOR_SETUP, type FakeScript, type FakeStep } from './fake-acp-agent.js';
-import { answer, fakeTransport, toolCall } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-acp-agent.ts', import.meta.url));
@@ -342,7 +342,7 @@ describe('an external ACP agent as a backend', () => {
     let messaged!: () => void;
     const parentMessaged = new Promise<void>((resolve) => (messaged = resolve));
     const replies = [
-      toolCall('Starting a peek.', [{ id: 'tu_a', name: 'agent', input: { agent: 'peek', task: 'hold on and look', background: true } }], usage),
+      toolCall('Starting a peek.', [{ id: 'tu_a', name: 'agent', input: { agent: 'peek', task: 'hold on and look', background: true } }, loadTools('message_agent')], usage),
       undefined,
       answer('Waiting for the peek.', usage),
       answer('The peek is back.', usage),

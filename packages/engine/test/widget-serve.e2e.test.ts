@@ -11,7 +11,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -53,13 +53,14 @@ async function setup(replies: readonly Reply[], capable = true) {
   return { workspace, home, transport, updates, connect, open, say, events };
 }
 
-const toolNames = (body: { tools: { name: string }[] }) => body.tools.map((t) => t.name);
+const toolNames = offeredTools;
 type Update = acp.SessionUpdate & { toolCallId?: string; _meta?: Record<string, unknown>; content?: acp.ToolCallContent[]; status?: string; title?: string };
 const forCall = (updates: readonly acp.SessionUpdate[], id: string) => (updates as Update[]).filter((u) => u.toolCallId === id);
 
 describe('gcode serve: show_widget', () => {
   it('stores the widget by its hash, logs the reference, and sends the html with the result', async () => {
     const { connect, open, say, events, updates, home, transport } = await setup([
+      toolCall('', [loadTools('show_widget')], usage),
       toolCall('Here is the breakdown.', [{ id: 'tu_w', name: 'show_widget', input: INPUT }], usage),
       answer('The thinking phase is the largest.', usage),
     ]);
@@ -72,7 +73,7 @@ describe('gcode serve: show_widget', () => {
     expect(toolNames(transport.requests[0]!.body)).toContain('show_widget');
     const file = path.join(home, 'sessions', sessionId, 'attachments', `${sha256(HTML)}.html`);
     expect(await readFile(file, 'utf8')).toBe(HTML);
-    const result = (await events(sessionId)).find((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result')!;
+    const result = (await events(sessionId)).find((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result' && e.toolUseId === 'tu_w')!;
     expect(result.widget).toEqual({ sha256: sha256(HTML), title: INPUT.title, bytes: Buffer.byteLength(HTML) });
     expect(result.status).toBe('ok');
     expect('output' in result && result.output).toBe(`Shown to the user in the chat: "${INPUT.title}".`);
@@ -91,7 +92,7 @@ describe('gcode serve: show_widget', () => {
   });
 
   it('draws it again when the session is loaded, and says so when the stored file is gone', async () => {
-    const { connect, open, say, updates, home, workspace } = await setup([toolCall('', [{ id: 'tu_w', name: 'show_widget', input: INPUT }], usage), answer('Done.', usage)]);
+    const { connect, open, say, updates, home, workspace } = await setup([toolCall('', [loadTools('show_widget')], usage), toolCall('', [{ id: 'tu_w', name: 'show_widget', input: INPUT }], usage), answer('Done.', usage)]);
     const sessionId = await connect(async (ctx) => {
       const id = await open(ctx);
       await say(ctx, id, 'draw it');
@@ -132,6 +133,7 @@ describe('gcode serve: show_widget', () => {
 
   it('tells the model what is wrong with a widget it cannot show', async () => {
     const { connect, open, say, events } = await setup([
+      toolCall('', [loadTools('show_widget')], usage),
       toolCall('', [{ id: 'tu_w', name: 'show_widget', input: { title: 'Speed', html: '<p>', width: 680 } }], usage),
       answer('Sorry.', usage),
     ]);
@@ -140,7 +142,7 @@ describe('gcode serve: show_widget', () => {
       await say(ctx, id, 'draw it');
       return id;
     });
-    const result = (await events(sessionId)).find((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result')!;
+    const result = (await events(sessionId)).find((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result' && e.toolUseId === 'tu_w')!;
     expect(result.status).toBe('error');
     expect('output' in result && result.output).toContain('show_widget has an unknown field "width"');
     expect(result.widget).toBeUndefined();

@@ -24,7 +24,7 @@ import { mcpSessions } from '../src/mcp/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, toolCall, type FakeToolUse } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -80,7 +80,7 @@ describe('background commands in a run', () => {
     const settle = use('bash', { command: 'sleep 1' });
     const transport = fakeTransport([
       toolCall('Starting the job.', [start], usage),
-      toolCall('Reading meanwhile.', [read], usage),
+      toolCall('Reading meanwhile.', [read, loadTools('bash_output', 'bash_stop')], usage),
       toolCall('Waiting.', [wait], usage),
       toolCall('Reading its output.', [output], usage),
       toolCall('A long one.', [long], usage),
@@ -143,7 +143,7 @@ describe('background commands in a run', () => {
     const server = background(`node -e "require('http').createServer((q, s) => s.end('hello from the dev server')).listen(${port}, '127.0.0.1', () => console.log('listening'))"`);
     const poll = use('bash', { command: `sleep 1; curl -s http://127.0.0.1:${port}/` });
     const stop = use('bash_stop', { id: 'bg-1' });
-    const transport = fakeTransport([toolCall('Serving.', [server], usage), toolCall('Polling.', [poll], usage), toolCall('Stopping.', [stop], usage), answer('Done.', usage)]);
+    const transport = fakeTransport([toolCall('Serving.', [server], usage), toolCall('Polling.', [poll, loadTools('bash_stop')], usage), toolCall('Stopping.', [stop], usage), answer('Done.', usage)]);
     expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Serve and poll'], env, { fetch: transport.fetch })).code).toBe(0);
     const bodies = transport.requests.map((r) => r.body as Body);
     expect(resultOf(bodies[2]!, poll.id)).toBe('hello from the dev server\n[exit code 0]');

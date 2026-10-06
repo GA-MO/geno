@@ -21,6 +21,7 @@ export type ToolRun = {
   readonly widget?: WidgetRef | undefined;
   readonly editorAction?: EditorAction | undefined;
   readonly todo?: TodoList | undefined;
+  readonly loaded?: readonly string[] | undefined;
 };
 
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>

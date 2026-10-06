@@ -55,6 +55,8 @@ export type ToolReply =
       readonly widget?: WidgetRef | undefined;
       readonly editorAction?: EditorAction | undefined;
       readonly todo?: TodoList | undefined;
+      /** The deferred tools a tool_search call loaded. */
+      readonly loaded?: readonly string[] | undefined;
     };
 
 /** A tool's executor, typed on its parsed input. */

@@ -18,7 +18,7 @@ import type { Io } from '../src/command.js';
 import { mcpSessions, type McpSessions } from '../src/mcp/sessions.js';
 import { gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { rgCommand } from './helpers.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
@@ -119,7 +119,7 @@ describe('gcode serve with MCP', () => {
   it('offers an editor-provided server tool to the model, asks once with an allow-for-session option, and logs the approval', async () => {
     const first = { id: 'tu_mcp_1', name: 'mcp__fake__echo', input: { text: 'one' } };
     const second = { id: 'tu_mcp_2', name: 'mcp__fake__echo', input: { text: 'two' } };
-    const { transport, permissions, updates, connect } = await setup([toolCall('Echoing.', [first], usage), toolCall('Again.', [second], usage), answer('Done.', usage)]);
+    const { transport, permissions, updates, connect } = await setup([toolCall('', [loadTools('mcp__fake__echo')], usage), toolCall('Echoing.', [first], usage), toolCall('Again.', [second], usage), answer('Done.', usage)]);
 
     const stop = await connect([editorServer()], async (ctx, sessionId) => {
       await serversUntil(ctx, sessionId, allReady);
@@ -127,16 +127,16 @@ describe('gcode serve with MCP', () => {
     });
 
     expect(stop).toBe('end_turn');
-    const tools = (transport.requests[0]!.body.tools as { name: string }[]).map((tool) => tool.name);
+    const tools = offeredTools(transport.requests[0]!.body);
     expect(tools.filter((name) => name.startsWith('mcp__'))).toEqual(['mcp__fake__crash', 'mcp__fake__echo', 'mcp__fake__env', 'mcp__fake__fail', 'mcp__fake__image', 'mcp__fake__screenshot']);
-    expect(tools.slice(0, tools.indexOf('mcp__fake__crash')), 'the built-in tools keep their cached place first').toEqual(['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'glob', 'grep', 'list', 'monitor', 'read', 'schedule_wakeup', 'skill', 'todo']);
-    expect(JSON.stringify(transport.requests[1]!.body.tools), 'the tool list is the same bytes on the next call').toBe(JSON.stringify(transport.requests[0]!.body.tools));
+    expect((transport.requests[0]!.body.tools as { name: string }[]).map((tool) => tool.name), 'the core tools in full, the rest behind tool_search').toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo', 'tool_search']);
+    for (const later of transport.requests.slice(1)) expect(JSON.stringify(later.body.tools), 'the tool list is the same bytes on every call, loads included').toBe(JSON.stringify(transport.requests[0]!.body.tools));
 
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject']);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'an MCP tool its server marks read-only' });
-    expect(JSON.stringify(transport.requests[1]!.body.messages)).toContain('echo: one');
-    expect(JSON.stringify(transport.requests[2]!.body.messages)).toContain('echo: two');
+    expect(JSON.stringify(transport.requests[2]!.body.messages)).toContain('echo: one');
+    expect(JSON.stringify(transport.requests[3]!.body.messages)).toContain('echo: two');
     expect(updates).toContainEqual(
       expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: first.id, _meta: { [APPROVAL_META]: expect.objectContaining({ rule: 'mcp-read-only', decidedBy: 'user', verdict: 'allow' }) } }),
     );
@@ -152,7 +152,7 @@ describe('gcode serve with MCP', () => {
       expect(before.servers).toEqual([expect.objectContaining({ name: 'fake', source: 'mcp-json', state: { status: 'untrusted' }, tools: [] })]);
 
       await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'hi' }] });
-      expect((transport.requests[0]!.body.tools as { name: string }[]).some((tool) => tool.name.startsWith('mcp__'))).toBe(false);
+      expect(offeredTools(transport.requests[0]!.body).some((name) => name.startsWith('mcp__'))).toBe(false);
       expect(existsSync(marker), 'an untrusted workspace server never spawns').toBe(false);
 
       const trusted = await ctx.request<McpServersResponse, McpTrustRequest>(MCP_TRUST_METHOD, { sessionId, name: 'fake', hash: before.servers[0]!.hash });
@@ -161,7 +161,7 @@ describe('gcode serve with MCP', () => {
       await serversUntil(ctx, sessionId, allReady);
 
       await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'again' }] });
-      expect((transport.requests[1]!.body.tools as { name: string }[]).map((tool) => tool.name)).toContain('mcp__fake__echo');
+      expect(offeredTools(transport.requests[1]!.body)).toContain('mcp__fake__echo');
       expect(existsSync(marker)).toBe(true);
     });
   });
@@ -188,7 +188,7 @@ describe('gcode serve with MCP', () => {
       await expect(ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'closed' }] })).rejects.toThrow(/no session/);
     });
 
-    const names = (index: number) => (transport.requests[index]!.body.tools as { name: string }[]).map((tool) => tool.name);
+    const names = (index: number) => offeredTools(transport.requests[index]!.body);
     expect(statesAtCall[0], 'the first model call went out while the server was still starting').toBe('starting');
     expect(names(0).some((name) => name.startsWith('mcp__')), 'the first prompt does not wait for the cold server').toBe(false);
     expect(statesAtCall[1]).toBe('starting');
@@ -219,7 +219,7 @@ describe('gcode serve with MCP', () => {
       await serversUntil(ctx, sessionId, allReady);
       await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'on' }] });
     });
-    expect((transport.requests[0]!.body.tools as { name: string }[]).some((tool) => tool.name.startsWith('mcp__'))).toBe(false);
-    expect((transport.requests[1]!.body.tools as { name: string }[]).map((tool) => tool.name)).toContain('mcp__fake__echo');
+    expect(offeredTools(transport.requests[0]!.body).some((name) => name.startsWith('mcp__'))).toBe(false);
+    expect(offeredTools(transport.requests[1]!.body)).toContain('mcp__fake__echo');
   });
 });

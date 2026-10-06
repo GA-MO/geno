@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { asSessionId, toolResultText, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse } from './fake-transport.js';
+import { answer, fakeTransport, loadTools, toolCall, type FakeToolUse } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -41,6 +41,7 @@ describe('a skill in ~/.agents/skills through gcode agent', () => {
     };
     const created = path.join(folder, 'created.md');
     const transport = fakeTransport([
+      toolCall('', [loadTools('skill')], usage),
       toolCall('Loading the skill.', [use('skill', { name: 'deploy' })], usage),
       toolCall('Reading its steps.', [use('read', { path: path.join(folder, 'references', 'steps.md') })], usage),
       toolCall('Reading elsewhere.', [use('read', { path: path.join(user, 'secret.txt') })], usage),
@@ -51,7 +52,7 @@ describe('a skill in ~/.agents/skills through gcode agent', () => {
     expect(run.code).toBe(0);
 
     const log = await readSessionLog(sessionFile(openStore(env), asSessionId(sessionIdOf(run.stdout))));
-    const [skill, steps, secret, edit] = results(log.events);
+    const [, skill, steps, secret, edit] = results(log.events);
     expect(skill).toEqual({ name: 'skill', status: 'ok', output: expect.stringContaining('# Deploy\n\nRead references/steps.md first.') });
     expect(steps).toEqual({ name: 'read', status: 'ok', output: '1\tBuild, then upload.' });
     expect(secret).toMatchObject({ name: 'read', status: 'error', output: expect.stringContaining('outside the workspace') });

@@ -1,0 +1,42 @@
+import { z } from 'zod';
+import { loadedTools, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster } from '@g-code/core';
+import { ALWAYS, executor, ToolError, type Executor } from './context.js';
+import type { Executors } from './index.js';
+
+const searchInput = z.strictObject({ select: z.array(z.string().min(1)).optional(), query: z.string().min(1).optional() });
+
+/**
+ * The roster's executors: `tool_search`, and each deferred tool refusing to run until a tool_search in the log loaded
+ * it. The log is what decides, so a resumed session can call what it loaded before.
+ */
+export function rosterExecutors(roster: ToolRoster, executors: Executors): Executors {
+  if (roster.deferred.size === 0) return executors;
+  const gated = Object.fromEntries(
+    Object.entries(executors).map(([name, inner]): [string, Executor] =>
+      roster.deferred.has(name)
+        ? [
+            name,
+            {
+              ...inner,
+              async run(raw, ctx) {
+                const refused = unloadedCallError(roster.deferred, loadedTools(ctx.events()), name);
+                if (refused !== undefined) throw new ToolError(refused);
+                return inner.run(raw, ctx);
+              },
+            },
+          ]
+        : [name, inner],
+    ),
+  );
+  const search = executor({
+    concurrent: ALWAYS,
+    input: searchInput,
+    describe: ({ select, query }) => `${TOOL_SEARCH_TOOL} ${[...(select ?? []), ...(query === undefined ? [] : [JSON.stringify(query)])].join(' ')}`,
+    async run(input) {
+      const { loaded, text } = searchTools(roster.deferred, input);
+      if (loaded.length === 0) throw new ToolError(text);
+      return { text, loaded };
+    },
+  });
+  return { ...gated, [TOOL_SEARCH_TOOL]: search };
+}

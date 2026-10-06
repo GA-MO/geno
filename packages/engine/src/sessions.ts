@@ -163,6 +163,7 @@ const toolResultFields = {
   widget: widgetRefSchema.optional(),
   editorAction: editorActionSchema.optional(),
   todo: todoSchema.optional(),
+  loaded: z.array(z.string()).optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 

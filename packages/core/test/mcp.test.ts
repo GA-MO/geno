@@ -3,13 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { MCP_RULES, mcpDenialFor, type ApprovalMode } from '../src/approval.js';
 import { classifierRequest } from '../src/classifier.js';
 import {
-  catalogText,
   definitionHash,
   isTrusted,
-  MAX_CATALOG_CHARS,
-  MCP_CALL_TOOL,
-  MCP_DESCRIBE_TOOL,
-  MCP_LAZY_THRESHOLD,
   MCP_MAX_RESTARTS,
   mcpCatalog,
   mcpResultText,
@@ -112,19 +107,11 @@ describe('MCP tool names and definitions', () => {
     expect(new Set(catalog.keys()).size).toBe(2);
   });
 
-  it('declares each tool directly, sorted by name, up to the threshold', () => {
+  it('declares each tool directly, sorted by name, however many there are', () => {
     const tools = [tool('zeta', 'b'), tool('alpha', 'z'), tool('alpha', 'a')];
     expect(mcpToolDefinitions(mcpCatalog(tools)).map((definition) => definition.name)).toEqual(['mcp__alpha__a', 'mcp__alpha__z', 'mcp__zeta__b']);
     expect(mcpToolDefinitions(mcpCatalog(tools.toReversed()))).toEqual(mcpToolDefinitions(mcpCatalog(tools)));
-  });
-
-  it('lists names past the threshold, with mcp_describe and mcp_call in their place, within a size budget', () => {
-    const many = Array.from({ length: MCP_LAZY_THRESHOLD + 1 }, (_, i) => tool('srv', `t${String(i).padStart(3, '0')}`));
-    expect(mcpToolDefinitions(mcpCatalog(many)).map((definition) => definition.name)).toEqual([MCP_CALL_TOOL, MCP_DESCRIBE_TOOL]);
-    const huge = Array.from({ length: 30 }, (_, s) => Array.from({ length: 20 }, (_, i) => tool(`server${s}`, `a_rather_long_tool_name_${i}`))).flat();
-    const text = catalogText(mcpCatalog(huge));
-    expect(text.length).toBeLessThanOrEqual(MAX_CATALOG_CHARS + 60);
-    expect(text).toMatch(/- \.\.\. \d+ more tools not listed$/);
+    expect(mcpToolDefinitions(mcpCatalog(Array.from({ length: 60 }, (_, i) => tool('srv', `t${i}`))))).toHaveLength(60);
   });
 
   it('turns a result into text, with images and resources described', () => {
