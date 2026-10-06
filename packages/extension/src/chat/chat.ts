@@ -40,6 +40,9 @@ import {
   RUNNING_META,
   TASK_STATUSES,
   TASK_UPDATE_METHOD,
+  ARENA_UPDATE_METHOD,
+  LANE_GRAFT_META,
+  laneGraftPrompt,
   type DetachRequest,
   type TaskRecord,
 } from '@g-code/core';
@@ -58,6 +61,7 @@ import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
 import { TaskHost } from './tasks-host.js';
+import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
 import {
@@ -397,6 +401,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly widgets: ReturnType<typeof widgetHost>;
   /** The engine's tasks and this folder's lanes, for their panes and their notices. */
   private readonly background: TaskHost;
+  /** This folder's best-of-n runs, for the Arena pane. */
+  private readonly arena: ArenaHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
   /** The running turn of the shown session that another window started, which the panel took over on load. */
@@ -445,6 +451,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         if (this.view !== undefined) this.view.badge = running === 0 ? undefined : { value: running, tooltip: running === 1 ? '1 task running in the background' : `${running} tasks running in the background` };
       },
     );
+    this.arena = new ArenaHost(() => this.engine.connection(), (message) => void this.view?.webview.postMessage(message satisfies ToView), {
+      applyLane: (name) => this.applyLane(name),
+      graftLane: (name, hunks) => this.graftLane(name, hunks),
+      defaultMode,
+    });
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -509,7 +520,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
-      .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params));
+      .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))
+      .onNotification(ARENA_UPDATE_METHOD, arenaUpdate, ({ params }) => this.arena.updated(params));
   }
 
   /** The shown session, the one being loaded, or one of the shown session's subagents. */
@@ -573,7 +585,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   async send(text: string, attachments: readonly OutgoingAttachment[] = []): Promise<acp.StopReason> {
     const routed = routeText(this.commands, text);
     if (routed.kind === 'editor') {
-      await this.editorActions[routed.action]();
+      await this.editorActions[routed.action](routed.args);
       return 'end_turn';
     }
     for (const a of attachments) if (a.path !== undefined) this.attachedPaths.add(a.path);
@@ -582,12 +594,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   /** What the editor's own `/` built-ins do: the same as the view's New Chat and History actions and the model button. */
-  private readonly editorActions: Readonly<Record<EditorAction, () => Promise<void>>> = {
+  private readonly editorActions: Readonly<Record<EditorAction, (args: string) => Promise<void>>> = {
     'new-chat': () => this.newChat(),
     history: async () => this.showHistory(),
     model: async () => this.showSettings(),
     rules: async () => void this.view?.webview.postMessage({ type: 'show-rules' } satisfies ToView),
     memory: async () => void this.view?.webview.postMessage({ type: 'show-memory' } satisfies ToView),
+    'best-of-n': (args) => this.arena.begin(args),
   };
 
   /** A logged command as its chip shows it; a command no longer listed shows as a prompt template. */
@@ -656,6 +669,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     return this.prompt(prompt, prompt, { [LANE_APPLY_META]: name }, async () => []);
   }
 
+  /** Grafts some of a lane's hunks into the main checkout as a turn of the shown chat, under review as an apply's are. */
+  async graftLane(name: string, hunks: readonly string[]): Promise<acp.StopReason> {
+    if (this.shownCwd !== undefined) throw new Error('Open a chat of the main checkout to graft a lane into it.');
+    const prompt = laneGraftPrompt(name, hunks.length);
+    return this.prompt(prompt, prompt, { [LANE_GRAFT_META]: { lane: name, hunks } }, async () => []);
+  }
+
   /** The adopted turn ended: its end shows as a sent one's would, with the usage the task reports. */
   private adoptedEnded(task: TaskRecord): void {
     const status = ADOPTED_ENDS[task.status];
@@ -699,6 +719,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     let session = this.sessions.get(connection);
     if (session === undefined) {
       void this.background.connected(connection).catch((error: unknown) => this.output.appendLine(`tasks: ${messageOf(error)}`));
+      void this.arena.connected(connection).catch((error: unknown) => this.output.appendLine(`arenas: ${messageOf(error)}`));
       session = this.openSession(connection);
       this.sessions.set(connection, session);
       session.catch(() => this.sessions.delete(connection));
@@ -1005,6 +1026,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         const background = this.background.current();
         void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown } satisfies ToView);
         void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
+        void view.webview.postMessage({ type: 'arena', state: this.arena.current() } satisfies ToView);
         this.composer.refreshModels();
         if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
         this.mcpAsked = false;
@@ -1047,6 +1069,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.composer.handlers,
       ...this.widgets.handlers,
       ...this.background.handlers,
+      ...this.arena.handlers,
     };
   }
 
