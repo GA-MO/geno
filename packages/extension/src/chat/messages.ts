@@ -14,6 +14,7 @@ import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
+import type { CompactMark } from '@g-code/core/compact';
 import type { ReviewMode } from '../review/mode.js';
 
 /**
@@ -81,7 +82,7 @@ export type Child = {
 };
 
 /** What a child's own stream adds to its turn. Its questions ask on the parent's call, so they are the parent's. */
-export const CHILD_ACTIONS = ['text', 'notice', 'tool', 'diff', 'steer'] as const;
+export const CHILD_ACTIONS = ['text', 'notice', 'tool', 'diff', 'steer', 'compact'] as const;
 export type ChildAction = Extract<Action, { readonly type: (typeof CHILD_ACTIONS)[number] }>;
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -89,7 +90,7 @@ export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
 export type Usage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };
 
 /** What the assistant did in a turn, in the order it happened. */
-export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock | SteerBlock;
+export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock | SteerBlock | CompactBlock;
 
 export type TextBlock = { readonly kind: 'text'; readonly id: string; readonly text: string };
 
@@ -208,6 +209,9 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 /** A message that joined the running turn where it landed: after the tool steps before it, before the model's next answer. */
 export type SteerBlock = { readonly kind: 'steer'; readonly id: string; readonly seq: number; readonly shown: SteerShown };
 
+/** Where the context was compacted (U47): the model reads the summary in place of what came before it. */
+export type CompactBlock = { readonly kind: 'compact'; readonly id: string; readonly mark: CompactMark };
+
 /**
  * A change to the transcript. Everything but `reset`, `model` and `review` applies to the last turn, the only
  * one that can still change. `at` is when the extension saw the update, so a replay keeps the durations.
@@ -276,6 +280,8 @@ export type Action =
   | { readonly type: 'error'; readonly message: string }
   /** A steer the engine logged in the running turn at `seq`. */
   | { readonly type: 'steer'; readonly seq: number; readonly shown: SteerShown }
+  /** The engine's compaction chunk, live or replayed; once per seq. */
+  | { readonly type: 'compact'; readonly mark: CompactMark }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined; readonly seq?: number | undefined }
   | { readonly type: 'child-start'; readonly id: string; readonly toolId: string; readonly role: string; readonly task: string; readonly model: string; readonly at: number }
   | { readonly type: 'child'; readonly id: string; readonly action: ChildAction }

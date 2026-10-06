@@ -131,6 +131,7 @@ import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from '.
 import type { CommandOption, SentCommand } from './slash.js';
 import { isChildAction, subagentAction } from './subagent-host.js';
 import { SteerHost, steerActionOf } from './steer-host.js';
+import { agentChunkAction } from './compact-host.js';
 import { RewindHost } from './rewind-host.js';
 import { UsageHost } from './usage-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
@@ -328,7 +329,7 @@ type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.Sessio
 
 const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
   user_message_chunk: (update) => steerActionOf(update),
-  agent_message_chunk: ({ content }) => (content.type === 'text' ? { type: 'text', text: content.text } : undefined),
+  agent_message_chunk: (update) => agentChunkAction(update),
   notice: ({ title, _meta }, at) => {
     if (_meta == null || !(WAITING_META in _meta)) return { type: 'notice', text: title };
     const waiting = waitingSchema.nullable().safeParse(_meta[WAITING_META]);

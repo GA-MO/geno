@@ -17,6 +17,7 @@
 @import './todo.css';
 @import './spinoff.css';
 @import './usage.css';
+@import './compact.css';
 
 /*
  * Trail: a run is a path. In the native style every color comes from the theme's variables, mixed with color-mix
