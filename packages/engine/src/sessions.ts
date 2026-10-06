@@ -35,6 +35,9 @@ import {
   isWakeId,
   MONITOR_OUTCOMES,
   type WakeId,
+  spinoffsOf,
+  type SpinoffDecision,
+  type SpinoffId,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
 import { editorActionSchema } from './tools/editor.js';
@@ -152,6 +155,16 @@ const approvalSchema = z.strictObject({
 
 const todoSchema = z.array(z.strictObject({ id: z.string(), text: z.string(), status: z.enum(TODO_STATUSES) }));
 
+const spinoffId = z.string().regex(/^task_[0-9a-f]{8}$/).transform((raw) => raw as SpinoffId);
+const spinoffNoteSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('offered'), offer: z.strictObject({ id: spinoffId, title: z.string().min(1), tldr: z.string().min(1), prompt: z.string().min(1) }) }),
+  z.strictObject({ kind: z.literal('withdrawn'), id: spinoffId }),
+]);
+const spinoffDecisionSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('started'), sessionId: z.string().min(1), lane: z.string().min(1) }),
+  z.strictObject({ kind: z.literal('dismissed') }),
+]);
+
 const toolResultFields = {
   kind: z.literal('tool-result'),
   ...seqFields,
@@ -165,6 +178,7 @@ const toolResultFields = {
   editorAction: editorActionSchema.optional(),
   todo: todoSchema.optional(),
   loaded: z.array(z.string()).optional(),
+  spinoff: spinoffNoteSchema.optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 
@@ -312,6 +326,7 @@ const turnEventSchema = z.union([
     }),
     z.strictObject({ kind: z.literal('backend-start'), ...seqFields, agentSessionId: z.string().min(1), lane: z.string().min(1).nullable(), sandboxed: z.boolean(), loadable: z.boolean() }),
     z.strictObject({ kind: z.literal('backend-model'), seq: seqFields.seq.optional(), at: seqFields.at, model: z.string().min(1) }),
+    z.strictObject({ kind: z.literal('spinoff'), seq: seqFields.seq.optional(), at: seqFields.at, id: spinoffId, decision: spinoffDecisionSchema }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
@@ -395,13 +410,16 @@ export async function logMode(log: SessionLog, mode: SessionMode): Promise<Sessi
 export type SettingChange =
   | { readonly kind: 'mode'; readonly mode: SessionMode }
   | { readonly kind: 'effort'; readonly effort: Effort }
-  | { readonly kind: 'backend-model'; readonly model: string };
+  | { readonly kind: 'backend-model'; readonly model: string }
+  /** Not a setting, but logged the same way: the user decides about a suggestion whether or not a turn runs. */
+  | { readonly kind: 'spinoff'; readonly id: SpinoffId; readonly decision: SpinoffDecision };
 
 /** Whether `change` would leave the session as it is. */
 const UNCHANGED: { readonly [K in SettingChange['kind']]: (log: SessionLog, change: Extract<SettingChange, { kind: K }>) => boolean } = {
   mode: (log, { mode }) => sessionModeOf(log.events) === mode,
   effort: (log, { effort }) => sessionEffortOf(log.session, log.events) === effort,
   'backend-model': (log, { model }) => log.events.findLast((e) => e.kind === 'backend-model')?.model === model,
+  spinoff: (log, { id }) => spinoffsOf(log.events).find((spinoff) => spinoff.id === id)?.state.kind !== 'offered',
 };
 
 const unchanged = (log: SessionLog, change: SettingChange): boolean => (UNCHANGED[change.kind] as (log: SessionLog, change: SettingChange) => boolean)(log, change);

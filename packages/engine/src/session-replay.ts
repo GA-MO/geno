@@ -22,6 +22,14 @@ import {
   STEER_META,
   steerMarkOf,
   reviewState,
+  DISMISS_TASK_TOOL,
+  parseDismissTask,
+  parseSpawnTask,
+  SPAWN_TASK_TOOL,
+  SPINOFF_META,
+  spinoffShownOf,
+  spinoffsOf,
+  type Spinoff,
   toolResultText,
   type FileChange,
   type HunkId,
@@ -96,6 +104,14 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseTodo(input);
     return parsed.ok ? `${TODO_TOOL} ${todoLine(parsed.value)}` : TODO_TOOL;
   },
+  [SPAWN_TASK_TOOL]: (input) => {
+    const parsed = parseSpawnTask(input);
+    return parsed.ok ? `${SPAWN_TASK_TOOL} ${parsed.value.title}` : SPAWN_TASK_TOOL;
+  },
+  [DISMISS_TASK_TOOL]: (input) => {
+    const parsed = parseDismissTask(input);
+    return parsed.ok ? `${DISMISS_TASK_TOOL} ${parsed.value}` : DISMISS_TASK_TOOL;
+  },
   ask_user: (input) => {
     const parsed = parseAskUser(input);
     return parsed.ok ? `ask_user ${askUserTitle(parsed.value)}` : 'ask_user';
@@ -122,8 +138,9 @@ const NO_WIDGETS = (): ShownWidget => ({ uri: '', html: undefined });
  * A tool's result as its closing update, live and replayed; `meta` adds to the approval record a flagged command
  * carries. A widget's html goes along as an embedded resource, its reference under WIDGET_META.
  */
-export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, unknown> = {}, widget?: ShownWidget): acp.SessionUpdate => {
+export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, unknown> = {}, widget?: ShownWidget, spinoffs?: readonly Spinoff[]): acp.SessionUpdate => {
   const all = {
+    ...(event.spinoff === undefined || event.status !== 'ok' ? {} : { [SPINOFF_META]: spinoffShownOf(event.toolUseId, event.spinoff, spinoffs) }),
     ...(event.approval === undefined ? {} : { [APPROVAL_META]: event.approval }),
     ...(event.widget === undefined ? {} : { [WIDGET_META]: event.widget }),
     ...(event.editorAction === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction }),
@@ -207,6 +224,7 @@ const reviewed = (change: FileChange, status: ReadonlyMap<HunkId, HunkStatus>): 
  */
 export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: WidgetRef) => ShownWidget = NO_WIDGETS): acp.SessionUpdate[] {
   const status = new Map(reviewState(events).map((hunk) => [hunk.id, hunk.status]));
+  const spinoffs = spinoffsOf(events);
   const start = events[0];
   const workspace = start?.kind === 'session-start' ? start.session.workspace : undefined;
   return runsOf(events).flatMap((run) => {
@@ -240,6 +258,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
               ...(event.change === undefined ? {} : { [REPLAYED_CHANGE_META]: reviewed(event.change, status) }),
             },
             event.widget === undefined ? undefined : widgetOf(event.widget),
+            spinoffs,
           ),
         );
       }
