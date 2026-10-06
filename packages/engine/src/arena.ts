@@ -249,10 +249,12 @@ export async function startArena(deps: ArenaDeps, task: string, variants: readon
   const step = (event: ArenaEvent): Promise<void> => {
     run = arenaStep(run, event);
     const snapshot = run;
-    saving = saving.then(async () => {
-      await saveArena(repo, snapshot);
-      deps.onUpdate(snapshot);
-    });
+    saving = saving
+      .then(async () => {
+        await saveArena(repo, snapshot);
+        deps.onUpdate(snapshot);
+      })
+      .catch((error: unknown) => io.err(`arena ${id}: could not save a step: ${String(error)}`));
     return saving;
   };
   await saveArena(repo, run);
