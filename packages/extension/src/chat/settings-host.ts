@@ -56,7 +56,7 @@ export class SettingsPage implements vscode.Disposable {
         if (event.affectsConfiguration('gcode')) this.refresh();
       }),
     ];
-    this.agents = new AgentsHost(output, post);
+    this.agents = new AgentsHost(output, post, secrets);
     this.handlers = {
       'settings-list': () => {
         this.shown = true;

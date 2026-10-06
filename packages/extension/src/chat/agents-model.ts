@@ -1,4 +1,4 @@
-/** The external ACP agents the settings page can sign in to and update, and the states of each one's account. */
+/** The external ACP agents the settings page signs in to and updates, and the states of each one's account. */
 
 export type AgentId = 'cursor';
 
@@ -21,14 +21,19 @@ export type ExternalAgent = {
   readonly status: readonly string[];
   readonly commands: Readonly<Record<AgentAction, readonly string[]>>;
   readonly parseStatus: (output: string) => StatusReport | undefined;
+  /** The environment variable the CLI reads an API key from. */
+  readonly keyEnv: string;
   /**
-   * The official installer, from the agent's docs. Geno runs it only in a terminal the user sees, after a confirm
-   * that names the command, where it downloads from and where it puts the CLI.
+   * The official installer, from the agent's docs. Geno never runs it: the card shows the command to copy and
+   * links the page it comes from, and the user installs the CLI themselves.
    */
-  readonly install: { readonly command: string; readonly source: string; readonly location: string; readonly url: string };
+  readonly install: { readonly command: string; readonly url: string };
 };
 
 export type CliFound = { readonly path: string; readonly version: string | undefined };
+
+/** How the CLI's processes sign in: its own browser login, or a key Geno keeps and passes in their env. */
+export type AuthSource = { readonly kind: 'browser'; readonly account: string | undefined } | { readonly kind: 'api-key' };
 
 /** How the last command ended, shown under the account until the next one. */
 export type Outcome = { readonly ok: boolean; readonly text: string; readonly output: string };
@@ -36,10 +41,8 @@ export type Outcome = { readonly ok: boolean; readonly text: string; readonly ou
 export type AgentState =
   | { readonly kind: 'checking'; readonly last?: Outcome }
   | { readonly kind: 'missing' }
-  /** The installer runs in a terminal; closing it checks again. */
-  | { readonly kind: 'installing' }
   | { readonly kind: 'signed-out'; readonly cli: CliFound; readonly last?: Outcome }
-  | { readonly kind: 'signed-in'; readonly cli: CliFound; readonly account: string | undefined; readonly last?: Outcome }
+  | { readonly kind: 'signed-in'; readonly cli: CliFound; readonly auth: AuthSource; readonly last?: Outcome }
   /** `link` names the sign-in page the CLI printed; the address itself stays in the extension. */
   | { readonly kind: 'signing-in'; readonly cli: CliFound; readonly output: string; readonly link: string | undefined }
   | { readonly kind: 'signing-out'; readonly cli: CliFound; readonly output: string }
@@ -49,12 +52,11 @@ export type AgentState =
 
 export type CheckResult =
   | { readonly kind: 'missing' }
-  | { readonly kind: 'found'; readonly path: string; readonly report: StatusReport }
+  | { readonly kind: 'found'; readonly path: string; readonly report: StatusReport; readonly apiKey: boolean }
   | { readonly kind: 'failed'; readonly path: string; readonly text: string; readonly output: string };
 
 export type AgentEvent =
   | { readonly type: 'check' }
-  | { readonly type: 'install' }
   | { readonly type: 'checked'; readonly result: CheckResult }
   | { readonly type: 'start'; readonly action: AgentAction }
   | { readonly type: 'output'; readonly output: string; readonly link?: string }
@@ -66,7 +68,9 @@ export type AgentsFromView =
   | { readonly type: 'agents-check' }
   | { readonly type: 'agents-run'; readonly id: string; readonly action: AgentAction }
   | { readonly type: 'agents-cancel'; readonly id: string }
-  | { readonly type: 'agents-install'; readonly id: string }
+  | { readonly type: 'agents-copy-install'; readonly id: string }
+  | { readonly type: 'agents-key'; readonly id: string; readonly key: string }
+  | { readonly type: 'agents-remove-key'; readonly id: string }
   | { readonly type: 'agents-open'; readonly id: string; readonly target: 'sign-in' | 'install' };
 
 // The terminal's cursor and erase codes, which the CLI draws its spinner with.
@@ -136,6 +140,16 @@ export function parseCursorAbout(output: string): StatusReport | undefined {
   return { version, signedIn: true, account: account === '' ? undefined : account };
 }
 
+/** The environment of one of the CLI's processes. The key goes only here, never into argv or the engine's env. */
+export function agentEnv(
+  agent: ExternalAgent,
+  base: Readonly<Record<string, string | undefined>>,
+  key: string | undefined,
+  extra: Readonly<Record<string, string>> = {},
+): Record<string, string | undefined> {
+  return key === undefined ? { ...base, ...extra } : { ...base, ...extra, [agent.keyEnv]: key };
+}
+
 export const EXTERNAL_AGENTS: readonly ExternalAgent[] = [
   {
     id: 'cursor',
@@ -145,7 +159,8 @@ export const EXTERNAL_AGENTS: readonly ExternalAgent[] = [
     status: ['about'],
     commands: { login: ['login'], logout: ['logout'], update: ['update'] },
     parseStatus: parseCursorAbout,
-    install: { command: 'curl https://cursor.com/install -fsS | bash', source: 'cursor.com', location: '~/.local/bin', url: 'https://cursor.com/docs/cli/installation' },
+    keyEnv: 'CURSOR_API_KEY',
+    install: { command: 'curl https://cursor.com/install -fsS | bash', url: 'https://cursor.com/docs/cli/installation' },
   },
 ];
 
@@ -166,24 +181,31 @@ const ENDED: Readonly<Record<(typeof RUNNING)[AgentAction], { readonly ok: strin
   updating: { ok: 'Update finished.', failed: 'Update failed', cancelled: 'Update cancelled.' },
 };
 
+function settled(result: Extract<CheckResult, { kind: 'found' }>, last: { readonly last?: Outcome }): AgentState {
+  const cli = { path: result.path, version: result.report.version };
+  if (result.apiKey) return { kind: 'signed-in', cli, auth: { kind: 'api-key' }, ...last };
+  if (!result.report.signedIn) return { kind: 'signed-out', cli, ...last };
+  return { kind: 'signed-in', cli, auth: { kind: 'browser', account: result.report.account }, ...last };
+}
+
+/** Whether a resting state offers `action`. A key signs in each process, so there is no login to sign out of. */
+const offers = (state: AgentState, action: AgentAction): state is Extract<AgentState, { cli: CliFound }> =>
+  (ACTIONS[state.kind] ?? []).includes(action) && 'cli' in state && !(action === 'logout' && state.kind === 'signed-in' && state.auth.kind === 'api-key');
+
 /** How an agent's state moves. An event that does not fit the state leaves it as it is. */
 export function agentReducer(state: AgentState, event: AgentEvent): AgentState {
   switch (event.type) {
     case 'check':
       return state.kind === 'checking' || state.kind === 'signing-in' || state.kind === 'signing-out' || state.kind === 'updating' ? state : { kind: 'checking' };
-    case 'install':
-      return state.kind === 'missing' ? { kind: 'installing' } : state;
     case 'checked': {
       if (state.kind !== 'checking') return state;
-      const last = state.last === undefined ? {} : { last: state.last };
       const { result } = event;
       if (result.kind === 'missing') return { kind: 'missing' };
       if (result.kind === 'failed') return { kind: 'error', cli: { path: result.path, version: undefined }, text: result.text, output: result.output };
-      const cli = { path: result.path, version: result.report.version };
-      return result.report.signedIn ? { kind: 'signed-in', cli, account: result.report.account, ...last } : { kind: 'signed-out', cli, ...last };
+      return settled(result, state.last === undefined ? {} : { last: state.last });
     }
     case 'start':
-      if (!(ACTIONS[state.kind] ?? []).includes(event.action) || !('cli' in state)) return state;
+      if (!offers(state, event.action)) return state;
       if (event.action === 'login') return { kind: 'signing-in', cli: state.cli, output: '', link: undefined };
       return { kind: RUNNING[event.action], cli: state.cli, output: '' };
     case 'output':
