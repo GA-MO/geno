@@ -100,7 +100,7 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
   },
 };
 
-const titleOf = (use: ToolUseBlock): string => {
+export const titleOf = (use: ToolUseBlock): string => {
   if (Object.hasOwn(EXECUTORS, use.name)) return EXECUTORS[use.name as keyof typeof EXECUTORS].describe(use.input);
   return AGENT_TITLES[use.name]?.((use.input ?? {}) as Record<string, unknown>) ?? use.name;
 };

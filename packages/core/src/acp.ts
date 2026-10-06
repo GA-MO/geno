@@ -6,6 +6,7 @@ import type { HunkStatus } from './hunks.js';
 import type { CheckpointRef, HunkId, ReviewHunk } from './review.js';
 import type { ForkOrigin, RewindChoice } from './rewind.js';
 import type { SessionSpend } from './spend.js';
+import type { SearchHit } from './session-search.js';
 
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
 export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
@@ -135,6 +136,15 @@ export type SessionSummaryMeta = { readonly turns: number; readonly costUsd: num
 export const RENAME_SESSION_METHOD = '_gcode/renameSession';
 
 export type RenameSessionRequest = { readonly sessionId: string; readonly title: string };
+
+/**
+ * Extension method, sent by the editor: searches the text of the sessions the history lists, this project's with
+ * `cwd`, every project's without, and answers with each matching session's best hit, best first.
+ */
+export const SEARCH_SESSIONS_METHOD = '_gcode/searchSessions';
+
+export type SearchSessionsRequest = { readonly query: string; readonly cwd?: string };
+export type SearchSessionsResponse = { readonly hits: readonly SearchHit[] };
 
 /**
  * Key in a replayed `user_message_chunk`'s `_meta` during session/load: how the turn it starts went, which ACP
