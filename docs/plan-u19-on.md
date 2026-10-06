@@ -207,3 +207,7 @@ Brief: research/competitors-2026-10.md §5 "U22". Agent definitions in Claude Co
 ## U39: command steps like Claude Code (queued after the Auto fix)
 
 The user compared one disk-cleanup prompt in Claude Code and in Geno. Claude Code titles each command step in plain words ("Show disk usage and project layout") and shows IN and OUT in one box. Geno shows "Ran" and a cut-off command. Add an optional `description` (5 to 10 words) to the `bash` tool, as Claude Code's Bash tool has, use it as the step title, and draw the step as one IN/OUT box. This is one deliberate change to the tool prefix. Check: unit and integration tests for the step, screenshots in all three themes at about 300px panel width, and a live smoke where `qwen3.8-flash` fills the description.
+
+## U40: sign in to external agents from the settings page (running)
+
+An Agents section in the settings page: find the Cursor CLI, show its version and sign-in status, and run `agent update`, `agent login` (browser, with the URL as a fallback link) and `agent logout` from buttons. Geno never touches the agent's tokens. The ACP backend itself stays in U33 (research/cursor-backend-2026-10.md).
