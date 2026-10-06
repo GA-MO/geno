@@ -56,6 +56,11 @@ async function site() {
         res.writeHead(200, { 'content-type': 'text/html' });
         res.end('<title>Landed</title><main><p>You reached the other host.</p></main>');
       },
+      '/markdown': () => {
+        const wants = String(req.headers.accept).startsWith('text/markdown');
+        res.writeHead(200, { 'content-type': wants ? 'text/markdown; charset=utf-8' : 'text/html' });
+        res.end(wants ? `${req.url?.includes('front') ? '---\ntitle: "Installing"\n---\n' : ''}# Install\n\nRun \`pnpm add next\`.\n` : '<title>HTML</title><p>html</p>');
+      },
       '/image': () => {
         res.writeHead(200, { 'content-type': 'image/png' });
         res.end(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0]));
@@ -261,6 +266,21 @@ describe('web_fetch against a local server', () => {
     expect(output(0)).toContain('answered HTTP 404');
     expect(output(1)).toContain('is image/png');
     expect(reads).toEqual([]);
+  });
+
+  it('asks for markdown first, and titles a markdown page by its first heading', async () => {
+    const { local } = await site();
+    const { transport, output } = await run([fetchCall(`${local}/markdown`), answer('Run `pnpm add next`.', usage), answer('Done.', usage)], { mode: 'ask' });
+    expect(transport.requests[1]!.body.messages[0].content[0].text).toContain('Title: Install\n\n# Install\n\nRun `pnpm add next`.');
+    expect(output(0)).toContain('title="Install"');
+    const front = await run([fetchCall(`${local}/markdown?front`), answer('ok', usage), answer('Done.', usage)], { mode: 'ask' });
+    expect(front.output(0)).toContain('title="Installing"');
+  });
+
+  it('says why nothing answered at a local address', async () => {
+    const { results, output } = await run([fetchCall('http://127.0.0.1:9/'), answer('Down.', usage)], { mode: 'ask' });
+    expect(results[0]!.status).toBe('error');
+    expect(output(0)).toMatch(/^could not fetch http:\/\/127\.0\.0\.1:9\/: \S/);
   });
 });
 
