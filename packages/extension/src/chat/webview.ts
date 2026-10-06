@@ -40,6 +40,8 @@ import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, t
 import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
 import { offersRewind, type RewindState } from './rewind-model.js';
 import { rewindSlot } from './rewind-view.js';
+import { usageCard, type UsageOpen, type UsageToView } from './usage-model.js';
+import { usageCardView } from './usage-view.js';
 import type { ReviewMode } from '../review/mode.js';
 import { turnChangesOf } from '../review/summary.js';
 
@@ -371,7 +373,8 @@ function render(): void {
       const later = changes !== undefined && transcript.turns.slice(i + 1).some((next) => turnChangesOf(next)?.undone === false);
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
         ...(changes === undefined ? [] : [{ key: 'changes', deps: [JSON.stringify(changes), later], build: () => turnChangesRow(changes, later, ui) }]),
-        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole, transcript.backend?.plan], build: () => turnFooter(turn, whole, transcript.backend) }]),
+        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole, transcript.backend?.plan, turn.seq, usage?.turn === turn.id], build: () => turnFooter(turn, whole, transcript.backend, breakdownOf(turn)) }]),
+        ...(usage?.turn !== turn.id || turn.status === 'streaming' ? [] : [{ key: 'usage', deps: [usage, turn.seq, facts.bahtPerUsd], build: () => usageSlot(usage!, turn.seq) }]),
         ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),
         ...(apply !== undefined ? [{ key: `apply:${apply}`, deps: [], build: () => applyLaneButton(apply, ui) }] : []),
       ]);
@@ -577,9 +580,11 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
   if (message.type === 'steered') return steered(message);
+  if (message.type === 'usage-spend' || message.type === 'usage-failed') return spent(message);
   if (message.type === 'rewind-state') return rewound(message.turn, message.state);
   if (message.type === 'rewind-prompt') return edit(message.text, undefined);
   if (message.type === 'reset' || message.type === 'turn-start') rewinds.clear();
+  if (message.type === 'reset') usage = undefined;
   // A steer on its way goes to the session it was sent to, which the panel no longer shows.
   if (message.type === 'reset' && followup?.state === 'steering') followup = undefined;
   transcript = reduce(transcript, message);
@@ -590,6 +595,45 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'turn-end') sendQueued(message.status);
   schedule();
 });
+
+/** The breakdown of where the tokens went, open under one turn's footer, until it closes or the session changes. */
+let usage: UsageOpen | undefined;
+
+/** A finished turn the engine named opens its breakdown from its usage line. */
+const breakdownOf = (turn: Turn): { readonly open: boolean; readonly toggle: () => void } | undefined =>
+  turn.seq === undefined ? undefined : { open: usage?.turn === turn.id, toggle: () => toggleUsage(turn.id) };
+
+function toggleUsage(turn: string): void {
+  if (usage?.turn === turn) return closeUsage();
+  usage = { turn, tab: 'turn', spend: { kind: 'loading' } };
+  host.postMessage({ type: 'usage', turn } satisfies FromView);
+  schedule();
+}
+
+function closeUsage(): void {
+  const turn = usage?.turn;
+  usage = undefined;
+  schedule();
+  if (turn !== undefined) requestAnimationFrame(() => log.querySelector<HTMLElement>(`[data-focus="usage:${CSS.escape(turn)}"]`)?.focus());
+}
+
+function spent(message: UsageToView): void {
+  if (usage?.turn !== message.turn) return;
+  usage = { ...usage, spend: message.type === 'usage-spend' ? { kind: 'shown', spend: message.spend } : { kind: 'failed', message: message.message } };
+  schedule();
+}
+
+const usageSlot = (open: UsageOpen, seq: number | undefined): HTMLElement =>
+  usageCardView(
+    open.turn,
+    open.tab,
+    usageCard(open, seq, facts.bahtPerUsd),
+    (tab) => {
+      usage = { ...open, tab };
+      schedule();
+    },
+    closeUsage,
+  );
 
 /** How a rewind or fork from each message goes, by turn id, until the next turn or session. */
 const rewinds = new Map<string, RewindState>();

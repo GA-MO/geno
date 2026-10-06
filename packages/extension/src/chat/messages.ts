@@ -8,6 +8,7 @@ import type { PermissionsFromView, PermissionsToView } from './permissions-model
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { RewindFromView, RewindToView } from './rewind-model.js';
+import type { UsageFromView, UsageToView } from './usage-model.js';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -348,7 +349,8 @@ export type ToView =
   | LanesToView
   | ArenaToView
   | SteerToView
-  | RewindToView;
+  | RewindToView
+  | UsageToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -455,4 +457,5 @@ export type FromView =
   | LanesFromView
   | ArenaFromView
   | SteerFromView
-  | RewindFromView;
+  | RewindFromView
+  | UsageFromView;
