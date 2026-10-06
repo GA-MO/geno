@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import { z } from 'zod';
 import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, LANES_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, TASKS_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
 import { BROWSER_ENABLED_SETTING } from './chat/browser.js';
+import { backendEnv } from './chat/backends-host.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
@@ -126,6 +127,7 @@ function registerChat(context: vscode.ExtensionContext): void {
       return [...servers];
     },
     (post) => new SettingsPage(context.secrets, engineCli(context), output, post),
+    (backend) => backendEnv(context.secrets, backend),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(

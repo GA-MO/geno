@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import type { ComposerView, ModelMenu, RunningChild } from './composer-model.js';
+import type { BackendRow, ComposerView, ModelMenu, RunningChild } from './composer-model.js';
 import { h, icon } from './dom.js';
 import type { FromView } from './messages.js';
 
@@ -38,21 +38,38 @@ function contextRing() {
 }
 
 /**
- * The menu the model button opens: the models the user can switch to, the Models and Keys page, then the efforts the
- * engine offers, with a muted note on what an effort change costs. It keeps the keys of the mode menu.
+ * The menu the model button opens: the backends a new chat can run on, the models the user can switch to, the Models
+ * and Keys page, then the efforts the engine offers, with a muted note on what an effort change costs. It keeps the
+ * keys of the mode menu.
  */
 function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement) {
   const menu = h('ul', { class: 'model-menu', id: 'model-menu', role: 'menu', 'aria-label': 'Model and effort', hidden: true });
-  let shown: ModelMenu = { models: [], efforts: [], note: undefined };
+  let shown: ModelMenu = { backends: [], models: [], efforts: [], note: undefined };
 
   const items = () => [...menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
-  const option = (attrs: Record<string, string>, label: string, checked: boolean | undefined, run: () => void, detail?: string) =>
+  /** An option without `run` is disabled: it keeps its place in the keys' path, and choosing it does nothing. */
+  const option = (attrs: Record<string, string>, label: string, checked: boolean | undefined, run: (() => void) | undefined, detail?: string, stacked = false) =>
     h(
       'li',
-      { class: 'model-option', tabindex: '-1', ...attrs, ...(checked === undefined ? {} : { 'aria-checked': String(checked) }), onclick: () => (close(), run()) },
-      h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, label), detail !== undefined && h('span', { class: 'model-option-detail' }, detail)),
+      {
+        class: 'model-option',
+        tabindex: '-1',
+        ...attrs,
+        ...(checked === undefined ? {} : { 'aria-checked': String(checked) }),
+        ...(run === undefined ? { 'aria-disabled': 'true' } : { onclick: () => (close(), run()) }),
+      },
+      h(
+        'span',
+        { class: stacked ? 'model-option-text stacked' : 'model-option-text' },
+        h('span', { class: 'model-option-name', title: label }, label),
+        detail !== undefined && h('span', { class: 'model-option-detail', title: detail }, detail),
+      ),
       checked === true && icon('check', 'model-check'),
     );
+  const backendOption = (b: BackendRow) =>
+    option({ role: 'menuitemradio', 'data-backend': b.id }, b.label, b.current, b.disabled ? undefined : () => {
+      if (!b.current) post({ type: 'set-backend', backend: b.id });
+    }, b.detail, true);
   const heading = (text: string) => h('li', { class: 'menu-heading', role: 'presentation' }, text);
 
   function open(): void {
@@ -61,17 +78,20 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
     draw();
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
-    (items().find((item) => item.getAttribute('aria-checked') === 'true') ?? items()[0])?.focus();
+    // The current model takes the keyboard, over the current backend above it.
+    const checked = items().filter((item) => item.getAttribute('aria-checked') === 'true');
+    (checked.find((item) => item.dataset['key'] !== undefined) ?? checked[0] ?? items()[0])?.focus();
   }
 
   function draw(): void {
-    const { models, efforts, note } = shown;
+    const { backends, models, efforts, note } = shown;
     menu.replaceChildren(
+      ...(backends.length === 0 ? [] : [heading('Backend'), ...backends.map(backendOption), h('li', { class: 'menu-separator', role: 'separator' })]),
       heading('Model'),
       ...models.map((m) =>
-        option({ role: 'menuitemradio', 'data-model': m.model, 'data-provider': m.provider }, m.model, m.current, () => {
-          if (!m.current) post({ type: 'set-model', provider: m.provider, model: m.model });
-        }, m.providerLabel),
+        option({ role: 'menuitemradio', 'data-key': m.key, ...(m.pick.kind === 'geno' ? { 'data-model': m.pick.model, 'data-provider': m.pick.provider } : { 'data-agent-model': m.pick.value }) }, m.label, m.current, () => {
+          if (!m.current) post(m.pick.kind === 'geno' ? { type: 'set-model', provider: m.pick.provider, model: m.pick.model } : { type: 'set-agent-model', value: m.pick.value });
+        }, m.detail),
       ),
       option({ role: 'menuitem', 'data-action': 'models' }, 'Models and Keys…', undefined, () => post({ type: 'choose-model' })),
       ...(efforts.length === 0
@@ -125,9 +145,9 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
       shown = next;
       if (!changed || menu.hidden) return;
       const focused = (document.activeElement as HTMLElement | null)?.dataset;
-      const key = focused?.['effort'] ?? focused?.['model'];
+      const key = focused?.['effort'] ?? focused?.['key'] ?? focused?.['backend'];
       draw();
-      (items().find((item) => item.dataset['effort'] === key || item.dataset['model'] === key) ?? items().find((item) => item.getAttribute('aria-checked') === 'true'))?.focus();
+      (items().find((item) => key !== undefined && (item.dataset['effort'] === key || item.dataset['key'] === key || item.dataset['backend'] === key)) ?? items().find((item) => item.getAttribute('aria-checked') === 'true'))?.focus();
     },
   };
 }
@@ -268,11 +288,13 @@ export function composerControls(
   const agents = agentsPill(hooks.openChild);
 
   const ring = contextRing();
+  const modelBackend = h('span', { class: 'model-backend', hidden: true });
   const modelName = h('span', { class: 'model-name' });
   const effort = h('span', { class: 'model-effort' });
   const modelButton = h(
     'button',
     { type: 'button', class: 'composer-model', title: 'Choose the model and effort', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'model-menu' },
+    modelBackend,
     modelName,
     effort,
     icon('chevron-down', 'model-chevron'),
@@ -294,6 +316,9 @@ export function composerControls(
       queuedLabel.textContent = view.queued ?? '';
       ring.show(view.ring);
       modelName.textContent = view.model.name;
+      modelBackend.textContent = view.model.backend ?? '';
+      modelBackend.hidden = view.model.backend === undefined;
+      modelButton.title = view.model.backend === undefined ? 'Choose the model and effort' : `${view.model.backend} runs this chat. Choose its model, or a backend for a new chat`;
       effort.textContent = view.model.effort ?? '';
       effort.hidden = view.model.effort === undefined;
       menu.show(view.menu);

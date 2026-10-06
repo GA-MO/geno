@@ -64,6 +64,7 @@ describe('the task rows', () => {
       title: 'Fix the login button',
       where: 'Lane fix-login',
       state: { label: 'Running', tone: 'busy' },
+      backend: undefined,
       time: '1m 0s',
       cost: undefined,
       live: true,
@@ -82,6 +83,12 @@ describe('the task rows', () => {
     expect(limited.state).toEqual({ label: 'Limited until 14:05', tone: 'wait' });
     expect(NEEDS_ATTENTION.waiting).toBe(true);
     expect(laneRowOf(lane({ task: 'waiting' })).actions).toMatchObject({ apply: false, discard: 'off' });
+  });
+
+  it('name the external agent a task runs on, and its lane once the first turn made one', () => {
+    expect(taskRowOf(task({ backend: 'cursor', lane: null }), undefined, 1000)).toMatchObject({ backend: 'Cursor', where: 'New lane' });
+    expect(taskRowOf(task({ backend: 'cursor', lane: 'please-read-a-ts' }), undefined, 1000)).toMatchObject({ backend: 'Cursor', where: 'Lane please-read-a-ts' });
+    expect(taskRowOf(task({ lane: null }), undefined, 1000)).toMatchObject({ backend: undefined, where: 'Main checkout' });
   });
 
   it('lists running tasks first, then the rest, newest first', () => {
