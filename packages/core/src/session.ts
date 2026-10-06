@@ -18,6 +18,7 @@ import type { FileChange, HunkId } from './review.js';
 import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
 import type { ProviderName } from './providers.js';
+import type { ChildEvent, ChildOf } from './subagent.js';
 import type { Brand } from './types.js';
 import type { WidgetRef } from './widget.js';
 
@@ -108,8 +109,8 @@ export type Checkpoint = {
 };
 
 export type TurnEvent =
-  /** `context` is absent in logs written before sessions loaded any. */
-  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined }
+  /** `context` is absent in logs written before sessions loaded any; `child` is present in a subagent's own log. */
+  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined; readonly child?: ChildOf | undefined }
   | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
   | {
       readonly kind: 'restored';
@@ -133,8 +134,11 @@ export type TurnEvent =
       /** The slash command `content` was expanded from. */
       readonly command?: Invocation | undefined;
     }
-  /** `timing` is absent in logs written before turns were timed. */
-  | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string; readonly timing?: ModelMarks | undefined } & AssistantTurn)
+  /**
+   * `timing` is absent in logs written before turns were timed. `issuedBy: 'user'` marks a tool call the user typed,
+   * such as `@explore`, which the engine logged in place of a model call.
+   */
+  | ({ readonly kind: 'assistant'; readonly seq: number; readonly at: string; readonly timing?: ModelMarks | undefined; readonly issuedBy?: 'user' | undefined } & AssistantTurn)
   | {
       readonly kind: 'error';
       readonly seq: number;
@@ -154,11 +158,12 @@ export type TurnEvent =
   | { readonly kind: 'effort'; readonly seq: number; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
+  | ChildEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
 
-/** Checkpoints, restores, review decisions, retries and titles record what happened around the conversation; the loop steps over them. */
+/** Checkpoints, restores, review decisions, retries, titles and child events record what happened around the conversation; the loop steps over them. */
 export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
   user: true,
@@ -172,6 +177,8 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   mode: false,
   effort: false,
   title: false,
+  'child-start': false,
+  'child-end': false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

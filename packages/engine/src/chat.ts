@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import {
   asSessionId,
+  childEndWords,
   hasPendingPrompt,
   isEmptyContext,
   isEffort,
@@ -258,6 +259,10 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   mode: ({ seq, mode }) => [`#${seq} mode: ${mode}`],
   effort: ({ seq, effort }) => [`#${seq} effort: ${effort}`],
   title: ({ seq, title }) => [`#${seq} renamed: ${title}`],
+  'child-start': ({ seq, child, role, model, effort, caps, start }) => [
+    `#${seq} child-start ${role} ${child} (${start}, ${model}, effort ${effort}, caps ${caps.maxTurns} turns $${caps.maxCostUsd})`,
+  ],
+  'child-end': ({ seq, child, end, turns, costUsd, summary }) => [`#${seq} child-end ${child} ${childEndWords(end)} turns=${turns} ${formatCost(costUsd)}: ${summary}`],
 };
 
 const render = <K extends TurnEvent['kind']>(event: EventOf<K>): string[] =>
