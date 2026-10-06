@@ -187,11 +187,15 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
   return runs;
 }
 
+/** What is logged after a turn ended without being part of it: background reports, and the user's settings and decisions. */
+const LOGGED_AROUND_TURNS: ReadonlySet<TurnEvent['kind']> = new Set(['background-end', 'child-end', 'wake', 'mode', 'effort', 'backend-model', 'title', 'review', 'spinoff']);
+
 function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
   const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
   const error = events.findLast((e) => e.kind === 'error');
-  // Background work may report long after its turn ended, for a woken turn to take; the turn ended with its own last event.
-  const last = events.findLast((e) => e.kind !== 'background-end' && e.kind !== 'child-end' && e.kind !== 'wake' && triggerOf(e) === undefined);
+  // Background work may report long after its turn ended, for a woken turn to take, and the user decides things between
+  // turns; the turn ended with its own last event.
+  const last = events.findLast((e) => !LOGGED_AROUND_TURNS.has(e.kind) && triggerOf(e) === undefined);
   return {
     ...(events[0]?.kind === 'lane-apply' ? {} : { seq: prompt.seq }),
     mode,
