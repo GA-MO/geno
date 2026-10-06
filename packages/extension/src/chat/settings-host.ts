@@ -13,6 +13,7 @@ import {
   type ProviderSettings,
   type RoleSettings,
 } from '../runtime.js';
+import { AgentsHost } from './agents-host.js';
 import type { FieldView, ProviderView, RoleView, SettingsFromView, SettingsListing, SettingsToView, TestState } from './settings-model.js';
 
 /** Long enough for a cold model behind the engine's own 30 seconds. */
@@ -40,6 +41,8 @@ type CliReport = { readonly ok: boolean; readonly error?: string; readonly reply
 export class SettingsPage implements vscode.Disposable {
   private shown = false;
   private readonly subscriptions: vscode.Disposable[];
+  private readonly agents: AgentsHost;
+  readonly handlers: { readonly [K in SettingsFromView['type']]: (message: Extract<SettingsFromView, { type: K }>) => void };
 
   constructor(
     private readonly secrets: vscode.SecretStorage,
@@ -53,6 +56,37 @@ export class SettingsPage implements vscode.Disposable {
         if (event.affectsConfiguration('gcode')) this.refresh();
       }),
     ];
+    this.agents = new AgentsHost(output, post);
+    this.handlers = {
+      'settings-list': () => {
+        this.shown = true;
+        this.refresh();
+      },
+      'settings-secret': ({ provider, field, value }) => {
+        const target = fieldOf(provider, field, true);
+        if (target === undefined || value.trim() === '') return;
+        void this.secrets.store(secretName(target.provider, target.field.id), value.trim()).then(
+          () => this.output.appendLine(`settings: stored the ${specOf(target.provider).label} ${target.field.label.toLowerCase()}`),
+          warn,
+        );
+      },
+      'settings-clear': ({ provider, field }) => {
+        const target = fieldOf(provider, field, true);
+        if (target !== undefined) void this.secrets.delete(secretName(target.provider, target.field.id)).then(undefined, warn);
+      },
+      'settings-value': ({ provider, field, value }) => {
+        const target = fieldOf(provider, field, false);
+        if (target !== undefined) void setUserValue(target.provider, target.field.id, value.trim()).then(undefined, warn);
+      },
+      'settings-role': ({ role, provider, model }) => void setRole(role, provider, model.trim()).then(undefined, warn),
+      'settings-test': ({ provider }) => {
+        if (isProviderName(provider)) void this.test(provider);
+      },
+      'settings-list-models': ({ provider }) => {
+        if (isProviderName(provider)) void this.models(provider);
+      },
+      ...this.agents.handlers,
+    };
   }
 
   private refresh(): void {
@@ -98,35 +132,6 @@ export class SettingsPage implements vscode.Disposable {
     };
   }
 
-  readonly handlers: { readonly [K in SettingsFromView['type']]: (message: Extract<SettingsFromView, { type: K }>) => void } = {
-    'settings-list': () => {
-      this.shown = true;
-      this.refresh();
-    },
-    'settings-secret': ({ provider, field, value }) => {
-      const target = fieldOf(provider, field, true);
-      if (target === undefined || value.trim() === '') return;
-      void this.secrets.store(secretName(target.provider, target.field.id), value.trim()).then(
-        () => this.output.appendLine(`settings: stored the ${specOf(target.provider).label} ${target.field.label.toLowerCase()}`),
-        warn,
-      );
-    },
-    'settings-clear': ({ provider, field }) => {
-      const target = fieldOf(provider, field, true);
-      if (target !== undefined) void this.secrets.delete(secretName(target.provider, target.field.id)).then(undefined, warn);
-    },
-    'settings-value': ({ provider, field, value }) => {
-      const target = fieldOf(provider, field, false);
-      if (target !== undefined) void setUserValue(target.provider, target.field.id, value.trim()).then(undefined, warn);
-    },
-    'settings-role': ({ role, provider, model }) => void setRole(role, provider, model.trim()).then(undefined, warn),
-    'settings-test': ({ provider }) => {
-      if (isProviderName(provider)) void this.test(provider);
-    },
-    'settings-list-models': ({ provider }) => {
-      if (isProviderName(provider)) void this.models(provider);
-    },
-  };
 
   /** The model a test uses: the one a role runs on this provider, else the provider's default. */
   private modelFor(provider: ProviderName): string | undefined {
@@ -187,6 +192,7 @@ export class SettingsPage implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.agents.dispose();
     for (const subscription of this.subscriptions) subscription.dispose();
   }
 }

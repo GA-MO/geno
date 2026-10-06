@@ -1,4 +1,5 @@
 import type { Adapter, FieldId, ProviderName, Role } from '@g-code/core';
+import type { AgentsFromView, AgentsToView } from './agents-model.js';
 
 /**
  * A field as the page shows it. A secret carries only whether it is set and where; its value never leaves the
@@ -42,7 +43,8 @@ export type SettingsToView =
   | { readonly type: 'settings'; readonly listing: SettingsListing }
   | { readonly type: 'show-settings' }
   | { readonly type: 'settings-tested'; readonly provider: ProviderName; readonly state: TestState }
-  | { readonly type: 'settings-models'; readonly provider: ProviderName; readonly state: ModelsState };
+  | { readonly type: 'settings-models'; readonly provider: ProviderName; readonly state: ModelsState }
+  | AgentsToView;
 
 /** What the page asks of the extension; each change is answered with a fresh listing. */
 export type SettingsFromView =
@@ -53,7 +55,8 @@ export type SettingsFromView =
   | { readonly type: 'settings-value'; readonly provider: string; readonly field: string; readonly value: string }
   | { readonly type: 'settings-role'; readonly role: string; readonly provider: string; readonly model: string }
   | { readonly type: 'settings-test'; readonly provider: string }
-  | { readonly type: 'settings-list-models'; readonly provider: string };
+  | { readonly type: 'settings-list-models'; readonly provider: string }
+  | AgentsFromView;
 
 /** How a provider's state reads on its card. */
 export function providerBadge(provider: ProviderView): { readonly label: string; readonly tone: 'ok' | 'wait' | 'quiet'; readonly state: 'ready' | 'needs' } {

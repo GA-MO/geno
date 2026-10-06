@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 import type { ProviderName } from '@g-code/core';
+import { agentCard, CONFIRMS_IN, type Confirming } from './agents-panel.js';
+import { EXTERNAL_AGENTS, type AgentId, type AgentState } from './agents-model.js';
 import { h, icon, reconcile } from './dom.js';
 import {
   providerBadge,
@@ -169,9 +171,12 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
   let expanded: Set<ProviderName> | undefined;
   const tests = new Map<ProviderName, TestState>();
   const models = new Map<ProviderName, ModelsState>();
+  const agentStates = new Map<AgentId, AgentState>();
+  let confirming: { readonly id: AgentId; readonly what: Confirming } | undefined;
 
   const roles = h('ul', { class: 'settings-roles', 'aria-label': 'Roles' });
   const providers = h('ul', { class: 'provider-list', 'aria-label': 'Providers' });
+  const agents = h('ul', { class: 'provider-list agent-list', 'aria-label': 'Agents' });
   const note = h('p', { class: 'history-note' }, 'Loading…');
   const element = h(
     'section',
@@ -185,13 +190,41 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     note,
     h('h3', { class: 'settings-heading' }, 'Roles'),
     roles,
+    h('h3', { class: 'settings-heading' }, 'Agents'),
+    h('p', { class: 'settings-intro' }, 'Other coding agents Geno can work with. Geno runs each agent’s own command line to sign in and update, and never reads or keeps its login.'),
+    agents,
     h('h3', { class: 'settings-heading' }, 'Providers'),
     h('p', { class: 'settings-intro' }, 'Keys go to VS Code’s secret storage and are never shown again. Base URLs are kept in your user settings, never a workspace’s.'),
     providers,
   );
 
+  function renderAgents(): void {
+    if (confirming !== undefined && agentStates.get(confirming.id)?.kind !== CONFIRMS_IN[confirming.what]) confirming = undefined;
+    reconcile(
+      agents,
+      EXTERNAL_AGENTS.map((agent) => {
+        const state = agentStates.get(agent.id) ?? { kind: 'checking' };
+        const asking = confirming?.id === agent.id ? confirming.what : undefined;
+        return {
+          key: agent.id,
+          deps: [state, asking],
+          build: () =>
+            agentCard(agent, state, asking, post, (what) => {
+              const was = confirming?.what;
+              confirming = what === undefined ? undefined : { id: agent.id, what };
+              renderAgents();
+              const focus = what !== undefined ? `${what}-no` : was;
+              if (focus !== undefined) agents.querySelector<HTMLElement>(`[data-agent="${agent.id}"] [data-action="${focus}"]`)?.focus();
+            }),
+        };
+      }),
+    );
+  }
+
   function render(): void {
-    if (!open || listing === undefined) return;
+    if (!open) return;
+    renderAgents();
+    if (listing === undefined) return;
     note.hidden = true;
     expanded ??= new Set([listing.chat]);
     const { chat } = listing;
@@ -219,6 +252,7 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     element.hidden = false;
     onToggle(true);
     post({ type: 'settings-list' });
+    post({ type: 'agents-check' });
     render();
     requestAnimationFrame(() => element.querySelector<HTMLElement>('.history-back')?.focus());
   }
@@ -251,6 +285,10 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     },
     modelsListed(provider: ProviderName, state: ModelsState): void {
       models.set(provider, state);
+      render();
+    },
+    agentChanged(id: AgentId, state: AgentState): void {
+      agentStates.set(id, state);
       render();
     },
   };
