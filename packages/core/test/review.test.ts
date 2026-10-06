@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
   changeOf,
+  checkpointBefore,
   locateSpan,
   reviewState,
   shiftSpan,
@@ -110,5 +111,41 @@ describe('reviewState', () => {
       ['/w/x.ts', 'pending'],
       ['/w/y.ts', 'undone'],
     ]);
+  });
+});
+
+describe('checkpointBefore', () => {
+  const sessionId = asSessionId('s');
+  const at = '2026-10-05T00:00:00.000Z';
+  const [x, y, z] = [changeOf('/w/x.ts', 'a\n', 'b\n'), changeOf('/w/y.ts', 'p\n', 'q\n'), changeOf('/w/z.ts', '1\n', '2\n')];
+  const checkpoint = (seq: number): TurnEvent => ({ kind: 'checkpoint', seq, at, sessionId, turnSeq: seq + 1, sha: `sha${seq}`, files: [], label: '' });
+  const prompt = (seq: number, steer?: true): TurnEvent => ({ kind: 'user', seq, at, content: 'go', ...(steer === undefined ? {} : { steer }) });
+  const result = (seq: number, change: typeof x): TurnEvent => ({ kind: 'tool-result', seq, at, toolUseId: `tu${seq}`, name: 'edit', status: 'ok', output: 'Edited.', change });
+  const events: TurnEvent[] = [
+    prompt(1),
+    checkpoint(2),
+    result(3, x),
+    prompt(4),
+    checkpoint(5),
+    result(6, x),
+    prompt(7, true),
+    checkpoint(8),
+    result(9, y),
+    checkpoint(10),
+    { kind: 'lane-apply', seq: 11, at, lane: 'l', changes: [z], conflicts: [], deleted: [] },
+  ];
+  const shaOf = (before: string) => checkpointBefore(events, { before })?.sha;
+
+  it("finds the checkpoint before the first model call of the change's turn, past a steer and later calls", () => {
+    expect(shaOf(y.id)).toBe('sha5');
+  });
+
+  it('takes the latest turn that made a change, as one redone after an undo has the same id', () => {
+    expect(shaOf(x.id)).toBe('sha5');
+  });
+
+  it('finds the checkpoint a lane apply takes just before it writes, and none for a change the log lacks', () => {
+    expect(shaOf(z.id)).toBe('sha10');
+    expect(shaOf('missing')).toBeUndefined();
   });
 });

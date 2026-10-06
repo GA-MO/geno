@@ -171,5 +171,5 @@ export function laneApplyText({ lane, conflicts, deleted, grafted }: LaneApplyRe
   if (files === 0) return `Lane ${lane} has nothing to apply.`;
   const gone = deleted.length === 0 ? '' : ` Deleted ${deleted.map((file) => `\`${file}\``).join(', ')}.`;
   const what = grafted === undefined ? '' : `${grafted === 1 ? '1 hunk' : `${grafted} hunks`} in `;
-  return `${grafted === undefined ? 'Applied' : 'Grafted'} ${what}${files === 1 ? '1 file' : `${files} files`} from lane ${lane}. Keep or undo each change.${gone}`;
+  return `${grafted === undefined ? 'Applied' : 'Grafted'} ${what}${files === 1 ? '1 file' : `${files} files`} from lane ${lane}.${gone}`;
 }

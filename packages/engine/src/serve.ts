@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   BASE_HASH_META,
   CHECKPOINT_TEXT_METHOD,
+  checkpointBefore,
   DIAGNOSTICS_CAPABILITY,
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
@@ -60,6 +61,7 @@ import {
   type DiagnosticsRequest,
   type DoneReason,
   type HunkId,
+  type CheckpointRef,
   type ReviewDecision,
   type ReviewResponse,
   type RewindResponse,
@@ -658,11 +660,19 @@ const reviewRequest = z.object({
   sessionId: z.string(),
   decisions: z.array(z.object({ hunk: z.string().min(1).transform((raw) => raw as HunkId), status: z.enum(HUNK_STATUSES) })),
 });
-const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string() });
-const rewindRequest = z.object({ sessionId: z.string() });
+const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string(), before: z.string().min(1).optional() });
+const rewindRequest = z.object({ sessionId: z.string(), before: z.string().min(1).optional() });
 const rewindPreviewRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive() });
 const rewindTurnRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), choice: z.object({ kind: z.enum(REWIND_KINDS) }) });
 const forkAt = z.number().int().positive().optional();
+
+/** The session's first checkpoint, or the one before the turn that made change `before`, which must be in the log. */
+function checkpointFor(events: readonly TurnEvent[], { before }: { readonly before?: CheckpointRef['before'] | undefined }) {
+  if (before === undefined) return checkpointsOf(events)[0];
+  const checkpoint = checkpointBefore(events, { before });
+  if (checkpoint === undefined) throw acp.RequestError.invalidParams({ before }, 'no checkpoint before the turn that made this change');
+  return checkpoint;
+}
 const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
@@ -1496,12 +1506,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(CHECKPOINT_TEXT_METHOD, checkpointTextRequest, async ({ params }): Promise<CheckpointTextResponse> => {
       known(params.sessionId);
       const log = await openSessionLog(store, params.sessionId, io);
-      const first = checkpointsOf(log.events)[0];
+      const checkpoint = checkpointFor(log.events, params);
       const file = await realpath(params.path).catch(() => params.path);
       const relative = path.relative(log.session.workspace, file);
       if (relative.startsWith('..') || path.isAbsolute(relative)) throw acp.RequestError.invalidParams({ path: params.path }, 'outside the workspace');
-      if (first === undefined) return { text: await DISK_FILES.read(file) };
-      return { text: await fileAt(shadowRepoFor(store, log.session.workspace), first.sha, relative) };
+      if (checkpoint === undefined) return { text: await DISK_FILES.read(file) };
+      return { text: await fileAt(shadowRepoFor(store, log.session.workspace), checkpoint.sha, relative) };
     })
     .onRequest(REWIND_METHOD, rewindRequest, async ({ params }): Promise<RewindResponse> => {
       const { sessionId } = params;
@@ -1509,9 +1519,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before undoing the session');
       return serially(sessionId, async () => {
         const log = await openSessionLog(store, sessionId, io);
-        const first = checkpointsOf(log.events)[0];
-        if (first === undefined) return { files: [] };
-        const { files } = await rewindTo(store, log, first.turnSeq);
+        const checkpoint = checkpointFor(log.events, params);
+        if (checkpoint === undefined) return { files: [] };
+        const { files } = await rewindTo(store, log, checkpoint.turnSeq);
         return { files: files.map((file) => path.join(log.session.workspace, file)) };
       });
     })
