@@ -11,6 +11,7 @@ import {
   cutView,
   eventTokens,
   forkEvents,
+  hasPendingPrompt,
   KEEP_TAIL_TOKENS,
   keepTailTokens,
   lastContextUse,
@@ -230,6 +231,17 @@ describe('the context after a compaction', () => {
     expect(lastContextUse(session, next)).toEqual({ used: 4_200, window: 1_000_000 });
   });
 
+  it('keeps the compacted text when the prompt it kept from is refused', () => {
+    const asked = [...log, assistant(16, big(500), [], 12_000), user(17, 'And the port?')];
+    const kept = compacted(asked, 18, 100);
+    expect(kept.keptFrom).toBe(17);
+    const refused: TurnEvent[] = [...asked, kept, { kind: 'error', seq: 19, at, error: 'refusal', message: 'refused' }];
+    expect(hasPendingPrompt(refused)).toBe(false);
+    const messages = replayMessages([...refused, user(20, 'Then the host?')]);
+    expect(messages).toHaveLength(1);
+    expect((messages[0]!.content as { text: string }[]).map((block) => block.text)).toEqual([expect.stringContaining('Use pnpm.'), compactedText(kept), 'Then the host?']);
+  });
+
   it("does not change the loop's next step", () => {
     const run = { firstSeq: 1, maxTurns: 50, maxCostUsd: 1 };
     expect(loopStep(after, run)).toEqual(loopStep(log, run));
@@ -261,6 +273,17 @@ describe('a second compaction on top of the first', () => {
     expect(second.kept.todo).toEqual(todo);
     expect(second.kept.tools).toEqual([echoDefinition]);
     expect(second.kept.files).toEqual({ read: ['src/date.ts', 'test/date.test.ts'], changed: ['test/date.test.ts'] });
+  });
+
+  it('estimates the context it leaves without the first one in it', () => {
+    const sent = (events: readonly TurnEvent[]): number => contextView(events).reduce((sum, e) => sum + eventTokens(e), 0);
+    const events: TurnEvent[] = [...log, first, user(17, 'Also update the README.')];
+    events.push(assistant(18, 'Reading.', [['tu_m', 'read', { path: 'README.md' }]], sent(events)));
+    events.push(result(19, 'tu_m', big(3_000), 'read'));
+    events.push(assistant(20, 'Updated.', [], sent(events)));
+    events.push(user(21, 'Thanks.'));
+    const next = compacted(events, 22, 100);
+    expect(Math.abs(next.tokensAfter - sent([...events, next]))).toBeLessThan(50);
   });
 
   it('replaces the first in the context', () => {
