@@ -123,6 +123,17 @@ import {
   RETRY_NOW_METHOD,
   type RetryNowResponse,
   type Waiting,
+  BACKEND_ENV_CAPABILITY,
+  BACKEND_ENV_METHOD,
+  BACKEND_META,
+  BACKENDS_METHOD,
+  backendShown,
+  EXTERNAL_BACKENDS,
+  isExternalBackendId,
+  MODEL_CONFIG_ID,
+  type BackendBinding,
+  type BackendsResponse,
+  type ExternalBackendId,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { arenaCompare, arenaPreview, arenaVariants, listArenas, pickWinner, startArena } from './arena.js';
@@ -131,7 +142,9 @@ import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lan
 import { Tasks } from './tasks.js';
 import { Viewers, type Viewer } from './viewers.js';
 import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
-import { openSessionLog, resumeSession, startSession, type OpenSession } from './chat.js';
+import { openSessionLog, resumeSession, startExternalSession, startSession, type OpenSession } from './chat.js';
+import { backendInfos, findBackend } from './backends.js';
+import { chosenModelOf, ExternalAgents, modelConfigOptions, runExternalTurn, type KeyOf } from './external.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
 import { homeOf, homesOf, runBuiltin, sessionCommands } from './commands.js';
@@ -145,7 +158,7 @@ import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
-import { appendEvent, dropTornTail, logBesideTurn, logEffort, logMode, type SettingChange } from './sessions.js';
+import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
@@ -200,6 +213,9 @@ const modeState = (mode: SessionMode): acp.SessionModeState => ({
 
 const unsavedBuffersResponse = z.object({ buffers: z.array(z.object({ path: z.string(), text: z.string() })) });
 
+const backendEnvResponse = z.object({ env: z.record(z.string(), z.string()) });
+const backendRequest = z.object({ id: z.string() }).nullish();
+
 const diagnosticsResponse = z.object({
   diagnostics: z.array(
     z.object({
@@ -228,9 +244,11 @@ type Peer = {
   readonly subagents: boolean;
   /** It takes task updates. */
   readonly tasks: boolean;
+  /** It answers BACKEND_ENV_METHOD with what the user chose for an external agent. */
+  readonly backendEnv: boolean;
 };
 
-const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false };
+const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false };
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
@@ -379,7 +397,7 @@ type Turn = {
 
 type Spent = { readonly tokens: TokenUsage; readonly model: string; readonly costUsd: number | null };
 
-function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '_meta'> {
+function usageOf(spent: Spent | undefined, backend: ExternalBackendId | undefined): Pick<acp.PromptResponse, 'usage' | '_meta'> {
   if (spent === undefined) return {};
   const { tokens, model, costUsd } = spent;
   const usage: acp.Usage = {
@@ -389,7 +407,7 @@ function usageOf(spent: Spent | undefined): Pick<acp.PromptResponse, 'usage' | '
     cachedWriteTokens: tokens.cacheWrite,
     totalTokens: tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite,
   };
-  const meta: TurnUsage = { model, costUsd };
+  const meta: TurnUsage = { model, costUsd, ...(backend === undefined ? {} : { backend }) };
   return { usage, _meta: { [TURN_USAGE_META]: meta } };
 }
 
@@ -416,6 +434,7 @@ function editorTurn(
   session: () => Session | undefined,
   widgetOf: (widget: WidgetRef) => Promise<ShownWidget>,
   disk = false,
+  backend?: ExternalBackendId,
 ): Turn {
   const sent = updates(route, sessionId, io);
   // What each widget's step last showed while the model wrote it, so a piece of html that changes nothing sends nothing.
@@ -429,7 +448,7 @@ function editorTurn(
     updates: sent,
     live,
     user: editorUser(route, peer, () => sent.flush(), () => running),
-    usage: () => usageOf(spent),
+    usage: () => usageOf(spent, backend),
     taskUsage: () => taskUsageOf(spent),
     surface: {
       files: peer.files && !disk ? editorFiles(route, () => running) : DISK_FILES,
@@ -480,7 +499,8 @@ function editorTurn(
               : loggedUpdate(event, peer);
           if (update !== undefined) sent.send(update);
           const opened = session();
-          if (event.kind === 'assistant' && opened !== undefined && spent !== undefined) {
+          // An external agent's window and token counts are its own; it reports them itself when it does.
+          if (event.kind === 'assistant' && opened !== undefined && spent !== undefined && backend === undefined) {
             sent.send(usageUpdate(contextUseOf(opened.provider, opened.model, event.usage), { model: spent.model, costUsd: spent.costUsd }));
           }
         },
@@ -700,6 +720,8 @@ export function engineShared(io: Io) {
     wakes: new Map<string, Wake>(),
     // Whether a connection already took up the waits an engine that stopped left in the logs; the first one does.
     leftWaits: { taken: false },
+    // Each external session's agent process.
+    externals: new ExternalAgents(io),
   };
 }
 
@@ -746,7 +768,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits } = shared;
+  const { turns, childCancels, autos, modes, writers, viewers, tasks, live, arenaWatchers, wakes, leftWaits, externals } = shared;
   const wakeOf = (sessionId: string) => wakes.get(sessionId) ?? wakes.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -788,11 +810,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     void serially(sessionId, async () => {
       const log = await openSessionLog(store, sessionId, io);
       await dropTornTail(log);
-      await (change.kind === 'mode' ? logMode(log, change.mode) : logEffort(log, change.effort));
+      await logSettingChange(log, change);
     }).catch((error: unknown) => io.err(`could not log the ${change.kind} of ${sessionId}: ${String(error)}`));
   };
   const switchMode = async (client: acp.AgentContext, sessionId: string, mode: SessionMode) => {
     modes.set(sessionId, mode);
+    void externals.setMode(sessionId, mode).catch((error: unknown) => io.err(`could not set the agent mode of ${sessionId}: ${String(error)}`));
     await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } });
     await logSetting(sessionId, { kind: 'mode', mode });
   };
@@ -819,6 +842,29 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   };
   const laneRepo = async (cwd: string) => laneRepoOf(await workspaceDir(io.cwd, cwd)).catch(refused({ cwd }));
   const runningMeta = (sessionId: string) => (turns.get(sessionId) !== undefined ? { _meta: { [RUNNING_META]: true } } : {});
+  /** The user's key for an agent, from the window showing the session, or from `asking` before one shows it. */
+  const keyOf =
+    (sessionId: string, asking?: Viewer<Peer>): KeyOf =>
+    async (backend) => {
+      if (backend.keyEnv === undefined) return undefined;
+      const viewer = viewers.of(sessionId) ?? asking;
+      if (viewer === undefined || !viewer.peer.backendEnv) return undefined;
+      const raw = await viewer.client.request<unknown>(BACKEND_ENV_METHOD, { backend: backend.id });
+      const parsed = backendEnvResponse.safeParse(raw);
+      const key = parsed.success ? parsed.data.env[backend.keyEnv] : undefined;
+      return key === undefined || key === '' ? undefined : key;
+    };
+  /** An external session's response fields: Geno's modes, the agent's models, and which backend it is. */
+  const externalFields = async (sessionId: string, binding: BackendBinding, events: readonly TurnEvent[], asking?: Viewer<Peer>) => {
+    const setup = await externals
+      .ensure(sessionId, binding, keyOf(sessionId, asking))
+      .then((link) => link.setup)
+      .catch((error: unknown) => {
+        io.err(`backend: ${binding.id} for ${sessionId} did not start: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
+      });
+    return { configOptions: modelConfigOptions(setup, chosenModelOf(events)), meta: { [BACKEND_META]: backendShown(binding.id) } };
+  };
 
   /**
    * One turn of a session, for a prompt from `from`, the editor that asked. It runs to its end whether or not any
@@ -862,7 +908,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     try {
       const header = await openSessionLog(store, sessionId, io);
       const lane = await laneAt(header.session.workspace, undefined).catch(() => undefined);
-      const shown = editorTurn(route, sessionId, from.peer, io, () => session, shownWidget(sessionId), lane !== undefined);
+      const backend = header.session.backend;
+      if (backend !== undefined && target !== undefined) throw acp.RequestError.invalidParams({ sessionId }, `${EXTERNAL_BACKENDS[backend.id].label} sessions take no inline edits`);
+      if (backend !== undefined && hasAttached(attached)) throw acp.RequestError.invalidParams({ sessionId }, `${EXTERNAL_BACKENDS[backend.id].label} sessions take the prompt's text only, without mentions or attachments`);
+      const shown = editorTurn(route, sessionId, from.peer, io, () => session, shownWidget(sessionId), lane !== undefined, backend?.id);
       turn = shown;
       live.set(sessionId, shown.live);
       tasks.start({
@@ -871,10 +920,43 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
+        ...(backend === undefined ? {} : { backend: backend.id }),
       });
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
       const response = await serially(sessionId, async (): Promise<acp.PromptResponse> => {
+        if (backend !== undefined) {
+          const log = await openSessionLog(store, sessionId, io);
+          await dropTornTail(log);
+          session = log.session;
+          shown.live.events.push(...log.events);
+          if (titleOf(log.events) === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+          if (rawLane !== undefined) {
+            const repo = await laneRepoOf(log.session.workspace).catch(refused({ sessionId }));
+            await applyLaneTurn(store, { log }, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
+            await shown.updates.flush();
+            return { stopReason: controller.signal.aborted ? 'cancelled' : 'end_turn' };
+          }
+          const result = await runExternalTurn({
+            io: turnIo,
+            store,
+            log,
+            prompt: slash?.content ?? text,
+            approval: {
+              kind: 'interactive',
+              mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
+              approve: shown.approve,
+              classify: commandClassifier(io.env, io.fetch),
+              auto: autoOf(sessionId),
+            },
+            surface: shown.surface,
+            signal: controller.signal,
+            agents: externals,
+            keyOf: keyOf(sessionId),
+          });
+          await shown.updates.flush();
+          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...shown.usage() };
+        }
         const resumed = await resumeSession(store, io, sessionId);
         session = resumed.log.session;
         shown.live.events.push(...resumed.log.events);
@@ -1016,6 +1098,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         widgets: _meta?.[WIDGET_CAPABILITY] === true,
         subagents: subagents != null,
         tasks: _meta?.[TASKS_CAPABILITY] === true,
+        backendEnv: _meta?.[BACKEND_ENV_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -1030,6 +1113,24 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
       const workspace = await workspaceDir(io.cwd, params.cwd);
+      const asked = backendRequest.safeParse(params._meta?.[BACKEND_META]);
+      const backendId = asked.success ? asked.data?.id : undefined;
+      if (backendId !== undefined && !isExternalBackendId(backendId)) throw acp.RequestError.invalidParams({ backend: backendId }, `no backend ${backendId}`);
+      if (backendId !== undefined) {
+        const found = await findBackend(EXTERNAL_BACKENDS[backendId], io.env);
+        if (found.kind === 'missing') throw acp.RequestError.invalidParams({ backend: backendId }, found.reason);
+        const binding: BackendBinding = { id: backendId };
+        const log = await startExternalSession(store, io, workspace, binding);
+        const { id } = log.session;
+        turns.set(id, undefined);
+        modes.set(id, DEFAULT_SESSION_MODE);
+        viewers.show(id, self());
+        commands.attach(client, id, workspace);
+        mcp.register(id, workspace, [], undefined);
+        io.err(`session: ${id} on ${backendId} log: ${log.file}`);
+        const fields = await externalFields(id, binding, log.events, self());
+        return { sessionId: id, modes: modeState(DEFAULT_SESSION_MODE), configOptions: fields.configOptions, _meta: fields.meta };
+      }
       const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
       const { id } = opened.log.session;
       turns.set(id, undefined);
@@ -1049,8 +1150,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       commands.attach(client, id, log.session.workspace);
       mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
       const context = lastContextUse(log.session, log.events);
-      if (context !== undefined) await client.notify(acp.methods.client.session.update, { sessionId: id, update: usageUpdate(context) });
+      if (context !== undefined && log.session.backend === undefined) await client.notify(acp.methods.client.session.update, { sessionId: id, update: usageUpdate(context) });
       io.err(`session: ${id} resumed, log: ${log.file}`);
+      if (log.session.backend !== undefined) {
+        const fields = await externalFields(id, log.session.backend, log.events);
+        return { modes: modeState(modes.get(id)!), configOptions: fields.configOptions, _meta: { ...runningMeta(id)._meta, ...fields.meta } };
+      }
       return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)), ...runningMeta(id) };
     })
     .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
@@ -1079,12 +1184,16 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (streaming !== '') await notify(textUpdate(streaming));
         if (running?.waiting != null && self().peer.notices) await notify(waitUpdate(running.waiting));
         const context = lastContextUse(log.session, events);
-        if (context !== undefined) await notify(usageUpdate(context));
+        if (context !== undefined && log.session.backend === undefined) await notify(usageUpdate(context));
         await notify(sessionInfo(summarizeSession(log.session, events)));
       } finally {
         replayed();
       }
       io.err(`session: ${id} loaded, log: ${log.file}`);
+      if (log.session.backend !== undefined) {
+        const fields = await externalFields(id, log.session.backend, log.events);
+        return { modes: modeState(modes.get(id)!), configOptions: fields.configOptions, _meta: { ...runningMeta(id)._meta, ...fields.meta } };
+      }
       return { modes: modeState(modes.get(id)!), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)), ...runningMeta(id) };
     })
     .onRequest(acp.methods.agent.session.list, async ({ params }): Promise<acp.ListSessionsResponse> => {
@@ -1100,6 +1209,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       turns.delete(sessionId);
       modes.delete(sessionId);
       viewers.hide(sessionId);
+      externals.close(sessionId);
       io.err(`session: ${sessionId} moved to ${trashed}`);
       return {};
     })
@@ -1110,6 +1220,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       turns.delete(sessionId);
       viewers.hide(sessionId);
       commands.detach(sessionId);
+      externals.close(sessionId);
       await mcp.close(sessionId);
       return {};
     })
@@ -1141,6 +1252,15 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
       const { sessionId } = params;
       known(sessionId);
+      const log = await existing(sessionId);
+      if (log.session.backend !== undefined) {
+        if (params.configId !== MODEL_CONFIG_ID || typeof params.value !== 'string') throw acp.RequestError.invalidParams({ configId: params.configId }, `an external session sets only ${MODEL_CONFIG_ID}`);
+        const setup = externals.setupOf(sessionId);
+        if (setup?.models !== undefined && !setup.models.available.some((m) => m.id === params.value)) throw acp.RequestError.invalidParams({ value: params.value }, `${EXTERNAL_BACKENDS[log.session.backend.id].label} offers no model ${String(params.value)}`);
+        await logSetting(sessionId, { kind: 'backend-model', model: params.value });
+        await externals.setModel(sessionId, params.value);
+        return { configOptions: modelConfigOptions(setup, params.value) };
+      }
       const effort = chosenEffort(params);
       await logSetting(sessionId, { kind: 'effort', effort });
       return { configOptions: effortConfigOptions(effort) };
@@ -1155,6 +1275,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       childCancels.get(params.sessionId)?.();
     })
     .onRequest(TASKS_METHOD, z.object({}).loose(), async (): Promise<TasksResponse> => tasks.list())
+    .onRequest(BACKENDS_METHOD, z.object({}).loose(), async (): Promise<BackendsResponse> => ({ backends: await backendInfos(io.env) }))
     .onRequest(LANES_METHOD, lanesRequest, async ({ params }): Promise<LanesResponse> => ({ lanes: await laneInfos(await laneRepo(params.cwd), store, io, tasks) }))
     .onRequest(LANE_NEW_METHOD, lanePrompt, async ({ params }): Promise<LaneNewResponse> => {
       const repo = await laneRepo(params.cwd);
