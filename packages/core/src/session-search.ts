@@ -1,0 +1,248 @@
+import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
+import { summarizeSession, type SessionSummary } from './history.js';
+import type { Session, SessionId, TurnEvent } from './session.js';
+import { isUsersOwn, startsTurn } from './steer.js';
+
+/**
+ * Full-text search over past sessions (U57): the History's search field and the model's `recall` tool. A session is
+ * indexed as its title and, per turn, the user's own messages, the assistant's text and the titles of its tool
+ * calls. Tool output is never indexed. Matching is by substring on case-folded text, so Thai, written without spaces
+ * between words, matches as well as English does.
+ */
+
+export const SEARCH_SOURCES = ['title', 'user', 'assistant', 'tool'] as const;
+export type SearchSource = (typeof SEARCH_SOURCES)[number];
+
+/** How much one occurrence counts: the user's words and a title say what a session was about more than its tool calls do. */
+const WEIGHTS: Readonly<Record<SearchSource, number>> = { title: 3, user: 2, assistant: 1, tool: 1 };
+
+/** `text` is what a snippet shows, on one line; `folded` is the same length, case-folded, and what a query matches. */
+export type SearchText = { readonly source: SearchSource; readonly text: string; readonly folded: string };
+
+/** `turn` counts the session's turns from 1, as its history row counts them; `seq` is the prompt's event number. */
+export type SearchTurn = { readonly turn: number; readonly seq: number; readonly at: string; readonly texts: readonly SearchText[] };
+
+/** One session as the search reads it, built once per version of its log. */
+export type SessionDoc = { readonly summary: SessionSummary; readonly title: SearchText; readonly turns: readonly SearchTurn[] };
+
+/** A shown excerpt and the ranges of it that match the query, as `[start, end)` offsets, sorted and apart. */
+export type Snippet = { readonly text: string; readonly marks: readonly (readonly [number, number])[] };
+
+/** Where a hit points: a turn, or only the session's title. */
+export type HitTurn = { readonly turn: number; readonly seq: number; readonly at: string };
+
+/** The best match in one session. */
+export type SearchHit = {
+  readonly sessionId: SessionId;
+  readonly title: string;
+  readonly workspace: string;
+  readonly updatedAt: string;
+  /** Null when only the title matched. */
+  readonly turn: HitTurn | null;
+  readonly source: SearchSource;
+  readonly snippet: Snippet;
+  /** How many of the session's turns match. */
+  readonly matchingTurns: number;
+  readonly score: number;
+};
+
+/**
+ * `all` keeps a session only when every word of the query occurs in it, as a search field does. `most` keeps one
+ * that holds at least half of them, ranked by how many, for the model's longer questions.
+ */
+export type SearchMatch = 'all' | 'most';
+
+export type SearchOptions = {
+  readonly match: SearchMatch;
+  readonly limit: number;
+  readonly snippetLength: number;
+  readonly exclude?: SessionId | undefined;
+};
+
+/** A text past this many characters is indexed by its start; a pasted log says little about what a session decided. */
+export const SEARCH_TEXT_MAX = 20_000;
+const MAX_TERMS = 10;
+/** Occurrences of a term counted in one text, so a word repeated a hundred times does not drown the others. */
+const MAX_COUNT = 3;
+
+/** Lower case, keeping every offset: a character whose lower case is longer, such as İ, stays as it is. */
+export function fold(text: string): string {
+  const lower = text.toLowerCase();
+  if (lower.length === text.length) return lower;
+  let out = '';
+  for (const ch of text) {
+    const each = ch.toLowerCase();
+    out += each.length === ch.length ? each : ch;
+  }
+  return out;
+}
+
+const oneLine = (raw: string): string => raw.normalize('NFC').replace(/\s+/g, ' ').trim().slice(0, SEARCH_TEXT_MAX);
+
+const searchText = (source: SearchSource, raw: string): SearchText | undefined => {
+  const text = oneLine(raw);
+  return text === '' ? undefined : { source, text, folded: fold(text) };
+};
+
+/**
+ * The session's index entry. `toolTitle` names a tool call as the transcript shows it. Turns follow the log as the
+ * user sees it, after rewinds; a child's report, a parent's message and a wake notice are not the user's words and
+ * are left out, while the answers to them are kept.
+ */
+export function sessionDoc(session: Session, events: readonly TurnEvent[], toolTitle: (use: ToolUseBlock) => string): SessionDoc {
+  const summary = summarizeSession(session, events);
+  const turns: { turn: number; seq: number; at: string; texts: SearchText[] }[] = [];
+  for (const event of events) {
+    if (startsTurn(event)) turns.push({ turn: turns.length + 1, seq: event.seq, at: event.at, texts: [] });
+    const turn = turns.at(-1);
+    if (turn === undefined) continue;
+    const add = (source: SearchSource, raw: string) => {
+      const text = searchText(source, raw);
+      if (text !== undefined) turn.texts.push(text);
+    };
+    if (event.kind === 'user' && isUsersOwn(event)) add('user', event.command === undefined ? event.content : `/${event.command.name} ${event.command.args}`);
+    if (event.kind === 'assistant') {
+      for (const block of event.content) {
+        if (block.type === 'text') add('assistant', block.text);
+        if (block.type === 'tool_use') add('tool', toolTitle(block));
+      }
+    }
+  }
+  return { summary, title: searchText('title', summary.title) ?? { source: 'title', text: '', folded: '' }, turns };
+}
+
+/** The query's words, case-folded, each once; a word that another one contains adds nothing and is dropped. */
+export function searchTerms(query: string): string[] {
+  const words = [...new Set(fold(query.normalize('NFC')).split(/\s+/).filter((word) => word !== ''))];
+  return words.filter((word) => !words.some((other) => other !== word && other.includes(word))).slice(0, MAX_TERMS);
+}
+
+const occurrences = (folded: string, term: string, cap: number): number => {
+  let count = 0;
+  for (let at = folded.indexOf(term); at !== -1 && count < cap; at = folded.indexOf(term, at + term.length)) count++;
+  return count;
+};
+
+type Scored = { readonly score: number; readonly matched: ReadonlySet<number>; readonly best: SearchText | undefined };
+
+/** A run of texts scored together: the terms it holds, and its best text, which the snippet is cut from. */
+function scoreTexts(texts: readonly SearchText[], terms: readonly string[]): Scored {
+  const matched = new Set<number>();
+  let score = 0;
+  let best: SearchText | undefined;
+  let bestScore = 0;
+  for (const text of texts) {
+    let own = 0;
+    let words = 0;
+    terms.forEach((term, i) => {
+      const count = occurrences(text.folded, term, MAX_COUNT);
+      if (count === 0) return;
+      matched.add(i);
+      words++;
+      own += count * WEIGHTS[text.source];
+    });
+    score += own;
+    if (words * 100 + own > bestScore) {
+      best = text;
+      bestScore = words * 100 + own;
+    }
+  }
+  // Each word the run holds outranks any number of repeats of one word.
+  return { score: matched.size * 100 + score, matched, best };
+}
+
+const isMark = (ch: string | undefined): boolean => ch !== undefined && /\p{M}/u.test(ch);
+const isLowSurrogate = (code: number): boolean => code >= 0xdc00 && code <= 0xdfff;
+
+/** Moves `at` off a combining mark or the second half of a surrogate pair, so a cut never splits a character. */
+function onBoundary(text: string, at: number, step: 1 | -1): number {
+  let i = at;
+  while (i > 0 && i < text.length && (isMark(text[i]) || isLowSurrogate(text.charCodeAt(i)))) i += step;
+  return i;
+}
+
+/** The space at or a few characters before `at`, when there is one; Thai often has none, and is cut where it falls. */
+function spaceBefore(text: string, at: number): number | undefined {
+  for (let i = at, n = 0; n < 12 && i > 0; i--, n++) if (text[i] === ' ') return i;
+  return undefined;
+}
+
+/** At most `length` characters of `text` around the first match, with an ellipsis where it was cut, and every match marked. */
+export function snippetOf(text: SearchText, terms: readonly string[], length: number): Snippet {
+  const first = Math.min(...terms.map((term) => text.folded.indexOf(term)).filter((at) => at !== -1));
+  const anchor = Number.isFinite(first) ? first : 0;
+  let start = 0;
+  let end = text.text.length;
+  if (end > length) {
+    start = Math.max(0, Math.min(anchor - Math.floor(length / 4), end - length));
+    if (start > 0) {
+      const space = spaceBefore(text.text, start);
+      start = space === undefined ? onBoundary(text.text, start, 1) : space + 1;
+    }
+    end = Math.min(end, start + length);
+    if (end < text.text.length) end = spaceBefore(text.text, end) ?? onBoundary(text.text, end, -1);
+  }
+  const before = start > 0 ? '…' : '';
+  const after = end < text.text.length ? '…' : '';
+  const ranges: [number, number][] = [];
+  for (const term of terms) {
+    for (let at = text.folded.indexOf(term, start); at !== -1 && at + term.length <= end; at = text.folded.indexOf(term, at + term.length)) {
+      ranges.push([at - start + before.length, at + term.length - start + before.length]);
+    }
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  const marks: [number, number][] = [];
+  for (const range of ranges) {
+    const last = marks.at(-1);
+    if (last !== undefined && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else marks.push([...range]);
+  }
+  return { text: `${before}${text.text.slice(start, end)}${after}`, marks };
+}
+
+const neededTerms = (match: SearchMatch, terms: number): number => (match === 'all' ? terms : Math.ceil(terms / 2));
+
+/** The session's best match, or undefined when it holds too few of the terms. */
+function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions): SearchHit | undefined {
+  const title = scoreTexts([doc.title], terms);
+  const covered = new Set(title.matched);
+  let best: { readonly turn: SearchTurn; readonly scored: Scored } | undefined;
+  let matchingTurns = 0;
+  for (const turn of doc.turns) {
+    const scored = scoreTexts(turn.texts, terms);
+    if (scored.matched.size === 0) continue;
+    matchingTurns++;
+    for (const i of scored.matched) covered.add(i);
+    if (best === undefined || scored.score > best.scored.score) best = { turn, scored };
+  }
+  if (covered.size < neededTerms(options.match, terms.length)) return undefined;
+  const shown = best?.scored.best ?? doc.title;
+  const { summary } = doc;
+  return {
+    sessionId: summary.id,
+    title: summary.title,
+    workspace: summary.workspace,
+    updatedAt: summary.updatedAt,
+    turn: best === undefined ? null : { turn: best.turn.turn, seq: best.turn.seq, at: best.turn.at },
+    source: shown.source,
+    snippet: snippetOf(shown, terms, options.snippetLength),
+    matchingTurns,
+    // The best turn ranks the session; a matching title and more matching turns add to it, a little each.
+    score: (best?.scored.score ?? 0) + (title.matched.size === 0 ? 0 : title.score) + Math.min(matchingTurns, 5) * 5,
+  };
+}
+
+/** The best hit of each matching session, best first, then newest first. An empty query finds nothing. */
+export function searchSessions(docs: Iterable<SessionDoc>, query: string, options: SearchOptions): SearchHit[] {
+  const terms = searchTerms(query);
+  if (terms.length === 0) return [];
+  const hits: SearchHit[] = [];
+  for (const doc of docs) {
+    if (doc.summary.id === options.exclude) continue;
+    const hit = hitIn(doc, terms, options);
+    if (hit !== undefined) hits.push(hit);
+  }
+  return hits
+    .sort((a, b) => b.score - a.score || b.updatedAt.localeCompare(a.updatedAt) || a.sessionId.localeCompare(b.sessionId))
+    .slice(0, options.limit);
+}
