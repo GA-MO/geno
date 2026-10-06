@@ -41,7 +41,7 @@ const picker = () => panel<{ mode: string; label: string; box: string }>(
 /** The badge and reason under the step that ran `command`. */
 const note = (command: string) =>
   panel<string | null>(
-    `(() => { const step = [...doc.querySelectorAll('.calls[data-step="bash"]')].find((s) => s.querySelector('.step-target')?.textContent === ${JSON.stringify(command)}); return step?.querySelector('.auto-note')?.textContent ?? null; })()`,
+    `(() => { const step = [...doc.querySelectorAll('.calls[data-step="bash"]')].find((s) => s.querySelector('.command-in')?.textContent === ${JSON.stringify(command)}); return step?.querySelector('.auto-note')?.textContent ?? null; })()`,
   );
 
 async function showPanel(): Promise<void> {
