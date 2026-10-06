@@ -104,13 +104,15 @@ export function reviewState(events: readonly TurnEvent[]): ReviewHunk[] {
   const checkpointSeq = new Map<number, number>();
   for (const event of events) {
     if (event.kind === 'checkpoint') checkpointSeq.set(event.turnSeq, event.seq);
-    if (event.kind === 'tool-result' && event.change !== undefined) {
-      const change = event.change;
-      const lines = afterLines(change);
-      changes.push({
-        seq: event.seq,
-        hunks: change.hunks.map((hunk, i) => ({ ...hunk, id: hunkIdOf(change, i), path: change.path, afterLine: lines[i]! })),
-      });
+    if (event.kind === 'tool-result' || event.kind === 'lane-apply') {
+      const made = event.kind === 'lane-apply' ? event.changes : event.change === undefined ? [] : [event.change];
+      for (const change of made) {
+        const lines = afterLines(change);
+        changes.push({
+          seq: event.seq,
+          hunks: change.hunks.map((hunk, i) => ({ ...hunk, id: hunkIdOf(change, i), path: change.path, afterLine: lines[i]! })),
+        });
+      }
     }
     if (event.kind === 'review') status.set(event.hunk, event.status);
     if (event.kind === 'restored') {
