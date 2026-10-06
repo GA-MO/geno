@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
+import { onMac } from './mac-only.js';
 import { THEMES } from './panel-fixture.js';
 import { DOCS, GROW_TITLE, LOADING, PROMPTS, SPEED_TITLE } from './widget-fixture.js';
 
@@ -157,10 +158,10 @@ export async function run(): Promise<void> {
   // Copy as image puts a PNG on the clipboard.
   await openMenu('copy-image');
   await waitFor('the copy to finish', async () => (await panel<string>(`doc.querySelector('.widget[data-widget="tu_speed"] .widget-head').dataset.flash ?? ''`)) === 'Copied');
-  if (process.platform === 'darwin') {
+  await onMac('the clipboard is read through osascript', async () => {
     const { stdout } = await promisify(execFile)('osascript', ['-e', 'clipboard info']);
     check(stdout.includes('PNGf'), 'the clipboard holds a PNG', stdout);
-  }
+  });
 
   // Download as HTML saves a page of its own.
   await openMenu('download');
