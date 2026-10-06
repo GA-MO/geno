@@ -29,9 +29,12 @@ export type ModelRuntime = {
   readonly more?: Readonly<Partial<Record<FieldId, Supplied>>>;
 };
 
+/** The prefix of every secret the engine reads; other secrets, such as an agent's key, never restart it. */
+export const ENGINE_SECRETS = 'gcode.apiKey.';
+
 /** Where SecretStorage keeps a secret field; a provider's API key keeps the name it had before the registry. */
 export const secretName = (provider: ProviderName, field: FieldId = 'apiKey'): string =>
-  field === 'apiKey' ? `gcode.apiKey.${provider}` : `gcode.apiKey.${provider}.${field}`;
+  field === 'apiKey' ? `${ENGINE_SECRETS}${provider}` : `${ENGINE_SECRETS}${provider}.${field}`;
 
 /** The setting a non-secret field lives in: Model Studio's endpoint keeps `gcode.baseUrl`, the rest share `gcode.providers`. */
 export const settingKey = (provider: ProviderName, field: FieldId): string =>
