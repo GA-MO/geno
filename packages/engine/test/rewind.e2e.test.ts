@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -133,6 +134,23 @@ const prose = (body: { readonly messages: readonly { readonly role: string; read
   );
 const restoredNote = /^\[The user rewound the workspace/;
 
+/** Whether a process whose command line holds `marker` still runs. */
+const running = (marker: string): boolean => {
+  try {
+    return execFileSync('pgrep', ['-f', marker], { encoding: 'utf8' }).trim() !== '';
+  } catch {
+    return false;
+  }
+};
+
+async function until(check: () => boolean, ms = 10_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error('timed out');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 describe('gcode serve: rewind to here', () => {
   it('restores only the files, shows them first with the edits no checkpoint holds, and the next turn hears of it', async () => {
     await serve([answer('Back at two.', usage)], async (editor) => {
@@ -187,6 +205,22 @@ describe('gcode serve: rewind to here', () => {
       expect(prompts(await editor.log())).toEqual(['make it two']);
       await editor.prompt('make it 3');
       expect(editor.sent().at(-1)).toEqual(['make it two', 'make it 3']);
+    });
+  });
+
+  it('stops the background commands of the turns it cuts, and their ends never reach the model', async () => {
+    const job = { id: 'tu_job', name: 'bash', input: { command: 'sleep 63.17', run_in_background: true } };
+    await serve([toolCall('Starting a job.', [job], usage), answer('It runs.', usage), answer('Made it 3.', usage)], async (editor) => {
+      await editor.prompt('start a job');
+      expect(running('sleep 63.17'), 'the job runs after its turn').toBe(true);
+      const turn3 = turnSeqOf(await editor.log(), 'start a job');
+      await editor.rewind(turn3, { kind: 'conversation' });
+      await until(() => !running('sleep 63.17'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const log = await editor.log();
+      expect(log.events.some((e) => e.kind === 'background-end'), 'its end is not in the session as of the cut').toBe(false);
+      await editor.prompt('make it 3');
+      expect(editor.sent().at(-1)).toEqual(['make it two', 'make it three', 'make it 3']);
     });
   });
 
