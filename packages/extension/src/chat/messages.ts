@@ -1,4 +1,4 @@
-import type { EditorAction, AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting, TodoList } from '@g-code/core';
+import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting, TodoList } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -320,6 +320,16 @@ export type HistoryRow = {
   readonly forkedFrom?: { readonly id: string; readonly title: string } | undefined;
 };
 
+/** Where a search found a session: the turn it opens at, null when only the title matched, and the line to show. */
+export type HistoryHit = {
+  readonly id: string;
+  /** `at` is in milliseconds since the epoch. */
+  readonly turn: { readonly number: number; readonly seq: number; readonly at: number } | null;
+  readonly snippet: Snippet;
+  /** How many of the session's turns match. */
+  readonly matchingTurns: number;
+};
+
 /** What the extension tells the chat webview: transcript changes, answers to its requests, its style and header. */
 export type ToView =
   | Action
@@ -341,6 +351,11 @@ export type ToView =
   | { readonly type: 'hide-history' }
   | { readonly type: 'history'; readonly scope: HistoryScope; readonly rows: readonly HistoryRow[] }
   | { readonly type: 'history-failed'; readonly scope: HistoryScope; readonly message: string }
+  /** The sessions whose text holds every word of `query`, best first. */
+  | { readonly type: 'history-hits'; readonly scope: HistoryScope; readonly query: string; readonly hits: readonly HistoryHit[] }
+  | { readonly type: 'history-hits-failed'; readonly scope: HistoryScope; readonly query: string; readonly message: string }
+  /** After a search result opened its session: scroll to that turn, by the transcript's turn id. */
+  | { readonly type: 'reveal-turn'; readonly turn: string }
   | McpToView
   | SettingsToView
   | PermissionsToView
@@ -445,7 +460,10 @@ export type FromView =
   | { readonly type: 'start-building' }
   /** Asks for the history list; answered by `history` or `history-failed`. */
   | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
-  | { readonly type: 'open-session'; readonly id: string; readonly workspace: string }
+  /** Searches the text of the scope's sessions; answered by `history-hits` or `history-hits-failed`. */
+  | { readonly type: 'search-sessions'; readonly scope: HistoryScope; readonly query: string }
+  /** `turnSeq` opens the session scrolled to that turn, as a search result does. */
+  | { readonly type: 'open-session'; readonly id: string; readonly workspace: string; readonly turnSeq?: number | undefined }
   /** The list is answered again once the change is made. */
   | { readonly type: 'rename-session'; readonly id: string; readonly title: string; readonly scope: HistoryScope }
   | { readonly type: 'delete-session'; readonly id: string; readonly scope: HistoryScope }
