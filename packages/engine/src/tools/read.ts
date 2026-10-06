@@ -39,7 +39,8 @@ function pick(raw: string | undefined, total: number, unit: string, shown: strin
   if (first < 1) throw new ToolError(`${unit}s count from 1`);
   if (asked < first) throw new ToolError(`${raw} ends before it starts`);
   if (first > total) throw new ToolError(`${unit} ${first} is past the end of ${shown}, which has ${total} ${unit}${total === 1 ? '' : 's'}`);
-  if (b !== '' && asked - first + 1 > max) throw new ToolError(`${raw} is ${asked - first + 1} ${unit}s; one read returns at most ${max}. Ask for ${first}-${first + max - 1}, then go on from there`);
+  const wanted = Math.min(asked, total) - first + 1;
+  if (b !== '' && wanted > max) throw new ToolError(`${raw} is ${wanted} ${unit}s; one read returns at most ${max}. Ask for ${first}-${first + max - 1}, then go on from there`);
   return { first, last: Math.min(asked, total, first + max - 1) };
 }
 
