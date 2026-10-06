@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting } from '@g-code/core';
+import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
@@ -44,8 +44,11 @@ export type Watcher = {
   text(delta: string): void;
   /** A tool use about to run, with its one-line description. */
   toolStart(use: ToolUseBlock, title: string): void;
-  /** That tool use finished; its result is logged once every tool of the batch has run. */
-  toolEnd(use: ToolUseBlock, status: ToolStatus): void;
+  /**
+   * That tool use finished; its result is logged once every tool of the batch has run. A todo call's list comes
+   * along, so the user sees it while a slower call of the same batch still runs.
+   */
+  toolEnd(use: ToolUseBlock, status: ToolStatus, todo?: TodoList): void;
   /** Every event, as it is appended to the session log. */
   logged(event: TurnEvent): void;
   /** A tool call the model is still writing. */
@@ -238,7 +241,7 @@ export async function drive(
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
       const { status, text, change, approval, images, widget, editorAction, todo } = await runTool(use, toolCtx, mode.executors);
-      watcher.toolEnd(use, status);
+      watcher.toolEnd(use, status, todo);
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
       const timing = { startAt: started.startAt, endAt: Date.now() };
       ran.set(i, { ...started, ...timing });
