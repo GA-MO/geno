@@ -11,12 +11,12 @@ function ruleRow(rule: PermissionRuleView, post: (message: PermissionsFromView) 
   const { label, tone } = EFFECT_LABELS[rule.effect];
   return h(
     'li',
-    { class: 'rule-row', 'data-rule': rule.id, 'data-effect': rule.effect },
-    h('span', { class: `rule-effect mcp-state ${tone}` }, label),
-    h('code', { class: 'rule-pattern' }, rule.text),
+    { class: 'perm-row', 'data-id': rule.id, 'data-effect': rule.effect },
+    h('span', { class: `perm-effect mcp-state ${tone}` }, label),
+    h('code', { class: 'perm-pattern' }, rule.text),
     h(
       'button',
-      { type: 'button', class: 'link-button rule-remove', 'aria-label': `Remove the rule ${label.toLowerCase()} ${rule.text}`, onclick: () => post({ type: 'permissions-remove', id: rule.id }) },
+      { type: 'button', class: 'link-button perm-remove', 'aria-label': `Remove the rule ${label.toLowerCase()} ${rule.text}`, onclick: () => post({ type: 'permissions-remove', id: rule.id }) },
       'Remove',
     ),
   );
@@ -27,15 +27,15 @@ function ruleRow(rule: PermissionRuleView, post: (message: PermissionsFromView) 
  * engine keeps them; the page only shows the last listing it heard.
  */
 export function permissionsSection(post: (message: PermissionsFromView) => void) {
-  const list = h('ul', { class: 'rules-list', 'aria-label': 'Permission rules' });
-  const note = h('p', { class: 'provider-note rules-note' }, 'Loading…');
-  const refused = h('p', { class: 'provider-test rules-refused', 'data-tone': 'failed', role: 'alert', hidden: true });
-  const effect = h('select', { class: 'role-provider rules-effect', 'aria-label': 'Rule effect' }, h('option', { value: 'allow' }, 'Allow'), h('option', { value: 'deny' }, 'Deny'));
-  const text = h('input', { class: 'provider-input rules-text', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'pnpm test', 'aria-label': 'Command' });
+  const list = h('ul', { class: 'perm-list', 'aria-label': 'Permission rules' });
+  const note = h('p', { class: 'provider-note perm-note' }, 'Loading…');
+  const refused = h('p', { class: 'provider-test perm-refused', 'data-tone': 'failed', role: 'alert', hidden: true });
+  const effect = h('select', { class: 'role-provider perm-choice', 'aria-label': 'Rule effect' }, h('option', { value: 'allow' }, 'Allow'), h('option', { value: 'deny' }, 'Deny'));
+  const text = h('input', { class: 'provider-input perm-text', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'pnpm test', 'aria-label': 'Command' });
   const form = h(
     'form',
     {
-      class: 'rules-add',
+      class: 'perm-add',
       onsubmit: (event: Event) => {
         event.preventDefault();
         if (text.value.trim() === '') return;
@@ -48,7 +48,7 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
   );
   const element = h(
     'div',
-    { class: 'rules-section' },
+    { class: 'perm-section' },
     h('h3', { class: 'settings-heading' }, 'Permissions'),
     h(
       'p',

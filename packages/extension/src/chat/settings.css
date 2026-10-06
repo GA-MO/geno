@@ -441,17 +441,17 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   }
 }
 
-.rules-section {
+.perm-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.rules-list {
+.perm-list {
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 0 12px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
@@ -460,54 +460,54 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   list-style: none;
 }
 
-.rules-list:empty {
+.perm-list:empty {
   display: none;
 }
 
-.rule-row {
+.perm-row {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 6px 0;
+  padding: 6px 12px;
 }
 
-.rule-row + .rule-row {
+.perm-row + .perm-row {
   border-top: 1px solid var(--border);
 }
 
-.rule-effect {
+.perm-effect {
   flex: none;
   min-width: 3.2em;
   font-weight: 600;
 }
 
-.rule-pattern {
+.perm-pattern {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.rule-remove {
+.perm-remove {
   flex: none;
 }
 
-.rules-add {
+.perm-add {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.rules-add .rules-effect {
+.perm-add .perm-choice {
   flex: 0 0 auto;
 }
 
-.rules-note,
-.rules-refused {
+.perm-note,
+.perm-refused {
   margin: 0 2px;
 }
 
-.rules-note[hidden],
-.rules-refused[hidden] {
+.perm-note[hidden],
+.perm-refused[hidden] {
   display: none;
 }

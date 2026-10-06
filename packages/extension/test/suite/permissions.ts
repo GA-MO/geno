@@ -4,7 +4,7 @@ import { check, click, count, openPanel, panel, panelWidth, screenshots, shown, 
 
 const CARD = '.permission-open';
 const ALWAYS = `${CARD} button[data-focus$=":allow-workspace"]`;
-const rows = () => panel<{ effect: string; text: string }[]>(`[...doc.querySelectorAll('.rule-row')].map((r) => ({ effect: r.dataset.effect, text: r.querySelector('.rule-pattern').textContent }))`);
+const rows = () => panel<{ effect: string; text: string }[]>(`[...doc.querySelectorAll('.perm-row')].map((r) => ({ effect: r.dataset.effect, text: r.querySelector('.perm-pattern').textContent }))`);
 
 /** Whether anything inside `selector` runs past its right edge. */
 const fitsIn = (selector: string) =>
@@ -14,6 +14,8 @@ const fitsIn = (selector: string) =>
 
 async function send(prompt: string): Promise<void> {
   await click('textarea');
+  const before = await panel<string>(`doc.querySelector('textarea').value`);
+  check(before === '', 'the composer is empty before the suite types', before);
   await ui({ do: 'type', text: prompt });
   await ui({ do: 'press', key: 'Enter' });
 }
@@ -31,9 +33,9 @@ async function narrow(name: string, selector: string): Promise<void> {
 }
 
 async function addRule(effect: 'allow' | 'deny', text: string): Promise<void> {
-  await panel(`(() => { const s = doc.querySelector('.rules-effect'); s.value = '${effect}'; const i = doc.querySelector('.rules-text'); i.value = ''; i.focus(); })()`);
+  await panel(`(() => { const s = doc.querySelector('.perm-choice'); s.value = '${effect}'; const i = doc.querySelector('.perm-text'); i.value = ''; i.focus(); })()`);
   await ui({ do: 'type', text });
-  await click('.rules-add button[type="submit"]');
+  await click('.perm-add button[type="submit"]');
 }
 
 export async function run(): Promise<void> {
@@ -44,7 +46,7 @@ export async function run(): Promise<void> {
   await waitFor('Ask to ask about a path outside the workspace', async () => (await count(CARD)) === 1);
   check((await textOf(ALWAYS)) === 'Always allow in this workspace', 'the card offers Always allow in this workspace', await textOf(ALWAYS));
   const buttons = await panel<string[]>(`[...doc.querySelectorAll('${CARD} .permission-actions button')].map((b) => b.textContent)`);
-  check(JSON.stringify(buttons) === JSON.stringify(['Allow', 'Always allow in this workspace', 'Deny']), 'Allow, then Always allow, then Deny', buttons);
+  check(JSON.stringify(buttons) === JSON.stringify(['Allow', 'Deny', 'Always allow in this workspace']), 'Allow and Deny, then Always allow', buttons);
   check((await textOf(`${CARD} .permission-rule code`)) === COMMAND, 'the card names the rule it would save', await textOf(`${CARD} .permission-rule`));
   await screenshots('card');
   await narrow('card', CARD);
@@ -52,7 +54,7 @@ export async function run(): Promise<void> {
   await click(ALWAYS);
   await waitFor('the first turn to finish', async () => (await count('.turn-footer')) === 1);
   const settled = await textOf('.permission-outcome');
-  check(settled === `Allowed, and from now on in this workspace: ${COMMAND}`, 'the settled card says the rule is saved', settled);
+  check(settled === 'Allowed, and saved as a rule for this workspace', 'the settled card says the rule is saved', settled);
 
   await send(PROMPTS.again);
   await waitFor('the second turn to finish', async () => (await count('.turn-footer')) === 2);
@@ -67,18 +69,18 @@ export async function run(): Promise<void> {
   await addRule('deny', 'pnpm publish');
   await waitFor('the deny rule', async () => (await rows()).length === 2);
   check((await rows())[1]!.effect === 'deny', 'the new rule denies', await rows());
-  check((await panel<string>(`doc.querySelector('.rules-text').value`)) === '', 'a saved rule clears the field');
+  check((await panel<string>(`doc.querySelector('.perm-text').value`)) === '', 'a saved rule clears the field');
 
   await addRule('allow', 'git push --force');
-  await waitFor('the refusal', () => shown('.rules-refused'));
-  const refusal = await textOf('.rules-refused');
-  check(refusal?.includes('always asks') === true, 'an allow rule for a hard ask is refused with the reason', refusal);
+  await waitFor('the refusal', () => shown('.perm-refused'));
+  const refusal = await textOf('.perm-refused');
+  check(refusal?.startsWith('Geno always asks') === true, 'an allow rule for a hard ask is refused with the reason', refusal);
   check((await rows()).length === 2, 'and nothing is saved', await rows());
-  await panel(`doc.querySelector('.rules-section').scrollIntoView({ block: 'end' })`);
+  await panel(`doc.querySelector('.perm-section').scrollIntoView({ block: 'end' })`);
   await screenshots('settings');
-  await narrow('settings', '.rules-section');
+  await narrow('settings', '.perm-section');
 
-  await click(`.rule-row[data-effect="allow"] .rule-remove`);
+  await click(`.perm-row[data-effect="allow"] .perm-remove`);
   await waitFor('the allow rule to go', async () => (await rows()).length === 1);
   check(JSON.stringify(await rows()) === JSON.stringify([{ effect: 'deny', text: 'pnpm publish' }]), 'only the deny rule is left', await rows());
 }

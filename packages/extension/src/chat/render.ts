@@ -421,6 +421,7 @@ const CHOICE_LABELS: Readonly<Record<string, string>> = {
 };
 
 const CHOICE_STYLES: Readonly<Record<string, string>> = {
+  [WORKSPACE_OPTION]: 'button secondary',
   allow_once: 'button',
   allow_always: 'button ghost',
   reject_once: 'button secondary',
@@ -436,7 +437,7 @@ const choiceButtons = (block: PermissionBlock, ui: Ui, labels: Readonly<Record<s
       h(
         'button',
         {
-          class: CHOICE_STYLES[option.kind] ?? 'button secondary',
+          class: CHOICE_STYLES[option.optionId] ?? CHOICE_STYLES[option.kind] ?? 'button secondary',
           'data-focus': `choose:${block.id}:${option.optionId}`,
           onclick: () => ui.post({ type: 'permission', id: block.id, optionId: option.optionId }),
         },
@@ -488,7 +489,7 @@ const COMMAND_FACE: CardFace = {
     block.outcome.kind === 'cancelled'
       ? outcomeLine(false, 'circle-slash', 'Cancelled')
       : block.outcome.kind === 'chosen' && block.outcome.optionId === WORKSPACE_OPTION
-        ? outcomeLine(true, 'check', `Allowed, and from now on in this workspace: ${block.rule ?? block.command}`)
+        ? outcomeLine(true, 'check', 'Allowed, and saved as a rule for this workspace')
         : allowedOf(block)
           ? outcomeLine(true, 'check', 'Allowed')
           : outcomeLine(false, 'close', 'Denied'),
