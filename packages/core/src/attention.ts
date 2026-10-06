@@ -1,4 +1,5 @@
 import type { TaskRecord, TaskStatus } from './tasks.js';
+import type { WakeView } from './wake.js';
 
 /**
  * Which sessions wait on the user. The Tasks list puts each top-level task, with its subagents or Arena lanes rolled
@@ -9,8 +10,11 @@ import type { TaskRecord, TaskStatus } from './tasks.js';
 /** A task whose turn has not ended. */
 export const isLive = (status: TaskStatus): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
 
-/** What a task wants from the user, most urgent first: a card to answer, a failure to read, a limit to retry. */
-export const NEEDS_YOU_REASONS = ['permission', 'question', 'failed', 'limited'] as const;
+/**
+ * What a task wants from the user, most urgent first: a card to answer, a failure to read, a limit to retry, or wakes
+ * paused at their hourly cap.
+ */
+export const NEEDS_YOU_REASONS = ['permission', 'question', 'failed', 'limited', 'paused'] as const;
 export type NeedsYouReason = (typeof NEEDS_YOU_REASONS)[number];
 
 /** The card a `needs-input` task shows. */
@@ -30,7 +34,7 @@ export const SECTIONS = ['needs-you', 'ready', 'working', 'done'] as const satis
 export type Section = (typeof SECTIONS)[number];
 
 /** A permission and a question share the first tier. */
-const TIER: { readonly [R in NeedsYouReason]: number } = { permission: 0, question: 0, failed: 1, limited: 2 };
+const TIER: { readonly [R in NeedsYouReason]: number } = { permission: 0, question: 0, failed: 1, limited: 2, paused: 2 };
 
 /** Which of a task's and its children's states the task shows: the most urgent, where a running child outranks a finished parent. */
 const urgency = (attention: Attention): number =>
@@ -58,8 +62,13 @@ export const returnedAtOf = (before: TaskRecord | undefined, after: TaskRecord, 
 
 const returned = (task: TaskRecord): number => task.returnedAt ?? task.endedAt ?? task.startedAt;
 
+/** A turn that ended while background work it started will wake the session again. */
+export const isWaking = (wake: WakeView | undefined): boolean => wake !== undefined && wake.paused === undefined && wake.waitsFor.length > 0;
+
 /** A task's own state, without its children. `seen` says the user opened it after it last came back. */
 function ownAttention(task: TaskRecord, seen: boolean): Attention {
+  if (!isLive(task.status) && task.wake?.paused === 'cap') return { kind: 'needs-you', reason: 'paused', at: task.sessionId };
+  if (!isLive(task.status) && isWaking(task.wake)) return { kind: 'working' };
   switch (task.status) {
     case 'needs-input':
       return { kind: 'needs-you', reason: task.asking ?? 'permission', at: task.sessionId };

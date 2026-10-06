@@ -5,6 +5,7 @@ import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lan
 import type { ForkOrigin } from './rewind.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
+import type { WakeView } from './wake.js';
 
 /**
  * Background sessions. The engine runs as one process per workspace that outlives the editor's window, so a turn goes
@@ -47,6 +48,8 @@ export type TaskRecord = {
   readonly jobs?: readonly TaskJob[] | undefined;
   /** The session and turn this one was forked from; absent for a session started fresh. */
   readonly forkedFrom?: ForkOrigin | undefined;
+  /** What will wake the session after its turn ended, or why its wakes wait for the user; absent when neither. */
+  readonly wake?: WakeView | undefined;
 };
 
 export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt'>;

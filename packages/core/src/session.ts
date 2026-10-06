@@ -21,6 +21,7 @@ import { spillNotice, type Spill } from './tools.js';
 import type { ProviderName } from './providers.js';
 import type { ChildEvent, ChildOf } from './subagent.js';
 import type { WaitEvent } from './waiting.js';
+import { wakeNoteText, type WakeEvent, type WakeTrigger } from './wake.js';
 import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
@@ -142,8 +143,13 @@ export type TurnEvent =
       readonly command?: Invocation | undefined;
       /** Delivered into a running turn, after its last tool results, rather than starting one (`steer.ts`). */
       readonly steer?: true | undefined;
-      /** A steer someone other than the user sent: the parent agent, or a background child reporting back. */
-      readonly from?: 'parent' | 'child' | undefined;
+      /**
+       * Someone other than the user: the parent agent's steer, a background child's report, or the engine itself,
+       * which starts a woken turn (`wake.ts`).
+       */
+      readonly from?: 'parent' | 'child' | 'wake' | undefined;
+      /** What woke the session, on a woken turn's first event. */
+      readonly wake?: readonly WakeTrigger[] | undefined;
     }
   /**
    * `timing` is absent in logs written before turns were timed. `issuedBy: 'user'` marks a tool call the user typed,
@@ -180,6 +186,7 @@ export type TurnEvent =
   /** The user chose one of the external agent's models; like an effort change, one made during a turn has no seq. */
   | { readonly kind: 'backend-model'; readonly seq?: number | undefined; readonly at: string; readonly model: string }
   | WaitEvent
+  | WakeEvent
   | ChildEvent
   | CutEvent
   | ToolResultEvent;
@@ -205,6 +212,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'lane-apply': false,
   'background-end': false,
   wait: false,
+  wake: false,
   'backend-start': false,
   'backend-model': false,
   cut: false,
@@ -308,6 +316,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
+    const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
+    if (noted !== undefined) prompts.push({ type: 'text', text: noted });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event, stored));
     if (event.kind === 'assistant') {
