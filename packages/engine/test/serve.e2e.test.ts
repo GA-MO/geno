@@ -347,7 +347,7 @@ describe('gcode serve', () => {
 
     expect(editor.permissions).toEqual([
       expect.objectContaining({
-        toolCall: expect.objectContaining({ toolCallId: push.id, kind: 'execute', rawInput: { command: 'git push origin main', reason: expect.any(String) } }),
+        toolCall: expect.objectContaining({ toolCallId: push.id, kind: 'execute', rawInput: { command: 'git push origin main', reason: expect.any(String), rule: 'git push origin' } }),
         options: expect.any(Array),
       }),
     ]);
@@ -399,7 +399,7 @@ describe('gcode serve', () => {
     expect(asked).toContain('console.log(7)');
     expect(asked).not.toContain('already approved');
     expect(editor.permissions).toEqual([
-      expect.objectContaining({ toolCall: expect.objectContaining({ toolCallId: remove.id, rawInput: { command: 'rm -rf src', reason: expect.any(String), description: 'Remove the source folder' } }) }),
+      expect.objectContaining({ toolCall: expect.objectContaining({ toolCallId: remove.id, rawInput: { command: 'rm -rf src', reason: expect.any(String), description: 'Remove the source folder', rule: 'rm -rf src' } }) }),
     ]);
   });
 
