@@ -24,10 +24,21 @@ const HOMEBREW_DIRS = ['/opt/homebrew/bin', '/usr/local/bin'];
 
 const executable = (file: string): Promise<boolean> => access(file, constants.X_OK).then(() => true, () => false);
 
-/** The agent's command: on PATH, then in `~/.local/bin`, where Cursor's installer puts it, then Homebrew's folders. */
+/**
+ * The agent's command: on PATH, then in `~/.local/bin`, where Cursor's installer puts it, then Homebrew's folders, then
+ * npm's global bin folders, where an adapter such as claude-agent-acp lands. npm itself is not run.
+ */
 export async function findBackend(backend: ExternalBackend, env: Env): Promise<BackendAvailability> {
   const home = env['HOME'] || homedir();
-  const dirs = [...(env['PATH'] ?? '').split(path.delimiter).filter(Boolean), path.join(home, '.local/bin'), ...HOMEBREW_DIRS];
+  const npm = [env['NPM_CONFIG_PREFIX'], env['npm_config_prefix']].flatMap((prefix) => (prefix ? [path.join(prefix, 'bin')] : []));
+  const dirs = [
+    ...(env['PATH'] ?? '').split(path.delimiter).filter(Boolean),
+    path.join(home, '.local/bin'),
+    ...HOMEBREW_DIRS,
+    ...npm,
+    ...(env['NVM_BIN'] ? [env['NVM_BIN']] : []),
+    path.join(home, '.npm-global/bin'),
+  ];
   for (const name of backend.binaries) {
     for (const dir of dirs) {
       const candidate = path.join(dir, name);

@@ -12,11 +12,15 @@ import {
   BACKEND_ENV_METHOD,
   BACKEND_META,
   BACKENDS_METHOD,
+  ARENA_NEW_METHOD,
+  ARENA_UPDATE_METHOD,
   CLASSIFIER_TOOL,
   LANE_APPLY_META,
   TASK_UPDATE_METHOD,
   TASKS_CAPABILITY,
   TURN_USAGE_META,
+  type ArenaNewResponse,
+  type ArenaUpdate,
   type BackendsResponse,
   type TaskUpdate,
 } from '@g-code/core';
@@ -26,7 +30,7 @@ import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
 import { CURSOR_SETUP, type FakeScript, type FakeStep } from './fake-acp-agent.js';
-import { fakeTransport, toolCall } from './fake-transport.js';
+import { answer, fakeTransport, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-acp-agent.ts', import.meta.url));
@@ -68,11 +72,12 @@ const TURNS: Record<string, readonly FakeStep[]> = {
   wait: [{ tool: { id: 'w1', kind: 'execute', title: 'sleep', rawInput: { command: 'sleep 100' } } }, { waitCancel: true }, { text: 'never' }],
   crash: [{ text: 'About to fall over. ' }, { crash: 3 }],
   priced: [{ text: 'Cheap.' }, { cost: 0.0123 }],
+  loud: [{ tool: { id: 'd1', kind: 'edit', title: 'Edit a.ts', locations: ['a.ts'] } }, { write: { path: 'a.ts', text: 'one\nTWO\nthree\n' } }, { done: { id: 'd1', status: 'completed' } }, { text: 'Two is loud now.' }],
   escape: [{ write: { path: 'inside.txt', text: 'in the lane\n' } }, { text: 'Wrote inside. ' }, { write: { path: '../../../escaped.txt', text: 'out\n' } }, { text: 'Wrote outside.' }],
 };
 
-async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = [], sandbox = false) {
-  const repo = await realpath(makeRepo('main', [{ message: 'start', files: { 'a.ts': FILE } }]));
+async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = [], sandbox = false, files: Record<string, string> = {}) {
+  const repo = await realpath(makeRepo('main', [{ message: 'start', files: { 'a.ts': FILE, ...files } }]));
   const home = await realpath(mkdtempSync(path.join(tmpdir(), 'gcode-home-')));
   const bin = mkdtempSync(path.join(tmpdir(), 'gcode-bin-'));
   // Where a sandboxed agent may write its state, so its log survives the sandbox.
@@ -101,6 +106,7 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
   const asked: acp.RequestPermissionRequest[] = [];
   const answers: ('allow' | 'reject')[] = [];
   const writes: acp.WriteTextFileRequest[] = [];
+  const arenas: ArenaUpdate[] = [];
   const window = acp
     .client({ name: 'test-window' })
     .onRequest(acp.methods.client.fs.readTextFile, ({ params }) => ({ content: readFileSync(params.path, 'utf8') }))
@@ -116,7 +122,8 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
     })
     .onRequest(BACKEND_ENV_METHOD, (raw) => raw as { backend: string }, ({ params }) => ({ env: params.backend === 'cursor' ? { CURSOR_API_KEY: KEY, OTHER: 'dropped' } : {} }))
     .onNotification(acp.methods.client.session.update, ({ params }) => void updates.push(params))
-    .onNotification(TASK_UPDATE_METHOD, (raw) => raw as TaskUpdate, ({ params }) => void tasks.push(params));
+    .onNotification(TASK_UPDATE_METHOD, (raw) => raw as TaskUpdate, ({ params }) => void tasks.push(params))
+    .onNotification(ARENA_UPDATE_METHOD, (raw) => raw as ArenaUpdate, ({ params }) => void arenas.push(params));
   const open = async () => {
     const connection = window.connect(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }, mcpSessions(store, env), shared));
     await connection.agent.request(acp.methods.agent.initialize, {
@@ -130,7 +137,7 @@ async function setup(classifierReplies: Parameters<typeof fakeTransport>[0] = []
     agent.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }], ...(meta === undefined ? {} : { _meta: meta }) });
   const shown = (sessionId: string) => updates.filter((u) => u.sessionId === sessionId).map((u) => u.update);
   const events = (sessionId: string) => readSessionLog(sessionFile(store, sessionId as never)).then((log) => log.events);
-  return { repo, home, open, agentCalls, prompt, shown, events, asked, answers, writes, tasks, shared, transport };
+  return { repo, home, open, agentCalls, prompt, shown, events, asked, answers, writes, tasks, shared, transport, arenas };
 }
 
 const text = (updates: readonly acp.SessionUpdate[]) => updates.flatMap((u) => (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text' ? [u.content.text] : [])).join('');
@@ -194,7 +201,7 @@ describe('an external ACP agent as a backend', () => {
     // The edit comes back through Apply, under review in the chat's own checkout.
     const applied = await t.prompt(agent, chat, 'Apply lane please-read-a-ts', { [LANE_APPLY_META]: 'please-read-a-ts' });
     expect(applied.stopReason).toBe('end_turn');
-    expect(t.writes).toEqual([expect.objectContaining({ path: path.join(t.repo, 'a.ts'), content: 'one\nTWO\nthree\n' })]);
+    expect(t.writes, text(t.shown(chat)).slice(-400)).toEqual([expect.objectContaining({ path: path.join(t.repo, 'a.ts'), content: 'one\nTWO\nthree\n' })]);
 
     // A model switch goes to the agent's model option, and the next turn names it.
     const switched = await agent.request(acp.methods.agent.session.setConfigOption, { sessionId: chat, configId: 'model', value: 'grok-4.7[fast=true]' });
@@ -286,6 +293,52 @@ describe('an external ACP agent as a backend', () => {
     expect(text(t.shown(chat))).not.toContain('Wrote outside.');
     expect((await t.events(chat)).find((e) => e.kind === 'backend-start')).toMatchObject({ sandboxed: true });
     expect(t.agentCalls().find((c) => c['start'])!['start'].argv).toEqual(['--sandbox', 'disabled', 'acp']);
+    t.shared.externals.closeAll();
+  });
+
+  it('hands an @cursor task to Cursor as a subagent in a lane of its own, and fences its report with the lane', async () => {
+    const t = await setup();
+    const agent = await t.open();
+    const { sessionId: chat } = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [] });
+    const done = await t.prompt(agent, chat, '@cursor make two loud');
+    expect(done.stopReason).toBe('end_turn');
+    expect(t.transport.requests).toHaveLength(0);
+    const lane = path.join(t.repo, '.geno/worktrees/make-two-loud');
+    expect(t.agentCalls().filter((c) => c['method'] === 'session/new').map((c) => c['params'].cwd).at(-1)).toBe(lane);
+    expect(readFileSync(path.join(lane, 'a.ts'), 'utf8')).toBe('one\nTWO\nthree\n');
+    expect(readFileSync(path.join(t.repo, 'a.ts'), 'utf8')).toBe(FILE);
+    const events = await t.events(chat);
+    const result = events.find((e) => e.kind === 'tool-result');
+    expect(result).toMatchObject({ name: 'agent', status: 'ok' });
+    const report = result !== undefined && 'output' in result ? result.output : '';
+    expect(report).toMatch(/^<subagent_report agent="cursor" session="[^"]+" status="done">/);
+    expect(report).toContain('Two is loud now.');
+    expect(report).toContain('edits are in lane make-two-loud');
+    expect(events.find((e) => e.kind === 'child-end')).toMatchObject({ end: { kind: 'done' }, costUsd: null });
+    // The child's process was its own, and it is gone with the child.
+    expect(t.shared.externals.live(chat)).toBeUndefined();
+  });
+
+  it('runs an Arena lane on Cursor beside a Geno lane', async () => {
+    const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
+    const ranking = answer(['```json', '{"ranking": [{"lane": "B", "reason": "Cursor did it."}, {"lane": "A", "reason": "Fine too."}], "summary": "B."}', '```'].join('\n'), usage);
+    const config = JSON.stringify({ check: 'true', arena: { variants: [{ seed: 'plain' }, { seed: 'plain', backend: 'cursor', model: 'composer-2.5[fast=true]' }] } });
+    const t = await setup([answer('Nothing to change in A.', usage), ranking], false, { '.gcode.json': config });
+    const agent = await t.open();
+    const { run } = await agent.request<ArenaNewResponse>(ARENA_NEW_METHOD, { cwd: t.repo, task: 'Make two loud', n: 2 });
+    expect(run.lanes.map((l) => l.variant)).toEqual([{ seed: 'plain', model: null, effort: null }, { seed: 'plain', model: 'composer-2.5[fast=true]', effort: null, backend: 'cursor' }]);
+    while (!t.arenas.some((u) => u.run.id === run.id && (u.run.status === 'ranked' || u.run.status === 'no-winner'))) await new Promise((resolve) => setTimeout(resolve, 50));
+    const ranked = t.arenas.findLast((u) => u.run.id === run.id)!.run;
+    expect(ranked.status).toBe('ranked');
+    expect(ranked.lanes.map((l) => [l.letter, l.status, l.rank])).toEqual([
+      ['A', 'passed', 2],
+      ['B', 'passed', 1],
+    ]);
+    const laneB = ranked.lanes[1]!;
+    expect(readFileSync(path.join(t.repo, '.geno/worktrees', laneB.lane, 'a.ts'), 'utf8')).toBe('one\nTWO\nthree\n');
+    const cursorCalls = t.agentCalls();
+    expect(cursorCalls.filter((c) => c['method'] === 'session/new').map((c) => c['params'].cwd)).toContain(path.join(t.repo, '.geno/worktrees', laneB.lane));
+    expect(cursorCalls.filter((c) => c['method'] === 'session/set_config_option').map((c) => c['params'])).toContainEqual(expect.objectContaining({ configId: 'model', value: 'composer-2.5[fast=true]' }));
     t.shared.externals.closeAll();
   });
 

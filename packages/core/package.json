@@ -9,7 +9,8 @@
     "./attachments": "./src/attachments.ts",
     "./widget": "./src/widget.ts",
     "./arena": "./src/arena.ts",
-    "./waiting": "./src/waiting.ts"
+    "./waiting": "./src/waiting.ts",
+    "./backends": "./src/backends.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."
