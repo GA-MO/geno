@@ -435,6 +435,44 @@ describe('gcode serve', () => {
     expect(turns).toEqual(['plan', 'ask']);
   });
 
+  it('asks in Ask, then after a switch to Auto runs what the classifier allows, blocks three asks unasked, asks on the fourth, and blocks unasked again after the user allows it', async () => {
+    const outside = (n: number) => use('bash', { command: `cd ~ && du -d 1 .gcode-test-missing-${n}` });
+    const gray = (n: number) => use('bash', { command: `node -e "console.log(${n})"` });
+    const verdict = (answer: 'allow' | 'ask', reason: string) => toolCall('', [use(CLASSIFIER_TOOL.name, { verdict: answer, reason })], usage);
+    const asked = outside(0);
+    const allowed = [outside(1), outside(2)];
+    const blocked = [gray(1), gray(2), gray(3)];
+    const prompted = gray(4);
+    const after = gray(5);
+    const { editor, transport, connect } = await setup([
+      toolCall('Measuring.', [asked], usage),
+      answer('Measured.', usage),
+      ...allowed.flatMap((call) => [toolCall('Measuring.', [call], usage), verdict('allow', 'measures disk use the user asked about')]),
+      ...[...blocked, prompted, after].flatMap((call) => [toolCall('Building.', [call], usage), verdict('ask', 'unclear why this is needed')]),
+      answer('Done.', usage),
+    ]);
+    editor.answerPermission = { outcome: 'selected', optionId: 'allow' };
+
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'What is using my disk?' }] });
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Clean it up.' }] });
+    });
+
+    expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, prompted.id]);
+    expect(editor.permissions[0]!.toolCall.title).toBe('Allow `cd ~`? It uses a path outside the workspace.');
+    expect(editor.permissions[1]!.toolCall.title).toBe('Allow `node -e console.log(4)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.');
+    const results = new Map(
+      transport.requests.flatMap((r) =>
+        (r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: string }[]).flatMap((b) => (b.type === 'tool_result' ? [[b.tool_use_id!, b.content!] as const] : [])),
+      ),
+    );
+    for (const call of allowed) expect(results.get(call.id)).not.toContain('denied');
+    for (const call of [...blocked, after]) expect(results.get(call.id)).toContain('Auto mode blocked `node -e console.log(');
+    expect(results.get(prompted.id)).toContain('4');
+    expect(results.get(prompted.id)).not.toContain('denied');
+  });
+
   it('keeps a mode switched during a turn when the engine stops before the turn ends', async () => {
     const { workspace, editor, transport, connect, env } = await setup([{ ...answer('Thinking.', usage), stallAfter: 1 }]);
     const id = await connect(async (ctx, sessionId) => {

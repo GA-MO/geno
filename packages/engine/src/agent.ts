@@ -38,7 +38,7 @@ import { memoryStore } from './memory.js';
 import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
-import { agentExecutors, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { showWidget } from './tools/widget.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
@@ -225,7 +225,7 @@ export const agent: Command = async (args, { io, store }) => {
   const mode = sessionModeOf(log.events);
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
-    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
+    : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch), auto: freshAuto() };
   const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'] };
   // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
   if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;

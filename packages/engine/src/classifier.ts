@@ -19,7 +19,7 @@ import type { Wire } from './wire-shape.js';
 /** Judges a command Auto cannot settle by rule. Never throws: any failure is an `ask`. */
 export type Classify = (input: ClassifierInput, signal: AbortSignal) => Promise<ClassifierRun>;
 
-/** The settings that choose the classifier; GCODE_CLASSIFIER_MODEL=off turns it off, so every gray command asks. */
+/** The settings that choose the classifier; GCODE_CLASSIFIER_MODEL=off turns it off, so Auto blocks every gray command until the blocks pause it. */
 export const CLASSIFIER_ENV = { provider: 'GCODE_CLASSIFIER_PROVIDER', model: 'GCODE_CLASSIFIER_MODEL' } as const;
 const DEFAULT_CLASSIFIER_PROVIDER: ProviderName = 'modelstudio';
 
