@@ -10,21 +10,25 @@ import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
-import { rgCommand } from './helpers.js';
+import { rgCommand, runCli } from './helpers.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 // At qwen3.8-flash's $0.15 per million input tokens, one call of these costs $0.03, past explore's $0.02 cap.
 const costly = { input: 200_000, cacheRead: 0, cacheWrite: 0 };
 const CHILD_MS = 400;
 
-type Chat = { readonly replies: readonly Reply[]; readonly delayMs?: number };
+/** `last` finds the marker in the newest message instead, for a fork, whose first message is the parent's. */
+type Chat = { readonly replies: readonly Reply[]; readonly delayMs?: number; readonly last?: boolean };
 
 /** One fake model per conversation, picked by a marker in its first message: the parent's prompt or a child's task. */
 function routedTransport(chats: Readonly<Record<string, Chat>>) {
-  const routes = Object.entries(chats).map(([marker, chat]) => ({ marker, chat, transport: fakeTransport(chat.replies) }));
+  const routes = Object.entries(chats)
+    .map(([marker, chat]) => ({ marker, chat, transport: fakeTransport(chat.replies) }))
+    .toSorted((a, b) => Number(b.chat.last === true) - Number(a.chat.last === true));
   const fetch: typeof globalThis.fetch = async (input, init) => {
-    const first = JSON.stringify(JSON.parse(String(init?.body)).messages[0]);
-    const route = routes.find((r) => first.includes(r.marker));
+    const { messages } = JSON.parse(String(init?.body));
+    const route = routes.find((r) => JSON.stringify(r.chat.last === true ? messages.at(-1) : messages[0]).includes(r.marker));
+    const first = JSON.stringify(messages[0]);
     if (route === undefined) throw new Error(`no fake model for ${first.slice(0, 300)}`);
     if (route.chat.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, route.chat.delayMs));
     return route.transport.fetch(input, init);
@@ -43,9 +47,9 @@ type Run = {
   readonly onUpdate?: (params: acp.SessionNotification, ctx: acp.ClientContext) => void;
 };
 
-async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, opts: Run = {}) {
+async function fixture() {
   const workspace = await realpath(
-    makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const alpha = 1;\n', 'b.ts': 'export const beta = 2;\n', '.gcode.json': '{ "agentTool": ["ask", "auto"] }\n' } }]),
+    makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const alpha = 1;\n', 'b.ts': 'export const beta = 2;\n', '.gcode.json': '{ "agentTool": ["ask", "auto", "non-interactive"] }\n' } }]),
   );
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const env = {
@@ -57,6 +61,11 @@ async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, 
     GCODE_RG: rgCommand(),
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
   };
+  return { workspace, env, store: openStore(env) };
+}
+
+async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, opts: Run = {}) {
+  const { workspace, env, store } = await fixture();
   const transport = routedTransport(chats);
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
   const updates: acp.SessionNotification[] = [];
@@ -76,7 +85,6 @@ async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, 
       updates.push(params);
       opts.onUpdate?.(params, connection!);
     });
-  const store = openStore(env);
   const { sessionId, response } = await client.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
     connection = ctx;
     await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: opts.native === true ? { subagents: {} } : {} });
@@ -243,5 +251,51 @@ describe('gcode serve: subagents', () => {
     expect(notices.map((n) => n.status.kind)).toEqual(['running', 'done']);
     expect(notices[1]).toMatchObject({ sessionId: log.session.id, role: 'explore', turns: 2 });
     expect(log.events.map((e) => e.kind)).toEqual(['session-start', 'user', 'assistant', 'child-start', 'child-end', 'tool-result']);
+  });
+
+  it("forks from the parent's conversation, with the parent's system prompt and tools, so the prefix is shared", async () => {
+    const { transport, log, childLog } = await runPrompt(
+      {
+        '[parent]': { replies: [toolCall('Forking.', [{ id: 'tu_k', name: 'agent', input: { agent: 'explore', task: '[fork-child] which file did we just discuss?', fork: true } }], usage), answer('Done.', usage)] },
+        '[fork-child]': { replies: [answer('a.ts:1, from the conversation.', usage)], last: true },
+      },
+      '[parent] we are talking about a.ts',
+    );
+
+    const [, parentNext] = transport.requests('[parent]');
+    const [childCall] = transport.requests('[fork-child]');
+    expect(childCall!.body.system, 'the system prompt is byte-identical').toEqual(parentNext!.body.system);
+    expect(childCall!.body.tools, 'and so are the tools').toEqual(parentNext!.body.tools);
+    expect(childCall!.body.messages.slice(0, -1), "every message before the call's answers").toEqual(parentNext!.body.messages.slice(0, -1));
+    expect(childCall!.body.messages).toHaveLength(3);
+    expect(JSON.stringify(childCall!.body.messages.at(-1))).toContain('This call started you, a forked subagent.');
+    expect(JSON.stringify(childCall!.body.messages.at(-1))).toContain('[You are now explore');
+    const [child] = childrenOf(log.events);
+    expect(child).toMatchObject({ start: 'fork', model: log.session.model });
+    expect((await childLog(child!.child)).events.map((e) => e.kind)).toEqual(['session-start', 'user', 'assistant', 'tool-result', 'user', 'assistant']);
+  });
+});
+
+describe('gcode agent: subagents in a non-interactive run', () => {
+  const worker = (marker: string) => ({
+    [marker]: { replies: [answer('Changed nothing.', usage)] },
+  });
+
+  it('starts only read-only subagents unless --allow-worker says otherwise', async () => {
+    const { workspace, env, store } = await fixture();
+    const refused = routedTransport(worker('[w1]'));
+    const first = await runCli(['agent', '--workspace', workspace, '--non-interactive', '@worker [w1] tidy a.ts'], env, { fetch: refused.fetch });
+    expect(first.code).toBe(0);
+    const id = /^session: (\S+)$/m.exec(first.stdout)![1]!;
+    const [result] = resultsOf((await readSessionLog(sessionFile(store, id as never))).events);
+    expect(result!.status).toBe('error');
+    expect(outputOf(result!)).toBe('worker may change files, and a non-interactive run starts only read-only subagents');
+    expect(refused.requests('[w1]')).toHaveLength(0);
+
+    const allowed = routedTransport(worker('[w2]'));
+    const second = await runCli(['agent', '--workspace', workspace, '--non-interactive', '--allow-worker', '@worker [w2] tidy a.ts'], env, { fetch: allowed.fetch });
+    expect(second.code).toBe(0);
+    expect(allowed.requests('[w2]')).toHaveLength(1);
+    expect(second.stdout).toMatch(/> worker done, turns=1 cost=\$/);
   });
 });
