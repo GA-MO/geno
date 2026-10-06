@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { RECALL_TOOL, recallText, type SearchHit } from '@g-code/core';
+import { RECALL_TOOL, recallText, type SessionHit } from '@g-code/core';
 import { ALWAYS, executor, ToolError, type Executor } from './context.js';
 
 /** Searches the session's workspace for the query, the session itself left out. */
-export type Recall = (query: string) => Promise<readonly SearchHit[]>;
+export type Recall = (query: string) => Promise<readonly SessionHit[]>;
 
 const QUERY_MAX = 200;
 

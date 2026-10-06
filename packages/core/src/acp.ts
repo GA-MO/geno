@@ -6,7 +6,7 @@ import type { HunkStatus } from './hunks.js';
 import type { CheckpointRef, HunkId, ReviewHunk } from './review.js';
 import type { ForkOrigin, RewindChoice } from './rewind.js';
 import type { SessionSpend } from './spend.js';
-import type { SearchHit } from './session-search.js';
+import type { SessionHit } from './session-search.js';
 
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
 export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
@@ -144,7 +144,7 @@ export type RenameSessionRequest = { readonly sessionId: string; readonly title:
 export const SEARCH_SESSIONS_METHOD = '_gcode/searchSessions';
 
 export type SearchSessionsRequest = { readonly query: string; readonly cwd?: string };
-export type SearchSessionsResponse = { readonly hits: readonly SearchHit[] };
+export type SearchSessionsResponse = { readonly hits: readonly SessionHit[] };
 
 /**
  * Key in a replayed `user_message_chunk`'s `_meta` during session/load: how the turn it starts went, which ACP

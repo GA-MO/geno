@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { inScope, searchSessions, sessionDoc, type SearchHit, type SearchOptions, type SessionDoc, type SessionScope } from '@g-code/core';
+import { inScope, searchSessions, sessionDoc, type SearchOptions, type SessionDoc, type SessionHit, type SessionScope } from '@g-code/core';
 import { titleOf } from './session-replay.js';
 import { readSessionLog } from './sessions.js';
 import { isMissing, type Store } from './store.js';
@@ -42,7 +42,7 @@ export class SessionIndex {
 
   constructor(private readonly store: Store) {}
 
-  async search(query: string, scope: SessionScope, options: SearchOptions, warn: Warn): Promise<SearchHit[]> {
+  async search(query: string, scope: SessionScope, options: SearchOptions, warn: Warn): Promise<SessionHit[]> {
     const docs = await this.docs(warn);
     return searchSessions(
       docs.filter((doc) => inScope(doc.summary, scope, TEMP_ROOTS)),
