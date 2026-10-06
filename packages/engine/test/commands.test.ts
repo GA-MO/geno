@@ -39,7 +39,7 @@ describe('command discovery', () => {
 
     const commands = await loadCommands(workspace, { app: home, user: undefined }, []);
 
-    expect(commands.slice(0, 9).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init', 'best-of-n']);
+    expect(commands.slice(0, 10).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n']);
     expect(summary(commands)).toEqual([
       'prompt ship workspace: Ship it now, carefully and with a changelog entry for every ...',
       'prompt review workspace: Review a file',
@@ -188,6 +188,7 @@ describe('gcode commands list', () => {
       '/mode plan | ask | auto built-in, engine    Switch the approval mode',
       '/model               built-in, editor    Choose the model',
       '/clear               built-in, editor    Clear the chat and start fresh',
+      '/compact [focus]     built-in, engine    Summarize the older turns to free context',
       '/rules               built-in, editor    Show the project rules',
       '/memory              built-in, editor    Show what Geno remembers',
       '/init                built-in, engine    Create or update AGENTS.md for this project',
