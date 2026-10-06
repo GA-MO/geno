@@ -116,14 +116,13 @@ describe('composerView, the tray', () => {
 describe('composerView, running', () => {
   const running = transcriptOf(start);
 
-  it('stops, asks for a follow-up to queue, and shows the time, the cost in baht and one agent', () => {
+  it('stops, asks for a follow-up to queue, and shows the time and the cost in baht, and no agents pill until a subagent runs', () => {
     const view = composerView(input({ transcript: running, now: STARTED + 65_000, facts: facts({ turnCostUsd: 0.0125 }) }));
     expect(view.action).toBe('stop');
     expect(view.placeholder).toBe('Queue a follow-up…');
     expect(view.running).toEqual({
       elapsed: '1:05',
       cost: { text: '฿0.40', title: '$0.0125 at ฿32 to the US dollar' },
-      agents: { count: 1, label: '1 agent' },
     });
   });
 

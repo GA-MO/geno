@@ -212,14 +212,14 @@ export async function run(): Promise<void> {
   await click('.attachment-chip[data-attachment="Screenshot 1.png"] .chip-remove');
   await click('.attachment-chip[data-attachment="notes.md"] .chip-remove');
 
-  // Running: time, cost, agents, Stop, and a follow-up queued.
+  // Running: time, cost, Stop, and a follow-up queued.
   await typeDraft(PROMPTS.run);
   await ui({ do: 'press', key: 'Enter' });
   await waitFor('the running status', async () => await shown('.run-status'));
   check(await shown('button.stop'), 'Stop replaces Send');
   check(!(await shown('button.send')), 'and Send hides');
   check((await attr('textarea', 'placeholder')) === 'Queue a follow-up…', 'the placeholder offers a queued follow-up', await attr('textarea', 'placeholder'));
-  check((await textOf('.agents-pill .agents-label')) === '1 agent', 'one agent runs', await textOf('.agents-pill'));
+  check((await count('.agents-pill')) === 0, 'no agents pill while only the chat itself runs', await count('.agents-pill'));
   const first = await textOf('.run-elapsed');
   await waitFor('the clock to tick', async () => (await textOf('.run-elapsed')) !== first, 5000);
   check(/^0:0\d$/.test((await textOf('.run-elapsed'))!), 'the clock reads minutes and seconds', await textOf('.run-elapsed'));

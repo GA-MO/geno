@@ -185,22 +185,6 @@
   gap: 3px;
 }
 
-.agents-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  color: var(--vscode-foreground);
-  outline: 1px solid var(--vscode-contrastBorder, transparent);
-}
-
-.agents-pill .codicon {
-  color: var(--ok);
-}
-
 /* The model menu opens over the model button, on the right, one line per row. It shares the mode menu's frame. */
 .composer .model-menu {
   left: auto;

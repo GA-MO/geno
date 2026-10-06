@@ -106,7 +106,8 @@ export async function run(): Promise<void> {
   await waitFor('the mode menu again', async () => (await count('.mode-menu:not([hidden]) .mode-option')) === 3);
   await click('.mode-option[data-mode="ask"]');
   await waitFor('the engine to confirm Ask', async () => (await picker()).mode === 'ask');
-  check(JSON.stringify(await picker()) === JSON.stringify({ mode: 'ask', label: 'Ask before risky commands', box: 'ask' }), 'Ask drops the Auto marker', await picker());
+  check(JSON.stringify(await picker()) === JSON.stringify({ mode: 'ask', label: 'Ask', box: 'ask' }), 'Ask drops the Auto marker', await picker());
+  await screenshots('ask');
 
   await send(PROMPTS.ask);
   await waitFor('Ask to ask before rm -rf', async () => (await count('.permission-open')) === 1);
