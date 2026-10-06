@@ -143,6 +143,6 @@ describe('the composer in VS Code', () => {
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies().length);
     // The effort chosen in the composer's menu reaches the model from the next call.
-    expect(requests.map((r) => (r.output_config as { effort?: string } | undefined)?.effort)).toEqual(['high', 'high', 'high', 'high', 'high', 'high']);
+    expect(requests.map((r) => (r.output_config as { effort?: string } | undefined)?.effort)).toEqual(['high', 'high', 'high', 'high', 'high', 'high', 'high']);
   }, 600_000);
 });
