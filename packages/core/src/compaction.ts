@@ -188,7 +188,7 @@ export type CompactPlan = {
   readonly region: readonly TurnEvent[];
   readonly tail: readonly TurnEvent[];
   readonly kept: Kept;
-  /** Estimates of the summarized events and the tail, as the model reads them. */
+  /** Estimates of what the compaction replaces (the summarized events and the previous compaction) and of the tail. */
   readonly regionTokens: number;
   readonly tailTokens: number;
 };
@@ -226,7 +226,7 @@ export function planCompaction(events: readonly TurnEvent[], keepTokens: number 
     region,
     tail: view.slice(cut),
     kept: keptOf(region),
-    regionTokens: suffix[base]! - suffix[cut]!,
+    regionTokens: suffix[0]! - suffix[cut]!,
     tailTokens: suffix[cut]!,
   };
 }
