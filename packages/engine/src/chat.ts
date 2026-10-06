@@ -257,7 +257,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
   mode: ({ seq, mode }) => [`${seq === undefined ? '' : `#${seq} `}mode: ${mode}`],
-  effort: ({ seq, effort }) => [`#${seq} effort: ${effort}`],
+  effort: ({ seq, effort }) => [`${seq === undefined ? '' : `#${seq} `}effort: ${effort}`],
   title: ({ seq, title }) => [`#${seq} renamed: ${title}`],
   'child-start': ({ seq, child, role, model, effort, caps, start }) => [
     `#${seq} child-start ${role} ${child} (${start}, ${model}, effort ${effort}, caps ${caps.maxTurns} turns $${caps.maxCostUsd})`,

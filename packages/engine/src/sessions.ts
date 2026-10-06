@@ -203,7 +203,7 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('review'), ...seqFields, hunk: hunkId, status: z.enum(HUNK_STATUSES) }),
     z.strictObject({ kind: z.literal('retry'), ...seqFields, attempt: z.number().int().positive(), delayMs: count, message: z.string() }),
     z.strictObject({ kind: z.literal('mode'), seq: seqFields.seq.optional(), at: seqFields.at, mode: z.enum(SESSION_MODES) }),
-    z.strictObject({ kind: z.literal('effort'), ...seqFields, effort: z.enum(EFFORTS) }),
+    z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
     z.strictObject({
       kind: z.literal('child-start'),
@@ -305,13 +305,17 @@ export async function logMode(log: SessionLog, mode: SessionMode): Promise<Sessi
   return { ...log, events: [...log.events, event] };
 }
 
+/** A setting the user changes while a turn may run. */
+export type SettingChange = { readonly kind: 'mode'; readonly mode: SessionMode } | { readonly kind: 'effort'; readonly effort: Effort };
+
 /**
- * Logs a mode switch while a turn holds the log, so the switch outlives a turn that never ends. It takes no seq, which
- * the turn owns, and it leaves a torn tail for the turn to cut: then it logs nothing and returns false.
+ * Logs a setting change while a turn holds the log, so the change outlives a turn that never ends. It takes no seq,
+ * which the turn owns, and it leaves a torn tail for the turn to cut: then it logs nothing and returns false.
  */
-export async function logModeBesideTurn(log: SessionLog, mode: SessionMode): Promise<boolean> {
+export async function logBesideTurn(log: SessionLog, change: SettingChange): Promise<boolean> {
   if (log.tornLine !== undefined) return false;
-  if (sessionModeOf(log.events) !== mode) await appendEvent(log.file, { kind: 'mode', at: new Date().toISOString(), mode });
+  const unchanged = change.kind === 'mode' ? sessionModeOf(log.events) === change.mode : sessionEffortOf(log.session, log.events) === change.effort;
+  if (!unchanged) await appendEvent(log.file, { ...change, at: new Date().toISOString() });
   return true;
 }
 
