@@ -213,3 +213,16 @@ The user compared one disk-cleanup prompt in Claude Code and in Geno. Claude Cod
 ## U40: sign in to external agents from the settings page (running)
 
 An Agents section in the settings page: find the Cursor CLI, show its version and sign-in status, and run `agent update`, `agent login` (browser, with the URL as a fallback link) and `agent logout` from buttons. Geno never touches the agent's tokens. The ACP backend itself stays in U33 (research/cursor-backend-2026-10.md).
+
+## Harness ideas taken from the coordinator's own tools (2026-10-06, queued after U33 and U43)
+
+The user asked which harness features the coordinator uses could go into Geno. Ranked for this user (cheap model, long runs, several sessions):
+
+1. **U44: steer a running agent.** A message to a running child or lane is delivered at its next tool round, as a user turn in its log, without stopping it. The same path lets the user's own follow-up land mid-turn instead of waiting in the queue.
+2. **U45: background commands.** `bash` with `background: true` returns at once with an id; the engine notifies the turn when it exits, with a tail of its output. Also stop and read-output tools. For dev servers, long tests and builds.
+3. **U46: deferred tools.** Only tool names sit in the prompt; the model loads a schema with a search tool when it needs one. Keeps the cached prefix small and stable as MCP servers grow.
+4. **U47: compact.** Summarize old turns into a checked summary when the context nears the window (the backlog item).
+5. **U48: spin-off tasks.** The agent flags an out-of-scope issue as a chip; one click starts it in a new lane with a self-contained prompt.
+6. **U49: wake-ups and loops.** The agent schedules its own next check ("check CI in 8 minutes"), and `/loop` repeats a prompt on an interval, with the engine process as the timer.
+7. **Worker isolation in a worktree.** U22 deferred `isolation: worktree`; lanes now exist, so a worker child can run in its own lane.
+8. **Hooks.** Run a user command at loop events (session start, before a tool, after an edit), as Claude Code and Cursor do.
