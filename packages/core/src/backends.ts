@@ -17,6 +17,8 @@ export type BackendSandbox = {
   readonly hosts: readonly string[];
   /** Paths under home it writes its state to. Its own config and permission files stay read-only. */
   readonly writableHome: readonly string[];
+  /** Absolute folders outside home it writes to, made before it starts because it may not create them itself. */
+  readonly writableSystem: readonly string[];
   /** Arguments, before `args`, that turn its own sandbox off: macOS refuses a second Seatbelt profile inside Geno's. */
   readonly args: readonly string[];
 };
@@ -72,6 +74,8 @@ export const EXTERNAL_BACKENDS: Readonly<Record<ExternalBackendId, ExternalBacke
         '.cursor/statsig-cache.json',
         '.cursor/agent-cli-state.json',
       ],
+      // CLI 2026.10.01 keeps per-project state in /tmp/.cursor whatever TMPDIR says.
+      writableSystem: ['/tmp/.cursor'],
       args: ['--sandbox', 'disabled'],
     },
     // Allowlist with an empty allowlist: every command and edit asks, and Geno answers by its own mode.

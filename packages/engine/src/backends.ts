@@ -98,10 +98,11 @@ async function sandboxSpec(backend: ExternalBackend, command: string, cwd: strin
   const sandbox = backend.sandbox!;
   const home = env['HOME'] || homedir();
   const real = async (p: string) => realpath(p).catch(() => p);
+  for (const dir of sandbox.writableSystem) await mkdir(dir, { recursive: true });
   return {
     command,
     hosts: [...sandbox.hosts],
-    writable: [await real(cwd), await real(tempDir), ...(await Promise.all(writable.map(real))), ...sandbox.writableHome.map((p) => path.join(home, p))],
+    writable: [await real(cwd), await real(tempDir), ...(await Promise.all(writable.map(real))), ...sandbox.writableHome.map((p) => path.join(home, p)), ...(await Promise.all(sandbox.writableSystem.map(real)))],
     denyRead: CREDENTIAL_PATHS.map((p) => path.join(home, p)),
     readable: [await real(cwd)],
   };
@@ -214,8 +215,10 @@ export async function startAgent(options: StartOptions): Promise<AgentProcess> {
       kill,
     };
   } catch (error) {
+    // A process that dies at start closes the stream before its exit lands; wait a moment so the error says why.
+    const exit = await Promise.race([exited, new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000).unref())]);
     kill();
-    throw error;
+    throw exit === undefined ? error : new EngineError(exitText(backend, exit));
   }
 }
 
