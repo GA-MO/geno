@@ -8,7 +8,6 @@ import {
   classifierInputOf,
   commandStatusLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
-  denialFor,
   formatDiagnostics,
   laneCommandDenial,
   laneDenialText,
@@ -18,6 +17,7 @@ import {
   MODE_REFUSALS,
   nextAutoState,
   OUTCOME_VERDICTS,
+  ruledDenial,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
@@ -25,6 +25,7 @@ import {
   type BaseRead,
   type ClassifierInput,
   type ClassifierRun,
+  type CommandPattern,
   type CommandScope,
   type Denial,
   type EditorDiagnostic,
@@ -36,6 +37,7 @@ import type { CheckCommand } from '../check-command.js';
 import type { Classify } from '../classifier.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
+import type { PermissionStore } from '../permissions.js';
 import type { Sandbox } from '../sandbox.js';
 import {
   displayPath,
@@ -53,8 +55,13 @@ import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { skillExecutor } from './skill.js';
 
-/** The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session. */
-export type PermissionAnswer = 'allow' | 'allow-session' | 'reject';
+/**
+ * The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session.
+ * `allow-workspace` is offered only with a command's `offer`, and saves that allow rule for the workspace.
+ */
+export type PermissionAnswer = 'allow' | 'allow-session' | 'allow-workspace' | 'reject';
+/** An answer that outlives the one call. */
+export type KeptAnswer = Extract<PermissionAnswer, 'allow-session' | 'allow-workspace'>;
 
 /** The subagent a question comes from; the user answers it, since a subagent can approve nothing itself. */
 export type Asker = { readonly name: string; readonly sessionId: string };
@@ -84,8 +91,8 @@ export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === '
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
- * In Auto a classifier `ask` blocks the command without asking anyone, until the blocks pause Auto. `forSession` runs
- * when the user allows it for the rest of the session.
+ * In Auto a classifier `ask` blocks the command without asking anyone, until the blocks pause Auto. `keep` runs, and
+ * is awaited, when the user's yes outlives the call.
  */
 export async function settle(
   approval: Approval,
@@ -93,7 +100,7 @@ export async function settle(
   denial: Denial,
   input: () => ClassifierInput,
   signal: AbortSignal,
-  forSession: () => void = () => {},
+  keep: (answer: KeptAnswer) => void | Promise<void> = () => {},
 ): Promise<ApprovalRecord> {
   const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return { ...record, decidedBy: 'rule', verdict: 'deny' };
@@ -105,13 +112,16 @@ export async function settle(
     return { ...record, classifier, decidedBy: 'classifier', verdict: OUTCOME_VERDICTS[outcome] };
   }
   const answer = await approval.approve(denial, classifier);
-  if (answer === 'allow-session') forSession();
+  if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
   const allowed = answer !== 'reject';
   auto.state = nextAutoState(auto.state, allowed ? 'user-allow' : 'user-reject');
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
 }
 
-export function denialText({ mode, command, reason, classifier, decidedBy }: ApprovalRecord): string {
+export function denialText({ mode, rule, command, reason, classifier, decidedBy }: ApprovalRecord): string {
+  if (rule === 'workspace-deny') {
+    return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.`;
+  }
   if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
     return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
   }
@@ -160,6 +170,8 @@ export type AgentToolEnv = {
   readonly lane?: LaneBounds | undefined;
   /** Where the session's background commands run; undefined for a subagent, which starts none. */
   readonly background?: SessionBackground | undefined;
+  /** The workspace's remembered rules; undefined runs with none. */
+  readonly permissions?: PermissionStore | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -240,9 +252,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       if (background !== undefined && mode === 'plan') throw new ToolError(`background commands are not available: ${MODE_REFUSALS.plan}. Do not retry it.`);
       const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
       if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
-      const denial = denialFor(command, tools.scope, mode);
+      const { permissions } = tools;
+      const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? []);
+      const keep = async () => {
+        if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
+      };
       const approval =
-        denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal);
+        denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal, keep);
       if (approval?.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
       if (background !== undefined) {
         const { text } = await background.jobs.start({

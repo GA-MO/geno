@@ -40,6 +40,7 @@ import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { memoryStore } from './memory.js';
+import { permissionStore } from './permissions.js';
 import { logMode } from './sessions.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
@@ -154,6 +155,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
     const config = await workspaceConfig(workspace);
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
+    const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
     const executorsFor = (approval: Approval, own = false) =>
       agentExecutors({
         sandbox,
@@ -167,6 +169,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         commands,
         lane: lane?.bounds,
         background: own ? { jobs, sessionId: session.id } : undefined,
+        permissions,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);

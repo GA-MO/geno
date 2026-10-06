@@ -190,7 +190,9 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
                 denial,
                 () => ({ ...classifierInputOf(ctx.events(), name, denial), mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args) } }),
                 ctx.signal,
-                () => allowed.add(name),
+                () => {
+                  allowed.add(name);
+                },
               );
         if (record?.verdict === 'deny') throw new ToolDenied(denialText(record), record);
         const { text, images } = await callTool(handle, name, info, args, ctx);
