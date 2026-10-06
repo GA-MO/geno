@@ -1,5 +1,6 @@
 // A scripted external ACP agent, standing in for Cursor's `agent acp` in tests. FAKE_ACP_SCRIPT names a JSON file:
 // what session/new offers, and per prompt the steps to play. Every call it gets goes to the script's log as JSON lines.
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -17,6 +18,8 @@ export type FakeStep =
    */
   | { readonly ask: { readonly id: string; readonly kind?: acp.ToolKind; readonly title?: string; readonly rawInput?: unknown; readonly options?: readonly acp.PermissionOption[] } }
   | { readonly waitCancel: true }
+  /** Starts a command and leaves it running; a cancel of the turn kills it, as a well-behaved agent would. */
+  | { readonly run: readonly string[] }
   /** Holds the turn until a file at this absolute path exists, so a test can act while the agent is mid-turn. */
   | { readonly waitFile: string }
   | { readonly crash: number }
@@ -122,7 +125,14 @@ const main = async () => {
       const steps = Object.entries(script.turns).find(([word]) => text.includes(word))?.[1] ?? [{ text: `no script for: ${text}` }];
       const update = (u: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId, update: u });
       let cancelled = false;
-      const cancelledNow = new Promise<void>((resolve) => cancels.set(sessionId, () => ((cancelled = true), resolve())));
+      const running: ChildProcess[] = [];
+      const cancelledNow = new Promise<void>((resolve) =>
+        cancels.set(sessionId, () => {
+          cancelled = true;
+          for (const child of running) child.kill('SIGKILL');
+          resolve();
+        }),
+      );
       for (const step of steps) {
         if (cancelled) break;
         if ('text' in step) await update({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: step.text } });
@@ -151,6 +161,7 @@ const main = async () => {
           const allowed = answer.outcome.outcome === 'selected' && (options ?? CURSOR_OPTIONS).find((o) => o.optionId === (answer.outcome as { optionId: string }).optionId)?.kind.startsWith('allow');
           if (!allowed) await update({ sessionUpdate: 'tool_call_update', toolCallId: id, status: 'failed', content: [{ type: 'content', content: { type: 'text', text: 'rejected' } }] });
         }
+        if ('run' in step) running.push(spawn(step.run[0]!, step.run.slice(1), { cwd, stdio: 'ignore' }));
         if ('waitCancel' in step) await cancelledNow;
         if ('waitFile' in step) while (!existsSync(step.waitFile)) await new Promise((resolve) => setTimeout(resolve, 20));
         if ('crash' in step) {
