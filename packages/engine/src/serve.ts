@@ -47,6 +47,7 @@ import {
   lastContextUse,
   type Session,
   sessionModeOf,
+  type AutoState,
   type SessionMode,
   type CheckpointTextResponse,
   type PermissionInput,
@@ -113,7 +114,7 @@ import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResu
 import { listSessions, renameSession, trashSession } from './history.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
-import type { Approval, Approver, Diagnostics, PermissionAnswer } from './tools/agent.js';
+import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
@@ -542,6 +543,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const turns = new Map<string, AbortController | undefined>();
   // Running subagents by their own session ids, which `session/cancel` may name.
   const childCancels = new Map<string, () => void>();
+  // Each session's Auto state, kept across its turns for as long as the engine runs.
+  const autos = new Map<string, { state: AutoState }>();
+  const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
   // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
   const modes = new Map<string, SessionMode>();
   // A turn and a review decision both append to the session log and number their events from what they read,
@@ -753,6 +757,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
             mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
             approve: turn.approve,
             classify: commandClassifier(io.env, io.fetch),
+            auto: autoOf(sessionId),
           };
           const result =
             target === undefined

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
+  AUTO_START,
   baseOf,
+  CLASSIFIER_OUTCOMES,
   checkHeadline,
   classifierInputOf,
   commandStatusLine,
@@ -14,9 +16,12 @@ import {
   AGENT_MODE_TOOLS,
   AGENT_TOOL_NAMES,
   MODE_REFUSALS,
+  nextAutoState,
+  OUTCOME_VERDICTS,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
+  type AutoState,
   type BaseRead,
   type ClassifierInput,
   type ClassifierRun,
@@ -66,15 +71,20 @@ export type Approval =
       mode(): SessionMode;
       readonly approve: Approver;
       readonly classify: Classify;
+      /** The session's Auto state, which outlives the turn. */
+      readonly auto: { state: AutoState };
     };
 
 export const NON_INTERACTIVE: Approval = { kind: 'non-interactive' };
+
+export const freshAuto = (): { state: AutoState } => ({ state: AUTO_START });
 
 export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
- * `forSession` runs when the user allows it for the rest of the session.
+ * In Auto a classifier `ask` blocks the command without asking anyone, until the blocks pause Auto. `forSession` runs
+ * when the user allows it for the rest of the session.
  */
 export async function settle(
   approval: Approval,
@@ -86,22 +96,32 @@ export async function settle(
 ): Promise<ApprovalRecord> {
   const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return { ...record, decidedBy: 'rule', verdict: 'deny' };
+  const { auto } = approval;
   const classifier = denial.verdict === 'classify' ? await approval.classify(input(), signal) : undefined;
-  if (classifier !== undefined && classifier.verdict !== 'ask') return { ...record, classifier, decidedBy: 'classifier', verdict: classifier.verdict };
+  const outcome = classifier === undefined ? 'ask-user' : CLASSIFIER_OUTCOMES[auto.state.phase][classifier.verdict];
+  if (outcome !== 'ask-user') {
+    auto.state = nextAutoState(auto.state, outcome);
+    return { ...record, classifier, decidedBy: 'classifier', verdict: OUTCOME_VERDICTS[outcome] };
+  }
   const answer = await approval.approve(denial, classifier);
   if (answer === 'allow-session') forSession();
   const allowed = answer !== 'reject';
+  auto.state = nextAutoState(auto.state, allowed ? 'user-allow' : 'user-reject');
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
 }
 
-export const denialText = ({ mode, command, reason, classifier, decidedBy }: ApprovalRecord): string =>
-  `denied: \`${command}\` ${
+export function denialText({ mode, command, reason, classifier, decidedBy }: ApprovalRecord): string {
+  if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
+    return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
+  }
+  return `denied: \`${command}\` ${
     decidedBy === 'classifier'
       ? `was refused by the safety classifier: ${classifier?.reason}`
       : MODE_REFUSALS[mode] === undefined
         ? `uses ${reason}, which needs the user's approval`
         : `uses ${reason}. ${MODE_REFUSALS[mode]}`
   }. Do not retry it; find another way.`;
+}
 
 /**
  * The tool, refused while the session's mode leaves it out. A run offers only its starting mode's tools, so this

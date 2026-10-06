@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { attachmentFileName, MCP_CALL_TOOL, MCP_DESCRIBE_TOOL, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
 import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
 import { openStore } from '../src/store.js';
-import type { Approval, PermissionAnswer } from '../src/tools/agent.js';
+import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { fakeMcpServer } from './fake-mcp-server.js';
 import { runCli } from './helpers.js';
@@ -73,6 +73,7 @@ function approval(mode: SessionMode, answer: PermissionAnswer, verdict: Classifi
       classified.push(input);
       return { verdict, reason: `classifier said ${verdict}`, model: 'fake', latencyMs: 1, costUsd: 0 };
     },
+    auto: freshAuto(),
   };
   return { value, asked, classified };
 }

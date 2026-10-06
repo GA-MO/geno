@@ -203,18 +203,34 @@ describe('the built-in browser', () => {
     expect(links.map((link) => [link.mimeType, /\/attachments\/[0-9a-f]{64}\.png$/.test(link.uri)]), 'the step links the stored screenshot for its thumbnail').toEqual([['image/png', true]]);
   }, 120_000);
 
-  it('asks before another host even in Auto, and opens nothing when the user says no', async () => {
+  it('asks before another host in Ask, and opens nothing when the user says no', async () => {
     const open = { id: 'tu_evil', name: 'mcp__browser__new_page', input: { url: 'http://localhost@evil.example/' } };
     const { transport, permissions, connect, setAnswer, marker } = await setup([toolCall('Opening.', [open], usage), answer('Refused.', usage)]);
     setAnswer('reject');
 
-    await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open it' }] }));
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      return ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open it' }] });
+    });
 
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'open http://localhost@evil.example/ (host evil.example)', reason: 'opening a page on another host' });
     expect(permissions[0]!.options.map((option) => option.optionId), 'no allow-for-session for a host').toEqual(['allow', 'reject']);
     expect(textOf(toolResults(transport.requests[1]!.body)[0]!)).toContain('denied');
     expect(chromes(marker), 'a refused navigation never starts Chrome').toEqual([]);
+  }, 120_000);
+
+  it('sends another host to the classifier in Auto, and opens nothing and asks nobody when it will not allow it', async () => {
+    const open = { id: 'tu_evil', name: 'mcp__browser__new_page', input: { url: 'http://localhost@evil.example/' } };
+    const verdict = toolCall('', [{ id: 'tu_v', name: CLASSIFIER_TOOL.name, input: { verdict: 'ask', reason: 'the request names no site' } }], usage);
+    const { transport, permissions, connect, marker } = await setup([toolCall('Opening.', [open], usage), verdict, answer('Blocked.', usage)]);
+
+    await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open it' }] }));
+
+    expect(permissions).toEqual([]);
+    expect(JSON.stringify(transport.requests[1]!.body.messages)).toContain('opening a page on another host (rule browser-remote-url)');
+    expect(textOf(toolResults(transport.requests[2]!.body)[0]!)).toContain('Auto mode blocked `open http://localhost@evil.example/ (host evil.example)` without asking the user');
+    expect(chromes(marker), 'a blocked navigation never starts Chrome').toEqual([]);
   }, 120_000);
 
   it('sends evaluate_script in Auto to the classifier with the page URL and the arguments fenced as data', async () => {
@@ -261,14 +277,17 @@ describe('the built-in browser', () => {
     expect(listed.problems).toContain("browser from .mcp.json is left out: the name belongs to Geno's built-in browser");
   }, 60_000);
 
-  it('reports a redirect off the allowed hosts in the step, then asks before acting on that page', async () => {
+  it('reports a redirect off the allowed hosts in the step, then asks before acting on that page in Ask', async () => {
     const base = await site();
     const open = { id: 'tu_open', name: 'mcp__browser__new_page', input: { url: `${base}/redirect` } };
     const click = { id: 'tu_click', name: 'mcp__browser__press_key', input: { pageId: 2, key: 'Enter' } };
     const { transport, permissions, connect, setAnswer } = await setup([toolCall('Opening.', [open], usage), toolCall('Pressing.', [click], usage), answer('Done.', usage)]);
     setAnswer('reject');
 
-    await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open the redirect' }] }));
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'ask' });
+      return ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'open the redirect' }] });
+    });
 
     const opened = textOf(toolResults(transport.requests[1]!.body).find((r) => r.tool_use_id === 'tu_open')!);
     expect(opened).toContain(`[Geno] Page 2 is now at http://${OFF_HOST}:`);
