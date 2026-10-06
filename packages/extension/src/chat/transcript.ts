@@ -1,5 +1,6 @@
 import type { AskUserAnswer, ChildEnd } from '@g-code/core';
 import type { Action, Block, Child, PermissionBlock, PermissionOutcome, ToolBlock, Transcript, Turn, TurnStatus } from './messages.js';
+import { withSteer } from './steer-model.js';
 
 export const emptyTranscript = (model: string): Transcript => ({ model, turns: [] });
 
@@ -162,6 +163,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       })),
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),
+  steer: (transcript, { seq, shown }) => onLast(transcript, (turn) => withSteer(turn, seq, shown)),
   'turn-end': (transcript, { at, status, usage }) =>
     onLast(transcript, (turn) => {
       // Nothing more arrives for a turn once it ends, so what still runs or waits never will.

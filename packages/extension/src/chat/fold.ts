@@ -124,7 +124,8 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 /** What a compact turn keeps in view while folded, widgets included, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget');
+  // What the user said mid-turn shapes the answer below it, as a decided question does.
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'steer');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => step.kind !== 'text' || step === narration).slice(-RECENT));
