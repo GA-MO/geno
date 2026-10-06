@@ -2,6 +2,9 @@
 import type { TaskRecord } from '@g-code/core';
 import { h, icon, reconcile } from './dom.js';
 import { laneRowOf, taskOrder, taskRowOf, type Badge, type LaneRow, type LanesFromView, type LanesListing, type TaskRow } from './lanes-model.js';
+import type { FromView } from './messages.js';
+import type { SteerTarget, SteerResult } from './steer-model.js';
+import { taskSteers } from './steer-view.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -139,7 +142,7 @@ export function lanesPanel(post: (message: LanesFromView) => void, onToggle: (op
   };
 }
 
-function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void): HTMLElement {
+function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void, message: () => void): HTMLElement {
   return h(
     'li',
     { class: `task-row${row.current ? ' current' : ''}`, 'data-task': row.id },
@@ -151,6 +154,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
       row.current
         ? h('span', { class: 'task-here' }, 'Shown in the chat')
         : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', onclick: () => (done(), post({ type: 'task-open', sessionId: row.id })) }, 'Open'),
+      row.live && !row.current && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'message', title: 'Send it a message that lands at its next tool round', onclick: message }, 'Message'),
       row.live && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
     ),
   );
@@ -159,7 +163,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
 const TASKS_NOTE = 'No tasks yet. A chat or lane that runs a turn shows here, and goes on running when the panel closes or the window reloads.';
 
 /** The Tasks pane: the engine's running and finished sessions, running first. */
-export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (open: boolean) => void) {
+export function tasksPanel(post: (message: FromView) => void, onToggle: (open: boolean) => void) {
   let tasks: readonly TaskRecord[] = [];
   let shown: string | undefined;
   let ticking: ReturnType<typeof setInterval> | undefined;
@@ -173,13 +177,20 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     }
   }, () => render());
   frame.body.append(note, list);
+  const steers = taskSteers(post, () => render());
 
   function render(): void {
     if (!frame.isOpen()) return;
     note.textContent = tasks.length === 0 ? TASKS_NOTE : '';
     note.hidden = tasks.length !== 0;
     const rows = taskOrder(tasks).map((task) => taskRowOf(task, shown, Date.now()));
-    reconcile(list, rows.map((row) => ({ key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close()) })));
+    reconcile(
+      list,
+      rows.flatMap((row) => [
+        { key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close(), () => steers.open(row.id, row.title)) },
+        ...steers.items(row.id, row.live && !row.current),
+      ]),
+    );
     const live = rows.some((row) => row.live);
     if (live && ticking === undefined) ticking = setInterval(render, 1000);
     if (!live && ticking !== undefined) {
@@ -198,5 +209,6 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
       shown = showing;
       render();
     },
+    steered: (target: SteerTarget, result: SteerResult) => steers.steered(target, result),
   };
 }
