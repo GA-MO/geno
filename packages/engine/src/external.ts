@@ -85,7 +85,7 @@ export class ExternalAgents {
     // A sandbox's rules are fixed when it starts, so an agent started before its lane was known starts again with it.
     const covered = (link: Link) => !link.process.sandboxed || writable.every((p) => link.writable.includes(p));
     if (running !== undefined && covered(running)) return running;
-    if (running !== undefined && running.session === undefined) this.close(sessionId);
+    if (running !== undefined) this.close(sessionId);
     const pending = this.starting.get(sessionId);
     if (pending !== undefined) return pending;
     const start = (async () => {
@@ -471,6 +471,3 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
     link.process.route(session.id, undefined);
   }
 }
-
-/** Whether a session runs on an external agent. */
-export const isExternal = (log: SessionLog): boolean => log.session.backend !== undefined;
