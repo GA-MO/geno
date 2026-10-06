@@ -13,7 +13,8 @@
     "./attention": "./src/attention.ts",
     "./backends": "./src/backends.ts",
     "./background": "./src/background.ts",
-    "./wake": "./src/wake.ts"
+    "./wake": "./src/wake.ts",
+    "./todo": "./src/todo.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."
