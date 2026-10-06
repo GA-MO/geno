@@ -25,6 +25,7 @@ export default defineConfig({
           fileParallelism: false,
           maxWorkers: 1,
           sequence: { groupOrder: 1 },
+          globalSetup: ['packages/extension/test/vscode-setup.ts'],
           // VS Code and the engine inherit this, so the Claude Code plugins installed on the machine stay out of the tests' command lists.
           env: { CLAUDE_CONFIG_DIR: path.join(tmpdir(), 'gcode-tests-no-claude-config') },
         },
