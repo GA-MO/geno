@@ -31,6 +31,11 @@ const stop = () => {
 };
 process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
+// The engine may die without a signal reaching us; once we are orphaned, the agent's group goes too.
+const parent = process.ppid;
+setInterval(() => {
+  if (process.ppid !== parent) stop();
+}, 1000).unref();
 child.on('exit', async (code, signal) => {
   await SandboxManager.reset().catch(() => {});
   process.exit(code ?? (signal === null ? 1 : 128));
