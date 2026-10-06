@@ -87,6 +87,7 @@ import {
   WIDGET_DRAFT_META,
   WIDGET_TOOL,
   widgetDraftOf,
+  SUBAGENT_META,
   type WidgetRef,
 } from '@g-code/core';
 import { LIMIT_FLAGS, limitsOf, runAgent } from './agent.js';
@@ -115,6 +116,7 @@ import type { Store } from './store.js';
 import type { Approval, Approver, Diagnostics, PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
 import { ruleAttacher } from './tools/rules.js';
+import { acpChildHost } from './subagent-acp.js';
 import type { UserChannel } from './tools/user.js';
 
 const RESOURCE_NOT_FOUND = -32002;
@@ -181,6 +183,8 @@ type Peer = {
   readonly memory: boolean;
   /** It draws show_widget's html. */
   readonly widgets: boolean;
+  /** It understands ACP's subagent sessions. */
+  readonly subagents: boolean;
 };
 
 type Updates = { send(update: acp.SessionUpdate | Promise<acp.SessionUpdate>): void; flush(): Promise<void> };
@@ -355,12 +359,14 @@ function editorTurn(client: acp.AgentContext, sessionId: string, peer: Peer, io:
         },
       },
     },
-    async approve(denial, classifier) {
+    async approve(denial, classifier, asker) {
       await sent.flush();
       const rawInput: PermissionInput = { command: denial.command, reason: denial.reason };
+      const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const { outcome } = await client.request(acp.methods.client.session.requestPermission, {
         sessionId,
-        toolCall: { toolCallId: running, title: approvalQuestion(denial, classifier), kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+        toolCall: { toolCallId: running, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+        ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
         options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
       });
       return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
@@ -527,13 +533,15 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
 
 /** The engine as an ACP agent. Each prompt runs `gcode agent`'s loop on the session's log, or a one-shot inline edit. */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env)): acp.AgentApp {
-  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false };
+  let peer: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false };
   /** A session's stored widget, as an update carries it. */
   const shownWidget = (sessionId: string) => async (widget: WidgetRef): Promise<ShownWidget> => {
     const dir = attachmentsDir(store, asSessionId(sessionId));
     return { uri: pathToFileURL(widgetFile(dir, widget)).href, html: await readWidget(dir, widget) };
   };
   const turns = new Map<string, AbortController | undefined>();
+  // Running subagents by their own session ids, which `session/cancel` may name.
+  const childCancels = new Map<string, () => void>();
   // Each known session's approval mode. A switch applies at once, even inside a running turn; the log catches up after it.
   const modes = new Map<string, SessionMode>();
   // A turn and a review decision both append to the session log and number their events from what they read,
@@ -576,7 +584,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   return acp
     .agent({ name: 'gcode' })
     .onRequest(acp.methods.agent.initialize, ({ params }) => {
-      const { fs, _meta, session, elicitation } = params.clientCapabilities ?? {};
+      const { fs, _meta, session, elicitation, subagents } = params.clientCapabilities ?? {};
       peer = {
         files: fs?.readTextFile === true && fs.writeTextFile === true,
         diagnostics: _meta?.[DIAGNOSTICS_CAPABILITY] === true,
@@ -585,6 +593,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         elicitation: elicitation?.form != null,
         memory: _meta?.[MEMORY_CAPABILITY] === true,
         widgets: _meta?.[WIDGET_CAPABILITY] === true,
+        subagents: subagents != null,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -747,6 +756,18 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                   mcp: await mcp.toolset(sessionId, approval),
                   user: turn.user,
                   widgets: peer.widgets,
+                  childHost: acpChildHost({
+                    client,
+                    parentId: sessionId,
+                    native: peer.subagents,
+                    flushParent: () => turn.updates.flush(),
+                    streamOf: (childId) => {
+                      const { surface, updates } = editorTurn(client, childId, peer, io, () => undefined, shownWidget(childId));
+                      return { watcher: surface.watcher, flush: () => updates.flush() };
+                    },
+                    cancels: childCancels,
+                    err: io.err,
+                  }),
                 })
               : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: turn.surface, diagnostics });
           await turn.updates.flush();
@@ -759,6 +780,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onNotification(acp.methods.agent.session.cancel, ({ params }) => {
       turns.get(params.sessionId)?.abort();
+      childCancels.get(params.sessionId)?.();
     })
     .onRequest(REVIEW_METHOD, reviewRequest, async ({ params }): Promise<ReviewResponse> => {
       known(params.sessionId);

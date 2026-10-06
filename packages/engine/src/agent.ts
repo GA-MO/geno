@@ -5,6 +5,8 @@ import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
   AGENT_MODE_SYSTEM_PROMPTS,
+  AGENT_TOOL,
+  APPROVAL_MODES,
   AGENT_MODE_TOOL_DEFINITIONS,
   approvalQuestion,
   describeServerState,
@@ -39,16 +41,21 @@ import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { showWidget } from './tools/widget.js';
+import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
+import { DISK_FILES } from './files.js';
 
-const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional() });
+/** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
+const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
 
-export async function configuredCheck(workspace: string): Promise<string | undefined> {
+type WorkspaceConfig = z.infer<typeof workspaceConfigSchema>;
+
+export async function workspaceConfig(workspace: string): Promise<WorkspaceConfig> {
   const file = path.join(workspace, '.gcode.json');
   let text: string;
   try {
     text = await readFile(file, 'utf8');
   } catch (error) {
-    if (isMissing(error)) return undefined;
+    if (isMissing(error)) return {};
     throw error;
   }
   let raw: unknown;
@@ -59,7 +66,7 @@ export async function configuredCheck(workspace: string): Promise<string | undef
   }
   const parsed = workspaceConfigSchema.safeParse(raw);
   if (!parsed.success) throw new StoreError(file, z.prettifyError(parsed.error));
-  return parsed.data.check;
+  return parsed.data;
 }
 
 export type AgentOptions = {
@@ -79,12 +86,16 @@ export type AgentOptions = {
   readonly widgets?: boolean | undefined;
   /** Undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy | undefined;
+  /** Where subagents show; undefined prints them on the terminal. */
+  readonly childHost?: SubagentHost | undefined;
+  /** Lets a non-interactive run start subagents that may change files. */
+  readonly allowWorker?: boolean | undefined;
 };
 
 export const askOnTerminal =
   (io: Io): Approver =>
-  async (denial, classifier) =>
-    (await io.confirm(approvalQuestion(denial, classifier))) ? 'allow' : 'reject';
+  async (denial, classifier, asker) =>
+    (await io.confirm(`${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`)) ? 'allow' : 'reject';
 
 function modeFlag(raw: string | undefined): SessionMode | undefined {
   if (raw === undefined || isSessionMode(raw)) return raw;
@@ -99,6 +110,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const lane = await laneAt(workspace, home);
   if (lane !== undefined) await bindSession(lane, session.id);
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
+  let children: Subagents | undefined;
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -106,18 +118,22 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const skillRoots = await globalSkillRoots(homes, claudeDirOf(io.env));
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
     const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
-    const executors = agentExecutors({
-      sandbox,
-      env: childEnv(io.env),
-      scope: { workspace, tempDir, home },
-      check: await checkCommand(options.check ?? (await configuredCheck(workspace)), workspace, homeOf(store)),
-      checkAfterEdit: options.checkAfterEdit,
-      approval: options.approval,
-      diagnostics: options.diagnostics,
-      rules: ruleAttacher(opened.log.events),
-      commands,
-      lane: lane?.bounds,
-    });
+    const config = await workspaceConfig(workspace);
+    const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
+    const executorsFor = (approval: Approval) =>
+      agentExecutors({
+        sandbox,
+        env: childEnv(io.env),
+        scope: { workspace, tempDir, home },
+        check,
+        checkAfterEdit: options.checkAfterEdit,
+        approval,
+        diagnostics: options.diagnostics,
+        rules: ruleAttacher(opened.log.events),
+        commands,
+        lane: lane?.bounds,
+      });
+    const executors = executorsFor(options.approval);
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
     // The run offers the tools and prompt of the mode it starts in; a switch mid-run applies from the next run.
@@ -129,16 +145,43 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const widgets = options.approval.kind === 'interactive' && options.widgets === true;
     const own = [...AGENT_MODE_TOOL_DEFINITIONS[startMode], ...userToolDefinitions(startMode, shownUserTools(channel)), ...widgetToolDefinitions(startMode, widgets)];
     const notes = renderMemory(await memory.list());
+    const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
+    const system = [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n');
+    const scan = await loadAgents(workspace, homes, plugins);
+    for (const problem of scan.problems) io.err(`agents: ${problem}`);
+    // A prompt logged before the run, with its attachments, is the newest event.
+    const logged = opened.log.events.at(-1);
+    const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
+    const issued = await mentionedCall(asked, scan.agents, session);
+    const agentTool = config.agentTool?.includes(startMode) === true;
+    let tools = mcp === undefined ? own : [...own, ...mcp.tools];
+    children = subagents({
+      io,
+      store,
+      parent: opened,
+      agents: scan.agents,
+      limits: options.limits,
+      approval: options.approval,
+      allowWriters: options.allowWorker === true,
+      files: options.surface?.files ?? DISK_FILES,
+      host: options.childHost ?? terminalChildHost(io),
+      executors: executorsFor,
+      parentMode: () => ({ tools, system }),
+      readRoots,
+    });
+    if (agentTool) tools = [...tools, children.tool];
     const mode = {
-      tools: mcp === undefined ? own : [...own, ...mcp.tools],
-      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...executors },
-      system: [AGENT_MODE_SYSTEM_PROMPTS[startMode], ...(genoTools === undefined ? [] : [pstackNote(genoTools)]), ...(notes === undefined ? [] : [notes])].join('\n\n'),
-      readRoots: [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])],
+      tools,
+      executors: { ...mcp?.executors, ...user, ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}), ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}), ...executors },
+      system,
+      readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
+      ...(issued === undefined ? {} : { issued }),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
   } finally {
+    await children?.settled();
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -170,6 +213,7 @@ export const agent: Command = async (args, { io, store }) => {
       'non-interactive': { type: 'boolean', default: false },
       mode: { type: 'string' },
       mcp: { type: 'boolean' },
+      'allow-worker': { type: 'boolean', default: false },
     },
   });
   const task = positionals.join(' ').trim();
@@ -182,7 +226,7 @@ export const agent: Command = async (args, { io, store }) => {
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
     : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch) };
-  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval };
+  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'] };
   // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
   if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
   const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });

@@ -46,6 +46,9 @@ export async function listSessions(store: Store, io: Io, scope: SessionScope): P
       .map(async (name) => {
         try {
           const log = await readSessionLog(path.join(store.sessionsDir, name));
+          // A subagent's session belongs to its parent's chat, not the history.
+          const start = log.events[0];
+          if (start?.kind === 'session-start' && start.child !== undefined) return [];
           return [summarizeSession(log.session, log.events)];
         } catch (error) {
           io.err(`warning: skipped ${name}: ${error instanceof Error ? error.message : String(error)}`);
