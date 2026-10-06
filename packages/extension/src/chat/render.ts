@@ -22,6 +22,8 @@ export type Ui = {
   readonly toggle: (id: string) => void;
   readonly isUnfolded: (id: string) => boolean;
   readonly unfold: (id: string) => void;
+  /** Opens a subagent's transcript in the side view. */
+  readonly openChild: (id: string) => void;
 };
 
 /** The avatar's markup, baked in by the build from the one dino named in src/dino.ts. */
@@ -55,6 +57,7 @@ const VERBS: Readonly<Record<string, readonly [running: string, finished: string
   edit: ['Editing', 'Edited'],
   bash: ['Running', 'Ran'],
   check: ['Checking for problems', 'Checked for problems'],
+  agent: ['Delegating to', 'Delegated to'],
 };
 
 /** An MCP call reads as its tool's own name, with its server beside it. */

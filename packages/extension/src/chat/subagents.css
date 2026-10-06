@@ -1,0 +1,242 @@
+/*
+ * Subagents (U23): each child nests under its agent call as a row, opens into a side view that takes the
+ * transcript's place, and counts in the composer's agents pill while it runs.
+ */
+
+.child-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 2px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--border);
+  list-style: none;
+}
+
+.child-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.child-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--small);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.child-open:hover,
+.child-open:focus-visible {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--vscode-foreground);
+}
+
+.child-open .chevron {
+  flex: none;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.child-role {
+  flex: none;
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.child-model {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.child-time,
+.child-cost {
+  flex: none;
+  white-space: nowrap;
+}
+
+.child-status {
+  flex: none;
+  width: 24px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.child-capped .child-status {
+  color: var(--warn);
+}
+
+/* The helper's 24px box holds a 1× Noodle; under a dino-free slot it keeps the row's columns even. */
+.helper-slot {
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+
+.helper-dino {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.child-cancel {
+  flex: none;
+}
+
+/* The side view: Back and the child's facts, then its own rail. */
+.child-view {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px var(--gap) 12px;
+  scrollbar-gutter: stable;
+}
+
+.child-view[hidden] {
+  display: none;
+}
+
+.child-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.child-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.child-back .codicon {
+  margin-right: 2px;
+}
+
+.child-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.child-title .child-role {
+  font-size: calc(var(--vscode-font-size) + 1px);
+}
+
+.child-title .child-model {
+  color: var(--muted);
+}
+
+.child-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--muted);
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+.child-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.child-meta .codicon {
+  font-size: 13px;
+}
+
+.child-state.status-done .codicon {
+  color: var(--ok);
+}
+
+.child-state.status-capped .codicon {
+  color: var(--warn);
+}
+
+.child-task {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.child-turn {
+  padding-top: 8px;
+}
+
+/* The agents pill: green while subagents run, its label dropped first when the row runs out of room. */
+.agents-pill {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--vscode-foreground);
+  font: inherit;
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  cursor: pointer;
+}
+
+.agents-pill .codicon {
+  flex: none;
+  color: var(--ok);
+  font-size: 13px;
+}
+
+.agents-pill:hover {
+  background: color-mix(in srgb, var(--ok) 24%, transparent);
+}
+
+.agents-pill:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.agents-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer .agents-menu {
+  left: auto;
+  right: var(--gap);
+  width: min(280px, calc(100% - 2 * var(--gap)));
+}
+
+.agents-menu .model-option {
+  align-items: center;
+}
+
+.agents-elapsed {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}

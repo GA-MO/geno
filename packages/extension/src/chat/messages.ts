@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
@@ -32,7 +32,33 @@ export type Turn = {
   readonly mode?: string | undefined;
   /** The `/` command the prompt invoked, which the bubble shows as a chip and its arguments. */
   readonly command?: SentCommand | undefined;
+  /** The subagents the turn started, by their own session ids, in the order they started. */
+  readonly children?: Readonly<Record<string, Child>> | undefined;
 };
+
+/**
+ * A subagent: a child session one of the turn's `agent` calls started. Its own work streams under its session id and
+ * builds `turn`, whose prompt is the task, so the panel draws a child with the same rail as any turn.
+ */
+export type Child = {
+  readonly id: string;
+  /** The parent's `agent` call it runs under. */
+  readonly toolId: string;
+  readonly role: string;
+  readonly model: string;
+  readonly status: ChildStatus;
+  /** Milliseconds since the epoch, as the extension saw the start and the end. */
+  readonly startedAt: number;
+  readonly endedAt: number | undefined;
+  readonly turns: number;
+  /** Known once it ends; null for a model with no price. */
+  readonly costUsd: number | null | undefined;
+  readonly turn: Turn;
+};
+
+/** What a child's own stream adds to its turn. Its questions ask on the parent's call, so they are the parent's. */
+export const CHILD_ACTIONS = ['text', 'notice', 'tool', 'diff'] as const;
+export type ChildAction = Extract<Action, { readonly type: (typeof CHILD_ACTIONS)[number] }>;
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
 
@@ -184,7 +210,10 @@ export type Action =
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }
   | { readonly type: 'error'; readonly message: string }
-  | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined };
+  | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined }
+  | { readonly type: 'child-start'; readonly id: string; readonly toolId: string; readonly role: string; readonly task: string; readonly model: string; readonly at: number }
+  | { readonly type: 'child'; readonly id: string; readonly action: ChildAction }
+  | { readonly type: 'child-end'; readonly id: string; readonly at: number; readonly end: ChildEnd; readonly turns: number; readonly costUsd: number | null };
 
 /** How the panel looks: dark glass with a rainbow edge on live work, or VS Code's native styling (`gcode.ui.style`). */
 export const UI_STYLES = ['glass', 'native'] as const;
@@ -316,6 +345,8 @@ export type FromView =
    */
   | { readonly type: 'want-commands' }
   | { readonly type: 'stop' }
+  /** Stops one running subagent; its parent goes on with what the child had. */
+  | { readonly type: 'cancel-child'; readonly id: string }
   | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
   /** The user's answers to a question card, or their refusal. */
   | { readonly type: 'answer'; readonly id: string; readonly answer: AskUserAnswer }

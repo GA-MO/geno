@@ -72,7 +72,8 @@ import {
 import { pageHtml } from './page.js';
 import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from './slash-route.js';
 import type { CommandOption, SentCommand } from './slash.js';
-import { emptyTranscript, reduce, totalsOf } from './transcript.js';
+import { isChildAction, subagentAction } from './subagent-host.js';
+import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
 
@@ -418,7 +419,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         writeTextFile(params, (document, change) => {
           this.onWrite(document, change);
           const toolId = params._meta?.[TOOL_CALL_META];
-          if (typeof toolId === 'string') this.dispatch({ type: 'diff', toolId, at: Date.now(), diff: diffOf(document.uri, change) });
+          if (typeof toolId !== 'string') return;
+          const diff = { type: 'diff', toolId, at: Date.now(), diff: diffOf(document.uri, change) } as const;
+          this.dispatch(childOf(this.transcript, params.sessionId) === undefined ? diff : { type: 'child', id: params.sessionId, action: diff });
         }),
       )
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) => this.askPermission(params))
@@ -429,6 +432,16 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private updated(sessionId: string, update: acp.SessionUpdate): void {
+    if (update.sessionUpdate === 'subagent_update') {
+      const action = subagentAction(update, Date.now());
+      if (action !== undefined && sessionId === this.shown) this.dispatch(action);
+      return;
+    }
+    if (childOf(this.transcript, sessionId) !== undefined) {
+      const action = actionOf(update, timeOf(update));
+      if (isChildAction(action)) this.dispatch({ type: 'child', id: sessionId, action });
+      return;
+    }
     if (this.composer.updated(sessionId, update)) return;
     // Every session of this window shares its workspace, so any session's list is the panel's.
     if (update.sessionUpdate === 'available_commands_update') return this.recommand(commandOptions(update.availableCommands));
@@ -547,6 +560,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     for (const answer of this.permissions.values()) answer(undefined);
     for (const answer of this.questions.values()) answer(undefined);
     await turn.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: turn.sessionId });
+  }
+
+  /** Stops one subagent of the running turn by its session id; the engine ends it, and the parent goes on. */
+  async cancelChild(id: string): Promise<void> {
+    const turn = this.turn;
+    if (turn === undefined || childOf(this.transcript, id)?.status.kind !== 'running') return;
+    await turn.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: id });
   }
 
   private sessionFor(connection: Connection): Promise<string> {
@@ -838,6 +858,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         ),
       'want-commands': () => void this.link().catch(() => {}),
       stop: () => void this.stop(),
+      'cancel-child': ({ id }) => void this.cancelChild(id).catch(warn),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),

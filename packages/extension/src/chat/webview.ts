@@ -17,14 +17,16 @@ import { historyPanel } from './history.js';
 import { mcpPanel } from './mcp-panel.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
-import { isWaiting, nodeOf, type Step } from './rail.js';
+import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
 import { callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
 import { slashPicker } from './slash-view.js';
 import { startPage } from './start-page.js';
-import { emptyTranscript, isRunning, reduce } from './transcript.js';
+import { childOf, emptyTranscript, isRunning, reduce, runningChildren } from './transcript.js';
 import { workingDino } from './working-dino.js';
+import { helperDinos } from './helper-dino.js';
+import { agentStep, childHead } from './subagent-view.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -67,6 +69,10 @@ function keepPlace(): boolean {
 
 const detail = (): ChatDetail => (document.body.dataset['detail'] === 'full' ? 'full' : 'compact');
 
+/** Which transcript the panel shows: the chat's own, or one subagent's in the side view, which Back leaves. */
+type Focus = { readonly kind: 'parent' } | { readonly kind: 'child'; readonly id: string; readonly scroll: number };
+let focus: Focus = { kind: 'parent' };
+
 const ui: Ui = {
   post: (message) => host.postMessage(message),
   isOpen: (id) => state.open.includes(id),
@@ -80,6 +86,7 @@ const ui: Ui = {
     save({ ...state, unfolded: [...state.unfolded, id] });
     schedule();
   },
+  openChild: (id) => openChild(id),
 };
 
 const log = h('div', { class: 'transcript', role: 'log', 'aria-label': 'Geno chat', 'aria-live': 'polite', tabindex: '-1' });
@@ -102,6 +109,7 @@ let queued: Queued | undefined;
 const controls = composerControls((message) => host.postMessage(message), {
   addContext: () => addContext(),
   openCommands: () => openCommands(),
+  openChild: (id) => openChild(id),
   unqueue: () => {
     queued = undefined;
     schedule();
@@ -143,12 +151,19 @@ const slash = slashPicker(input, {
 const peek = peekOver((shown) => peekGate.set('shown', shown));
 const peekGate = motionGate((motion) => peek.setMotion(motion));
 peek.setMotion(peekGate.motion());
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, peek.element, inputBox);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, controls.agentsMenu, peek.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
 const gate = motionGate((motion) => start.setMotion(motion));
 const working = workingDino();
 const workGate = motionGate((motion) => working.setMotion(motion));
 working.setMotion(workGate.motion());
+const helpers = helperDinos();
+const helperGate = motionGate((motion) => helpers.setMotion(motion));
+helpers.setMotion(helperGate.motion());
+
+const childSlot = h('div', { class: 'child-head-slot' });
+const childRail = h('ol', { class: 'rail child-rail' });
+const childView = h('section', { class: 'child-view', 'aria-label': 'Subagent transcript', hidden: true }, childSlot, h('div', { class: 'turn child-turn' }, childRail));
 
 const projectLabel = h('span', { class: 'header-project' });
 const titleLabel = h('span', { class: 'header-title' });
@@ -178,6 +193,7 @@ const showPane = (name: string, open: boolean): void => {
   document.body.dataset['view'] = shown;
   log.hidden = shown !== 'chat';
   form.hidden = shown !== 'chat';
+  childView.hidden = shown !== 'child';
   if (shown === 'chat') input.focus();
   schedule();
 };
@@ -187,10 +203,18 @@ const mcp = mcpPanel(post, (open) => showPane('mcp', open));
 const rules = rulesPanel(post, (open) => showPane('rules', open));
 const memory = memoryPanel(post, (open) => showPane('memory', open));
 const settings = settingsPanel(post, (open) => showPane('settings', open));
-const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings };
+const child: Pane = {
+  isOpen: () => focus.kind === 'child',
+  close: () => {
+    if (focus.kind === 'parent') return;
+    focus = { kind: 'parent' };
+    showPane('child', false);
+  },
+};
+const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, child };
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, childView, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
 tray.insertBefore(attachments.element, chips);
 inputBox.insertBefore(attachments.note, input);
@@ -237,6 +261,14 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
+    case 'agent': {
+      // A running child's clock moves each second.
+      const second = step.children.some((c) => c.status.kind === 'running') ? Math.floor(Date.now() / 1000) : 0;
+      return {
+        deps: [quiet, step.tool, second, ...step.children, '|', ...state.open],
+        build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()),
+      };
+    }
     case 'notice':
       return { deps: [step.text], build: () => turnNotice(step.text) };
     case 'thinking':
@@ -310,12 +342,15 @@ function render(): void {
     });
   }
 
+  renderChild();
   const running = isRunning(transcript);
   if (empty && !wasEmpty) start.refresh();
   wasEmpty = empty;
   gate.set('shown', empty && document.body.dataset['view'] === 'chat');
   working.show(transcript.turns.at(-1), empty ? undefined : shells.at(-1));
   workGate.set('shown', working.active());
+  helpers.show(runningChildren(transcript));
+  helperGate.set('shown', helpers.active() && document.body.dataset['view'] === 'chat');
   // One Noodle at a time: the start page has its own, and the working dino has the stage while a turn runs.
   peek.blocked(empty || running || document.body.dataset['view'] !== 'chat');
   const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now() });
@@ -333,6 +368,37 @@ function render(): void {
 
 function schedule(): void {
   frame ??= requestAnimationFrame(render);
+}
+
+/** Opens a subagent's transcript in the side view, keeping the chat's place for Back. */
+function openChild(id: string): void {
+  if (childOf(transcript, id) === undefined) return;
+  focus = { kind: 'child', id, scroll: log.scrollTop };
+  showPane('child', true);
+  render();
+  childSlot.querySelector<HTMLElement>('.child-back')?.focus();
+}
+
+/** Back to the chat, where it was, with the keyboard on the child that was opened. */
+function closeChild(): void {
+  if (focus.kind === 'parent') return;
+  const { id, scroll } = focus;
+  child.close();
+  render();
+  log.scrollTop = scroll;
+  log.querySelector<HTMLElement>(`[data-focus="child:${CSS.escape(id)}"]`)?.focus();
+}
+
+/** The side view: the open child's head, and its own turn drawn with the same rail as the chat's. */
+function renderChild(): void {
+  if (focus.kind === 'parent') return;
+  const shown = childOf(transcript, focus.id);
+  if (shown === undefined) return child.close();
+  const second = shown.status.kind === 'running' ? Math.floor(Date.now() / 1000) : 0;
+  reconcile(childSlot, [{ key: shown.id, deps: [shown.status, shown.costUsd, shown.turns, second], build: () => childHead(shown, ui, Date.now(), closeChild) }]);
+  const own = shown.turn;
+  const lastText = own.blocks.at(-1)?.kind === 'text' ? own.blocks.at(-1)!.id : undefined;
+  reconcile(childRail, railOf(own).map((step) => stepItem(own, step, step.kind === 'text' && step.block.id === lastText, false)));
 }
 
 /** The running turn's clock, redrawn each second while it runs. */
@@ -662,6 +728,11 @@ input.addEventListener('keydown', (event) => {
 });
 stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && focus.kind === 'child') {
+    event.preventDefault();
+    closeChild();
+    return;
+  }
   if (event.key === 'Escape' && isRunning(transcript) && !anyPaneOpen()) {
     event.preventDefault();
     host.postMessage({ type: 'stop' });
