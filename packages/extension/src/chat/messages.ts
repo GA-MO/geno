@@ -5,6 +5,7 @@ import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
+import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -65,7 +66,7 @@ export type Child = {
 };
 
 /** What a child's own stream adds to its turn. Its questions ask on the parent's call, so they are the parent's. */
-export const CHILD_ACTIONS = ['text', 'notice', 'tool', 'diff'] as const;
+export const CHILD_ACTIONS = ['text', 'notice', 'tool', 'diff', 'steer'] as const;
 export type ChildAction = Extract<Action, { readonly type: (typeof CHILD_ACTIONS)[number] }>;
 
 export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
@@ -73,7 +74,7 @@ export type TurnStatus = 'streaming' | 'done' | 'stopped' | 'failed';
 export type Usage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };
 
 /** What the assistant did in a turn, in the order it happened. */
-export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock;
+export type Block = TextBlock | ToolBlock | PermissionBlock | ErrorBlock | SteerBlock;
 
 export type TextBlock = { readonly kind: 'text'; readonly id: string; readonly text: string };
 
@@ -174,6 +175,9 @@ export type PermissionBlock = {
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
 
+/** A message that joined the running turn where it landed: after the tool steps before it, before the model's next answer. */
+export type SteerBlock = { readonly kind: 'steer'; readonly id: string; readonly seq: number; readonly shown: SteerShown };
+
 /**
  * A change to the transcript. Everything but `reset`, `model` and `review` applies to the last turn, the only
  * one that can still change. `at` is when the extension saw the update, so a replay keeps the durations.
@@ -226,6 +230,8 @@ export type Action =
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }
   | { readonly type: 'error'; readonly message: string }
+  /** A steer the engine logged in the running turn at `seq`. */
+  | { readonly type: 'steer'; readonly seq: number; readonly shown: SteerShown }
   | { readonly type: 'turn-end'; readonly at: number; readonly status: Exclude<TurnStatus, 'streaming'>; readonly usage: Usage | undefined }
   | { readonly type: 'child-start'; readonly id: string; readonly toolId: string; readonly role: string; readonly task: string; readonly model: string; readonly at: number }
   | { readonly type: 'child'; readonly id: string; readonly action: ChildAction }
@@ -302,7 +308,8 @@ export type ToView =
   | ContextToView
   | ComposerToView
   | LanesToView
-  | ArenaToView;
+  | ArenaToView
+  | SteerToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -396,4 +403,5 @@ export type FromView =
   | ContextFromView
   | ComposerFromView
   | LanesFromView
-  | ArenaFromView;
+  | ArenaFromView
+  | SteerFromView;
