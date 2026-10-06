@@ -320,6 +320,18 @@
   overflow-wrap: anywhere;
 }
 
+.agent-name {
+  font-family: var(--vscode-editor-font-family);
+  font-size: calc(var(--small) - 0.5px);
+  white-space: nowrap;
+}
+
+.agent-plan,
+.agent-note {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
 .agent-install {
   display: block;
   padding: 6px 8px;

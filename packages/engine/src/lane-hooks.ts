@@ -98,7 +98,7 @@ export function idleLane(lane: LaneRecord, tasks: Tasks): void {
  */
 export async function applyLaneTurn(
   store: Store,
-  opened: OpenSession,
+  opened: Pick<OpenSession, 'log'>,
   repo: LaneRepo,
   name: string,
   files: Files,
@@ -109,7 +109,8 @@ export async function applyLaneTurn(
   const { session, file } = opened.log;
   if (repo.main !== session.workspace) throw new EngineError(`apply lane ${name} from a chat in ${repo.main}`);
   const lane = await requireLane(repo, name);
-  idleLane(lane, tasks);
+  // An external agent's lane is bound to the chat that applies it, whose own turn is this apply.
+  if (lane.session !== session.id) idleLane(lane, tasks);
   const events: TurnEvent[] = [...opened.log.events];
   const record = async (event: TurnEvent) => {
     events.push(event);

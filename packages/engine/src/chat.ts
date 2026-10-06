@@ -7,6 +7,7 @@ import {
   isEmptyContext,
   isEffort,
   isProviderName,
+  type BackendBinding,
   specOf,
   nextSeq,
   toolUsesOf,
@@ -64,6 +65,7 @@ async function newSession(
   provider: ProviderName,
   model: string,
   effort: Effort,
+  backend?: BackendBinding,
 ): Promise<SessionLog> {
   const session: Session = {
     id: asSessionId(randomUUID()),
@@ -72,6 +74,7 @@ async function newSession(
     provider,
     model,
     effort,
+    ...(backend === undefined ? {} : { backend }),
   };
   const file = sessionFile(store, session.id);
   // Loaded once and logged, so every later turn and a resumed session send the same text.
@@ -108,6 +111,12 @@ export async function startSession(store: Store, io: Io, choice: SessionChoice):
   const { provider, model } = chooseModel(io, choice);
   const gateway = gatewayFor(provider, io.env, io.fetch);
   return { log: await newSession(store, choice.workspace, provider, model, effort), gateway };
+}
+
+/** A session on an external agent, which needs no Geno model or key: the agent brings its own. */
+export async function startExternalSession(store: Store, io: Io, workspace: string, backend: BackendBinding): Promise<SessionLog> {
+  const named = io.env['GCODE_PROVIDER'] ?? '';
+  return newSession(store, workspace, isProviderName(named) ? named : DEFAULT_PROVIDER, backend.id, DEFAULT_EFFORT, backend);
 }
 
 export async function resumeSession(store: Store, io: Io, rawId: string): Promise<OpenSession> {
@@ -228,7 +237,7 @@ export function totalOf(events: readonly TurnEvent[]): Totals {
 const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   'session-start': ({ session, context }) => [
     `session: ${session.id}`,
-    `created: ${session.createdAt}  workspace: ${session.workspace}  provider: ${session.provider}  model: ${session.model}  effort: ${session.effort}`,
+    `created: ${session.createdAt}  workspace: ${session.workspace}  provider: ${session.provider}  model: ${session.model}  effort: ${session.effort}${session.backend === undefined ? '' : `  backend: ${session.backend.id}`}`,
     ...(context === undefined || isEmptyContext(context)
       ? []
       : [
@@ -273,6 +282,8 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     `#${seq} child-start ${role} ${child} (${start}, ${model}, effort ${effort}, caps ${caps.maxTurns} turns $${caps.maxCostUsd})`,
   ],
   'child-end': ({ seq, child, end, turns, costUsd, summary }) => [`#${seq} child-end ${child} ${childEndWords(end)} turns=${turns} ${formatCost(costUsd)}: ${summary}`],
+  'backend-start': ({ seq, agentSessionId, lane, sandboxed }) => [`#${seq} backend session ${agentSessionId}${lane === null ? '' : ` in lane ${lane}`}${sandboxed ? ', sandboxed' : ', not sandboxed'}`],
+  'backend-model': ({ seq, model }) => [`${seq === undefined ? '' : `#${seq} `}backend model: ${model}`],
   'lane-apply': ({ seq, lane, changes, conflicts, deleted }) => [
     `#${seq} lane-apply ${lane}: ${conflicts.length > 0 ? `${conflicts.length} conflicts, nothing applied` : `${changes.length + deleted.length} files`}`,
     ...changes.map((change) => `  changed ${change.path} (${change.hunks.length} hunks)`),

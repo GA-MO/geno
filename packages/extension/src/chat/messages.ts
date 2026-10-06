@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -14,7 +14,12 @@ import type { CommandOption, SentCommand } from './slash.js';
  * Action; the webview runs the same reducer (transcript.ts) and renders the result, so replaying or
  * resending the whole transcript can never leave the view out of step.
  */
-export type Transcript = { readonly model: string; readonly turns: readonly Turn[] };
+export type Transcript = {
+  readonly model: string;
+  readonly turns: readonly Turn[];
+  /** The external agent the session runs on, fixed when it starts; undefined for Geno's own loop. */
+  readonly backend?: BackendShown | undefined;
+};
 
 export type Turn = {
   readonly id: string;
@@ -170,6 +175,8 @@ export type PermissionBlock = {
   readonly ask?: PermissionAsk | undefined;
   /** The call it asks about. Its own update can reach the panel after the question does. */
   readonly toolId?: string | undefined;
+  /** An edit, which an external agent asks about, reads as one; any other call as a command. */
+  readonly toolKind?: ToolKind | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -181,6 +188,8 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 export type Action =
   | { readonly type: 'reset'; readonly transcript: Transcript }
   | { readonly type: 'model'; readonly model: string }
+  /** The session's backend, as its start or load said, or again once its first turn names the lane. */
+  | { readonly type: 'backend'; readonly backend: BackendShown | undefined }
   | {
       readonly type: 'turn-start';
       readonly id: string;
@@ -222,6 +231,7 @@ export type Action =
       readonly classifier?: string | undefined;
       readonly ask?: PermissionAsk | undefined;
       readonly toolId?: string | undefined;
+      readonly toolKind?: ToolKind | undefined;
     }
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }

@@ -8,6 +8,7 @@ import {
   CHILD_CAPS,
   CHILD_STARTS,
   APPROVAL_RULE_IDS,
+  EXTERNAL_BACKEND_IDS,
   EFFORTS,
   HUNK_STATUSES,
   nextSeq,
@@ -62,6 +63,7 @@ const sessionSchema = z.strictObject({
   provider: z.enum(PROVIDERS).default('openrouter'),
   model: z.string().min(1),
   effort: z.enum(EFFORTS),
+  backend: z.strictObject({ id: z.enum(EXTERNAL_BACKEND_IDS) }).optional(),
 });
 
 // Blocks are stored exactly as the API returned them and replayed verbatim, so only their tag is checked.
@@ -248,6 +250,8 @@ const turnEventSchema = z.union([
       deleted: z.array(z.string()),
       grafted: count.optional(),
     }),
+    z.strictObject({ kind: z.literal('backend-start'), ...seqFields, agentSessionId: z.string().min(1), lane: z.string().min(1).nullable(), sandboxed: z.boolean(), loadable: z.boolean() }),
+    z.strictObject({ kind: z.literal('backend-model'), seq: seqFields.seq.optional(), at: seqFields.at, model: z.string().min(1) }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
@@ -328,7 +332,27 @@ export async function logMode(log: SessionLog, mode: SessionMode): Promise<Sessi
 }
 
 /** A setting the user changes while a turn may run. */
-export type SettingChange = { readonly kind: 'mode'; readonly mode: SessionMode } | { readonly kind: 'effort'; readonly effort: Effort };
+export type SettingChange =
+  | { readonly kind: 'mode'; readonly mode: SessionMode }
+  | { readonly kind: 'effort'; readonly effort: Effort }
+  | { readonly kind: 'backend-model'; readonly model: string };
+
+/** Whether `change` would leave the session as it is. */
+const UNCHANGED: { readonly [K in SettingChange['kind']]: (log: SessionLog, change: Extract<SettingChange, { kind: K }>) => boolean } = {
+  mode: (log, { mode }) => sessionModeOf(log.events) === mode,
+  effort: (log, { effort }) => sessionEffortOf(log.session, log.events) === effort,
+  'backend-model': (log, { model }) => log.events.findLast((e) => e.kind === 'backend-model')?.model === model,
+};
+
+const unchanged = (log: SessionLog, change: SettingChange): boolean => (UNCHANGED[change.kind] as (log: SessionLog, change: SettingChange) => boolean)(log, change);
+
+/** Logs a setting change between turns. */
+export async function logSettingChange(log: SessionLog, change: SettingChange): Promise<SessionLog> {
+  if (unchanged(log, change)) return log;
+  const event = { ...change, seq: nextSeq(log.events), at: new Date().toISOString() } as TurnEvent;
+  await appendEvent(log.file, event);
+  return { ...log, events: [...log.events, event] };
+}
 
 /**
  * Logs a setting change while a turn holds the log, so the change outlives a turn that never ends. It takes no seq,
@@ -336,8 +360,7 @@ export type SettingChange = { readonly kind: 'mode'; readonly mode: SessionMode 
  */
 export async function logBesideTurn(log: SessionLog, change: SettingChange): Promise<boolean> {
   if (log.tornLine !== undefined) return false;
-  const unchanged = change.kind === 'mode' ? sessionModeOf(log.events) === change.mode : sessionEffortOf(log.session, log.events) === change.effort;
-  if (!unchanged) await appendEvent(log.file, { ...change, at: new Date().toISOString() });
+  if (!unchanged(log, change)) await appendEvent(log.file, { ...change, at: new Date().toISOString() } as TurnEvent);
   return true;
 }
 

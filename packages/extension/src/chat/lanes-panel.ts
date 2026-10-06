@@ -161,7 +161,8 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
     h(
       'p',
       { class: 'lane-meta' },
-      h('span', {}, row.where),
+      row.backend !== undefined && h('span', { class: 'task-backend', title: `Runs on ${row.backend}` }, row.backend),
+      h('span', { class: 'task-where' }, row.where),
       row.children !== undefined && h('span', { class: 'task-children' }, row.children),
       h('span', { class: 'task-time' }, row.time),
       row.cost !== undefined && h('span', { class: 'lane-cost' }, row.cost),

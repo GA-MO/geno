@@ -30,7 +30,7 @@ export class Tasks {
     if (record !== undefined && record.parent !== parent) this.put({ ...record, parent });
   }
 
-  update(sessionId: string, patch: Partial<Pick<TaskRecord, 'title' | 'usage'>>): void {
+  update(sessionId: string, patch: Partial<Pick<TaskRecord, 'title' | 'usage' | 'lane'>>): void {
     const record = this.records.get(sessionId);
     if (record !== undefined && isLive(record.status)) this.put({ ...record, ...patch });
   }

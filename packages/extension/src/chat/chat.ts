@@ -51,6 +51,15 @@ import {
   RETRY_NOW_METHOD,
   type RetryNowRequest,
   type RetryNowResponse,
+  BACKEND_ENV_METHOD,
+  BACKEND_META,
+  BACKENDS_METHOD,
+  EXTERNAL_BACKEND_IDS,
+  type BackendEnvResponse,
+  type BackendId,
+  type BackendShown,
+  type BackendsResponse,
+  type ExternalBackendId,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -179,12 +188,22 @@ const taskUpdate = z.object({
     parent: z.string().nullable().optional(),
     kind: z.enum(TASK_KINDS).optional(),
     returnedAt: z.number().nullable().optional(),
+    backend: z.enum(EXTERNAL_BACKEND_IDS).optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
 // The parse drops a field it does not name, so a field TaskRecord gains must be named above; U43 lost `parent` that way.
 const namesEveryTaskField: Exclude<keyof TaskRecord, keyof z.infer<typeof taskUpdate>['task']> extends never ? true : never = true;
 void namesEveryTaskField;
+
+const backendShown = z.object({ id: z.enum(EXTERNAL_BACKEND_IDS), label: z.string(), plan: z.string(), lane: z.string().nullable() });
+const backendEnvRequest = z.object({ backend: z.enum(EXTERNAL_BACKEND_IDS) });
+
+/** The backend a session response or info update names under BACKEND_META; undefined for Geno's own loop. */
+const backendOf = (meta: Record<string, unknown> | null | undefined): BackendShown | undefined => {
+  const parsed = backendShown.safeParse(meta?.[BACKEND_META]);
+  return parsed.success ? parsed.data : undefined;
+};
 
 /** How a turn the panel adopted after a reload ends, by the status its task ended in. */
 const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 'streaming'> | undefined>> = {
@@ -328,6 +347,8 @@ const REPLAY_TAIL_MS = 5000;
 function totalsLabel(transcript: Transcript): string {
   const totals = totalsOf(transcript);
   if (totals.turns === 0) return '';
+  // An external agent counts no tokens through Geno, and its plan pays when it names no price.
+  if (transcript.backend !== undefined && totals.inputTokens + totals.outputTokens === 0) return totals.costUsd === null ? transcript.backend.plan : formatCost(totals.costUsd);
   const tokens = `${formatTokens(totals.inputTokens + totals.outputTokens)} tokens`;
   return totals.costUsd === null ? tokens : `${formatCost(totals.costUsd)} · ${tokens}`;
 }
@@ -452,6 +473,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     settingsPage: (post: (message: SettingsToView) => void) => SettingsPage,
     /** When the user last opened each task, kept across reloads. */
     seen: SeenStore,
+    /** What the user chose for an external agent, such as its API key, for the engine that starts it. */
+    private readonly backendEnv: (backend: ExternalBackendId) => Promise<BackendEnvResponse>,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
@@ -466,6 +489,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       () => this.settingsPage.listing(),
       modelName,
       (provider, model) => setRole('chat', provider, model),
+      async () => (await (await this.engine.connection()).agent.request<BackendsResponse>(BACKENDS_METHOD, {})).backends,
+      (backend) => this.newChatOn(backend),
     );
     this.background = new TaskHost(
       () => this.engine.connection(),
@@ -554,6 +579,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(acp.methods.client.elicitation.create, ({ params, signal }) => this.askQuestion(params, signal))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
+      .onRequest(BACKEND_ENV_METHOD, backendEnvRequest, ({ params }) => this.backendEnv(params.backend))
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
       .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))
       .onNotification(ARENA_UPDATE_METHOD, arenaUpdate, ({ params }) => this.arena.updated(params));
@@ -585,6 +611,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       return;
     }
     if (update.sessionUpdate === 'session_info_update') {
+      const backend = backendOf(update._meta);
+      if (backend !== undefined && this.shown === sessionId) this.dispatch({ type: 'backend', backend });
       if (update.title === undefined) return;
       if (this.replay?.id === sessionId) {
         this.replay.title = update.title ?? undefined;
@@ -777,7 +805,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const cwd = this.shownCwd ?? connection.cwd;
     if (this.shown !== undefined) {
       try {
-        const { modes, configOptions } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+        const { modes, configOptions, _meta } = await connection.agent.request(acp.methods.agent.session.resume, { sessionId: this.shown, cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+        this.dispatch({ type: 'backend', backend: backendOf(_meta) });
         this.remode(modesOf(modes) ?? this.modes);
         this.composer.switched(this.shown, configOptions);
         return this.shown;
@@ -799,15 +828,16 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     return this.fresh(connection, this.transcript, this.modes.current);
   }
 
-  /** Starts a session in `mode`, by default the one the settings give new sessions. */
-  private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode()): Promise<string> {
-    const { sessionId, modes, configOptions } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
+  /** Starts a session in `mode`, by default the one the settings give new sessions, on Geno's own loop unless `backend` names an agent. */
+  private async fresh(connection: Connection, transcript = emptyTranscript(this.modelName()), mode: string = this.defaultMode(), backend: BackendId = 'geno'): Promise<string> {
+    const on = backend === 'geno' ? {} : { [BACKEND_META]: { id: backend } };
+    const { sessionId, modes, configOptions, _meta } = await connection.agent.request(acp.methods.agent.session.new, { cwd: connection.cwd, mcpServers: await this.forwardedServers(), _meta: { ...browserMeta(), ...on } });
     let state = modesOf(modes) ?? { current: mode, available: MODE_FALLBACK };
     if (state.current !== mode && state.available.some((m) => m.id === mode)) {
       await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
       state = { ...state, current: mode };
     }
-    await this.show(sessionId, transcript, undefined, state, configOptions);
+    await this.show(sessionId, { ...transcript, backend: backendOf(_meta) }, undefined, state, configOptions);
     return sessionId;
   }
 
@@ -824,16 +854,19 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     let modes: Modes | undefined;
     let options: acp.LoadSessionResponse['configOptions'];
     let running = false;
+    let backend: BackendShown | undefined;
     try {
       const loaded = await connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd: cwd ?? connection.cwd, mcpServers: await this.forwardedServers(), _meta: browserMeta() });
       modes = modesOf(loaded.modes);
+      backend = backendOf(loaded._meta);
       options = loaded.configOptions;
       running = loaded._meta?.[RUNNING_META] === true;
       await Promise.race([tail, new Promise((resolve) => setTimeout(resolve, REPLAY_TAIL_MS))]);
     } finally {
       this.replay = undefined;
     }
-    const transcript = replay.end === undefined || running ? replay.transcript : reduce(replay.transcript, replay.end);
+    const replayed = replay.end === undefined || running ? replay.transcript : reduce(replay.transcript, replay.end);
+    const transcript = { ...replayed, backend };
     // The engine may have ended the turn between its answer and now; its task says so.
     const task = this.background.get(sessionId);
     const adopt = running && (task === undefined || isLive(task.status));
@@ -933,6 +966,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     await this.moveTo((connection) => this.fresh(connection));
   }
 
+  /** Starts a chat on `backend`, which the session keeps for its life, even when the shown chat has no turns yet. */
+  async newChatOn(backend: BackendId): Promise<void> {
+    void this.view?.webview.postMessage({ type: 'hide-history' } satisfies ToView);
+    if (this.shown !== undefined && this.transcript.turns.length === 0 && (this.transcript.backend?.id ?? 'geno') === backend) return;
+    await this.moveTo((connection) => this.fresh(connection, undefined, undefined, backend));
+  }
+
   /** Opens the History list in the panel. */
   showHistory(): void {
     void this.view?.webview.postMessage({ type: 'show-history' } satisfies ToView);
@@ -1004,6 +1044,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         classifier: classifierReasonOf(toolCall.title),
         ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
         toolId: toolCall.toolCallId,
+        ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
       });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
