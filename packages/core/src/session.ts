@@ -15,6 +15,7 @@ import { renderContextItems, renderLoadedContext, type ContextItem, type LoadedC
 import type { HunkStatus } from './hunks.js';
 import type { ApprovalRecord } from './classifier.js';
 import type { ModelRetry } from './model-error.js';
+import type { EditorAction } from './editor-actions.js';
 import type { FileChange, HunkId } from './review.js';
 import type { InterruptedTool, ModelMarks, ToolMarks } from './timing.js';
 import { spillNotice, type Spill } from './tools.js';
@@ -102,6 +103,8 @@ export type ToolResultEvent = {
   readonly images?: readonly ImageAttachment[] | undefined;
   /** The widget a show_widget call drew, stored by its hash. */
   readonly widget?: WidgetRef | undefined;
+  /** What an editor tool showed the user, so its step can show it again. */
+  readonly editorAction?: EditorAction | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;

@@ -76,7 +76,8 @@ export type ReviewResponse = { readonly hunks: readonly ReviewHunk[] };
  */
 export const CHECKPOINT_TEXT_METHOD = '_gcode/checkpointText';
 
-export type CheckpointTextRequest = { readonly sessionId: string; readonly path: string } & Partial<CheckpointRef>;
+/** With `sha`, the file at that checkpoint of the session, as a show_diff names it. */
+export type CheckpointTextRequest = { readonly sessionId: string; readonly path: string; readonly sha?: string } & Partial<CheckpointRef>;
 export type CheckpointTextResponse = { readonly text: string | null };
 
 /**
