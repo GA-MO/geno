@@ -15,6 +15,7 @@ import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } fr
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { lanesPanel, tasksPanel } from './lanes-panel.js';
+import type { Reveal } from './lanes-model.js';
 import { arenaPanel } from './arena-panel.js';
 import { mcpPanel } from './mcp-panel.js';
 import { sendMenu } from './send-menu.js';
@@ -209,7 +210,7 @@ const memory = memoryPanel(post, (open) => showPane('memory', open));
 const settings = settingsPanel(post, (open) => showPane('settings', open));
 const lanes = lanesPanel(post, (open) => showPane('lanes', open));
 const tasks = tasksPanel(post, (open) => showPane('tasks', open));
-const arena = arenaPanel(post, (open) => showPane('arena', open));
+const arena = arenaPanel(post, (open) => showPane('arena', open), (id) => post({ type: 'task-seen', id }));
 const child: Pane = {
   isOpen: () => focus.kind === 'child',
   close: () => {
@@ -368,6 +369,7 @@ function render(): void {
   if (focused !== undefined && !document.activeElement?.isConnected) document.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus();
   focusNewPermission();
   if (!keepPlace() && atBottom) log.scrollTop = log.scrollHeight;
+  revealAsked();
   if (animating) schedule();
 }
 
@@ -421,6 +423,29 @@ function tick(running: boolean): void {
 
 /** A waiting card's control that takes the keyboard: the one it marks, such as a question's first option, or else its first field or button. */
 const answerControl = (card: Element): HTMLElement | null => card.querySelector<HTMLElement>('[data-keyboard]') ?? card.querySelector<HTMLElement>('textarea, button');
+
+/**
+ * What a task opened from the Tasks list asked to show. A loaded session's card or wait can arrive after the replay,
+ * so the ask stands for a few seconds until it finds its target.
+ */
+let revealing: { readonly reveal: Reveal; readonly until: number } | undefined;
+const REVEAL_WAIT_MS = 5000;
+
+function revealAsked(): void {
+  if (revealing === undefined || document.body.dataset['view'] !== 'chat') return;
+  if (Date.now() > revealing.until) return void (revealing = undefined);
+  if (revealing.reveal === 'end') {
+    log.scrollTop = log.scrollHeight;
+    revealing = undefined;
+    return;
+  }
+  const card = revealing.reveal === 'card' ? document.querySelector('.permission-open[data-permission]') : document.querySelector('.run-wait .retry-now');
+  const control = card === null ? null : revealing.reveal === 'card' ? answerControl(card) : (card as HTMLElement);
+  if (card === null || control === null) return void setTimeout(schedule, 100);
+  revealing = undefined;
+  control.focus();
+  card.scrollIntoView({ block: 'nearest' });
+}
 
 /** A question from the engine takes the keyboard once, on its default button. */
 const asked = new Set<string>();
@@ -499,7 +524,11 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-memory') return memory.open();
   if (message.type === 'lanes') return lanes.listed(message.listing);
   if (message.type === 'show-lanes') return lanes.open();
-  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown);
+  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown, message.seen);
+  if (message.type === 'task-reveal') {
+    revealing = { reveal: message.reveal, until: Date.now() + REVEAL_WAIT_MS };
+    return schedule();
+  }
   if (message.type === 'show-tasks') return tasks.open();
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();

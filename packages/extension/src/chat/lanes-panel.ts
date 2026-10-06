@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
-import type { TaskRecord } from '@g-code/core';
+import type { Section, TaskRecord } from '@g-code/core';
+import { SECTIONS } from '@g-code/core/attention';
 import { h, icon, reconcile } from './dom.js';
-import { laneRowOf, taskOrder, taskRowOf, type Badge, type LaneRow, type LanesFromView, type LanesListing, type TaskRow } from './lanes-model.js';
+import { DONE_SHOWN, laneRowOf, SECTION_HEADINGS, taskSections, type Badge, type LaneRow, type LanesFromView, type LanesListing, type SeenMarkers, type TaskRow } from './lanes-model.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -140,31 +141,81 @@ export function lanesPanel(post: (message: LanesFromView) => void, onToggle: (op
 }
 
 function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void): HTMLElement {
+  const open = () => (done(), post({ type: 'task-open', sessionId: row.id }));
   return h(
     'li',
-    { class: `task-row${row.current ? ' current' : ''}`, 'data-task': row.id },
-    h('div', { class: 'lane-head' }, h('span', { class: 'lane-name task-title', title: row.title }, row.title), h('span', { class: 'spacer' }), badge(row.state, 'task-state')),
-    h('p', { class: 'lane-meta' }, h('span', {}, row.where), h('span', { class: 'task-time' }, row.time), row.cost !== undefined && h('span', { class: 'lane-cost' }, row.cost)),
+    {
+      class: `task-row${row.current ? ' current' : ''}${row.fresh ? ' fresh' : ''}`,
+      'data-task': row.id,
+      // The whole row opens the task; its buttons do their own thing.
+      onclick: (event: Event) => void ((event.target as Element).closest('button') === null && open()),
+    },
+    h(
+      'div',
+      { class: 'lane-head' },
+      h('span', { class: 'lane-name task-title', title: row.title }, row.title),
+      h('span', { class: 'spacer' }),
+      row.fresh && h('span', { class: 'task-new', title: 'Finished since you last opened it' }, 'New'),
+      badge(row.state, 'task-state'),
+    ),
+    h(
+      'p',
+      { class: 'lane-meta' },
+      h('span', {}, row.where),
+      row.children !== undefined && h('span', { class: 'task-children' }, row.children),
+      h('span', { class: 'task-time' }, row.time),
+      row.cost !== undefined && h('span', { class: 'lane-cost' }, row.cost),
+    ),
     h(
       'div',
       { class: 'lane-actions' },
       row.current
         ? h('span', { class: 'task-here' }, 'Shown in the chat')
-        : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', onclick: () => (done(), post({ type: 'task-open', sessionId: row.id })) }, 'Open'),
-      row.live && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
+        : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', 'data-focus': `task-open:${row.id}`, onclick: open }, 'Open'),
+      row.stop && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
     ),
   );
 }
 
 const TASKS_NOTE = 'No tasks yet. A chat or lane that runs a turn shows here, and goes on running when the panel closes or the window reloads.';
 
-/** The Tasks pane: the engine's running and finished sessions, running first. */
+/** One section of the Tasks pane. Working folds to one line, and Done shows its newest few until asked for more. */
+function taskSection(section: Section, toggle: () => void) {
+  const list = h('ul', { class: 'lane-list', 'aria-label': SECTION_HEADINGS[section], id: `tasks-${section}` });
+  const count = h('span', { class: 'tasks-count' });
+  const summary = h('span', { class: 'tasks-summary' });
+  const more = h('button', { type: 'button', class: 'link-button tasks-more', onclick: toggle });
+  const heading =
+    section === 'working'
+      ? h(
+          'h3',
+          { class: 'tasks-heading' },
+          h('button', { type: 'button', class: 'tasks-fold', 'aria-expanded': 'false', 'aria-controls': list.id, onclick: toggle }, icon('chevron-right', 'tasks-chevron'), h('span', {}, SECTION_HEADINGS[section]), count, summary),
+        )
+      : h('h3', { class: 'tasks-heading' }, h('span', {}, SECTION_HEADINGS[section]), count);
+  const element = h('section', { class: 'tasks-section', 'data-section': section, hidden: true }, heading, list, section === 'done' && more);
+  return { element, list, count, summary, more };
+}
+
+/** The Tasks pane: each top-level task, with its subagents or lanes rolled in, in Needs you, Ready, Working or Done. */
 export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (open: boolean) => void) {
   let tasks: readonly TaskRecord[] = [];
   let shown: string | undefined;
+  let seen: SeenMarkers = {};
   let ticking: ReturnType<typeof setInterval> | undefined;
-  const list = h('ul', { class: 'lane-list', 'aria-label': 'Tasks' });
+  let workingOpen = false;
+  let doneAll = false;
   const note = h('p', { class: 'history-note lanes-note', role: 'status' });
+  const sections = Object.fromEntries(
+    SECTIONS.map((section) => [
+      section,
+      taskSection(section, () => {
+        if (section === 'working') workingOpen = !workingOpen;
+        else doneAll = !doneAll;
+        render();
+      }),
+    ]),
+  ) as Record<Section, ReturnType<typeof taskSection>>;
   const frame = pane('Tasks', 'Tasks', (open) => {
     onToggle(open);
     if (!open) {
@@ -172,15 +223,31 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
       ticking = undefined;
     }
   }, () => render());
-  frame.body.append(note, list);
+  frame.body.append(note, h('div', { class: 'tasks' }, ...SECTIONS.map((section) => sections[section].element)));
 
   function render(): void {
     if (!frame.isOpen()) return;
     note.textContent = tasks.length === 0 ? TASKS_NOTE : '';
     note.hidden = tasks.length !== 0;
-    const rows = taskOrder(tasks).map((task) => taskRowOf(task, shown, Date.now()));
-    reconcile(list, rows.map((row) => ({ key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close()) })));
-    const live = rows.some((row) => row.live);
+    const listed = new Map(taskSections(tasks, seen, shown, Date.now()).map((s) => [s.section, s.rows]));
+    for (const section of SECTIONS) {
+      const rows = listed.get(section) ?? [];
+      const { element, list, count, summary, more } = sections[section];
+      element.hidden = rows.length === 0;
+      count.textContent = String(rows.length);
+      const items = reconcile(list, rows.map((row) => ({ key: row.id, deps: [JSON.stringify(row)], build: () => taskItem(row, post, () => frame.close()) })));
+      if (section === 'working') {
+        summary.textContent = rows.map((row) => row.title).join(', ');
+        list.hidden = !workingOpen;
+        element.querySelector('.tasks-fold')!.setAttribute('aria-expanded', String(workingOpen));
+      }
+      if (section === 'done') {
+        items.forEach((item, i) => (item.hidden = !doneAll && i >= DONE_SHOWN));
+        more.hidden = rows.length <= DONE_SHOWN;
+        more.textContent = doneAll ? 'Show fewer' : `Show ${rows.length - DONE_SHOWN} more`;
+      }
+    }
+    const live = [...listed.values()].some((rows) => rows.some((row) => row.live));
     if (live && ticking === undefined) ticking = setInterval(render, 1000);
     if (!live && ticking !== undefined) {
       clearInterval(ticking);
@@ -193,9 +260,10 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     isOpen: frame.isOpen,
     open: frame.open,
     close: frame.close,
-    listed(next: readonly TaskRecord[], showing: string | undefined): void {
+    listed(next: readonly TaskRecord[], showing: string | undefined, markers: SeenMarkers): void {
       tasks = next;
       shown = showing;
+      seen = markers;
       render();
     },
   };

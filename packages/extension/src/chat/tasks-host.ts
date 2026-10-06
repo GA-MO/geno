@@ -6,22 +6,24 @@ import {
   LANE_DISCARD_METHOD,
   LANE_NEW_METHOD,
   LANES_METHOD,
-  TASK_NOTICES,
+  needsYouCount,
+  placeTasks,
   TASKS_METHOD,
+  type Attention,
   type LaneDiscardRequest,
   type LaneNewRequest,
   type LaneNewResponse,
   type LanesRequest,
   type LanesResponse,
-  type TaskNotice,
-  type TaskNoticeKind,
+  type PlacedTask,
   type TaskRecord,
   type TasksResponse,
   type TaskUpdate,
 } from '@g-code/core';
 import type { Connection } from './engine.js';
-import type { LanesFromView, LanesListing, LanesToView } from './lanes-model.js';
-import { channelsOf, noticeText, osNotification } from './notices.js';
+import { revealOf, type LanesFromView, type SeenMarkers, type LanesListing, type LanesToView } from './lanes-model.js';
+import { attentionNotice, channelsOf, noticeText, osNotification, type AttentionNotice } from './notices.js';
+import type { SeenStore } from './seen.js';
 
 export const OS_NOTIFICATIONS_SETTING = 'gcode.tasks.osNotifications';
 
@@ -30,6 +32,8 @@ export type TaskChat = {
   readonly shown: () => string | undefined;
   readonly panelVisible: () => boolean;
   readonly openTask: (sessionId: string, workspace: string) => Promise<void>;
+  /** Opens the Arena pane on a run. */
+  readonly openArena: (id: string) => void;
   readonly applyLane: (name: string) => Promise<unknown>;
   /** A task of the shown session ended in the background, such as one the panel adopted after a reload. */
   readonly ended: (task: TaskRecord) => void;
@@ -39,7 +43,7 @@ export type TaskChat = {
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 const warn = (error: unknown): void => void vscode.window.showWarningMessage(messageOf(error));
 
-const SHOW: Readonly<Record<TaskNotice['severity'], (message: string, ...items: string[]) => Thenable<string | undefined>>> = {
+const SHOW: Readonly<Record<AttentionNotice['severity'], (message: string, ...items: string[]) => Thenable<string | undefined>>> = {
   info: (message, ...items) => vscode.window.showInformationMessage(message, ...items),
   warning: (message, ...items) => vscode.window.showWarningMessage(message, ...items),
   error: (message, ...items) => vscode.window.showErrorMessage(message, ...items),
@@ -47,8 +51,9 @@ const SHOW: Readonly<Record<TaskNotice['severity'], (message: string, ...items: 
 
 /**
  * The engine's tasks and the lanes of this folder, for the Tasks and Lanes panes, and the notices their changes
- * call for. The engine tells every connected window about each change; this window shows a notice by the trigger
- * table, and also the notices of changes that came while no window was connected.
+ * call for. The engine tells every connected window about each change; this window places each top-level task, with
+ * its children rolled in, by what it needs of the user, and tells the user when one moves into Needs you or Ready.
+ * Notices of changes that came while no window was connected come with the list.
  */
 export class TaskHost implements vscode.Disposable {
   private readonly tasks = new Map<string, TaskRecord>();
@@ -59,7 +64,8 @@ export class TaskHost implements vscode.Disposable {
     private readonly connection: () => Promise<Connection>,
     private readonly post: (message: LanesToView) => void,
     private readonly chat: TaskChat,
-    private readonly badge: (running: number) => void,
+    private readonly badge: (needsYou: number) => void,
+    private readonly seen: SeenStore,
   ) {}
 
   dispose(): void {}
@@ -70,52 +76,99 @@ export class TaskHost implements vscode.Disposable {
     this.tasks.clear();
     for (const task of tasks) this.tasks.set(task.sessionId, task);
     this.changed();
-    for (const { sessionId, kind } of missed) {
-      const task = this.tasks.get(sessionId);
-      if (task !== undefined) this.tell(kind, task);
+    const roots = new Set(missed.flatMap(({ sessionId }) => (this.tasks.has(sessionId) ? [this.rootOf(this.tasks.get(sessionId)!)] : [])));
+    for (const root of roots) {
+      const placed = this.placementOf(root);
+      const notice = placed && attentionNotice({ kind: 'working' }, placed.attention);
+      if (placed !== undefined && notice !== undefined) this.tell(notice, placed.task);
     }
   }
 
-  updated({ task, notice }: TaskUpdate): void {
+  updated({ task }: TaskUpdate): void {
     const before = this.tasks.get(task.sessionId);
+    const root = this.rootOf(task);
+    const was = this.placementOf(root)?.attention;
     this.tasks.set(task.sessionId, task);
-    this.changed();
+    const now = this.placementOf(root);
     if (before !== undefined && isLive(before.status) && !isLive(task.status) && task.sessionId === this.chat.shown()) this.chat.ended(task);
-    if (notice !== null) this.tell(notice, task);
+    const notice = now && attentionNotice(was, now.attention);
+    if (now !== undefined && notice !== undefined) this.tell(notice, now.task);
+    this.changed();
     if (task.lane !== null && before?.status !== task.status) void this.listLanes();
   }
 
   /** The tasks as the pane last heard them, for a webview created later. */
-  current(): { readonly tasks: readonly TaskRecord[]; readonly lanes: LanesListing } {
-    return { tasks: [...this.tasks.values()], lanes: this.lanes };
+  current(): { readonly tasks: readonly TaskRecord[]; readonly lanes: LanesListing; readonly seen: SeenMarkers } {
+    return { tasks: [...this.tasks.values()], lanes: this.lanes, seen: this.seen.current() };
   }
 
   get(sessionId: string): TaskRecord | undefined {
     return this.tasks.get(sessionId);
   }
 
-  /** The session the panel shows changed, so the Tasks pane marks another row. */
+  /** The session the panel shows changed, or the panel came into view, so the Tasks pane marks another row. */
   reshow(): void {
     this.changed();
   }
 
-  private changed(): void {
-    this.post({ type: 'tasks', tasks: [...this.tasks.values()], shown: this.chat.shown() });
-    this.badge([...this.tasks.values()].filter((task) => isLive(task.status) && task.sessionId !== this.chat.shown()).length);
+  /** The user looked at a session or an Arena run, such as in the Arena pane. */
+  saw(id: string): void {
+    if (this.markSeen(id)) this.changed();
   }
 
-  private tell(kind: TaskNoticeKind, task: TaskRecord): void {
-    const notice = TASK_NOTICES[kind]!;
+  /** The top-level task a task rolls up into: its parent while the list holds it, or itself. */
+  private rootOf(task: TaskRecord): string {
+    return task.parent != null && this.tasks.has(task.parent) ? task.parent : task.sessionId;
+  }
+
+  private placed(): PlacedTask[] {
+    return placeTasks([...this.tasks.values()], this.seen.current());
+  }
+
+  private placementOf(root: string): PlacedTask | undefined {
+    return this.placed().find((placed) => placed.task.sessionId === root);
+  }
+
+  /** Moves the marker only past a change it has not seen, so the file is written once per change. */
+  private markSeen(id: string): boolean {
+    const due = this.placementOf(id)?.returnedAt ?? this.tasks.get(id)?.returnedAt;
+    if (due == null || due <= (this.seen.current()[id] ?? -Infinity)) return false;
+    return this.seen.mark(id, Math.max(Date.now(), due));
+  }
+
+  private changed(): void {
+    const shown = this.chat.shown();
+    // The chat in view, in a window in front, is a session the user sees as it changes.
+    if (shown !== undefined && this.chat.panelVisible() && vscode.window.state.focused) this.markSeen(shown);
+    this.post({ type: 'tasks', tasks: [...this.tasks.values()], shown, seen: this.seen.current() });
+    this.badge(needsYouCount(this.placed()));
+  }
+
+  private tell(notice: AttentionNotice, task: TaskRecord): void {
     const channels = channelsOf({ shown: task.sessionId === this.chat.shown(), focused: vscode.window.state.focused, panelVisible: this.chat.panelVisible() });
     const text = noticeText(notice, task);
-    if (channels.os && process.platform === 'darwin' && vscode.workspace.getConfiguration().get<boolean>(OS_NOTIFICATIONS_SETTING, true)) {
+    if (channels.os && notice.os && process.platform === 'darwin' && vscode.workspace.getConfiguration().get<boolean>(OS_NOTIFICATIONS_SETTING, true)) {
       const [file, args] = osNotification('Geno', text);
       execFile(file, [...args], { timeout: 10_000 }, () => {});
     }
     if (!channels.toast) return;
     void SHOW[notice.severity](text, 'Open').then((choice) => {
-      if (choice === 'Open') void this.chat.openTask(task.sessionId, task.workspace).catch(warn);
+      if (choice === 'Open') this.open(task.sessionId);
     });
+  }
+
+  /** Opens a top-level task at what it needs of the user: the card, Retry now, or the end of the transcript. */
+  private open(root: string): void {
+    const placed = this.placementOf(root);
+    const attention: Attention = placed?.attention ?? { kind: 'done' };
+    const at = attention.kind === 'needs-you' ? attention.at : root;
+    const task = this.tasks.get(at);
+    if (task === undefined) return;
+    if (task.kind === 'arena') return this.chat.openArena(at);
+    void this.chat
+      .openTask(at, task.workspace)
+      .then(() => this.post({ type: 'task-reveal', reveal: revealOf(attention) }))
+      .catch(warn);
   }
 
   private async listLanes(): Promise<void> {
@@ -164,10 +217,8 @@ export class TaskHost implements vscode.Disposable {
       })()
         .catch(warn)
         .finally(() => void this.listLanes()),
-    'task-open': ({ sessionId }) => {
-      const task = this.tasks.get(sessionId);
-      if (task !== undefined) void this.chat.openTask(sessionId, task.workspace).catch(warn);
-    },
+    'task-open': ({ sessionId }) => this.open(this.tasks.has(sessionId) ? this.rootOf(this.tasks.get(sessionId)!) : sessionId),
+    'task-seen': ({ id }) => this.saw(id),
     'task-stop': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.notify(acp.methods.agent.session.cancel, { sessionId }))

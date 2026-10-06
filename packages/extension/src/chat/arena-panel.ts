@@ -295,8 +295,11 @@ function compareCard(compare: CompareView, post: Post, local: { focus: (lane: st
   );
 }
 
-/** The Arena pane: the preview before a best-of-n starts, its race, then the ranking and the compare with Pick and Graft. */
-export function arenaPanel(post: Post, onToggle: (open: boolean) => void) {
+/**
+ * The Arena pane: the preview before a best-of-n starts, its race, then the ranking and the compare with Pick and
+ * Graft. `saw` hears of each run the pane shows, which counts as the user opening it.
+ */
+export function arenaPanel(post: Post, onToggle: (open: boolean) => void, saw: (id: string) => void) {
   let state: ArenaState = EMPTY_ARENA;
   /** What only this view decides, per run: the lane a narrow compare shows, and the hunks ticked for a graft. */
   const focus = new Map<string, string>();
@@ -366,6 +369,7 @@ export function arenaPanel(post: Post, onToggle: (open: boolean) => void) {
       }
     }
     reconcile(content, items);
+    if (run !== undefined) saw(run.id);
     if (was !== undefined && !document.activeElement?.isConnected) content.querySelector<HTMLElement>(`[data-focus="${CSS.escape(was)}"]`)?.focus();
     moveRunners(run);
     dinos.show(racing ? run.lanes.map((lane) => ({ id: lane.sessionId, turn: raceTurnOf(lane, Date.parse(run.createdAt)) })) : []);

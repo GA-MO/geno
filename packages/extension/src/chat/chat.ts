@@ -65,6 +65,7 @@ import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
+import type { SeenStore } from './seen.js';
 import { TaskHost } from './tasks-host.js';
 import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
@@ -367,6 +368,12 @@ export const isLaneOf = (folder: string, main: string): boolean => {
 
 export type SessionMemory = ReturnType<typeof sessionMemory>;
 
+/**
+ * The view's badge counts the tasks that need the user. VS Code draws it on the view's icon in the activity bar, or on
+ * its tab, so it shows while the panel is closed and takes no room in a narrow one.
+ */
+const needsYouBadge = (n: number): vscode.ViewBadge | undefined => (n === 0 ? undefined : { value: n, tooltip: n === 1 ? '1 task needs you' : `${n} tasks need you` });
+
 /** The chat panel and its one conversation with the engine. */
 export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly engine: Engine;
@@ -413,6 +420,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly widgets: ReturnType<typeof widgetHost>;
   /** The engine's tasks and this folder's lanes, for their panes and their notices. */
   private readonly background: TaskHost;
+  /** How many top-level tasks need the user, for the view's badge. */
+  private needsYou = 0;
   /** This folder's best-of-n runs, for the Arena pane. */
   private readonly arena: ArenaHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
@@ -433,6 +442,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     /** The MCP servers the user owns, from VS Code's user mcp.json; never the workspace's, which skip no approval this way. */
     private readonly forwardedServers: () => Promise<acp.McpServer[]>,
     settingsPage: (post: (message: SettingsToView) => void) => SettingsPage,
+    /** When the user last opened each task, kept across reloads. */
+    seen: SeenStore,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
     this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
@@ -455,14 +466,18 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         shown: () => this.shown,
         panelVisible: () => this.view?.visible === true,
         openTask: (sessionId, workspace) => this.openChat(sessionId, workspace),
+        openArena: (id) => this.arena.show(id),
         applyLane: (name) => this.applyLane(name),
         ended: (task) => this.adoptedEnded(task),
         defaultMode,
       },
-      (running) => {
-        if (this.view !== undefined) this.view.badge = running === 0 ? undefined : { value: running, tooltip: running === 1 ? '1 task running in the background' : `${running} tasks running in the background` };
+      (needsYou) => {
+        this.needsYou = needsYou;
+        if (this.view !== undefined) this.view.badge = needsYouBadge(needsYou);
       },
+      seen,
     );
+    void seen.load().then(() => this.background.reshow());
     this.arena = new ArenaHost(() => this.engine.connection(), (message) => void this.view?.webview.postMessage(message satisfies ToView), {
       applyLane: (name) => this.applyLane(name),
       graftLane: (name, hunks) => this.graftLane(name, hunks),
@@ -1043,7 +1058,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'mcp', listing: this.mcp.current() } satisfies ToView);
         void view.webview.postMessage({ type: 'composer', facts: this.composer.current() } satisfies ToView);
         const background = this.background.current();
-        void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown } satisfies ToView);
+        void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown, seen: background.seen } satisfies ToView);
         void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
         void view.webview.postMessage({ type: 'arena', state: this.arena.current() } satisfies ToView);
         this.composer.refreshModels();
@@ -1112,9 +1127,15 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.look());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
-    const focus = vscode.window.onDidChangeWindowState(({ focused }) => void view.webview.postMessage({ type: 'window-focus', focused } satisfies ToView));
+    const focus = vscode.window.onDidChangeWindowState(({ focused }) => {
+      void view.webview.postMessage({ type: 'window-focus', focused } satisfies ToView);
+      this.background.reshow();
+    });
+    const visible = view.onDidChangeVisibility(() => this.background.reshow());
+    view.badge = needsYouBadge(this.needsYou);
     view.onDidDispose(() => {
       focus.dispose();
+      visible.dispose();
       if (this.view === view) this.view = undefined;
     });
   }
