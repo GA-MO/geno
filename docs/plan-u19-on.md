@@ -199,6 +199,7 @@ U19 measured tools at 24% of agent time. Almost all of it was `bash` (94.9 s ove
 - **The running turn's own CSS cost.** U18b measured a running turn at 6.6 to 8.7% main-thread busy, from the rainbow, shimmer, rail flow and spinner, with or without the dino. Worth one look.
 - **Budget overshoot.** The engine checks `--max-cost` only after each model call, so a run can end slightly over its cap (U13 saw $0.0509 against $0.05).
 - **Approval card order.** An approval card can draw above its own step when it arrives first (U17). Counts no longer depend on it; only the display order does.
+- **Flaky widget height wait.** `widget.integration` timed out waiting for a widget to take its content's height twice under load (host 2026-10-06, Docker beside another container); alone it passes.
 - **Compact.** There is no compact action yet, so the context ring offers only the numbers (U36).
 
 ## U22: subagent engine (next; replaces U16)
