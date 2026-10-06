@@ -106,7 +106,7 @@ import {
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { applyLaneTurn, idleLane, laneFor, laneInfos } from './lane-hooks.js';
-import { discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
+import { bindSession, discardLane, laneAt, laneRepoOf, requireLane } from './lanes.js';
 import { Tasks } from './tasks.js';
 import { Viewers, type Viewer } from './viewers.js';
 import { AttachmentError, attachmentsDir, incomingAttachments, loadWidgets, readWidget, storeAttachments, widgetFile, type Incoming } from './attachments.js';
@@ -1045,6 +1045,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const lane = await laneFor(repo, params.prompt, store, io).catch(refused({ cwd: params.cwd }));
       const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: undefined, effort: undefined });
       const { id } = opened.log.session;
+      // Bound now, so the Lanes pane names the task from the first update on.
+      const bound = await laneAt(lane.path, undefined);
+      if (bound !== undefined) await bindSession(bound, id);
       const mode = params.mode !== undefined && isSessionMode(params.mode) ? params.mode : DEFAULT_SESSION_MODE;
       turns.set(id, undefined);
       modes.set(id, mode);

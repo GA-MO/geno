@@ -41,6 +41,7 @@ export async function laneInfos(repo: LaneRepo, store: Store, io: Io, tasks: Tas
     (await listLanes(repo)).map(async (lane): Promise<LaneInfo> => {
       const log = lane.session === null ? undefined : await openSessionLog(store, lane.session, io).catch(() => undefined);
       const summary = log === undefined ? undefined : summarizeSession(log.session, log.events);
+      const task = lane.session === null ? undefined : tasks.get(lane.session);
       return {
         name: lane.name,
         path: lane.path,
@@ -49,8 +50,9 @@ export async function laneInfos(repo: LaneRepo, store: Store, io: Io, tasks: Tas
         createdAt: lane.createdAt,
         diff: await laneDiffStat(lane),
         check: log === undefined ? 'none' : checkOutcomeOf(log.events),
-        session: summary === undefined ? null : { id: summary.id, title: summary.title, turns: summary.turns, costUsd: summary.costUsd },
-        task: lane.session === null ? null : (tasks.get(lane.session)?.status ?? null),
+        // A task that just started has its title before its log has the prompt.
+        session: summary === undefined ? null : { id: summary.id, title: task?.title ?? summary.title, turns: summary.turns, costUsd: summary.costUsd },
+        task: task?.status ?? null,
       };
     }),
   );
