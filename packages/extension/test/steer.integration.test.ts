@@ -23,7 +23,7 @@ const asModel = (reply: Reply): Reply => ({
 /** `hold` keeps a reply back until the suite releases it by name. */
 type Scripted = { readonly reply: Reply; readonly hold?: string };
 
-const bash = (id: string, file: string) => ({ id, name: 'bash', input: { command: waitFor(file), description: 'Wait for the build' } });
+const bash = (id: string, file: string) => ({ id, name: 'bash', input: { command: waitFor(file), description: 'Wait for the build', timeout_seconds: 600 } });
 
 /** One script per conversation, picked by the marker in its first message. */
 const SCRIPTS: Readonly<Record<string, readonly Scripted[]>> = {
