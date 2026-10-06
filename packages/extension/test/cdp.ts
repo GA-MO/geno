@@ -119,8 +119,11 @@ export async function evaluate<T>(view: Webview, expression: string): Promise<T>
  * through the compositor's hit testing, which a window nobody sees never updates, so the page would keep it.
  */
 
-/** The center of the first `selector` match whose trimmed text is `text` when given, scrolled into view. */
-async function centerOf(view: Webview, selector: string, text?: string): Promise<{ x: number; y: number }> {
+/**
+ * The center of the first `selector` match whose trimmed text is `text` when given, scrolled into view. With `hit`, an
+ * element painted over that center is an error naming it, since a click there would land on it instead.
+ */
+async function centerOf(view: Webview, selector: string, text?: string, hit = false): Promise<{ x: number; y: number }> {
   const at = await evaluate<{ x: number; y: number } | string>(
     view,
     `(() => {
@@ -130,6 +133,8 @@ async function centerOf(view: Webview, selector: string, text?: string): Promise
       if (!el) return 'no ' + ${JSON.stringify(selector)} + ' ' + ${JSON.stringify(text ?? '')} + ' among ' + all.length;
       el.scrollIntoView({ block: 'nearest' });
       const r = el.getBoundingClientRect();
+      const top = ${hit} ? doc.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) : null;
+      if (top !== null && !el.contains(top) && !top.contains(el)) return ${JSON.stringify(selector)} + ' is covered at its center by ' + top.tagName.toLowerCase() + '.' + [...top.classList].join('.');
       return { x: frame.x + r.x + r.width / 2, y: frame.y + r.y + r.height / 2 };
     })()`,
   );
@@ -144,7 +149,7 @@ export async function hover(view: Webview, selector: string): Promise<void> {
 
 /** Clicks the first `selector` match whose trimmed text is `text` when given, at its center. */
 export async function click(view: Webview, selector: string, text?: string): Promise<void> {
-  const at = await centerOf(view, selector, text);
+  const at = await centerOf(view, selector, text, true);
   await view.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...at });
   await view.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...at, button: 'left', clickCount: 1 });
   await view.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...at, button: 'left', clickCount: 1 });
