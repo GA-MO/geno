@@ -11,7 +11,10 @@ export type FakeStep =
   | { readonly tool: { readonly id: string; readonly kind: acp.ToolKind; readonly title: string; readonly rawInput?: unknown; readonly locations?: readonly string[] } }
   | { readonly done: { readonly id: string; readonly status: 'completed' | 'failed'; readonly output?: string } }
   | { readonly write: { readonly path: string; readonly text: string } }
-  /** Asks permission for tool `id`; an allow goes on, a reject fails the tool and the rest of the steps still play. */
+  /**
+   * Asks permission for tool `id`, as Cursor does only when its approval mode says to ask; under any other mode it runs
+   * the tool unasked. An allow goes on, a reject fails the tool and the rest of the steps still play.
+   */
   | { readonly ask: { readonly id: string; readonly kind?: acp.ToolKind; readonly title?: string; readonly rawInput?: unknown; readonly options?: readonly acp.PermissionOption[] } }
   | { readonly waitCancel: true }
   | { readonly crash: number }
@@ -63,6 +66,15 @@ const main = async () => {
   const script: FakeScript = JSON.parse(readFileSync(process.env['FAKE_ACP_SCRIPT']!, 'utf8'));
   const log = (entry: Record<string, unknown>) => appendFileSync(script.log, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
   const key = process.env['CURSOR_API_KEY'];
+  // Cursor's approval mode comes only from its global config, under HOME.
+  const approvalMode = (() => {
+    try {
+      return (JSON.parse(readFileSync(path.join(process.env['HOME'] ?? '', '.cursor/cli-config.json'), 'utf8')) as { approvalMode?: string }).approvalMode ?? 'auto-review';
+    } catch {
+      return 'auto-review';
+    }
+  })();
+  log({ approvalMode, home: process.env['HOME'] ?? null });
   log({ start: { argv: process.argv.slice(2), cwd: process.cwd(), key: key === undefined ? null : createHash('sha256').update(key).digest('hex').slice(0, 12), noOpenBrowser: process.env['NO_OPEN_BROWSER'] ?? null } });
   const cwds = new Map<string, string>();
   const cancels = new Map<string, () => void>();
@@ -125,7 +137,8 @@ const main = async () => {
           mkdirSync(path.dirname(file), { recursive: true });
           writeFileSync(file, step.write.text);
         }
-        if ('ask' in step) {
+        if ('ask' in step && approvalMode !== 'allowlist') log({ unasked: step.ask.id });
+        if ('ask' in step && approvalMode === 'allowlist') {
           const { id, kind, title, rawInput, options } = step.ask;
           const answer = await client.request(acp.methods.client.session.requestPermission, {
             sessionId,

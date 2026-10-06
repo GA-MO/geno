@@ -2,7 +2,7 @@
 // a throwaway git workspace. It spends the user's Cursor plan, so it runs only with GCODE_LIVE_CURSOR=1.
 //   GCODE_LIVE_CURSOR=1 pnpm tsx packages/engine/test/backend-smoke.ts
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -26,7 +26,8 @@ const PROMPTS = [
 const redact = (text: string) => text.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '<email>');
 const say = (line: string) => console.log(redact(line));
 
-const root = mkdtempSync(path.join(tmpdir(), 'u33-smoke-'));
+// Real, so a path the engine resolved under /private/var reads relative to it, not across /var.
+const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'u33-smoke-')));
 const repo = path.join(root, 'work');
 execFileSync('git', ['init', '-q', '-b', 'main', repo]);
 writeFileSync(path.join(repo, 'a.ts'), 'export const one = 1;\nexport const two = 2;\nexport const three = 3;\n');
