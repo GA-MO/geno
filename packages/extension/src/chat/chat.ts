@@ -981,7 +981,6 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     }
   }
 
-  /** Opens the session a started suggestion became, in its lane. */
   private async openSpinoff(id: string): Promise<void> {
     const state = spinoffsIn(this.transcript).find((spinoff) => spinoff.id === id)?.state;
     if (state?.kind !== 'started') return;
