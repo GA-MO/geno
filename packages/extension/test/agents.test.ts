@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentEnv,
   agentReducer,
+  EXTERNAL_AGENTS,
   firstLink,
   linkLabel,
   parseCursorAbout,
@@ -84,22 +86,31 @@ describe('what of a command’s output reaches the page', () => {
 
 const CLI = { path: '/Users/me/.local/bin/agent', version: '2026.01.23-916f423' };
 const run = (state: AgentState, ...events: AgentEvent[]) => events.reduce(agentReducer, state);
-const found = (signedIn: boolean): AgentEvent => ({
+const found = (signedIn: boolean, apiKey = false): AgentEvent => ({
   type: 'checked',
-  result: { kind: 'found', path: CLI.path, report: signedIn ? { version: CLI.version, signedIn: true, account: 'user@example.com' } : { version: CLI.version, signedIn: false } },
+  result: { kind: 'found', path: CLI.path, apiKey, report: signedIn ? { version: CLI.version, signedIn: true, account: 'user@example.com' } : { version: CLI.version, signedIn: false } },
 });
+const browser = { kind: 'browser', account: 'user@example.com' } as const;
 
 describe('an agent’s account state', () => {
   it('starts checking and settles on what the check found', () => {
     expect(run({ kind: 'checking' }, { type: 'checked', result: { kind: 'missing' } })).toEqual({ kind: 'missing' });
     expect(run({ kind: 'checking' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI });
-    expect(run({ kind: 'checking' }, found(true))).toEqual({ kind: 'signed-in', cli: CLI, account: 'user@example.com' });
+    expect(run({ kind: 'checking' }, found(true))).toEqual({ kind: 'signed-in', cli: CLI, auth: browser });
     expect(run({ kind: 'checking' }, { type: 'checked', result: { kind: 'failed', path: CLI.path, text: 'timed out', output: '' } })).toEqual({
       kind: 'error',
       cli: { path: CLI.path, version: undefined },
       text: 'timed out',
       output: '',
     });
+  });
+
+  it('reads a stored API key as signed in by key, whatever the browser login says, with no sign-out', () => {
+    const keyed = run({ kind: 'checking' }, found(false, true));
+    expect(keyed).toEqual({ kind: 'signed-in', cli: CLI, auth: { kind: 'api-key' } });
+    expect(run({ kind: 'checking' }, found(true, true))).toEqual(keyed);
+    expect(run(keyed, { type: 'start', action: 'logout' })).toBe(keyed);
+    expect(run(keyed, { type: 'start', action: 'update' })).toEqual({ kind: 'updating', cli: CLI, output: '' });
   });
 
   it('signs in: waits with the output and the link, then checks again and shows signed in', () => {
@@ -120,13 +131,13 @@ describe('an agent’s account state', () => {
     });
   });
 
-  it('updates from either account state and signs out only when signed in', () => {
-    expect(run({ kind: 'signed-in', cli: CLI, account: undefined }, { type: 'start', action: 'update' })).toEqual({ kind: 'updating', cli: CLI, output: '' });
+  it('updates from either account state and signs out only when signed in by browser', () => {
+    expect(run({ kind: 'signed-in', cli: CLI, auth: browser }, { type: 'start', action: 'update' })).toEqual({ kind: 'updating', cli: CLI, output: '' });
     expect(run({ kind: 'signed-out', cli: CLI }, { type: 'start', action: 'update' })).toEqual({ kind: 'updating', cli: CLI, output: '' });
-    expect(run({ kind: 'signed-in', cli: CLI, account: undefined }, { type: 'start', action: 'logout' })).toEqual({ kind: 'signing-out', cli: CLI, output: '' });
+    expect(run({ kind: 'signed-in', cli: CLI, auth: browser }, { type: 'start', action: 'logout' })).toEqual({ kind: 'signing-out', cli: CLI, output: '' });
     const out: AgentState = { kind: 'signed-out', cli: CLI };
     expect(run(out, { type: 'start', action: 'logout' })).toBe(out);
-    const signedIn: AgentState = { kind: 'signed-in', cli: CLI, account: undefined };
+    const signedIn: AgentState = { kind: 'signed-in', cli: CLI, auth: browser };
     expect(run(signedIn, { type: 'start', action: 'login' })).toBe(signedIn);
   });
 
@@ -137,20 +148,27 @@ describe('an agent’s account state', () => {
     expect(run(updating, found(true))).toBe(updating);
   });
 
-  it('installs only from missing, and checks again from the installing state', () => {
-    const installing = run({ kind: 'missing' }, { type: 'install' });
-    expect(installing).toEqual({ kind: 'installing' });
-    expect(run(installing, { type: 'check' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI });
-    expect(run(installing, { type: 'check' }, { type: 'checked', result: { kind: 'missing' } })).toEqual({ kind: 'missing' });
-    const signedOut: AgentState = { kind: 'signed-out', cli: CLI };
-    expect(run(signedOut, { type: 'install' })).toBe(signedOut);
-  });
-
-  it('starts nothing where there is no CLI, and ignores a stray exit', () => {
+  it('starts nothing where there is no CLI, checks again from missing, and ignores a stray exit', () => {
     const missing: AgentState = { kind: 'missing' };
     expect(run(missing, { type: 'start', action: 'login' })).toBe(missing);
+    expect(run(missing, { type: 'check' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI });
     const signedOut: AgentState = { kind: 'signed-out', cli: CLI };
     expect(run(signedOut, { type: 'exit', code: 0, cancelled: false })).toBe(signedOut);
     expect(run(signedOut, { type: 'output', output: 'x' })).toBe(signedOut);
+  });
+});
+
+describe('the env of the CLI’s processes', () => {
+  const cursor = EXTERNAL_AGENTS[0]!;
+
+  it('carries a stored key as CURSOR_API_KEY, beside what the process needs anyway', () => {
+    expect(agentEnv(cursor, { PATH: '/bin' }, 'crsr-key', { NO_OPEN_BROWSER: '1' })).toEqual({ PATH: '/bin', NO_OPEN_BROWSER: '1', CURSOR_API_KEY: 'crsr-key' });
+  });
+
+  it('adds no key when none is stored, and leaves the base env as it was', () => {
+    const base = { PATH: '/bin' };
+    expect(agentEnv(cursor, base, undefined)).toEqual({ PATH: '/bin' });
+    agentEnv(cursor, base, 'crsr-key');
+    expect(base).toEqual({ PATH: '/bin' });
   });
 });

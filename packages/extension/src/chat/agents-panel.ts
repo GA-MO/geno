@@ -12,7 +12,6 @@ const BADGES: Readonly<Record<AgentState['kind'], Badge>> = {
   'signing-in': { label: 'Signing in…', tone: 'busy' },
   'signing-out': { label: 'Signing out…', tone: 'busy' },
   updating: { label: 'Updating…', tone: 'busy' },
-  installing: { label: 'Installing…', tone: 'busy' },
   error: { label: 'Error', tone: 'failed' },
 };
 
@@ -45,28 +44,82 @@ function outcome(last: Outcome | undefined, agent: ExternalAgent): Child {
 }
 
 /** A question the card asks before it acts. */
-export type Confirming = 'install' | 'logout';
+export type Confirming = 'logout';
 
 /** The state a question belongs to; once the agent leaves it, the question is gone. */
-export const CONFIRMS_IN: Readonly<Record<Confirming, AgentState['kind']>> = { install: 'missing', logout: 'signed-in' };
+export const CONFIRMS_IN: Readonly<Record<Confirming, AgentState['kind']>> = { logout: 'signed-in' };
 
-function confirmBox(label: string, text: readonly Child[], yes: string, prefix: Confirming, onYes: () => void, onNo: () => void): HTMLElement {
+/** What the user does to install the CLI: Geno shows the official command and its page, and runs nothing. */
+function installHelp(agent: ExternalAgent, post: (message: AgentsFromView) => void, check: Child): Child[] {
+  const copy = h(
+    'button',
+    {
+      type: 'button',
+      class: 'button small secondary agent-copy',
+      'data-action': 'copy-install',
+      title: 'Copy the install command',
+      onclick: () => {
+        post({ type: 'agents-copy-install', id: agent.id });
+        copy.textContent = 'Copied';
+      },
+    },
+    'Copy',
+  );
+  return [
+    h('p', { class: 'agent-text' }, `Geno needs ${agent.label}’s CLI to sign in to ${agent.label} and use its agent. Install it yourself with ${agent.label}’s official installer:`),
+    h('div', { class: 'agent-command' }, h('code', { class: 'agent-install' }, agent.install.command), copy),
+    h('p', { class: 'agent-text' }, 'Geno looks again when this window gets the focus back.'),
+    h(
+      'div',
+      { class: 'provider-actions' },
+      h('button', { type: 'button', class: 'button small', 'data-action': 'guide', onclick: () => post({ type: 'agents-open', id: agent.id, target: 'install' }) }, 'Open the install page'),
+      check,
+    ),
+  ];
+}
+
+/** Where the key goes and what it costs; the page sends it once and keeps no copy. */
+function keyForm(agent: ExternalAgent, post: (message: AgentsFromView) => void): HTMLElement {
+  const input = h('input', {
+    class: 'provider-input',
+    type: 'password',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    'aria-label': `${agent.label} API key`,
+    placeholder: `${agent.label} API key`,
+  });
+  const submit = (event: Event) => {
+    event.preventDefault();
+    if (input.value.trim() === '') return;
+    post({ type: 'agents-key', id: agent.id, key: input.value });
+    input.value = '';
+  };
+  return h(
+    'form',
+    { class: 'provider-field agent-key', onsubmit: submit },
+    h('label', { class: 'provider-field-label' }, 'Use an API key', h('span', { class: 'provider-field-note' }, 'instead of the browser')),
+    h('div', { class: 'provider-field-row' }, input, h('button', { type: 'submit', class: 'button secondary small', 'data-action': 'save-key' }, 'Save')),
+    h('p', { class: 'agent-text agent-billing' }, icon('info'), h('span', {}, 'May bill by usage instead of your plan')),
+  );
+}
+
+function confirmBox(label: string, text: readonly Child[], yes: string, onYes: () => void, onNo: () => void): HTMLElement {
   return h(
     'div',
-    { class: 'lane-confirm agent-confirm', 'data-tone': prefix === 'logout' ? 'danger' : 'ask', role: 'group', 'aria-label': label },
+    { class: 'lane-confirm agent-confirm', 'data-tone': 'danger', role: 'group', 'aria-label': label },
     ...text,
     h(
       'div',
       { class: 'lane-actions' },
-      h('button', { type: 'button', class: `button small${prefix === 'logout' ? ' danger' : ''}`, 'data-action': `${prefix}-yes`, onclick: onYes }, yes),
-      h('button', { type: 'button', class: 'button small secondary', 'data-action': `${prefix}-no`, onclick: onNo }, 'Cancel'),
+      h('button', { type: 'button', class: 'button small danger', 'data-action': 'logout-yes', onclick: onYes }, yes),
+      h('button', { type: 'button', class: 'button small secondary', 'data-action': 'logout-no', onclick: onNo }, 'Cancel'),
     ),
   );
 }
 
 /**
- * One external agent's card: where its CLI is, its version with Update, and its account with Sign in or Sign out.
- * Installing and signing out ask first, in the card, as discarding a lane does.
+ * One external agent's card: where its CLI is, its version with Update, and its account with Sign in, an API key
+ * or Sign out. Without a CLI it shows how to install one. Signing out asks first, in the card, as discarding a lane does.
  */
 export function agentCard(
   agent: ExternalAgent,
@@ -77,7 +130,8 @@ export function agentCard(
 ): HTMLElement {
   const badge = BADGES[state.kind];
   const run = (action: AgentAction) => post({ type: 'agents-run', id: agent.id, action });
-  const offered = ACTIONS[state.kind] ?? [];
+  const keyed = state.kind === 'signed-in' && state.auth.kind === 'api-key';
+  const offered = (ACTIONS[state.kind] ?? []).filter((action) => !(action === 'logout' && keyed));
   const button = (action: AgentAction): Child =>
     offered.includes(action) &&
     h(
@@ -96,50 +150,31 @@ export function agentCard(
   if (state.kind === 'checking') {
     body.push(h('p', { class: 'provider-note' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, 'Looking for the CLI…')), outcome(state.last, agent));
   } else if (state.kind === 'missing') {
-    const guide = h('button', { type: 'button', class: 'link-button agent-check', 'data-action': 'guide', onclick: () => post({ type: 'agents-open', id: agent.id, target: 'install' }) }, 'Install guide');
-    body.push(h('p', { class: 'agent-text' }, `${agent.label}’s CLI is not installed. Geno needs it to sign in to ${agent.label} and use its agent.`));
-    if (confirming === 'install') {
-      body.push(
-        confirmBox(
-          `Install the ${agent.label} CLI`,
-          [
-            h('p', { class: 'lane-confirm-text' }, `Install the ${agent.label} CLI? Geno opens a terminal and runs ${agent.label}’s official installer there, where you can watch it:`),
-            h('code', { class: 'agent-install' }, agent.install.command),
-            h('p', { class: 'lane-confirm-text' }, `It downloads the CLI from ${agent.install.source} and puts it in ${agent.install.location}.`),
-          ],
-          'Install',
-          'install',
-          () => (confirm(undefined), post({ type: 'agents-install', id: agent.id })),
-          () => confirm(undefined),
-        ),
-      );
-    } else {
-      body.push(
-        h(
-          'div',
-          { class: 'provider-actions' },
-          h('button', { type: 'button', class: 'button small', 'data-action': 'install', onclick: () => confirm('install') }, `Install ${agent.label} CLI`),
-          check,
-          guide,
-        ),
-      );
-    }
-  } else if (state.kind === 'installing') {
-    body.push(
-      h('p', { class: 'provider-test agent-wait', role: 'status', 'data-tone': 'busy' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, 'Installing in the terminal…')),
-      h('p', { class: 'agent-text' }, 'Geno checks again when you close that terminal. If the install already finished, check now.'),
-      h('div', { class: 'provider-actions' }, check),
-    );
+    body.push(...installHelp(agent, post, check));
   } else {
     const signedIn = state.kind === 'signed-in';
-    const account = signedIn ? (state.account ?? 'Signed in') : state.kind === 'signed-out' || state.kind === 'signing-in' ? 'Signed out' : state.kind === 'error' ? 'Unknown' : '…';
+    const account = signedIn
+      ? state.auth.kind === 'api-key'
+        ? 'API key'
+        : (state.auth.account ?? 'Signed in')
+      : state.kind === 'signed-out' || state.kind === 'signing-in'
+        ? 'Signed out'
+        : state.kind === 'error'
+          ? 'Unknown'
+          : '…';
     body.push(
       h(
         'dl',
         { class: 'agent-facts' },
         fact('CLI', h('code', { class: 'agent-path', title: state.cli.path }, state.cli.path)),
         fact('Version', h('span', { class: 'agent-version' }, state.cli.version ?? 'unknown'), button('update')),
-        fact('Account', h('span', { class: 'agent-account' }, account), confirming === 'logout' ? undefined : button('login'), confirming === 'logout' ? undefined : button('logout')),
+        fact(
+          'Account',
+          h('span', { class: 'agent-account' }, account),
+          confirming === 'logout' ? undefined : button('login'),
+          confirming === 'logout' ? undefined : button('logout'),
+          keyed && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'remove-key', onclick: () => post({ type: 'agents-remove-key', id: agent.id }) }, 'Remove key'),
+        ),
       ),
     );
     if (confirming === 'logout' && signedIn) {
@@ -148,7 +183,6 @@ export function agentCard(
           `Sign out of ${agent.label}`,
           [h('p', { class: 'lane-confirm-text' }, `Sign out of ${agent.label}? Its CLI on this computer forgets your login, so ${agent.label} needs Sign in again before Geno can use it.`)],
           'Sign out',
-          'logout',
           () => (confirm(undefined), run('logout')),
           () => confirm(undefined),
         ),
@@ -172,6 +206,7 @@ export function agentCard(
       );
     }
     if (state.kind === 'error') body.push(h('p', { class: 'provider-test', 'data-tone': 'failed' }, icon('error'), h('span', {}, state.text)), output(state.output, `${agent.label} output`));
+    if (state.kind === 'signed-out') body.push(keyForm(agent, post));
     if (state.kind === 'signed-in' || state.kind === 'signed-out') body.push(outcome(state.last, agent));
     if (state.kind === 'signed-in' || state.kind === 'signed-out' || state.kind === 'error') body.push(h('div', { class: 'provider-actions agent-footer' }, check));
   }

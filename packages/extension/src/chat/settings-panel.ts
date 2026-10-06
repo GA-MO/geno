@@ -191,7 +191,7 @@ export function settingsPanel(post: (message: SettingsFromView) => void, onToggl
     h('h3', { class: 'settings-heading' }, 'Roles'),
     roles,
     h('h3', { class: 'settings-heading' }, 'Agents'),
-    h('p', { class: 'settings-intro' }, 'Other coding agents Geno can work with. Geno runs each agent’s own command line to sign in and update, and never reads or keeps its login.'),
+    h('p', { class: 'settings-intro' }, 'Other coding agents Geno can work with. You install each agent’s command line yourself; Geno runs its own commands to sign in and update, and never reads its login.'),
     agents,
     h('h3', { class: 'settings-heading' }, 'Providers'),
     h('p', { class: 'settings-intro' }, 'Keys go to VS Code’s secret storage and are never shown again. Base URLs are kept in your user settings, never a workspace’s.'),

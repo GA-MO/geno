@@ -329,6 +329,17 @@
   user-select: all;
 }
 
+.agent-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-command .agent-install {
+  flex: 1;
+}
+
 .agent-text {
   margin: 0;
   font-size: var(--small);
@@ -356,10 +367,16 @@
   gap: 6px;
 }
 
-/* Installing is not destructive, so its question is not tinted as a sign-out's is. */
-.agent-confirm[data-tone='ask'] {
-  border-color: var(--vscode-focusBorder);
-  background: var(--surface);
+.agent-billing {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.agent-billing .codicon {
+  margin-top: 1px;
+  font-size: 13px;
 }
 
 .agent-footer {
