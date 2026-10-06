@@ -19,6 +19,9 @@ async function git(repo: string, args: readonly string[]): Promise<string> {
   }
 }
 
+/** The working tree's changes against HEAD, staged or not. */
+export const workingDiff = (repo: string): Promise<string> => git(repo, ['diff', 'HEAD']);
+
 export const repoRoot = async (dir: string): Promise<string> =>
   (await git(dir, ['rev-parse', '--show-toplevel'])).trim();
 

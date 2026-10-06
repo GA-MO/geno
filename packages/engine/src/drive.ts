@@ -219,7 +219,7 @@ export async function drive(
         let earlier: Promise<void> = Promise.resolve();
         for (let i = batch.start; i < batch.end; i++) {
           const before = earlier;
-          const call = runOne(i, { ...ctx, earlierCalls: () => before });
+          const call = runOne(i, { ...ctx, toolUseId: toolUses[i]!.id, earlierCalls: () => before });
           calls.push(call);
           earlier = call.then(
             () => before,

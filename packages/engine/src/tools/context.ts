@@ -25,6 +25,8 @@ export type ToolContext = {
    * it touches state they share, so that state changes in the turn's order.
    */
   readonly earlierCalls: () => Promise<void>;
+  /** The model's id for the call being run; absent outside a run. */
+  readonly toolUseId?: string | undefined;
   /** Logs a subagent starting or ending in this session's log; absent outside a run, where no subagent starts. */
   readonly logChild?: ((note: ChildNote) => Promise<void>) | undefined;
 };
