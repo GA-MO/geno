@@ -65,7 +65,15 @@ export type ComposerInput = {
 };
 
 /** `fraction` is undefined when the window is unknown; `high` from 80%. */
-export type RingView = { readonly fraction: number | undefined; readonly high: boolean; readonly title: string };
+export type RingView = { readonly fraction: number | undefined; readonly high: boolean; readonly title: string; readonly compact: CompactOffer | undefined };
+
+/** The ring's Compact action, offered from 80% on Geno's own sessions; `held` says why it waits while a turn runs. */
+export type CompactOffer = { readonly held: string | undefined };
+
+/** What Compact sends, exactly as if the user typed it. */
+export const COMPACT_COMMAND = '/compact';
+
+const COMPACT_HELD = 'A turn is running. Compact works between turns, and Geno compacts on its own as the context fills.';
 
 /** A backend the menu offers. Any but the current one starts a new chat; a missing one is disabled, with its reason. */
 export type BackendRow = {
@@ -138,15 +146,16 @@ const NAVIGATIONS = new Set(['mcp__browser__navigate_page', 'mcp__browser__new_p
 
 const count = (n: number): string => n.toLocaleString('en-US');
 
-function ringOf(context: ContextUse | undefined): RingView {
-  if (context === undefined) return { fraction: 0, high: false, title: 'Context: nothing yet' };
+/** An external agent keeps its own context, so only Geno's own loop offers Compact. */
+function ringOf(context: ContextUse | undefined, running: boolean, backend: BackendShown | undefined): RingView {
+  if (context === undefined) return { fraction: 0, high: false, title: 'Context: nothing yet', compact: undefined };
   const { used, window } = context;
-  if (window === undefined) return { fraction: undefined, high: false, title: `Context: ${count(used)} tokens. Geno does not know this model’s window.` };
+  if (window === undefined) return { fraction: undefined, high: false, title: `Context: ${count(used)} tokens. Geno does not know this model’s window.`, compact: undefined };
   const fraction = Math.min(1, used / window);
   const high = fraction >= HIGH_CONTEXT;
   const numbers = `Context: ${count(used)} of ${count(window)} tokens (${Math.floor((used / window) * 100)}%)`;
-  // Geno has no compact action yet; the ring offers one here once it does.
-  return { fraction, high, title: high ? `${numbers}. Start a new chat to free it; Geno cannot compact a chat yet.` : numbers };
+  if (!high || backend !== undefined) return { fraction, high, title: numbers, compact: undefined };
+  return { fraction, high, title: `${numbers}. Compact summarizes the older turns to free it.`, compact: { held: running ? COMPACT_HELD : undefined } };
 }
 
 /** Where the browser last went: the URL of the latest navigation in the transcript. */
@@ -233,7 +242,7 @@ export function composerView({ transcript, facts, mcp, queued, now, background =
         : 'Ask a follow-up, @ to add context, / for commands',
     browser: browserChip(mcp, transcript),
     queued,
-    ring: ringOf(facts.context),
+    ring: ringOf(facts.context, running, backend),
     model: { name, effort: effort?.options.find((o) => o.value === effort.current)?.name, backend: backend?.label },
     menu: {
       backends: backendRows(facts.backends, backend),

@@ -175,6 +175,64 @@
   outline-offset: 2px;
 }
 
+/* From 80% the ring offers Compact beside it, amber like the ring; while a turn runs it stays, dimmed, with its reason. */
+.input-box .compact-offer {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  margin-left: -4px;
+  padding: 0 7px 0 5px;
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  backdrop-filter: none;
+  color: var(--vscode-foreground);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.input-box .compact-offer[hidden] {
+  display: none;
+}
+
+.input-box .compact-offer .codicon {
+  font-size: 12px;
+  color: var(--warn);
+}
+
+.input-box .compact-offer:hover {
+  background: color-mix(in srgb, var(--warn) 24%, transparent);
+}
+
+.input-box .compact-offer:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.input-box .compact-offer[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.input-box .compact-offer[aria-disabled='true']:hover {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+body.vscode-high-contrast .input-box .compact-offer,
+body.vscode-high-contrast-light .input-box .compact-offer {
+  border-color: var(--vscode-contrastBorder);
+  background: transparent;
+}
+
+body.vscode-high-contrast .input-box .compact-offer[aria-disabled='true'],
+body.vscode-high-contrast-light .input-box .compact-offer[aria-disabled='true'] {
+  opacity: 1;
+  border-style: dashed;
+}
+
 .run-status {
   display: inline-flex;
   flex: none;

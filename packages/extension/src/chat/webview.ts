@@ -5,7 +5,7 @@ import type { OutgoingAttachment } from './attachment-model.js';
 import { widgetStep } from './widget-view.js';
 import { editorStep } from './editor-step.js';
 import { composerAttachments } from './composer-attachments.js';
-import { composerView, NO_FACTS, type ComposerFacts } from './composer-model.js';
+import { COMPACT_COMMAND, composerView, NO_FACTS, type ComposerFacts } from './composer-model.js';
 import { composerControls } from './composer-view.js';
 import type { McpListing } from './mcp-model.js';
 import { h, icon, reconcile, type Keyed } from './dom.js';
@@ -136,6 +136,10 @@ const controls = composerControls((message) => host.postMessage(message), {
   unqueue: () => {
     followup = undefined;
     schedule();
+  },
+  // As a typed /compact goes, though the draft stays.
+  compact: () => {
+    if (!isRunning(transcript)) host.postMessage({ type: 'send', text: COMPACT_COMMAND });
   },
 });
 const sendNow = sendNowButton(() => steerNow());

@@ -84,11 +84,28 @@ describe('composerView, the context ring', () => {
     expect(ring).toMatchObject({ fraction: 0.25, high: false, title: 'Context: 250,000 of 1,000,000 tokens (25%)' });
   });
 
-  it('turns high at 80%, and says Geno has no compact yet', () => {
+  it('turns high at 80% and offers Compact there', () => {
     const { ring } = composerView(input({ facts: facts({ context: { used: 800_000, window: 1_000_000 } }) }));
     expect(ring.high).toBe(true);
-    expect(ring.title).toBe('Context: 800,000 of 1,000,000 tokens (80%). Start a new chat to free it; Geno cannot compact a chat yet.');
-    expect(composerView(input({ facts: facts({ context: { used: 799_999, window: 1_000_000 } }) })).ring.high).toBe(false);
+    expect(ring.title).toBe('Context: 800,000 of 1,000,000 tokens (80%). Compact summarizes the older turns to free it.');
+    expect(ring.compact).toEqual({ held: undefined });
+    const below = composerView(input({ facts: facts({ context: { used: 799_999, window: 1_000_000 } }) })).ring;
+    expect(below.high).toBe(false);
+    expect(below.compact).toBeUndefined();
+    expect(composerView(input()).ring.compact).toBeUndefined();
+  });
+
+  it('holds Compact back with its reason while a turn runs', () => {
+    const { ring } = composerView(input({ transcript: transcriptOf(start), facts: facts({ context: { used: 900_000, window: 1_000_000 } }) }));
+    expect(ring.compact?.held).toBe('A turn is running. Compact works between turns, and Geno compacts on its own as the context fills.');
+  });
+
+  it('offers no Compact for an unknown window or an external agent, which keeps its own context', () => {
+    expect(composerView(input({ facts: facts({ context: { used: 4_000_000, window: undefined } }) })).ring.compact).toBeUndefined();
+    const cursor = transcriptOf({ type: 'backend', backend: { id: 'cursor', label: 'Cursor', plan: 'Cursor plan', lane: null } });
+    const external = composerView(input({ transcript: cursor, facts: facts({ context: { used: 900_000, window: 1_000_000 } }) })).ring;
+    expect(external.high).toBe(true);
+    expect(external.compact).toBeUndefined();
   });
 
   it('stays full rather than overflowing, and shows the tokens alone when the window is unknown', () => {
