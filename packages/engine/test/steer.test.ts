@@ -1,7 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { asSessionId, REPLAYED_TURN_META, STEER_META, steerEvent, type TurnEvent } from '@g-code/core';
 import { replayUpdates } from '../src/session-replay.js';
 import { Steers, steerRunning } from '../src/steer.js';
+
+// A steer that never lands must fail here in seconds, never leave a worker spinning.
+vi.setConfig({ testTimeout: 15_000, hookTimeout: 15_000 });
+
+function bounded<T>(work: Promise<T>, step: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`timed out after 1000ms waiting for ${step}`)), 1000)));
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
 
 const text = (t: string) => [{ type: 'text' as const, text: t }];
 
@@ -14,11 +23,11 @@ describe('steer inbox', () => {
     const taken = inbox.take();
     expect(taken.map((q) => q.steer.text)).toEqual(['a', 'b']);
     taken.forEach((q, i) => q.settle({ kind: 'delivered', seq: 5 + i }));
-    expect(await also).toEqual({ kind: 'delivered', seq: 6 });
+    expect(await bounded(also, 'the second steer to settle')).toEqual({ kind: 'delivered', seq: 6 });
     const second = inbox.push({ text: 'late', from: 'user' })!;
     steers.release('s1', inbox);
-    expect(await first).toEqual({ kind: 'delivered', seq: 5 });
-    expect(await second).toEqual({ kind: 'next-turn' });
+    expect(await bounded(first, 'the first steer to settle')).toEqual({ kind: 'delivered', seq: 5 });
+    expect(await bounded(second, 'the late steer to go to the next turn')).toEqual({ kind: 'next-turn' });
     expect(inbox.push({ text: 'c', from: 'user' }), 'a closed run takes nothing').toBeUndefined();
     expect(steers.of('s1')).toBeUndefined();
   });
@@ -30,7 +39,7 @@ describe('steer inbox', () => {
     const waited = inbox.arrival(new AbortController().signal);
     inbox.push({ text: 'report', from: 'child' });
     paid();
-    await waited;
+    await bounded(waited, 'the run to wake for the report');
     expect(inbox.owed).toBe(0);
     expect(inbox.queued().map((s) => s.from)).toEqual(['child']);
   });
@@ -41,7 +50,7 @@ describe('steer inbox', () => {
     const controller = new AbortController();
     const waited = inbox.arrival(controller.signal);
     controller.abort();
-    await expect(waited).resolves.toBeUndefined();
+    await expect(bounded(waited, 'the abort to end the wait')).resolves.toBeUndefined();
   });
 });
 
