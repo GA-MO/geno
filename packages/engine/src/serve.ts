@@ -9,6 +9,9 @@ import {
   CHECKPOINT_TEXT_METHOD,
   checkpointBefore,
   DIAGNOSTICS_CAPABILITY,
+  EDITOR_ACTION_METHOD,
+  EDITOR_ACTIONS_CAPABILITY,
+  type EditorActionRequest,
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   INLINE_EDIT_META,
@@ -204,6 +207,7 @@ import { listSessions, renameSession, trashSession } from './history.js';
 import type { Store } from './store.js';
 import { freshAuto, type Approval, type Approver, type Diagnostics, type PermissionAnswer } from './tools/agent.js';
 import { ToolError } from './tools/context.js';
+import type { Editor } from './tools/editor.js';
 import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
@@ -297,9 +301,11 @@ type Peer = {
   readonly tasks: boolean;
   /** It answers BACKEND_ENV_METHOD with what the user chose for an external agent. */
   readonly backendEnv: boolean;
+  /** It carries out EDITOR_ACTION_METHOD, so the model gets open_file, reveal and show_diff. */
+  readonly editorActions: boolean;
 };
 
-const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false };
+const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false };
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
@@ -418,6 +424,17 @@ function editorFiles(route: Route, writer: () => acp.ToolCallId): Files {
       if (!parsed.success) throw new ToolError(`the editor sent malformed buffers: ${z.prettifyError(parsed.error)}`);
       return parsed.data.buffers;
     },
+  };
+}
+
+/** Carries out an editor action in the editor showing the session; a refusal the model reads while none does. */
+function editorActions(route: Route): Editor {
+  return async (action) => {
+    const viewer = viewerThat(route, (peer) => peer.editorActions);
+    if (viewer === undefined) throw new ToolError('no editor shows this session now, so there is nothing to show it in');
+    await viewer.client.request<unknown, EditorActionRequest>(EDITOR_ACTION_METHOD, { sessionId: route.sessionId, action }).catch((error: unknown) => {
+      throw new ToolError(`the editor could not show ${action.path}: ${error instanceof Error ? error.message : String(error)}`);
+    });
   };
 }
 
@@ -693,7 +710,7 @@ const reviewRequest = z.object({
   sessionId: z.string(),
   decisions: z.array(z.object({ hunk: z.string().min(1).transform((raw) => raw as HunkId), status: z.enum(HUNK_STATUSES) })),
 });
-const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string(), before: z.string().min(1).optional() });
+const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string(), before: z.string().min(1).optional(), sha: z.string().min(1).optional() });
 const rewindRequest = z.object({ sessionId: z.string(), before: z.string().min(1).optional() });
 const rewindPreviewRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive() });
 const rewindTurnRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), choice: z.object({ kind: z.enum(REWIND_KINDS) }) });
@@ -1085,6 +1102,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       });
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
+      const editor = from.peer.editorActions ? editorActions(route) : undefined;
       const response = await serially(sessionId, async (): Promise<acp.PromptResponse> => {
         if (backend !== undefined) {
           const log = await openSessionLog(store, sessionId, io);
@@ -1161,6 +1179,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 mcp: await mcp.toolset(sessionId, approval),
                 user: shown.user,
                 widgets: from.peer.widgets,
+                editor,
                 externals,
                 keyOf: keyOf(sessionId),
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
@@ -1346,6 +1365,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         subagents: subagents != null,
         tasks: _meta?.[TASKS_CAPABILITY] === true,
         backendEnv: _meta?.[BACKEND_ENV_CAPABILITY] === true,
+        editorActions: _meta?.[EDITOR_ACTIONS_CAPABILITY] === true,
       };
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
@@ -1625,7 +1645,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(CHECKPOINT_TEXT_METHOD, checkpointTextRequest, async ({ params }): Promise<CheckpointTextResponse> => {
       known(params.sessionId);
       const log = await openSessionLog(store, params.sessionId, io);
-      const checkpoint = checkpointFor(log.events, params);
+      const checkpoint = params.sha === undefined ? checkpointFor(log.events, params) : checkpointsOf(log.events).find((c) => c.sha === params.sha);
+      if (params.sha !== undefined && checkpoint === undefined) throw acp.RequestError.invalidParams({ sha: params.sha }, 'no such checkpoint in this session');
       const file = await realpath(params.path).catch(() => params.path);
       const relative = path.relative(log.session.workspace, file);
       if (relative.startsWith('..') || path.isAbsolute(relative)) throw acp.RequestError.invalidParams({ path: params.path }, 'outside the workspace');
