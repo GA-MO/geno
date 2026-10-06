@@ -105,14 +105,14 @@ describe('an agent’s account state', () => {
   it('signs in: waits with the output and the link, then checks again and shows signed in', () => {
     const waiting = run({ kind: 'signed-out', cli: CLI }, { type: 'start', action: 'login' }, { type: 'output', output: 'Opening the browser', link: 'cursor.com' }, { type: 'output', output: 'Opening the browser\nWaiting' });
     expect(waiting).toEqual({ kind: 'signing-in', cli: CLI, output: 'Opening the browser\nWaiting', link: 'cursor.com' });
-    const ended = run(waiting, { type: 'exit', code: 0, cancelled: false });
+    const ended = run(waiting, { type: 'exit', code: 0, cancelled: false }, { type: 'check' });
     expect(ended).toEqual({ kind: 'checking', last: { ok: true, text: 'Sign-in finished.', output: 'Opening the browser\nWaiting' } });
     expect(run(ended, found(true))).toMatchObject({ kind: 'signed-in', last: { ok: true } });
   });
 
   it('reports a cancelled or failed sign-in under the signed-out account', () => {
     const waiting = run({ kind: 'signed-out', cli: CLI }, { type: 'start', action: 'login' });
-    expect(run(waiting, { type: 'exit', code: null, cancelled: true }, found(false))).toEqual({ kind: 'signed-out', cli: CLI, last: { ok: false, text: 'Sign-in cancelled.', output: '' } });
+    expect(run(waiting, { type: 'exit', code: null, cancelled: true }, { type: 'check' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI, last: { ok: false, text: 'Sign-in cancelled.', output: '' } });
     expect(run(waiting, { type: 'output', output: 'no network' }, { type: 'exit', code: 1, cancelled: false }, found(false))).toEqual({
       kind: 'signed-out',
       cli: CLI,
@@ -135,6 +135,15 @@ describe('an agent’s account state', () => {
     expect(run(updating, { type: 'start', action: 'login' })).toBe(updating);
     expect(run(updating, { type: 'check' })).toBe(updating);
     expect(run(updating, found(true))).toBe(updating);
+  });
+
+  it('installs only from missing, and checks again from the installing state', () => {
+    const installing = run({ kind: 'missing' }, { type: 'install' });
+    expect(installing).toEqual({ kind: 'installing' });
+    expect(run(installing, { type: 'check' }, found(false))).toEqual({ kind: 'signed-out', cli: CLI });
+    expect(run(installing, { type: 'check' }, { type: 'checked', result: { kind: 'missing' } })).toEqual({ kind: 'missing' });
+    const signedOut: AgentState = { kind: 'signed-out', cli: CLI };
+    expect(run(signedOut, { type: 'install' })).toBe(signedOut);
   });
 
   it('starts nothing where there is no CLI, and ignores a stray exit', () => {
