@@ -13,6 +13,15 @@
   color: var(--vscode-foreground);
 }
 
+/* A steer already went out, so there is nothing for the chip's × to take back. */
+.queued-chip[data-state='steering'] .chip-remove {
+  display: none;
+}
+
+.queued-chip[data-state='steering'] {
+  padding-right: 9px;
+}
+
 /* The chip's clock says it waits; a steer is on its way, so it points up instead. */
 .queued-chip[data-state='steering'] .codicon-clock::before {
   content: '\eaa1';
