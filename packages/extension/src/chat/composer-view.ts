@@ -9,8 +9,11 @@ const SVG = 'http://www.w3.org/2000/svg';
 const RADIUS = 6;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-/** The context ring: a track and an arc filled to the share of the window in use. Data, not an icon, so it is drawn. */
-function contextRing() {
+/**
+ * The context ring: a track and an arc filled to the share of the window in use. Data, not an icon, so it is drawn.
+ * `inside` draws it as the Compact button's picture, which the button names.
+ */
+function contextRing(inside = false) {
   const circle = (cls: string) => {
     const c = document.createElementNS(SVG, 'circle');
     c.setAttribute('class', cls);
@@ -25,13 +28,15 @@ function contextRing() {
   const arc = circle('ring-fill');
   arc.setAttribute('stroke-dasharray', String(CIRCUMFERENCE));
   svg.append(circle('ring-track'), arc);
-  const element = h('span', { class: 'context-ring', role: 'img', tabindex: '0' });
+  const element = h('span', inside ? { class: 'context-ring', 'aria-hidden': 'true' } : { class: 'context-ring', role: 'img', tabindex: '0' });
   element.append(svg);
   return {
     element,
     show({ fraction, high, title }: ComposerView['ring']): void {
-      element.title = title;
-      element.setAttribute('aria-label', title);
+      if (!inside) {
+        element.title = title;
+        element.setAttribute('aria-label', title);
+      }
       element.dataset['level'] = fraction === undefined ? 'unknown' : high ? 'high' : 'ok';
       arc.setAttribute('stroke-dashoffset', String(CIRCUMFERENCE * (1 - (fraction ?? 0))));
     },
@@ -235,7 +240,9 @@ export function composerControls(
   const activity = activityPill(hooks.openTasks);
 
   const ring = contextRing();
-  const compact = h('button', { type: 'button', class: 'compact-offer', hidden: true, onclick: () => compact.getAttribute('aria-disabled') !== 'true' && hooks.compact() }, icon('fold'), h('span', {}, 'Compact'));
+  // From 80% the ring itself becomes the Compact button; the plain ring stays in place, hidden, for what sits beside it.
+  const pillRing = contextRing(true);
+  const compact = h('button', { type: 'button', class: 'compact-offer', hidden: true, onclick: () => compact.getAttribute('aria-disabled') !== 'true' && hooks.compact() }, pillRing.element, h('span', { class: 'compact-offer-label' }, 'Compact'));
   const modelBackend = h('span', { class: 'model-backend', hidden: true });
   const modelName = h('span', { class: 'model-name' });
   const effort = h('span', { class: 'model-effort' });
@@ -268,10 +275,12 @@ export function composerControls(
       queued.hidden = view.queued === undefined;
       queuedLabel.textContent = view.queued ?? '';
       ring.show(view.ring);
+      pillRing.show(view.ring);
       const offer = view.ring.compact;
       compact.hidden = offer === undefined;
-      compact.title = offer?.held ?? 'Summarize the older turns to free context (/compact)';
-      compact.setAttribute('aria-label', offer?.held === undefined ? 'Compact the context' : `Compact the context. ${offer.held}`);
+      ring.element.hidden = offer !== undefined;
+      compact.title = offer?.title ?? '';
+      compact.setAttribute('aria-label', `Compact the context. ${offer?.title ?? ''}`);
       if (offer?.held === undefined) compact.removeAttribute('aria-disabled');
       else compact.setAttribute('aria-disabled', 'true');
       modelName.textContent = view.model.name;

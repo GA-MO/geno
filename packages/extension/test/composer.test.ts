@@ -88,7 +88,7 @@ describe('composerView, the context ring', () => {
     const { ring } = composerView(input({ facts: facts({ context: { used: 800_000, window: 1_000_000 } }) }));
     expect(ring.high).toBe(true);
     expect(ring.title).toBe('Context: 800,000 of 1,000,000 tokens (80%). Compact summarizes the older turns to free it.');
-    expect(ring.compact).toEqual({ held: undefined });
+    expect(ring.compact).toEqual({ held: undefined, title: ring.title });
     const below = composerView(input({ facts: facts({ context: { used: 799_999, window: 1_000_000 } }) })).ring;
     expect(below.high).toBe(false);
     expect(below.compact).toBeUndefined();
@@ -97,7 +97,7 @@ describe('composerView, the context ring', () => {
 
   it('holds Compact back with its reason while a turn runs', () => {
     const { ring } = composerView(input({ transcript: transcriptOf(start), facts: facts({ context: { used: 900_000, window: 1_000_000 } }) }));
-    expect(ring.compact?.held).toBe('A turn is running. Compact works between turns, and Geno compacts on its own as the context fills.');
+    expect(ring.compact).toEqual({ held: 'A turn is running. Compact works between turns, and Geno compacts on its own as the context fills.', title: 'Context: 900,000 of 1,000,000 tokens (90%). A turn is running. Compact works between turns, and Geno compacts on its own as the context fills.' });
   });
 
   it('offers no Compact for an unknown window or an external agent, which keeps its own context', () => {
