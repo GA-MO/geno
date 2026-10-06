@@ -11,6 +11,7 @@ import { childEnv } from './child-env.js';
 import { commandsList } from './commands.js';
 import { singleId, UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
+import { evalArenaCommand } from './eval-arena.js';
 import { evalRunCommand } from './eval-run.js';
 import { evalSpeedCommand } from './eval-speed.js';
 import { laneCommands } from './lane-cli.js';
@@ -51,6 +52,7 @@ export const USAGE = `usage:
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
   gcode eval run --agent gcode|claude-code (--task <id> | --all) [--model qwen3.8-flash] [--max-cost-per-task 0.40] [--max-cost 3] [--runs-dir <dir>] [--check "<cmd>"] [--no-check-after-edit]
   gcode eval speed [--model qwen3.8-flash] [--max-cost-per-task 0.08] [--max-cost 0.25] [--runs-dir <dir>] [--check "<cmd>"] [--effort-policy flat|stepped] [--from <results.jsonl>]
+  gcode eval arena [--task <id>]... [--n 3] [--model qwen3.8-flash] [--max-cost 1.00] [--max-cost-per-lane 0.07] [--max-turns 30] [--check "<cmd>"] [--runs-dir <dir>]
   gcode eval classifier [--dry-run] [--concurrency 4] [--max-cost 0.40]
   gcode tab report [--since <iso>]
   gcode tab replay [--history 6] [--limit 100] [--warmup 3] [--endpoint <url>] [--out <file>]`;
@@ -164,6 +166,7 @@ const evalCommands: Record<string, Command> = {
   'check-task': checkTaskCommand,
   run: evalRunCommand,
   speed: evalSpeedCommand,
+  arena: evalArenaCommand,
   classifier: classifierEvalCommand,
 };
 
