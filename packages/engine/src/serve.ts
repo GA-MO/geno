@@ -107,7 +107,7 @@ import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, rewindTo } from './rewind.js';
 import { browserLauncherOf, browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
-import { appendEvent, dropTornTail, logEffort, logMode, logModeBesideTurn } from './sessions.js';
+import { appendEvent, dropTornTail, logBesideTurn, logEffort, logMode, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
 import { errorText, replayUpdates, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
@@ -557,25 +557,28 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return next;
   };
   const commands = sessionCommands(homesOf(store, io.env), io);
-  const switchMode = async (client: acp.AgentContext, sessionId: string, mode: SessionMode) => {
-    modes.set(sessionId, mode);
-    await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } });
-    // A running turn holds the log until it ends, which may be never, so the switch is logged beside it.
+  const logSetting = async (sessionId: string, change: SettingChange) => {
+    // A running turn holds the log until it ends, which may be never, so the change is logged beside it.
     if (turns.get(sessionId) !== undefined) {
       const beside = await openSessionLog(store, sessionId, io)
-        .then((log) => logModeBesideTurn(log, mode))
+        .then((log) => logBesideTurn(log, change))
         .catch((error: unknown) => {
-          io.err(`could not log the mode of ${sessionId} beside its turn: ${String(error)}`);
+          io.err(`could not log the ${change.kind} of ${sessionId} beside its turn: ${String(error)}`);
           return false;
         });
       if (beside) return;
     }
-    // Not awaited: a turn that starts now holds the log until it ends, and the switch must not wait for it.
+    // Not awaited: a turn that starts now holds the log until it ends, and the change must not wait for it.
     void serially(sessionId, async () => {
       const log = await openSessionLog(store, sessionId, io);
       await dropTornTail(log);
-      await logMode(log, mode);
-    }).catch((error: unknown) => io.err(`could not log the mode of ${sessionId}: ${String(error)}`));
+      await (change.kind === 'mode' ? logMode(log, change.mode) : logEffort(log, change.effort));
+    }).catch((error: unknown) => io.err(`could not log the ${change.kind} of ${sessionId}: ${String(error)}`));
+  };
+  const switchMode = async (client: acp.AgentContext, sessionId: string, mode: SessionMode) => {
+    modes.set(sessionId, mode);
+    await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: 'current_mode_update', currentModeId: mode } });
+    await logSetting(sessionId, { kind: 'mode', mode });
   };
   const existing = (sessionId: string) =>
     openSessionLog(store, sessionId, io).catch((error: unknown) => {
@@ -710,12 +713,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { sessionId } = params;
       known(sessionId);
       const effort = chosenEffort(params);
-      // Not awaited, as a mode switch: a running turn holds the log, and the next turn reads the effort from it.
-      void serially(sessionId, async () => {
-        const log = await openSessionLog(store, sessionId, io);
-        await dropTornTail(log);
-        await logEffort(log, effort);
-      }).catch((error: unknown) => io.err(`could not log the effort of ${sessionId}: ${String(error)}`));
+      await logSetting(sessionId, { kind: 'effort', effort });
       return { configOptions: effortConfigOptions(effort) };
     })
     .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {

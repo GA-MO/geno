@@ -491,6 +491,21 @@ describe('gcode serve', () => {
     expect(log).not.toContain('"kind":"assistant"');
   });
 
+  it('keeps an effort set during a turn when the engine stops before the turn ends', async () => {
+    const { workspace, transport, connect } = await setup([{ ...answer('Thinking.', usage), stallAfter: 1 }]);
+    const id = await connect(async (ctx, sessionId) => {
+      void ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Clean up the disk' }] }).catch(() => {});
+      await expect.poll(() => transport.requests.length).toBe(1);
+      await ctx.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: 'effort', value: 'high' });
+      return sessionId;
+    });
+
+    const loaded = await connect((ctx) => ctx.request(acp.methods.agent.session.load, { sessionId: id, cwd: workspace, mcpServers: [] }));
+    expect(loaded.configOptions?.[0]).toMatchObject({ id: 'effort', currentValue: 'high' });
+    const resumed = await connect((ctx) => ctx.request(acp.methods.agent.session.resume, { sessionId: id, cwd: workspace }));
+    expect(resumed.configOptions?.[0]).toMatchObject({ id: 'effort', currentValue: 'high' });
+  });
+
   it('offers the session effort as a config option, sends the effort set with session/set_config_option, and keeps it on load', async () => {
     const { workspace, transport, connect } = await setup([answer('Thinking harder.', usage)]);
     const effortOption = (current: string) => ({

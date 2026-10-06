@@ -157,8 +157,8 @@ export type TurnEvent =
    * a turn runs has no seq, because the turn numbers its own events and is still writing them.
    */
   | { readonly kind: 'mode'; readonly seq?: number | undefined; readonly at: string; readonly mode: SessionMode }
-  /** The user set the session's effort; it holds from the next model call until the next change, across resumes. */
-  | { readonly kind: 'effort'; readonly seq: number; readonly at: string; readonly effort: Effort }
+  /** The user set the session's effort; it holds from the next model call until the next change, across resumes. Like a mode switch, one set during a turn has no seq. */
+  | { readonly kind: 'effort'; readonly seq?: number | undefined; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
   | { readonly kind: 'title'; readonly seq: number; readonly at: string; readonly title: string }
   | ChildEvent
