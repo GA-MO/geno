@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants, existsSync } from 'node:fs';
-import { appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
@@ -377,7 +377,13 @@ async function blobAt(dir: string, tree: string, file: string): Promise<string |
 async function workingTree(lane: LaneRecord, scratch: string): Promise<string> {
   const index = path.join(scratch, 'index');
   const own = (await git(lane.path, ['rev-parse', '--path-format=absolute', '--git-path', 'index'])).trim();
-  if (existsSync(own)) await copyFile(own, index);
+  if (existsSync(own)) {
+    await copyFile(own, index);
+    // Git rechecks the content of an entry no older than its index, so the copy keeps the index's own time: a fresh
+    // time would pass a same-size edit made in the second the lane was checked out as unchanged.
+    const { atime, mtime } = await stat(own);
+    await utimes(index, atime, mtime);
+  }
   await git(lane.path, ['add', '-A'], { GIT_INDEX_FILE: index });
   return (await git(lane.path, ['write-tree'], { GIT_INDEX_FILE: index })).trim();
 }
