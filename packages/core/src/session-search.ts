@@ -31,7 +31,7 @@ export type Snippet = { readonly text: string; readonly marks: readonly (readonl
 export type HitTurn = { readonly turn: number; readonly seq: number; readonly at: string };
 
 /** The best match in one session. */
-export type SearchHit = {
+export type SessionHit = {
   readonly sessionId: SessionId;
   readonly title: string;
   readonly workspace: string;
@@ -215,7 +215,7 @@ export function snippetOf(text: SearchText, terms: readonly string[], length: nu
 const neededTerms = (match: SearchMatch, terms: number): number => (match === 'all' ? terms : Math.ceil(terms / 2));
 
 /** The session's best match, or undefined when it holds too few of the terms. */
-function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions): SearchHit | undefined {
+function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions): SessionHit | undefined {
   const title = scoreTexts([doc.title], terms);
   const covered = new Set(title.matched);
   let best: { readonly turn: SearchTurn; readonly scored: Scored } | undefined;
@@ -245,11 +245,11 @@ function hitIn(doc: SessionDoc, terms: readonly string[], options: SearchOptions
 }
 
 /** The best hit of each matching session, best first, then newest first. An empty query finds nothing. */
-export function searchSessions(docs: Iterable<SessionDoc>, query: string, options: SearchOptions): SearchHit[] {
+export function searchSessions(docs: Iterable<SessionDoc>, query: string, options: SearchOptions): SessionHit[] {
   const terms = searchTerms(query);
   if (terms.length === 0) return [];
   const excluded = new Set(options.exclude);
-  const hits: SearchHit[] = [];
+  const hits: SessionHit[] = [];
   for (const doc of docs) {
     const source = doc.summary.forkedFrom?.sessionId;
     if (excluded.has(doc.summary.id) || (source !== undefined && excluded.has(source))) continue;
@@ -286,10 +286,10 @@ const FORGED_RECALL = new RegExp(`<\\s*(/?)\\s*(${RECALL_TAG})`, 'gi');
 const unforged = (text: string): string => text.replace(FORGED_RECALL, '‹$1$2');
 
 /** The day a hit points at: its turn's, or the session's last activity when only the title matched. */
-const dayOf = (hit: SearchHit): string => (hit.turn?.at ?? hit.updatedAt).slice(0, 10);
+const dayOf = (hit: SessionHit): string => (hit.turn?.at ?? hit.updatedAt).slice(0, 10);
 
 /** The hits as the recall tool's result, fenced as data, so a quoted instruction can neither pose as the user's nor close the fence. */
-export function recallText(query: string, hits: readonly SearchHit[]): string {
+export function recallText(query: string, hits: readonly SessionHit[]): string {
   if (hits.length === 0) return `No earlier session in this workspace mentions ${JSON.stringify(query)}. Try other words, or fewer.`;
   const entries = hits.map((hit) => {
     const where = hit.turn === null ? 'title' : `turn ${hit.turn.turn}${hit.matchingTurns > 1 ? ` (${hit.matchingTurns} turns match)` : ''}`;
