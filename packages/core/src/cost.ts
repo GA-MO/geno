@@ -42,10 +42,13 @@ export const PRICES: { readonly [P in ProviderName]: Readonly<Record<string, Rat
 
 export const isPriced = (provider: ProviderName, model: string): boolean => Object.hasOwn(PRICES[provider], model);
 
-/** Null for an unpriced model, so an unknown cost never reads as free. */
-export function costOf(provider: ProviderName, model: string, usage: TokenUsage): number | null {
-  if (!isPriced(provider, model)) return null;
-  const rates = PRICES[provider][model]!;
+export const ratesOf = (provider: ProviderName, model: string): Rates | undefined => (isPriced(provider, model) ? PRICES[provider][model] : undefined);
+
+/** Null without rates, so an unknown cost never reads as free. */
+export function costAt(rates: Rates | undefined, usage: TokenUsage): number | null {
+  if (rates === undefined) return null;
   const buckets = Object.keys(rates) as (keyof TokenUsage)[];
   return buckets.reduce((sum, k) => sum + usage[k] * rates[k], 0) / 1_000_000;
 }
+
+export const costOf = (provider: ProviderName, model: string, usage: TokenUsage): number | null => costAt(ratesOf(provider, model), usage);

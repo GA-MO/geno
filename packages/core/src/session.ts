@@ -25,6 +25,7 @@ import type { WaitEvent } from './waiting.js';
 import { wakeNoteText, type WakeEvent, type WakeTrigger } from './wake.js';
 import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
+import type { PartRun } from './breakdown.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
@@ -75,6 +76,8 @@ export type AssistantTurn = {
   readonly costUsd: number | null;
   readonly latencyMs: number;
   readonly model: string;
+  /** The request split into parts by the tokenizer estimate; absent in logs written before requests were split. */
+  readonly promptParts?: readonly PartRun[] | undefined;
 };
 
 export type TurnResult =

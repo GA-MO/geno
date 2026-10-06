@@ -5,6 +5,7 @@ import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
 import type { CheckpointRef, HunkId, ReviewHunk } from './review.js';
 import type { ForkOrigin, RewindChoice } from './rewind.js';
+import type { SessionSpend } from './spend.js';
 
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
 export const DIAGNOSTICS_METHOD = '_gcode/diagnostics';
@@ -176,3 +177,9 @@ export function formatDiagnostics(diagnostics: readonly EditorDiagnostic[], show
   );
   return `The editor reports these problems in the files you read or edited:\n${lines.join('\n')}`;
 }
+
+/** Extension method, sent by the editor: where the session's tokens went, turn by turn, as `gcode usage` prints it. */
+export const USAGE_METHOD = '_gcode/usage';
+
+export type UsageRequest = { readonly sessionId: string };
+export type UsageResponse = SessionSpend;
