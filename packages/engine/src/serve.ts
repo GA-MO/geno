@@ -208,7 +208,7 @@ import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import { waitsLeft, waitUpdate } from './wait-hooks.js';
-import { draftNotice, wakeCancelRequest, WakeDriver } from './wake-hooks.js';
+import { draftNotice, wakeCancelRequest, WakeDriver, wakePolicyOf } from './wake-hooks.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 
@@ -847,6 +847,7 @@ export function engineShared(io: Io) {
       shownBy: (sessionId) => viewers.of(sessionId),
       serially,
       autoWake: io.env['GCODE_AUTO_WAKE'] !== 'off',
+      policy: wakePolicyOf(io.env),
     }),
   };
 }
@@ -1162,7 +1163,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 widgets: from.peer.widgets,
                 externals,
                 keyOf: keyOf(sessionId),
-                engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd } } } : {}) },
+                engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
                   parentId: sessionId,

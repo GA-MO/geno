@@ -159,7 +159,8 @@ export class Wakes {
    * monitor started stops. On Cancel, the session's other commands run on, silenced. True when anything was pending.
    */
   cancel(sessionId: string, uses?: ReadonlySet<string>): boolean {
-    const waits = this.sessions.get(sessionId);
+    // Cancel silences commands a session that never waited on anything else may still run.
+    const waits = uses === undefined ? this.of(sessionId) : this.sessions.get(sessionId);
     if (waits === undefined) return false;
     const chosen = (toolUseId: string) => uses === undefined || uses.has(toolUseId);
     let any = false;

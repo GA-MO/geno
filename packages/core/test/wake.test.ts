@@ -74,7 +74,7 @@ const answered = (seq: number, ms: number): TurnEvent => ({
   kind: 'assistant',
   seq,
   at: at(ms),
-  content: [{ type: 'text', text: 'Started it; I will look when it ends.' }],
+  content: [{ type: 'text', text: 'Started it; I will look when it ends.', citations: null }],
   stopReason: 'end_turn',
   usage: { input: 10, cacheRead: 0, cacheWrite: 0, output: 5 },
   costUsd: 0.001,

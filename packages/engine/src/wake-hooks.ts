@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { nextSeq, openSchedulesOf, unwokenOf, wakeGate, wakePauseOf, type Waiter, type WakeNote, type WakeView } from '@g-code/core';
+import { nextSeq, openSchedulesOf, unwokenOf, WAKE_POLICY, wakeGate, wakePauseOf, type Waiter, type WakeNote, type WakePolicy, type WakeView } from '@g-code/core';
 import type { BackgroundJobs } from './background.js';
 import { openSessionLog } from './chat.js';
 import type { Io } from './command.js';
@@ -27,6 +27,7 @@ export type WakeDeps = {
   readonly serially: <T>(sessionId: string, work: () => Promise<T>) => Promise<T>;
   /** `gcode.wake.auto`: off, nothing wakes a session and arrivals wait for the next prompt. */
   readonly autoWake: boolean;
+  readonly policy: WakePolicy;
 };
 
 /**
@@ -51,6 +52,10 @@ export class WakeDriver {
 
   get autoWake(): boolean {
     return this.deps.autoWake;
+  }
+
+  get policy(): WakePolicy {
+    return this.deps.policy;
   }
 
   /** The store and the log of the first connection's engine; nothing is woken before one connects. */
@@ -111,7 +116,7 @@ export class WakeDriver {
     if (head?.kind !== 'session-start' || head.child !== undefined || log.session.backend !== undefined) return;
     const now = Date.now();
     const unwoken = unwokenOf(log.events, this.registry.wakes(sessionId));
-    const pause = wakePauseOf(log.events, now);
+    const pause = wakePauseOf(log.events, now, this.deps.policy.cap);
     const verdict = wakeGate({
       autoWake: this.deps.autoWake,
       now,
@@ -122,6 +127,7 @@ export class WakeDriver {
       draftClearedAt: this.cleared.get(sessionId),
       pause,
       window: this.wakers.size > 0,
+      batchMs: this.deps.policy.batchMs,
     });
     const waitsFor = this.registry.waitsFor(sessionId);
     // A pause is worth showing only while something would otherwise wake the session.
@@ -193,6 +199,17 @@ export async function schedulesLeft(
       }),
   );
   return found.flat();
+}
+
+const policySchema = z.strictObject({ batchMs: z.number().int().nonnegative(), secondMs: z.number().int().positive(), cap: z.number().int().positive() }).partial();
+
+/** WAKE_POLICY, with any of its numbers replaced from the GCODE_WAKE_POLICY JSON, which the tests use to wake in milliseconds. */
+export function wakePolicyOf(env: Readonly<Record<string, string | undefined>>): WakePolicy {
+  const raw = env['GCODE_WAKE_POLICY'];
+  if (raw === undefined || raw === '') return WAKE_POLICY;
+  const parsed = policySchema.safeParse(JSON.parse(raw));
+  if (!parsed.success) throw new Error(`GCODE_WAKE_POLICY: ${z.prettifyError(parsed.error)}`);
+  return { ...WAKE_POLICY, ...Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined)) };
 }
 
 export const draftNotice = z.object({ sessionId: z.string(), typing: z.boolean() });

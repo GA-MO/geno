@@ -65,6 +65,13 @@ export const WAKE_BATCH_MS = 2000;
 export const WAKE_CAP = 12;
 export const WAKE_CAP_WINDOW_MS = 60 * 60 * 1000;
 
+/**
+ * How long a batch of arrivals gathers, how long one second of a wake-up's delay or a monitor's timeout lasts, and
+ * the cap. The tests shorten them through GCODE_WAKE_POLICY.
+ */
+export type WakePolicy = { readonly batchMs: number; readonly secondMs: number; readonly cap: number };
+export const WAKE_POLICY: WakePolicy = { batchMs: WAKE_BATCH_MS, secondMs: 1000, cap: WAKE_CAP };
+
 export const SCHEDULE_MIN_S = 60;
 export const SCHEDULE_MAX_S = 60 * 60;
 export const MONITOR_DEFAULT_S = 10 * 60;
@@ -138,10 +145,10 @@ export function wakesInWindow(events: readonly TurnEvent[], now: number): number
 }
 
 /** Whether, and why, the session's wakes wait for the user: the last turn ended on an error, or the cap is spent. */
-export function wakePauseOf(events: readonly TurnEvent[], now: number): WakePause | undefined {
+export function wakePauseOf(events: readonly TurnEvent[], now: number, cap = WAKE_CAP): WakePause | undefined {
   const ended = events.findLast((e) => e.kind === 'assistant' || e.kind === 'error');
   if (ended?.kind === 'error') return PAUSED_BY[ended.error];
-  return wakesInWindow(events, now) >= WAKE_CAP ? 'cap' : undefined;
+  return wakesInWindow(events, now) >= cap ? 'cap' : undefined;
 }
 
 /** What keeps a wake waiting until it changes. */
@@ -163,6 +170,8 @@ export type WakeGateInput = {
   readonly pause: WakePause | undefined;
   /** An editor is connected to run the woken turn for. */
   readonly window: boolean;
+  /** WAKE_BATCH_MS unless a test says otherwise. */
+  readonly batchMs?: number | undefined;
 };
 
 export type WakeVerdict =
@@ -184,8 +193,8 @@ const WAKE_RULES: readonly Rule[] = [
   ({ pause }) => (pause === undefined ? undefined : { kind: 'paused', why: pause }),
   ({ asking }) => (asking ? { kind: 'hold', until: 'card' } : undefined),
   ({ typing }) => (typing ? { kind: 'hold', until: 'typing' } : undefined),
-  ({ arrivedAt, now }) => (arrivedAt !== undefined && now < arrivedAt + WAKE_BATCH_MS ? { kind: 'at', at: arrivedAt + WAKE_BATCH_MS } : undefined),
-  ({ draftClearedAt, now }) => (draftClearedAt !== undefined && now < draftClearedAt + WAKE_BATCH_MS ? { kind: 'at', at: draftClearedAt + WAKE_BATCH_MS } : undefined),
+  ({ arrivedAt, now, batchMs = WAKE_BATCH_MS }) => (arrivedAt !== undefined && now < arrivedAt + batchMs ? { kind: 'at', at: arrivedAt + batchMs } : undefined),
+  ({ draftClearedAt, now, batchMs = WAKE_BATCH_MS }) => (draftClearedAt !== undefined && now < draftClearedAt + batchMs ? { kind: 'at', at: draftClearedAt + batchMs } : undefined),
   ({ window }) => (window ? undefined : { kind: 'hold', until: 'window' }),
 ];
 
