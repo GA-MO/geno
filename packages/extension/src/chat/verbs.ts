@@ -10,6 +10,9 @@ const VERBS: Readonly<Record<string, readonly [running: string, finished: string
   bash: ['Running', 'Ran'],
   check: ['Checking for problems', 'Checked for problems'],
   agent: ['Delegating to', 'Delegated to'],
+  open_file: ['Opening', 'Opened'],
+  reveal: ['Revealing', 'Revealed'],
+  show_diff: ['Opening the diff of', 'Showed the diff of'],
 };
 
 /** An MCP call reads as its tool's own name, with its server beside it. */

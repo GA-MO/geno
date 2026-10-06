@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   afterLines,
   DIAGNOSTICS_METHOD,
+  EDITOR_ACTION_METHOD,
   HUNK_STATUSES,
   hunkIdOf,
   APPROVAL_META,
@@ -122,6 +123,7 @@ import { RewindHost } from './rewind-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
+import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
 
 export const CHAT_VIEW = 'gcode.chat';
 export const SEND_COMMAND = 'gcode.chat.send';
@@ -329,8 +331,10 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
 
 function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf<K>, at: number): Action | undefined {
   const action = (UPDATES[update.sessionUpdate] as ((u: UpdateOf<K>, at: number) => Action | undefined) | undefined)?.(update, at);
+  if (action?.type !== 'tool') return action;
   const widget = widgetOf(update);
-  return action?.type === 'tool' && widget !== undefined ? { ...action, widget } : action;
+  const editorAction = update.sessionUpdate === 'tool_call_update' ? editorActionOf(update._meta) : undefined;
+  return { ...action, ...(widget === undefined ? {} : { widget }), ...(editorAction === undefined ? {} : { editorAction }) };
 }
 
 /** When an update happened: now, or for a replayed tool call, when it was logged. */
@@ -662,6 +666,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(acp.methods.client.elicitation.create, ({ params, signal }) => this.askQuestion(params, signal))
       .onRequest(DIAGNOSTICS_METHOD, diagnosticsRequest, ({ params }) => diagnostics(params.paths))
       .onRequest(UNSAVED_BUFFERS_METHOD, unsavedBuffersRequest, () => unsavedBuffers())
+      .onRequest(EDITOR_ACTION_METHOD, editorActionRequest, async ({ params }) => {
+        await runEditorAction(params.action);
+        return {};
+      })
       .onRequest(BACKEND_ENV_METHOD, backendEnvRequest, ({ params }) => this.backendEnv(params.backend))
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
       .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))
@@ -1288,6 +1296,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),
       reveal: ({ hunk }) => void vscode.commands.executeCommand(REVEAL_COMMAND, hunk),
       'undo-turn': ({ checkpoint, later }) => void vscode.commands.executeCommand(UNDO_TURN_COMMAND, checkpoint, later).then(undefined, warn),
+      'editor-action': ({ action }) => void runEditorAction(action).then(undefined, warn),
       'open-change': ({ path, checkpoint }) => void vscode.commands.executeCommand(OPEN_CHANGE_COMMAND, path, checkpoint),
       copy: ({ text }) => void vscode.env.clipboard.writeText(text),
       'choose-model': () => this.showSettings(),

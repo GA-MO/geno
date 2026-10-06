@@ -131,7 +131,7 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
   // What the user said mid-turn shapes the answer below it, as a decided question does.
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'steer');
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => step.kind !== 'text' || step === narration).slice(-RECENT));

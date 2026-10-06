@@ -3,6 +3,7 @@
 /// <reference lib="dom.asynciterable" />
 import type { OutgoingAttachment } from './attachment-model.js';
 import { widgetStep } from './widget-view.js';
+import { editorStep } from './editor-step.js';
 import { composerAttachments } from './composer-attachments.js';
 import { composerView, NO_FACTS, type ComposerFacts } from './composer-model.js';
 import { composerControls } from './composer-view.js';
@@ -284,6 +285,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
+    case 'editor':
+      return { deps: [step.tool.editorAction], build: () => editorStep(step.tool, ui) };
     case 'agent':
       return { deps: [quiet, step.tool, ...step.children, '|', ...state.open], build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()) };
     case 'notice':
