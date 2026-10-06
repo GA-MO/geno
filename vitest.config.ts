@@ -1,6 +1,9 @@
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { useTestTmp } from './scripts/test-tmp.js';
+
+useTestTmp();
 
 const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
 

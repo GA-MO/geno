@@ -7,7 +7,9 @@ import { build, type BuildOptions } from 'esbuild';
 
 // Vitest runs from the repository root.
 export const root = path.resolve('packages/extension');
-export const cachePath = path.resolve(root, '../../.vscode-test');
+const gitCommonDir = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).stdout.trim();
+// Every worktree shares the main checkout's download, so a new worktree does not fetch VS Code again.
+export const cachePath = path.join(gitCommonDir === '' ? path.resolve(root, '../..') : path.dirname(gitCommonDir), '.vscode-test');
 
 const common: BuildOptions = { bundle: true, platform: 'node', format: 'cjs', target: 'node20', external: ['vscode'] };
 
