@@ -236,8 +236,9 @@ export function totalOf(events: readonly TurnEvent[]): Totals {
 }
 
 const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
-  'session-start': ({ session, context }) => [
+  'session-start': ({ session, context, fork }) => [
     `session: ${session.id}`,
+    ...(fork === undefined ? [] : [`forked from: ${fork.sessionId} at turn ${fork.turnSeq} (${fork.title})`]),
     `created: ${session.createdAt}  workspace: ${session.workspace}  provider: ${session.provider}  model: ${session.model}  effort: ${session.effort}${session.backend === undefined ? '' : `  backend: ${session.backend.id}`}`,
     ...(context === undefined || isEmptyContext(context)
       ? []
@@ -261,6 +262,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   checkpoint: ({ seq, turnSeq, sha, files }) => [
     `#${seq} checkpoint before turn ${turnSeq}: ${sha.slice(0, 12)}${files.length === 0 ? '' : ` changed ${files.join(', ')}`}`,
   ],
+  cut: ({ seq, turnSeq }) => [`#${seq} cut the conversation from turn ${turnSeq} on`],
   restored: ({ seq, turnSeq, sha, files }) => [
     `#${seq} restored to the checkpoint before turn ${turnSeq} (${sha.slice(0, 12)}): ${files.length === 0 ? 'no files changed' : files.join(', ')}`,
   ],
