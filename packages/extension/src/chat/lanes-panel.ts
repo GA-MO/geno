@@ -260,6 +260,13 @@ export function tasksPanel(post: (message: LanesFromView) => void, onToggle: (op
     isOpen: frame.isOpen,
     open: frame.open,
     close: frame.close,
+    /** Opens the pane scrolled to a section, or its top while that section is empty. */
+    openAt(section: Section): void {
+      frame.open();
+      const target = sections[section].element;
+      if (target.hidden) frame.element.scrollTop = 0;
+      else target.scrollIntoView({ block: 'start' });
+    },
     listed(next: readonly TaskRecord[], showing: string | undefined, markers: SeenMarkers): void {
       tasks = next;
       shown = showing;

@@ -16,6 +16,7 @@ import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { lanesPanel, tasksPanel } from './lanes-panel.js';
 import type { Reveal } from './lanes-model.js';
+import { NO_BACKGROUND, type Background } from './activity-model.js';
 import { arenaPanel } from './arena-panel.js';
 import { mcpPanel } from './mcp-panel.js';
 import { sendMenu } from './send-menu.js';
@@ -108,12 +109,13 @@ const stop = h('button', { type: 'button', class: 'round-button stop', title: 'S
 /** What the extension host knows for the composer, the shown session's MCP servers, and a follow-up waiting on the turn. */
 let facts: ComposerFacts = NO_FACTS;
 let mcpListing: McpListing = { kind: 'loading' };
+let background: Background = NO_BACKGROUND;
 type Queued = { readonly text: string; readonly attachments: readonly OutgoingAttachment[] };
 let queued: Queued | undefined;
 const controls = composerControls((message) => host.postMessage(message), {
   addContext: () => addContext(),
   openCommands: () => openCommands(),
-  openChild: (id) => openChild(id),
+  openTasks: () => tasks.openAt('needs-you'),
   unqueue: () => {
     queued = undefined;
     schedule();
@@ -156,7 +158,7 @@ const slash = slashPicker(input, {
 const peek = peekOver((shown) => peekGate.set('shown', shown));
 const peekGate = motionGate((motion) => peek.setMotion(motion));
 peek.setMotion(peekGate.motion());
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, controls.agentsMenu, more.menu, peek.element, inputBox);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, more.menu, peek.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
 const gate = motionGate((motion) => start.setMotion(motion));
 const working = workingDino();
@@ -356,7 +358,7 @@ function render(): void {
   helperGate.set('shown', helpers.active() && document.body.dataset['view'] === 'chat');
   // One Noodle at a time: the start page has its own, and the working dino has the stage while a turn runs.
   peek.blocked(empty || running || document.body.dataset['view'] !== 'chat');
-  const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now() });
+  const view = composerView({ transcript, facts, mcp: mcpListing, queued: queued === undefined ? undefined : queued.text || `${queued.attachments.length} attachments`, now: Date.now(), background });
   controls.show(view);
   showTray();
   send.hidden = view.action !== 'send';
@@ -524,7 +526,11 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-memory') return memory.open();
   if (message.type === 'lanes') return lanes.listed(message.listing);
   if (message.type === 'show-lanes') return lanes.open();
-  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown, message.seen);
+  if (message.type === 'tasks') {
+    background = { tasks: message.tasks, seen: message.seen, shown: message.shown };
+    schedule();
+    return tasks.listed(message.tasks, message.shown, message.seen);
+  }
   if (message.type === 'task-reveal') {
     revealing = { reveal: message.reveal, until: Date.now() + REVEAL_WAIT_MS };
     return schedule();

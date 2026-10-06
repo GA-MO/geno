@@ -1,9 +1,10 @@
 import type { ContextUse, WaitKind } from '@g-code/core';
 import { waitLabel } from '@g-code/core/waiting';
 import { clockOf } from './format.js';
+import { activityOf, NO_BACKGROUND, type ActivityView, type Background } from './activity-model.js';
 import type { McpListing } from './mcp-model.js';
 import type { Transcript } from './messages.js';
-import { isRunning, runningChildren, workedMs } from './transcript.js';
+import { isRunning, workedMs } from './transcript.js';
 
 /**
  * The composer's view model: a pure function from what the panel knows about the session to what each slot of the
@@ -48,6 +49,8 @@ export type ComposerInput = {
   /** A follow-up typed while the turn runs, sent when it finishes. */
   readonly queued: string | undefined;
   readonly now: number;
+  /** The engine's tasks, for the row's pill; none when left out. */
+  readonly background?: Background | undefined;
 };
 
 /** `fraction` is undefined when the window is unknown; `high` from 80%. */
@@ -60,9 +63,6 @@ export type ModelMenu = {
   readonly note: string | undefined;
 };
 
-/** A running subagent as the agents pill offers it. */
-export type RunningChild = { readonly id: string; readonly role: string; readonly model: string; readonly elapsed: string };
-
 /** A model call the turn waits on: "Offline, retrying in 12s" or "Limited until 14:05", with the failure as its title. */
 export type WaitView = { readonly kind: WaitKind; readonly text: string; readonly title: string };
 
@@ -73,8 +73,6 @@ export type RunningView = {
   readonly wait: WaitView | undefined;
   /** Undefined before the turn's first model call. */
   readonly cost: { readonly text: string; readonly title: string } | undefined;
-  /** The pill for the turn's running subagents; undefined while none runs. */
-  readonly agents: { readonly count: number; readonly noun: string; readonly title: string; readonly children: readonly RunningChild[] } | undefined;
 };
 
 export type ComposerView = {
@@ -87,6 +85,8 @@ export type ComposerView = {
   readonly menu: ModelMenu;
   readonly action: 'send' | 'stop';
   readonly running: RunningView | undefined;
+  /** The pill and label for work beside this chat and tasks that need the user, whether or not this chat runs. */
+  readonly activity: ActivityView | undefined;
 };
 
 /** From this fill the ring warns. */
@@ -143,13 +143,6 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
-function agentsOf(transcript: Transcript, now: number): RunningView['agents'] {
-  const children = runningChildren(transcript).map(({ id, role, model, startedAt }) => ({ id, role, model, elapsed: formatElapsed(now - startedAt) }));
-  if (children.length === 0) return undefined;
-  const noun = children.length === 1 ? 'agent' : 'agents';
-  return { count: children.length, noun, title: `${children.length} ${noun} running: ${children.map((c) => c.role).join(', ')}`, children };
-}
-
 function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView['cost'] {
   if (usd === undefined) return undefined;
   if (usd === null) return { text: '฿ unknown', title: 'This model has no price in Geno’s table' };
@@ -157,7 +150,7 @@ function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView
   return { text: baht > 0 && baht < 0.01 ? '<฿0.01' : `฿${baht.toFixed(2)}`, title: `$${usd.toFixed(4)} at ฿${bahtPerUsd} to the US dollar` };
 }
 
-export function composerView({ transcript, facts, mcp, queued, now }: ComposerInput, clock: (ms: number) => string = clockOf): ComposerView {
+export function composerView({ transcript, facts, mcp, queued, now, background = NO_BACKGROUND }: ComposerInput, clock: (ms: number) => string = clockOf): ComposerView {
   const running = isRunning(transcript);
   const turn = transcript.turns.at(-1);
   const name = transcript.model === '' ? 'Default model' : transcript.model;
@@ -184,8 +177,8 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
             elapsed: formatElapsed(workedMs(turn, now)),
             wait: turn.waiting === undefined ? undefined : { kind: turn.waiting.kind, text: waitLabel(turn.waiting, now, clock), title: turn.waiting.message },
             cost: costOf(facts.turnCostUsd, facts.bahtPerUsd),
-            agents: agentsOf(transcript, now),
           }
         : undefined,
+    activity: activityOf(transcript, background),
   };
 }

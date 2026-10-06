@@ -95,6 +95,9 @@ const rowFits = () =>
     })()`,
   );
 
+/** The pill's shown words, its hidden parts left out. */
+const pillText = () => panel<string | null>(`doc.querySelector('.activity-pill')?.innerText.trim() ?? null`);
+
 export async function run(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
   await vscode.commands.executeCommand('notifications.clearAll');
@@ -122,16 +125,17 @@ export async function run(): Promise<void> {
   }
   check(/^Delegat/.test((await textOf('.step-agent .step-verb'))!), 'the agent step says it delegated', await textOf('.step-agent .step-verb'));
 
-  // The pill counts the running children and offers both.
-  await waitFor('the agents pill', async () => (await textOf('.agents-pill .agents-label')) === '2 agents');
-  check((await count('.agents-pill')) === 1, 'one pill');
-  await click('.agents-pill');
-  await waitFor('the pill to open its menu', async () => await shown('#agents-menu'));
-  const offered = await panel<string[]>(`[...doc.querySelectorAll('#agents-menu [data-child]')].map((e) => e.dataset.child)`);
-  check(offered.toSorted().join() === [alpha, beta].toSorted().join(), 'the menu offers both running children', offered);
-  check((await panel<string | null>('doc.activeElement?.dataset.child ?? null')) === offered[0], 'the first takes the keyboard');
+  // The row's one pill counts the running children, and the label names the latest step.
+  await waitFor('the pill', async () => (await pillText()) === '2 running', 30_000);
+  check((await count('.activity-pill')) === 1, 'one pill');
+  await waitFor('a label for the latest step', async () => /^explore: /.test((await textOf('.activity-label')) ?? ''), 30_000);
+  check(!(await shown('.activity-label')), 'at 420px the label gives its room to the pill');
+  const wide = await rowFits();
+  check(wide.fits, 'the running row fits at 420px with the pill', wide);
+  await click('.activity-pill');
+  await waitFor('the pill to open Tasks', async () => (await view()) === 'tasks');
   await press('Escape');
-  check(!(await shown('#agents-menu')) && (await panel<boolean>(`doc.activeElement === doc.querySelector('.agents-pill')`)), 'Escape closes the menu onto the pill');
+  await waitFor('the chat again', async () => (await view()) === 'chat');
   await screenshots('running');
 
   // At about 300px the bottom row still fits, pill and all.
@@ -140,14 +144,13 @@ export async function run(): Promise<void> {
   await sleep(300);
   const fits = await rowFits();
   check(fits.fits, `the bottom row fits at ${narrow}px with the pill`, fits);
-  check(await shown('.agents-pill'), 'the pill still shows when narrow');
+  check(await shown('.activity-pill'), 'the pill still shows when narrow');
+  check(!(await shown('.activity-label')), 'the label goes before the pill does');
   await screenshots('narrow-300');
   await panelWidth(420);
 
-  // The menu opens a child's transcript in the side view, and Back returns to the chat.
-  await click('.agents-pill');
-  await waitFor('the menu again', async () => await shown('#agents-menu'));
-  await click(`#agents-menu [data-child="${alpha}"]`);
+  // A child's row opens its transcript in the side view, and Back returns to the chat.
+  await click(row(alpha, '.child-open'));
   await waitFor('the side view', async () => (await view()) === 'child');
   check(!(await shown('.transcript')) && !(await shown('.composer')), 'the side view takes the chat and the composer\'s place');
   check((await textOf('.child-view .child-title .child-role')) === 'explore', 'it names the role', await textOf('.child-view .child-title .child-role'));
@@ -170,21 +173,16 @@ export async function run(): Promise<void> {
   await waitFor('Escape back to the chat', async () => (await view()) === 'chat');
   check(await shown('button.stop'), 'Escape in the side view went back and did not stop the turn');
 
-  // One child ends; the pill counts the other and opens it straight away.
+  // One child ends; the pill counts the other.
   await ui({ do: 'release', name: 'beta' });
   await waitFor('beta to end', async () => (await count(`.child-row.child-done[data-child="${beta}"]`)) === 1);
-  await waitFor('the pill to count one', async () => (await textOf('.agents-pill .agents-label')) === '1 agent');
+  await waitFor('the pill to count one', async () => (await pillText()) === '1 running', 30_000);
   check((await textOf(row(beta, '.child-cost'))) !== null, 'an ended child shows its cost', await textOf(row(beta, '.child-cost')));
   check((await count(row(beta, '.helper-dino'))) === 0 && (await count(row(beta, '.child-cancel'))) === 0, 'an ended child has no helper and no Cancel');
-  await click('.agents-pill');
-  await waitFor('the one running child to open', async () => (await view()) === 'child');
-  check((await textOf('.child-view .child-task'))!.includes(MARKERS.alpha), 'one running child opens without a menu');
-  await click('.child-view .child-back');
-  await waitFor('the chat', async () => (await view()) === 'chat');
 
   await ui({ do: 'release', name: 'alpha' });
   await waitFor('the turn to finish', async () => (await count('.turn-footer')) === 1);
-  check((await count('.agents-pill')) === 0, 'the pill leaves with the last child');
+  check((await count('.activity-pill')) === 0, 'the pill leaves with the last child');
   check((await count('.transcript .child-row.child-done')) === 2, 'both children done', await nesting());
   check((await count('.helper-dino')) === 0, 'no helper dino once they ended');
   check((await textOf('.turn .step-text:last-of-type'))?.includes(ANSWERS.parent) === true, 'the parent answered from both reports', await textOf('.turn .step-text:last-of-type'));

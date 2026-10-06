@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ANSWERS, MARKERS, PROMPTS } from './attention-fixture.js';
-import { check, click, count, openPanel, panel, panelWidth, press, screenshots, shown, sleep, textOf, toasts, ui, view, waitFor, workbench } from './lanes-ui.js';
+import { check, click, count, openPanel, panel, panelWidth, press, rowFits, screenshots, shown, sleep, textOf, toasts, ui, view, waitFor, workbench } from './lanes-ui.js';
 
 type Marker = (typeof MARKERS)[keyof typeof MARKERS];
 
@@ -40,6 +40,16 @@ const cardInView = () =>
     const r = card.getBoundingClientRect();
     const log = doc.querySelector('.transcript').getBoundingClientRect();
     return { focused: card.contains(doc.activeElement), inView: r.top >= log.top - 1 && r.top < log.bottom };
+  })()`);
+
+/** The pill's shown words, its hidden parts left out. */
+const pillText = () => panel<string | null>(`doc.querySelector('.activity-pill')?.innerText.replace(/\\s+/g, ' ').trim() ?? null`);
+
+/** The pill and the label end before the context ring starts, so nothing in the row draws over them. */
+const clear = () =>
+  panel<boolean>(`(() => {
+    const ring = doc.querySelector('.context-ring').getBoundingClientRect();
+    return [...doc.querySelectorAll('.activity-pill, .activity-label')].filter((e) => e.getClientRects().length > 0).every((e) => e.getBoundingClientRect().right <= ring.left + 0.5);
   })()`);
 
 async function send(prompt: string): Promise<void> {
@@ -92,7 +102,38 @@ export async function run(): Promise<void> {
   await press('Escape');
   await vscode.commands.executeCommand('notifications.clearAll');
 
-  await openTasks();
+  // The idle chat's row carries one pill for the rest, in the accent color while anything needs the user.
+  await waitFor('the row’s pill', async () => (await pillText()) === '1 running · 2 need you', 30_000, pillText);
+  check((await textOf('.activity-label')) === `Waiting for your approval in ${PROMPTS.parent}`, 'the label names the newest card', await textOf('.activity-label'));
+  check((await panel<string>(`doc.querySelector('.activity-label').dataset.tone`)) === 'needs-you', 'in the accent tone');
+  check((await panel<string>(`doc.querySelector('.activity-pill').dataset.needsYou`)) === 'true', 'and so is the pill');
+  const wide = await panelWidth(560);
+  await sleep(300);
+  const rowWide = await rowFits();
+  check(rowWide.fits, `the row fits at ${wide}px with the pill and the label`, rowWide);
+  check(await clear(), 'the pill and the label stop short of the context ring', await clear());
+  const labelWidth = await panel<number>(`doc.querySelector('.activity-label').getBoundingClientRect().width`);
+  check(labelWidth >= 100, `the label has room at ${wide}px`, labelWidth);
+  await screenshots('row');
+  await panelWidth(420);
+  await sleep(300);
+  check((await rowFits()).fits && (await clear()), 'the row fits at 420px', await rowFits());
+  check((await shown('.activity-pill')) && !(await shown('.activity-label')), 'at 420px the label goes and the pill stays', await pillText());
+  check((await pillText()) === '1 running · 2 need you', 'with its words', await pillText());
+  await screenshots('row-420');
+  const rowNarrow = await panelWidth(300);
+  await sleep(300);
+  const rowFit = await rowFits();
+  check(rowFit.fits, `the row fits at ${rowNarrow}px with the pill`, rowFit);
+  check(await clear(), 'nothing overlaps at 300px', await clear());
+  check((await shown('.activity-pill')) && !(await shown('.activity-label')), 'the label goes before the pill', await pillText());
+  check((await pillText()) === '1 · 2', 'the pill keeps its counts', await pillText());
+  await screenshots('row-300');
+  await panelWidth(420);
+
+  // The pill opens Tasks at Needs you.
+  await click('.activity-pill');
+  await waitFor('the Tasks pane from the pill', async () => (await view()) === 'tasks');
   const listed = async () => sectionsShown();
   await waitFor('every section', async () => (await listed()).order.join() === 'needs-you,ready,working,done', 30_000, listed);
   const { rows } = await listed();

@@ -1,4 +1,5 @@
-import { SUBAGENT_META } from '@g-code/core';
+import { SUBAGENT_META, type TaskRecord } from '@g-code/core';
+import type { Background } from '../src/chat/activity-model.js';
 import { describe, expect, it } from 'vitest';
 import { composerView, NO_FACTS } from '../src/chat/composer-model.js';
 import type { Action, Transcript } from '../src/chat/messages.js';
@@ -85,24 +86,49 @@ describe('children in the transcript', () => {
   });
 });
 
-describe('the agents pill', () => {
-  const view = (t: Transcript, now: number) => composerView({ transcript: t, facts: NO_FACTS, mcp: { kind: 'loading' }, queued: undefined, now });
+describe('the row\'s pill and label', () => {
+  const view = (t: Transcript, background?: Background) => composerView({ transcript: t, facts: NO_FACTS, mcp: { kind: 'loading' }, queued: undefined, now: T0 + 5020, background });
+  const task = (patch: Partial<TaskRecord>): TaskRecord => ({ sessionId: 's', title: 'Fix the header', workspace: '/repo', lane: null, status: 'running', startedAt: T0, endedAt: null, ...patch });
 
-  it('shows only while a child runs, with the count of running children', () => {
-    expect(view(run(parent), T0 + 1000).running?.agents).toBeUndefined();
+  it('counts this chat\'s running subagents, and leaves the pill out while only the chat itself runs', () => {
+    expect(view(run(parent)).activity).toBeUndefined();
     const one = run([...parent, startChild('c_a', 'tu_a')]);
-    expect(view(one, T0 + 5020).running?.agents).toEqual({
-      count: 1,
-      noun: 'agent',
-      title: '1 agent running: explore',
-      children: [{ id: 'c_a', role: 'explore', model: 'qwen3.8-flash', elapsed: '0:05' }],
-    });
+    expect(view(one).activity).toMatchObject({ running: 1, needsYou: 0, text: '1 running', label: { text: 'explore: thinking', tone: 'working' } });
     const two = run([startChild('c_b', 'tu_b')], one);
-    expect(view(two, T0 + 5020).running?.agents).toMatchObject({ count: 2, noun: 'agents', title: '2 agents running: explore, explore' });
-    const back = run([{ type: 'child-end', id: 'c_a', at: T0 + 3000, end: { kind: 'done' }, turns: 1, costUsd: 0 }], two);
-    expect(view(back, T0 + 5020).running?.agents?.children.map((c) => c.id)).toEqual(['c_b']);
-    const none = run([{ type: 'child-end', id: 'c_b', at: T0 + 3000, end: { kind: 'capped', cap: 'turns' }, turns: 4, costUsd: 0.01 }], back);
-    expect(view(none, T0 + 5020).running?.agents).toBeUndefined();
+    expect(view(two).activity?.text).toBe('2 running');
+    const none = run(['c_a', 'c_b'].map((id): Action => ({ type: 'child-end', id, at: T0 + 3000, end: { kind: 'done' }, turns: 1, costUsd: 0 })), two);
+    expect(view(none).activity).toBeUndefined();
+  });
+
+  it('labels the latest step of the chat or its subagents', () => {
+    const reading = run([...parent, startChild('c_a', 'tu_a'), { type: 'child', id: 'c_a', action: { type: 'tool', id: 'r1', at: T0 + 30, name: 'read', target: 'a.ts', toolKind: 'read', status: 'running' } }]);
+    expect(view(reading).activity?.label).toEqual({ text: 'explore: reading a.ts', tone: 'working' });
+    const own = run([{ type: 'tool', id: 'e1', at: T0 + 40, name: 'edit', target: 'b.ts', toolKind: 'edit', status: 'running' }], reading);
+    expect(view(own).activity?.label?.text).toBe('Editing b.ts');
+  });
+
+  it('adds other sessions and lanes, and shows them while this chat is idle', () => {
+    const idle = emptyTranscript('qwen3.8-flash');
+    const background: Background = { tasks: [task({ sessionId: 'lane', lane: 'fix-header' }), task({ sessionId: 'done', status: 'done', endedAt: T0 + 1 })], seen: { done: T0 + 2 }, shown: 'here' };
+    expect(view(idle, background).activity).toEqual({ running: 1, needsYou: 0, text: '1 running', label: { text: 'fix-header: running', tone: 'working' } });
+    expect(view(idle, { ...background, shown: 'lane' }).activity, 'the shown chat is not beside itself').toBeUndefined();
+  });
+
+  it('counts what needs the user, in the accent tone, and names the top of Needs you', () => {
+    const idle = emptyTranscript('qwen3.8-flash');
+    const background: Background = {
+      tasks: [
+        task({ sessionId: 'run' }),
+        task({ sessionId: 'ask', lane: 'lane-x', status: 'needs-input', asking: 'permission', returnedAt: T0 + 9 }),
+        task({ sessionId: 'failed', status: 'failed', endedAt: T0 + 5, returnedAt: T0 + 5 }),
+      ],
+      seen: {},
+      shown: 'here',
+    };
+    expect(view(idle, background).activity).toEqual({ running: 1, needsYou: 2, text: '1 running · 2 need you', label: { text: 'Waiting for your approval in lane-x', tone: 'needs-you' } });
+    const one = { ...background, tasks: background.tasks.slice(1, 2) };
+    expect(view(idle, one).activity?.text).toBe('1 needs you');
+    expect(view(idle, { ...one, shown: 'ask' }).activity?.label?.text).toBe('Waiting for your approval in this chat');
   });
 });
 

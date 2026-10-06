@@ -196,68 +196,120 @@
   padding-top: 8px;
 }
 
-/* The agents pill: green while subagents run, its label dropped first when the row runs out of room. */
-.agents-pill {
+/*
+ * The row's one pill and label (U43): what runs beside this chat, and what waits on the user, in the accent color
+ * once anything does. The label takes what room is left and cuts with an ellipsis.
+ */
+.run-activity {
   display: inline-flex;
   flex: 0 1 auto;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.input-box .toolbar-right:has(.run-activity) {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.activity-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
   height: 20px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--ok) 55%, transparent);
+  padding: 0 6px;
+  font-size: var(--small);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  background: transparent;
   color: var(--vscode-foreground);
-  font: inherit;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   outline: 1px solid var(--vscode-contrastBorder, transparent);
   cursor: pointer;
 }
 
-.agents-pill .codicon {
+.activity-pill .pill-icon {
   flex: none;
   color: var(--ok);
   font-size: 13px;
 }
 
-.agents-pill:hover {
-  background: color-mix(in srgb, var(--ok) 24%, transparent);
+.activity-pill .pill-part[hidden],
+.activity-pill .pill-separator[hidden],
+.activity-label[hidden] {
+  display: none;
 }
 
-.agents-pill:focus-visible {
+.activity-pill .pill-needs {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.activity-pill[data-needs-you='true'] {
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+.activity-pill[data-needs-you='true'] .pill-icon {
+  color: var(--warn);
+}
+
+.activity-pill:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.activity-pill:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }
 
-.agents-label {
+.activity-label {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer .agents-menu {
-  left: auto;
-  right: var(--gap);
-  width: min(280px, calc(100% - 2 * var(--gap)));
-}
-
-.agents-menu .model-option {
-  align-items: center;
-}
-
-.agents-elapsed {
-  flex: none;
-  color: var(--muted);
   font-size: var(--small);
-  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+.activity-label[data-tone='needs-you'] {
+  color: var(--warn);
 }
 
 /*
  * While a turn runs, the bottom row holds the clock, the cost and the pill as well, and the user's panel is narrow.
- * The row gives up what the turn footer repeats first: the effort and the cost, then the model and the pill's noun.
+ * The row gives up what the turn footer repeats first: the effort and the cost, then the model, the label and the
+ * pill's nouns.
  */
 .input-toolbar {
   container: composer-row / inline-size;
+}
+
+/*
+ * The pill and its label take the room the model and the mode's name would have; the model is still in its menu's
+ * place in the turn footer, and the mode keeps its icon. The cost goes before the label, and the label before the pill.
+ */
+@container composer-row (max-width: 600px) {
+  .input-toolbar:has(.run-activity) :is(.model-effort, .run-cost) {
+    display: none;
+  }
+}
+
+@container composer-row (max-width: 520px) {
+  .input-toolbar:has(.run-activity) :is(.composer-model, .mode-name) {
+    display: none;
+  }
+}
+
+/* Below this a label would show a word or two, which says less than the pill. */
+@container composer-row (max-width: 440px) {
+  .input-toolbar .activity-label {
+    display: none;
+  }
 }
 
 @container composer-row (max-width: 460px) {
@@ -272,7 +324,13 @@
 }
 
 @container composer-row (max-width: 360px) {
-  .input-toolbar:has(.round-button.stop:not([hidden])) :is(.composer-model, .run-time .codicon, .agents-noun) {
+  .input-toolbar:has(.round-button.stop:not([hidden])) :is(.composer-model, .run-time .codicon) {
+    display: none;
+  }
+
+  /* The pill keeps its counts; its label goes first, then the pill's nouns, and an idle row's model gives it room. */
+  .input-toolbar :is(.activity-label, .pill-noun),
+  .input-toolbar:has(.run-activity) .composer-model {
     display: none;
   }
 
