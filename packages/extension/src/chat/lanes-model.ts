@@ -1,4 +1,5 @@
 import type { CheckOutcome, LaneInfo, LaneStatus, TaskRecord, TaskStatus } from '@g-code/core';
+import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
 import { clockOf, formatCost, formatDuration } from './format.js';
 
@@ -100,6 +101,8 @@ export type TaskRow = {
   /** The lane it runs in, or the main checkout. */
   readonly where: string;
   readonly state: Badge;
+  /** The external agent it runs on; undefined for Geno's own loop. */
+  readonly backend: string | undefined;
   /** How long it has run, or ran. */
   readonly time: string;
   readonly cost: string | undefined;
@@ -108,11 +111,15 @@ export type TaskRow = {
   readonly current: boolean;
 };
 
+/** Where a task works: its lane, or the main checkout. An external agent always works in a lane, made on its first turn. */
+const whereOf = (task: TaskRecord): string => (task.lane !== null ? `Lane ${task.lane}` : task.backend !== undefined ? 'New lane' : 'Main checkout');
+
 export function taskRowOf(task: TaskRecord, shown: string | undefined, now: number, clock: (ms: number) => string = clockOf): TaskRow {
   return {
     id: task.sessionId,
     title: task.title,
-    where: task.lane === null ? 'Main checkout' : `Lane ${task.lane}`,
+    where: whereOf(task),
+    backend: task.backend === undefined ? undefined : EXTERNAL_BACKENDS[task.backend].label,
     state: task.status === 'waiting' && task.waiting !== undefined ? { label: waitLabel(task.waiting, now, clock), tone: 'wait' } : TASK_BADGES[task.status],
     time: formatDuration((task.endedAt ?? now) - task.startedAt),
     cost: task.usage?.costUsd == null ? undefined : formatCost(task.usage.costUsd),

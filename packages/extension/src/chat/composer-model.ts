@@ -1,5 +1,6 @@
-import type { ContextUse, WaitKind } from '@g-code/core';
+import type { BackendId, BackendInfo, BackendShown, ContextUse, WaitKind } from '@g-code/core';
 import { waitLabel } from '@g-code/core/waiting';
+import { planCost } from './backend-model.js';
 import { clockOf } from './format.js';
 import type { McpListing } from './mcp-model.js';
 import type { Transcript } from './messages.js';
@@ -10,9 +11,12 @@ import { isRunning, runningChildren, workedMs } from './transcript.js';
  * composer shows. The webview bundles this file, so it imports only types and other pure webview modules.
  */
 
-/** One effort the engine offers through ACP's `effort` session config option. */
-export type EffortOption = { readonly value: string; readonly name: string };
-export type EffortChoice = { readonly current: string; readonly options: readonly EffortOption[] };
+/** One value of a select session config option: an effort, or an external agent's model. */
+export type SelectOption = { readonly value: string; readonly name: string };
+export type SelectChoice = { readonly current: string; readonly options: readonly SelectOption[] };
+/** The efforts the engine offers through ACP's `effort` session config option. */
+export type EffortOption = SelectOption;
+export type EffortChoice = SelectChoice;
 
 /** A model the menu offers: a ready provider's default or priced model. */
 export type ModelChoice = { readonly provider: string; readonly providerLabel: string; readonly model: string };
@@ -24,6 +28,10 @@ export type ComposerFacts = {
   /** Undefined until the engine offers the option. */
   readonly effort: EffortChoice | undefined;
   readonly models: readonly ModelChoice[];
+  /** The external agents the engine knows and whether each is installed; empty until it answers. */
+  readonly backends: readonly BackendInfo[];
+  /** An external session's models, from its `model` config option; undefined for Geno's own loop. */
+  readonly agentModels: SelectChoice | undefined;
   /** After the session's latest model call; undefined before any. */
   readonly context: ContextUse | undefined;
   /** The running turn's cost so far: undefined before its first call, null for a model with no price. */
@@ -36,9 +44,12 @@ export type ComposerFacts = {
 export type ComposerToView = { readonly type: 'composer'; readonly facts: ComposerFacts };
 export type ComposerFromView =
   | { readonly type: 'set-effort'; readonly value: string }
-  | { readonly type: 'set-model'; readonly provider: string; readonly model: string };
+  | { readonly type: 'set-model'; readonly provider: string; readonly model: string }
+  | { readonly type: 'set-agent-model'; readonly value: string }
+  /** Starts a new chat on `backend`, which a session keeps for its life. */
+  | { readonly type: 'set-backend'; readonly backend: BackendId };
 
-export const NO_FACTS: ComposerFacts = { provider: '', effort: undefined, models: [], context: undefined, turnCostUsd: undefined, bahtPerUsd: 0 };
+export const NO_FACTS: ComposerFacts = { provider: '', effort: undefined, models: [], backends: [], agentModels: undefined, context: undefined, turnCostUsd: undefined, bahtPerUsd: 0 };
 
 export type ComposerInput = {
   readonly transcript: Transcript;
@@ -53,8 +64,32 @@ export type ComposerInput = {
 /** `fraction` is undefined when the window is unknown; `high` from 80%. */
 export type RingView = { readonly fraction: number | undefined; readonly high: boolean; readonly title: string };
 
+/** A backend the menu offers. Any but the current one starts a new chat; a missing one is disabled, with its reason. */
+export type BackendRow = {
+  readonly id: BackendId;
+  readonly label: string;
+  readonly current: boolean;
+  readonly disabled: boolean;
+  /** The muted line under the name, and its tooltip in full. */
+  readonly detail: string | undefined;
+};
+
+/** What choosing a model row does: Geno's chat role takes a provider's model, an external agent its own. */
+export type ModelPick = { readonly kind: 'geno'; readonly provider: string; readonly model: string } | { readonly kind: 'agent'; readonly value: string };
+
+export type ModelRow = {
+  /** Unique in the menu; the keyboard's place survives a redraw by it. */
+  readonly key: string;
+  readonly label: string;
+  readonly detail: string | undefined;
+  readonly current: boolean;
+  readonly pick: ModelPick;
+};
+
 export type ModelMenu = {
-  readonly models: readonly (ModelChoice & { readonly current: boolean })[];
+  /** Empty until the engine lists its backends. */
+  readonly backends: readonly BackendRow[];
+  readonly models: readonly ModelRow[];
   readonly efforts: readonly (EffortOption & { readonly current: boolean })[];
   /** A muted line under the efforts. */
   readonly note: string | undefined;
@@ -83,7 +118,8 @@ export type ComposerView = {
   readonly browser: { readonly label: string; readonly title: string } | undefined;
   readonly queued: string | undefined;
   readonly ring: RingView;
-  readonly model: { readonly name: string; readonly effort: string | undefined };
+  /** `backend` names the external agent the session runs on. */
+  readonly model: { readonly name: string; readonly effort: string | undefined; readonly backend: string | undefined };
   readonly menu: ModelMenu;
   readonly action: 'send' | 'stop';
   readonly running: RunningView | undefined;
@@ -150,17 +186,51 @@ function agentsOf(transcript: Transcript, now: number): RunningView['agents'] {
   return { count: children.length, noun, title: `${children.length} ${noun} running: ${children.map((c) => c.role).join(', ')}`, children };
 }
 
-function costOf(usd: number | null | undefined, bahtPerUsd: number): RunningView['cost'] {
+function costOf(usd: number | null | undefined, bahtPerUsd: number, backend: BackendShown | undefined): RunningView['cost'] {
+  if (usd == null && backend !== undefined) return planCost(backend);
   if (usd === undefined) return undefined;
   if (usd === null) return { text: '฿ unknown', title: 'This model has no price in Geno’s table' };
   const baht = usd * bahtPerUsd;
   return { text: baht > 0 && baht < 0.01 ? '<฿0.01' : `฿${baht.toFixed(2)}`, title: `$${usd.toFixed(4)} at ฿${bahtPerUsd} to the US dollar` };
 }
 
+export const STARTS_NEW_CHAT = 'Starts a new chat';
+
+/** Geno's own loop first, then each external agent the engine knows; nothing until it answered. */
+function backendRows(backends: readonly BackendInfo[], shown: BackendShown | undefined): BackendRow[] {
+  if (backends.length === 0) return [];
+  const current: BackendId = shown?.id ?? 'geno';
+  const geno: BackendRow = { id: 'geno', label: 'Geno', current: current === 'geno', disabled: false, detail: current === 'geno' ? undefined : STARTS_NEW_CHAT };
+  return [
+    geno,
+    ...backends.map(({ id, label, availability }): BackendRow => {
+      if (id === current) return { id, label, current: true, disabled: false, detail: undefined };
+      return availability.kind === 'missing' ? { id, label, current: false, disabled: true, detail: availability.reason } : { id, label, current: false, disabled: false, detail: STARTS_NEW_CHAT };
+    }),
+  ];
+}
+
+/** An external session lists its agent's models; Geno's lists each ready provider's. */
+function modelRows(facts: ComposerFacts, transcript: Transcript): ModelRow[] {
+  const agent = facts.agentModels;
+  if (transcript.backend !== undefined) {
+    return (agent?.options ?? []).map((o) => ({ key: `agent:${o.value}`, label: o.name, detail: undefined, current: o.value === agent?.current, pick: { kind: 'agent', value: o.value } }));
+  }
+  return facts.models.map((m) => ({
+    key: `${m.provider}/${m.model}`,
+    label: m.model,
+    detail: m.providerLabel,
+    current: m.provider === facts.provider && m.model === transcript.model,
+    pick: { kind: 'geno', provider: m.provider, model: m.model },
+  }));
+}
+
 export function composerView({ transcript, facts, mcp, queued, now }: ComposerInput, clock: (ms: number) => string = clockOf): ComposerView {
   const running = isRunning(transcript);
   const turn = transcript.turns.at(-1);
-  const name = transcript.model === '' ? 'Default model' : transcript.model;
+  const backend = transcript.backend;
+  const agentModel = facts.agentModels?.options.find((o) => o.value === facts.agentModels?.current)?.name;
+  const name = backend !== undefined ? (agentModel ?? 'Default model') : transcript.model === '' ? 'Default model' : transcript.model;
   const effort = facts.effort;
   return {
     placeholder: running
@@ -171,11 +241,12 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
     browser: browserChip(mcp, transcript),
     queued,
     ring: ringOf(facts.context),
-    model: { name, effort: effort?.options.find((o) => o.value === effort.current)?.name },
+    model: { name, effort: effort?.options.find((o) => o.value === effort.current)?.name, backend: backend?.label },
     menu: {
-      models: facts.models.map((m) => ({ ...m, current: m.provider === facts.provider && m.model === transcript.model })),
+      backends: backendRows(facts.backends, backend),
+      models: modelRows(facts, transcript),
       efforts: (effort?.options ?? []).map((o) => ({ ...o, current: o.value === effort?.current })),
-      note: EFFORT_NOTES[facts.provider],
+      note: backend === undefined ? EFFORT_NOTES[facts.provider] : undefined,
     },
     action: running ? 'stop' : 'send',
     running:
@@ -183,7 +254,7 @@ export function composerView({ transcript, facts, mcp, queued, now }: ComposerIn
         ? {
             elapsed: formatElapsed(workedMs(turn, now)),
             wait: turn.waiting === undefined ? undefined : { kind: turn.waiting.kind, text: waitLabel(turn.waiting, now, clock), title: turn.waiting.message },
-            cost: costOf(facts.turnCostUsd, facts.bahtPerUsd),
+            cost: costOf(facts.turnCostUsd, facts.bahtPerUsd, backend),
             agents: agentsOf(transcript, now),
           }
         : undefined,
