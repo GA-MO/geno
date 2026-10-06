@@ -64,6 +64,7 @@ import {
   type BackendShown,
   type BackendsResponse,
   type ExternalBackendId,
+  asSessionId,
 } from '@g-code/core';
 import { KEEP_COMMAND, UNDO_COMMAND } from '../review/controller.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
@@ -189,6 +190,8 @@ const jobState = z.discriminatedUnion('status', [
 const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), state: jobState, tail: z.string() });
 const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number() });
 
+const forkOrigin = z.object({ sessionId: z.string().transform(asSessionId), turnSeq: z.number(), title: z.string() });
+
 const taskUpdate = z.object({
   task: z.object({
     sessionId: z.string(),
@@ -206,6 +209,7 @@ const taskUpdate = z.object({
     returnedAt: z.number().nullable().optional(),
     backend: z.enum(EXTERNAL_BACKEND_IDS).optional(),
     jobs: z.array(taskJob).optional(),
+    forkedFrom: forkOrigin.optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });

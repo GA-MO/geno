@@ -1,3 +1,4 @@
+import type { ForkOrigin } from './rewind.js';
 import type { Session, SessionId, TurnEvent } from './session.js';
 
 /** One past conversation as the history lists it, read from its log. */
@@ -13,6 +14,8 @@ export type SessionSummary = {
   readonly turns: number;
   /** Null when any model call had no known price. */
   readonly costUsd: number | null;
+  /** The session and turn this one was forked from; absent for a session started fresh. */
+  readonly forkedFrom?: ForkOrigin | undefined;
 };
 
 /** Which sessions a listing shows: one workspace's, or every workspace's but the temporary ones. */
@@ -44,6 +47,8 @@ export function summarizeSession(session: Session, events: readonly TurnEvent[])
   // A subagent's spend is the parent's: the parent's log records it when the child ends.
   const spends = events.flatMap((e) => (e.kind === 'assistant' || e.kind === 'child-end' ? [e.costUsd] : []));
   const last = events.at(-1);
+  const head = events[0];
+  const forkedFrom = head?.kind === 'session-start' ? head.fork : undefined;
   return {
     id: session.id,
     workspace: session.workspace,
@@ -52,6 +57,7 @@ export function summarizeSession(session: Session, events: readonly TurnEvent[])
     updatedAt: last === undefined || last.kind === 'session-start' ? session.createdAt : last.at,
     turns: prompts.length,
     costUsd: spends.includes(null) ? null : spends.reduce<number>((sum, cost) => sum + (cost ?? 0), 0),
+    ...(forkedFrom === undefined ? {} : { forkedFrom }),
   };
 }
 

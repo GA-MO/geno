@@ -23,6 +23,7 @@ import type { ChildEvent, ChildOf } from './subagent.js';
 import type { WaitEvent } from './waiting.js';
 import type { LaneApplyRecord } from './tasks.js';
 import type { BackendBinding, BackendStart } from './backends.js';
+import type { CutEvent, ForkOrigin } from './rewind.js';
 import type { Brand } from './types.js';
 import type { WidgetRef } from './widget.js';
 
@@ -115,8 +116,8 @@ export type Checkpoint = {
 };
 
 export type TurnEvent =
-  /** `context` is absent in logs written before sessions loaded any; `child` is present in a subagent's own log. */
-  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined; readonly child?: ChildOf | undefined }
+  /** `context` is absent in logs written before sessions loaded any; `child` is present in a subagent's own log, `fork` in a fork's. */
+  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined; readonly child?: ChildOf | undefined; readonly fork?: ForkOrigin | undefined }
   | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
   | {
       readonly kind: 'restored';
@@ -180,6 +181,7 @@ export type TurnEvent =
   | { readonly kind: 'backend-model'; readonly seq?: number | undefined; readonly at: string; readonly model: string }
   | WaitEvent
   | ChildEvent
+  | CutEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
@@ -205,6 +207,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   wait: false,
   'backend-start': false,
   'backend-model': false,
+  cut: false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>

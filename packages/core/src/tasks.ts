@@ -2,6 +2,7 @@ import type { Asking, TaskKind } from './attention.js';
 import type { ExternalBackendId } from './backends.js';
 import type { BackgroundJob } from './background.js';
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
+import type { ForkOrigin } from './rewind.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
 
@@ -44,6 +45,8 @@ export type TaskRecord = {
   readonly backend?: ExternalBackendId | undefined;
   /** The session's background commands that run now, oldest first; absent when none does. */
   readonly jobs?: readonly TaskJob[] | undefined;
+  /** The session and turn this one was forked from; absent for a session started fresh. */
+  readonly forkedFrom?: ForkOrigin | undefined;
 };
 
 export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt'>;
