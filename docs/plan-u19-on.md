@@ -226,3 +226,12 @@ The user asked which harness features the coordinator uses could go into Geno. R
 6. **U49: wake-ups and loops.** The agent schedules its own next check ("check CI in 8 minutes"), and `/loop` repeats a prompt on an interval, with the engine process as the timer.
 7. **Worker isolation in a worktree.** U22 deferred `isolation: worktree`; lanes now exist, so a worker child can run in its own lane.
 8. **Hooks.** Run a user command at loop events (session start, before a tool, after an edit), as Claude Code and Cursor do.
+
+## U50: rewind and fork from the panel (starts after U44 merges)
+
+Today `gcode rewind --session <id> --to <turn>` restores files from the checkpoint taken before each model call, from the command line only, and the conversation stays. Fork is U32's, not built.
+
+- **Rewind to here** on each of the user's messages: restore files, the conversation, or both, as Claude Code does. Restoring the conversation cuts the session at that turn (logged as an event, never deleting the log) and puts the message back in the composer to edit.
+- **Fork from here**: a new session with the conversation up to that turn and its own checkpoint lineage; it opens beside the original in History and Tasks. Over ACP, use session fork when the client advertises it.
+- Keep U44's steered messages in place on rewind and fork.
+- Check: unit tests for the cut and fork of the log; engine e2e for rewind files only, conversation only, both, and fork; Docker integration tests for the message menu; container screenshots in three themes and 300px.
