@@ -122,7 +122,8 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
   const all = {
     ...(event.approval === undefined ? {} : { [APPROVAL_META]: event.approval }),
     ...(event.widget === undefined ? {} : { [WIDGET_META]: event.widget }),
-    ...(event.editorAction, todo === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction, todo }),
+    ...(event.editorAction === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction }),
+    ...(event.todo === undefined ? {} : { [TODO_META]: { items: event.todo } }),
     ...meta,
   };
   return {
