@@ -273,6 +273,8 @@ export function composerControls(
       modelButton.title = view.model.backend === undefined ? 'Choose the model and effort' : `${view.model.backend} runs this chat. Choose its model, or a backend for a new chat`;
       effort.textContent = view.model.effort ?? '';
       effort.hidden = view.model.effort === undefined;
+      // A narrow row hides the name, so the button's name cannot come from its text.
+      modelButton.setAttribute('aria-label', [view.model.backend, view.model.name, view.model.effort].filter((part) => part !== undefined).join(' '));
       menu.show(view.menu);
       status.hidden = view.running === undefined;
       activity.show(view.activity, status.parentElement!, ring.element);

@@ -103,6 +103,8 @@ export function modePicker(choose: (modeId: string) => void, onShow: (modes: Mod
       const look = lookOf(next.available.find((m) => m.id === next.current), next.current);
       glyph.replaceChildren(icon(look.icon));
       label.textContent = look.label;
+      // A narrow row shows only the icon.
+      element.setAttribute('aria-label', `Approval mode: ${look.label}`);
       element.dataset['mode'] = next.current;
       element.title = `${next.available.find((m) => m.id === next.current)?.description ?? look.label} Click to change.`;
       onShow(next);
