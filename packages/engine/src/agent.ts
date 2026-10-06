@@ -16,6 +16,8 @@ import {
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
   pstackNote,
+  READ_TERMINAL_TOOL,
+  readTerminalToolDefinitions,
   RECALL_SEARCH,
   renderMemory,
   toolRoster,
@@ -56,6 +58,7 @@ import { ruleAttacher } from './tools/rules.js';
 import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
+import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { webExecutors, type WebDeps } from './tools/web.js';
@@ -105,6 +108,8 @@ export type AgentOptions = {
   readonly user?: UserChannel | undefined;
   /** The editor that opens files, diffs and Explorer items for the model; a non-interactive run ignores it. */
   readonly editor?: Editor | undefined;
+  /** The editor whose terminals read_terminal reads; a non-interactive run ignores it. */
+  readonly terminal?: TerminalReader | undefined;
   /** Whether the editor draws widgets; a non-interactive run ignores it, having nobody to show them to. */
   readonly widgets?: boolean | undefined;
   /** Undefined uses the default policy. */
@@ -211,6 +216,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const user = userExecutors({ channel, mode: () => modeOf(options.approval), memory, sessionId: session.id });
     const widgets = options.approval.kind === 'interactive' && options.widgets === true;
     const editor = options.approval.kind === 'interactive' ? options.editor : undefined;
+    const terminal = options.approval.kind === 'interactive' ? options.terminal : undefined;
     const search = searchConfigOf(io.env);
     const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
@@ -218,6 +224,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...userToolDefinitions(startMode, shownUserTools(channel)),
       ...widgetToolDefinitions(startMode, widgets),
       ...editorActionToolDefinitions(startMode, editor !== undefined),
+      ...readTerminalToolDefinitions(startMode, terminal !== undefined),
       ...webToolDefinitions(search !== undefined),
     ];
     const notes = renderMemory(await memory.list());
@@ -263,6 +270,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...user,
         ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
         ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
+        ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
         ...web,
         ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
