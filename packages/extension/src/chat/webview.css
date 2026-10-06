@@ -2662,11 +2662,13 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
     scroll-padding-bottom: calc(var(--composer-height, 0px) + 8px);
   }
 
+  /* Above a turn's sticky request (z-index 3), which would otherwise paint over the composer and take its clicks. */
   & .composer {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
+    z-index: 4;
   }
 
   & .input-box {
