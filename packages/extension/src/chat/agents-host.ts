@@ -1,4 +1,4 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess, type ExecFileException } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
@@ -7,10 +7,14 @@ import {
   agentEnv,
   agentOf,
   agentReducer,
+  checksOnFocus,
+  copyText,
   EXTERNAL_AGENTS,
   firstLink,
   linkLabel,
+  searchDirs,
   shownOutput,
+  type AdapterFound,
   type AgentAction,
   type AgentEvent,
   type AgentId,
@@ -23,7 +27,12 @@ import {
 
 const STATUS_TIMEOUT_MS = 30_000;
 
-type Running = { readonly child: ChildProcess; raw: string; link: string | undefined; cancelled: boolean };
+type Executed = { readonly error: ExecFileException | null; readonly stdout: string; readonly stderr: string };
+
+const execute = (file: string, args: readonly string[], env: NodeJS.ProcessEnv): Promise<Executed> =>
+  new Promise((resolve) => execFile(file, args, { env, timeout: STATUS_TIMEOUT_MS, encoding: 'utf8' }, (error, stdout, stderr) => resolve({ error, stdout, stderr })));
+
+type Running ={ readonly child: ChildProcess; raw: string; link: string | undefined; cancelled: boolean };
 
 /** SecretStorage's name for the agent's API key, outside `ENGINE_SECRETS`, so the engine never reads it. */
 export const agentKeyName = (agent: ExternalAgent): string => `gcode.agents.${agent.id}.apiKey`;
@@ -48,7 +57,7 @@ export class AgentsHost implements vscode.Disposable {
     // The user installs the CLI in a terminal or a browser; coming back to the window is when to look again.
     this.focus = vscode.window.onDidChangeWindowState((window) => {
       if (!window.focused) return;
-      for (const agent of EXTERNAL_AGENTS) if (this.states.get(agent.id)?.kind === 'missing') void this.check(agent);
+      for (const agent of EXTERNAL_AGENTS) if (checksOnFocus(agent, this.states.get(agent.id)!)) void this.check(agent);
     });
   }
 
@@ -64,34 +73,40 @@ export class AgentsHost implements vscode.Disposable {
     this.dispatch(agent, { type: 'checked', result: await this.probe(agent) });
   }
 
-  /** Finds the agent's CLI and asks it for its version and account. */
+  /** Finds the agent's CLI and its adapter, and asks the CLI for its version and account. */
   private async probe(agent: ExternalAgent): Promise<CheckResult> {
-    const dirs = agent.homeDirs.map((dir) => path.join(os.homedir(), dir));
-    let found: string | undefined;
-    for (const name of agent.binaries) found ??= await findExecutable(name, process.env, dirs);
-    if (found === undefined) return { kind: 'missing' };
-    const cli = found;
+    const node = agent.npmGlobal ? await findExecutable('node', process.env) : undefined;
+    const dirs = searchDirs(agent, process.env, os.homedir(), node === undefined ? undefined : path.dirname(node));
+    const first = async (names: readonly string[]) => {
+      for (const name of names) {
+        const found = await findExecutable(name, process.env, dirs);
+        if (found !== undefined) return found;
+      }
+      return undefined;
+    };
+    const cli = await first(agent.binaries);
+    if (cli === undefined) return { kind: 'missing' };
+    const adapterPath = agent.adapter.kind === 'built-in' ? undefined : await first(agent.adapter.binaries);
+    const adapter: AdapterFound = agent.adapter.kind === 'built-in' ? { kind: 'built-in' } : adapterPath === undefined ? { kind: 'missing' } : { kind: 'found', path: adapterPath };
     const key = await this.secrets.get(agentKeyName(agent));
-    return new Promise((resolve) => {
-      // No browser on a status check, should the CLI decide it needs one.
-      const env = agentEnv(agent, process.env, key, { NO_OPEN_BROWSER: '1' });
-      execFile(cli, agent.status, { env, timeout: STATUS_TIMEOUT_MS, encoding: 'utf8' }, (error, stdout, stderr) => {
-        const report = agent.parseStatus(stdout);
-        if (report !== undefined) return resolve({ kind: 'found', path: cli, report, apiKey: key !== undefined });
-        const text = error === null ? `${agent.label}'s CLI printed a status Geno cannot read.` : `${agent.label}'s status check failed: ${error.killed ? 'timed out' : error.message.split('\n')[0]}`;
-        resolve({ kind: 'failed', path: cli, text: shownOutput(text), output: shownOutput(`${stdout}${stderr}`) });
-      });
-    });
+    const env = agentEnv(agent, process.env, key, agent.statusEnv);
+    const version = agent.version === undefined ? undefined : agent.version.parse((await execute(cli, agent.version.args, env)).stdout);
+    const { error, stdout, stderr } = await execute(cli, agent.status, env);
+    const report = agent.parseStatus(stdout);
+    if (report !== undefined) return { kind: 'found', path: cli, adapter, report: { ...report, version: report.version ?? version }, apiKey: key !== undefined };
+    const text = error === null ? `${agent.label}'s CLI printed a status Geno cannot read.` : `${agent.label}'s status check failed: ${error.killed ? 'timed out' : error.message.split('\n')[0]}`;
+    return { kind: 'failed', path: cli, adapter, text: shownOutput(text), output: shownOutput(`${stdout}${stderr}`) };
   }
 
   private async run(agent: ExternalAgent, action: AgentAction): Promise<void> {
-    if (this.running.has(agent.id)) return;
+    const way = agent.actions[action];
+    if (this.running.has(agent.id) || way.kind !== 'run') return;
     const key = await this.secrets.get(agentKeyName(agent));
     const before = this.states.get(agent.id)!;
     const next = this.dispatch(agent, { type: 'start', action });
     if (next === before || !('cli' in next)) return;
-    this.output.appendLine(`agents: running ${agent.label}'s ${[path.basename(next.cli.path), ...agent.commands[action]].join(' ')}`);
-    const child = spawn(next.cli.path, agent.commands[action], { shell: false, stdio: ['ignore', 'pipe', 'pipe'], env: agentEnv(agent, process.env, key) });
+    this.output.appendLine(`agents: running ${agent.label}'s ${[path.basename(next.cli.path), ...way.args].join(' ')}`);
+    const child = spawn(next.cli.path, way.args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'], env: agentEnv(agent, process.env, key) });
     const job: Running = { child, raw: '', link: undefined, cancelled: false };
     this.running.set(agent.id, job);
     const take = (chunk: string) => {
@@ -151,9 +166,13 @@ export class AgentsHost implements vscode.Disposable {
     'agents-check': () => {
       for (const agent of EXTERNAL_AGENTS) void this.check(agent);
     },
-    'agents-run': ({ id, action }) => this.act(id, (agent) => Object.hasOwn(agent.commands, action) && this.run(agent, action)),
+    'agents-run': ({ id, action }) => this.act(id, (agent) => Object.hasOwn(agent.actions, action) && this.run(agent, action)),
     'agents-cancel': ({ id }) => this.act(id, (agent) => this.cancel(agent)),
-    'agents-copy-install': ({ id }) => this.act(id, (agent) => vscode.env.clipboard.writeText(agent.install.command)),
+    'agents-copy': ({ id, what }) =>
+      this.act(id, (agent) => {
+        const text = copyText(agent, what);
+        return text !== undefined && vscode.env.clipboard.writeText(text);
+      }),
     'agents-key': ({ id, key }) => this.act(id, (agent) => typeof key === 'string' && key.trim() !== '' && this.setKey(agent, key.trim())),
     'agents-remove-key': ({ id }) => this.act(id, (agent) => this.setKey(agent, undefined)),
     'agents-open': ({ id, target }) => this.act(id, (agent) => (target === 'install' || target === 'sign-in') && this.open(agent, target)),

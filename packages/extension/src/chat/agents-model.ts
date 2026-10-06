@@ -1,15 +1,26 @@
 /** The external ACP agents the settings page signs in to and updates, and the states of each one's account. */
 
-export type AgentId = 'cursor';
+export type AgentId = 'cursor' | 'claude-code';
 
-/** A command of the agent's own CLI that Geno runs for the user. */
+/** A command of the agent's own CLI, for the user's account or the CLI itself. */
 export type AgentAction = 'login' | 'logout' | 'update';
+
+/**
+ * How the card offers an action: Geno runs the CLI's own command, or, where that command needs the user at a
+ * terminal, shows it to copy and runs nothing.
+ */
+export type ActionWay = { readonly kind: 'run'; readonly args: readonly string[] } | { readonly kind: 'copy'; readonly command: string };
 
 /** What the agent's status command says, once parsed. */
 export type StatusReport = { readonly version: string | undefined } & (
   | { readonly signedIn: false }
-  | { readonly signedIn: true; readonly account: string | undefined }
+  | { readonly signedIn: true; readonly account: string | undefined; readonly plan?: string }
 );
+
+/** The program that speaks ACP for the agent: a command of its CLI, or a separate binary the user installs. */
+export type AdapterSpec =
+  | { readonly kind: 'built-in'; readonly command: string }
+  | { readonly kind: 'separate'; readonly binaries: readonly string[]; readonly install: string };
 
 /** One external agent's CLI: the names it installs under, where its installer puts it, and its own commands. */
 export type ExternalAgent = {
@@ -18,22 +29,32 @@ export type ExternalAgent = {
   readonly binaries: readonly string[];
   /** Folders under the home folder, which the PATH of a VS Code started from the Dock may lack. */
   readonly homeDirs: readonly string[];
+  /** Whether to look in npm's global bin folders too, where an npm install of the CLI or its adapter lands. */
+  readonly npmGlobal: boolean;
   readonly status: readonly string[];
-  readonly commands: Readonly<Record<AgentAction, readonly string[]>>;
+  /** Added to the status check's env only. */
+  readonly statusEnv: Readonly<Record<string, string>>;
   readonly parseStatus: (output: string) => StatusReport | undefined;
-  /** The environment variable the CLI reads an API key from. */
-  readonly keyEnv: string;
+  /** A separate version command, for a CLI whose status does not name its version. */
+  readonly version?: { readonly args: readonly string[]; readonly parse: (output: string) => string | undefined };
+  readonly actions: Readonly<Record<AgentAction, ActionWay>>;
+  /** The environment variable the CLI reads an API key from, and what using one costs. */
+  readonly key: { readonly env: string; readonly billing: string };
   /**
    * The official installer, from the agent's docs. Geno never runs it: the card shows the command to copy and
    * links the page it comes from, and the user installs the CLI themselves.
    */
   readonly install: { readonly command: string; readonly url: string };
+  readonly adapter: AdapterSpec;
 };
 
-export type CliFound = { readonly path: string; readonly version: string | undefined };
+/** Where the agent's ACP adapter is. Geno only looks; it never installs one. */
+export type AdapterFound = { readonly kind: 'built-in' } | { readonly kind: 'found'; readonly path: string } | { readonly kind: 'missing' };
+
+export type CliFound = { readonly path: string; readonly version: string | undefined; readonly adapter: AdapterFound };
 
 /** How the CLI's processes sign in: its own browser login, or a key Geno keeps and passes in their env. */
-export type AuthSource = { readonly kind: 'browser'; readonly account: string | undefined } | { readonly kind: 'api-key' };
+export type AuthSource = { readonly kind: 'browser'; readonly account: string | undefined; readonly plan?: string } | { readonly kind: 'api-key' };
 
 /** How the last command ended, shown under the account until the next one. */
 export type Outcome = { readonly ok: boolean; readonly text: string; readonly output: string };
@@ -52,8 +73,8 @@ export type AgentState =
 
 export type CheckResult =
   | { readonly kind: 'missing' }
-  | { readonly kind: 'found'; readonly path: string; readonly report: StatusReport; readonly apiKey: boolean }
-  | { readonly kind: 'failed'; readonly path: string; readonly text: string; readonly output: string };
+  | { readonly kind: 'found'; readonly path: string; readonly adapter: AdapterFound; readonly report: StatusReport; readonly apiKey: boolean }
+  | { readonly kind: 'failed'; readonly path: string; readonly adapter: AdapterFound; readonly text: string; readonly output: string };
 
 export type AgentEvent =
   | { readonly type: 'check' }
@@ -68,10 +89,13 @@ export type AgentsFromView =
   | { readonly type: 'agents-check' }
   | { readonly type: 'agents-run'; readonly id: string; readonly action: AgentAction }
   | { readonly type: 'agents-cancel'; readonly id: string }
-  | { readonly type: 'agents-copy-install'; readonly id: string }
+  | { readonly type: 'agents-copy'; readonly id: string; readonly what: CopyTarget }
   | { readonly type: 'agents-key'; readonly id: string; readonly key: string }
   | { readonly type: 'agents-remove-key'; readonly id: string }
   | { readonly type: 'agents-open'; readonly id: string; readonly target: 'sign-in' | 'install' };
+
+/** What a Copy button on the card copies: the install command, the adapter's, or a copy-only action's. */
+export type CopyTarget = 'install' | 'adapter' | AgentAction;
 
 // The terminal's cursor and erase codes, which the CLI draws its spinner with.
 const ESCAPES = /\u001b\[[0-9;?]*[A-Za-z]|\u001b\][^\u0007]*\u0007/g;
@@ -140,6 +164,51 @@ export function parseCursorAbout(output: string): StatusReport | undefined {
   return { version, signedIn: true, account: account === '' ? undefined : account };
 }
 
+/**
+ * Reads `claude auth status --json`, recorded from Claude Code 2.1.291: an object whose `loggedIn` says whether
+ * anyone is signed in, with `email` and `subscriptionType` for the account. Anything else is not output Geno knows.
+ */
+export function parseClaudeAuthStatus(output: string): StatusReport | undefined {
+  let status: unknown;
+  try {
+    status = JSON.parse(output);
+  } catch {
+    return undefined;
+  }
+  if (typeof status !== 'object' || status === null || !('loggedIn' in status) || typeof status.loggedIn !== 'boolean') return undefined;
+  if (!status.loggedIn) return { version: undefined, signedIn: false };
+  const text = (key: string): string | undefined => {
+    const value = (status as Record<string, unknown>)[key];
+    return typeof value === 'string' && value !== '' ? value : undefined;
+  };
+  const plan = text('subscriptionType');
+  return { version: undefined, signedIn: true, account: text('email'), ...(plan === undefined ? {} : { plan }) };
+}
+
+/** The version in `claude --version`, which prints `2.1.291 (Claude Code)`. */
+export const parseClaudeVersion = (output: string): string | undefined => /^\s*(\d+\.\d+\.\d+\S*)/.exec(output)?.[1];
+
+/** npm's global bin folders, read from the env and the home folder. npm itself is not run, and `.npmrc` is not read: it can hold tokens. */
+export function npmGlobalBins(env: Readonly<Record<string, string | undefined>>, home: string, nodeDir: string | undefined): string[] {
+  const prefixes = [env['NPM_CONFIG_PREFIX'], env['npm_config_prefix']].filter((prefix) => prefix !== undefined && prefix !== '');
+  const dirs = [...prefixes.map((prefix) => `${prefix}/bin`), env['NVM_BIN'], `${home}/.npm-global/bin`, nodeDir];
+  return [...new Set(dirs.filter((dir): dir is string => dir !== undefined && dir !== ''))];
+}
+
+/** Where to look for the agent's CLI and adapter after Homebrew's folders and PATH. */
+export const searchDirs = (agent: ExternalAgent, env: Readonly<Record<string, string | undefined>>, home: string, nodeDir: string | undefined): string[] => [
+  ...agent.homeDirs.map((dir) => `${home}/${dir}`),
+  ...(agent.npmGlobal ? npmGlobalBins(env, home, nodeDir) : []),
+];
+
+/** What a Copy button puts on the clipboard, taken from the table and never from the page. */
+export function copyText(agent: ExternalAgent, what: CopyTarget): string | undefined {
+  if (what === 'install') return agent.install.command;
+  if (what === 'adapter') return agent.adapter.kind === 'separate' ? agent.adapter.install : undefined;
+  const way = Object.hasOwn(agent.actions, what) ? agent.actions[what] : undefined;
+  return way?.kind === 'copy' ? way.command : undefined;
+}
+
 /** The environment of one of the CLI's processes. The key goes only here, never into argv or the engine's env. */
 export function agentEnv(
   agent: ExternalAgent,
@@ -147,7 +216,7 @@ export function agentEnv(
   key: string | undefined,
   extra: Readonly<Record<string, string>> = {},
 ): Record<string, string | undefined> {
-  return key === undefined ? { ...base, ...extra } : { ...base, ...extra, [agent.keyEnv]: key };
+  return key === undefined ? { ...base, ...extra } : { ...base, ...extra, [agent.key.env]: key };
 }
 
 export const EXTERNAL_AGENTS: readonly ExternalAgent[] = [
@@ -156,11 +225,31 @@ export const EXTERNAL_AGENTS: readonly ExternalAgent[] = [
     label: 'Cursor',
     binaries: ['agent', 'cursor-agent'],
     homeDirs: ['.local/bin'],
+    npmGlobal: false,
     status: ['about'],
-    commands: { login: ['login'], logout: ['logout'], update: ['update'] },
+    // No browser on a status check, should the CLI decide it needs one.
+    statusEnv: { NO_OPEN_BROWSER: '1' },
     parseStatus: parseCursorAbout,
-    keyEnv: 'CURSOR_API_KEY',
+    actions: { login: { kind: 'run', args: ['login'] }, logout: { kind: 'run', args: ['logout'] }, update: { kind: 'run', args: ['update'] } },
+    key: { env: 'CURSOR_API_KEY', billing: 'May bill by usage instead of your plan' },
     install: { command: 'curl https://cursor.com/install -fsS | bash', url: 'https://cursor.com/docs/cli/installation' },
+    adapter: { kind: 'built-in', command: 'agent acp' },
+  },
+  {
+    id: 'claude-code',
+    label: 'Claude Code',
+    binaries: ['claude'],
+    homeDirs: ['.local/bin'],
+    npmGlobal: true,
+    status: ['auth', 'status', '--json'],
+    statusEnv: {},
+    parseStatus: parseClaudeAuthStatus,
+    version: { args: ['--version'], parse: parseClaudeVersion },
+    // `claude auth login` opens a browser and asks its questions in the terminal, so the user runs it, and logout beside it.
+    actions: { login: { kind: 'copy', command: 'claude auth login' }, logout: { kind: 'copy', command: 'claude auth logout' }, update: { kind: 'run', args: ['update'] } },
+    key: { env: 'ANTHROPIC_API_KEY', billing: 'Bills by API usage instead of your Claude plan' },
+    install: { command: 'curl -fsSL https://claude.ai/install.sh | bash', url: 'https://code.claude.com/docs/en/setup' },
+    adapter: { kind: 'separate', binaries: ['claude-agent-acp', 'claude-code-acp'], install: 'npm install -g @agentclientprotocol/claude-agent-acp' },
   },
 ];
 
@@ -182,11 +271,26 @@ const ENDED: Readonly<Record<(typeof RUNNING)[AgentAction], { readonly ok: strin
 };
 
 function settled(result: Extract<CheckResult, { kind: 'found' }>, last: { readonly last?: Outcome }): AgentState {
-  const cli = { path: result.path, version: result.report.version };
+  const cli = { path: result.path, version: result.report.version, adapter: result.adapter };
   if (result.apiKey) return { kind: 'signed-in', cli, auth: { kind: 'api-key' }, ...last };
-  if (!result.report.signedIn) return { kind: 'signed-out', cli, ...last };
-  return { kind: 'signed-in', cli, auth: { kind: 'browser', account: result.report.account }, ...last };
+  const { report } = result;
+  if (!report.signedIn) return { kind: 'signed-out', cli, ...last };
+  return { kind: 'signed-in', cli, auth: { kind: 'browser', account: report.account, ...(report.plan === undefined ? {} : { plan: report.plan }) }, ...last };
 }
+
+/** The actions a resting state offers, each with how the card offers it. */
+export function offeredActions(agent: ExternalAgent, state: AgentState): readonly (readonly [AgentAction, ActionWay])[] {
+  return (ACTIONS[state.kind] ?? []).filter((action) => offers(state, action)).map((action) => [action, agent.actions[action]] as const);
+}
+
+/**
+ * Whether the window getting the focus back should look again: the user went to install the CLI or its adapter, or
+ * to run a command the card showed. Otherwise coming back reruns nothing.
+ */
+export const checksOnFocus = (agent: ExternalAgent, state: AgentState): boolean =>
+  state.kind === 'missing' ||
+  offeredActions(agent, state).some(([, way]) => way.kind === 'copy') ||
+  ((state.kind === 'signed-in' || state.kind === 'signed-out') && state.cli.adapter.kind === 'missing');
 
 /** Whether a resting state offers `action`. A key signs in each process, so there is no login to sign out of. */
 const offers = (state: AgentState, action: AgentAction): state is Extract<AgentState, { cli: CliFound }> =>
@@ -201,7 +305,7 @@ export function agentReducer(state: AgentState, event: AgentEvent): AgentState {
       if (state.kind !== 'checking') return state;
       const { result } = event;
       if (result.kind === 'missing') return { kind: 'missing' };
-      if (result.kind === 'failed') return { kind: 'error', cli: { path: result.path, version: undefined }, text: result.text, output: result.output };
+      if (result.kind === 'failed') return { kind: 'error', cli: { path: result.path, version: undefined, adapter: result.adapter }, text: result.text, output: result.output };
       return settled(result, state.last === undefined ? {} : { last: state.last });
     }
     case 'start':
