@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, offeredTools, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
@@ -62,7 +62,7 @@ const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Prom
     const reply = replies[requests.push(JSON.parse(await bodyOf(req))) - 1];
     if (reply === undefined) return void res.writeHead(500).end(`no reply for request ${requests.length - 1}`);
     res.writeHead(200, { 'content-type': 'text/event-stream' });
-    const hold = requests.length === 1 ? HOLD_AFTER(reply) : reply.events.length;
+    const hold = requests.length === 2 ? HOLD_AFTER(reply) : reply.events.length;
     for (const event of reply.events.slice(0, hold)) res.write(sse(event));
     if (hold < reply.events.length) {
       await held;
@@ -98,6 +98,7 @@ describe('widgets in the chat panel', () => {
   it('shows the loading state while the model writes, draws the widget, sizes it, keeps it across reloads, and offers its actions', async () => {
     const speed = await readFile(path.join(root, 'test/fixtures/widgets/speed-chart.html'), 'utf8');
     replies = [
+      toolCall('', [loadTools('show_widget')], usage),
       toolCall('Here is where the time goes.', [{ id: 'tu_speed', name: 'show_widget', input: { title: SPEED_TITLE, loading_messages: [...LOADING], html: speed } }], usage),
       answer('Thinking is the largest part.', usage),
       toolCall('', [{ id: 'tu_grow', name: 'show_widget', input: { title: GROW_TITLE, html: GROW } }], usage),
@@ -126,7 +127,7 @@ describe('widgets in the chat panel', () => {
     });
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
-    const tools = (requests[0] as { tools: { name: string }[] }).tools.map((t) => t.name);
+    const tools = offeredTools(requests[0] as { tools: { name: string }[] });
     expect(tools).toContain('show_widget');
   }, 600_000);
 });

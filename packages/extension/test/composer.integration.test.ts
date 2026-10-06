@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, loadTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -27,6 +27,7 @@ type Held = Reply & { readonly held?: true };
 
 let pageUrl = '';
 const replies = (): readonly Held[] => [
+  asModel(toolCall('Loading the browser tool.', [loadTools('mcp__browser__new_page')], usage)),
   asModel(toolCall('Opening the page.', [{ id: 'tu_open', name: 'mcp__browser__new_page', input: { url: pageUrl } }], usage)),
   asModel(answer('The page is open.', usage)),
   asModel(toolCall('Reading.', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }], usage)),
