@@ -189,8 +189,11 @@ export async function startAgent(options: StartOptions): Promise<AgentProcess> {
     });
   const connection = app.connect(acp.ndJsonStream(Writable.toWeb(child.stdin!), Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>));
   void exited.then(() => connection.close(new EngineError(`${backend.label} stopped`)));
+  // SIGTERM first: the sandbox host kills the agent's whole process group on it, which a SIGKILL would skip.
   const kill = () => {
-    if (!isDead) child.kill('SIGKILL');
+    if (isDead) return;
+    child.kill(sandboxed ? 'SIGTERM' : 'SIGKILL');
+    if (sandboxed) setTimeout(() => !isDead && child.kill('SIGKILL'), 2000).unref();
   };
   try {
     const initialized = await Promise.race([
