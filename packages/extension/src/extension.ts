@@ -20,6 +20,7 @@ import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
 import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, resumeEnvOf, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
 import { SettingsPage } from './chat/settings-host.js';
+import { seenStore } from './chat/seen.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
 const engineCli = (context: vscode.ExtensionContext): string => path.join(context.extensionPath, 'dist', 'engine', 'cli.js');
@@ -126,6 +127,7 @@ function registerChat(context: vscode.ExtensionContext): void {
       return [...servers];
     },
     (post) => new SettingsPage(context.secrets, engineCli(context), output, post),
+    seenStore(context.storageUri),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(

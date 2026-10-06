@@ -48,6 +48,135 @@
   border-color: var(--mark, var(--border));
 }
 
+/* The Tasks pane's sections: Needs you, Ready, Working (one line until opened) and Done. */
+.tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tasks-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tasks-section[hidden],
+.tasks-section .lane-list[hidden],
+.task-row[hidden],
+.tasks-more[hidden] {
+  display: none;
+}
+
+.tasks-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: 600;
+}
+
+.tasks-count {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+}
+
+[data-section='needs-you'] .tasks-heading {
+  color: var(--warn);
+}
+
+[data-section='needs-you'] .tasks-count {
+  border-color: currentColor;
+}
+
+.tasks-fold {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: inherit;
+  background: var(--surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+}
+
+.tasks-fold:hover {
+  color: var(--vscode-foreground);
+}
+
+.tasks-fold:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.tasks-chevron {
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.tasks-fold[aria-expanded='true'] .tasks-chevron {
+  transform: rotate(90deg);
+}
+
+.tasks-summary {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row {
+  cursor: pointer;
+}
+
+.task-row:hover {
+  border-color: color-mix(in srgb, var(--vscode-foreground) 25%, var(--border));
+}
+
+[data-section='needs-you'] .task-row {
+  border-left: 2px solid var(--warn);
+}
+
+.task-new {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+  font-size: calc(var(--small) - 1px);
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.tasks-more {
+  align-self: flex-start;
+  font-size: var(--small);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tasks-chevron {
+    transition: none;
+  }
+}
+
 .lane-head {
   display: flex;
   align-items: center;

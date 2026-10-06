@@ -94,6 +94,12 @@ export class ArenaHost {
     this.post({ type: 'show-arena' });
   }
 
+  /** Opens the pane on a run, as the Tasks list does. */
+  show(id: string): void {
+    this.set({ preview: undefined, shown: id });
+    this.post({ type: 'show-arena' });
+  }
+
   private set(patch: Partial<ArenaState>): void {
     this.state = { ...this.state, ...patch };
     this.publish();
