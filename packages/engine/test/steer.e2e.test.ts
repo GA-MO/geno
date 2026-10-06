@@ -374,6 +374,25 @@ describe('gcode serve: steering a running turn', () => {
     expect(model.requests('[parent]')).toHaveLength(4);
   });
 
+  it('cancels a background child once its parent run stops for a reason other than the end of its turn', async () => {
+    const model = models({
+      '[parent]': (n) =>
+        n === 0
+          ? { reply: toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[child] where is alpha', background: true } }], usage) }
+          : { reply: answer('I cannot help with that.', usage, { stopReason: 'refusal' }) },
+      '[child]': () => ({ reply: { ...answer('never sent', usage), stallAfter: 1 } }),
+    });
+    const { log, result } = await serve(
+      model.fetch,
+      async () => {},
+      async (editor) => within(editor.prompt('[parent] find alpha, in the background'), 'the refused turn to end with its child cancelled'),
+    );
+
+    expect(result.stopReason).toBe('refusal');
+    const end = log.events.find((e) => e.kind === 'child-end');
+    expect(end?.kind === 'child-end' && end.end.kind, 'the child no longer runs or spends').toBe('cancelled');
+  });
+
   it('message_agent to a child that finished says so', async () => {
     const childDone = gate();
     let childId = '';

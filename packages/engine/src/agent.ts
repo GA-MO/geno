@@ -193,6 +193,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     return await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox });
   } finally {
     steers.release(session.id, inbox);
+    children?.stopBackground();
     await children?.settled();
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });
