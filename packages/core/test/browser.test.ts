@@ -83,15 +83,17 @@ describe('the browser approval table', () => {
     }
   });
 
-  it('asks before any other host in every interactive mode, Auto included, and refuses it in a non-interactive run', () => {
+  it('asks before any other host in Ask, lets the classifier judge it in Auto, and refuses it in a non-interactive run', () => {
     for (const tool of ['new_page', 'navigate_page']) {
-      expect(verdicts(call(tool, { url: 'https://example.com/' }))).toEqual({ plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' });
-      expect(verdicts(call(tool, { url: 'http://localhost@evil.com/' }))).toEqual({ plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' });
+      expect(verdicts(call(tool, { url: 'https://example.com/' }))).toEqual({ plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' });
+      expect(verdicts(call(tool, { url: 'http://localhost@evil.com/' }))).toEqual({ plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' });
     }
   });
 
-  it('a tool allowed for the session still asks about another host', () => {
-    expect(browserDenialFor(call('navigate_page', { url: 'https://example.com/' }), 'auto', ctx({ allowedForSession: true }))?.verdict).toBe('ask');
+  it('a tool allowed for the session still asks about another host, or sends it to the classifier in Auto', () => {
+    const navigate = call('navigate_page', { url: 'https://example.com/' });
+    expect(browserDenialFor(navigate, 'ask', ctx({ allowedForSession: true }))?.verdict).toBe('ask');
+    expect(browserDenialFor(navigate, 'auto', ctx({ allowedForSession: true }))).toMatchObject({ verdict: 'classify', rule: 'browser-remote-url' });
   });
 
   it('refuses file: URLs outside the workspace and other schemes in every mode', () => {
@@ -134,11 +136,11 @@ describe('the browser approval table', () => {
     }
   });
 
-  it('asks before acting on a page of another host the user never approved, even in Auto and for a tool allowed for the session', () => {
+  it('asks before acting on a page of another host nobody approved, or sends it to the classifier in Auto, even for a tool allowed for the session', () => {
     expect(verdicts(call('click', { uid: '1_2' }), ctx({ page: remotePage, allowedForSession: true }))).toEqual({
       plan: 'deny',
       ask: 'ask',
-      auto: 'ask',
+      auto: 'classify',
       'non-interactive': 'deny',
     });
     expect(browserDenialFor(call('click', { uid: '1_2' }), 'auto', ctx({ page: remotePage }))?.rule).toBe('browser-remote-page');

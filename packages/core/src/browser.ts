@@ -127,8 +127,8 @@ export function navigationTarget(call: Pick<BrowserCall, 'tool' | 'args'>): stri
 }
 
 /**
- * What the engine knows of the page a call acts on. `approved` is true once the user allowed opening that host in
- * this session, which is the only way a page of another host is reached on purpose.
+ * What the engine knows of the page a call acts on. `approved` is true once the user, or the classifier in Auto, allowed
+ * opening that host in this session, which is the only way a page of another host is reached on purpose.
  */
 export type BrowserPage = { readonly url: BrowserUrl; readonly approved: boolean };
 
@@ -150,7 +150,7 @@ function ruleDenial(rule: BrowserRuleId, mode: ApprovalMode, command: string, re
 /**
  * What settles one browser call before it runs, or undefined when it runs. A navigation is judged by its URL alone,
  * plus the risky-tool rule when it carries an init script. Any other call that changes a page another host serves,
- * which the user never approved, asks. Then the risky tools ask, or go to the classifier in Auto, every time; the
+ * which nobody approved, asks, or goes to the classifier in Auto. Then the risky tools do the same every time; the
  * rest follow the MCP rules.
  */
 export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {

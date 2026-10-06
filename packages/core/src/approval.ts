@@ -36,7 +36,8 @@ export type SimpleCommand = {
 
 /**
  * `plan` reads and runs only what is clearly safe, and changes nothing. `ask` asks the user before every flagged command.
- * `auto` still asks before what cannot be undone, runs what is clearly safe, and lets the classifier judge the rest.
+ * `auto` runs what is clearly safe, asks before an `rm -rf` outside the workspace, and lets the classifier judge the
+ * rest; what the classifier will not allow is blocked without asking, until the blocks pause Auto (see auto.ts).
  * Non-interactive runs, such as evals, have nobody to ask.
  */
 export const APPROVAL_MODES = ['plan', 'ask', 'auto', 'non-interactive'] as const;
@@ -85,7 +86,8 @@ export type Denial = {
 
 // What cannot be undone: Auto still asks.
 const ALWAYS_ASK: Verdicts = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
-// What Auto lets the classifier judge.
+// What Auto lets the classifier judge. A command still cannot write outside the workspace or reach the network,
+// because the sandbox stops it.
 const ASK_OR_CLASSIFY: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' };
 
 const CLOUD_CLIS = new Set([
@@ -333,7 +335,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'git-push': {
     reason: 'git push',
-    verdicts: ALWAYS_ASK,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ program, args }) => program === 'git' && gitSubcommand(args).name === 'push',
   },
   'git-reset-hard': {
@@ -346,7 +348,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'path-outside-workspace': {
     reason: 'a path outside the workspace',
-    verdicts: ALWAYS_ASK,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ words }, scope) =>
       words.some((word) => {
         const target = pathOf(word, scope);
@@ -355,7 +357,7 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
   },
   'network-download': {
     reason: 'curl or wget',
-    verdicts: ALWAYS_ASK,
+    verdicts: ASK_OR_CLASSIFY,
     matches: ({ program, args }) => {
       const options = DOWNLOADERS.get(program);
       return options !== undefined && !onlyLocalUrls(options, args);
@@ -400,15 +402,15 @@ export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; re
 
 /**
  * The built-in browser's calls, which `browserDenialFor` in browser.ts matches. A page on this machine opens without
- * asking; any other host asks in every interactive mode, Auto included, because a page can carry the agent's context
- * out; and the user's answer covers that one navigation. None of these offers "allow for the session".
+ * asking. Any other host asks in Ask mode, and the classifier judges it in Auto, because a page can carry the agent's
+ * context out; the answer covers that one navigation. None of these offers "allow for the session".
  */
 
 export const BROWSER_RULES: Readonly<Record<BrowserRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
   'browser-local-url': { reason: 'opening a page on this machine', verdicts: { plan: 'deny', ask: 'allow', auto: 'allow', 'non-interactive': 'allow' } },
-  'browser-remote-url': { reason: 'opening a page on another host', verdicts: ALWAYS_ASK },
+  'browser-remote-url': { reason: 'opening a page on another host', verdicts: ASK_OR_CLASSIFY },
   'browser-refused-url': { reason: 'a URL the browser may not open', verdicts: { plan: 'deny', ask: 'deny', auto: 'deny', 'non-interactive': 'deny' } },
-  'browser-remote-page': { reason: 'acting on a page from another host the user did not approve', verdicts: ALWAYS_ASK },
+  'browser-remote-page': { reason: 'acting on a page from another host the user did not approve', verdicts: ASK_OR_CLASSIFY },
   'browser-risky-tool': {
     reason: 'a browser tool that runs script, uploads a file or fills a form',
     verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
