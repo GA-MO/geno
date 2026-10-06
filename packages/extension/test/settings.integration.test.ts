@@ -6,6 +6,7 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chatAnswer, chatSse, type ChatReply } from '../../engine/test/fake-openai.js';
+import { offeredTools } from '../../engine/test/fake-transport.js';
 import { leaksOf } from '../../engine/test/no-leak.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
@@ -123,7 +124,7 @@ describe('the Geno settings page', () => {
     expect(openai.every((r) => r.authorization === `Bearer ${OPENAI_KEY}`), 'the key from SecretStorage reaches the provider').toBe(true);
     expect(openai[1]!.body).toMatchObject({ model: MODEL, messages: [{ role: 'user', content: 'Reply with the word OK.' }] });
     expect(openai[2]!.body.messages.at(-1).content).toEqual(expect.arrayContaining([expect.objectContaining({ text: expect.stringContaining('Say hello') })]));
-    expect(openai[2]!.body.tools.map((tool: { function: { name: string } }) => tool.function.name), 'the stored search key turns web_search on').toEqual(expect.arrayContaining(['web_fetch', 'web_search']));
+    expect(offeredTools({ tools: openai[2]!.body.tools.map((tool: { function: { name: string; description?: string } }) => tool.function) }), 'the stored search key turns web_search on').toEqual(expect.arrayContaining(['web_fetch', 'web_search']));
 
     // The user data folder holds VS Code's logs, the output channels among them, and the webview's storage.
     const userData = path.join(work, 'ud');
