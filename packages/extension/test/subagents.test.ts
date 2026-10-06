@@ -62,6 +62,23 @@ describe('children in the transcript', () => {
     expect(childOf(t, 'c_a')).toMatchObject({ status: { kind: 'cancelled' }, endedAt: T0 + 700 });
   });
 
+  it("takes the engine's own end of a child that arrives after its parent's turn ended", () => {
+    const t = run([
+      ...parent,
+      startChild('c_a', 'tu_a'),
+      { type: 'turn-end', at: T0 + 700, status: 'stopped', usage: undefined },
+      { type: 'child-end', id: 'c_a', at: T0 + 720, end: { kind: 'done' }, turns: 2, costUsd: 0.001 },
+      { type: 'child-end', id: 'c_a', at: T0 + 900, end: { kind: 'cancelled' }, turns: 9, costUsd: 9 },
+    ]);
+    expect(childOf(t, 'c_a')).toMatchObject({ status: { kind: 'done' }, endedAt: T0 + 700, turns: 2, costUsd: 0.001, turn: { status: 'done' } });
+    expect(childOf(t, 'c_a')!.endedByParent).toBeUndefined();
+  });
+
+  it('drops what a child streams after it ended', () => {
+    const ended = run([...parent, startChild('c_a', 'tu_a'), { type: 'child-end', id: 'c_a', at: T0 + 500, end: { kind: 'done' }, turns: 1, costUsd: 0 }]);
+    expect(run([{ type: 'child', id: 'c_a', action: { type: 'text', text: 'late' } }], ended)).toBe(ended);
+  });
+
   it('starts a child once, however often it is announced', () => {
     const once = run([...parent, startChild('c_a', 'tu_a')]);
     expect(run([startChild('c_a', 'tu_a', T0 + 999)], once)).toBe(once);

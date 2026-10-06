@@ -165,7 +165,10 @@ function agentsPill(openChild: (id: string) => void) {
     if (pill.isConnected) pill.focus();
   }
   pill.addEventListener('click', () => {
-    if (children.length === 1) return openChild(children[0]!.id);
+    if (children.length === 1) {
+      close();
+      return openChild(children[0]!.id);
+    }
     if (!menu.hidden) return close();
     draw();
     menu.hidden = false;
@@ -181,8 +184,9 @@ function agentsPill(openChild: (id: string) => void) {
       Enter: () => all[at]?.click(),
       ' ': () => all[at]?.click(),
       Escape: close,
-      Tab: close,
     };
+    // Tab closes the menu onto the pill and goes on from there, so it leaves the menu as it would leave any control.
+    if (event.key === 'Tab') return close();
     const move = moves[event.key];
     if (move === undefined) return;
     event.preventDefault();

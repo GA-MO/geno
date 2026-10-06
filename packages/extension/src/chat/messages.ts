@@ -54,6 +54,8 @@ export type Child = {
   /** Known once it ends; null for a model with no price. */
   readonly costUsd: number | null | undefined;
   readonly turn: Turn;
+  /** Its parent's turn ended first and marked it cancelled; its own end, when it comes, still counts. */
+  readonly endedByParent?: true | undefined;
 };
 
 /** What a child's own stream adds to its turn. Its questions ask on the parent's call, so they are the parent's. */
