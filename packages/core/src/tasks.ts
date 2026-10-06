@@ -1,3 +1,4 @@
+import type { JobView } from './background.js';
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
@@ -42,7 +43,11 @@ export type TaskRecord = {
   readonly usage?: TaskUsage | undefined;
   /** What a `waiting` task waits for; absent in every other status. */
   readonly waiting?: Waiting | undefined;
+  /** The session's background commands that run now, oldest first; absent when none does. */
+  readonly jobs?: readonly TaskJob[] | undefined;
 };
+
+export type TaskJob = Pick<JobView, 'id' | 'command' | 'description' | 'startedAt'>;
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
 export type TaskUsage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };

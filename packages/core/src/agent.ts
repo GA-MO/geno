@@ -1,5 +1,6 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
+import { BACKGROUND_TAIL_LINES, MAX_BACKGROUND_JOBS } from './background.js';
 import { EDIT_FORMAT_SPECS } from './edit.js';
 import { SYSTEM_PROMPT } from './request.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
@@ -11,13 +12,16 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'check', 'edit', 'skill', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'skill', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
+
+/** A subagent ends with its call, so it starts no background command and has none to read or stop. */
+export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => name !== 'bash_output' && name !== 'bash_stop');
 
 const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL_SPECS>, Tool>> = {
   bash: {
     name: 'bash',
-    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it has no network, so installing packages or fetching URLs fails. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise.`,
+    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it has no network beyond localhost, so installing packages or fetching URLs fails. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise. With run_in_background: true the command starts the same way, then returns at once with a job id such as bg-1 and runs on with no timeout, for a dev server, a watcher or a long build; at most ${MAX_BACKGROUND_JOBS} run at once per session. You are told when one ends, with the end of its output.`,
     input_schema: {
       type: 'object',
       properties: {
@@ -31,10 +35,37 @@ const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL
           type: 'integer',
           minimum: 1,
           maximum: MAX_BASH_TIMEOUT_SECONDS,
-          description: `Seconds before the command is killed. Defaults to ${DEFAULT_BASH_TIMEOUT_SECONDS}.`,
+          description: `Seconds before the command is killed. Defaults to ${DEFAULT_BASH_TIMEOUT_SECONDS}. Ignored with run_in_background.`,
+        },
+        run_in_background: {
+          type: 'boolean',
+          description: 'Start the command and return at once with its job id, leaving it running. Defaults to false.',
         },
       },
       required: ['command'],
+      additionalProperties: false,
+    },
+  },
+  bash_output: {
+    name: 'bash_output',
+    description: `Read a background command's output: whether it still runs, its exit code once it ended, and the output it printed since your last bash_output of it, or its last tail lines when tail is given. Output past the first 1 MB is kept from its end.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'The job id bash returned, such as bg-1.' },
+        tail: { type: 'integer', minimum: 1, maximum: 1000, description: `The number of last lines to return instead of the new output, such as ${BACKGROUND_TAIL_LINES}.` },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+  },
+  bash_stop: {
+    name: 'bash_stop',
+    description: 'Stop a background command and everything it started: SIGTERM, then SIGKILL if it is still running a few seconds later. Returns how it ended and the end of its output.',
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'The job id bash returned, such as bg-1.' } },
+      required: ['id'],
       additionalProperties: false,
     },
   },
@@ -66,18 +97,22 @@ export const AGENT_TOOL_DEFINITIONS: readonly Tool[] = Object.freeze(AGENT_TOOL_
 export const AGENT_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
 You are running as an agent that changes the code itself. How to work in this mode:
-- Your tools are read, grep, glob and list to look around, edit to change files, bash to run commands, check to run the project's check command, and skill to load a skill's instructions by name.
+- Your tools are read, grep, glob and list to look around, edit to change files, bash to run commands, bash_output and bash_stop for commands bash started in the background, check to run the project's check command, and skill to load a skill's instructions by name.
 - When you need several reads, searches or listings that do not depend on each other, ask for all of them in one turn; they run at the same time.
 - Read a file before you edit it. edit refuses a file you have not read in this session, or one that changed since you last read it; read it again and retry.
 - edit replaces one exact piece of text that appears once in the file. Copy old_str from what read showed you, without the line numbers and the tab after them. To make a new file, pass create: true with the whole content as new_str. Several separate changes to one file are several edit calls.
 - When the project has a check command, it runs after every successful edit and its result is appended to the edit's result. If it fails because of your change, fix that before moving on. Failures that were there before your change are not yours to fix unless the task asks.
-- bash runs in a sandbox with no network and writes only inside the workspace. Dependencies are already installed; do not try to install packages. If a command is denied, do not retry it; find another way or explain what you could not do.
+- For a dev server, a watcher or a long build, run bash with run_in_background: true, go on with other work, read its output with bash_output, and stop it with bash_stop when you no longer need it.
+- bash runs in a sandbox with no network beyond localhost and writes only inside the workspace. Dependencies are already installed; do not try to install packages. If a command is denied, do not retry it; find another way or explain what you could not do.
 - Before you finish, run the relevant tests or type checker with bash or check and read the result.
 - Work until the task is done without stopping to ask questions; when something is ambiguous, choose the reading that best fits the codebase and say which you chose. End your turn with a short report of what you changed and how you checked it.`;
 
+// Plan starts nothing that outlives a call, so it has no background commands to read or stop.
+const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'bash_stop']);
+
 /** What a mode lets the agent change: everything, or in Plan nothing, with bash held to the safe list by the rules. */
 export const AGENT_MODE_TOOLS: Readonly<Record<ApprovalMode, readonly AgentToolName[]>> = {
-  plan: AGENT_TOOL_NAMES.filter((name) => name !== 'edit'),
+  plan: AGENT_TOOL_NAMES.filter((name) => !PLAN_LEAVES_OUT.has(name)),
   ask: AGENT_TOOL_NAMES,
   auto: AGENT_TOOL_NAMES,
   'non-interactive': AGENT_TOOL_NAMES,
