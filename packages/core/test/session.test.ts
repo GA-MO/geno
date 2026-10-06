@@ -87,6 +87,12 @@ describe('replayMessages', () => {
     expect(nextSeq([start])).toBe(1);
     expect(nextSeq([start, user(1, 'a'), error(2, 'abort')])).toBe(3);
   });
+
+  it('numbers past a mode switch logged beside a running turn, which has no seq', () => {
+    const beside: TurnEvent = { kind: 'mode', at: '2026-01-01T00:00:00.000Z', mode: 'auto' };
+    expect(nextSeq([start, user(1, 'a'), beside])).toBe(2);
+    expect(nextSeq([start, beside])).toBe(1);
+  });
 });
 
 const toolCall = (seq: number, ...uses: [id: string, name: string, input: object][]): TurnEvent => ({
