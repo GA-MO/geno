@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { z } from 'zod';
-import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
+import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, LANES_COMMAND, MCP_COMMAND, NEW_CHAT_COMMAND, SEND_COMMAND, sessionMemory, STOP_COMMAND, TASKS_COMMAND, LOOK_SETTINGS, lookOf } from './chat/chat.js';
 import { BROWSER_ENABLED_SETTING } from './chat/browser.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
 import type { EngineSettings } from './chat/engine.js';
@@ -149,6 +149,14 @@ function registerChat(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(MCP_COMMAND, async () => {
       await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
       chat.showMcp();
+    }),
+    vscode.commands.registerCommand(LANES_COMMAND, async () => {
+      await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
+      chat.showPane('show-lanes');
+    }),
+    vscode.commands.registerCommand(TASKS_COMMAND, async () => {
+      await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
+      chat.showPane('show-tasks');
     }),
     vscode.commands.registerCommand(SETTINGS_COMMAND, async () => {
       await vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);

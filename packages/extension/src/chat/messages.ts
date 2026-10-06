@@ -1,6 +1,7 @@
 import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
+import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { WidgetTheme } from './widget-frame.js';
@@ -292,7 +293,8 @@ export type ToView =
   | McpToView
   | SettingsToView
   | ContextToView
-  | ComposerToView;
+  | ComposerToView
+  | LanesToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -382,4 +384,5 @@ export type FromView =
   | McpFromView
   | SettingsFromView
   | ContextFromView
-  | ComposerFromView;
+  | ComposerFromView
+  | LanesFromView;
