@@ -120,6 +120,7 @@ import type { CommandOption, SentCommand } from './slash.js';
 import { isChildAction, subagentAction } from './subagent-host.js';
 import { SteerHost, steerActionOf } from './steer-host.js';
 import { RewindHost } from './rewind-host.js';
+import { UsageHost } from './usage-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
@@ -511,6 +512,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly steers: SteerHost;
   /** The message menu's rewinds and forks. */
   private readonly rewinds: RewindHost;
+  private readonly usage: UsageHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
   /** The running turn of the shown session that another window started, or Geno woke it for, which the panel took over. */
@@ -595,6 +597,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       turnAt: (seq) => this.transcript.turns.find((t) => t.seq === seq)?.id,
       reload: () => this.reshow(),
       open: (sessionId) => this.moveTo((connection) => this.load(connection, sessionId, this.shownCwd).then(() => sessionId)),
+      post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
+    });
+    this.usage = new UsageHost({
+      connection: () => this.engine.connection(),
+      shown: () => this.shown,
       post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
     this.transcript = emptyTranscript(modelName());
@@ -1319,6 +1326,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.arena.handlers,
       ...this.steers.handlers,
       ...this.rewinds.handlers,
+      ...this.usage.handlers,
     };
   }
 

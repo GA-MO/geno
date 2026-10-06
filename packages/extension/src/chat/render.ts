@@ -643,8 +643,11 @@ export const applyLaneButton = (lane: string, ui: Ui): HTMLElement =>
     ),
   );
 
-/** How the turn ended, if not as it should, then its model, tokens and cost when `usage`. */
-export function turnFooter(turn: Turn, usage: boolean, backend: BackendShown | undefined): HTMLElement {
+/**
+ * How the turn ended, if not as it should, then its model, tokens and cost when `usage`. With `breakdown`, the usage
+ * line is a button that opens where the turn's tokens went.
+ */
+export function turnFooter(turn: Turn, usage: boolean, backend: BackendShown | undefined, breakdown?: { readonly open: boolean; readonly toggle: () => void }): HTMLElement {
   const parts: Child[] = [];
   if (turn.status === 'stopped' || turn.status === 'failed') {
     const ending = ENDINGS[turn.status];
@@ -654,12 +657,23 @@ export function turnFooter(turn: Turn, usage: boolean, backend: BackendShown | u
     const { model, inputTokens, outputTokens, costUsd } = turn.usage;
     const cost = turnCost(costUsd, backend);
     const tokens = showsTokens(turn.usage, backend);
-    parts.push(
+    const line = [
       h('span', { class: 'model' }, model),
       tokens && h('span', { title: `${inputTokens} input tokens` }, `${formatTokens(inputTokens)} in`),
       tokens && h('span', { title: `${outputTokens} output tokens` }, `${formatTokens(outputTokens)} out`),
       cost !== undefined && h('span', { class: 'turn-cost', title: cost.title }, cost.text),
-    );
+    ];
+    if (breakdown === undefined) parts.push(...line);
+    else {
+      parts.push(
+        h(
+          'button',
+          { type: 'button', class: 'turn-usage', title: 'Where the tokens went', 'aria-expanded': String(breakdown.open), 'data-focus': `usage:${turn.id}`, onclick: breakdown.toggle },
+          ...line,
+          icon(breakdown.open ? 'chevron-up' : 'chevron-down', 'turn-usage-chevron'),
+        ),
+      );
+    }
   }
   return h('div', { class: 'turn-footer' }, ...parts);
 }

@@ -1,0 +1,237 @@
+/*
+ * Where the tokens went (U61): the turn footer's usage line as a button, and the card it opens with the turn's parts
+ * and the session's totals. Each row is two lines, so it fits a 300px panel.
+ */
+
+.turn-footer .turn-usage {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.turn-footer .turn-usage:hover {
+  background: var(--surface-2);
+}
+
+.turn-footer .turn-usage:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.turn-usage-chevron {
+  margin-left: -8px;
+  font-size: 12px !important;
+}
+
+.usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  font-size: var(--small);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.usage-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.usage-tab {
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.usage-tab.selected {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--vscode-foreground);
+}
+
+.usage-tab:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+.usage-close {
+  margin-left: auto;
+}
+
+.usage-driver {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.usage-driver .codicon {
+  color: var(--warn);
+}
+
+.usage-rows,
+.usage-top {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usage-row {
+  display: grid;
+  /* Fixed number columns, so every row's bar is the same length and the shares compare. */
+  grid-template-columns: minmax(0, 1fr) 4.4em 4.4em;
+  grid-template-areas: 'label tokens percent' 'bar cost cost';
+  gap: 1px 8px;
+  align-items: center;
+}
+
+.usage-label {
+  grid-area: label;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-tokens {
+  grid-area: tokens;
+  color: var(--muted);
+  text-align: right;
+}
+
+.usage-percent {
+  grid-area: percent;
+  text-align: right;
+}
+
+.usage-row .usage-cost {
+  grid-area: cost;
+}
+
+.usage-row.driver .usage-label,
+.usage-row.driver .usage-percent {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.usage-bar {
+  grid-area: bar;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+}
+
+.usage-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--vscode-foreground) 45%, transparent);
+}
+
+.usage-row.driver .usage-bar-fill {
+  background: var(--warn);
+}
+
+.usage-cost {
+  display: inline-flex;
+  gap: 6px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.usage-usd {
+  color: var(--muted);
+}
+
+.usage-total,
+.usage-children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: center;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.usage-session-total {
+  padding-top: 0;
+  border-top: none;
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.usage-meta {
+  color: var(--muted);
+}
+
+.usage-meta.failed {
+  color: var(--vscode-errorForeground);
+}
+
+.usage-note.estimated {
+  color: var(--warn);
+}
+
+.usage-external {
+  color: var(--vscode-foreground);
+}
+
+.usage-heading {
+  margin-top: 2px !important;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.usage-top-turn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 8px;
+}
+
+.usage-top-prompt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-top-driver {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+/* High contrast draws the bars in its border color, with no tints. */
+body.vscode-high-contrast .usage-bar-fill,
+body.vscode-high-contrast-light .usage-bar-fill {
+  background: var(--vscode-contrastActiveBorder, var(--vscode-foreground));
+}
