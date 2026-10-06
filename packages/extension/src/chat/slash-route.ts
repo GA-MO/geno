@@ -34,21 +34,21 @@ export const BUILTIN_OPTIONS: readonly CommandOption[] = Object.entries(BUILTIN_
 }));
 
 /** The panel actions the editor's built-ins run instead of a prompt. */
-export const EDITOR_ACTIONS = { new: 'new-chat', clear: 'new-chat', history: 'history', model: 'model', rules: 'rules', memory: 'memory' } as const;
+export const EDITOR_ACTIONS = { new: 'new-chat', clear: 'new-chat', history: 'history', model: 'model', rules: 'rules', memory: 'memory', 'best-of-n': 'best-of-n' } as const;
 export type EditorAction = (typeof EDITOR_ACTIONS)[keyof typeof EDITOR_ACTIONS];
 
 /**
- * What sending `text` does. An editor built-in runs its panel action. A listed command goes to the engine as typed
+ * What sending `text` does. An editor built-in runs its panel action with the text after its name. A listed command goes to the engine as typed
  * and shows as a chip. Anything else, such as `/usr/bin`, is an ordinary prompt.
  */
-export type Routed = { readonly kind: 'editor'; readonly action: EditorAction } | { readonly kind: 'prompt'; readonly command: SentCommand | undefined };
+export type Routed = { readonly kind: 'editor'; readonly action: EditorAction; readonly args: string } | { readonly kind: 'prompt'; readonly command: SentCommand | undefined };
 
 export function routeText(commands: readonly CommandOption[], text: string): Routed {
   const invocation = parseInvocation(text);
   const command = invocation === undefined ? undefined : commands.find((c) => c.name === invocation.name);
   if (invocation === undefined || command === undefined) return { kind: 'prompt', command: undefined };
   if (command.route === 'editor' && Object.hasOwn(EDITOR_ACTIONS, command.name)) {
-    return { kind: 'editor', action: EDITOR_ACTIONS[command.name as keyof typeof EDITOR_ACTIONS] };
+    return { kind: 'editor', action: EDITOR_ACTIONS[command.name as keyof typeof EDITOR_ACTIONS], args: invocation.args };
   }
   return { kind: 'prompt', command: { ...invocation, route: command.route } };
 }

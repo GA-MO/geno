@@ -59,15 +59,16 @@ describe('the / picker', () => {
 
 describe('routing a sent / command', () => {
   it('runs the editor’s built-ins in the panel, /clear as a new chat', () => {
-    expect(routeText(BUILTIN_OPTIONS, '/new')).toEqual({ kind: 'editor', action: 'new-chat' });
-    expect(routeText(BUILTIN_OPTIONS, '/clear')).toEqual({ kind: 'editor', action: 'new-chat' });
-    expect(routeText(BUILTIN_OPTIONS, '/history')).toEqual({ kind: 'editor', action: 'history' });
-    expect(routeText(BUILTIN_OPTIONS, '/model')).toEqual({ kind: 'editor', action: 'model' });
+    expect(routeText(BUILTIN_OPTIONS, '/new')).toEqual({ kind: 'editor', action: 'new-chat', args: '' });
+    expect(routeText(BUILTIN_OPTIONS, '/clear')).toEqual({ kind: 'editor', action: 'new-chat', args: '' });
+    expect(routeText(BUILTIN_OPTIONS, '/history')).toEqual({ kind: 'editor', action: 'history', args: '' });
+    expect(routeText(BUILTIN_OPTIONS, '/model')).toEqual({ kind: 'editor', action: 'model', args: '' });
   });
 
   it('opens the rules and memory panes for /rules and /memory, and sends /init to the engine', () => {
-    expect(routeText(BUILTIN_OPTIONS, '/rules')).toEqual({ kind: 'editor', action: 'rules' });
-    expect(routeText(BUILTIN_OPTIONS, '/memory')).toEqual({ kind: 'editor', action: 'memory' });
+    expect(routeText(BUILTIN_OPTIONS, '/rules')).toEqual({ kind: 'editor', action: 'rules', args: '' });
+    expect(routeText(BUILTIN_OPTIONS, '/memory')).toEqual({ kind: 'editor', action: 'memory', args: '' });
+    expect(routeText(BUILTIN_OPTIONS, '/best-of-n 3 --vary effort Make two loud')).toEqual({ kind: 'editor', action: 'best-of-n', args: '3 --vary effort Make two loud' });
     expect(routeText(BUILTIN_OPTIONS, '/init')).toEqual({ kind: 'prompt', command: { name: 'init', args: '', route: 'engine' } });
   });
 
