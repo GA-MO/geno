@@ -63,6 +63,7 @@ describe('read on a text PDF', () => {
       'quartz.pdf is a PDF with 2 pages.\n--- page 1 of 2 ---\nPage one says hello.\nSecond line here.\n1\n[pages 1-1 of 2. Read again with pages="2" to continue.]',
     );
     expect(await textOf({ path: 'quartz.pdf', pages: '1-2' })).toContain('--- page 2 of 2 ---\nPage two mentions ZEBRA-7.');
+    expect(await textOf({ path: 'quartz.pdf', pages: '1-30' })).toMatch(/--- page 2 of 2 ---\nPage two mentions ZEBRA-7\.$/);
   });
 
   it('reads pages packed in a compressed object stream', async () => {
