@@ -14,6 +14,12 @@ import {
   REVIEW_METHOD,
   reviewState,
   REWIND_METHOD,
+  REWIND_PREVIEW_METHOD,
+  REWIND_TURN_METHOD,
+  REWIND_KINDS,
+  FORK_AT_META,
+  TURN_SEQ_META,
+  toolUsesFrom,
   SEVERITIES,
   spillNotice,
   STALE_BASE_ERROR,
@@ -57,6 +63,9 @@ import {
   type ReviewDecision,
   type ReviewResponse,
   type RewindResponse,
+  type ForkOrigin,
+  type RewindPreviewResponse,
+  type RewindTurnResponse,
   type ToolStatus,
   type Attachment,
   type ContextItem,
@@ -164,7 +173,7 @@ import { workspaceDir, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
-import { checkpointsOf, rewindTo } from './rewind.js';
+import { checkpointsOf, forkSession, rewindPreview, rewindSession, rewindTo } from './rewind.js';
 import { browserSettingsOf } from './mcp/browser.js';
 import { mcpSessions, type McpSessions } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
@@ -627,11 +636,17 @@ function editorUser(route: Route, peer: Peer, flush: () => Promise<void>, runnin
 const sessionInfo = (summary: SessionSummary): acp.SessionUpdate => ({ sessionUpdate: 'session_info_update', title: summary.title, updatedAt: summary.updatedAt });
 
 function sessionInfoOf(summary: SessionSummary): acp.SessionInfo {
-  const meta: SessionSummaryMeta = { turns: summary.turns, costUsd: summary.costUsd, createdAt: summary.createdAt };
+  const meta: SessionSummaryMeta = { turns: summary.turns, costUsd: summary.costUsd, createdAt: summary.createdAt, ...(summary.forkedFrom === undefined ? {} : { forkedFrom: summary.forkedFrom }) };
   return { sessionId: summary.id, cwd: summary.workspace, title: summary.title, updatedAt: summary.updatedAt, _meta: { [SESSION_SUMMARY_META]: meta } };
 }
 
 const renameRequest = z.object({ sessionId: z.string(), title: z.string() });
+
+/** The task's link back to the session it was forked from, if it was. */
+const forkOf = (events: readonly TurnEvent[]): { readonly forkedFrom?: ForkOrigin } => {
+  const head = events[0];
+  return head?.kind === 'session-start' && head.fork !== undefined ? { forkedFrom: head.fork } : {};
+};
 
 const promptText = (blocks: readonly acp.ContentBlock[]): string =>
   blocks
@@ -645,6 +660,9 @@ const reviewRequest = z.object({
 });
 const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string() });
 const rewindRequest = z.object({ sessionId: z.string() });
+const rewindPreviewRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive() });
+const rewindTurnRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), choice: z.object({ kind: z.enum(REWIND_KINDS) }) });
+const forkAt = z.number().int().positive().optional();
 const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
@@ -964,8 +982,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
     let ended: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'> = 'failed';
+    let firstSeq = Number.POSITIVE_INFINITY;
     try {
       const header = await openSessionLog(store, sessionId, io);
+      firstSeq = nextSeq(header.events);
       const lane = await laneAt(header.session.workspace, undefined).catch(() => undefined);
       const backend = header.session.backend;
       if (backend !== undefined && target !== undefined) throw acp.RequestError.invalidParams({ sessionId }, `${EXTERNAL_BACKENDS[backend.id].label} sessions take no inline edits`);
@@ -980,6 +1000,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
         ...(backend === undefined ? {} : { backend: backend.id }),
+        ...forkOf(header.events),
       });
       const turnIo = { ...io, interrupts: () => controller.signal };
       const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
@@ -1084,7 +1105,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...shown.usage() };
       });
       ended = TASK_ENDS[response.stopReason];
-      return response;
+      const logged = turn.live.events.findLast(startsTurn);
+      if (logged === undefined || logged.seq < firstSeq) return response;
+      return { ...response, _meta: { ...response._meta, [TURN_SEQ_META]: logged.seq } };
     } finally {
       turnEnded(controller.signal.aborted);
       live.delete(sessionId);
@@ -1214,7 +1237,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: {
           loadSession: true,
-          sessionCapabilities: { resume: {}, list: {}, delete: {}, close: {} },
+          sessionCapabilities: { resume: {}, list: {}, delete: {}, close: {}, fork: {} },
           promptCapabilities: { embeddedContext: true, image: true },
           mcpCapabilities: { http: true, sse: true },
         },
@@ -1491,6 +1514,48 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const { files } = await rewindTo(store, log, first.turnSeq);
         return { files: files.map((file) => path.join(log.session.workspace, file)) };
       });
+    })
+    .onRequest(REWIND_PREVIEW_METHOD, rewindPreviewRequest, async ({ params }): Promise<RewindPreviewResponse> => {
+      const { sessionId, turnSeq } = params;
+      known(sessionId);
+      return serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        const { files, unsaved } = await rewindPreview(store, log, turnSeq).catch(refused({ turnSeq }));
+        const absolute = (file: string) => path.join(log.session.workspace, file);
+        return { files: files.map(absolute), unsaved: unsaved.map(absolute) };
+      });
+    })
+    .onRequest(REWIND_TURN_METHOD, rewindTurnRequest, async ({ params }): Promise<RewindTurnResponse> => {
+      const { sessionId, turnSeq, choice } = params;
+      known(sessionId);
+      if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before rewinding the session');
+      return serially(sessionId, async () => {
+        const log = await openSessionLog(store, sessionId, io);
+        if (choice.kind !== 'files') {
+          // A cut turn's background commands have no turn left to report to.
+          const cut = toolUsesFrom(log.events, turnSeq);
+          for (const job of jobs.views(sessionId)) if (cut.has(job.toolUseId)) await jobs.stop(sessionId, job.id, 'user').catch(() => {});
+        }
+        const { files, prompt } = await rewindSession(store, log, turnSeq, choice).catch(refused({ turnSeq }));
+        return { files: files.map((file) => path.join(log.session.workspace, file)), prompt };
+      });
+    })
+    .onRequest(acp.methods.agent.session.fork, async ({ params }): Promise<acp.ForkSessionResponse> => {
+      const { sessionId } = params;
+      const source = await existing(sessionId);
+      if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'stop the running turn before forking the session');
+      const at = forkAt.safeParse(params._meta?.[FORK_AT_META]);
+      if (!at.success) throw acp.RequestError.invalidParams({ [FORK_AT_META]: params._meta?.[FORK_AT_META] }, `${FORK_AT_META} must be an event number`);
+      const turnSeq = at.data ?? source.events.findLast(startsTurn)?.seq;
+      if (turnSeq === undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'the session has no turn to fork');
+      const log = await serially(sessionId, () => forkSession(store, source, turnSeq)).catch(refused({ turnSeq }));
+      const id = log.session.id;
+      const mode = sessionModeOf(log.events);
+      turns.set(id, undefined);
+      modes.set(id, mode);
+      mcp.register(id, log.session.workspace, params.mcpServers ?? [], browserSettingsOf(params._meta));
+      io.err(`session: ${id} forked from ${sessionId} at ${turnSeq}, log: ${log.file}`);
+      return { sessionId: id, modes: modeState(mode), configOptions: effortConfigOptions(sessionEffortOf(log.session, log.events)) };
     })
     .onRequest(RULES_METHOD, sessionRequest, async ({ params }): Promise<RulesResponse> => {
       known(params.sessionId);

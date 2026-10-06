@@ -58,6 +58,12 @@ export async function changedBetween(repo: ShadowRepo, from: string, to: string)
   return lines(await git(repo, ['diff', '--name-only', '--no-renames', from, to, '--']));
 }
 
+/** Workspace-relative paths whose text now differs from commit `sha`, untracked files included; it commits nothing. */
+export async function changedSince(repo: ShadowRepo, sha: string): Promise<string[]> {
+  await git(repo, ['add', '--all', '--', '.']);
+  return lines(await git(repo, ['diff', '--cached', '--name-only', '--no-renames', sha, '--'])).sort();
+}
+
 async function pruneEmpty(dir: string, root: string): Promise<void> {
   for (let current = dir; current !== root && current.startsWith(root + path.sep); current = path.dirname(current)) {
     try {
