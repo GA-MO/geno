@@ -110,5 +110,6 @@ describe('steer events', () => {
   it("tells message_agent's caller where the message went", () => {
     expect(messageAgentResult({ kind: 'delivered', seq: 6 })).toMatch(/^delivered at next tool round/);
     expect(messageAgentResult({ kind: 'next-turn' })).toMatch(/^child already finished/);
+    expect(messageAgentResult({ kind: 'refused', reason: 'peek runs on Cursor, which cannot take a message mid-turn' })).toBe('not delivered: peek runs on Cursor, which cannot take a message mid-turn');
   });
 });

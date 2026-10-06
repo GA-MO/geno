@@ -139,6 +139,10 @@ describe("the composer's follow-up", () => {
     expect(fieldStatus({ kind: 'failed', message: 'Invalid request: the subagent already finished' }, 'explore')).toEqual({ tone: 'failed', text: 'explore already finished' });
     expect(fieldStatus({ kind: 'failed', message: 'Invalid params: no session c1' }, 'explore').text).toBe('explore already finished');
     expect(fieldStatus({ kind: 'failed', message: 'Invalid params: the steer has no text' }, 'explore').text).toBe('the steer has no text');
+    expect(fieldStatus({ kind: 'failed', message: 'Invalid request: peek runs on Cursor, which cannot take a message mid-turn, so it was not delivered' }, 'peek')).toEqual({
+      tone: 'failed',
+      text: 'peek runs on Cursor, which cannot take a message mid-turn, so it was not delivered',
+    });
   });
 });
 

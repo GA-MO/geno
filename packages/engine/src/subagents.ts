@@ -15,6 +15,7 @@ import {
   childReport,
   childSummary,
   childSystemPrompt,
+  EXTERNAL_BACKENDS,
   forkOpening,
   forkTask,
   isReadOnly,
@@ -326,7 +327,9 @@ export function subagents(env: SubagentEnv): Subagents {
       const id = asSessionId(randomUUID());
       started.add(id);
       // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
-      const inbox = env.steers.open(id, parent.log.session.id);
+      // An external agent's turn is one prompt with no safe point between tool rounds, so a message would wait for its end.
+      const refusal = agent.backend === undefined ? undefined : `${name} runs on ${EXTERNAL_BACKENDS[agent.backend].label}, which cannot take a message mid-turn`;
+      const inbox = env.steers.open(id, parent.log.session.id, refusal);
       const stop = new AbortController();
       if (background === true) inBackground.add(stop);
       const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
