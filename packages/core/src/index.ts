@@ -40,6 +40,7 @@ export * from './check.js';
 export * from './widget.js';
 export * from './lanes.js';
 export * from './subagent.js';
+export * from './attention.js';
 export * from './tasks.js';
 export * from './waiting.js';
 export * from './arena.js';

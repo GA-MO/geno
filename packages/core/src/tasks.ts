@@ -1,3 +1,4 @@
+import type { Asking, TaskKind } from './attention.js';
 import { LANE_CONFLICT_REASONS, type LaneConflict, type LaneStatus } from './lanes.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
@@ -14,19 +15,6 @@ import type { Waiting } from './waiting.js';
 export const TASK_STATUSES = ['running', 'needs-input', 'waiting', 'done', 'failed', 'stopped'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-/** A task whose turn has not ended. */
-export const isLive = (status: TaskStatus): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
-
-/** A live task that wants the user's eye: a card to answer, or a call held offline or by a limit. */
-export const NEEDS_ATTENTION: { readonly [S in TaskStatus]: boolean } = {
-  running: false,
-  'needs-input': true,
-  waiting: true,
-  done: false,
-  failed: false,
-  stopped: false,
-};
-
 /** One session's latest turn, as the engine reports it to every editor connected to it. Times are ms since the epoch. */
 export type TaskRecord = {
   readonly sessionId: string;
@@ -42,6 +30,14 @@ export type TaskRecord = {
   readonly usage?: TaskUsage | undefined;
   /** What a `waiting` task waits for; absent in every other status. */
   readonly waiting?: Waiting | undefined;
+  /** The card a `needs-input` task shows; absent in every other status. */
+  readonly asking?: Asking | undefined;
+  /** The task this one rolls up into: a subagent's parent, or a lane's Arena run. Null or absent for a top-level task. */
+  readonly parent?: string | null | undefined;
+  /** Absent reads as `session`. */
+  readonly kind?: TaskKind | undefined;
+  /** When the task last came back to the user, by `returnedAtOf`; null before it first did. */
+  readonly returnedAt?: number | null | undefined;
 };
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
