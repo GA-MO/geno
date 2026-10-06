@@ -49,6 +49,9 @@ export type PolicyInput = {
   readonly writable?: readonly string[];
 };
 
+/** Where the user's CLIs keep keys and tokens, under the home folder. Auto lets the classifier judge reads outside the workspace, so these stay unreadable whatever it says. */
+export const CREDENTIAL_PATHS = ['.ssh', '.aws', '.azure', '.config/gcloud', '.config/gh', '.docker', '.gnupg', '.kube', '.netrc'] as const;
+
 /** Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. */
 export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> {
   const repos = (await readTasks(input.store)).map((task) => task.repo);
@@ -56,7 +59,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
     writable: await withRealPaths([input.workspace, input.tempDir, ...(input.writable ?? [])]),
     denyRead: await withRealPaths([
       input.store.evalsDir,
-      path.join(input.home, '.ssh'),
+      ...CREDENTIAL_PATHS.map((p) => path.join(input.home, p)),
       ENGINE_ENV_FILE,
       ...repos,
       ...(input.denyRead ?? []),
