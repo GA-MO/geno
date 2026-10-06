@@ -77,13 +77,15 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
   read: {
     name: 'read',
     description:
-      `Read a text file, or look at an image: a PNG, JPEG, GIF or WebP file comes back as the image itself. Returns a text file's lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. Also reads spilled tool output and the files in a skill's folder by their absolute paths.`,
+      `Read a text file, or look at an image: a PNG, JPEG, GIF or WebP file comes back as the image itself. Returns a text file's lines numbered from 1. One read returns at most ${formatCount(PAGE_MAX_LINES)} lines or ${formatCount(PAGE_MAX_CHARS)} characters; a longer file comes back a page at a time, ending with the start_line that continues it. Pass start_line and end_line (inclusive) to read part of a file. A PDF returns the text of each page under a page marker, 10 pages unless pages asks for others (at most 20 per read); a page with no text layer, such as a scan, comes back as an image. A Jupyter notebook (.ipynb) returns each cell's type, source and outputs, with image outputs as images; pass start_line to read its raw JSON instead. Also reads spilled tool output and the files in a skill's folder by their absolute paths.`,
     input_schema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: "File path relative to the workspace root, or the absolute path of a spill file or a file in a skill's folder." },
         start_line: { type: 'integer', minimum: 1, description: 'First line to return, from 1.' },
         end_line: { type: 'integer', minimum: 1, description: 'Last line to return, inclusive.' },
+        pages: { type: 'string', description: 'PDF pages to return, such as "3" or "1-5", from 1. At most 20. Defaults to the first 10.' },
+        cells: { type: 'string', description: 'Notebook cells to return, such as "3" or "4-9", from 1. Defaults to every cell.' },
       },
       required: ['path'],
       additionalProperties: false,
