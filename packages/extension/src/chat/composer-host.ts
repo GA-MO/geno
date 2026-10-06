@@ -1,8 +1,8 @@
 import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
-import { PRICES, TURN_USAGE_META, type ContextUse, type ProviderName } from '@g-code/core';
+import { MODEL_CONFIG_ID, PRICES, TURN_USAGE_META, type BackendId, type BackendInfo, type ContextUse, type ProviderName } from '@g-code/core';
 import { z } from 'zod';
-import type { ComposerFacts, ComposerFromView, ComposerToView, EffortChoice, ModelChoice } from './composer-model.js';
+import type { ComposerFacts, ComposerFromView, ComposerToView, ModelChoice, SelectChoice } from './composer-model.js';
 import type { Connection } from './engine.js';
 import type { SettingsListing } from './settings-model.js';
 
@@ -13,21 +13,29 @@ const DEFAULT_BAHT_PER_USD = 33;
 /** U21's session config option for the effort. */
 export const EFFORT_CONFIG_ID = 'effort';
 
-const effortOption = z.object({
-  id: z.literal(EFFORT_CONFIG_ID),
-  type: z.literal('select'),
-  currentValue: z.string(),
-  options: z.array(z.object({ value: z.string(), name: z.string() })),
-});
+const selectOption = (id: string) =>
+  z.object({
+    id: z.literal(id),
+    type: z.literal('select'),
+    currentValue: z.string(),
+    options: z.array(z.object({ value: z.string(), name: z.string() })),
+  });
+
+const selectOf =
+  (schema: ReturnType<typeof selectOption>) =>
+  (options: readonly unknown[] | null | undefined): SelectChoice | undefined => {
+    for (const option of options ?? []) {
+      const parsed = schema.safeParse(option);
+      if (parsed.success) return { current: parsed.data.currentValue, options: parsed.data.options.map(({ value, name }) => ({ value, name })) };
+    }
+    return undefined;
+  };
 
 /** The effort among a session's config options; undefined when the engine offers none. */
-export function effortOf(options: readonly unknown[] | null | undefined): EffortChoice | undefined {
-  for (const option of options ?? []) {
-    const parsed = effortOption.safeParse(option);
-    if (parsed.success) return { current: parsed.data.currentValue, options: parsed.data.options.map(({ value, name }) => ({ value, name })) };
-  }
-  return undefined;
-}
+export const effortOf = selectOf(selectOption(EFFORT_CONFIG_ID));
+
+/** An external session's models among its config options; undefined for Geno's own loop. */
+export const agentModelsOf = selectOf(selectOption(MODEL_CONFIG_ID));
 
 const turnUsage = z.object({ costUsd: z.number().nullable() });
 
@@ -61,8 +69,12 @@ export class ComposerHost implements vscode.Disposable {
     private readonly model: () => string,
     /** Writes the chat role's provider and model, as the settings page does. */
     private readonly chooseModel: (provider: ProviderName, model: string) => Promise<void>,
+    /** The engine's backends and what it found of each. */
+    private readonly listBackends: () => Promise<readonly BackendInfo[]>,
+    /** Starts a new chat on a backend; the panel's chat owns its sessions. */
+    private readonly startOn: (backend: BackendId) => Promise<void>,
   ) {
-    this.facts = { provider: '', effort: undefined, models: [], context: undefined, turnCostUsd: undefined, bahtPerUsd: rate() };
+    this.facts = { provider: '', effort: undefined, models: [], backends: [], agentModels: undefined, context: undefined, turnCostUsd: undefined, bahtPerUsd: rate() };
     this.subscription = vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(BAHT_SETTING)) this.set({ bahtPerUsd: rate() });
     });
@@ -77,10 +89,14 @@ export class ComposerHost implements vscode.Disposable {
     this.post({ type: 'composer', facts: this.facts });
   }
 
-  /** Asks the settings for the providers again, after a key, provider or model changed. */
+  /** Asks the settings for the providers again, after a key, provider or model changed, and the engine for its backends. */
   refreshModels(): void {
     void this.listing().then(
       (listing) => this.set({ provider: listing.chat, models: modelChoices(listing, this.model()) }),
+      () => {},
+    );
+    void this.listBackends().then(
+      (backends) => this.set({ backends }),
       () => {},
     );
   }
@@ -88,7 +104,7 @@ export class ComposerHost implements vscode.Disposable {
   /** A session was shown: a new chat, or one resumed or loaded, with the options its response gave. */
   switched(sessionId: string, options: readonly unknown[] | null | undefined): void {
     this.shown = sessionId;
-    this.set({ effort: effortOf(options), context: this.contexts.get(sessionId), turnCostUsd: undefined });
+    this.set({ effort: effortOf(options), agentModels: agentModelsOf(options), context: this.contexts.get(sessionId), turnCostUsd: undefined });
   }
 
   turnStarted(): void {
@@ -98,7 +114,7 @@ export class ComposerHost implements vscode.Disposable {
   /** Takes a usage or config option update; false for any other. */
   updated(sessionId: string, update: acp.SessionUpdate): boolean {
     if (update.sessionUpdate === 'config_option_update') {
-      if (sessionId === this.shown) this.set({ effort: effortOf(update.configOptions) });
+      if (sessionId === this.shown) this.set({ effort: effortOf(update.configOptions), agentModels: agentModelsOf(update.configOptions) });
       return true;
     }
     if (update.sessionUpdate !== 'usage_update') return false;
@@ -117,7 +133,20 @@ export class ComposerHost implements vscode.Disposable {
       const known = this.facts.models.find((m) => m.provider === provider && m.model === model);
       if (known !== undefined) void this.chooseModel(known.provider as ProviderName, known.model).catch(warn);
     },
+    'set-agent-model': ({ value }) => {
+      if (this.facts.agentModels?.options.some((o) => o.value === value) === true) void this.setAgentModel(value).catch(warn);
+    },
+    'set-backend': ({ backend }) => {
+      const ready = backend === 'geno' || this.facts.backends.some((b) => b.id === backend && b.availability.kind === 'ready');
+      if (ready) void this.startOn(backend).catch(warn);
+    },
   };
+
+  private async setAgentModel(value: string): Promise<void> {
+    const { connection, sessionId } = await this.link();
+    const { configOptions } = await connection.agent.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: MODEL_CONFIG_ID, value });
+    if (sessionId === this.shown) this.set({ agentModels: agentModelsOf(configOptions) });
+  }
 
   private async setEffort(value: string): Promise<void> {
     const { connection, sessionId } = await this.link();

@@ -1,4 +1,4 @@
-import type { AppliedRule, AskUserAnswer, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
+import type { AppliedRule, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, HunkStatus, MemoryEntry, MemoryScope, Waiting } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -14,7 +14,12 @@ import type { CommandOption, SentCommand } from './slash.js';
  * Action; the webview runs the same reducer (transcript.ts) and renders the result, so replaying or
  * resending the whole transcript can never leave the view out of step.
  */
-export type Transcript = { readonly model: string; readonly turns: readonly Turn[] };
+export type Transcript = {
+  readonly model: string;
+  readonly turns: readonly Turn[];
+  /** The external agent the session runs on, fixed when it starts; undefined for Geno's own loop. */
+  readonly backend?: BackendShown | undefined;
+};
 
 export type Turn = {
   readonly id: string;
@@ -181,6 +186,8 @@ export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly
 export type Action =
   | { readonly type: 'reset'; readonly transcript: Transcript }
   | { readonly type: 'model'; readonly model: string }
+  /** The session's backend, as its start or load said, or again once its first turn names the lane. */
+  | { readonly type: 'backend'; readonly backend: BackendShown | undefined }
   | {
       readonly type: 'turn-start';
       readonly id: string;

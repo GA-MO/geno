@@ -1,9 +1,10 @@
 /// <reference lib="dom" />
 import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
-import { formatCost, formatDuration, formatTokens } from './format.js';
+import { formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { AskUserRequest } from '@g-code/core';
+import type { AskUserRequest, BackendShown } from '@g-code/core';
+import { showsTokens, turnCost } from './backend-model.js';
 import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { answerWords, settledLine } from './question-model.js';
 import { questionCard } from './question-view.js';
@@ -526,20 +527,27 @@ export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
 export const thinkingRow = (): HTMLElement => h('div', { class: 'thinking', role: 'status' }, icon('lightbulb'), h('span', { class: 'shimmer' }, 'Thinking'));
 
 /** A turn's model, tokens and cost, as one line. */
-const usageLine = ({ model, inputTokens, outputTokens, costUsd }: NonNullable<Turn['usage']>): string =>
-  [model, `${formatTokens(inputTokens)} in`, `${formatTokens(outputTokens)} out`, ...(costUsd === null ? [] : [formatCost(costUsd)])].join(' · ');
+function usageLine(usage: NonNullable<Turn['usage']>, backend: BackendShown | undefined): string {
+  const cost = turnCost(usage.costUsd, backend);
+  const tokens = showsTokens(usage, backend) ? [`${formatTokens(usage.inputTokens)} in`, `${formatTokens(usage.outputTokens)} out`] : [];
+  return [usage.model, ...tokens, ...(cost === undefined ? [] : [cost.text])].join(' · ');
+}
 
-/** The avatar, the name, and what the turn is doing or how long it worked, with its model, tokens and cost as the tooltip. */
-export function turnHead(turn: Turn): HTMLElement {
+/**
+ * The avatar, the name, and what the turn is doing or how long it worked, with its model, tokens and cost as the
+ * tooltip. A turn of a session on an external agent names the agent beside Geno, which drives it.
+ */
+export function turnHead(turn: Turn, backend: BackendShown | undefined): HTMLElement {
   return h(
     'div',
     { class: 'turn-head' },
     dino('avatar'),
     icon('loading', 'turn-working codicon-modifier-spin'),
     h('span', { class: 'turn-name' }, 'Geno'),
+    backend !== undefined && h('span', { class: 'turn-backend', title: `${backend.label} works this chat in its own lane; Geno asks your permission and brings its changes back` }, backend.label),
     h(
       'span',
-      { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta', title: turn.usage === undefined ? undefined : usageLine(turn.usage) },
+      { class: turn.status === 'streaming' ? 'turn-meta shimmer' : 'turn-meta', title: turn.usage === undefined ? undefined : usageLine(turn.usage, backend) },
       headerOf(turn, formatDuration),
     ),
     turn.mode === 'plan' && h('span', { class: 'turn-mode', title: 'This turn ran in Plan mode, which changes nothing' }, icon('checklist'), 'Plan'),
@@ -559,8 +567,21 @@ const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { read
   failed: { icon: 'error', label: 'Failed' },
 };
 
+/** Under an external agent's turn that left changes in its lane: bring them into the main checkout for review. */
+export const applyLaneButton = (lane: string, ui: Ui): HTMLElement =>
+  h(
+    'div',
+    { class: 'apply-lane' },
+    h(
+      'button',
+      { type: 'button', class: 'button secondary', 'data-focus': `apply-lane:${lane}`, title: `Apply changes from lane ${lane} to the main checkout, for review`, onclick: () => ui.post({ type: 'lane-apply', name: lane }) },
+      icon('git-pull-request-go-to-changes'),
+      h('span', { class: 'apply-lane-label' }, `Apply changes from lane ${lane}`),
+    ),
+  );
+
 /** How the turn ended, if not as it should, then its model, tokens and cost when `usage`. */
-export function turnFooter(turn: Turn, usage: boolean): HTMLElement {
+export function turnFooter(turn: Turn, usage: boolean, backend: BackendShown | undefined): HTMLElement {
   const parts: Child[] = [];
   if (turn.status === 'stopped' || turn.status === 'failed') {
     const ending = ENDINGS[turn.status];
@@ -568,11 +589,13 @@ export function turnFooter(turn: Turn, usage: boolean): HTMLElement {
   }
   if (usage && turn.usage !== undefined) {
     const { model, inputTokens, outputTokens, costUsd } = turn.usage;
+    const cost = turnCost(costUsd, backend);
+    const tokens = showsTokens(turn.usage, backend);
     parts.push(
       h('span', { class: 'model' }, model),
-      h('span', { title: `${inputTokens} input tokens` }, `${formatTokens(inputTokens)} in`),
-      h('span', { title: `${outputTokens} output tokens` }, `${formatTokens(outputTokens)} out`),
-      costUsd !== null && h('span', { title: `$${costUsd} estimated` }, formatCost(costUsd)),
+      tokens && h('span', { title: `${inputTokens} input tokens` }, `${formatTokens(inputTokens)} in`),
+      tokens && h('span', { title: `${outputTokens} output tokens` }, `${formatTokens(outputTokens)} out`),
+      cost !== undefined && h('span', { class: 'turn-cost', title: cost.title }, cost.text),
     );
   }
   return h('div', { class: 'turn-footer' }, ...parts);

@@ -21,7 +21,8 @@ import { sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
-import { callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { laneOffer } from './backend-model.js';
+import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
 import { slashPicker } from './slash-view.js';
@@ -327,17 +328,20 @@ function render(): void {
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
-      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage], build: () => turnHead(turn) }]);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage, transcript.backend?.label], build: () => turnHead(turn, transcript.backend) }]);
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
       const open = ui.isOpen(foldId(turn.id));
       const whole = detail() === 'full' || open;
       const steps = shownSteps(turn, detail(), open);
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
       reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText, !whole)));
-      const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && i === transcript.turns.length - 1;
+      const last = i === transcript.turns.length - 1;
+      const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && last;
+      const apply = last ? laneOffer(transcript) : undefined;
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
-        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole], build: () => turnFooter(turn, whole) }]),
+        ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole, transcript.backend?.plan], build: () => turnFooter(turn, whole, transcript.backend) }]),
         ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),
+        ...(apply !== undefined ? [{ key: `apply:${apply}`, deps: [], build: () => applyLaneButton(apply, ui) }] : []),
       ]);
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
@@ -499,7 +503,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-memory') return memory.open();
   if (message.type === 'lanes') return lanes.listed(message.listing);
   if (message.type === 'show-lanes') return lanes.open();
-  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown);
+  if (message.type === 'tasks') return tasks.listed(message.tasks, message.shown, message.backends);
   if (message.type === 'show-tasks') return tasks.open();
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
