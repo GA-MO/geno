@@ -175,32 +175,30 @@
   outline-offset: 2px;
 }
 
-/* From 80% the ring offers Compact beside it, amber like the ring; while a turn runs it stays, dimmed, with its reason. */
+/*
+ * From 80% the ring itself becomes the Compact button, amber like the ring; while a turn runs it stays, dimmed, with
+ * its reason. The plain ring hides meanwhile.
+ */
+.input-box .context-ring[hidden],
+.input-box .compact-offer[hidden] {
+  display: none;
+}
+
 .input-box .compact-offer {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 3px;
-  height: 20px;
-  margin-left: -4px;
-  padding: 0 7px 0 5px;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px 0 3px;
   border: 1px solid var(--warn);
-  border-radius: 10px;
+  border-radius: 11px;
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   backdrop-filter: none;
   color: var(--vscode-foreground);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-}
-
-.input-box .compact-offer[hidden] {
-  display: none;
-}
-
-.input-box .compact-offer .codicon {
-  font-size: 12px;
-  color: var(--warn);
 }
 
 .input-box .compact-offer:hover {
@@ -219,6 +217,23 @@
 
 .input-box .compact-offer[aria-disabled='true']:hover {
   background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+/* The label takes the effort's room, which the model menu still shows; a narrow panel shows the ring alone. */
+@media (min-width: 360px) and (max-width: 479px) {
+  .toolbar-right:has(.compact-offer:not([hidden])) .model-effort {
+    display: none;
+  }
+}
+
+@media (max-width: 359px) {
+  .input-box .compact-offer {
+    padding: 0 3px;
+  }
+
+  .input-box .compact-offer-label {
+    display: none;
+  }
 }
 
 body.vscode-high-contrast .input-box .compact-offer,

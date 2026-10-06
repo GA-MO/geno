@@ -67,8 +67,11 @@ export type ComposerInput = {
 /** `fraction` is undefined when the window is unknown; `high` from 80%. */
 export type RingView = { readonly fraction: number | undefined; readonly high: boolean; readonly title: string; readonly compact: CompactOffer | undefined };
 
-/** The ring's Compact action, offered from 80% on Geno's own sessions; `held` says why it waits while a turn runs. */
-export type CompactOffer = { readonly held: string | undefined };
+/**
+ * The ring's Compact action, offered from 80% on Geno's own sessions; `held` says why it waits while a turn runs. Its
+ * tooltip keeps the ring's numbers.
+ */
+export type CompactOffer = { readonly held: string | undefined; readonly title: string };
 
 /** What Compact sends, exactly as if the user typed it. */
 export const COMPACT_COMMAND = '/compact';
@@ -155,7 +158,8 @@ function ringOf(context: ContextUse | undefined, running: boolean, backend: Back
   const high = fraction >= HIGH_CONTEXT;
   const numbers = `Context: ${count(used)} of ${count(window)} tokens (${Math.floor((used / window) * 100)}%)`;
   if (!high || backend !== undefined) return { fraction, high, title: numbers, compact: undefined };
-  return { fraction, high, title: `${numbers}. Compact summarizes the older turns to free it.`, compact: { held: running ? COMPACT_HELD : undefined } };
+  const title = `${numbers}. Compact summarizes the older turns to free it.`;
+  return { fraction, high, title, compact: running ? { held: COMPACT_HELD, title: `${numbers}. ${COMPACT_HELD}` } : { held: undefined, title } };
 }
 
 /** Where the browser last went: the URL of the latest navigation in the transcript. */
