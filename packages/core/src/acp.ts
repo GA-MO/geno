@@ -3,7 +3,7 @@
 import type { ExternalBackendId } from './backends.js';
 import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
-import type { HunkId, ReviewHunk } from './review.js';
+import type { CheckpointRef, HunkId, ReviewHunk } from './review.js';
 import type { ForkOrigin, RewindChoice } from './rewind.js';
 
 /** Extension method, sent by the engine: the editor's diagnostics for some files. */
@@ -67,16 +67,22 @@ export type ReviewDecision = { readonly hunk: HunkId; readonly status: HunkStatu
 export type ReviewRequest = { readonly sessionId: string; readonly decisions: readonly ReviewDecision[] };
 export type ReviewResponse = { readonly hunks: readonly ReviewHunk[] };
 
-/** Extension method, sent by the editor: a file's text at the session's first checkpoint, null when it did not exist then. */
+/**
+ * Extension method, sent by the editor: a file's text at the session's first checkpoint, or with `before` at the
+ * checkpoint before that change's turn; null when it did not exist then.
+ */
 export const CHECKPOINT_TEXT_METHOD = '_gcode/checkpointText';
 
-export type CheckpointTextRequest = { readonly sessionId: string; readonly path: string };
+export type CheckpointTextRequest = { readonly sessionId: string; readonly path: string } & Partial<CheckpointRef>;
 export type CheckpointTextResponse = { readonly text: string | null };
 
-/** Extension method, sent by the editor: restores the session's first checkpoint, as `gcode rewind` does, and returns the absolute paths it rewrote or deleted. */
+/**
+ * Extension method, sent by the editor: restores the session's first checkpoint, or with `before` the checkpoint
+ * before that change's turn, as `gcode rewind` does, and returns the absolute paths it rewrote or deleted.
+ */
 export const REWIND_METHOD = '_gcode/rewind';
 
-export type RewindRequest = { readonly sessionId: string };
+export type RewindRequest = { readonly sessionId: string } & Partial<CheckpointRef>;
 export type RewindResponse = { readonly files: readonly string[] };
 
 /** Extension method, sent by the editor: what restoring the files before the turn at `turnSeq` would change. Paths are relative to the session's workspace. */

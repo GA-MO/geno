@@ -653,6 +653,31 @@ describe('gcode serve', () => {
     }, sessionId);
   });
 
+  it('serves the checkpoint before the turn of a change and rewinds to it, leaving the earlier turns', async () => {
+    const { file, editor, connect } = await setup([
+      toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' })], usage),
+      answer('Done.', usage),
+      toolCall('Reading.', [use('read', { path: 'a.ts' })], usage),
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 2', new_str: 'a = 3' })], usage),
+      answer('Done.', usage),
+    ]);
+    editor.buffers.delete(file);
+    const [two, three] = ['export const a = 2;\n', 'export const a = 3;\n'];
+    const second = changeOf(file, two, three);
+    await connect(async (ctx, sessionId) => {
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Set a to 2' }] });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Set a to 3' }] });
+      expect(readFileSync(file, 'utf8')).toBe(three);
+      const before = { sessionId, before: second.id };
+      expect(await ctx.request<CheckpointTextResponse, CheckpointTextRequest>(CHECKPOINT_TEXT_METHOD, { ...before, path: file })).toEqual({ text: two });
+      await expect(ctx.request<RewindResponse, RewindRequest>(REWIND_METHOD, { sessionId, before: 'missing' })).rejects.toThrow(/no checkpoint before/);
+      expect(await ctx.request<RewindResponse, RewindRequest>(REWIND_METHOD, before)).toEqual({ files: [file] });
+      expect(readFileSync(file, 'utf8')).toBe(two);
+      return sessionId;
+    });
+  });
+
   it('runs an inline edit of a selection as one edit call with the file and its problems in the prompt', async () => {
     const { file, editor, transport, connect } = await setup([
       toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'unsaved = true', new_str: 'unsaved = false' })], usage),

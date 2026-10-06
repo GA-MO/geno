@@ -106,7 +106,7 @@ describe('lanes over ACP', () => {
     expect(writes).toEqual([expect.objectContaining({ path: path.join(repo, 'a.ts'), content: 'one\nTWO\nthree\n', _meta: expect.objectContaining({ [TOOL_CALL_META]: expect.stringMatching(/^lane-/) }) })]);
     const chatUpdates = updates.filter((u) => u.sessionId === chat).map((u) => u.update);
     expect(chatUpdates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call', title: 'edit a.ts', kind: 'edit' }));
-    expect(chatUpdates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Applied 1 file from lane make-two-loud. Keep or undo each change.' } });
+    expect(chatUpdates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Applied 1 file from lane make-two-loud.' } });
     const review = await agent.request<ReviewResponse>(REVIEW_METHOD, { sessionId: chat, decisions: [] });
     expect(review.hunks).toEqual([expect.objectContaining({ path: path.join(repo, 'a.ts'), oldText: 'two\n', newText: 'TWO\n', status: 'pending' })]);
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { hunksBetween, type Hunk, type HunkStatus } from './hunks.js';
 import type { TurnEvent } from './session.js';
+import { startsTurn } from './steer.js';
 import type { Brand } from './types.js';
 
 export type HunkId = Brand<string, 'HunkId'>;
@@ -121,4 +122,30 @@ export function reviewState(events: readonly TurnEvent[]): ReviewHunk[] {
     }
   }
   return changes.flatMap((logged) => logged.hunks.map((hunk) => ({ ...hunk, status: status.get(hunk.id) ?? hunk.status })));
+}
+
+/**
+ * Names the checkpoint taken before the turn that made a change. The editor knows a turn by the changes it shows,
+ * and a change's id is the one name the editor and the engine share.
+ */
+export type CheckpointRef = { readonly before: FileChange['id'] };
+
+type CheckpointEvent = Extract<TurnEvent, { kind: 'checkpoint' }>;
+
+const isCheckpoint = (event: TurnEvent): event is CheckpointEvent => event.kind === 'checkpoint';
+
+const made = (event: TurnEvent, id: string): boolean =>
+  (event.kind === 'tool-result' && event.change?.id === id) || (event.kind === 'lane-apply' && event.changes.some((change) => change.id === id));
+
+/**
+ * The checkpoint before the latest turn that logged change `before`; an edit redone after an undo has the same id.
+ * A turn takes one before each of its model calls, so its first is the one after its prompt; a lane apply has no
+ * prompt and takes one just before it writes.
+ */
+export function checkpointBefore(events: readonly TurnEvent[], { before }: CheckpointRef): CheckpointEvent | undefined {
+  const at = events.findLastIndex((event) => made(event, before));
+  if (at === -1) return undefined;
+  const earlier = events.slice(0, at);
+  if (events[at]!.kind === 'lane-apply') return earlier.findLast(isCheckpoint);
+  return earlier.slice(earlier.findLastIndex(startsTurn) + 1).find(isCheckpoint);
 }
