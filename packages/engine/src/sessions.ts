@@ -17,6 +17,7 @@ import {
   SESSION_MODES,
   sessionEffortOf,
   sessionModeOf,
+  TODO_STATUSES,
   TOOL_STATUSES,
   TURN_ERROR_KINDS,
   WAIT_KINDS,
@@ -148,6 +149,8 @@ const approvalSchema = z.strictObject({
   verdict: verdict.exclude(['ask']),
 });
 
+const todoSchema = z.array(z.strictObject({ id: z.string(), text: z.string(), status: z.enum(TODO_STATUSES) }));
+
 const toolResultFields = {
   kind: z.literal('tool-result'),
   ...seqFields,
@@ -159,6 +162,7 @@ const toolResultFields = {
   images: z.array(imageAttachmentSchema).optional(),
   widget: widgetRefSchema.optional(),
   editorAction: editorActionSchema.optional(),
+  todo: todoSchema.optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 

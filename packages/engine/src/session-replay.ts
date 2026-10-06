@@ -33,6 +33,10 @@ import {
   type TurnErrorKind,
   type TurnEvent,
   parseShowWidget,
+  parseTodo,
+  TODO_META,
+  TODO_TOOL,
+  todoLine,
   WIDGET_META,
   WIDGET_TOOL,
   type WidgetRef,
@@ -84,6 +88,10 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseShowWidget(input);
     return parsed.ok ? `${WIDGET_TOOL} ${parsed.value.title}` : WIDGET_TOOL;
   },
+  [TODO_TOOL]: (input) => {
+    const parsed = parseTodo(input);
+    return parsed.ok ? `${TODO_TOOL} ${todoLine(parsed.value)}` : TODO_TOOL;
+  },
   ask_user: (input) => {
     const parsed = parseAskUser(input);
     return parsed.ok ? `ask_user ${askUserTitle(parsed.value)}` : 'ask_user';
@@ -114,7 +122,7 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
   const all = {
     ...(event.approval === undefined ? {} : { [APPROVAL_META]: event.approval }),
     ...(event.widget === undefined ? {} : { [WIDGET_META]: event.widget }),
-    ...(event.editorAction === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction }),
+    ...(event.editorAction, todo === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction, todo }),
     ...meta,
   };
   return {

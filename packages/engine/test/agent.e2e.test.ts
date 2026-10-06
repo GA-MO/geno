@@ -400,7 +400,7 @@ describe('gcode agent --mode plan', () => {
     expect(result.code).toBe(0);
 
     const [first] = transport.requests;
-    expect(first!.body.tools.map((t: { name: string }) => t.name)).toEqual(['bash', 'check', 'glob', 'grep', 'list', 'read', 'skill']);
+    expect(first!.body.tools.map((t: { name: string }) => t.name)).toEqual(['bash', 'check', 'glob', 'grep', 'list', 'read', 'skill', 'todo']);
     expect(first!.body.tools).toEqual(AGENT_MODE_TOOL_DEFINITIONS.plan);
     expect(first!.body.system[0].text).toBe(AGENT_MODE_SYSTEM_PROMPTS.plan);
     expect(first!.body.system[0].text).toContain('You are in Plan mode, which is read-only.');

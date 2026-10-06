@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, ChildNote, EditorAction, FileChange, ImageAttachment, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
+import type { ApprovalRecord, ChildNote, EditorAction, FileChange, ImageAttachment, TodoList, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -44,7 +44,7 @@ export class ToolDenied extends ToolError {
   }
 }
 
-/** What a tool tells the model, the file edit it made, how its command was approved, and images, a widget or an editor action it returns, if any. */
+/** What a tool tells the model, the file edit it made, how its command was approved, and images, a widget an editor action or a todo list it returns, if any. */
 export type ToolReply =
   | string
   | {
@@ -54,6 +54,7 @@ export type ToolReply =
       readonly images?: readonly ImageAttachment[] | undefined;
       readonly widget?: WidgetRef | undefined;
       readonly editorAction?: EditorAction | undefined;
+      readonly todo?: TodoList | undefined;
     };
 
 /** A tool's executor, typed on its parsed input. */
