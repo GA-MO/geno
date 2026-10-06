@@ -8,6 +8,7 @@ import { UsageError, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
 import type { ToolInputDraft } from './gateway.js';
+import { loggedArrival, type Arrival } from './inbox.js';
 import { appendEvent } from './sessions.js';
 import { isMissing, type Store } from './store.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
@@ -27,6 +28,8 @@ export type Mode = {
   readonly effortPolicy?: EffortPolicy;
   /** A tool call the user typed, such as `@explore`: logged in place of the first model call, and the run ends once its tools ran. */
   readonly issued?: AssistantTurn;
+  /** What reached the session from outside the loop since the last call, logged at the safe point before each model call. */
+  readonly arrivals?: () => readonly Arrival[];
 };
 
 export type Limits = { readonly maxTurns: number; readonly maxCostUsd: number };
@@ -256,6 +259,7 @@ export async function drive(
     // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
     const left = openWaitOf(events);
     let lastWait = left;
+    for (const arrival of mode.arrivals?.() ?? []) await record(loggedArrival(arrival, 0));
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const result = await gateway.turn({
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),

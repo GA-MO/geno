@@ -3,6 +3,8 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  BACKGROUND_META,
+  type JobView,
   laneApplyPrompt,
   laneApplyText,
   askUserTitle,
@@ -110,6 +112,13 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
   };
 };
 
+/** A background job as its bash call's step follows it, live and replayed. */
+export const backgroundUpdate = (view: JobView, meta: Record<string, unknown> = {}): acp.SessionUpdate => ({
+  sessionUpdate: 'tool_call_update',
+  toolCallId: view.toolUseId,
+  _meta: { [BACKGROUND_META]: view, ...meta },
+});
+
 const ms = (iso: string): number => Date.parse(iso);
 
 /** One prompt, the mode the session was in when it was sent, and everything logged until the next. */
@@ -131,7 +140,8 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
 function turnOf({ prompt, mode, events }: Run): ReplayedTurn {
   const answers = events.flatMap((e) => (e.kind === 'assistant' ? [e] : []));
   const error = events.findLast((e) => e.kind === 'error');
-  const last = events.at(-1);
+  // A background command may end long after its turn did; the turn ended with its own last event.
+  const last = events.findLast((e) => e.kind !== 'background-end');
   return {
     mode,
     startedAt: ms(prompt.at),
@@ -211,6 +221,10 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
         updates.push(textUpdate(laneApplyText(event, event.changes.length)));
       }
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
+      if (event.kind === 'background-end') {
+        const { id, toolUseId, command, state } = event.job;
+        updates.push(backgroundUpdate({ id, toolUseId, command, state, tail: event.tail }, { [REPLAYED_AT_META]: ms(event.at) }));
+      }
     }
     return updates;
   });

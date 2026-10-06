@@ -21,6 +21,7 @@ import {
   type EffortPolicy,
   type SessionMode,
   type TurnEvent,
+  TELLS_MODEL,
 } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -44,6 +45,8 @@ import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js
 import { showWidget } from './tools/widget.js';
 import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
+import { BackgroundJobs } from './background.js';
+import { Inbox } from './inbox.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -93,7 +96,24 @@ export type AgentOptions = {
   readonly allowWorker?: boolean | undefined;
   /** A subagent call the caller issues as the user's own, as an `@` mention would; the Arena's review is one. */
   readonly issued?: AssistantTurn | undefined;
+  /**
+   * The engine's background commands and where their ends arrive. Undefined runs them for this run alone: they are
+   * killed when it ends, as a CLI run's process ends with it.
+   */
+  readonly background?: { readonly jobs: BackgroundJobs; readonly inbox: Inbox } | undefined;
 };
+
+/** Background commands that live as long as one run, their ends delivered to its loop. */
+function runBackground(): { readonly jobs: BackgroundJobs; readonly inbox: Inbox } {
+  const inbox = new Inbox();
+  const jobs = new BackgroundJobs({
+    changed: () => {},
+    ended(end, job) {
+      if (TELLS_MODEL(end.job.state)) inbox.put(job.sessionId, end);
+    },
+  });
+  return { inbox, jobs };
+}
 
 export const askOnTerminal =
   (io: Io): Approver =>
@@ -114,6 +134,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   if (lane !== undefined) await bindSession(lane, session.id);
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
   let children: Subagents | undefined;
+  const background = options.background ?? runBackground();
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
@@ -123,7 +144,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
     const config = await workspaceConfig(workspace);
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
-    const executorsFor = (approval: Approval) =>
+    const executorsFor = (approval: Approval, own = false) =>
       agentExecutors({
         sandbox,
         env: childEnv(io.env),
@@ -135,8 +156,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         rules: ruleAttacher(opened.log.events),
         commands,
         lane: lane?.bounds,
+        background: own ? { jobs: background.jobs, sessionId: session.id } : undefined,
       });
-    const executors = executorsFor(options.approval);
+    const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
     // The run offers the tools and prompt of the mode it starts in; a switch mid-run applies from the next run.
@@ -179,12 +201,14 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       system,
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
+      arrivals: () => background.inbox.take(session.id),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(issued === undefined ? {} : { issued }),
     };
     return await drive(io, store, opened, prompt, options.limits, mode, options.surface);
   } finally {
     await children?.settled();
+    if (options.background === undefined) await background.jobs.kill('engine-exit', { sessionId: session.id });
     await sandbox.close();
     await rm(tempDir, { recursive: true, force: true });
   }
