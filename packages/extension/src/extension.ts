@@ -18,7 +18,7 @@ import { readSettings, TabProvider } from './tab/provider.js';
 import { registerTabServer } from './tab/status.js';
 import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
-import { describeEngineRuntime, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
+import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
 import { SettingsPage } from './chat/settings-host.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
@@ -133,7 +133,9 @@ function registerChat(context: vscode.ExtensionContext): void {
     chat,
     review.onDidChange(() => chat.reviewed(review.all())),
     vscode.commands.registerCommand(SET_KEY_COMMAND, (key?: string, provider?: string, field?: FieldId) => setApiKey(context.secrets, key, provider, field)),
-    context.secrets.onDidChange(() => chat.resetEngine()),
+    context.secrets.onDidChange((event) => {
+      if (event.key.startsWith(ENGINE_SECRETS)) chat.resetEngine();
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
       if (LOOK_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.restyle();
