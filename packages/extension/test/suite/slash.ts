@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { EXPANDED, SENT, THEMES } from './slash-fixture.js';
 
-const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init'];
+const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init', 'best-of-n'];
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
