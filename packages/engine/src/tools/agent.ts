@@ -8,6 +8,8 @@ import {
   DEFAULT_BASH_TIMEOUT_SECONDS,
   denialFor,
   formatDiagnostics,
+  laneCommandDenial,
+  laneDenialText,
   MAX_BASH_TIMEOUT_SECONDS,
   AGENT_MODE_TOOLS,
   AGENT_TOOL_NAMES,
@@ -21,6 +23,7 @@ import {
   type CommandScope,
   type Denial,
   type EditorDiagnostic,
+  type LaneBounds,
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
@@ -129,6 +132,8 @@ export type AgentToolEnv = {
   readonly rules: RuleAttacher;
   /** The slash commands as discovered now, for the skill tool. */
   readonly commands: () => Promise<readonly SlashCommand[]>;
+  /** Set when the session runs in a lane: commands that would reach the main checkout are refused. */
+  readonly lane?: LaneBounds | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -201,6 +206,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     describe: ({ command }) => `bash ${command}`,
     async run({ command, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS }, ctx) {
+      const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
+      if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
       const mode = modeOf(tools.approval);
       const denial = denialFor(command, tools.scope, mode);
       const approval =
