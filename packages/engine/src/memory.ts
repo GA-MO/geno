@@ -55,7 +55,7 @@ async function readMemoryFile(file: string): Promise<MemoryFile | undefined> {
   return parsed.data;
 }
 
-async function writeAtomically(file: string, value: unknown): Promise<void> {
+export async function writeAtomically(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);

@@ -1,4 +1,5 @@
 import { realpath } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
@@ -85,6 +86,15 @@ import {
   MEMORY_DELETE_METHOD,
   MEMORY_EDIT_METHOD,
   MEMORY_METHOD,
+  parseRule,
+  patternText,
+  PERMISSION_ADD_METHOD,
+  PERMISSION_REMOVE_METHOD,
+  PERMISSIONS_METHOD,
+  RULE_EFFECTS,
+  type Denial,
+  type PermissionRule,
+  type PermissionsResponse,
   REMEMBER_META,
   RULES_METHOD,
   type AskUserReply,
@@ -169,6 +179,7 @@ import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
 import { homeOf, homesOf, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
+import { permissionStore, rulesWorkspace } from './permissions.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Io } from './command.js';
 import { workspaceDir, type Limits, type Surface } from './drive.js';
@@ -218,7 +229,16 @@ const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' },
   PERMISSION_OPTIONS[1]!,
 ];
-const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session' };
+// A command with an offered rule can also be allowed for the workspace, from now on.
+const RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [
+  PERMISSION_OPTIONS[0]!,
+  { optionId: 'allow-workspace', name: 'Always allow in this workspace', kind: 'allow_always' },
+  PERMISSION_OPTIONS[1]!,
+];
+const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session', 'allow-workspace': 'allow-workspace' };
+
+const optionsFor = (denial: Denial): acp.PermissionOption[] =>
+  isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : denial.offer === undefined ? PERMISSION_OPTIONS : RULE_PERMISSION_OPTIONS;
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
@@ -540,7 +560,12 @@ function editorTurn(
     async approve(denial, classifier, asker) {
       await sent.flush();
       const description = asker === undefined ? runningDescription : undefined;
-      const rawInput: PermissionInput = { command: denial.command, reason: denial.reason, ...(description === undefined ? {} : { description }) };
+      const rawInput: PermissionInput = {
+        command: denial.command,
+        reason: denial.reason,
+        ...(description === undefined ? {} : { description }),
+        ...(denial.offer === undefined ? {} : { rule: patternText(denial.offer) }),
+      };
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const toolCallId = running;
       try {
@@ -553,7 +578,7 @@ function editorTurn(
               sessionId: route.sessionId,
               toolCall: { toolCallId, title, kind: PERMISSION_KINDS[denial.rule] ?? (isMcpRule(denial.rule) ? 'other' : 'execute'), status: 'pending', rawInput },
               ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
-              options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
+              options: optionsFor(denial),
             }),
           asker?.sessionId,
         );
@@ -677,6 +702,8 @@ const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
 const sessionRequest = z.object({ sessionId: z.string() });
+const permissionAddRequest = z.object({ sessionId: z.string(), effect: z.enum(RULE_EFFECTS), text: z.string() });
+const permissionRemoveRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
 const memoryEditRequest = z.object({ sessionId: z.string(), id: z.string().min(1), text: z.string() });
 const memoryDeleteRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
 const inlineEditTarget = z
@@ -913,6 +940,15 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const memoryOf = async (sessionId: string) => {
     known(sessionId);
     return memoryStore(homeOf(store), (await existing(sessionId)).session.workspace);
+  };
+  const permissionsOf = async (sessionId: string) => {
+    known(sessionId);
+    const workspace = await workspaceDir(io.cwd, (await existing(sessionId)).session.workspace);
+    const home = io.env['HOME'] || homedir();
+    const rules = permissionStore(homeOf(store), await rulesWorkspace(workspace, home));
+    const scope = { workspace: rules.workspace, tempDir: tmpdir(), home };
+    const answer = async (list: Promise<readonly PermissionRule[]>): Promise<PermissionsResponse> => ({ workspace: rules.workspace, rules: await list });
+    return { rules, scope, answer };
   };
   const refusedMemory =
     (id: string) =>
@@ -1582,6 +1618,20 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(MEMORY_DELETE_METHOD, memoryDeleteRequest, async ({ params }): Promise<MemoryResponse> => ({
       entries: await (await memoryOf(params.sessionId)).remove(params.id).catch(refusedMemory(params.id)),
     }))
+    .onRequest(PERMISSIONS_METHOD, sessionRequest, async ({ params }): Promise<PermissionsResponse> => {
+      const { rules, answer } = await permissionsOf(params.sessionId);
+      return answer(rules.list());
+    })
+    .onRequest(PERMISSION_ADD_METHOD, permissionAddRequest, async ({ params }): Promise<PermissionsResponse> => {
+      const { rules, scope, answer } = await permissionsOf(params.sessionId);
+      const parsed = parseRule(params.effect, params.text, scope);
+      if (!parsed.ok) throw acp.RequestError.invalidParams({ text: params.text }, parsed.reason);
+      return answer(rules.add(params.effect, parsed.pattern));
+    })
+    .onRequest(PERMISSION_REMOVE_METHOD, permissionRemoveRequest, async ({ params }): Promise<PermissionsResponse> => {
+      const { rules, answer } = await permissionsOf(params.sessionId);
+      return answer(rules.remove(params.id));
+    })
     .onRequest(MCP_SERVERS_METHOD, mcpServersRequest, async ({ params }): Promise<McpServersResponse> => {
       known(params.sessionId);
       return mcp.servers(params.sessionId);
