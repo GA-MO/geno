@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { childrenOf, SUBAGENT_META, SUBAGENT_METHOD, type SubagentNotice, type ToolResultEvent, type TurnEvent } from '@g-code/core';
+import { childrenOf, SUBAGENT_META, SUBAGENT_METHOD, TASKS_METHOD, type SubagentNotice, type TaskRecord, type TasksResponse, type ToolResultEvent, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
@@ -71,11 +71,14 @@ async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, 
   const updates: acp.SessionNotification[] = [];
   const notices: SubagentNotice[] = [];
   const permissions: acp.RequestPermissionRequest[] = [];
+  // The engine's tasks while each permission waits.
+  const asking: (readonly TaskRecord[])[] = [];
   let connection: acp.ClientContext | undefined;
   const client = acp
     .client({ name: 'test-editor' })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+    .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       permissions.push(params);
+      asking.push((await connection!.request<TasksResponse>(TASKS_METHOD, {})).tasks);
       return { outcome: { outcome: 'selected', optionId: 'reject' } };
     })
     .onNotification(SUBAGENT_METHOD, (raw) => raw as SubagentNotice, ({ params }) => {
@@ -94,7 +97,7 @@ async function runPrompt(chats: Readonly<Record<string, Chat>>, prompt: string, 
   });
   const log = await readSessionLog(sessionFile(store, sessionId as never));
   const childLog = async (id: string) => readSessionLog(sessionFile(store, id as never));
-  return { transport, updates, notices, permissions, response, log, childLog, sessionId };
+  return { transport, updates, notices, permissions, asking, response, log, childLog, sessionId };
 }
 
 const resultsOf = (events: readonly TurnEvent[]) => events.filter((e): e is ToolResultEvent => e.kind === 'tool-result');
@@ -214,7 +217,7 @@ describe('gcode serve: subagents', () => {
   });
 
   it("asks the user in the parent's channel, with the child's name, before a child runs a flagged command", async () => {
-    const { permissions, transport, log } = await runPrompt(
+    const { permissions, asking, transport, log } = await runPrompt(
       {
         '[parent]': { replies: [toolCall('Handing it over.', [agentCall('tu_w', 'worker', '[child-w] download the page')], usage), answer('The user refused.', usage)] },
         '[child-w]': {
@@ -231,6 +234,9 @@ describe('gcode serve: subagents', () => {
     expect(asked!.toolCall.title).toMatch(/^\[worker\] /);
     const [child] = childrenOf(log.events);
     expect(asked!._meta?.[SUBAGENT_META]).toEqual({ name: 'worker', sessionId: child!.child });
+    // The child's own task waits on the card and rolls up into the parent's; the parent's record still runs.
+    expect(asking[0]!.find((t) => t.sessionId === child!.child)).toMatchObject({ status: 'needs-input', asking: 'permission', parent: log.session.id, kind: 'subagent' });
+    expect(asking[0]!.find((t) => t.sessionId === log.session.id)).toMatchObject({ status: 'running', parent: null });
     const childSent = toolResults(transport.requests('[child-w]')[1]!.body);
     expect(childSent[0]!.is_error).toBe(true);
     expect(childSent[0]!.content).toContain('denied');

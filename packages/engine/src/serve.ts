@@ -114,6 +114,9 @@ import {
   type ArenaPreviewResponse,
   type ArenasResponse,
   type ArenaUpdate,
+  type Asking,
+  type ArenaStatus,
+  type ChildEnd,
   type LaneEnd,
   type LaneRecord,
   type VariantSpec,
@@ -245,9 +248,12 @@ const viewerThat = (route: Route, can: (peer: Peer) => boolean): Viewer<Peer> | 
   return viewer !== undefined && can(viewer.peer) ? viewer : undefined;
 };
 
-/** Asks whichever editor shows the session, waiting for one; the task reads needs-input until it answers. */
-async function askEditor<T>(route: Route, signal: AbortSignal | undefined, request: (viewer: Viewer<Peer>) => Promise<T>): Promise<T> {
-  const answered = route.tasks.ask(route.sessionId);
+/**
+ * Asks whichever editor shows the session, waiting for one. The task of `asker`, a subagent's or else the session's
+ * own, reads needs-input with the card until it answers.
+ */
+async function askEditor<T>(route: Route, signal: AbortSignal | undefined, card: Asking, request: (viewer: Viewer<Peer>) => Promise<T>, asker = route.sessionId): Promise<T> {
+  const answered = route.tasks.ask(asker, card);
   try {
     return await route.viewers.ask(route.sessionId, signal ?? route.signal, request);
   } finally {
@@ -493,13 +499,18 @@ function editorTurn(
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const toolCallId = running;
       try {
-        const { outcome } = await askEditor(route, undefined, (viewer) =>
-          viewer.client.request(acp.methods.client.session.requestPermission, {
-            sessionId: route.sessionId,
-            toolCall: { toolCallId, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
-            ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
-            options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
-          }),
+        const { outcome } = await askEditor(
+          route,
+          undefined,
+          'permission',
+          (viewer) =>
+            viewer.client.request(acp.methods.client.session.requestPermission, {
+              sessionId: route.sessionId,
+              toolCall: { toolCallId, title, kind: isMcpRule(denial.rule) ? 'other' : 'execute', status: 'pending', rawInput },
+              ...(asker === undefined ? {} : { _meta: { [SUBAGENT_META]: asker } }),
+              options: isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : PERMISSION_OPTIONS,
+            }),
+          asker?.sessionId,
         );
         return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
       } catch (error) {
@@ -536,7 +547,7 @@ function editorUser(route: Route, peer: Peer, flush: () => Promise<void>, runnin
           async remember(input, signal) {
             await flush();
             const toolCallId = running();
-            const { outcome } = await askEditor(route, signal, (viewer) =>
+            const { outcome } = await askEditor(route, signal, 'permission', (viewer) =>
               viewer.client.request(
                 acp.methods.client.session.requestPermission,
                 {
@@ -566,7 +577,7 @@ function editorUser(route: Route, peer: Peer, flush: () => Promise<void>, runnin
             try {
               return askUserReplyOf(
                 request,
-                await askEditor(route, signal, (viewer) => viewer.client.request(acp.methods.client.elicitation.create, elicitation, { cancellationSignal: signal })),
+                await askEditor(route, signal, 'question', (viewer) => viewer.client.request(acp.methods.client.elicitation.create, elicitation, { cancellationSignal: signal })),
               );
             } catch (error) {
               // An editor that advertised forms but cannot show this one: the model asks in plain words instead.
@@ -721,6 +732,22 @@ const arenaNewRequest = z.object({ cwd: z.string(), task: z.string().trim().min(
 const arenaRequest = z.object({ cwd: z.string(), id: z.string() });
 const arenaPickRequest = z.object({ cwd: z.string(), id: z.string(), lane: z.string().min(1) });
 const laneGraftMeta = z.strictObject({ lane: z.string().min(1), hunks: z.array(z.string().min(1)).min(1) });
+
+const CHILD_TASK_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>>> = {
+  done: 'done',
+  failed: 'failed',
+  cancelled: 'stopped',
+  capped: 'done',
+};
+
+/** An Arena run's own task ends as the run settles: ranked, with no lane that passed, or stopped. */
+const ARENA_TASK_ENDS: { readonly [S in ArenaStatus]: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'> | undefined } = {
+  running: undefined,
+  ranking: undefined,
+  ranked: 'done',
+  'no-winner': 'failed',
+  stopped: 'stopped',
+};
 
 /** How a lane's turn ended, as the Arena counts it. */
 const ARENA_ENDS: Readonly<Record<acp.StopReason, LaneEnd>> = {
@@ -920,6 +947,19 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                   },
                   cancels: childCancels,
                   err: io.err,
+                  tasks: {
+                    started: (child) =>
+                      tasks.start({
+                        sessionId: child.id,
+                        parent: sessionId,
+                        kind: 'subagent',
+                        title: `${child.agent.name}: ${child.task.split('\n')[0]!}`,
+                        workspace: header.session.workspace,
+                        lane: lane?.record.name ?? null,
+                        startedAt: Date.now(),
+                      }),
+                    ended: (child, end) => tasks.end(child.id, CHILD_TASK_ENDS[end.kind], undefined),
+                  },
                 }),
               })
             : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: shown.surface, diagnostics });
@@ -938,7 +978,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   };
 
   /** A new session in `lane` running `prompt` in the background, as Run in a new lane and each Arena lane start one. */
-  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec) => {
+  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec, parent?: string) => {
     const opened = await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined });
     const { id } = opened.log.session;
     // Bound now, so the Lanes pane names the task from the first update on.
@@ -950,6 +990,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
     mcp.register(id, lane.path, [], undefined);
     io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
+    if (parent !== undefined) tasks.adopt(id, parent);
     const turn = runTurn(id, [{ type: 'text', text: prompt }], undefined, self());
     void turn.catch((error: unknown) => io.err(`lane ${lane.name}: ${String(error)}`));
     return { id, turn };
@@ -1170,6 +1211,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     })
     .onRequest(ARENA_NEW_METHOD, arenaNewRequest, async ({ params }): Promise<ArenaNewResponse> => {
       const n = arenaSizeOf(params.n, params);
+      let rootId: string | undefined;
       const repo = await laneRepo(params.cwd);
       const variants = await arenaVariants(repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
       const started = await startArena(
@@ -1178,19 +1220,32 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           store,
           io,
           check: undefined,
-          runLane: async (lane, variant, prompt) => {
-            const { id, turn } = await startLaneSession(lane, prompt, params.mode, variant);
+          runLane: async (lane, variant, prompt, run) => {
+            // The run's own task, which its lanes roll up into, starts with its first lane.
+            if (tasks.get(run) === undefined) {
+              rootId = run;
+              tasks.start({ sessionId: run, kind: 'arena', parent: null, title: `Best of ${n}: ${params.task}`, workspace: repo.main, lane: null, startedAt: Date.now() });
+            }
+            const { id, turn } = await startLaneSession(lane, prompt, params.mode, variant, run);
             return { sessionId: id, ended: turn.then((response) => ARENA_ENDS[response.stopReason]) };
           },
           onUpdate: (run) => {
+            const end = ARENA_TASK_ENDS[run.status];
+            if (end !== undefined) tasks.end(run.id, end, undefined);
             for (const watch of arenaWatchers) watch({ run });
           },
         },
         params.task,
         variants,
         await arenaPreview(store, io, n),
-      ).catch(refused({ cwd: params.cwd }));
-      void started.finished.catch((error: unknown) => io.err(`arena ${started.run.id}: ${String(error)}`));
+      ).catch((error: unknown) => {
+        if (rootId !== undefined) tasks.end(rootId, 'failed', undefined);
+        return refused({ cwd: params.cwd })(error);
+      });
+      void started.finished.catch((error: unknown) => {
+        tasks.end(started.run.id, 'failed', undefined);
+        io.err(`arena ${started.run.id}: ${String(error)}`);
+      });
       return { run: started.run };
     })
     .onRequest(ARENAS_METHOD, lanesRequest, async ({ params }): Promise<ArenasResponse> => ({ arenas: await listArenas(await laneRepo(params.cwd)) }))

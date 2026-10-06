@@ -18,6 +18,8 @@ import {
   REVIEW_METHOD,
   SEEDS,
   TASKS_CAPABILITY,
+  TASKS_METHOD,
+  type TasksResponse,
   type ArenaCompareResponse,
   type ArenaNewResponse,
   type ArenaPreviewResponse,
@@ -130,6 +132,11 @@ describe('the Arena over ACP', () => {
     expect(ranked.summary).toBe('B wins on scope.');
     expect(ranked.review?.report).toMatch(/^<subagent_report agent="review" session="[^"]+" status="done">/);
     expect(runs.map((r) => r.status)).toContain('ranking');
+
+    // The run is a task of its own, and its lanes roll up into it.
+    const { tasks } = await agent.request<TasksResponse>(TASKS_METHOD, {});
+    expect(tasks.find((t) => t.sessionId === started.id)).toMatchObject({ kind: 'arena', status: 'done', parent: null, title: `Best of 3: ${TASK}` });
+    expect(started.lanes.map((l) => tasks.find((t) => t.sessionId === l.sessionId)?.parent)).toEqual([started.id, started.id, started.id]);
 
     // The review saw the two passing lanes' diffs and not the failed one's, and the chat's model was never called for it.
     const reviews = model.requests.filter((r) => r.script === 'review');
