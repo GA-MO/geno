@@ -1,0 +1,11 @@
+{
+  "slots": {
+    "size": 4,
+    "calls": 50,
+    "peak": 3,
+    "waited": 0,
+    "waitMs": 0,
+    "pauses": 0
+  },
+  "retries": 0
+}
