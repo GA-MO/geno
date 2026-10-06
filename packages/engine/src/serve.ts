@@ -1059,7 +1059,6 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const laneRepo = async (cwd: string) => laneRepoOf(await workspaceDir(io.cwd, cwd)).catch(refused({ cwd }));
   /** Suggestions being started, by session and id, so a second click does not start a second lane. */
   const startingSpinoffs = new Set<string>();
-  /** The suggestion `id` of the session as its log has it, still open, with the session's workspace. */
   const openSpinoff = async (sessionId: string, id: string): Promise<Spinoff & { readonly workspace: string }> => {
     const log = await existing(sessionId);
     const open = openSpinoffNamed(spinoffsOf(log.events), id);

@@ -317,7 +317,6 @@ export function tasksPanel(post: (message: FromView) => void, onToggle: (open: b
       if (target.hidden) frame.element.scrollTop = 0;
       else target.scrollIntoView({ block: 'start' });
     },
-    /** The shown chat's open suggestions, drawn above the tasks. */
     suggested(next: readonly SpinoffCard[]): void {
       if (JSON.stringify(next) === JSON.stringify(suggestions)) return;
       suggestions = next;

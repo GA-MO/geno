@@ -34,7 +34,6 @@ export function withSpinoff(transcript: Transcript, shown: SpinoffShown): Transc
   return changed ? { ...transcript, turns } : transcript;
 }
 
-/** Every suggestion of the session, in the order offered. */
 export const spinoffsIn = (transcript: Transcript): Spinoff[] =>
   transcript.turns.flatMap((turn) => turn.blocks.flatMap((block) => (block.kind === 'tool' && block.spinoff !== undefined ? [block.spinoff] : [])));
 

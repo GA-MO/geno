@@ -126,7 +126,6 @@ export function parseSpawnTask(raw: unknown): Parsed<SpawnTaskInput> {
   return { ok: true, value: input as SpawnTaskInput };
 }
 
-/** The model's dismiss_task input: the id it was given. */
 export function parseDismissTask(raw: unknown): Parsed<SpinoffId> {
   if (!isRecord(raw) || typeof raw['task_id'] !== 'string' || raw['task_id'].trim() === '') return fail(`${DISMISS_TASK_TOOL} takes an object with the task_id spawn_task returned`);
   const extra = extraField(raw, ['task_id']);
