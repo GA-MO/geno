@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { EXPANDED, SENT, THEMES } from './slash-fixture.js';
 
-const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'rules', 'memory', 'init', 'best-of-n'];
+const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n'];
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -77,12 +77,12 @@ export async function run(): Promise<void> {
   await screenshots('picker');
 
   await type('m');
-  await waitFor('typing to filter the list', async () => (await rows()).join() === 'mode,model,memory');
+  await waitFor('typing to filter the list', async () => (await rows()).join() === 'mode,model,memory,compact');
   await press('ArrowDown');
   check((await active()) === 'model', 'ArrowDown moves to the next command', await active());
   await press('ArrowUp');
   await press('ArrowUp');
-  check((await active()) === 'memory', 'ArrowUp wraps to the last command', await active());
+  check((await active()) === 'compact', 'ArrowUp wraps to the last command', await active());
   await press('Escape');
   check((await rows()).length === 0 && (await composer()) === '/m', 'Escape closes the list and keeps the draft', await composer());
   await type('o');
