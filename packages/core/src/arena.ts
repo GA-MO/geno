@@ -290,6 +290,7 @@ export function parseRanking(report: string, passing: readonly LaneKey[]): Ranki
 export type LaneForReview = { readonly lane: string; readonly letter: string; readonly path: string; readonly variant: VariantSpec; readonly check: LaneCheck | null; readonly diff: string };
 
 export const RANKING_DIFF_CHARS = 60_000;
+const RANKING_READS = 3;
 
 /** The review child's task: the user's task, each passing lane's diff, and the answer format `parseRanking` reads. */
 export function rankingTask(task: string, lanes: readonly LaneForReview[]): string {
@@ -311,7 +312,8 @@ export function rankingTask(task: string, lanes: readonly LaneForReview[]): stri
       '```',
       '',
     ]),
-    'You may read files in the lane folders to judge. End your answer with exactly one JSON block and nothing after it:',
+    // In the U26 run, two of four reviews spent all 8 of their turns reading lane files and never answered.
+    `The diffs above are each lane's whole change. Read a file in a lane folder only to settle one specific doubt, at most ${RANKING_READS} reads in all, then answer. End your answer with exactly one JSON block and nothing after it:`,
     '```json',
     `{"ranking": [${lanes.map((lane) => `{"lane": "${lane.letter}", "reason": "<one sentence>"}`).join(', ')}], "summary": "<two sentences comparing them>"}`,
     '```',
