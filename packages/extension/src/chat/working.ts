@@ -33,6 +33,7 @@ const BY_NAME: Readonly<Record<string, WorkKind | 'edit'>> = {
   bash: 'run',
   check: 'run',
   show_widget: 'write',
+  todo: 'plan',
 };
 const BY_KIND: Readonly<Record<ToolKind, WorkKind | 'edit'>> = { read: 'read', search: 'read', edit: 'edit', execute: 'run', other: 'thinking' };
 

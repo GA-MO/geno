@@ -23,7 +23,9 @@ import { mcpPanel } from './mcp-panel.js';
 import { sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
-import { isWaiting, nodeOf, railOf, type Step } from './rail.js';
+import { isWaiting, nodeOf, railOf, todoListOf, type Step } from './rail.js';
+import { todoOpen, todoStep } from './todo-view.js';
+import type { TodoList } from '@g-code/core/todo';
 import { laneOffer } from './backend-model.js';
 import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
@@ -287,6 +289,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
     case 'editor':
       return { deps: [step.tool.editorAction], build: () => editorStep(step.tool, ui) };
+    case 'todo':
+      return { deps: [step.list, step.pinned, todoOpen(step, ui)], build: () => todoStep(step, ui) };
     case 'agent':
       return { deps: [quiet, step.tool, ...step.children, '|', ...state.open], build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()) };
     case 'notice':
@@ -345,6 +349,7 @@ function render(): void {
   );
   let animating = false;
   if (!empty) {
+    let carried: TodoList = [];
     transcript.turns.forEach((turn, i) => {
       const shell = shells[i]!;
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
@@ -355,7 +360,8 @@ function render(): void {
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
       const open = ui.isOpen(foldId(turn.id));
       const whole = detail() === 'full' || open;
-      const steps = shownSteps(turn, detail(), open);
+      const steps = shownSteps(turn, detail(), open, carried);
+      carried = todoListOf(turn) ?? carried;
       const lastText = turn.blocks.at(-1)?.kind === 'text' ? turn.blocks.at(-1)!.id : undefined;
       reconcile(shell.querySelector<HTMLElement>(':scope > .rail')!, steps.map((step) => stepItem(turn, step, step.kind === 'text' && step.block.id === lastText, !whole)));
       const last = i === transcript.turns.length - 1;

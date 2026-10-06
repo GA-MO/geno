@@ -1,4 +1,5 @@
 import type { CheckpointRef } from '@g-code/core';
+import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import { TOOL_KINDS, type Block, type ChatDetail, type PermissionBlock, type ToolBlock, type ToolKind, type Turn } from './messages.js';
 import { isEdit, nodeOf, railOf, type EditTool, type Step } from './rail.js';
 
@@ -67,7 +68,8 @@ function deniedCalls(blocks: readonly Block[]): ReadonlySet<string> {
 }
 
 export function summaryOf(turn: Turn): Summary {
-  const tools = turn.blocks.filter((block): block is ToolBlock => block.kind === 'tool');
+  // The list shows its own progress, so its calls are not work to count.
+  const tools = turn.blocks.filter((block): block is ToolBlock => block.kind === 'tool' && block.name !== TODO_TOOL);
   const denied = deniedCalls(turn.blocks);
   const kinds = Object.fromEntries(TOOL_KINDS.map((kind) => [kind, new Set(tools.filter((t) => t.toolKind === kind).map(KINDS[kind].key)).size])) as Record<ToolKind, number>;
   return { kinds, failed: tools.filter((t) => t.status === 'failed' && !denied.has(t.id)).length, denied: denied.size };
@@ -108,8 +110,8 @@ const needsUser = (step: Step): boolean => nodeOf(step) === 'wait' || step.kind 
 const decided = (step: Step): boolean =>
   step.kind === 'permission' && step.block.ask?.kind === 'question' && (step.block.outcome.kind === 'answered' || step.block.outcome.kind === 'skipped');
 
-export function turnView(turn: Turn): TurnView {
-  const trail = railOf(turn);
+export function turnView(turn: Turn, carried: TodoList = []): TurnView {
+  const trail = railOf(turn, carried);
   const lastCall = turn.blocks.findLastIndex((block) => block.kind === 'tool');
   const after = new Set(turn.blocks.slice(lastCall + 1).map((block) => block.id));
   const edits = turn.blocks.flatMap((block) => (block.kind === 'tool' && isEdit(block) ? [block] : []));
@@ -131,10 +133,10 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
   // What the user said mid-turn shapes the answer below it, as a decided question does.
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer');
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'todo');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
-    const recent = new Set<Step>(work.filter((step) => step.kind !== 'text' || step === narration).slice(-RECENT));
+    const recent = new Set<Step>(work.filter((step) => (step.kind !== 'text' || step === narration) && step.kind !== 'todo').slice(-RECENT));
     const shown = kept((step) => recent.has(step));
     const hidden = work.length - shown.length;
     return { shown, label: hidden === 0 ? undefined : (open) => (open ? `Hide ${hidden} earlier steps` : `+${hidden} earlier steps`) };
@@ -145,8 +147,8 @@ function folded(turn: Turn, view: TurnView): Folded | undefined {
 }
 
 /** What the rail draws of a turn: every step in full detail; in compact, the fold line and what stays in view. */
-export function shownSteps(turn: Turn, detail: ChatDetail, open: boolean): Step[] {
-  const view = turnView(turn);
+export function shownSteps(turn: Turn, detail: ChatDetail, open: boolean, carried: TodoList = []): Step[] {
+  const view = turnView(turn, carried);
   const fold = detail === 'full' ? undefined : folded(turn, view);
   if (fold === undefined) return [...view.trail];
   const files: Step[] = view.files.length === 0 ? [] : [{ kind: 'files', key: 'files', files: view.files }];
