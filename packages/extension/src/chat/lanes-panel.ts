@@ -6,6 +6,8 @@ import { DONE_SHOWN, laneRowOf, SECTION_HEADINGS, taskSections, type Badge, type
 import type { FromView } from './messages.js';
 import type { SteerTarget, SteerResult } from './steer-model.js';
 import { taskSteers } from './steer-view.js';
+import type { SpinoffCard } from './spinoff-model.js';
+import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -222,8 +224,15 @@ function taskSection(section: Section, toggle: () => void) {
   return { element, list, count, summary, more };
 }
 
-/** The Tasks pane: each top-level task, with its subagents or lanes rolled in, in Needs you, Ready, Working or Done. */
-export function tasksPanel(post: (message: FromView) => void, onToggle: (open: boolean) => void) {
+/**
+ * The Tasks pane: the shown chat's suggested tasks, then each top-level task, with its subagents or lanes rolled in, in
+ * Needs you, Ready, Working or Done.
+ */
+export function tasksPanel(post: (message: FromView) => void, onToggle: (open: boolean) => void, spinoffUi: SpinoffUi) {
+  let suggestions: readonly SpinoffCard[] = [];
+  const suggestedList = h('ul', { class: 'lane-list spinoff-list', 'aria-label': 'Suggested in this chat' });
+  const suggestedCount = h('span', { class: 'tasks-count' });
+  const suggested = h('section', { class: 'tasks-section', 'data-section': 'suggested', hidden: true }, h('h3', { class: 'tasks-heading' }, h('span', {}, 'Suggested in this chat'), suggestedCount), suggestedList);
   let tasks: readonly TaskRecord[] = [];
   let shown: string | undefined;
   let seen: SeenMarkers = {};
@@ -248,13 +257,21 @@ export function tasksPanel(post: (message: FromView) => void, onToggle: (open: b
       ticking = undefined;
     }
   }, () => render());
-  frame.body.append(note, h('div', { class: 'tasks' }, ...SECTIONS.map((section) => sections[section].element)));
+  frame.body.append(note, h('div', { class: 'tasks' }, suggested, ...SECTIONS.map((section) => sections[section].element)));
   const steers = taskSteers(post, () => render());
 
   function render(): void {
     if (!frame.isOpen()) return;
-    note.textContent = tasks.length === 0 ? TASKS_NOTE : '';
-    note.hidden = tasks.length !== 0;
+    note.textContent = tasks.length === 0 && suggestions.length === 0 ? TASKS_NOTE : '';
+    note.hidden = note.textContent === '';
+    suggested.hidden = suggestions.length === 0;
+    suggestedCount.textContent = String(suggestions.length);
+    reconcile(
+      suggestedList,
+      suggestions.flatMap((card) =>
+        card.kind === 'hidden' ? [] : [{ key: card.spinoff.id, deps: [JSON.stringify(card)], build: () => h('li', { class: 'spinoff-row' }, spinoffCard(card, spinoffUi, 'pane')) }],
+      ),
+    );
     const listed = new Map(taskSections(tasks, seen, shown, Date.now()).map((s) => [s.section, s.rows]));
     for (const section of SECTIONS) {
       const rows = listed.get(section) ?? [];
@@ -299,6 +316,12 @@ export function tasksPanel(post: (message: FromView) => void, onToggle: (open: b
       const target = sections[section].element;
       if (target.hidden) frame.element.scrollTop = 0;
       else target.scrollIntoView({ block: 'start' });
+    },
+    /** The shown chat's open suggestions, drawn above the tasks. */
+    suggested(next: readonly SpinoffCard[]): void {
+      if (JSON.stringify(next) === JSON.stringify(suggestions)) return;
+      suggestions = next;
+      render();
     },
     listed(next: readonly TaskRecord[], showing: string | undefined, markers: SeenMarkers): void {
       tasks = next;

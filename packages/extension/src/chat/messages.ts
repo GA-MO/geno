@@ -9,6 +9,8 @@ import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { RewindFromView, RewindToView } from './rewind-model.js';
 import type { UsageFromView, UsageToView } from './usage-model.js';
+import type { SpinoffFromView, SpinoffToView } from './spinoff-model.js';
+import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -123,6 +125,8 @@ export type ToolBlock = {
   readonly widget?: ToolWidget | undefined;
   /** The whole list a todo call set, once it ran. */
   readonly todo?: TodoList | undefined;
+  /** The task a spawn_task call suggested, as it stands now. */
+  readonly spinoff?: Spinoff | undefined;
   /** The background command a bash call started, as the engine last reported it. */
   readonly background?: BackgroundStep | undefined;
   /** What an open_file, reveal or show_diff call showed in the editor, which its step shows again. */
@@ -244,10 +248,14 @@ export type Action =
       readonly widget?: ToolWidget;
       readonly editorAction?: EditorAction;
       readonly todo?: TodoList;
+      /** An offer sets this call's card; a move, such as from dismiss_task, changes the card with its id. */
+      readonly spinoff?: SpinoffShown;
     }
   | { readonly type: 'diff'; readonly toolId: string; readonly at: number; readonly diff: FileDiff }
   /** A background command changed; it may belong to any turn, since it outlives the one that started it. */
   | { readonly type: 'background'; readonly toolId: string; readonly job: BackgroundStep }
+  /** A suggested task changed outside any tool call, such as by the user's Start; it may be on any turn. */
+  | { readonly type: 'spinoff'; readonly shown: SpinoffShown }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
   | { readonly type: 'review'; readonly hunks: Readonly<Record<string, HunkStatus>> }
   | {
@@ -364,7 +372,8 @@ export type ToView =
   | ArenaToView
   | SteerToView
   | RewindToView
-  | UsageToView;
+  | UsageToView
+  | SpinoffToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -475,4 +484,5 @@ export type FromView =
   | ArenaFromView
   | SteerFromView
   | RewindFromView
-  | UsageFromView;
+  | UsageFromView
+  | SpinoffFromView;

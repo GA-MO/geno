@@ -1,0 +1,171 @@
+/* Suggested tasks (U48): a card the agent offers for an issue outside the change, with Start and Dismiss. */
+
+.spinoff {
+  margin: 2px 0 4px;
+  padding: 7px 10px 8px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  font-size: var(--small);
+  min-width: 0;
+}
+
+.spinoff-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 2px;
+  color: var(--muted);
+}
+
+.spinoff-icon {
+  flex: none;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.spinoff-title {
+  margin: 0;
+  font-size: var(--vscode-font-size);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.spinoff-tldr {
+  margin: 3px 0 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.spinoff-prompt {
+  margin: 5px 0 0;
+}
+
+.spinoff-prompt > summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.spinoff-prompt > summary:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.spinoff-prompt-text {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--code-size);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.spinoff-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 6px 0 0;
+  color: var(--vscode-errorForeground);
+  overflow-wrap: anywhere;
+}
+
+.spinoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.spinoff-hint {
+  color: var(--muted);
+}
+
+.spinoff[data-state='started'] {
+  padding: 4px 8px;
+  border-left-color: var(--ok);
+}
+
+.spinoff-started {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.spinoff-started .spinoff-icon {
+  color: var(--ok);
+}
+
+.spinoff-started-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spinoff-verb {
+  color: var(--muted);
+}
+
+.spinoff-lane {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--muted);
+}
+
+.spinoff-list {
+  display: grid;
+  gap: 6px;
+}
+
+.spinoff-row {
+  list-style: none;
+}
+
+.spinoff-row .spinoff {
+  margin: 0;
+}
+
+/* High contrast draws edges, not tints: the left mark becomes the theme's own border colour. */
+.vscode-high-contrast .spinoff,
+.vscode-high-contrast-light .spinoff {
+  border-color: var(--vscode-contrastBorder);
+  border-left-color: var(--vscode-contrastActiveBorder, var(--vscode-contrastBorder));
+  background: transparent;
+}
+
+.vscode-high-contrast .spinoff-prompt-text,
+.vscode-high-contrast-light .spinoff-prompt-text {
+  border: 1px solid var(--vscode-contrastBorder);
+  background: transparent;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .spinoff {
+  border-color: var(--glass-edge);
+  border-left-color: var(--accent);
+  background: var(--glass-pane);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .spinoff[data-state='started'] {
+  border-left-color: var(--ok);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .spinoff-prompt-text {
+  background: var(--glass-well);
+}

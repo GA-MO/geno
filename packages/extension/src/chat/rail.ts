@@ -1,6 +1,7 @@
 import type { ChangedFile } from './fold.js';
 import type { WaitKind } from '@g-code/core';
 import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
+import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
 import type { Child, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 import type { EditorTool } from './editor-step.js';
@@ -23,6 +24,8 @@ export type Step =
   | { readonly kind: 'editor'; readonly key: string; readonly tool: EditorTool }
   /** A show_widget call: the widget itself, never folded into a run of calls. */
   | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
+  /** A spawn_task call's suggestion, as a card: open, or started. Dismissed or withdrawn, it is gone. */
+  | { readonly kind: 'spinoff'; readonly key: string; readonly tool: SpinoffTool }
   /** The todo list: pinned above a running turn's latest step, and once the turn ends, where it last changed. */
   | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly pinned: boolean }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
@@ -35,6 +38,7 @@ export type Step =
 
 export type EditTool = ToolBlock & { readonly diff: NonNullable<ToolBlock['diff']> };
 export type WidgetTool = ToolBlock & { readonly widget: NonNullable<ToolBlock['widget']> };
+export type SpinoffTool = ToolBlock & { readonly spinoff: NonNullable<ToolBlock['spinoff']> };
 
 /** How a step's node on the rail reads: done, under way, waiting on the user, failed, or text. */
 export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
@@ -74,6 +78,8 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
     const last = steps.at(-1);
     if (block.kind === 'tool' && isTodoCall(block)) {
       if (!streaming && block === lastSet && block.todo!.length > 0) steps.push({ kind: 'todo', key: 'todo', turn: turn.id, list: block.todo!, pinned: false });
+    } else if (block.kind === 'tool' && block.name === SPAWN_TASK_TOOL && block.spinoff !== undefined) {
+      if (block.spinoff.state.kind === 'offered' || block.spinoff.state.kind === 'started') steps.push({ kind: 'spinoff', key: `spinoff:${block.id}`, tool: block as SpinoffTool });
     } else if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
@@ -115,6 +121,7 @@ export function nodeOf(step: Step): NodeState {
     case 'error':
       return 'failed';
     case 'editor':
+    case 'spinoff':
       return 'done';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
