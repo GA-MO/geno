@@ -153,7 +153,8 @@ function raceCard(run: ArenaRun, notice: ArenaNotice | undefined, post: Post): H
   );
 }
 
-function rankItem(row: RankRow, run: ArenaRun, post: Post): HTMLElement {
+/** `lead` marks the review's best pick, whose Pick is the primary action. */
+function rankItem(row: RankRow, run: ArenaRun, post: Post, lead: boolean): HTMLElement {
   return h(
     'li',
     { class: `rank-row${row.winner ? ' winner' : ''}`, 'data-lane': row.lane },
@@ -175,7 +176,7 @@ function rankItem(row: RankRow, run: ArenaRun, post: Post): HTMLElement {
         row.pick &&
           h(
             'button',
-            { type: 'button', class: 'button small', 'data-action': 'pick', 'data-focus': `arena-pick:${row.lane}`, title: 'Make it the winner and apply it in the chat, for review', onclick: () => post({ type: 'arena-pick', id: run.id, lane: row.lane }) },
+            { type: 'button', class: `button small${lead ? '' : ' secondary'}`, 'data-action': 'pick', 'data-focus': `arena-pick:${row.lane}`, title: 'Make it the winner and apply it in the chat, for review', onclick: () => post({ type: 'arena-pick', id: run.id, lane: row.lane }) },
             `Pick ${row.letter}`,
           ),
         row.cost !== undefined && h('span', { class: 'lane-cost rank-cost' }, row.cost),
@@ -189,7 +190,7 @@ function resultsCard(run: ArenaRun, notice: ArenaNotice | undefined, post: Post)
     { class: 'arena-card arena-results', 'aria-label': 'The ranking' },
     runHead(run),
     run.summary !== null && run.summary !== '' && h('p', { class: 'arena-summary' }, run.summary),
-    h('ol', { class: 'rank-list', 'aria-label': 'Lanes, best first' }, ...rankRows(run).map((row) => rankItem(row, run, post))),
+    h('ol', { class: 'rank-list', 'aria-label': 'Lanes, best first' }, ...rankRows(run).map((row, i, rows) => rankItem(row, run, post, row.pick && rows.findIndex((r) => r.pick) === i))),
     noticeLine(notice),
   );
 }
