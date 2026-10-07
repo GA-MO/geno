@@ -239,6 +239,25 @@ P13 also covers rows that have no Claude Code conformance test:
 | B/B-99 | T-HOOK-07 above. `hooks.webview.test.ts` shows the warning and each hook's status in Settings. |
 | B/B-100, B/B-126 | T-HOOK-06 and T-HOOK-01 above. A workspace hook runs inside the sandbox and cannot write outside the workspace (`hooks.test.ts`, engine). |
 
+## Handback and report contents (P17)
+
+A fresh Geno child has a child-only `report{message}` tool, Geno's name for Claude Code's `SubagentHandback`. A report call that goes through ends the child's run, and its message alone is the report, so the narration a model writes between calls stays out of it. A child that ends its turn without the call gets one `report-nudge` event, which the request renders as `[Geno] Your report has not been delivered. Call report({message: <your full report>}) now; the call ends your run.`, and its last text becomes the report if it ends again without one. The nudge needs a turn left under the child's cap; with none left, the last text is the report at once. A fork keeps the parent's tools for the cache, and an external agent has no Geno tools, so for them the last text is the report. A child that a cap, a failure or a cancel stopped keeps today's partial report, every text joined. The panel shows a report call as the child's text, live and in a replay.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-AGENT-03 | A subagent that ends without `SubagentHandback` gets one `[handback-send-enforce]` reminder. | Adapted: a child that narrates ("Let me read the file.") and then calls `report` hands back the message alone, with no model call after it. A child that never calls it is nudged once, and its last text, not the narration or the answer before the nudge, is the report. | pass (adapt, was fail: the report joined every text) | `agents.conformance.test.ts`, both wires |
+
+P17 also covers these rows:
+
+| ID | Check |
+|---|---|
+| C/C-22, C/C-23, B/B-45 | `loop.test.ts` (core): the report call ends the run once its batch ran, even at a limit; a failed report call lets the model go on; an end without one is nudged once per run while a turn is left; a run without handback is never nudged. `subagent.test.ts` (core): `handedBack` takes the report call's message, else the last text, else every text when the child stopped early. `workflows.e2e.test.ts`: each step's JSON block arrives in its report call and still gates the next step. |
+| C/C-27 | `subagent.test.ts` snapshots `childReport` with `turns="3" cost="$0.0042" duration="12s"` on the fence, and `cost="unknown"` for an unpriced call. `reportBody` still reads a fence with these attributes and one without them (`subagent.test.ts`, `arena.test.ts`, `workflow.test.ts`). A workflow's report carries its steps' turns and cost together. |
+| C/C-15 | `subagent.test.ts`: the `agent` tool's description says not to predict or fabricate a pending subagent's results, not to do its work too, and to relay what matters. The background launch result says the same and that the report arrives as a message from Geno. |
+| C/C-10 | `subagent.test.ts`: `forkTask` says "Execute the task directly; do not hand it to another subagent." and that the fork's last message is its report. |
+
+The eval of the parent's turns that state results before the report ran live on Model Studio qwen3.8-flash with `packages/engine/test/handback-smoke.ts`: a background explore in a small fixture repository, three runs on `main` and four on P17. No parent turn stated results before the report on either side, so this task does not separate the launch text's rules. The parent searched the repository again after the report in 3 of 3 runs on `main` and 1 of 4 on P17. On P17 the child called `report` in all four runs, after the nudge in two. The seven runs cost $0.050.
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -335,7 +354,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-CTX-07 | keep Geno's | none | no test yet |
 | T-AGENT-01 | deliberate, adapt; deliberate | P21 | no test yet |
 | T-AGENT-02 | adapt | P4 | pass |
-| T-AGENT-03 | adapt | P17 | no test yet |
+| T-AGENT-03 | adapt | P17 | pass |
 | T-AGENT-04 | adopt | P18 | no test yet |
 | T-AGENT-05 | adapt | P20 | no test yet |
 | T-WF-01 | adapt | P34 | no test yet |
