@@ -1,7 +1,6 @@
 import path from 'node:path';
 import {
   attachedRulePaths,
-  needsSpill,
   renderContextItems,
   ruleAttachment,
   rulesMatching,
@@ -34,9 +33,9 @@ export function ruleAttacher(events: readonly TurnEvent[]): RuleAttacher {
 }
 
 /** A rule too long to ride along with a read result is named instead, for the model to read. */
-function attachments(text: string, rules: readonly ProjectRule[], file: string): string {
+function attachments(text: string, rules: readonly ProjectRule[], file: string, spillChars: number): string {
   const full = rules.map((rule) => ruleAttachment(rule, file));
-  if (!needsSpill([text, ...full].join('\n\n'))) return full.join('\n\n');
+  if ([text, ...full].join('\n\n').length <= spillChars) return full.join('\n\n');
   return rules.map((rule) => ruleAttachment({ path: rule.path, text: `This rule applies to ${file}. Read ${rule.path} for it.` }, file)).join('\n\n');
 }
 
@@ -51,7 +50,7 @@ export function withRuleAttachments(read: Executor, rules: RuleAttacher): Execut
       if (path.isAbsolute(file)) return reply;
       await ctx.earlierCalls();
       const fresh = rules.take(file);
-      return fresh.length === 0 ? reply : `${reply}\n\n${attachments(reply, fresh, file)}`;
+      return fresh.length === 0 ? reply : `${reply}\n\n${attachments(reply, fresh, file, ctx.spillChars)}`;
     },
   };
 }

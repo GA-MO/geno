@@ -1,16 +1,13 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 
-/** Results longer than this many characters go to a spill file instead of the conversation. */
-export const SPILL_THRESHOLD = 24_000;
-
 /** The most lines one read returns. */
 export const PAGE_MAX_LINES = 2000;
 
 /**
- * The most characters of numbered text one read returns. Pi pages at 50 KB; here a page must stay under the spill
- * threshold every tool result shares, or the page itself would be spilled, with room left for a notice and a rule.
+ * The most characters of numbered text one read returns. Pi pages at 50 KB; here a page must stay under every model's
+ * `spillChars`, or the page itself would be spilled, with room left for a notice and a rule.
  */
-export const PAGE_MAX_CHARS = SPILL_THRESHOLD - 4_000;
+export const PAGE_MAX_CHARS = 20_000;
 
 const formatCount = (n: number): string => n.toLocaleString('en-US');
 
@@ -113,8 +110,6 @@ export type Spill = {
   readonly head: string;
   readonly tail: string;
 };
-
-export const needsSpill = (output: string): boolean => output.length > SPILL_THRESHOLD;
 
 export const spillEdges = (output: string): Pick<Spill, 'head' | 'tail'> => ({
   head: output.slice(0, SPILL_EDGE),
