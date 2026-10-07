@@ -90,7 +90,7 @@ const pinned =
     else callback(null, addresses[0]!.address, addresses[0]!.family);
   };
 
-type Response = {
+export type Response = {
   readonly status: number;
   readonly location: string | undefined;
   readonly contentType: string;
@@ -109,8 +109,13 @@ function decoded(res: http.IncomingMessage): Readable {
   return res;
 }
 
+/** What a GET asks for and how much of the body it keeps. */
+export type GetOptions = { readonly accept: string; readonly maxBytes: number; readonly agent: string };
+
+const PAGE_GET: GetOptions = { accept: ACCEPT, maxBytes: WEB_LIMITS.maxBytes, agent: 'web_fetch' };
+
 /** One GET, with no redirect followed; the cap counts decompressed bytes, so a small bomb cannot fill memory. */
-async function get(target: Reachable, resolve: Resolve, signal: AbortSignal): Promise<Response> {
+export async function get(target: Reachable, resolve: Resolve, signal: AbortSignal, options: GetOptions = PAGE_GET): Promise<Response> {
   const url = new URL(target.url);
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const literal = url.hostname.startsWith('[') || /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
@@ -124,7 +129,7 @@ async function get(target: Reachable, resolve: Resolve, signal: AbortSignal): Pr
         port: url.port === '' ? undefined : Number(url.port),
         path: `${url.pathname}${url.search}`,
         method: 'GET',
-        headers: { accept: ACCEPT, 'accept-encoding': 'gzip, deflate, br', 'user-agent': 'Mozilla/5.0 (compatible; Geno web_fetch)' },
+        headers: { accept: options.accept, 'accept-encoding': 'gzip, deflate, br', 'user-agent': `Mozilla/5.0 (compatible; Geno ${options.agent})` },
         signal,
         ...(lookup === undefined ? {} : { lookup }),
       },
@@ -144,7 +149,7 @@ async function get(target: Reachable, resolve: Resolve, signal: AbortSignal): Pr
         const finish = () => done({ status, location, contentType, body: Buffer.concat(chunks), truncated });
         body.on('data', (chunk: Buffer) => {
           if (truncated) return;
-          const room = WEB_LIMITS.maxBytes - size;
+          const room = options.maxBytes - size;
           chunks.push(chunk.length > room ? chunk.subarray(0, room) : chunk);
           size += Math.min(chunk.length, room);
           if (chunk.length >= room) {
