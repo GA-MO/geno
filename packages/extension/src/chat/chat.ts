@@ -258,6 +258,16 @@ const wakeSource = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('pr'), id: wakeId, pr: z.number() }),
 ]);
 const wakeView = z.object({ waitsFor: z.array(wakeSource), paused: z.enum(['cap', 'limit', 'stopped', 'failed']).optional() });
+const workflowProgress = z.object({
+  name: z.string(),
+  step: z.number(),
+  steps: z.number(),
+  running: z.array(z.string()),
+  spentUsd: z.number(),
+  capUsd: z.number(),
+  status: z.enum(['running', 'done', 'stopped', 'cancelled']),
+  stop: z.string().optional(),
+});
 
 const taskUpdate = z.object({
   task: z.object({
@@ -278,6 +288,7 @@ const taskUpdate = z.object({
     jobs: z.array(taskJob).optional(),
     forkedFrom: forkOrigin.optional(),
     wake: wakeView.optional(),
+    workflow: workflowProgress.optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });

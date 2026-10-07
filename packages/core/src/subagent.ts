@@ -279,9 +279,10 @@ export const DEFAULT_CHILD_CAPS: ChildCaps = { maxTurns: 20, maxCostUsd: 0.05 };
  * A child's caps: its definition's, else the defaults, with the cost held to what its parent's run has left for
  * children. Undefined when nothing is left.
  */
-export function childCaps(agent: AgentDefinition, leftUsd: number): ChildCaps | undefined {
+/** `asked` is a workflow step's own caps, which replace the definition's. */
+export function childCaps(agent: AgentDefinition, leftUsd: number, asked: { readonly [K in keyof ChildCaps]?: ChildCaps[K] | undefined } = {}): ChildCaps | undefined {
   if (!(leftUsd > 0)) return undefined;
-  return { maxTurns: agent.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: Math.min(agent.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd, leftUsd) };
+  return { maxTurns: asked.maxTurns ?? agent.maxTurns ?? DEFAULT_CHILD_CAPS.maxTurns, maxCostUsd: Math.min(asked.maxCostUsd ?? agent.maxCostUsd ?? DEFAULT_CHILD_CAPS.maxCostUsd, leftUsd) };
 }
 
 /** Where a child's conversation starts: empty, or a copy of the parent's, which shares the parent's cached prefix. */

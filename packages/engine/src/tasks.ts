@@ -1,4 +1,4 @@
-import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskEnd, type TaskUpdate, type Waiting } from '@g-code/core';
+import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskEnd, type TaskUpdate, type Waiting, type WorkflowProgress } from '@g-code/core';
 
 const emptyless = (wake: WakeView | undefined): WakeView | undefined => (wake === undefined || (wake.waitsFor.length === 0 && wake.paused === undefined) ? undefined : wake);
 
@@ -49,6 +49,12 @@ export class Tasks {
     if (record === undefined || !isLive(record.status)) return;
     this.asking.delete(sessionId);
     this.put({ ...record, status, endedAt: Date.now(), usage: usage ?? record.usage, waiting: undefined, asking: undefined, wake: emptyless(wake) });
+  }
+
+  /** How far the session's workflow got; it keeps its last progress after its turn ends. */
+  workflow(sessionId: string, progress: WorkflowProgress): void {
+    const record = this.records.get(sessionId);
+    if (record !== undefined && JSON.stringify(record.workflow) !== JSON.stringify(progress)) this.put({ ...record, workflow: progress });
   }
 
   /** What will wake the session after its turn, or why its wakes wait for the user; a running turn shows none. */

@@ -6,6 +6,7 @@ import type { ForkOrigin } from './rewind.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
 import type { WakeView } from './wake.js';
+import type { WorkflowProgress } from './workflow.js';
 
 /**
  * Background sessions. The engine runs as one process per workspace that outlives the editor's window, so a turn goes
@@ -54,6 +55,8 @@ export type TaskRecord = {
   readonly forkedFrom?: ForkOrigin | undefined;
   /** What will wake the session after its turn ended, or why its wakes wait for the user; absent when neither. */
   readonly wake?: WakeView | undefined;
+  /** The workflow the session runs, and how far it got; absent for any other session. */
+  readonly workflow?: WorkflowProgress | undefined;
 };
 
 export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt' | 'preview'>;

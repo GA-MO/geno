@@ -46,6 +46,8 @@ import {
   SCHEDULE_TASK_TOOL,
   SCHEDULED_RUN_NOTE,
   scheduleToolDefinitions,
+  WORKFLOW_TOOL,
+  workflowToolDefinitions,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -56,7 +58,7 @@ import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
-import { drive, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type DriveResult, type Limits, type Surface } from './drive.js';
+import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type Director, type DriveResult, type Limits, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
@@ -73,6 +75,8 @@ import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
 import { spinoffExecutors } from './tools/spinoff.js';
 import { scheduleExecutor, type ScheduleTools } from './tools/schedule.js';
+import { workflowExecutor, type WorkflowTools } from './tools/workflow.js';
+import { workflowCommandCall } from './workflows.js';
 import { chapterExecutor } from './tools/chapters.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
@@ -142,8 +146,13 @@ export type AgentOptions = {
   readonly childHost?: SubagentHost | undefined;
   /** Lets a non-interactive run start subagents that may change files. */
   readonly allowWorker?: boolean | undefined;
-  /** A subagent call the caller issues as the user's own, as an `@` mention would; the Arena's review is one. */
-  readonly issued?: AssistantTurn | undefined;
+  /**
+   * Calls the caller issues as the user's own, in place of the model: the Arena's review, or a workflow's rounds. Such
+   * calls may set a subagent's model and caps.
+   */
+  readonly director?: Director | undefined;
+  /** The workspace's workflows, for the workflow tool and `/workflow`; a non-interactive run ignores it. */
+  readonly workflows?: WorkflowTools | undefined;
   /** The engine's external agents, which a child on an external backend runs in. */
   readonly externals?: ExternalAgents | undefined;
   readonly keyOf?: KeyOf | undefined;
@@ -245,6 +254,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const terminal = options.approval.kind === 'interactive' ? options.terminal : undefined;
     const spinoffs = options.approval.kind === 'interactive' && options.spinoffs === true;
     const schedules = options.approval.kind === 'interactive' ? options.schedules : undefined;
+    const workflows = options.approval.kind === 'interactive' ? options.workflows : undefined;
     const chapters = options.approval.kind === 'interactive' && options.chapters === true;
     const search = searchConfigOf(io.env);
     const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
@@ -256,6 +266,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...readTerminalToolDefinitions(startMode, terminal !== undefined),
       ...spinoffToolDefinitions(startMode, spinoffs),
       ...scheduleToolDefinitions(startMode, schedules !== undefined),
+      ...workflowToolDefinitions(startMode, workflows !== undefined),
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
@@ -266,7 +277,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // A prompt logged before the run, with its attachments, is the newest event.
     const logged = opened.log.events.at(-1);
     const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
-    const issued = options.issued ?? (await mentionedCall(asked, scan.agents, session));
+    const typed = (await mentionedCall(asked, scan.agents, session)) ?? (workflows === undefined ? undefined : workflowCommandCall(logged, session));
+    const director = options.director ?? (typed === undefined ? undefined : issuedOnce(typed));
     const agentTool = config.agentTool?.includes(startMode) === true;
     let tools = mcp === undefined ? own : [...own, ...mcp.tools];
     children = subagents({
@@ -286,6 +298,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       keyOf: options.keyOf,
       steers,
       waits: wakes?.registry,
+      steps: options.director !== undefined,
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools);
@@ -310,7 +323,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
         ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
         ...web,
-        ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
+        ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
+        ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
         ...executors,
       }),
@@ -319,7 +333,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       arrivals: () => steers.inbox.take(session.id),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
-      ...(issued === undefined ? {} : { issued }),
+      ...(director === undefined ? {} : { director }),
     };
     result = await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
     return result;

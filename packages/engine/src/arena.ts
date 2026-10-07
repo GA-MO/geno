@@ -40,6 +40,7 @@ import {
 import { runAgent, workspaceConfig } from './agent.js';
 import { openSessionLog, startSession } from './chat.js';
 import { checkCommand } from './check-command.js';
+import { issuedOnce } from './drive.js';
 import { childEnv } from './child-env.js';
 import type { Io } from './command.js';
 import { EngineError } from './errors.js';
@@ -188,7 +189,7 @@ export async function reviewArena(store: Store, io: Io, repo: LaneRepo, run: Are
     check: undefined,
     checkAfterEdit: false,
     approval: NON_INTERACTIVE,
-    issued: call,
+    director: issuedOnce(call),
   });
   const answered = result.events.find((e) => e.kind === 'tool-result' && e.toolUseId === (call.content[0] as ToolUseBlock).id);
   const report = answered?.kind === 'tool-result' && 'output' in answered ? answered.output : '';

@@ -158,7 +158,12 @@ export type SubagentEnv = {
   readonly steers: Steers;
   /** What the parent's session waits on to be woken; undefined where nothing wakes it, and a turn waits for its children. */
   readonly waits?: Wakes | undefined;
+  /** The calls come from a workflow, not a model, and may set each step's model and caps. */
+  readonly steps?: boolean | undefined;
 };
+
+/** What a workflow step sets on its child: the model, and caps in place of the definition's. */
+type StepOptions = { readonly model?: string | undefined; readonly max_turns?: number | undefined; readonly max_cost_usd?: number | undefined; readonly lane?: string | undefined };
 
 type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
 
@@ -178,7 +183,17 @@ export type Subagents = {
   settled(): Promise<void>;
 };
 
-const inputSchema = z.strictObject({ agent: z.string().min(1), task: z.string(), fork: z.boolean().optional(), background: z.boolean().optional() });
+const inputSchema = z.strictObject({
+  agent: z.string().min(1),
+  task: z.string(),
+  fork: z.boolean().optional(),
+  background: z.boolean().optional(),
+  model: z.string().min(1).optional(),
+  max_turns: z.int().positive().optional(),
+  max_cost_usd: z.number().positive().optional(),
+  lane: z.string().min(1).optional(),
+});
+const STEP_FIELDS = ['model', 'max_turns', 'max_cost_usd', 'lane'] as const;
 const messageSchema = z.strictObject({ agent_session: z.string().min(1), text: z.string().trim().min(1) });
 
 function semaphore(size: number) {
@@ -230,8 +245,9 @@ export function subagents(env: SubagentEnv): Subagents {
     ctx: Parameters<Executor['run']>[1],
     id: SessionId,
     inbox: SteerInbox,
+    step: StepOptions,
   ): Promise<ChildOutcome> => {
-    const caps = childCaps(agent, env.limits.maxCostUsd - committed);
+    const caps = childCaps(agent, env.limits.maxCostUsd - committed, { maxTurns: step.max_turns, maxCostUsd: step.max_cost_usd });
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
     committed += caps.maxCostUsd;
     const parentEvents = ctx.events();
@@ -242,7 +258,7 @@ export function subagents(env: SubagentEnv): Subagents {
       workspace: parentSession.workspace,
       provider: parentSession.provider,
       // A fork shares the parent's cached prefix only on the parent's model.
-      model: agent.backend !== undefined ? agent.backend : start === 'fork' ? parentSession.model : (agent.model ?? parentSession.model),
+      model: agent.backend !== undefined ? agent.backend : start === 'fork' ? parentSession.model : (step.model ?? agent.model ?? parentSession.model),
       effort: agent.effort ?? sessionEffortOf(parentSession, parentEvents),
       ...(agent.backend === undefined ? {} : { backend: { id: agent.backend } }),
     };
@@ -324,7 +340,10 @@ export function subagents(env: SubagentEnv): Subagents {
       return definition !== undefined && isReadOnly(definition);
     },
     describe: ({ agent, task }) => `${AGENT_TOOL} ${agent}: ${task.split('\n')[0]}`,
-    async run({ agent: name, task, fork, background }, ctx) {
+    async run({ agent: name, task, fork, background, ...step }, ctx) {
+      const set = STEP_FIELDS.filter((field) => step[field] !== undefined);
+      if (set.length > 0 && env.steps !== true) throw new ToolError(`${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} for workflow steps; leave ${set.length === 1 ? 'it' : 'them'} out`);
+      if (step.lane !== undefined) throw new ToolError('a workflow step in a lane is not supported yet');
       const agent = byName(name);
       if (agent === undefined) throw new ToolError(`no subagent ${name}; the subagents are ${agents.map((a) => a.name).join(', ')}`);
       if (agent.isolation === 'worktree') throw new ToolError(`${name} asks for isolation: worktree, which Geno does not support yet; it cannot run`);
@@ -346,7 +365,7 @@ export function subagents(env: SubagentEnv): Subagents {
       const stop = new AbortController();
       if (background === true) inBackground.add(stop);
       const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
-      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox));
+      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox, step));
       running.add(child);
       void child
         .finally(() => {
