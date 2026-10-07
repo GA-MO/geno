@@ -298,6 +298,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   wait: ({ seq, at, wait }) => [`#${seq} ${formatWait(wait, Date.parse(at))}`],
   wake: ({ seq, note }) => [`#${seq} wake ${note.kind}${'id' in note ? ` ${note.id}` : ''}${note.kind === 'scheduled' ? ` at ${new Date(note.dueAt).toISOString()}: ${note.reason}` : note.kind === 'monitor' ? ` on ${note.job}: ${note.outcome}` : note.kind === 'pr' ? ` on PR #${note.pr}: ${note.outcome}` : ''}`],
   mode: ({ seq, mode }) => [`${seq === undefined ? '' : `#${seq} `}mode: ${mode}`],
+  'hook-context': ({ seq, event, matched, notes }) => [`#${seq} ${event}:${matched} hook: ${notes.length} ${notes.length === 1 ? 'note' : 'notes'} for the model`],
   notice: ({ seq, mode, memory }) => [
     `#${seq} told the model:${mode === undefined ? '' : ` ${mode} mode`}${memory === undefined ? '' : ` ${memory.added.length} notes added, ${memory.removed.length} removed`}`,
   ],

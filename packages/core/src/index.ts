@@ -80,3 +80,4 @@ export * from './schedule.js';
 export * from './catalog.js';
 export * from './workflow.js';
 export * from './workflow-progress.js';
+export * from './hooks.js';
