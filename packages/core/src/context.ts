@@ -34,7 +34,7 @@ export type ProjectRule = {
   readonly text: string;
 };
 
-/** A `SKILL.md` under `.agents/skills/*` or `.claude/skills/*`, listed so the model can read it when a task needs it. */
+/** A `SKILL.md` under `.agents/skills/*` or `.claude/skills/*`, listed so the model can load it with the skill tool when a task needs it. */
 export type SkillEntry = { readonly name: string; readonly description: string; readonly path: string };
 
 /**
@@ -93,7 +93,7 @@ function skillsSection(skills: readonly SkillEntry[]): string[] {
   return [
     [
       'The following skills provide specialized instructions for specific tasks.',
-      "Use the read tool to load a skill's file when the task matches its description.",
+      "When the task matches a skill's description, load the skill by calling the skill tool with its name. Without a skill tool, read the file at its location.",
       "When a skill file references a relative path, resolve it against the skill's directory.",
       '',
       '<available_skills>',
