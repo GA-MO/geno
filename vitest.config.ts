@@ -7,6 +7,7 @@ import { vscodeWorkers } from './scripts/vscode-workers.js';
 useTestTmp();
 
 const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
+const WEBVIEW_TESTS = 'packages/extension/test/**/*.webview.test.ts';
 const workers = vscodeWorkers(process.env, 1);
 
 export default defineConfig({
@@ -16,8 +17,10 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'], exclude: [VSCODE_TESTS], sequence: { groupOrder: 0 } },
+        test: { name: 'unit', include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'], exclude: [VSCODE_TESTS, WEBVIEW_TESTS], sequence: { groupOrder: 0 } },
       },
+      // The chat webview in headless Chromium against a fake host: no VS Code, so these run in parallel with the unit tests.
+      { extends: true, test: { name: 'webview', include: [WEBVIEW_TESTS], sequence: { groupOrder: 0 } } },
       {
         // Each file launches a whole VS Code, with its own profile, workspace and engine, after the unit tests.
         extends: true,

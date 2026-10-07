@@ -1,6 +1,7 @@
 /**
  * `pnpm test:affected [--base <ref>] [--docker] [--dry]`: typecheck and the boundary lint, the unit tests related to
- * what changed since the merge base with main, and only the VS Code integration files that change can break.
+ * what changed since the merge base with main, the webview tests, and only the VS Code integration files that change
+ * can break.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -47,6 +48,8 @@ const run = (cmd: string, cmdArgs: string[]) => {
 run('pnpm', ['typecheck']);
 run('pnpm', ['lint:deps']);
 run('pnpm', ['vitest', 'run', '--project', 'unit', '--changed', mergeBase, '--passWithNoTests']);
+// The webview files load the panel's bundles, which vitest's import graph does not see, and take seconds, so all run.
+run('pnpm', ['vitest', 'run', '--project', 'webview']);
 if (picks.length > 0) {
   run('pnpm', ['build']);
   const files = picks.map((p) => p.file);
