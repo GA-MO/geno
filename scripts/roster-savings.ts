@@ -1,5 +1,5 @@
 // Prints, per mode and client, the tools U46's roster defers and the tokens that saves a call, by the roster's own
-// estimate. Rerun it after adding a tool and update the numbers in docs/u46.md, u48.md, u53.md, u55.md, u57.md, u59.md and u60.md.
+// estimate. Rerun it after adding a tool and update the numbers in docs/u46.md, u48.md, u53.md, u55.md, u57.md, u59.md, u60.md and u62.md.
 // Run with: pnpm tsx scripts/roster-savings.ts
 // The tool list mirrors the `own` list that runAgent builds in packages/engine/src/agent.ts, without MCP or subagent tools.
 import {
@@ -8,6 +8,7 @@ import {
   editorActionToolDefinitions,
   MIN_SAVED_TOKENS,
   readTerminalToolDefinitions,
+  scheduleToolDefinitions,
   spinoffToolDefinitions,
   toolRoster,
   userToolDefinitions,
@@ -17,13 +18,13 @@ import {
   type UserToolName,
 } from '../packages/core/src/index.js';
 
-type Client = { readonly name: string; readonly user: readonly UserToolName[]; readonly widgets: boolean; readonly editor: boolean; readonly terminal: boolean; readonly spinoffs: boolean };
+type Client = { readonly name: string; readonly user: readonly UserToolName[]; readonly widgets: boolean; readonly editor: boolean; readonly terminal: boolean; readonly spinoffs: boolean; readonly schedules: boolean };
 
 const CLIENTS: readonly Client[] = [
-  { name: 'terminal', user: [], widgets: false, editor: false, terminal: false, spinoffs: false },
-  { name: 'editor without remember or widget', user: ['ask_user'], widgets: false, editor: true, terminal: true, spinoffs: true },
-  { name: 'editor with remember', user: ['ask_user', 'remember'], widgets: false, editor: true, terminal: true, spinoffs: true },
-  { name: 'VS Code panel (remember and widget)', user: ['ask_user', 'remember'], widgets: true, editor: true, terminal: true, spinoffs: true },
+  { name: 'terminal', user: [], widgets: false, editor: false, terminal: false, spinoffs: false, schedules: false },
+  { name: 'editor without remember or widget', user: ['ask_user'], widgets: false, editor: true, terminal: true, spinoffs: true, schedules: true },
+  { name: 'editor with remember', user: ['ask_user', 'remember'], widgets: false, editor: true, terminal: true, spinoffs: true, schedules: true },
+  { name: 'VS Code panel (remember and widget)', user: ['ask_user', 'remember'], widgets: true, editor: true, terminal: true, spinoffs: true, schedules: true },
 ];
 
 const MODES: readonly ApprovalMode[] = ['non-interactive', 'plan', 'ask', 'auto'];
@@ -40,6 +41,7 @@ for (const search of [false, true]) {
         ...editorActionToolDefinitions(mode, client.editor),
         ...readTerminalToolDefinitions(mode, client.terminal),
         ...spinoffToolDefinitions(mode, client.spinoffs),
+        ...scheduleToolDefinitions(mode, client.schedules),
         ...webToolDefinitions(search),
       ];
       const roster = toolRoster(tools);
