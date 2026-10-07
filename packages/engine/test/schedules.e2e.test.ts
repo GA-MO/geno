@@ -25,7 +25,7 @@ import { scheduleFile, type Clock } from '../src/schedules.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore, type Store } from '../src/store.js';
-import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, httpError, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -248,6 +248,25 @@ describe('gcode serve: scheduled tasks', () => {
     expect(costEnd).toMatchObject({ kind: 'budget', message: expect.stringContaining('past --max-cost 0.05') });
     expect(costEnd?.costUsd).toBeGreaterThan(0.05);
     expect(costEnd?.costUsd).toBeLessThan(0.08);
+  });
+
+  it('ends a run failed when the model refused, stopped at its output limit, or answered a call with an error', async () => {
+    const at = await fixture();
+    const clock = new FakeClock(T0);
+    const model = models({
+      '[sched-refuse]': () => answer('I will not.', usage, { stopReason: 'refusal' }),
+      '[sched-long]': () => answer('And then', usage, { stopReason: 'max_tokens' }),
+      '[sched-400]': () => httpError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'messages.1.content.0: unexpected tool_use_id' } }),
+    });
+    const TITLES = ['[sched-refuse] say no', '[sched-long] write at length', '[sched-400] send a bad request'];
+    const { result } = await serve(at, clock, model.fetch, async (window) => {
+      for (const title of TITLES) await window.prompt(`/schedule in 1h ${title}`);
+      await until(() => clock.armed(), 'the scheduler to arm its timer');
+      clock.advance(HOUR);
+      await until(async () => (await window.list()).tasks.every((t) => ranOf(t).at(-1)?.end != null), 'the runs to end');
+      return window.list();
+    });
+    expect(TITLES.map((title) => ranOf(named(result, title))[0]?.end?.kind)).toEqual(['failed', 'failed', 'failed']);
   });
 
   it('runs a missed run once when the engine starts within the grace window, and records one past it as missed', async () => {
