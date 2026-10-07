@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -134,9 +134,47 @@ function found(tasks: readonly ScheduledTask[], id: string): number {
 
 const INTERRUPTED = 'Geno stopped before the run ended';
 
+/** A hold lasts as long as a look takes to start its runs, so one this old belongs to an engine that hung. */
+const LOCK_STALE_MS = 5 * 60_000;
+const LOCK_POLL_MS = 25;
+
+/**
+ * Two engines can keep one workspace's tasks, as a main checkout's window and a lane's do. Each holds `<file>.lock`
+ * through a change or a look, with the runs that look starts, so neither starts a run the other started or writes
+ * over the other's change. A lock whose engine is gone is taken over.
+ */
+async function holdingLock<T>(file: string, pid: number, alive: (pid: number) => boolean, work: () => Promise<T>): Promise<T> {
+  const lock = `${file}.lock`;
+  await mkdir(path.dirname(lock), { recursive: true });
+  for (;;) {
+    try {
+      await writeFile(lock, String(pid), { flag: 'wx' });
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const holder = await Promise.all([readFile(lock, 'utf8'), stat(lock)]).catch(() => undefined);
+    if (holder !== undefined) {
+      const [text, { mtimeMs }] = holder;
+      // An empty lock is one its engine has made and not written yet.
+      const gone = text !== '' && !alive(Number(text));
+      if (gone || Date.now() - mtimeMs > LOCK_STALE_MS) {
+        await rm(lock, { force: true });
+        continue;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_POLL_MS));
+  }
+  try {
+    return await work();
+  } finally {
+    await rm(lock, { force: true });
+  }
+}
+
 /**
  * Every workspace's scheduled tasks, for the engine process. It reads and writes each workspace's file one change at
- * a time, looks after every change and on a timer, and applies `planDue` to each task: a run starts through a
+ * a time, under a lock another engine respects, looks after every change and on a timer, and applies `planDue` to each task: a run starts through a
  * connected editor, a missed one is recorded. While no editor is connected nothing starts; the grace window then
  * decides, once one connects. The file is the truth, so tasks and their runs outlive the engine.
  */
@@ -241,7 +279,8 @@ export class Scheduler {
   }
 
   private serially<T>(workspace: string, work: () => Promise<T>): Promise<T> {
-    const next = (this.chains.get(workspace) ?? Promise.resolve()).then(work, work);
+    const held = () => holdingLock(this.file(workspace), this.deps.pid, this.deps.alive, work);
+    const next = (this.chains.get(workspace) ?? Promise.resolve()).then(held, held);
     this.chains.set(
       workspace,
       next.catch(() => {}),
