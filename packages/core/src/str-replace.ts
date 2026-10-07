@@ -91,19 +91,17 @@ function replaceNormalized(
 }
 
 /**
- * Replaces the one place `oldStr` appears. When it appears nowhere, matches again line by line ignoring
- * indentation, trailing whitespace and CR, and accepts only a single such match.
+ * Replaces the one place `oldStr` appears, or with `replaceAll` every place it appears exactly. When it appears
+ * nowhere, matches again line by line ignoring indentation, trailing whitespace and CR, and accepts only a single
+ * such match.
  */
-export function strReplace(path: string, text: string, oldStr: string, newStr: string): ApplyOutcome {
+export function strReplace(path: string, text: string, oldStr: string, newStr: string, replaceAll = false): ApplyOutcome {
   if (oldStr === '') {
     return { kind: 'failed', reason: 'parse-error', detail: 'old_str is empty; copy the exact text to replace from the file' };
   }
   const exact = exactStarts(text, oldStr);
-  if (exact.length === 1) {
-    const at = exact[0]!;
-    return { kind: 'applied', after: text.slice(0, at) + newStr + text.slice(at + oldStr.length) };
-  }
-  if (exact.length > 1) return multiple(path, exact.map((at) => lineAt(text, at)));
+  if (exact.length === 1 || (replaceAll && exact.length > 1)) return { kind: 'applied', after: text.split(oldStr).join(newStr) };
+  if (exact.length > 1) return multiple(path, exact.map((at) => lineAt(text, at)), 'exact');
 
   const lines = fileLines(text);
   const target = fileLines(oldStr);
@@ -112,7 +110,7 @@ export function strReplace(path: string, text: string, oldStr: string, newStr: s
   if (normalized.length === 1) {
     return { kind: 'applied', after: replaceNormalized(lines, normalized[0]!, target, newStr, text.endsWith('\n')) };
   }
-  if (normalized.length > 1) return multiple(path, normalized.map((start) => start + 1));
+  if (normalized.length > 1) return multiple(path, normalized.map((start) => start + 1), 'normalized');
   // Models resend an edit they already made; when its result is there once and its old text is gone, the
   // file is already in the state the call asks for. A one-line result can be there by chance, so it must not
   // pass a wrong edit off as done.
@@ -121,11 +119,18 @@ export function strReplace(path: string, text: string, oldStr: string, newStr: s
   return zero(path, lines, target);
 }
 
-function multiple(path: string, startLines: readonly number[]): ApplyOutcome {
+// replace_all changes exact matches only, so a count that ignored whitespace asks for the exact text first.
+const MATCHES = {
+  exact: { how: '', all: 'or pass replace_all: true to change every one' },
+  normalized: { how: ' when indentation and trailing whitespace are ignored', all: 'or copy it exactly from the file and pass replace_all: true to change every one' },
+} as const;
+
+function multiple(path: string, startLines: readonly number[], kind: keyof typeof MATCHES): ApplyOutcome {
+  const { how, all } = MATCHES[kind];
   return {
     kind: 'failed',
     reason: 'multiple-matches',
-    detail: `old_str appears ${startLines.length} times in ${path}, starting at ${listLines(startLines)}. Include more of the surrounding lines in old_str so it matches exactly one place.`,
+    detail: `old_str appears ${startLines.length} times in ${path}${how}, starting at ${listLines(startLines)}. Include more of the surrounding lines in old_str so it matches exactly one place, ${all}.`,
   };
 }
 
