@@ -2,6 +2,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { asSessionId, type TurnEvent } from '@g-code/core';
+import type { Io } from '../../src/command.js';
 import { readSessionLog, sessionFile } from '../../src/sessions.js';
 import { openStore, type Store } from '../../src/store.js';
 import { chatAnswer, chatToolCall, fakeOpenAiServer, type ChatReply } from '../fake-openai.js';
@@ -80,7 +81,8 @@ export async function closeServers(): Promise<void> {
 
 /**
  * A git workspace holding `files`, and a fake provider on `wire` that answers the model calls with `script` in order.
- * `cli` runs the `gcode` command line against it; `seen` reads each model request as the model saw it.
+ * `cli` runs the `gcode` command line against it and `io` serves it to an editor; `seen` reads each model request as
+ * the model saw it.
  */
 export async function scripted(wire: Wire, script: readonly ScriptedTurn[], files: Readonly<Record<string, string>> = { 'a.ts': 'export const a = 1;\n' }) {
   const workspace = await realpath(makeRepo('ws', [{ message: 'start', files }]));
@@ -102,6 +104,9 @@ export async function scripted(wire: Wire, script: readonly ScriptedTurn[], file
   }
   const store: Store = openStore(env);
   const cli = (argv: readonly string[], options: CliOptions = {}) => runCli([...argv], env, { ...(fetch === undefined ? {} : { fetch }), ...options });
-  const log = async (stdout: string): Promise<readonly TurnEvent[]> => (await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(stdout))))).events;
-  return { workspace, env, store, cli, seen, log };
+  const events = async (sessionId: string): Promise<readonly TurnEvent[]> => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events;
+  const log = (stdout: string) => events(sessionIdOf(stdout));
+  // For an engine served to an editor over ACP, as `gcode serve` runs.
+  const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, ...(fetch === undefined ? {} : { fetch }) };
+  return { workspace, env, store, io, cli, seen, log, events };
 }

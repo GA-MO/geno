@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import * as acp from '@agentclientprotocol/sdk';
 import { afterEach, describe, expect, it } from 'vitest';
+import { gcodeAgent } from '../../src/serve.js';
 import type { FakeToolUse } from '../fake-transport.js';
 import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
@@ -74,6 +76,60 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
     const next = seen()[1]!;
     expect(next.results).toEqual([{ id: stopped.id, error: true, text: expect.stringMatching(/interrupted by (the )?user/i) }]);
     expect(next.text).toContain("don't run that");
+  });
+
+  it('A/A-10 in the editor a Stop keeps what finished, answers the rest as stopped, and the next prompt runs none of it', async () => {
+    const finished = read('a.ts');
+    const stopped = bash('echo run >> runs.txt; sleep 5');
+    const queued = read('b.ts');
+    const { workspace, store, io, seen, events } = await scripted(wire, [call('Working.', [finished, stopped, queued]), say('Left as it is.')], {
+      'a.ts': 'export const a = 1;\n',
+      'b.ts': 'export const b = 2;\n',
+    });
+    const runs = path.join(workspace, 'runs.txt');
+    const updates: acp.SessionUpdate[] = [];
+    const editor = acp
+      .client({ name: 'test-editor' })
+      .onRequest(acp.methods.client.session.requestPermission, () => ({ outcome: { outcome: 'cancelled' } }))
+      .onNotification(acp.methods.client.session.update, ({ params }) => {
+        updates.push(params.update);
+      });
+
+    const sessionId = await editor.connectWith(gcodeAgent(io, store, { maxTurns: 10, maxCostUsd: 1 }), async (ctx) => {
+      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
+      const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      const prompt = (text: string) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
+      const stopping = setInterval(() => {
+        if (existsSync(runs)) void ctx.notify(acp.methods.agent.session.cancel, { sessionId });
+      }, 20);
+      await prompt('Do the three things').finally(() => clearInterval(stopping));
+      await prompt("don't run that");
+      return sessionId;
+    });
+
+    expect(readFileSync(runs, 'utf8'), 'the stopped command ran once').toBe('run\n');
+    const next = seen()[1]!;
+    expect(next.results).toEqual([
+      { id: finished.id, error: false, text: expect.stringContaining('export const a = 1;') },
+      { id: stopped.id, error: true, text: expect.stringMatching(/interrupted by user.*may have partly run/) },
+      { id: queued.id, error: true, text: expect.stringMatching(/interrupted by user.*did not run/) },
+    ]);
+    expect(next.text).toContain("don't run that");
+    const log = await events(sessionId);
+    const stop = log.findIndex((e) => e.kind === 'error');
+    expect(log.slice(stop - 3, stop + 1).map((e) => (e.kind === 'tool-result' ? `${e.toolUseId}:${e.status}` : e.kind)), 'the results are logged before the abort').toEqual([
+      `${finished.id}:ok`,
+      `${stopped.id}:error`,
+      `${queued.id}:error`,
+      'error',
+    ]);
+    expect(log[stop]).toMatchObject({ error: 'abort', tools: [expect.objectContaining({ toolUseId: stopped.id })] });
+    expect(updates, 'the editor shows the call that never started, and its result').toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionUpdate: 'tool_call', toolCallId: queued.id, title: expect.stringContaining('b.ts') }),
+        expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: queued.id, status: 'failed' }),
+      ]),
+    );
   });
 });
 
