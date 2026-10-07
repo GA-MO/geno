@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, ChapterMark, ChildNote, EditorAction, FileChange, ImageAttachment, SpinoffNote, TodoList, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
+import { isSecretPath, type ApprovalRecord, type ChapterMark, type ChildNote, type EditorAction, type FileChange, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -150,6 +150,18 @@ export async function resolveWritable(ctx: ToolContext, raw: string): Promise<st
   if (!within(ctx.workspace, resolved)) throw outside;
   return resolved;
 }
+
+/**
+ * Whether `target`, an absolute path inside a readable root, is a credentials file by the rule that makes `cat .env` ask,
+ * judged below that root, so the folders above the workspace do not count.
+ */
+export function isSecret(ctx: ToolContext, target: string): boolean {
+  const root = [ctx.workspace, ctx.spillDir, ...ctx.readRoots].find((r) => within(r, target));
+  return root !== undefined && isSecretPath(path.relative(root, target).split(path.sep).join('/'));
+}
+
+export const secretRefusal = (tool: string, shown: string): string =>
+  `${shown} is off limits to ${tool}: it matches Geno's built-in rule for credentials files (.env files, keys, .ssh and the like), whose contents would reach the model provider. Do not try to get its contents another way. If the task needs a value from it, ask the user.`;
 
 /** How a path inside the workspace is shown to the model. Spill files keep their absolute path. */
 export function displayPath(ctx: ToolContext, real: string): string {

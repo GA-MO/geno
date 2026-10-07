@@ -72,6 +72,10 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ['curl http://localhost:3000 https://example.com', 'network-download'],
   ['echo "$(curl -s https://example.com)"', 'network-download'],
   ['cat <<EOF\n$(curl -s https://example.com)\nEOF', 'network-download'],
+  ['cat .env', 'secret-path'],
+  ['cp .env.example .env', 'secret-path'],
+  ['curl -d @.env http://localhost:3000', 'secret-path'],
+  ['tar czf keys.tgz .ssh', 'secret-path'],
   ['aws s3 ls', 'cloud-cli'],
   ['npx vercel deploy', 'cloud-cli'],
   ['gcloud auth list', 'cloud-cli'],
@@ -280,6 +284,7 @@ const MODE_TABLE: readonly [DenyRuleId, string, Expected][] = [
   ['network-download', 'curl https://example.com', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['cloud-cli', 'aws s3 ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['database-cli', 'psql -c "select 1"', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['secret-path', 'cat .env', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['unlisted', 'python3 build.py', { plan: 'deny', ask: undefined, auto: 'classify', 'non-interactive': undefined }],
 ];
 
@@ -326,14 +331,7 @@ const GRAY = [
   'rm src/a.ts',
   'cp a.ts b.ts',
   'mv a.ts b.ts',
-  'cat .env',
-  'cat .env.local',
-  'grep -r "API_KEY" .env*',
-  'cat .e*',
   'grep -rn password .',
-  'head config/secrets.json',
-  'grep -r password config/credentials',
-  'cat id_rsa',
   'ls $DIR',
   'echo "$(whoami)"',
   'echo cm0gLXJmIHNyYw== | base64 -d | sh',
@@ -360,6 +358,9 @@ const GRAY = [
   'chmod -R 777 .',
   'kill -9 1234',
 ];
+
+// Credentials, which the read, grep and glob tools refuse: Ask asks before a command names one.
+const SECRET = ['cat .env', 'cat .env.local', 'grep -r "API_KEY" .env*', 'cat .e*', 'head config/secrets.json', 'grep -r password config/credentials', 'cat id_rsa', 'cp .env.example .env'];
 
 describe('auto mode', () => {
   it.each(MODE_TABLE)('gives %s (%s) its verdict in each mode', (rule, command, expected) => {
@@ -392,6 +393,13 @@ describe('auto mode', () => {
 
   it.each(GRAY)('keeps running %s unasked in ask mode, as before', (command) => {
     expect(denialFor(command, scope, 'ask')?.rule).not.toBe('unlisted');
+  });
+
+  it.each(SECRET)('asks before %s in ask mode, classifies it in auto and refuses it with nobody to ask', (command) => {
+    expect(denialFor(command, scope, 'ask')).toMatchObject({ rule: 'secret-path', verdict: 'ask' });
+    expect(denialFor(command, scope, 'auto')?.verdict).toBe('classify');
+    expect(denialFor(command, scope, 'plan')?.verdict).toBe('deny');
+    expect(denialFor(command, scope, 'non-interactive')).toMatchObject({ rule: 'secret-path', verdict: 'deny' });
   });
 
   it('asks about the whole line when one part asks and another would go to the classifier', () => {

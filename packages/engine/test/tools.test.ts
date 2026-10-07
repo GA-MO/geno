@@ -34,6 +34,10 @@ beforeAll(async () => {
   await symlink(path.join(root, 'outside', 'secret.txt'), path.join(ws, 'escape.txt'));
   await symlink(path.join(root, 'outside'), path.join(ws, 'escape-dir'));
   await symlink(path.join(ws, 'src', 'config.ts'), path.join(ws, 'alias.ts'));
+  await writeFile(path.join(ws, '.env.local'), 'SERVER_URL=https://secret-host\n');
+  await mkdir(path.join(ws, 'config', 'credentials'), { recursive: true });
+  await writeFile(path.join(ws, 'config', 'credentials', 'prod.json'), '{"SERVER_URL": "https://secret-host"}\n');
+  await symlink(path.join(ws, '.env.local'), path.join(ws, 'settings.txt'));
   ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
 });
 
@@ -181,6 +185,31 @@ describe('unsaved buffers', () => {
   });
 });
 
+describe('credentials files', () => {
+  it('are refused by read, by name, through a link and inside a credentials directory', async () => {
+    for (const file of ['.env.local', 'settings.txt', 'config/credentials/prod.json']) {
+      expect(await call('read', { path: file })).toEqual(failure(new RegExp(`^${file.replace(/\./g, '\\.')} is off limits to read: it matches Geno's built-in rule for credentials files`)));
+    }
+  });
+
+  it('are left out of grep and glob results, and a search that names them is refused', async () => {
+    const grep = await call('grep', { pattern: 'secret-host' });
+    expect(grep).toEqual(ok('no matches'));
+    expect((await call('glob', { pattern: '**/*.{local,json}' })).text).not.toMatch(/\.env|credentials/);
+    expect(await call('glob', { pattern: '.env*' })).toEqual(failure(/^\.env\* is off limits to glob/));
+    for (const input of [{ path: '**/.env*' }, { glob: '*.pem' }, { path: 'config/credentials' }, { path: '.env.local' }, { path: 'settings.txt' }]) {
+      expect(await call('grep', { pattern: 'x', ...input })).toEqual(failure(/is off limits to grep: it matches Geno's built-in rule for credentials files/));
+    }
+    expect(await call('glob', { pattern: '*.json', directory: 'config/credentials' })).toEqual(failure(/^config\/credentials is off limits to glob/));
+  });
+
+  it('are left out of an unsaved buffer search too', async () => {
+    const files = { ...DISK_FILES, unsaved: async () => [{ path: path.join(ctx.workspace, '.env.local'), text: 'SERVER_URL=https://buffered-secret\n' }] };
+    const result = await runTool({ type: 'tool_use', id: 'tu_buffer', name: 'grep', input: { pattern: 'buffered-secret' } } as ToolUseBlock, { ...ctx, files }, EXECUTORS);
+    expect(result).toEqual(ok('no matches'));
+  });
+});
+
 describe('glob', () => {
   it('lists matching files sorted, relative to the workspace, without symlinks', async () => {
     expect(await call('glob', { pattern: 'src/**/*.ts' })).toEqual(ok('src/config.ts\nsrc/lib/util.ts'));
@@ -193,7 +222,7 @@ describe('glob', () => {
 
 describe('list', () => {
   it('shows entries to the depth asked, counting files below the cut, without .git or symlinks', async () => {
-    const root = '.github/ (1 file)\n.hidden.ts\nREADME.md\nimage.bin\nsrc/ (2 files)';
+    const root = '.env.local\n.github/ (1 file)\n.hidden.ts\nREADME.md\nconfig/ (1 file)\nimage.bin\nsrc/ (2 files)';
     expect(await call('list', { depth: 1 })).toEqual(ok(root));
     expect(await call('list', { directory: '', depth: 1 })).toEqual(ok(root));
     expect(await call('list', { directory: 'src' })).toEqual(ok('src/config.ts\nsrc/lib/\nsrc/lib/util.ts'));

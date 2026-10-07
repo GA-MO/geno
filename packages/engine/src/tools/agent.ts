@@ -20,6 +20,7 @@ import {
   nextAutoState,
   OUTCOME_VERDICTS,
   ruledDenial,
+  secretReadDenial,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
@@ -56,6 +57,7 @@ import {
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
 import { EXECUTORS } from './index.js';
+import { readTool, type SecretGate } from './read.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
 import { skillExecutor } from './skill.js';
@@ -235,13 +237,24 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   // What the model last saw of each file: the base an edit must still match.
   const reads = new Map<string, BaseRead>();
 
+  // A credentials file opens only with the user's yes or the classifier's, as `cat .env` does.
+  const askSecret: SecretGate = async (ctx, shown) => {
+    const mode = modeOf(tools.approval);
+    const denial = secretReadDenial(shown, mode);
+    if (denial === undefined) return undefined;
+    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx.signal);
+    if (approval.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
+    return approval;
+  };
+  const gated = readTool(askSecret);
+
   const read: Executor = {
-    ...EXECUTORS.read,
+    ...gated,
     async run(raw, ctx) {
       // The base is the very text the read tool showed, so a change a moment later makes the next edit stale.
       let seen: string | null = null;
       const files: Files = { ...ctx.files, read: async (file) => (seen = await ctx.files.read(file)) };
-      const text = await EXECUTORS.read.run(raw, { ...ctx, files });
+      const text = await gated.run(raw, { ...ctx, files });
       const file = await resolveInside(ctx, (raw as { path: string }).path);
       await ctx.earlierCalls();
       reads.set(file, baseOf(seen, null));

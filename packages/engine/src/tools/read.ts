@@ -1,9 +1,9 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { BINARY_SNIFF, formatBytes, linesOf, MAX_MESSAGE_BYTES, numberedPage } from '@g-code/core';
+import { BINARY_SNIFF, formatBytes, isSecretPath, linesOf, MAX_MESSAGE_BYTES, numberedPage, type ApprovalRecord } from '@g-code/core';
 import { AttachmentError, describeImage, storeImage } from '../attachments.js';
-import { ALWAYS, displayPath, executor, optional, resolveInside, ToolError, type ToolContext, type ToolReply } from './context.js';
+import { displayPath, executor, isSecret, optional, resolveInside, secretRefusal, ToolError, type Executor, type ToolContext, type ToolReply } from './context.js';
 import { NotebookError, parseNotebook } from './notebook.js';
 import { openPdf, PdfError, type PdfPage } from './pdf.js';
 import { readSections, type Section } from './sections.js';
@@ -109,44 +109,71 @@ async function readNotebook(ctx: ToolContext, shown: string, real: string, size:
   });
 }
 
-export const read = executor({
-  concurrent: ALWAYS,
-  input: z.strictObject({
-    path: z.string().min(1),
-    start_line: optional(lineNumber),
-    end_line: optional(lineNumber),
-    pages: optional(range),
-    cells: optional(range),
-  }),
+/**
+ * What a read of a credentials file goes through before it opens: it throws to refuse, or returns how the user or the
+ * classifier let it through.
+ */
+export type SecretGate = (ctx: ToolContext, shown: string) => Promise<ApprovalRecord | undefined>;
+
+/** For a run with no way to ask, such as `gcode ask`. */
+export const REFUSE_SECRETS: SecretGate = async (_ctx, shown) => {
+  throw new ToolError(secretRefusal('read', shown));
+};
+
+const withApproval = (reply: ToolReply, approval: ApprovalRecord | undefined): ToolReply =>
+  approval === undefined ? reply : typeof reply === 'string' ? { text: reply, approval } : { ...reply, approval };
+
+const readInput = z.strictObject({
+  path: z.string().min(1),
+  start_line: optional(lineNumber),
+  end_line: optional(lineNumber),
+  pages: optional(range),
+  cells: optional(range),
+});
+type ReadInput = z.infer<typeof readInput>;
+
+export const readTool = (gate: SecretGate): Executor => executor({
+  // A read that may ask runs alone, as a command that may ask does.
+  concurrent: ({ path: raw }) => !isSecretPath(raw),
+  input: readInput,
   describe: ({ path, start_line, end_line, pages, cells }) =>
     pages !== undefined ? `read ${path} pages ${pages}`
     : cells !== undefined ? `read ${path} cells ${cells}`
     : start_line === undefined && end_line === undefined ? `read ${path}`
     : `read ${path}:${start_line ?? 1}-${end_line ?? ''}`,
-  async run({ path: raw, start_line, end_line, pages, cells }, ctx) {
-    const real = await resolveInside(ctx, raw);
-    const info = await stat(real);
-    if (info.isDirectory()) throw new ToolError(`${raw} is a directory; use list`);
-    const extension = path.extname(real).toLowerCase();
-    const lines = start_line !== undefined || end_line !== undefined;
-    if (pages !== undefined && extension !== '.pdf') throw new ToolError(`pages is for PDFs; ${raw} is not one`);
-    if (cells !== undefined && extension !== '.ipynb') throw new ToolError(`cells is for Jupyter notebooks; ${raw} is not one`);
-    if (IMAGE_EXTENSIONS.has(extension)) return readImage(ctx, displayPath(ctx, real), real, info.size);
-    if (extension === '.pdf') {
-      if (lines) throw new ToolError(`${raw} is a PDF; pass pages, such as "1-5", instead of start_line and end_line`);
-      return readPdf(ctx, displayPath(ctx, real), real, info.size, pages);
-    }
-    if (extension === '.ipynb' && !lines) return readNotebook(ctx, displayPath(ctx, real), real, info.size, cells);
-    const text = await ctx.files.read(real);
-    if (text === null) throw new ToolError(`no such file or directory: ${raw}`);
-    if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new ToolError(`${raw} is a binary file`);
-    if (text === '') return `${raw} is empty`;
-    const all = linesOf(text);
-    const total = all.length;
-    const first = start_line ?? 1;
-    const last = Math.min(end_line ?? total, total);
-    if (first > total) throw new ToolError(`start_line ${first} is past the end of ${raw}, which has ${total} lines`);
-    if (last < first) throw new ToolError(`end_line ${last} is before start_line ${first}`);
-    return numberedPage(all, first, last);
+  async run(input, ctx) {
+    const real = await resolveInside(ctx, input.path);
+    // By the name asked for and by the file it reaches, so a link named .env and a link to .env both go through the gate.
+    const secret = isSecret(ctx, path.resolve(ctx.workspace, input.path)) || isSecret(ctx, real);
+    const approval = secret ? await gate(ctx, input.path) : undefined;
+    return withApproval(await readResolved(ctx, real, input), approval);
   },
 });
+
+export const read = readTool(REFUSE_SECRETS);
+
+async function readResolved(ctx: ToolContext, real: string, { path: raw, start_line, end_line, pages, cells }: ReadInput): Promise<ToolReply> {
+  const info = await stat(real);
+  if (info.isDirectory()) throw new ToolError(`${raw} is a directory; use list`);
+  const extension = path.extname(real).toLowerCase();
+  const lines = start_line !== undefined || end_line !== undefined;
+  if (pages !== undefined && extension !== '.pdf') throw new ToolError(`pages is for PDFs; ${raw} is not one`);
+  if (cells !== undefined && extension !== '.ipynb') throw new ToolError(`cells is for Jupyter notebooks; ${raw} is not one`);
+  if (IMAGE_EXTENSIONS.has(extension)) return readImage(ctx, displayPath(ctx, real), real, info.size);
+  if (extension === '.pdf') {
+    if (lines) throw new ToolError(`${raw} is a PDF; pass pages, such as "1-5", instead of start_line and end_line`);
+    return readPdf(ctx, displayPath(ctx, real), real, info.size, pages);
+  }
+  if (extension === '.ipynb' && !lines) return readNotebook(ctx, displayPath(ctx, real), real, info.size, cells);
+  const text = await ctx.files.read(real);
+  if (text === null) throw new ToolError(`no such file or directory: ${raw}`);
+  if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new ToolError(`${raw} is a binary file`);
+  if (text === '') return `${raw} is empty`;
+  const all = linesOf(text);
+  const total = all.length;
+  const first = start_line ?? 1;
+  const last = Math.min(end_line ?? total, total);
+  if (first > total) throw new ToolError(`start_line ${first} is past the end of ${raw}, which has ${total} lines`);
+  if (last < first) throw new ToolError(`end_line ${last} is before start_line ${first}`);
+  return numberedPage(all, first, last);
+}

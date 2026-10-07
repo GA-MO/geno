@@ -15,6 +15,7 @@ export const DENY_RULE_IDS = [
   'network-download',
   'cloud-cli',
   'database-cli',
+  'secret-path',
   'unlisted',
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
@@ -298,6 +299,10 @@ const SECRET_PATH =
   /(?:^|[/=@])(?:\.env[^/]*|\.npmrc|\.yarnrc(?:\.yml)?|\.netrc|\.pgpass|\.git-credentials|\.ssh|\.aws|\.gnupg|\.kube|\.docker|id_(?:rsa|dsa|ecdsa|ed25519)[^/]*|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|credentials?(?:\.[^/]*)?|secrets?(?:\.[^/]*)?)(?:\/|$)/i;
 // A glob over hidden names can reach any of them, such as `.e*`.
 const HIDDEN_GLOB = /(?:^|\/)\.[^/]*[*?[]/;
+
+/** Whether a `/`-separated path, or a glob, names a credentials file or a path inside a credentials directory. */
+export const isSecretPath = (file: string): boolean => SECRET_PATH.test(file);
+
 // A search for credentials by name, which a recursive grep answers from any file it reaches, such as .env.
 const SECRET_TERM = /api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key/i;
 // A write under .git, such as a hook, runs later outside any command the user sees.
@@ -374,6 +379,12 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     reason: 'a database CLI',
     verdicts: ASK_OR_CLASSIFY,
     matches: ({ program }) => DATABASE_CLIS.has(program),
+  },
+  // read asks under this rule too, and grep and glob leave the same paths out (isSecretPath), so no route sends a secret unasked.
+  'secret-path': {
+    reason: 'a credentials file such as .env',
+    verdicts: ASK_OR_CLASSIFY,
+    matches: ({ words }) => words.some((word) => SECRET_PATH.test(word) || HIDDEN_GLOB.test(word)),
   },
   // Plan and Auto act on this: Ask and non-interactive runs run what no other rule flags, as they always have.
   unlisted: {
@@ -735,6 +746,13 @@ export function mergedDenial(command: string, flags: readonly Flag[]): Denial | 
   // One yes runs the whole line, so a question about several flagged commands must show all of them.
   if (new Set(flags.map((d) => d.command)).size === 1) return lead;
   return { ...lead, command: command.trim(), reason: [...new Set(flags.map((d) => d.reason))].join('; ') };
+}
+
+/** What a read of a credentials file meets in this mode: the rule that makes `cat .env` ask, for `read <shown>`. */
+export function secretReadDenial(shown: string, mode: ApprovalMode): Denial | undefined {
+  const { reason, verdicts } = DENY_RULES['secret-path'];
+  const verdict = verdicts[mode];
+  return verdict === 'allow' ? undefined : { rule: 'secret-path', reason, command: `read ${shown}`, verdict };
 }
 
 /** The first command in the line a rule denies in this mode, else the merged question or classification. */
