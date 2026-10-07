@@ -107,10 +107,10 @@ afterAll(() => {
   return new Promise<void>((resolve) => fake.close(() => resolve()));
 });
 
-/** The user's prose in a request, without the loaded context and the tool results. */
+/** The user's prose in a request, without the loaded context, Geno's own notes and the tool results. */
 const prose = (body: Body): string[] =>
   body.messages.flatMap((m) =>
-    m.role !== 'user' ? [] : (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') ? [b.text] : [])),
+    m.role !== 'user' ? [] : (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') && !b.text.startsWith('[Geno]') ? [b.text] : [])),
   );
 
 describe('rewind and fork from the panel in VS Code', () => {
