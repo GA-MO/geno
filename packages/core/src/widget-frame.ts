@@ -18,7 +18,14 @@ export const WIDGET_SANDBOX = 'allow-scripts';
 const POLICY = (script: string): string =>
   `default-src 'none'; script-src ${script}; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; form-action 'none'; base-uri 'none'; frame-src 'none'; worker-src 'none'`;
 
-export const frameCsp = (nonce: string): string => POLICY(`'nonce-${nonce}'`);
+const NONCE = /^[A-Za-z0-9+/=_-]+$/;
+
+function nonceOf(nonce: string): string {
+  if (!NONCE.test(nonce)) throw new Error(`${JSON.stringify(nonce)} is not a nonce`);
+  return nonce;
+}
+
+export const frameCsp = (nonce: string): string => POLICY(`'nonce-${nonceOf(nonce)}'`);
 
 export type WidgetTheme = { readonly scheme: 'dark' | 'light'; readonly vars: Readonly<Partial<Record<WidgetVariable, string>>> };
 
@@ -39,7 +46,10 @@ export function widgetTheme(read: (name: string) => string | undefined, scheme: 
   return { scheme, vars };
 }
 
-export type FrameInput = { readonly html: string; readonly nonce: string; readonly theme: WidgetTheme };
+/** Both schemes' variables, for a page that follows the reader's system theme rather than the panel's. */
+export type WidgetSchemes = { readonly light: WidgetTheme['vars']; readonly dark: WidgetTheme['vars'] };
+
+export type FrameInput = { readonly html: string; readonly nonce: string; readonly theme: WidgetTheme | WidgetSchemes };
 
 export const FRAME_HEIGHT = { min: 24, max: 2400 } as const;
 
@@ -50,10 +60,17 @@ const NAME = /^--[a-z0-9-]+$/;
 // Enough for colors, rgb() with alpha, and font stacks; never a brace, semicolon or angle bracket.
 const VALUE = /^[\w\s#().,%/"'+-]*$/;
 
-/** The theme as one CSS rule. A value that could end the rule or the style element is left out. */
-export function themeCss({ scheme, vars }: WidgetTheme): string {
+function rootRule(scheme: WidgetTheme['scheme'], vars: WidgetTheme['vars']): string {
   const declarations = Object.entries(vars).filter(([name, value]) => NAME.test(name) && typeof value === 'string' && VALUE.test(value));
   return `:root{color-scheme:${scheme === 'light' ? 'light' : 'dark'}${declarations.map(([name, value]) => `;${name}:${value}`).join('')}}`;
+}
+
+/**
+ * The theme as CSS: one rule, or for both schemes the light rule and the dark one under `prefers-color-scheme`. A
+ * value that could end the rule or the style element is left out.
+ */
+export function themeCss(theme: WidgetTheme | WidgetSchemes): string {
+  return 'scheme' in theme ? rootRule(theme.scheme, theme.vars) : `${rootRule('light', theme.light)}@media (prefers-color-scheme: dark){${rootRule('dark', theme.dark)}}`;
 }
 
 const BASE_CSS =
@@ -160,14 +177,12 @@ const BOOT = String.raw`(function () {
   report();
 })();`;
 
-const NONCE = /^[A-Za-z0-9+/=_-]+$/;
-
 /** The widget's text as a JavaScript string that cannot end its script element or open a comment. */
 const scriptString = (text: string): string => JSON.stringify(text).replaceAll('<', '\\u003c');
 
 /** The srcdoc of a widget's frame in a page whose scripts need `nonce`. */
 export function frameDocument({ html, nonce, theme }: FrameInput): string {
-  if (!NONCE.test(nonce)) throw new Error(`${JSON.stringify(nonce)} is not a nonce`);
+  nonceOf(nonce);
   const boot = BOOT.replace('SOURCE', () => scriptString(html));
   return [
     '<!doctype html><html><head><meta charset="utf-8">',
