@@ -68,6 +68,7 @@ const EVENT_TOKENS: { readonly [K in TurnEventKind]: (event: EventOf<K>) => numb
   'child-start': none,
   'child-end': none,
   cut: none,
+  spinoff: none,
 };
 
 export const eventTokens = (event: TurnEvent): number => (EVENT_TOKENS[event.kind] as (e: TurnEvent) => number)(event);
