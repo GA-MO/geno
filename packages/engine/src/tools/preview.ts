@@ -66,26 +66,20 @@ async function folderOf(config: LaunchConfig, ctx: ToolContext): Promise<string>
 
 const withApproval = (text: string, approval: ApprovalRecord | undefined) => (approval === undefined ? text : { text, approval });
 
-export function previewExecutors(
-  background: SessionBackground | undefined,
-  start: StartServer,
-  readyTimeoutMs = PREVIEW_READY_TIMEOUT_S * 1000,
-  pageTimeoutMs = PREVIEW_PAGE_TIMEOUT_S * 1000,
-): Readonly<Record<PreviewToolName, Executor>> {
+export function previewExecutors(background: SessionBackground | undefined, start: StartServer): Readonly<Record<PreviewToolName, Executor>> {
   const own = (): SessionBackground => {
     if (background === undefined) throw new ToolError(NO_BACKGROUND);
     return background;
   };
 
-  /** Waits for the server's port, then reports it as preview_start does. */
   const reported = async (kind: 'started' | 'reused', job: Server, ctx: ToolContext): Promise<string> => {
     const { jobs, sessionId } = own();
     const began = Date.now();
-    const outcome = await untilAnswers(job.preview.url, jobs.kept(sessionId, job.id).ended, readyTimeoutMs, ctx.signal);
+    const outcome = await untilAnswers(job.preview.url, jobs.kept(sessionId, job.id).ended, PREVIEW_READY_TIMEOUT_S * 1000, ctx.signal);
     const now = jobs.jobs(sessionId).find((each) => each.id === job.id) ?? job;
     const tail = outcome === 'ready' ? '' : filterLog(jobs.kept(sessionId, job.id).text, { level: 'all', lines: BACKGROUND_TAIL_LINES }).lines.join('\n');
     const server: PreviewServer = { ...job.preview, job: job.id, command: job.command, status: previewStatusOf(now.state, outcome === 'ready') };
-    const page = outcome === 'ready' ? await checkPage(job.preview.url, pageTimeoutMs, ctx.signal) : undefined;
+    const page = outcome === 'ready' ? await checkPage(job.preview.url, PREVIEW_PAGE_TIMEOUT_S * 1000, ctx.signal) : undefined;
     return previewStartText({ kind, server, waitedS: Math.round((Date.now() - began) / 1000), tail, page });
   };
 

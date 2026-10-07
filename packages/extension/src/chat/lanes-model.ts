@@ -37,7 +37,6 @@ export type LanesFromView =
   /** The user looked at an Arena run in its pane. */
   | { readonly type: 'task-seen'; readonly id: string }
   | { readonly type: 'task-stop'; readonly sessionId: string }
-  /** Stops one of the task's background commands, such as its dev server. */
   | { readonly type: 'task-job-stop'; readonly sessionId: string; readonly id: string }
   /** The session stops waiting to be woken. */
   | { readonly type: 'task-wake-cancel'; readonly sessionId: string }

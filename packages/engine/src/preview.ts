@@ -43,7 +43,6 @@ export function parseLaunchFile(file: string, text: string): LaunchFile {
   return { file, configs, problems };
 }
 
-/** The workspace's launch entries, from every launch file it has. */
 export async function readLaunchConfigs(workspace: string): Promise<LaunchConfigs> {
   const files = await Promise.all(
     LAUNCH_FILES.map(async (file) => {

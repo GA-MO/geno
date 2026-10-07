@@ -102,7 +102,6 @@ export type PreviewStart =
   | { readonly kind: 'started' | 'reused'; readonly server: PreviewServer; readonly waitedS: number; readonly tail: string; readonly page?: PageCheck | undefined }
   | { readonly kind: 'taken'; readonly config: LaunchConfig };
 
-/** Characters of a page title kept. */
 export const PAGE_TITLE_MAX = 120;
 
 /** The `<title>` of an HTML page, on one line and cut to PAGE_TITLE_MAX, or undefined when it has none. */
@@ -176,7 +175,6 @@ const statusText = (server: PreviewServer): string => {
 
 const tailText = (tail: string): string => (tail === '' ? 'It printed nothing.' : `The end of its output:\n${tail}`);
 
-/** What preview_start returns. */
 export function previewStartText(outcome: PreviewStart): string {
   if (outcome.kind === 'taken') {
     const { config } = outcome;
@@ -209,7 +207,6 @@ export function previewListText(launch: LaunchConfigs, servers: readonly Preview
   return [...entries, ...problems, ...running].join('\n');
 }
 
-/** What preview_logs returns. */
 export function previewLogsText(server: PreviewServer, read: LogRead, filter: LogFilter): string {
   const which = [filter.level === 'all' ? undefined : `level ${filter.level}`, filter.search === undefined ? undefined : `"${filter.search}"`].filter((part) => part !== undefined);
   const head = `${server.name} (${server.job}) ${statusText(server)}.`;
