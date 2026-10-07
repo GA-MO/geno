@@ -21,7 +21,8 @@ await SandboxManager.initialize({
 const wrapped = await SandboxManager.wrapWithSandbox(parsed.command, undefined, {
   filesystem: { denyRead: parsed.denyRead, allowRead: parsed.readable, allowWrite: parsed.writable, denyWrite: [] },
 });
-const child = spawn('/bin/sh', ['-c', wrapped], { stdio: 'inherit', detached: true });
+const { ELECTRON_RUN_AS_NODE: _runAsNode, ...agentEnv } = process.env;
+const child = spawn('/bin/sh', ['-c', wrapped], { stdio: 'inherit', detached: true, env: agentEnv });
 const stop = () => {
   try {
     if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
