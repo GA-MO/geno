@@ -113,7 +113,6 @@ export class TaskHost implements vscode.Disposable {
     if (task.lane !== null && before?.status !== task.status) void this.listLanes();
   }
 
-  /** The folder's scheduled tasks changed, or were listed. */
   scheduled({ tasks }: SchedulesResponse): void {
     this.schedules = tasks;
     this.post({ type: 'schedules', tasks });

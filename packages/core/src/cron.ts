@@ -38,7 +38,7 @@ const FIELDS: readonly Field[] = [
   { name: 'day of the week', min: 0, max: 7, names: WEEKDAY_NAMES, first: 0 },
 ];
 
-export const CRON_MACROS: Readonly<Record<string, string>> = {
+const CRON_MACROS: Readonly<Record<string, string>> = {
   '@hourly': '0 * * * *',
   '@daily': '0 0 * * *',
   '@midnight': '0 0 * * *',
@@ -106,16 +106,6 @@ function formatIn(zone: string): Intl.DateTimeFormat {
   return format;
 }
 
-/** Whether `zone` is an IANA time zone this runtime knows. */
-export function isTimeZone(zone: string): boolean {
-  try {
-    formatIn(zone);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** The zone this process runs in, which "local time" means. */
 export const localZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -141,7 +131,6 @@ export function instantOf(wall: Wall, zone: string): number {
   return valid.length === 0 ? before : Math.min(...valid);
 }
 
-/** The weekday of a calendar date, 0 for Sunday. */
 export const weekdayOf = (wall: Pick<Wall, 'year' | 'month' | 'day'>): number => new Date(Date.UTC(wall.year, wall.month - 1, wall.day)).getUTCDay();
 
 function dayMatches(cron: Cron, date: Date): boolean {

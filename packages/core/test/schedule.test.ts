@@ -6,7 +6,7 @@ import {
   endRun,
   formatAt,
   instantOf,
-  isRunning,
+  hasOpenRun,
   MISSED_COUNT_CAP,
   newTask,
   nextCronAfter,
@@ -309,7 +309,7 @@ describe('runs', () => {
     for (let i = 0; i < SCHEDULE_LIMITS.runs + 2; i++) task = withRuns(task, ran(`s${i}`));
     expect(task.runs).toHaveLength(SCHEDULE_LIMITS.runs);
     expect(task.runs[0]).toMatchObject({ sessionId: 's2' });
-    expect(isRunning(task)).toBe(true);
+    expect(hasOpenRun(task)).toBe(true);
     const end = { kind: 'done', at: 5, costUsd: 0.01 } as const;
     task = endRun(task, 's11', end);
     expect(task.runs.at(-1)).toMatchObject({ end });
