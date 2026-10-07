@@ -56,6 +56,25 @@ P4 also covers rows whose checks are unit tests:
 | B/B-83 | `classifier.test.ts` (core) checks when `classifierInputOf` sets the flag and that the note sits outside every fence. `classifier.test.ts` (engine) sends the `report-delete-src` eval case to a fake classifier. The live verdict comes from `gcode eval classifier`, which needs a Model Studio key. |
 | D7 | T-AGENT-02 above. Background-end notices, monitor matches, PR-watch text and a parent's message to its child go through the same `neutralize`. |
 
+## Model capability record (P23)
+
+`MODEL_CAPABILITIES` in `core/src/model-capabilities.ts` holds each model's window, output limit, thinking setting, prompt tier, cache TTL, spill limit and compaction point. A model with no row gets `UNKNOWN_MODEL`.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-ASM-01 | Both system blocks are cached with a 1 h TTL. There is no billing header. | On Anthropic, Bedrock and Vertex, every breakpoint has a 1 h TTL, because an entry may not outlive one before it. Model Studio and OpenRouter keep the default TTL until a longer one is tested there. No system block is a billing header. | pass (adapt) | `assembly.conformance.test.ts`, Anthropic wire only: Chat Completions has no `cache_control` |
+| T-ASM-06 | At effort medium: `output_config.effort` is `medium`, thinking is adaptive with display omitted, and `max_tokens` is 128,000, clamped near a full window. | `claude-opus-5-5` at effort medium sends the same three fields. Near a full window, `max_tokens` is the window minus the input estimate and 1,000 tokens. | pass | `assembly.conformance.test.ts`, Anthropic wire only: Chat Completions sends none of these fields |
+| T-TOOL-07 | Output over 30,000 characters goes to a file. | Output over the model's `spillChars`, 24,000 for every model, goes to a file that holds all of it. The model sees 2,000 characters of head and of tail. | partial: the threshold half passes. The MCP cap and note are P10. | `tools.conformance.test.ts`, both wires |
+
+P23 also covers rows that have no Claude Code conformance test. Their checks are unit tests and a live eval:
+
+| ID | Check |
+|---|---|
+| A/G-03, A/C-08 | `model-capabilities.test.ts`: every default and priced model has a row, every row's output limit and compaction point are inside its window, and an unknown model falls back. `session.test.ts`: `buildRequest` clamps `max_tokens` near a full window, sends 1 when the input alone fills it, and leaves an unknown window unclamped. |
+| A/C-09 (settings) | `session.test.ts`: Claude Opus gets adaptive thinking; Model Studio gets no thinking field. |
+| A/C-02 | T-ASM-01 above. `model-capabilities.test.ts` holds Anthropic's cache write price at 2x input, the 1 h rate. The live check on Anthropic (`cacheRead` above 0 after 10 minutes) is not run: the repository has no Anthropic key. |
+| A/E-01 (default) | `packages/engine/test/compact-cost.ts`, a live eval on qwen3.8-flash that spent $0.14. A long flash session costs about 30% as much at 200,000 tokens as at 800,000, so flash now compacts at 200,000. Other models keep 80% of their window. Results in [results/p23-compaction-cost.md](results/p23-compaction-cost.md). |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -74,17 +93,17 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-TOOL-05 | keep Geno's | none | no test yet |
 | T-TOOL-06a | deliberate | none | no test yet |
 | T-TOOL-06b | adopt | P27 | no test yet |
-| T-TOOL-07 | keep Geno's | P10, P23 | no test yet |
+| T-TOOL-07 | keep Geno's | P10, P23 | partial |
 | T-TOOL-10 | keep Geno's, adopt | P27 | no test yet |
 | T-TOOL-11 | adapt | P27 | no test yet |
 | T-TOOL-12 | adopt | P2 | pass |
 | T-TOOL-08 | adopt | P27 | no test yet |
 | T-TOOL-09 | adopt | P36 | no test yet |
-| T-ASM-01 | adapt | P23 | no test yet |
+| T-ASM-01 | adapt | P23 | pass |
 | T-ASM-03 | adopt | P5 | no test yet |
 | T-ASM-04 | at parity | none | no test yet |
 | T-ASM-05 | adopt | P24 | no test yet |
-| T-ASM-06 | adapt | P23 | no test yet |
+| T-ASM-06 | adapt | P23 | pass |
 | T-ASM-07 | adopt | P11 | no test yet |
 | T-ASM-08 | skip | none | no test yet |
 | T-ASM-09 | at parity | none | no test yet |
