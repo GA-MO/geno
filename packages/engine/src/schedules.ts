@@ -4,7 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   endRun,
-  isRunning,
+  hasOpenRun,
   missedRun,
   newTask,
   nextOccurrence,
@@ -155,7 +155,6 @@ export class Scheduler {
     this.bound ??= { home, err };
   }
 
-  /** Runs the workspace's tasks as they come due, from now on. */
   watch(workspace: string): void {
     if (this.workspaces.has(workspace)) return;
     this.workspaces.add(workspace);
@@ -220,7 +219,7 @@ export class Scheduler {
       await this.edit(workspace, async (tasks) => {
         const at = found(tasks, id);
         const task = tasks[at]!;
-        if (isRunning(task)) throw new ScheduleError(`${task.id} is running already`);
+        if (hasOpenRun(task)) throw new ScheduleError(`${task.id} is running already`);
         const by = runner ?? this.runner();
         if (by === undefined) throw new ScheduleError('no editor is connected to run it');
         return { tasks: tasks.with(at, await this.start(workspace, by, task, { dueAt: now, trigger: 'now' })), result: undefined };
@@ -286,7 +285,7 @@ export class Scheduler {
       // A run an engine that is gone left open never ends by itself.
       const left = read.runs.find((r) => r.kind === 'ran' && r.end === null && r.by !== pid && !alive(r.by));
       const task = left?.kind === 'ran' ? endRun(read, left.sessionId, { kind: 'failed', at: now, costUsd: null, message: INTERRUPTED }) : read;
-      const plan = planDue(task, now, zone(), policy, isRunning(task));
+      const plan = planDue(task, now, zone(), policy, hasOpenRun(task));
       if (plan.kind === 'miss') tasks.push(settled(task, plan.missed.to, missedRun(plan.missed, now)));
       else if (plan.kind === 'run' && runner !== undefined) {
         const due = settled(task, plan.dueAt, ...(plan.skipped === null ? [] : [missedRun(plan.skipped, now)]));
@@ -295,7 +294,7 @@ export class Scheduler {
     }
     if (JSON.stringify(tasks) !== JSON.stringify(before)) await this.write(workspace, file, tasks);
     const waits = tasks.flatMap((t) => {
-      const plan = planDue(t, now, zone(), policy, isRunning(t));
+      const plan = planDue(t, now, zone(), policy, hasOpenRun(t));
       return plan.kind === 'wait' ? [plan.at] : [];
     });
     if (waits.length === 0) return;

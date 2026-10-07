@@ -17,7 +17,6 @@ export type ScheduleId = Brand<string, 'ScheduleId'>;
 /** A cron expression in the engine's local time, or one instant. */
 export type When = { readonly kind: 'cron'; readonly expr: string } | { readonly kind: 'at'; readonly at: number };
 
-/** What one run may spend: the model calls' estimated cost, and how many calls. */
 export type ScheduleBudget = { readonly maxCostUsd: number; readonly maxTurns: number };
 
 /** A run spends money with nobody watching, so the default is small; a task asks for more when it needs it. */
@@ -83,7 +82,6 @@ export type SchedulePatch = Partial<ScheduleDraft & { readonly paused: boolean }
 const fail = (problem: string): Parsed<never> => ({ ok: false, problem });
 const isRecord = (raw: unknown): raw is Record<string, unknown> => typeof raw === 'object' && raw !== null && !Array.isArray(raw);
 
-/** The first instant after `after` that `when` names, or null when it names none. */
 export function nextOccurrence(when: When, after: number, zone: string): number | null {
   if (when.kind === 'at') return when.at > after ? when.at : null;
   const cron = parseCron(when.expr);
@@ -145,9 +143,8 @@ export function planDue(task: ScheduledTask, now: number, zone: string, policy: 
   return { kind: 'run', dueAt: latest, trigger: now - latest > policy.lateMs ? 'catch-up' : 'schedule', skipped };
 }
 
-export const isRunning = (task: ScheduledTask): boolean => task.runs.some((run) => run.kind === 'ran' && run.end === null);
+export const hasOpenRun = (task: ScheduledTask): boolean => task.runs.some((run) => run.kind === 'ran' && run.end === null);
 
-/** The task with more runs, keeping the newest SCHEDULE_LIMITS.runs. */
 export const withRuns = (task: ScheduledTask, ...runs: readonly ScheduleRun[]): ScheduledTask => ({ ...task, runs: [...task.runs, ...runs].slice(-SCHEDULE_LIMITS.runs) });
 
 export const missedRun = (missed: Missed, at: number): ScheduleRun => ({ kind: 'missed', at, ...missed });
@@ -235,7 +232,6 @@ export function taskLine(task: ScheduleDraft & { readonly paused?: boolean }, zo
 
 const END_WORDS: Readonly<Record<RunEndKind, string>> = { done: 'done', failed: 'failed', stopped: 'stopped', budget: 'stopped at its budget', 'max-turns': 'stopped at its turn limit' };
 
-/** What a run came to, in a few words. */
 export function runText(run: ScheduleRun, zone: string, now: number): string {
   switch (run.kind) {
     case 'ran': {
@@ -331,7 +327,6 @@ function parseClock(text: string): Parsed<{ readonly hour: number; readonly minu
   return { ok: true, value: { hour, minute } };
 }
 
-/** The next time the wall clock reads `hour:minute`, today or tomorrow. */
 function nextClock(hour: number, minute: number, now: number, zone: string): number {
   const today = wallOf(now, zone);
   const at = instantOf({ ...today, hour, minute }, zone);
@@ -385,7 +380,6 @@ const WHEN_FORMS: readonly WhenForm[] = [
   { pattern: /^(?:cron\s+)?([\d*][^\s]*(?:\s+[^\s]+){4})/i, read: (match) => cronOf(match[1]!) },
 ];
 
-/** `when` at the start of `text`, and what follows it. */
 function readWhen(text: string, now: number, zone: string): Parsed<{ readonly when: When; readonly rest: string }> {
   const trimmed = text.trim();
   for (const form of WHEN_FORMS) {
@@ -523,10 +517,8 @@ export function scheduleQuestion(change: ScheduleChange, zone: string, now: numb
   }
 }
 
-/** The reason under the approval card's question. */
 export const SCHEDULE_REASON = 'A scheduled task runs by itself, with nobody watching, and each run spends up to its budget.';
 
-/** The tool's list result: each task with its id, schedule, next run and last run. */
 export function scheduleListText(tasks: readonly ScheduledTask[], zone: string, now: number): string {
   if (tasks.length === 0) return 'No scheduled tasks in this workspace.';
   return tasks

@@ -69,5 +69,4 @@ export function scheduleRowOf(task: ScheduleView, zone: string, now: number): Sc
   };
 }
 
-/** The pane's hint: how to add a task. */
 export const SCHEDULE_HINT = 'Add one with /schedule in the chat, such as /schedule weekdays at 9:00 run /review on main.';
