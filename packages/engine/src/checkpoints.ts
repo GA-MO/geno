@@ -56,15 +56,16 @@ function inTurn<T>(repo: ShadowRepo, work: () => Promise<T>): Promise<T> {
   return next;
 }
 
-export const snapshot = (repo: ShadowRepo, label: string): Promise<string> =>
-  inTurn(repo, async () => {
-    if (!(await exists(repo.gitDir))) {
-      await exec('git', ['init', '--quiet', '--bare', repo.gitDir], { env: childEnv(process.env) });
-    }
-    await git(repo, ['add', '--all', '--', '.']);
-    await git(repo, ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', label]);
-    return (await git(repo, ['rev-parse', 'HEAD'])).trim();
-  });
+async function commitAll(repo: ShadowRepo, label: string): Promise<string> {
+  if (!(await exists(repo.gitDir))) {
+    await exec('git', ['init', '--quiet', '--bare', repo.gitDir], { env: childEnv(process.env) });
+  }
+  await git(repo, ['add', '--all', '--', '.']);
+  await git(repo, ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', label]);
+  return (await git(repo, ['rev-parse', 'HEAD'])).trim();
+}
+
+export const snapshot = (repo: ShadowRepo, label: string): Promise<string> => inTurn(repo, () => commitAll(repo, label));
 
 const lines = (out: string) => out.split('\n').filter((line) => line !== '');
 
@@ -99,22 +100,23 @@ export async function fileAt(repo: ShadowRepo, sha: string, file: string): Promi
  * Makes the work tree match commit `sha`: files changed since are checked out from it and files made since
  * are deleted. Running it again changes nothing. Returns the paths it touched.
  */
-export async function restore(repo: ShadowRepo, sha: string): Promise<string[]> {
-  const now = await snapshot(repo, `before restoring ${sha}`);
-  const changes = lines(await git(repo, ['diff', '--name-status', '--no-renames', sha, now, '--'])).map((line) => {
-    const [status = '', file = ''] = line.split('\t');
-    return { status, file };
+export const restore = (repo: ShadowRepo, sha: string): Promise<string[]> =>
+  inTurn(repo, async () => {
+    const now = await commitAll(repo, `before restoring ${sha}`);
+    const changes = lines(await git(repo, ['diff', '--name-status', '--no-renames', sha, now, '--'])).map((line) => {
+      const [status = '', file = ''] = line.split('\t');
+      return { status, file };
+    });
+    const added = changes.filter((c) => c.status === 'A').map((c) => c.file);
+    const reverted = changes.filter((c) => c.status !== 'A').map((c) => c.file);
+    if (reverted.length > 0) await git(repo, ['checkout', sha, '--', ...reverted]);
+    for (const file of added) {
+      const target = path.join(repo.workTree, file);
+      await rm(target, { force: true });
+      await pruneEmpty(path.dirname(target), repo.workTree);
+    }
+    return changes.map((c) => c.file).sort();
   });
-  const added = changes.filter((c) => c.status === 'A').map((c) => c.file);
-  const reverted = changes.filter((c) => c.status !== 'A').map((c) => c.file);
-  if (reverted.length > 0) await git(repo, ['checkout', sha, '--', ...reverted]);
-  for (const file of added) {
-    const target = path.join(repo.workTree, file);
-    await rm(target, { force: true });
-    await pruneEmpty(path.dirname(target), repo.workTree);
-  }
-  return changes.map((c) => c.file).sort();
-}
 
 const lastCheckpoint = (events: readonly TurnEvent[]) =>
   events.findLast((e): e is Extract<TurnEvent, { kind: 'checkpoint' }> => e.kind === 'checkpoint');
