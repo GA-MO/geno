@@ -46,6 +46,7 @@ import {
   type SpinoffId,
 } from '@g-code/core';
 import { attachmentSchema, imageAttachmentSchema, widgetRefSchema } from './attachments.js';
+import { memoryEntrySchema } from './memory.js';
 import { editorActionSchema } from './tools/editor.js';
 import { EngineError } from './errors.js';
 import { isMissing, StoreError, type Store } from './store.js';
@@ -266,6 +267,7 @@ const turnEventSchema = z.union([
       kind: z.literal('session-start'),
       session: sessionSchema,
       context: loadedContextSchema.optional(),
+      memory: z.array(memoryEntrySchema).optional(),
       environment: environmentSchema.optional(),
       child: childOfSchema.optional(),
       fork: z.strictObject({ sessionId: childId, turnSeq: seqFields.seq, title: z.string() }).optional(),
@@ -346,6 +348,12 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('wait'), ...seqFields, wait: waitingSchema, by: waiterSchema.optional() }),
     z.strictObject({ kind: z.literal('wake'), ...seqFields, note: wakeNoteSchema }),
     z.strictObject({ kind: z.literal('mode'), seq: seqFields.seq.optional(), at: seqFields.at, mode: z.enum(SESSION_MODES) }),
+    z.strictObject({
+      kind: z.literal('notice'),
+      ...seqFields,
+      mode: z.enum(SESSION_MODES).optional(),
+      memory: z.strictObject({ added: z.array(memoryEntrySchema), removed: z.array(memoryEntrySchema) }).optional(),
+    }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
     z.strictObject({

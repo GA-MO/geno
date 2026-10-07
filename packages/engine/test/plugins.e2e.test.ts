@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_MODE_SYSTEM_PROMPTS, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, type TurnEvent } from '@g-code/core';
+import { AGENT_SYSTEM_PROMPT, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, type TurnEvent } from '@g-code/core';
 import { renderGenoTools } from '../src/geno-tools.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
@@ -65,8 +65,8 @@ describe('pstack through gcode agent', () => {
     const genoTools = path.join(await realpath(home), 'geno-tools.md');
     expect(await readFile(genoTools, 'utf8')).toBe(renderGenoTools({ subagents: false }));
     const system = transport.requests[0]!.body.system[0].text as string;
-    expect(system.startsWith(AGENT_MODE_SYSTEM_PROMPTS.ask)).toBe(true);
-    expect(system.slice(AGENT_MODE_SYSTEM_PROMPTS.ask.length)).toBe(
+    expect(system.startsWith(AGENT_SYSTEM_PROMPT)).toBe(true);
+    expect(system.slice(AGENT_SYSTEM_PROMPT.length)).toBe(
       `\n\n${DEFERRED_TOOLS_NOTE}\n\npstack skills are installed. They are written for Claude Code; before you follow one, read ${genoTools}, which maps their tools to yours.`,
     );
 
@@ -93,7 +93,7 @@ describe('pstack through gcode agent', () => {
     const { workspace, env, home } = await setup('other');
     const transport = fakeTransport([answer('Hi.', usage)]);
     expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Hi'], env, { fetch: transport.fetch })).code).toBe(0);
-    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_MODE_SYSTEM_PROMPTS['non-interactive']}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(existsSync(path.join(home, 'geno-tools.md'))).toBe(false);
   });
 });

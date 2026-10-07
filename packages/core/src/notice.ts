@@ -1,0 +1,62 @@
+import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
+import { contextView } from './compact.js';
+import { GENO_NOTE } from './fence.js';
+import { memoryDelta, renderMemoryDelta, withDelta, type MemoryDelta, type MemoryEntry } from './memory.js';
+import type { TurnEvent } from './session.js';
+
+/**
+ * What changed in the session's settings since the model was last told: the mode the user switched to, and the memory
+ * notes added or removed. It is logged at the safe point before a model call and read as a message, so the system
+ * prompt and the tools stay byte-stable for the whole session and the cached prefix holds across a change.
+ */
+export type Notice = { readonly mode?: SessionMode | undefined; readonly memory?: MemoryDelta | undefined };
+
+/**
+ * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
+ * the tools a mode leaves out are refused when called.
+ */
+export const MODE_NOTICES: Readonly<Record<SessionMode, string>> = {
+  plan: `${GENO_NOTE} The user switched this session to Plan mode, which is read-only. You cannot change anything: edit, and every tool that starts or stops background work or wakes you later, is refused, and bash runs only read-only commands from the safe list; anything else is denied. This overrides what the system prompt says about changing code, until the user switches modes again. Investigate with read, grep, glob, list, check and safe bash commands, then answer with:
+- a concrete, numbered step-by-step plan for the change;
+- the files you would change or create, and what changes in each;
+- the risks and open questions, and how you would check the result.
+Also write the steps with the todo tool, all pending, since that same list is the one you tick off once the user starts building.
+Do not ask to switch modes; the user starts building when the plan looks right.`,
+  ask: `${GENO_NOTE} The user switched this session to Ask mode. You can change code as the system prompt describes; a command outside the safe list asks the user before it runs.`,
+  auto: `${GENO_NOTE} The user switched this session to Auto mode. You can change code as the system prompt describes. A command outside the safe list goes to a classifier instead of the user, and ask_user is refused: when something is ambiguous, choose the reading that best fits the codebase and say which you chose.`,
+};
+
+/** What the model has been told: the session's opening, then each notice, in the events it reads now. */
+export type Told = { readonly mode: SessionMode; readonly memory: readonly MemoryEntry[] };
+
+/**
+ * Read from the context view, so a compaction that drops a notice drops what it told, and the next safe point tells
+ * it again.
+ */
+export function toldOf(events: readonly TurnEvent[]): Told {
+  const view = contextView(events);
+  const start = view[0];
+  let mode: SessionMode = DEFAULT_SESSION_MODE;
+  let memory: readonly MemoryEntry[] = start?.kind === 'session-start' ? (start.memory ?? []) : [];
+  for (const event of view) {
+    if (event.kind !== 'notice') continue;
+    if (event.mode !== undefined) mode = event.mode;
+    if (event.memory !== undefined) memory = withDelta(memory, event.memory);
+  }
+  return { mode, memory };
+}
+
+/** What to tell the model before its next call, or undefined when it already knows. `mode` is undefined in a run nobody can switch. */
+export function noticeFor(events: readonly TurnEvent[], now: { readonly mode: SessionMode | undefined; readonly memory: readonly MemoryEntry[] }): Notice | undefined {
+  const told = toldOf(events);
+  const mode = now.mode !== undefined && now.mode !== told.mode ? now.mode : undefined;
+  const memory = memoryDelta(told.memory, now.memory);
+  if (mode === undefined && memory === undefined) return undefined;
+  return { ...(mode === undefined ? {} : { mode }), ...(memory === undefined ? {} : { memory }) };
+}
+
+/** A notice as the model reads it: the mode's text, then the memory change. */
+export const noticeTexts = (notice: Notice): string[] => [
+  ...(notice.mode === undefined ? [] : [MODE_NOTICES[notice.mode]]),
+  ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
+];

@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -37,6 +37,8 @@ export type Mode = {
   readonly director?: Director;
   /** What reached the session from outside the loop since the last call: taken at the one safe point, before each model call. */
   readonly arrivals?: () => readonly Arrival[];
+  /** What the model must be told at the safe point, such as a mode switch or a memory change; undefined when it knows. */
+  readonly notice?: (events: readonly TurnEvent[]) => Promise<Notice | undefined>;
 };
 
 export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
@@ -383,11 +385,14 @@ export async function drive(
   const verified = new Map<string, DiskState>();
   // The one safe point: whatever reached the session from outside the loop, a background command's end or a steer, is
   // logged after the last tool results and before the model next sees the log, with a note for each file the model
-  // read that changed on disk. True when anything arrived; a note alone does not hold back the model call.
+  // read that changed on disk and a notice of a mode switch or a memory change. True when anything arrived; a note or
+  // a notice alone does not hold back the model call.
   const deliver = async (): Promise<boolean> => {
     for (const { path, now, excerpt } of await changedOnDisk(events, verified)) {
       await record({ kind: 'file-changed', seq: 0, at: new Date().toISOString(), path, shown: displayPath(ctx, path), now, ...(excerpt === undefined ? {} : { excerpt }) });
     }
+    const notice = await mode.notice?.(events);
+    if (notice !== undefined) await record({ kind: 'notice', seq: nextSeq(events), at: new Date().toISOString(), ...notice });
     const arrived = mode.arrivals?.() ?? [];
     for (const arrival of arrived) {
       if (arrival.kind !== 'steer') for (const event of arrivalEvents(arrival)) await record(event);

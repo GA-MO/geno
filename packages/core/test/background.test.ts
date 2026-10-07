@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_MODE_TOOL_DEFINITIONS,
+  AGENT_MODE_TOOLS,
   type BackgroundEndEvent,
   backgroundEndNotice,
   type EndedJobState,
@@ -113,10 +113,9 @@ describe('a background end in the conversation', () => {
 });
 
 describe('the background tools by mode', () => {
-  it('leaves bash_output and bash_stop out of Plan and offers them elsewhere', () => {
-    const names = (mode: keyof typeof AGENT_MODE_TOOL_DEFINITIONS) => AGENT_MODE_TOOL_DEFINITIONS[mode].map((tool) => tool.name);
-    expect(names('plan')).not.toContain('bash_output');
-    expect(names('plan')).not.toContain('bash_stop');
-    for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(names(mode)).toEqual(expect.arrayContaining(['bash', 'bash_output', 'bash_stop']));
+  it('refuses bash_output and bash_stop in Plan and runs them elsewhere', () => {
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('bash_output');
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('bash_stop');
+    for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(AGENT_MODE_TOOLS[mode]).toEqual(expect.arrayContaining(['bash', 'bash_output', 'bash_stop']));
   });
 });

@@ -1,3 +1,5 @@
+import { arrivalText, GENO_NOTE, neutralizeNoticeLines } from './fence.js';
+
 /**
  * Memory: short notes the user approved for Geno to keep across sessions, one store per workspace and one for every
  * workspace. A note is a standing instruction, so only the user's own approval writes one; the model only proposes.
@@ -39,22 +41,51 @@ export function memoryProblem(text: string, entries: readonly MemoryEntry[], rep
 
 const escapeXml = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export const MEMORY_PREAMBLE =
-  'The user approved these notes for you to remember from earlier sessions. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do.';
+const notesBlock = (entries: readonly MemoryEntry[]): string[] => [
+  '<memory>',
+  ...sortedMemory(entries).map((entry) => `<note scope="${entry.scope}">${neutralizeNoticeLines(escapeXml(entry.text))}</note>`),
+  '</memory>',
+];
+
+export const MEMORY_PREAMBLE = `${GENO_NOTE} The user approved these notes for you to remember from earlier sessions; they were loaded when this session started. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do. A note says what was true when it was written and may be stale: before you rely on a note that names a file, function or flag, verify that it still exists.`;
 
 /**
- * The notes as a section of the system prompt, or undefined when there are none. Fixed text around the notes in a
- * fixed order, so the prompt's bytes, and the cached prefix, hold still while memory does.
+ * The notes as the session's opening message holds them, or undefined when there are none. The session-start event
+ * keeps them, so every request of the session, and of a resume, sends the same bytes however memory changes later.
  */
 export function renderMemory(entries: readonly MemoryEntry[]): string | undefined {
   if (entries.length === 0) return undefined;
-  return [
-    MEMORY_PREAMBLE,
-    '<memory>',
-    ...sortedMemory(entries).map((entry) => `<note scope="${entry.scope}">${escapeXml(entry.text)}</note>`),
-    '</memory>',
-  ].join('\n');
+  return [MEMORY_PREAMBLE, ...notesBlock(entries)].join('\n');
 }
+
+/** The notes added and the notes gone since the model was last told; a note whose text was edited is both. */
+export type MemoryDelta = { readonly added: readonly MemoryEntry[]; readonly removed: readonly MemoryEntry[] };
+
+const noteKey = (entry: MemoryEntry): string => `${entry.id}\n${entry.text}`;
+
+/** How `now` differs from `told`, or undefined when it does not. */
+export function memoryDelta(told: readonly MemoryEntry[], now: readonly MemoryEntry[]): MemoryDelta | undefined {
+  const before = new Set(told.map(noteKey));
+  const after = new Set(now.map(noteKey));
+  const added = now.filter((entry) => !before.has(noteKey(entry)));
+  const removed = told.filter((entry) => !after.has(noteKey(entry)));
+  return added.length === 0 && removed.length === 0 ? undefined : { added, removed };
+}
+
+/** `notes` with `delta` applied. */
+export function withDelta(notes: readonly MemoryEntry[], delta: MemoryDelta): MemoryEntry[] {
+  const gone = new Set(delta.removed.map(noteKey));
+  return [...notes.filter((entry) => !gone.has(noteKey(entry))), ...delta.added];
+}
+
+/** A change to memory as the model reads it mid-session: an arrival, never a rewrite of the opening or the system prompt. */
+export const renderMemoryDelta = ({ added, removed }: MemoryDelta): string =>
+  arrivalText(
+    [
+      ...(added.length === 0 ? [] : ['The user approved new notes for you to remember. Follow them where they apply, like the notes loaded when this session started:', ...notesBlock(added)]),
+      ...(removed.length === 0 ? [] : ['These notes were deleted from memory or replaced; stop following them:', ...notesBlock(removed)]),
+    ].join('\n'),
+  );
 
 /** Key in session/request_permission's `toolCall._meta` when the question is a `remember` call: its RememberInput. */
 export const REMEMBER_META = 'gcode/remember';

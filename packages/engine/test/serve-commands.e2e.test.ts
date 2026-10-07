@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { asSessionId, COMMAND_META, REPLAYED_TURN_META, type TurnEvent, ENVIRONMENT_HEADING } from '@g-code/core';
+import { asSessionId, COMMAND_META, MODE_NOTICES, REPLAYED_TURN_META, type TurnEvent, ENVIRONMENT_HEADING } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
@@ -175,8 +175,11 @@ describe('gcode serve slash commands', () => {
       '/rules runs in the editor, and this client does not offer it.',
     ]);
     expect(transport.requests).toHaveLength(1);
-    expect(firstMessage(transport.requests[0]!.body)).toEqual([{ type: 'text', text: '/usr/bin what is this' }]);
-    expect((await events(sessionId)).map((e) => e.kind)).toEqual(['session-start', 'mode', 'user', 'checkpoint', 'assistant']);
+    expect(firstMessage(transport.requests[0]!.body), 'the switch to Auto is told before the prompt').toEqual([
+      { type: 'text', text: MODE_NOTICES.auto },
+      { type: 'text', text: '/usr/bin what is this' },
+    ]);
+    expect((await events(sessionId)).map((e) => e.kind)).toEqual(['session-start', 'mode', 'user', 'notice', 'checkpoint', 'assistant']);
     expect((await userEvents(sessionId))[0]).not.toHaveProperty('command');
   });
 

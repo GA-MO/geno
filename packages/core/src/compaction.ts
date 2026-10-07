@@ -5,6 +5,7 @@ import { changedOnDiskNote } from './file-tracker.js';
 import { compactedText, contextView, KEEP_TAIL_TOKENS, keepTailTokens, type CompactEvent, type CompactTrigger, type Kept, type KeptMessage } from './compact.js';
 import { renderContextItems } from './context.js';
 import { textTokens } from './context-window.js';
+import { noticeTexts } from './notice.js';
 import { TOOL_SEARCH_TOOL } from './deferred-tools.js';
 import { replayMessages, restoredNotice, toolResultText, toolUsesOf, type Session, type Spend, type TurnEvent, type TurnEventKind } from './session.js';
 import type { TodoList } from './todo.js';
@@ -61,6 +62,7 @@ const EVENT_TOKENS: { readonly [K in TurnEventKind]: (event: EventOf<K>) => numb
   review: none,
   retry: none,
   mode: none,
+  notice: (event) => textTokens(noticeTexts(event).join('\n')),
   effort: none,
   title: none,
   'lane-apply': none,

@@ -7,6 +7,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import {
   localZone,
+  MODE_NOTICES,
   nextOccurrence,
   SCHEDULE_ACT_METHOD,
   SCHEDULED_RUN_NOTE,
@@ -211,8 +212,8 @@ describe('gcode serve: scheduled tasks', () => {
     expect(events.find((e) => e.kind === 'user')).toMatchObject({ content: '[sched-a] summarize the repository' });
     const body = model.requests('[sched-a]')[0]!;
     expect(JSON.stringify(body.system)).toContain(SCHEDULED_RUN_NOTE);
-    expect(JSON.stringify(body.system)).toContain('You are in Plan mode');
-    expect(offeredTools(body), 'read-only, and a run schedules nothing itself').not.toContain('edit');
+    expect(JSON.stringify(body.messages.at(-1)!.content)).toContain(JSON.stringify(MODE_NOTICES.plan).slice(1, -1));
+    expect(offeredTools(body), 'a run schedules nothing itself').not.toContain('schedule_task');
     expect(offeredTools(body)).not.toContain('schedule_task');
     expect(offeredTools(body)).not.toContain('ask_user');
 

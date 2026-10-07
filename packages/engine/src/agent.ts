@@ -4,10 +4,10 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
-  AGENT_MODE_SYSTEM_PROMPTS,
+  AGENT_SYSTEM_PROMPT,
   AGENT_TOOL,
+  AGENT_TOOL_DEFINITIONS,
   APPROVAL_MODES,
-  AGENT_MODE_TOOL_DEFINITIONS,
   approvalQuestion,
   DEFERRED_TOOLS_NOTE,
   describeServerState,
@@ -24,11 +24,11 @@ import {
   isSessionMode,
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
+  noticeFor,
   pstackNote,
   READ_TERMINAL_TOOL,
   readTerminalToolDefinitions,
   RECALL_SEARCH,
-  renderMemory,
   toolRoster,
   searchConfigOf,
   sessionModeOf,
@@ -246,8 +246,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
-    // The run offers the tools and prompt of the mode it starts in; a switch mid-run applies from the next run.
-    // MCP tools are offered in every mode, and their rules decide what each mode lets them do.
+    // Every mode is offered the same tools and the same system prompt, so a switch keeps the cached prefix. A switch is
+    // told at the next safe point and refuses what the new mode leaves out from the next call on. MCP tools are offered
+    // in every mode, and their rules decide what each mode lets them do.
     const startMode = options.approval.kind === 'interactive' ? options.approval.mode() : 'non-interactive';
     const memory = memoryStore(homeOf(store), workspace);
     const channel = options.approval.kind === 'interactive' ? (options.user ?? {}) : {};
@@ -262,8 +263,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const search = searchConfigOf(io.env);
     const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
-      ...AGENT_MODE_TOOL_DEFINITIONS[startMode],
-      ...userToolDefinitions(startMode, shownUserTools(channel)),
+      ...AGENT_TOOL_DEFINITIONS,
+      ...userToolDefinitions(shownUserTools(channel)),
       ...widgetToolDefinitions(startMode, widgets),
       ...editorActionToolDefinitions(startMode, editor !== undefined),
       ...readTerminalToolDefinitions(startMode, terminal !== undefined),
@@ -273,7 +274,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
-    const notes = renderMemory(await memory.list());
     const agentTool = config.agentTool?.includes(startMode) === true;
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
@@ -307,13 +307,12 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools);
     const system = [
-      AGENT_MODE_SYSTEM_PROMPTS[startMode],
+      AGENT_SYSTEM_PROMPT,
       ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
       ...(spinoffs && SPINOFF_MODES[startMode] ? [SPINOFF_NOTE] : []),
       ...(options.scheduled === true ? [SCHEDULED_RUN_NOTE] : []),
       ...(chapters && CHAPTER_MODES[startMode] ? [CHAPTER_NOTE] : []),
       ...(genoTools === undefined ? [] : [pstackNote(genoTools)]),
-      ...(notes === undefined ? [] : [notes]),
     ].join('\n\n');
     const mode = {
       tools: roster.offered,
@@ -336,6 +335,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       readRoots,
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       arrivals: () => steers.inbox.take(session.id),
+      notice: async (events: readonly TurnEvent[]) =>
+        noticeFor(events, { mode: options.approval.kind === 'interactive' ? options.approval.mode() : undefined, memory: await memory.list() }),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(director === undefined ? {} : { director }),
     };

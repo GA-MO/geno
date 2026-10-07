@@ -91,7 +91,7 @@ describe('remember', () => {
         const result = await remember.run({ text, scope: 'global' }, ctx());
         expect(asked, `${mode} asks`).toEqual([{ text, scope: 'global' }]);
         expect((await memory.list()).map((e) => e.text), `${mode} ${yes ? 'saves on yes' : 'saves nothing on no'}`).toEqual(yes ? [text] : []);
-        expect(result).toBe(yes ? "Saved to global memory. It applies from the user's next message." : 'The user declined. Nothing was saved; do not propose it again unless they ask.');
+        expect(result).toBe(yes ? "Saved to global memory. It applies from now on." : 'The user declined. Nothing was saved; do not propose it again unless they ask.');
       }
     }
   });

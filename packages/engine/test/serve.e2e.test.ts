@@ -6,8 +6,9 @@ import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_MODE_SYSTEM_PROMPTS,
-  AGENT_MODE_TOOL_DEFINITIONS,
+  AGENT_SYSTEM_PROMPT,
+  AGENT_TOOL_DEFINITIONS,
+  MODE_NOTICES,
   DEFERRED_TOOLS_NOTE,
   toolRoster,
   webToolDefinitions,
@@ -450,7 +451,7 @@ describe('gcode serve', () => {
     expect(resumed).toBe('auto');
   });
 
-  it('switches to plan with session/set_mode, offers no edit there, keeps plan on resume, and replays the mode of each turn', async () => {
+  it('switches to plan with session/set_mode, tells the model in a message, keeps plan on resume, and replays the mode of each turn', async () => {
     const { workspace, editor, transport, connect } = await setup([answer('1. Change a.ts.', usage), answer('Building.', usage)]);
     const id = await connect(async (ctx, sessionId) => {
       await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'plan' });
@@ -461,9 +462,14 @@ describe('gcode serve', () => {
       return sessionId;
     });
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
-    expect(transport.requests[0]!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.plan, ...webToolDefinitions(false)]).offered);
-    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_MODE_SYSTEM_PROMPTS.plan}\n\n${DEFERRED_TOOLS_NOTE}`);
-    expect(transport.requests[1]!.body.tools).toEqual(toolRoster([...AGENT_MODE_TOOL_DEFINITIONS.ask, ...webToolDefinitions(false)]).offered);
+    const [plan, ask] = transport.requests.map((request) => request.body);
+    expect(plan.tools).toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)]).offered);
+    expect(plan.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(ask.tools, 'the switch back to Ask keeps the tools').toEqual(plan.tools);
+    expect(ask.system, 'and the system prompt').toEqual(plan.system);
+    const said = (body: { messages: { content: unknown }[] }) => JSON.stringify(body.messages.at(-1)!.content);
+    expect(said(plan)).toContain(JSON.stringify(MODE_NOTICES.plan).slice(1, -1));
+    expect(said(ask)).toContain(JSON.stringify(MODE_NOTICES.ask).slice(1, -1));
 
     editor.updates.length = 0;
     const resumed = await connect(async (ctx) => {

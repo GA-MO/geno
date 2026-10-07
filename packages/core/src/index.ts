@@ -42,6 +42,7 @@ export * from './browser-tools.generated.js';
 export * from './history.js';
 export * from './session-search.js';
 export * from './memory.js';
+export * from './notice.js';
 export * from './user-tools.js';
 export * from './ask-user.js';
 export * from './check.js';

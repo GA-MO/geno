@@ -131,43 +131,16 @@ You are running as an agent that changes the code itself. How to work in this mo
 // It may still list and read the dev servers a session started before it switched to Plan.
 const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'bash_stop', 'monitor', 'preview_start', 'preview_stop', 'schedule_wakeup', 'watch_pr']);
 
-/** What a mode lets the agent change: everything, or in Plan nothing, with bash held to the safe list by the rules. */
+/**
+ * What a mode lets the agent call: everything, or in Plan nothing that changes files, with bash held to the safe list
+ * by the rules. Every mode is offered all the tools, so a switch keeps the cached prefix; a call the mode leaves out is
+ * refused, and the mode's notice (`notice.ts`) tells the model which.
+ */
 export const AGENT_MODE_TOOLS: Readonly<Record<ApprovalMode, readonly AgentToolName[]>> = {
   plan: AGENT_TOOL_NAMES.filter((name) => !PLAN_LEAVES_OUT.has(name)),
   ask: AGENT_TOOL_NAMES,
   auto: AGENT_TOOL_NAMES,
   'non-interactive': AGENT_TOOL_NAMES,
-};
-
-const definitionsFor = (mode: ApprovalMode): readonly Tool[] => {
-  const allowed = new Set<string>(AGENT_MODE_TOOLS[mode]);
-  const tools = AGENT_TOOL_DEFINITIONS.filter((tool) => allowed.has(tool.name));
-  return tools.length === AGENT_TOOL_DEFINITIONS.length ? AGENT_TOOL_DEFINITIONS : Object.freeze(tools);
-};
-
-// Built once per mode, so each mode's cached prefix stays byte-stable from call to call.
-export const AGENT_MODE_TOOL_DEFINITIONS: Readonly<Record<ApprovalMode, readonly Tool[]>> = {
-  plan: definitionsFor('plan'),
-  ask: definitionsFor('ask'),
-  auto: definitionsFor('auto'),
-  'non-interactive': definitionsFor('non-interactive'),
-};
-
-const PLAN_PROMPT = `
-
-You are in Plan mode, which is read-only. You cannot change anything: there is no edit tool, and bash runs only read-only commands from the safe list; anything else is denied. This overrides what is said above about changing code. Investigate with read, grep, glob, list, check and safe bash commands, then answer with:
-- a concrete, numbered step-by-step plan for the change;
-- the files you would change or create, and what changes in each;
-- the risks and open questions, and how you would check the result.
-Also write the steps with the todo tool, all pending, since that same list is the one you tick off once the user starts building.
-Do not ask to switch modes; the user starts building when the plan looks right.`;
-
-/** The system prompt in each mode, fixed per mode so its cached prefix stays byte-stable. */
-export const AGENT_MODE_SYSTEM_PROMPTS: Readonly<Record<ApprovalMode, string>> = {
-  plan: `${AGENT_SYSTEM_PROMPT}${PLAN_PROMPT}`,
-  ask: AGENT_SYSTEM_PROMPT,
-  auto: AGENT_SYSTEM_PROMPT,
-  'non-interactive': AGENT_SYSTEM_PROMPT,
 };
 
 /**

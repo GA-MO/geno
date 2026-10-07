@@ -11,7 +11,7 @@ import { isMissing, StoreError } from './store.js';
  * a rename, so a crash leaves the old file or the new one. A deleted note goes to `trash/memory/`.
  */
 
-const entrySchema = z.strictObject({
+export const memoryEntrySchema = z.strictObject({
   id: z.string().min(1),
   text: z.string(),
   scope: z.enum(MEMORY_SCOPES),
@@ -19,7 +19,7 @@ const entrySchema = z.strictObject({
   sessionId: z.string().nullable(),
 });
 
-const fileSchema = z.strictObject({ version: z.literal(1), workspace: z.string().optional(), entries: z.array(entrySchema) });
+const fileSchema = z.strictObject({ version: z.literal(1), workspace: z.string().optional(), entries: z.array(memoryEntrySchema) });
 type MemoryFile = z.infer<typeof fileSchema>;
 
 export class MemoryError extends Error {}

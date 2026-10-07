@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { AGENT_MODE_TOOL_DEFINITIONS, AGENT_TOOL_DEFINITIONS, type SlashCommand } from '@g-code/core';
+import { AGENT_MODE_TOOLS, AGENT_TOOL_DEFINITIONS, type SlashCommand } from '@g-code/core';
 import { availableCommands, loadCommands } from '../src/commands.js';
 import { DISK_FILES } from '../src/files.js';
 import { claudeDirOf, loadPlugins } from '../src/plugins.js';
@@ -218,7 +218,7 @@ describe('the skill tool', () => {
     expect(names).toContain('skill');
     expect(names).toEqual(names.toSorted());
     expect(Object.isFrozen(AGENT_TOOL_DEFINITIONS)).toBe(true);
-    for (const tools of Object.values(AGENT_MODE_TOOL_DEFINITIONS)) expect(tools.map((tool) => tool.name)).toContain('skill');
+    for (const tools of Object.values(AGENT_MODE_TOOLS)) expect(tools).toContain('skill');
   });
 });
 

@@ -103,7 +103,7 @@ const systemOf = (body: { system: { text: string }[] }) => body.system[0]!.text;
 const toolResults = (body: { messages: { content: unknown }[] }) => JSON.stringify(body.messages.at(-1)!.content);
 
 describe('gcode serve: remember and memory', () => {
-  it('asks with the exact text before saving, puts the note in the next prompt, and keeps the prompt bytes while memory holds still', async () => {
+  it('asks with the exact text before saving, tells the model the new note as a notice, and keeps the system prompt and tools byte for byte', async () => {
     const text = 'Run the tests with pnpm vitest.';
     const { transport, editor, connect, say, home } = await setup([
       answer('Hello.', usage),
@@ -122,10 +122,9 @@ describe('gcode serve: remember and memory', () => {
       await say(ctx, sessionId, 'next');
     });
 
-    const [first, second, third, , , sixth] = transport.requests.map((r) => r.body);
-    expect(toolNames(first), 'a client that shows both cards is offered both tools in Ask').toEqual(expect.arrayContaining(['ask_user', 'remember']));
-    expect(toolNames(third), 'Auto offers remember but not ask_user').toContain('remember');
-    expect(toolNames(third)).not.toContain('ask_user');
+    const [first, second, third, , fifth, sixth] = transport.requests.map((r) => r.body);
+    expect(toolNames(first), 'a client that shows both cards is offered both tools').toEqual(expect.arrayContaining(['ask_user', 'remember']));
+    expect(toolNames(third), 'Auto is offered the same tools, and refuses ask_user when called').toEqual(toolNames(first));
     expect(systemOf(second), 'unchanged memory, same prompt bytes').toBe(systemOf(first));
     expect(systemOf(first)).not.toContain('<memory>');
 
@@ -134,7 +133,10 @@ describe('gcode serve: remember and memory', () => {
     expect(asked.toolCall._meta?.[REMEMBER_META], 'Auto still asks, showing the exact text').toEqual({ text, scope: 'project' });
     expect(asked.toolCall.title).toBe('Remember this in this project?');
     expect(asked.options.map((o) => o.name)).toEqual(['Remember', "Don't remember"]);
-    expect(systemOf(sixth)).toContain(`<note scope="project">${text}</note>`);
+    expect(toolResults(fifth), 'the next call after the yes is told the new note').toContain(JSON.stringify(`<note scope="project">${text}</note>`).slice(1, -1));
+    expect(systemOf(sixth), 'a remember leaves the system prompt as it was').toBe(systemOf(first));
+    expect(JSON.stringify(sixth.tools)).toBe(JSON.stringify(first.tools));
+    expect(JSON.stringify(sixth.messages[0]), 'and the opening message').toBe(JSON.stringify(first.messages[0]).replace(/,"cache_control":\{[^}]*\}/g, ''));
     expect(JSON.stringify(await readFile(path.join(home, 'memory', 'global.json'), 'utf8').catch(() => 'none'))).toBe('"none"');
   });
 
