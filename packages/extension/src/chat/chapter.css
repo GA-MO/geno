@@ -1,18 +1,8 @@
 /*
  * Chapters (U58): the divider where a chapter starts, the title field under a message, and the table of contents
- * that floats at the transcript's top left, beside the stuck request.
+ * that floats at the transcript's top left, beside the stuck request. Its button stays inside the rail's gutter, left
+ * of where any step's text starts, so it covers no text at any width.
  */
-
-:root {
-  /* The room the stuck request leaves at its left for the table of contents' button. */
-  --toc-room: 40px;
-}
-
-@media (min-width: 480px) {
-  :root {
-    --toc-room: min(32vw, 220px);
-  }
-}
 
 .chapter-divider {
   display: flex;
@@ -47,8 +37,13 @@
   display: none;
 }
 
+/* Its title starts where the steps' text does, clear of the table of contents' button. */
 .chapter-slot .chapter-divider {
   margin: 0 0 10px;
+}
+
+.chapter-slot .chapter-divider::before {
+  flex-basis: calc(var(--rail-indent) - 8px);
 }
 
 /* A chapter's step is the divider itself; the rail runs on through it without a node. */
@@ -110,7 +105,7 @@ body:not([data-view='chat']) .chapter-toc-slot {
 
 /* The stuck request keeps clear of the button. */
 body[data-chapters] .turn > .request {
-  padding-left: var(--toc-room);
+  padding-left: var(--rail-indent);
 }
 
 .chapter-toc {
@@ -122,10 +117,10 @@ body[data-chapters] .turn > .request {
 .chapter-toc-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: calc(var(--toc-room) - 8px);
+  justify-content: center;
+  width: 28px;
   height: 26px;
-  padding: 0 7px;
+  padding: 0;
   border: 1px solid var(--vscode-contrastBorder, var(--border));
   border-radius: 13px;
   background: var(--bg);
@@ -144,25 +139,6 @@ body[data-chapters] .turn > .request {
   outline-offset: 1px;
 }
 
-.chapter-toc-current {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chapter-toc-chevron {
-  flex: none;
-  font-size: 12px;
-}
-
-/* Below 480px the button is its icon alone, in the 40px the stuck request leaves it. */
-@media (max-width: 479px) {
-  .chapter-toc-current,
-  .chapter-toc-chevron {
-    display: none;
-  }
-}
 
 .chapter-toc-list {
   position: absolute;
@@ -224,4 +200,22 @@ body[data-chapters] .turn > .request {
   font-size: var(--small);
   font-weight: normal;
   overflow-wrap: anywhere;
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) {
+  & .chapter-toc-toggle,
+  & .chapter-toc-list {
+    border-color: var(--glass-edge-hi);
+    background: var(--glass-float);
+    box-shadow: var(--glass-float-shadow);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  & .chapter-toc-list {
+    border-radius: 10px;
+  }
+
+  & .chapter-toc-item:hover {
+    background: var(--glass-hover);
+  }
 }

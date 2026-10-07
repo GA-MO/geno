@@ -750,16 +750,19 @@ const anchorOf = (entry: TocEntry): HTMLElement | null => log.querySelector<HTML
 
 /**
  * Scrolls a chapter to the top: the agent's divider lands below its turn's stuck request, as a revealed turn does; the
- * user's opens its turn, so it goes to the very top.
+ * user's opens its turn, so it goes to the top, just below the table of contents' button.
  */
 function jumpTo(entry: TocEntry): void {
   const target = anchorOf(entry);
   if (entry.anchor === START_ANCHOR) log.scrollTop = 0;
   else if (target === null) return;
-  else if (entry.by === 'user') log.scrollTop += target.getBoundingClientRect().top - log.getBoundingClientRect().top - 4;
+  else if (entry.by === 'user') log.scrollTop += target.getBoundingClientRect().top - toc.element.getBoundingClientRect().bottom - TOC_BUTTON_ROOM;
   else target.scrollIntoView({ block: 'start' });
   markCurrent();
 }
+
+/** How far below the transcript's top the table of contents' button ends, as chapter.css places it, and a gap. */
+const TOC_BUTTON_ROOM = 38;
 
 /** Where a chapter counts as reached: just below the stuck request, which the transcript's scroll padding leaves room for. */
 const readingLine = (): number => (Number.parseFloat(getComputedStyle(log).scrollPaddingTop) || 0) + 8;

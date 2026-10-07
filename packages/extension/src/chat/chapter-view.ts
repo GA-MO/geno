@@ -50,19 +50,12 @@ export type Toc = {
 
 /**
  * The table of contents: a small button at the transcript's top left, beside the stuck request, that opens the list
- * of chapters. The list stays open while the chat scrolls, so the current row follows the reading, until the button,
+ * of chapters, the current one marked. The list stays open while the chat scrolls, so the current row follows the reading, until the button,
  * Escape, or a choice on a narrow panel closes it. Arrows, Home and End move between rows.
  */
 export function chapterToc(jump: (entry: TocEntry) => void): Toc {
   const listId = 'chapter-toc-list';
-  const current = h('span', { class: 'chapter-toc-current' });
-  const toggle = h(
-    'button',
-    { type: 'button', class: 'chapter-toc-toggle', 'aria-expanded': 'false', 'aria-controls': listId, 'data-focus': 'chapter-toc' },
-    icon('list-unordered'),
-    current,
-    icon('chevron-down', 'chapter-toc-chevron'),
-  );
+  const toggle = h('button', { type: 'button', class: 'chapter-toc-toggle', 'aria-expanded': 'false', 'aria-controls': listId, 'data-focus': 'chapter-toc' }, icon('list-unordered'));
   const list = h('ol', { class: 'chapter-toc-list', id: listId, hidden: true });
   const nav = h('nav', { class: 'chapter-toc', 'aria-label': 'Chapters' }, toggle, list);
   const element = h('div', { class: 'chapter-toc-slot', hidden: true }, nav);
@@ -128,7 +121,6 @@ export function chapterToc(jump: (entry: TocEntry) => void): Toc {
       if (entries.length === 0) return setOpen(false);
       rows.forEach((row, i) => (i === at ? row.setAttribute('aria-current', 'true') : row.removeAttribute('aria-current')));
       const title = entries[at]?.title ?? '';
-      current.textContent = title;
       toggle.title = `Chapters: ${title}`;
       toggle.setAttribute('aria-label', `Chapters, ${entries.length - (entries[0]?.by === 'start' ? 1 : 0)} marked. Now in: ${title}`);
     },
