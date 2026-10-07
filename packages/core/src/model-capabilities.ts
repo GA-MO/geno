@@ -43,10 +43,10 @@ const SPILL_CHARS = 24_000;
 type Choices = Pick<ModelCapabilities, 'thinking' | 'promptTier' | 'cacheTtl' | 'guessed'>;
 
 /** A known model. `compactAt` is 80% of the window, Geno's trigger since U47, unless a row's eval says otherwise. */
-const known = (source: string, window: number, maxOutput: number, choices: Choices): ModelCapabilities => ({
+const known = (source: string, window: number, maxOutput: number, choices: Choices, compactAt = Math.floor(0.8 * window)): ModelCapabilities => ({
   window,
   maxOutput,
-  compactAt: Math.floor(0.8 * window),
+  compactAt,
   spillChars: SPILL_CHARS,
   source,
   ...choices,
@@ -75,8 +75,10 @@ export const MODEL_CAPABILITIES: { readonly [P in ProviderName]: Readonly<Record
     'anthropic/claude-sonnet-5.5': known(CLAUDE_DOCS, 1_000_000, 128_000, { ...OPENROUTER_CLAUDE, guessed: ['promptTier'] }),
   },
   // Each page's "Context limits"; the output limits answered a live request at the limit and refused one above it.
+  // Flash compacts at 200,000: a long session then costs about 30% of what it does at 800,000
+  // (docs/results/p23-compaction-cost.md).
   modelstudio: {
-    'qwen3.8-flash': known(modelStudioDocs('qwen3-8-flash'), 1_000_000, 131_072, QWEN_FLASH),
+    'qwen3.8-flash': known(modelStudioDocs('qwen3-8-flash'), 1_000_000, 131_072, QWEN_FLASH, 200_000),
     'qwen3.6-flash': known(modelStudioDocs('qwen3-6-flash'), 1_000_000, 65_536, QWEN_FLASH),
     'qwen3.7-plus': known(modelStudioDocs('qwen3-7-plus'), 1_000_000, 131_072, QWEN_LARGER),
     'qwen3.7-max': known(modelStudioDocs('qwen3-7-max'), 1_000_000, 131_072, QWEN_LARGER),
