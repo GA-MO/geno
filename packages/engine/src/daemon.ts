@@ -9,6 +9,7 @@ import type { Limits } from './drive.js';
 import { browserLauncherOf } from './mcp/browser.js';
 import { mcpSessions } from './mcp/sessions.js';
 import { engineShared, gcodeAgent } from './serve.js';
+import { killShells } from './process.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
 
@@ -44,13 +45,13 @@ async function listen(server: Server, socket: string): Promise<void> {
  * The engine as a process of its own on a Unix socket, which editor windows connect to and come back to after a
  * reload. Every connection shares the sessions, so a turn goes on while no window is connected. The process exits
  * once no editor is connected and no turn runs for `idleMs`. Another process already on the socket wins: this one
- * exits with 0, and the editor connects to that one.
+ * exits with 0, and the editor connects to that one. `stopping` ends it at once, windows connected or not.
  */
-export async function serveSocket(io: Io, store: Store, limits: Limits, socket: string, idleMs = IDLE_EXIT_MS): Promise<number> {
+export async function serveSocket(io: Io, store: Store, limits: Limits, socket: string, idleMs = IDLE_EXIT_MS, stopping?: AbortSignal): Promise<number> {
   const mcp = mcpSessions(store, io.env, io.err, browserLauncherOf(io.env));
   const shared = engineShared(io);
   // A crash cannot wait for a grace period; a command or an external agent left running would outlive the engine that owns it.
-  const killJobs = () => (shared.jobs.killAllNow(), shared.externals.closeAll());
+  const killJobs = () => (killShells(), shared.jobs.killAllNow(), shared.externals.closeAll());
   process.once('exit', killJobs);
   const open = new Set<Socket>();
   let idle: ReturnType<typeof setTimeout> | undefined;
@@ -89,15 +90,35 @@ export async function serveSocket(io: Io, store: Store, limits: Limits, socket: 
   }
   io.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on ${socket}, sessions in ${store.sessionsDir}`);
   watchIdle();
+  stopping?.addEventListener('abort', () => stop(), { once: true });
+  if (stopping?.aborted) stop();
   await stopped;
-  io.err('gcode serve: idle, exiting');
   server.close();
-  await shared.jobs.kill('engine-exit', 'all');
+  if (stopping?.aborted) {
+    io.err(`gcode serve: ${String(stopping.reason)}, exiting`);
+    for (const connection of open) connection.destroy();
+    // Whoever sent the signal may follow it with SIGKILL, so commands get no grace period.
+    killShells();
+    shared.jobs.killAllNow();
+  } else {
+    io.err('gcode serve: idle, exiting');
+    await shared.jobs.kill('engine-exit', 'all');
+  }
   shared.externals.closeAll();
   process.off('exit', killJobs);
   await mcp.stopAll();
   await rm(socket, { force: true });
   return 0;
+}
+
+/**
+ * Aborts on the first SIGTERM or SIGINT; a second one kills the process. The engine stops on them itself: sandbox-runtime
+ * cleans up on both once its sandbox has run a command, and its handler leaves the process running.
+ */
+function stopSignal(): AbortSignal {
+  const controller = new AbortController();
+  for (const name of ['SIGTERM', 'SIGINT'] as const) process.once(name, () => controller.abort(name));
+  return controller.signal;
 }
 
 /**
@@ -116,17 +137,24 @@ export const serve: Command = async (args, { io, store }) => {
   if (values.socket !== undefined) {
     const idle = values['idle-ms'] === undefined ? IDLE_EXIT_MS : Number(values['idle-ms']);
     if (!Number.isInteger(idle) || idle < 0) throw new UsageError('--idle-ms must be a whole number of milliseconds');
-    return serveSocket(quiet, store, limitsOf(values), values.socket, idle);
+    const stopping = stopSignal();
+    const code = await serveSocket(quiet, store, limitsOf(values), values.socket, idle, stopping);
+    // A turn still running would hold the process open past its socket and children.
+    if (stopping.aborted) process.exit(code);
+    return code;
   }
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
   const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env));
   const shared = engineShared(quiet);
-  process.once('exit', () => (shared.jobs.killAllNow(), shared.externals.closeAll()));
+  process.once('exit', () => (killShells(), shared.jobs.killAllNow(), shared.externals.closeAll()));
   const connection = gcodeAgent(quiet, store, limitsOf(values), mcp, shared).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);
-  await connection.closed;
-  await shared.jobs.kill('engine-exit', 'all');
+  const stopping = stopSignal();
+  await Promise.race([connection.closed, new Promise((resolve) => stopping.addEventListener('abort', resolve, { once: true }))]);
+  if (stopping.aborted) shared.jobs.killAllNow();
+  else await shared.jobs.kill('engine-exit', 'all');
   shared.externals.closeAll();
   await mcp.stopAll();
+  if (stopping.aborted) process.exit(0);
   return 0;
 };

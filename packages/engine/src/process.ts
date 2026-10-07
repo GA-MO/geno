@@ -19,6 +19,20 @@ export type ShellResult = {
 
 export const OUTPUT_LIMIT = 4 * 1024 * 1024;
 
+/** The process groups of the commands runShell runs now, which an engine on its way out kills. */
+const running = new Set<number>();
+
+/** Kills every command runShell runs now, with all it started. */
+export function killShells(): void {
+  for (const group of running) {
+    try {
+      process.kill(-group, 'SIGKILL');
+    } catch {
+      // The group is already gone.
+    }
+  }
+}
+
 /**
  * Runs `command` with sh in its own process group, so a timeout or abort kills everything it started,
  * including the process tree under a sandbox wrapper.
@@ -31,6 +45,7 @@ export function runShell(command: string, options: ShellOptions): Promise<ShellR
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     });
+    if (child.pid !== undefined) running.add(child.pid);
     let output = '';
     let truncated = false;
     let timedOut = false;
@@ -68,6 +83,7 @@ export function runShell(command: string, options: ShellOptions): Promise<ShellR
       reject(error);
     });
     child.on('close', (code) => {
+      if (child.pid !== undefined) running.delete(child.pid);
       clearTimeout(timer);
       signal?.removeEventListener('abort', kill);
       resolve({ code, output, timedOut, truncated });
