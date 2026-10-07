@@ -91,6 +91,63 @@ export function runShell(command: string, options: ShellOptions): Promise<ShellR
   });
 }
 
+export type InputShellOptions = {
+  readonly cwd: string;
+  readonly env: Readonly<Record<string, string>>;
+  /** Written to the command's stdin, which is then closed. */
+  readonly input: string;
+  readonly timeoutMs: number;
+  readonly signal?: AbortSignal | undefined;
+};
+
+/** How a command fed on stdin ended, with its stdout and stderr apart. `code` is null when it was killed. */
+export type InputShellResult = { readonly code: number | null; readonly stdout: string; readonly stderr: string; readonly timedOut: boolean };
+
+/**
+ * Runs `command` with sh in its own process group, as runShell does, with `input` on stdin and stdout and stderr kept
+ * apart, as a hook needs. At `timeoutMs` or on abort the whole group is killed.
+ */
+export function runWithInput(command: string, options: InputShellOptions): Promise<InputShellResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('/bin/sh', ['-c', command], { cwd: options.cwd, env: options.env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    if (child.pid !== undefined) running.add(child.pid);
+    const out = { stdout: '', stderr: '' };
+    const collect = (stream: keyof typeof out) => (chunk: Buffer) => {
+      out[stream] = (out[stream] + chunk.toString('utf8')).slice(-OUTPUT_LIMIT);
+    };
+    child.stdout.on('data', collect('stdout'));
+    child.stderr.on('data', collect('stderr'));
+    // A command that never reads its stdin closes the pipe before the write ends.
+    child.stdin.on('error', () => {});
+    child.stdin.end(options.input);
+    let timedOut = false;
+    const kill = () => {
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // The group is already gone.
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+    }, options.timeoutMs);
+    const { signal } = options;
+    if (signal?.aborted) kill();
+    else signal?.addEventListener('abort', kill, { once: true });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (child.pid !== undefined) running.delete(child.pid);
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', kill);
+      resolve({ code, ...out, timedOut });
+    });
+  });
+}
+
 export function tail(output: string, lines = 40, chars = 4000): string {
   const kept = output.trimEnd().split('\n').slice(-lines).join('\n');
   return kept.length > chars ? kept.slice(-chars) : kept;

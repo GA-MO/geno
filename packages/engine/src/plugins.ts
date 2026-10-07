@@ -8,8 +8,11 @@ import { isMissing } from './store.js';
  * reads them: their skills join the slash commands, and their folders become read-only roots for the read tools.
  */
 
-/** `root` is a real path, so the read tools can compare a resolved file against it. */
-export type InstalledPlugin = { readonly name: string; readonly root: string };
+/**
+ * `root` is a real path, so the read tools can compare a resolved file against it. `key` is its `name@marketplace` in
+ * installed_plugins.json; `project` marks a plugin installed for this workspace's project rather than for the user.
+ */
+export type InstalledPlugin = { readonly name: string; readonly root: string; readonly key?: string | undefined; readonly project?: true | undefined };
 
 /** Each problem names its file or plugin; a broken file is reported and skipped, never thrown. */
 export type PluginScan = { readonly plugins: readonly InstalledPlugin[]; readonly problems: readonly string[] };
@@ -26,7 +29,7 @@ export const claudeDirOf = (env: Readonly<Record<string, string | undefined>>): 
 
 const canonical = (file: string): Promise<string> => realpath(file).catch(() => file);
 
-async function readJson(file: string): Promise<{ readonly kind: 'missing' } | { readonly kind: 'read'; readonly value: unknown } | { readonly kind: 'broken'; readonly reason: string }> {
+export async function readJson(file: string): Promise<{ readonly kind: 'missing' } | { readonly kind: 'read'; readonly value: unknown } | { readonly kind: 'broken'; readonly reason: string }> {
   let text: string;
   try {
     text = await readFile(file, 'utf8');
@@ -43,7 +46,7 @@ async function readJson(file: string): Promise<{ readonly kind: 'missing' } | { 
 type Resolved = { readonly plugin: InstalledPlugin } | { readonly problem: string };
 
 /** A plugin without a manifest is named by its key, `name@marketplace`, as Claude Code does. */
-async function resolvePlugin(key: string, installPath: string, claudeDir: string): Promise<Resolved> {
+async function resolvePlugin(key: string, installPath: string, claudeDir: string, project: boolean): Promise<Resolved> {
   const root = await realpath(installPath).catch(() => undefined);
   if (root === undefined || !(await stat(root)).isDirectory()) return { problem: `${key}: ${installPath} does not exist` };
   // A plugin folder becomes readable to the model, so it must never take in the Claude config dir and its credentials.
@@ -54,7 +57,7 @@ async function resolvePlugin(key: string, installPath: string, claudeDir: string
   if (manifest.kind === 'broken') return { problem: `${key}: ${manifestFile} is not valid JSON: ${manifest.reason}` };
   const parsed = manifest.kind === 'read' ? manifestSchema.safeParse(manifest.value) : undefined;
   if (parsed !== undefined && !parsed.success) return { problem: `${key}: ${manifestFile}: ${z.prettifyError(parsed.error)}` };
-  return { plugin: { name: parsed?.data.name ?? key.split('@')[0]!, root } };
+  return { plugin: { name: parsed?.data.name ?? key.split('@')[0]!, root, key, ...(project ? { project: true as const } : {}) } };
 }
 
 /** The plugins installed for the user, plus those installed for this workspace's project, sorted by key. */
@@ -78,7 +81,7 @@ export async function loadPlugins(claudeDir: string | undefined, workspace: stri
     }
     const install = applies[0];
     if (install === undefined) continue;
-    const resolved = await resolvePlugin(key, install.installPath, claudeReal);
+    const resolved = await resolvePlugin(key, install.installPath, claudeReal, install.projectPath !== undefined);
     if ('plugin' in resolved) plugins.push(resolved.plugin);
     else problems.push(resolved.problem);
   }

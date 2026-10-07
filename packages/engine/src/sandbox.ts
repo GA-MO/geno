@@ -23,6 +23,8 @@ export type Sandbox = {
   run(command: string, options: SandboxRunOptions): Promise<ShellResult>;
   /** Starts a command under the same rules and returns while it runs, as a background command does. */
   spawn(command: string, options: SpawnOptions): Promise<SpawnedShell>;
+  /** `command` wrapped to run under this sandbox's rules, for a caller that spawns it itself, as the hook runner does. */
+  wrap(command: string): Promise<string>;
   /** Keeps the sandbox open past `close` until the returned function runs, for a command that outlives its turn. */
   retain(): () => Promise<void>;
   close(): Promise<void>;
@@ -151,6 +153,7 @@ export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
       return runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
     },
     spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem }), options),
+    wrap: (command) => SandboxManager.wrapWithSandbox(command, undefined, { filesystem }),
     retain() {
       holds++;
       let released = false;
