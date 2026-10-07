@@ -4,6 +4,7 @@ import { CHILD_TOOL_NAMES, type AgentToolName } from './agent.js';
 import { pendingToolUses, type DoneReason } from './loop.js';
 import { EFFORTS, IN_CONVERSATION, nextSeq, type Effort, type SessionId, type TurnEvent } from './session.js';
 import { BANNER_START, indentLines, instructionPatternsIn, neutralize, REPORT_TAG } from './fence.js';
+import { stripHidden } from './hidden.js';
 import { TOOL_NAMES } from './tools.js';
 
 /**
@@ -421,7 +422,7 @@ const REPORT_NOTE = [
  */
 export function childReport(name: string, child: SessionId, end: ChildEnd, report: string, notes: readonly string[] = []): string {
   const partial = isPartial(end);
-  const text = report.trim();
+  const text = stripHidden(report.trim());
   const patterns = instructionPatternsIn(text);
   return [
     `<${REPORT_TAG} agent="${name}" session="${child}" status="${end.kind}"${partial ? ' partial="true"' : ''}>`,

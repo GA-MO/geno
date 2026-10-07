@@ -68,11 +68,6 @@ export type ContextItem =
   /** The SKILL.md of a skill the user invoked as a slash command. */
   | { readonly kind: 'skill'; readonly name: string; readonly path: string; readonly text: string };
 
-// Zero-width and bidirectional controls, the BOM and Unicode tag characters: invisible text that can hide instructions.
-const HIDDEN = /[­​-‏‪-‮⁠-⁤⁦-⁩﻿\u{E0000}-\u{E007F}]/gu;
-
-export const stripHidden = (text: string): string => text.replace(HIDDEN, '');
-
 const escapeXml = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 

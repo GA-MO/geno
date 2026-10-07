@@ -21,6 +21,7 @@ import {
   searchResultText,
   SEARCH_PROVIDER_SPECS,
   specOf,
+  stripHidden,
   webDenialFor,
   webTargetOf,
   WEB_LIMITS,
@@ -197,7 +198,8 @@ function markdownTitle(text: string): string | undefined {
 /** The page as markdown. HTML is converted; other text is read as it is; anything else is refused. */
 export function pageOf(url: string, response: Response): FetchedPage {
   const type = response.contentType.split(';')[0]!.trim().toLowerCase();
-  const text = textOf(response.body, charsetOf(response.contentType, response.body));
+  // A page can hide instructions from the user in characters that do not show; the helper never sees them.
+  const text = stripHidden(textOf(response.body, charsetOf(response.contentType, response.body)));
   const html = type === 'text/html' || type === 'application/xhtml+xml' || (type === '' && /^\s*</.test(text));
   if (html) {
     const { title, markdown } = htmlToMarkdown(text, url);

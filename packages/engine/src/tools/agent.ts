@@ -19,6 +19,7 @@ import {
   MODE_REFUSALS,
   nextAutoState,
   OUTCOME_VERDICTS,
+  restoreHidden,
   ruledDenial,
   secretReadDenial,
   type AgentToolName,
@@ -223,7 +224,9 @@ export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: Tool
       const current = await currentBase(ctx, file);
       const base = current.hash === null ? current : reads.get(file);
       if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);
-      const { proposed, change } = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw: input, base }, null);
+      // read showed hidden characters as escapes, so an edit written from what it showed gets them back.
+      const raw = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, typeof value === 'string' && key !== 'path' ? restoreHidden(value) : value]));
+      const { proposed, change } = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw, base }, null);
       if (proposed.result.kind === 'failed') throw new ToolError(proposed.result.detail);
       reads.set(file, await currentBase(ctx, file));
       const after = await afterEdit(ctx);
