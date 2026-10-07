@@ -296,12 +296,14 @@ describe('gcode serve: scheduled tasks', () => {
     expect(often.nextAt).toBe(nextOccurrence(often.when, latest, zone));
   });
 
-  it('ends a run that an engine which is gone left open, so the task runs again when next due', async () => {
+  it('ends a run that an engine which is gone left open, and takes over its lock, so the task runs again when next due', async () => {
     const at = await fixture();
-    await serve(at, new FakeClock(T0), models({}).fetch, async (window) => {
+    const first = new FakeClock(T0);
+    await serve(at, first, models({}).fetch, async (window) => {
       await window.prompt('/schedule cron "*/30 * * * *" [sched-left] look at the queue');
+      await until(() => first.armed(), 'the first engine to finish its look');
     });
-    // The engine died during the 08:30 run: the file holds it open, by a pid that no longer runs.
+    // The engine died during the 08:30 run: the file holds it open, by a pid that no longer runs, and that engine's lock.
     const gone = spawnSync('true').pid;
     const file = scheduleFile(at.env.GCODE_HOME, at.workspace);
     const saved = JSON.parse(await readFile(file, 'utf8')) as { tasks: { since: number; runs: unknown[] }[] };
@@ -309,6 +311,7 @@ describe('gcode serve: scheduled tasks', () => {
     saved.tasks[0]!.since = T0 + 30 * MINUTE;
     saved.tasks[0]!.runs = [open];
     await writeFile(file, JSON.stringify(saved));
+    await writeFile(`${file}.lock`, String(gone));
 
     const restart = T0 + 65 * MINUTE;
     const model = models({ '[sched-left]': () => answer('The queue is empty.', usage) });
@@ -322,6 +325,29 @@ describe('gcode serve: scheduled tasks', () => {
       expect.objectContaining({ dueAt: T0 + 60 * MINUTE, trigger: 'catch-up', by: process.pid, end: expect.objectContaining({ kind: 'done' }) }),
     ]);
     expect(model.requests('[sched-left]')).toHaveLength(1);
+  });
+
+  it('starts a due run once when two engines keep the same workspace\'s tasks, as a main checkout\'s window and a lane\'s do', async () => {
+    const at = await fixture();
+    const first = new FakeClock(T0);
+    const second = new FakeClock(T0);
+    const model = models({ '[sched-two]': () => answer('The queue is empty.', usage) });
+    const { result } = await serve(at, first, model.fetch, async (window) => {
+      await window.prompt('/schedule in 1h [sched-two] look at the queue');
+      return (
+        await serve(at, second, model.fetch, async (other) => {
+          await until(() => first.armed() && second.armed(), 'both engines to arm their timers');
+          first.advance(HOUR);
+          second.advance(HOUR);
+          await until(() => ended(other, '[sched-two] look at the queue'), 'the run to end');
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return other.list();
+        })
+      ).result;
+    });
+
+    expect(model.requests('[sched-two]'), 'one run, not one per engine').toHaveLength(1);
+    expect(ranOf(named(result, '[sched-two] look at the queue'))).toHaveLength(1);
   });
 
   it('asks the user before the model schedules anything, never the classifier, and takes "Allow for this chat" for the rest', async () => {
