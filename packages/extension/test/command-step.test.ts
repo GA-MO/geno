@@ -63,6 +63,21 @@ describe('a command step', () => {
     expect(commandStepOf(stopped, false).job).toMatchObject({ running: false, line: 'bg-1 was stopped by the user', tone: 'stopped' });
   });
 
+  it('shows a dev server by its name, its command line and the address it serves', () => {
+    const actions: Action[] = [
+      { type: 'turn-start', id: 't1', at: 1000, prompt: 'p' },
+      { type: 'tool', id: 'p1', at: 2000, name: 'preview_start', toolKind: 'other', status: 'running', target: 'web' },
+      { type: 'background', toolId: 'p1', job: { id: 'bg-1', state: { status: 'running' }, tail: 'ready on http://localhost:3000', command: 'pnpm dev', preview: { name: 'web', url: 'http://localhost:3000' } } },
+    ];
+    const tool = actions.reduce(reduce, emptyTranscript('m')).turns[0]!.blocks[0] as ToolBlock;
+    expect(commandStepOf(tool, false)).toMatchObject({
+      title: 'Dev server web',
+      command: 'pnpm dev',
+      output: ['ready on http://localhost:3000'],
+      job: { id: 'bg-1', running: true, line: 'Serving http://localhost:3000 as bg-1' },
+    });
+  });
+
   it('finds the step of a background command in an earlier turn, and ignores one it does not have', () => {
     const actions: Action[] = [
       { type: 'turn-start', id: 't1', at: 1000, prompt: 'start it' },

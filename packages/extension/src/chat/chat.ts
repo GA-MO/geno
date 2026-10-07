@@ -220,8 +220,9 @@ const jobState = z.discriminatedUnion('status', [
   z.object({ status: z.literal('stopped'), by: stopBy }),
   z.object({ status: z.literal('killed'), cause: killCause }),
 ]);
-const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), state: jobState, tail: z.string() });
-const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number() });
+const previewTag = z.object({ name: z.string(), url: z.string() });
+const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), command: z.string(), state: jobState, tail: z.string(), preview: previewTag.optional() });
+const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number(), preview: previewTag.optional() });
 
 const wakeMark = z.object({ seq: z.number(), label: z.string() });
 const forkOrigin = z.object({ sessionId: z.string().transform(asSessionId), turnSeq: z.number(), title: z.string() });
@@ -789,8 +790,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     }
     const job = update.sessionUpdate === 'tool_call_update' ? backgroundView.safeParse(update._meta?.[BACKGROUND_META]) : undefined;
     if (job?.success === true) {
-      const { id, state, tail } = job.data;
-      return this.dispatch({ type: 'background', toolId: job.data.toolUseId, job: { id, state, tail } });
+      const { id, state, tail, command, preview } = job.data;
+      return this.dispatch({ type: 'background', toolId: job.data.toolUseId, job: { id, state, tail, command, ...(preview === undefined ? {} : { preview }) } });
     }
     const at = timeOf(update);
     const action = actionOf(update, at);

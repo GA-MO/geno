@@ -150,7 +150,7 @@ export class BackgroundJobs {
       await output.flushed();
       await release();
       this.hooks.changed(entry!.job, viewOf(entry!));
-      this.hooks.ended({ kind: 'background-end', at: new Date().toISOString(), job: { id, toolUseId: job.toolUseId, command: job.command, state: ended.state as EndedJobState }, tail: tailOf(output) }, ended);
+      this.hooks.ended({ kind: 'background-end', at: new Date().toISOString(), job: { id, toolUseId: job.toolUseId, command: job.command, ...(job.preview === undefined ? {} : { preview: job.preview }), state: ended.state as EndedJobState }, tail: tailOf(output) }, ended);
       this.forgetOld(jobs);
       return ended;
     });

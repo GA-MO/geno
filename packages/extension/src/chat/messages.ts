@@ -1,4 +1,4 @@
-import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, MemoryScope, Waiting, TodoList } from '@g-code/core';
+import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -135,8 +135,11 @@ export type ToolBlock = {
   readonly editorAction?: EditorAction | undefined;
 };
 
-/** A background command on its bash step: its job id, its state, and the end of its output so far. */
-export type BackgroundStep = { readonly id: string; readonly state: JobState; readonly tail: string };
+/**
+ * A background command on its step: its job id, its state, and the end of its output so far. A dev server that
+ * preview_start ran also carries its command line and its name and URL.
+ */
+export type BackgroundStep = { readonly id: string; readonly state: JobState; readonly tail: string; readonly command?: string | undefined; readonly preview?: PreviewTag | undefined };
 
 /**
  * A widget's life on its step: drafting while the model writes it, ready with the stored html once the call ran,

@@ -183,7 +183,20 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
       h(
         'ul',
         { class: 'task-jobs', 'aria-label': 'Background commands' },
-        ...row.jobs.map((job) => h('li', { class: 'task-job', 'data-job': job.id, title: job.label }, icon('circle-filled', 'job-icon'), h('span', { class: 'task-job-id' }, job.id), h('span', { class: 'task-job-label' }, job.label))),
+        ...row.jobs.map((job) =>
+          h(
+            'li',
+            { class: 'task-job', 'data-job': job.id, title: job.label },
+            icon('circle-filled', 'job-icon'),
+            h('span', { class: 'task-job-id' }, job.id),
+            h('span', { class: 'task-job-label' }, job.label),
+            h(
+              'button',
+              { type: 'button', class: 'button small ghost task-job-stop', 'data-action': 'job-stop', title: `Stop ${job.id}: SIGTERM, then SIGKILL`, onclick: () => post({ type: 'task-job-stop', sessionId: row.id, id: job.id }) },
+              'Stop',
+            ),
+          ),
+        ),
       ),
     row.wakes !== undefined && h('p', { class: 'task-wakes', title: row.wakes }, icon('bell', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.wakes)),
     h(

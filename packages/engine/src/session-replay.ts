@@ -306,8 +306,8 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
       if (event.kind === 'compact') updates.push(compactUpdate(event));
       if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
       if (event.kind === 'background-end') {
-        const { id, toolUseId, command, state } = event.job;
-        updates.push(backgroundUpdate({ id, toolUseId, command, state, tail: event.tail }, { [REPLAYED_AT_META]: ms(event.at) }));
+        const { id, toolUseId, command, preview, state } = event.job;
+        updates.push(backgroundUpdate({ id, toolUseId, command, ...(preview === undefined ? {} : { preview }), state, tail: event.tail }, { [REPLAYED_AT_META]: ms(event.at) }));
       }
     }
     return updates;
