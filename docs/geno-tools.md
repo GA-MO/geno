@@ -64,7 +64,7 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 
 ## Models and effort
 
-Skills name models by Claude aliases (`opus`, `fable`, `sonnet`, `haiku`) and can add an effort level, as in `opus @high`. In Geno each alias, `inherit-parent` and `auto` mean the session's model, and Geno ignores effort levels. Geno does not read the pstack override sheet (`pstack-models.md`) and runs no `SessionStart` hook.
+Skills name models by Claude aliases (`opus`, `fable`, `sonnet`, `haiku`) and can add an effort level, as in `opus @high`. In Geno each alias, `inherit-parent` and `auto` mean the session's model, and Geno ignores effort levels. Geno does not read the pstack override sheet (`pstack-models.md`) itself. It runs pstack's `SessionStart` hook as Claude Code does, so the sheet's `session hook: off` line still turns that hook off.
 
 ## Skills and drivers that pstack names
 

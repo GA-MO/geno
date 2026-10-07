@@ -211,6 +211,34 @@ P9 also covers these rows:
 |---|---|
 | A/C-16, B/B-11, C/C-67 | `project-context.test.ts` (engine): one file per directory by precedence, outer first; `.github` included; `node_modules`, ignored directories, blank files and a directory named `AGENTS.md` left out; hidden Unicode stripped; imports under each importing directory; `.env` and paths outside the workspace refused; a file the opening imported left out; a missing ripgrep reported. `context.test.ts` (core): a directory is a prefix, so dotfiles and names with `[` match; the listing sits under the repository preamble; an import's attachment is neutralized and found again by its path. `rules.test.ts` (engine): outer directories first, before the glob rules, and a file two directories import is attached once. `memory.test.ts` (core): the rules pane lists a nested file as instructions for `<dir>/**`. |
 
+## Hooks (P13)
+
+`core/src/hooks.ts` holds the contract: every Claude Code event and whether Geno fires it (`HOOK_EVENTS`), the matcher with its Claude Code to Geno tool-name table, the deduplication, and what an exit code and stdout mean (`hookOutcome`). `engine/src/hook-config.ts` reads `hooks` from `~/.g-code/settings.json`, `~/.claude/settings.json`, installed plugins' `hooks/hooks.json`, `.gcode.json`, `.claude/settings.json` and `.claude/settings.local.json`, the user's own files first. `engine/src/hooks.ts` runs the handlers that match, all at once, each with the payload on stdin and killed at its timeout; a workspace's hooks run only for an editor that sends `WORKSPACE_TRUST_CAPABILITY`, and inside the sandbox. `HookSessions` fires SessionStart on a session's first run in the engine process (`startup`, or `resume` once the model has answered) and after each compaction (`compact`), and SessionEnd when the command-line run or the engine ends. SessionStart's text is a `hook-context` event, which opens the first request for `startup` and joins the next one otherwise. The user's guide is [hooks.md](hooks.md).
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. The events between come with P14 to P16. | partial: the session's two ends pass | `hooks.conformance.test.ts` |
+| T-HOOK-06 | A SessionStart matcher of `compact` runs after a compaction. | `startup` on a new session, `resume` on a resumed one, `compact` after a compaction, each with the common payload. A matcher that names another source does not run. The output opens the first request before the prompt, under `[Geno]`; a resume keeps the opening's bytes and its own output joins the next request; the compact output follows the compacted context. `clear` never fires: Geno has no `/clear`. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires; compaction on the Anthropic wire only |
+| T-HOOK-07 | A misspelled event name warns the user (Claude Code ignores it). | The hook never runs. The command line prints `hooks: <file>: SesionStart is not a hook event…`, and Settings lists it as a warning above the hooks. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires and over ACP |
+| T-HOOK-08 | Exit 2 blocks and a JSON allow cannot override it; exit 1 does not block; JSON that does not parse is a non-blocking error. | SessionStart with exit 2, exit 1 or broken JSON puts nothing before the model, the session goes on, and each is reported on stderr. A block needs an event that can block, which comes with P14; `hookOutcome` already returns a block for PreToolUse exit 2 whatever stdout says. | partial: the non-blocking half passes end to end, the block in `hooks.test.ts` (core) | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-09 | Matching hooks run in parallel, and an identical handler in two files runs once. | Two hooks that each wait for the other's mark both see it, and the same command in `~/.claude/settings.json` and `~/.g-code/settings.json` runs once. | pass (was fail) | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-10 | The model sees `SessionStart:<source> hook success: <stdout>`, `UserPromptSubmit hook additional context: …` and `PostToolUse:<Tool> hook additional context: …`. | SessionStart's plain stdout and its JSON `additionalContext` reach the model in Claude Code's words under `[Geno]`, and `systemMessage` reaches only the user. UserPromptSubmit comes with P14 and PostToolUse with P15. | partial: the SessionStart texts pass | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-11 | 600 s by default, 30 s for UserPromptSubmit, then kill. | A hook with `timeout: 1` that sleeps is killed with its process group, reported, and the session goes on. The defaults are in `HOOK_EVENTS`. | pass (was fail) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the defaults |
+
+P13 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-89, B/B-90, C/C-55 | `hooks.test.ts` (engine) reads every source in order with a plugin's root, skips a plugin that `enabledPlugins` turns off, and reports a file that is not valid JSON. `hooks.test.ts` (core) parses groups, skips a non-command handler with a note, and reports a bad matcher. `plugins.e2e.test.ts` serves a session to an editor over ACP with pstack's own `hooks.json` and script: the mandate opens the first request before the prompt, and `session hook: off` in the override sheet leaves it out. `hooks.conformance.test.ts` runs a workspace hook for an editor that trusts the workspace, and not for one that does not or for the command line. |
+| B/B-91 | `hooks.test.ts` (core): `Edit\|Write`, `Write` and `MultiEdit` match `edit`, `Bash` matches `bash`, a regex must match the whole name, and Geno's own name matches too. |
+| B/B-92 | T-HOOK-11 above. |
+| B/B-93 | T-HOOK-09 above, and `hooks.test.ts` (engine) times two 1 s hooks under 1.9 s. |
+| B/B-94 | T-HOOK-06 above checks the payload. `hooks.test.ts` (engine) checks `CLAUDE_PROJECT_DIR` and that no API key reaches the hook's environment, and a plugin hook's `CLAUDE_PLUGIN_ROOT`. |
+| B/B-95, B/B-96 | T-HOOK-08 above, and `hookOutcome` in `hooks.test.ts` (core). |
+| B/B-97 | T-HOOK-10 above. `hooks.test.ts` (core) checks that hook output cannot pose as `[Geno]` and is cut at 10,000 characters. |
+| B/B-99 | T-HOOK-07 above. `hooks.webview.test.ts` shows the warning and each hook's status in Settings. |
+| B/B-100, B/B-126 | T-HOOK-06 and T-HOOK-01 above. A workspace hook runs inside the sandbox and cannot write outside the workspace (`hooks.test.ts`, engine). |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -274,17 +302,17 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AUTO-02 | keep Geno's | none | no test yet |
 | T-AUTO-04 | adapt, skip | P4 | pass |
 | T-AUTO-03 | skip | none | no test yet |
-| T-HOOK-01 | adapt | P13 | no test yet |
+| T-HOOK-01 | adapt | P13 | partial |
 | T-HOOK-02 | adopt | P14 | no test yet |
 | T-HOOK-03 | adopt, keep Geno's | P15 | no test yet |
 | T-HOOK-04 | adopt | P15 | no test yet |
 | T-HOOK-05 | adapt | P32 | no test yet |
-| T-HOOK-06 | adopt | P13 | no test yet |
-| T-HOOK-07 | adapt | P13 | no test yet |
-| T-HOOK-08 | adopt | P13 | no test yet |
-| T-HOOK-09 | adopt | P13 | no test yet |
-| T-HOOK-10 | adapt | P13 | no test yet |
-| T-HOOK-11 | adopt | P13 | no test yet |
+| T-HOOK-06 | adopt | P13 | pass |
+| T-HOOK-07 | adapt | P13 | pass |
+| T-HOOK-08 | adopt | P13 | partial |
+| T-HOOK-09 | adopt | P13 | pass |
+| T-HOOK-10 | adapt | P13 | partial |
+| T-HOOK-11 | adopt | P13 | pass |
 | T-BG-01 | keep Geno's, adopt | P19 | no test yet |
 | T-BG-02 | keep Geno's | none | no test yet |
 | T-BG-03 | adopt | P19 | no test yet |
