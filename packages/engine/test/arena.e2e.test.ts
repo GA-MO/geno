@@ -32,7 +32,7 @@ import type { Io } from '../src/command.js';
 import { mcpSessions } from '../src/mcp/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
-import { answer, sseBody, toolCall, type Reply } from './fake-transport.js';
+import { answer, httpError, sseBody, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -44,7 +44,8 @@ const edit = (id: string, file: string, from: string, to: string) => ({ id, name
 
 /** Each lane's turns by step, keyed by what its prompt says; the plain lane has no seed text. */
 const read = (id: string, file: string) => ({ id, name: 'read', input: { path: file } });
-const SCRIPTS: Readonly<Record<'A' | 'B' | 'C' | 'review', readonly Reply[]>> = {
+type Scripts = Readonly<Record<'A' | 'B' | 'C' | 'review', readonly Reply[]>>;
+const SCRIPTS: Scripts = {
   A: [toolCall('Reading.', [read('tu_a0', 'a.ts')], usage), toolCall('Editing.', [edit('tu_a1', 'a.ts', 'two', 'TWO')], usage), toolCall('And a line.', [edit('tu_a2', 'a.ts', 'three', 'three\nfour')], usage), answer('Done in A.', usage)],
   B: [toolCall('Reading.', [read('tu_b0', 'a.ts'), read('tu_b00', 'b.ts')], usage), toolCall('Editing.', [edit('tu_b1', 'a.ts', 'two', 'Two'), edit('tu_b2', 'b.ts', 'x', 'y')], usage), answer('Done in B.', usage)],
   C: [toolCall('Reading.', [read('tu_c0', 'a.ts')], usage), toolCall('Editing.', [edit('tu_c1', 'a.ts', 'two', 'BAD')], usage), answer('Done in C.', usage)],
@@ -56,27 +57,28 @@ const SCRIPTS: Readonly<Record<'A' | 'B' | 'C' | 'review', readonly Reply[]>> = 
   ],
 };
 
-function router() {
-  const requests: { script: keyof typeof SCRIPTS; body: string }[] = [];
+function router(scripts: Scripts) {
+  const requests: { script: keyof Scripts; body: string }[] = [];
   const fetch: typeof globalThis.fetch = async (_input, init) => {
     const body = String(init?.body);
     const parsed = JSON.parse(body) as { messages: { content: unknown }[] };
     const first = JSON.stringify(parsed.messages[0]?.content);
-    const script: keyof typeof SCRIPTS = first.includes('lanes each tried the task') ? 'review' : first.includes(SEEDS.minimal.text) ? 'B' : first.includes(SEEDS.idiomatic.text) ? 'C' : 'A';
+    const script: keyof Scripts = first.includes('lanes each tried the task') ? 'review' : first.includes(SEEDS.minimal.text) ? 'B' : first.includes(SEEDS.idiomatic.text) ? 'C' : 'A';
     requests.push({ script, body });
     const step = (parsed.messages as { role?: string }[]).filter((m) => m.role === 'assistant').length;
-    const reply = SCRIPTS[script][step];
+    const reply = scripts[script][step];
     if (reply === undefined) throw new Error(`no step ${step} for ${script}`);
+    if (reply.failure !== undefined) return new Response(JSON.stringify(reply.failure.body), { status: reply.failure.status, headers: { 'content-type': 'application/json' } });
     return new Response(sseBody(reply), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   };
   return { fetch, requests };
 }
 
-async function setup() {
+async function setup(scripts = SCRIPTS) {
   const repo = await realpath(makeRepo('main', [{ message: 'start', files: { 'a.ts': A_TS, 'b.ts': B_TS, '.gcode.json': '{ "check": "! grep -q BAD a.ts" }\n' } }]));
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const env = { GCODE_HOME: home, GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic', GCODE_RG: rgCommand(), PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: home };
-  const model = router();
+  const model = router(scripts);
   const io: Io = { env, cwd: repo, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: model.fetch };
   const store = openStore(env);
   const runs: ArenaRun[] = [];
@@ -180,6 +182,17 @@ describe('the Arena over ACP', () => {
       ['a.ts', 'two\n', 'Two\n', 'pending'],
       ['b.ts', 'x\n', 'y\n', 'pending'],
       ['a.ts', '', 'four\n', 'pending'],
+    ]);
+  });
+
+  it('counts a lane whose turn ended on a model error as failed, though its edit would pass the check', async () => {
+    const BAD_REQUEST = httpError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'messages.2.content.0: unexpected tool_use_id' } });
+    const { repo, agent, settled } = await setup({ ...SCRIPTS, A: [toolCall('Editing.', [edit('tu_a1', 'a.ts', 'two', 'TWO')], usage), BAD_REQUEST] });
+    await agent.request<ArenaNewResponse>(ARENA_NEW_METHOD, { cwd: repo, task: TASK, n: 2 });
+    const ended = await settled();
+    expect(ended.lanes.map((l) => [l.letter, l.status])).toEqual([
+      ['A', 'failed'],
+      ['B', 'passed'],
     ]);
   });
 });
