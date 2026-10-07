@@ -704,11 +704,16 @@ function variants(words: readonly string[], vars: Bindings): readonly (readonly 
 /** One simple command of a line: its words as written, and every value they may take once variables expand. */
 export type ParsedCommand = { readonly words: readonly string[]; readonly variants: readonly SimpleCommand[] };
 
+const movesCwd = (commands: readonly (readonly string[])[]): boolean => commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program));
+
+/** Whether a command line runs cd, pushd or popd anywhere in it. */
+export const changesDirectory = (command: string): boolean => movesCwd(splitCommand(command));
+
 export function parseCommandLine(command: string, scope: CommandScope): readonly ParsedCommand[] {
   const commands = splitCommand(command);
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
-  const cwd = commands.some((words) => CWD_CHANGERS.has(simpleCommand(words, undefined).program)) ? undefined : scope.workspace;
+  const cwd = movesCwd(commands) ? undefined : scope.workspace;
   return commands.map((words) => ({ words, variants: variants(words, vars).map((variant) => simpleCommand(variant, cwd)) }));
 }
 

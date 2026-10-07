@@ -3,16 +3,19 @@ import {
   AGENT_EDIT_FORMAT,
   AUTO_START,
   baseOf,
+  changesDirectory,
   CLASSIFIER_OUTCOMES,
   checkHeadline,
   commandLineOf,
   classifierInputOf,
   commandFailureLine,
   commandStatusLine,
+  cwdResetLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   formatDiagnostics,
   laneCommandDenial,
   laneDenialText,
+  leadingSleep,
   MAX_BASH_TIMEOUT_SECONDS,
   AGENT_MODE_TOOLS,
   AGENT_TOOL_NAMES,
@@ -24,6 +27,7 @@ import {
   STOP_AND_WAIT,
   ruledDenial,
   secretReadDenial,
+  sleepRefusal,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
@@ -323,6 +327,9 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     async run({ command, description, timeout_seconds = DEFAULT_BASH_TIMEOUT_SECONDS, run_in_background = false }, ctx) {
       const background = run_in_background ? tools.background : undefined;
       if (run_in_background && background === undefined) throw new ToolError(NO_BACKGROUND);
+      // Only where run_in_background and monitor exist to wait with instead; a subagent may still sleep.
+      const sleep = run_in_background || tools.background === undefined ? undefined : leadingSleep(command);
+      if (sleep !== undefined) throw new ToolError(sleepRefusal(sleep));
       const approval = await approveCommand(command, ctx, background !== undefined);
       if (background !== undefined) {
         const { text } = await startInBackground(background, command, description, ctx);
@@ -338,7 +345,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const failure = commandFailureLine(result.code, killedAfter);
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
       const output = `${neutralizeNoticeLines(result.output)}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
-      const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${commandStatusLine(result.code, killedAfter)}`;
+      const reset = changesDirectory(command) ? `${cwdResetLine(ctx.workspace)}\n` : '';
+      const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${reset}${commandStatusLine(result.code, killedAfter)}`;
       return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };
     },
   });

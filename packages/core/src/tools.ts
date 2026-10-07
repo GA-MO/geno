@@ -129,6 +129,27 @@ export const spillNotice = ({ path, bytes, head, tail }: Spill): string =>
 export const commandStatusLine = (code: number | null, killedAfterSeconds: number | undefined): string =>
   killedAfterSeconds === undefined ? `[exit code ${code ?? 'killed'}]` : `[killed after ${killedAfterSeconds} seconds]`;
 
+/** The shortest foreground wait bash refuses when other commands follow it. */
+const MIN_BLOCKED_SLEEP_SECONDS = 2;
+
+const SLEEP_UNITS: Readonly<Record<string, number>> = { '': 1, s: 1, m: 60, h: 3600, d: 86_400 };
+const LEADING_SLEEP = /^\s*sleep\s+(\d+(?:\.\d+)?)([smhd]?)\s*(?:;|&&|\n)\s*(\S[\s\S]*)$/;
+
+/** A command that waits `seconds` before it does `rest`, for a wait long enough to refuse; undefined for any other. */
+export function leadingSleep(command: string): { readonly seconds: number; readonly rest: string } | undefined {
+  const match = LEADING_SLEEP.exec(command);
+  if (match === null) return undefined;
+  const seconds = Number(match[1]) * SLEEP_UNITS[match[2]!]!;
+  return seconds < MIN_BLOCKED_SLEEP_SECONDS ? undefined : { seconds, rest: match[3]!.trim() };
+}
+
+/** Claude Code's refusal of a leading foreground sleep, pointing to Geno's tools for waiting. */
+export const sleepRefusal = ({ seconds, rest }: { readonly seconds: number; readonly rest: string }): string =>
+  `Blocked: sleep ${seconds} followed by: ${rest}. To wait for a condition, use monitor with a command such as \`until <check>; do sleep 2; done; echo ready\` and the pattern ready, then end your turn. To wait for a command you started, run it with run_in_background: true; Geno starts your next turn when it ends. Do not chain shorter sleeps to work around this block.`;
+
+/** Appended to a bash result whose command changed directory: the next command starts at the workspace root again. */
+export const cwdResetLine = (workspace: string): string => `Shell cwd was reset to ${workspace}`;
+
 /** The first line of a failed bash result, so the failure is the first thing the model reads; undefined for a clean exit. */
 export const commandFailureLine = (code: number | null, killedAfterSeconds: number | undefined): string | undefined =>
   killedAfterSeconds !== undefined ? `Killed after ${killedAfterSeconds} seconds` : code === 0 ? undefined : `Exit code ${code ?? 'killed'}`;
