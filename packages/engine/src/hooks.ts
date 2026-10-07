@@ -1,4 +1,4 @@
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import {
   handlersFor,
   HOOK_EVENTS,
@@ -143,7 +143,7 @@ export class HookSessions {
     const plugins = (await loadPlugins(claudeDirOf(io.env), opening.workspace)).plugins;
     const config = await loadHookConfig({ claudeDir: claudeDirOf(io.env), appHome: homeOf(opening.store), workspace: opening.workspace, plugins });
     for (const problem of config.problems) if (problem.severity === 'warning') io.err(`hooks: ${problem.text}`);
-    const home = io.env['HOME'] || undefined;
+    const home = io.env['HOME'] || homedir();
     const runner = hookRunner({
       entries: runnableEntries(config.entries, opening.trusted),
       sessionId,
@@ -151,7 +151,7 @@ export class HookSessions {
       workspace: opening.workspace,
       env: io.env,
       sandbox: async () =>
-        openSandbox(await sandboxPolicy({ store: opening.store, home: home ?? opening.workspace, workspace: opening.workspace, tempDir: opening.scratchpad ?? tmpdir() })),
+        openSandbox(await sandboxPolicy({ store: opening.store, home, workspace: opening.workspace, tempDir: opening.scratchpad ?? tmpdir() })),
     });
     this.active.set(sessionId, { io, runner, permissionMode: opening.permissionMode });
     const source: SessionStartSource = opened.log.events.some((event) => event.kind === 'assistant') ? 'resume' : 'startup';
