@@ -52,7 +52,7 @@ export type TaskRecord = {
   readonly wake?: WakeView | undefined;
 };
 
-export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt'>;
+export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt' | 'preview'>;
 
 /** Tokens in and out of a turn's model calls, and their cost, null for a model with no price. */
 export type TaskUsage = { readonly model: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number | null };
