@@ -278,6 +278,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...(event.change === undefined ? [] : [`  changed ${event.change.path}: ${event.change.hunks.length} hunks (${event.change.id})`]),
     ...(event.approval === undefined ? [] : [formatApproval(event.approval)]),
     ...(event.spinoff === undefined ? [] : [event.spinoff.kind === 'offered' ? `  suggested ${event.spinoff.offer.id}: ${event.spinoff.offer.title}` : `  withdrew ${event.spinoff.id}`]),
+    ...(event.chapter === undefined ? [] : [`  chapter: ${event.chapter.title}${event.chapter.summary === undefined ? '' : ` (${event.chapter.summary})`}`]),
   ],
   review: ({ seq, hunk, status }) => [`#${seq} review: hunk ${hunk} ${status}`],
   retry: ({ seq, ...retry }) => [`#${seq} ${formatRetry(retry)}`],
@@ -292,6 +293,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   'child-end': ({ seq, child, end, turns, costUsd, summary }) => [`#${seq} child-end ${child} ${childEndWords(end)} turns=${turns} ${formatCost(costUsd)}: ${summary}`],
   'backend-start': ({ seq, agentSessionId, lane, sandboxed }) => [`#${seq} backend session ${agentSessionId}${lane === null ? '' : ` in lane ${lane}`}${sandboxed ? ', sandboxed' : ', not sandboxed'}`],
   'backend-model': ({ seq, model }) => [`${seq === undefined ? '' : `#${seq} `}backend model: ${model}`],
+  chapter: ({ seq, turnSeq, mark }) => [`${seq === undefined ? '' : `#${seq} `}chapter at turn ${turnSeq}: ${mark === null ? 'removed by the user' : `${mark.title}, marked by the user`}`],
   spinoff: ({ seq, id, decision }) => [`${seq === undefined ? '' : `#${seq} `}spinoff ${id}: ${decision.kind === 'started' ? `started as session ${decision.sessionId} in lane ${decision.lane}` : 'dismissed by the user'}`],
   'lane-apply': ({ seq, lane, changes, conflicts, deleted }) => [
     `#${seq} lane-apply ${lane}: ${conflicts.length > 0 ? `${conflicts.length} conflicts, nothing applied` : `${changes.length + deleted.length} files`}`,

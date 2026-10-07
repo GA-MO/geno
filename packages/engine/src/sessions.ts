@@ -38,6 +38,10 @@ import {
   PR_WATCH_OUTCOMES,
   type WakeId,
   spinoffsOf,
+  CHAPTER_LIMITS,
+  chaptersOf,
+  userChapterAt,
+  type ChapterMark,
   type SpinoffDecision,
   type SpinoffId,
 } from '@g-code/core';
@@ -174,7 +178,9 @@ const keptSchema = z.strictObject({
   todo: todoSchema,
   tools: z.array(z.string()),
   files: z.strictObject({ read: z.array(z.string()), changed: z.array(z.string()) }),
+  chapters: z.array(z.string()).optional(),
 });
+const chapterMarkSchema = z.strictObject({ title: z.string().min(1).max(CHAPTER_LIMITS.title), summary: z.string().min(1).max(CHAPTER_LIMITS.summary).optional() });
 
 const toolResultFields = {
   kind: z.literal('tool-result'),
@@ -190,6 +196,7 @@ const toolResultFields = {
   todo: todoSchema.optional(),
   loaded: z.array(z.string()).optional(),
   spinoff: spinoffNoteSchema.optional(),
+  chapter: chapterMarkSchema.optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 
@@ -355,6 +362,7 @@ const turnEventSchema = z.union([
     z.strictObject({ kind: z.literal('backend-start'), ...seqFields, agentSessionId: z.string().min(1), lane: z.string().min(1).nullable(), sandboxed: z.boolean(), loadable: z.boolean() }),
     z.strictObject({ kind: z.literal('backend-model'), seq: seqFields.seq.optional(), at: seqFields.at, model: z.string().min(1) }),
     z.strictObject({ kind: z.literal('spinoff'), seq: seqFields.seq.optional(), at: seqFields.at, id: spinoffId, decision: spinoffDecisionSchema }),
+    z.strictObject({ kind: z.literal('chapter'), seq: seqFields.seq.optional(), at: seqFields.at, turnSeq: seqFields.seq, mark: chapterMarkSchema.nullable() }),
   ]),
   z.strictObject({ ...toolResultFields, output: z.string() }),
   z.strictObject({
@@ -440,7 +448,9 @@ export type SettingChange =
   | { readonly kind: 'effort'; readonly effort: Effort }
   | { readonly kind: 'backend-model'; readonly model: string }
   /** Not a setting, but logged the same way: the user decides about a suggestion whether or not a turn runs. */
-  | { readonly kind: 'spinoff'; readonly id: SpinoffId; readonly decision: SpinoffDecision };
+  | { readonly kind: 'spinoff'; readonly id: SpinoffId; readonly decision: SpinoffDecision }
+  /** Nor is the user's chapter at one of their messages, which they can mark while a turn runs. */
+  | { readonly kind: 'chapter'; readonly turnSeq: number; readonly mark: ChapterMark | null };
 
 /** Whether `change` would leave the session as it is. */
 const UNCHANGED: { readonly [K in SettingChange['kind']]: (log: SessionLog, change: Extract<SettingChange, { kind: K }>) => boolean } = {
@@ -448,6 +458,10 @@ const UNCHANGED: { readonly [K in SettingChange['kind']]: (log: SessionLog, chan
   effort: (log, { effort }) => sessionEffortOf(log.session, log.events) === effort,
   'backend-model': (log, { model }) => log.events.findLast((e) => e.kind === 'backend-model')?.model === model,
   spinoff: (log, { id }) => spinoffsOf(log.events).find((spinoff) => spinoff.id === id)?.state.kind !== 'offered',
+  chapter: (log, { turnSeq, mark }) => {
+    const now = userChapterAt(chaptersOf(log.events), turnSeq);
+    return mark === null ? now === undefined : now?.title === mark.title && now.summary === mark.summary;
+  },
 };
 
 const unchanged = (log: SessionLog, change: SettingChange): boolean => (UNCHANGED[change.kind] as (log: SessionLog, change: SettingChange) => boolean)(log, change);
