@@ -204,7 +204,7 @@ describe('skills and agents from a catalog, through gcode serve', () => {
 
       const agent = await cat.install('agent', 'reviewer', 'project');
       expect(await readFile(projectAgent, 'utf8')).toBe(AGENT);
-      expect(agent.skills.items).toContainEqual(expect.objectContaining({ kind: 'agent', name: 'reviewer', where: 'workspace', path: projectAgent, loads: true }));
+      expect(agent.skills.items).toContainEqual(expect.objectContaining({ kind: 'agent', name: 'reviewer', where: 'workspace', path: '.claude/agents/reviewer.md', loads: true }));
       expect((await cat.search('reviewer')).hits[0]!.installed).toEqual(['project']);
 
       const sessionId = (await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] })).sessionId;
@@ -257,6 +257,19 @@ describe('skills and agents from a catalog, through gcode serve', () => {
       'relative/folder: a catalog folder must be an absolute path, such as ~/catalogs/team',
     ]);
     expect(result.hits).toHaveLength(5);
+  });
+
+  it('keeps both records when two engines install at once', async () => {
+    const { workspace, home, catalogDir, env } = await setup();
+    const engine = () => catalogService({ app: env.GCODE_HOME, user: env.HOME }, async () => workspace, async () => []);
+    const [a, b] = [engine(), engine()];
+    const installs = await Promise.all([
+      a.install({ cwd: workspace, catalog: catalogDir, kind: 'skill', name: 'deploy-notes', scope: 'user' }),
+      b.install({ cwd: workspace, catalog: catalogDir, kind: 'agent', name: 'reviewer', scope: 'project' }),
+    ]);
+    const manifest = JSON.parse(await readFile(path.join(home, 'catalog', 'installs.json'), 'utf8'));
+    expect(manifest.installs.map((r: { id: string }) => r.id).toSorted()).toEqual(installs.map((i) => i.record.id).toSorted());
+    expect(existsSync(path.join(home, 'catalog', 'installs.json.lock'))).toBe(false);
   });
 
   it('fetches a remote catalog only through the web guards, so a name that points at a private address is refused', async () => {
