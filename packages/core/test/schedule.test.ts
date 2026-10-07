@@ -323,14 +323,16 @@ describe('runs', () => {
   const error = (kind: 'budget' | 'max-turns' | 'abort' | 'transport'): TurnEvent => ({ kind: 'error', seq: 9, at, error: kind, message: `${kind} message` });
 
   it.each([
-    ['done', events(answer(0.01), answer(0.02)), { kind: 'done', costUsd: 0.03 }],
-    ['budget', events(answer(0.06), error('budget')), { kind: 'budget', costUsd: 0.06, message: 'budget message' }],
-    ['max-turns', events(answer(0.01), error('max-turns')), { kind: 'max-turns' }],
-    ['stopped', events(answer(0.01), error('abort')), { kind: 'stopped' }],
-    ['failed', events(error('transport')), { kind: 'failed', costUsd: 0 }],
-    ['an unpriced model', events(answer(null)), { kind: 'done', costUsd: null }],
-  ])('reads a run that ended %s from its log', (_name, log, expected) => {
-    expect(runEndOf(log, 7)).toMatchObject({ ...expected, at: 7 });
+    ['done', events(answer(0.01), answer(0.02)), 'done', { kind: 'done', costUsd: 0.03 }],
+    ['budget', events(answer(0.06), error('budget')), 'budget', { kind: 'budget', costUsd: 0.06, message: 'budget message' }],
+    ['max-turns', events(answer(0.01), error('max-turns')), 'max-turns', { kind: 'max-turns', costUsd: 0.01, message: 'max-turns message' }],
+    ['stopped', events(answer(0.01), error('abort')), 'stopped', { kind: 'stopped', costUsd: 0.01, message: 'abort message' }],
+    ['failed', events(error('transport')), 'failed', { kind: 'failed', costUsd: 0, message: 'transport message' }],
+    ['failed with no error logged, as at the output limit', events(answer(0.01)), 'failed', { kind: 'failed', costUsd: 0.01 }],
+    ['done after an error a later answer recovered from', events(error('transport'), answer(0.01)), 'done', { kind: 'done', costUsd: 0.01 }],
+    ['an unpriced model', events(answer(null)), 'done', { kind: 'done', costUsd: null }],
+  ] as const)('ends a run %s with its cost and the error that ended it', (_name, log, kind, expected) => {
+    expect(runEndOf(log, kind, 7)).toEqual({ ...expected, at: 7 });
   });
 
   it('says what a run came to', () => {

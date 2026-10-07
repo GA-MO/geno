@@ -27,6 +27,7 @@ import {
   SCHEDULES_UPDATE_METHOD,
   taskLine,
   type RunEnd,
+  type RunEndKind,
   type ScheduleChange,
   type ScheduledTask,
   type SchedulePolicy,
@@ -1071,16 +1072,16 @@ const ARENA_TASK_ENDS: { readonly [S in ArenaStatus]: TaskEnd | undefined } = {
 type TurnEnd = DoneReason | 'cancelled';
 
 /**
- * What each end of a turn is to its task, to an Arena lane, and on ACP's wire. ACP has no stop for a failed model call
- * or for the budget, so those go out as the nearest stop, and TURN_END_META carries the task end.
+ * What each end of a turn is to its task, to an Arena lane, to a scheduled run, and on ACP's wire. ACP has no stop for
+ * a failed model call or for the budget, so those go out as the nearest stop, and TURN_END_META carries the task end.
  */
-const TURN_ENDS: { readonly [E in TurnEnd]: { readonly task: TaskEnd; readonly lane: LaneEnd; readonly stop: acp.StopReason } } = {
-  end_turn: { task: 'done', lane: 'done', stop: 'end_turn' },
-  'max-turns': { task: 'failed', lane: 'capped', stop: 'max_turn_requests' },
-  budget: { task: 'failed', lane: 'capped', stop: 'max_turn_requests' },
-  refusal: { task: 'failed', lane: 'failed', stop: 'refusal' },
-  error: { task: 'failed', lane: 'failed', stop: 'end_turn' },
-  cancelled: { task: 'stopped', lane: 'stopped', stop: 'cancelled' },
+const TURN_ENDS: { readonly [E in TurnEnd]: { readonly task: TaskEnd; readonly lane: LaneEnd; readonly run: RunEndKind; readonly stop: acp.StopReason } } = {
+  end_turn: { task: 'done', lane: 'done', run: 'done', stop: 'end_turn' },
+  'max-turns': { task: 'failed', lane: 'capped', run: 'max-turns', stop: 'max_turn_requests' },
+  budget: { task: 'failed', lane: 'capped', run: 'budget', stop: 'max_turn_requests' },
+  refusal: { task: 'failed', lane: 'failed', run: 'failed', stop: 'refusal' },
+  error: { task: 'failed', lane: 'failed', run: 'failed', stop: 'end_turn' },
+  cancelled: { task: 'stopped', lane: 'stopped', run: 'stopped', stop: 'cancelled' },
 };
 
 /** ACP's answer for a turn that ended with `end`, with the task end under TURN_END_META. */
@@ -1594,7 +1595,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const limits: Limits = { maxTurns: task.budget.maxTurns, maxCostUsd: task.budget.maxCostUsd };
     const { id, turn } = await startBackground(where, lane, task.prompt, task.edits ? 'auto' : 'plan', { title: task.title, run: { limits, scheduled: true } });
     const ended: Promise<RunEnd> = turn.then(
-      async () => runEndOf((await existing(id)).events, schedules.now()),
+      async ({ end }) => runEndOf((await existing(id)).events, TURN_ENDS[end].run, schedules.now()),
       (error: unknown) => ({ kind: 'failed', at: schedules.now(), costUsd: null, message: error instanceof Error ? error.message : String(error) }),
     );
     return { sessionId: id, workspace: where, lane: lane?.name ?? null, ended };

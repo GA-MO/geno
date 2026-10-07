@@ -175,13 +175,16 @@ export function patchTask(task: ScheduledTask, patch: SchedulePatch, now: number
   return restarts ? { ...next, since: Math.max(task.since, now) } : next;
 }
 
-/** How a run's session ended, read from its log: its last error, if any, decides. */
-export function runEndOf(events: readonly TurnEvent[], at: number): RunEnd {
+/**
+ * A run's end. `kind` comes from how its turn ended, and the session's log gives the cost and the message of the error
+ * that ended it. The log alone cannot give the kind: a turn the model cut off at its output limit failed and logged
+ * no error.
+ */
+export function runEndOf(events: readonly TurnEvent[], kind: RunEndKind, at: number): RunEnd {
   const answers = events.filter((event) => event.kind === 'assistant');
   const costUsd = answers.some((event) => event.costUsd === null) ? null : answers.reduce((sum, event) => sum + (event.costUsd ?? 0), 0);
   const last = events.findLast((event) => event.kind === 'error' || event.kind === 'assistant' || event.kind === 'user');
-  if (last?.kind !== 'error') return { kind: 'done', at, costUsd };
-  const kind: RunEndKind = last.error === 'abort' ? 'stopped' : last.error === 'budget' || last.error === 'max-turns' ? last.error : 'failed';
+  if (kind === 'done' || last?.kind !== 'error') return { kind, at, costUsd };
   return { kind, at, costUsd, message: last.message };
 }
 
