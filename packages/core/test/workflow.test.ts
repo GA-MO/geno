@@ -158,6 +158,11 @@ describe('workflowRefusal', () => {
     expect(workflowRefusal(parsed, BUILTIN_AGENTS, 'auto')).toBeUndefined();
   });
 
+  it('refuses a step in a lane before anything is spent, since no step runs in one yet', () => {
+    const parsed = spec({ description: 'x', steps: [{ role: 'review', prompt: 'a' }, { role: 'worker', prompt: 'b', lane: 'fix' }] });
+    expect(workflowRefusal(parsed, BUILTIN_AGENTS, 'auto')).toBe('step worker asks for lane fix, and a workflow step cannot run in a lane yet; remove "lane" to run it in the main checkout');
+  });
+
   it('lets a read-only workflow run in Plan', () => {
     expect(workflowRefusal(spec({ description: 'x', steps: [{ role: 'review', prompt: 'x' }] }), BUILTIN_AGENTS, 'plan')).toBeUndefined();
   });
