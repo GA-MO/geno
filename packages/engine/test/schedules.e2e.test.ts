@@ -1,4 +1,5 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -20,7 +21,7 @@ import {
   type TurnEvent,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
-import type { Clock } from '../src/schedules.js';
+import { scheduleFile, type Clock } from '../src/schedules.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore, type Store } from '../src/store.js';
@@ -293,6 +294,34 @@ describe('gcode serve: scheduled tasks', () => {
       expect.objectContaining({ kind: 'ran', dueAt: latest, trigger: 'catch-up' }),
     ]);
     expect(often.nextAt).toBe(nextOccurrence(often.when, latest, zone));
+  });
+
+  it('ends a run that an engine which is gone left open, so the task runs again when next due', async () => {
+    const at = await fixture();
+    await serve(at, new FakeClock(T0), models({}).fetch, async (window) => {
+      await window.prompt('/schedule cron "*/30 * * * *" [sched-left] look at the queue');
+    });
+    // The engine died during the 08:30 run: the file holds it open, by a pid that no longer runs.
+    const gone = spawnSync('true').pid;
+    const file = scheduleFile(at.env.GCODE_HOME, at.workspace);
+    const saved = JSON.parse(await readFile(file, 'utf8')) as { tasks: { since: number; runs: unknown[] }[] };
+    const open = { kind: 'ran', dueAt: T0 + 30 * MINUTE, trigger: 'schedule', startedAt: T0 + 30 * MINUTE, sessionId: 'sess-gone', workspace: at.workspace, lane: null, by: gone, end: null };
+    saved.tasks[0]!.since = T0 + 30 * MINUTE;
+    saved.tasks[0]!.runs = [open];
+    await writeFile(file, JSON.stringify(saved));
+
+    const restart = T0 + 65 * MINUTE;
+    const model = models({ '[sched-left]': () => answer('The queue is empty.', usage) });
+    const { result } = await serve(at, new FakeClock(restart), model.fetch, async (window) => {
+      await until(async () => ranOf(named(await window.list(), '[sched-left] look at the queue')).length === 2 && (await ended(window, '[sched-left] look at the queue')), 'the next run ends');
+      return window.list();
+    });
+
+    expect(ranOf(named(result, '[sched-left] look at the queue'))).toEqual([
+      { ...open, end: { kind: 'failed', at: restart, costUsd: null, message: 'Geno stopped before the run ended' } },
+      expect.objectContaining({ dueAt: T0 + 60 * MINUTE, trigger: 'catch-up', by: process.pid, end: expect.objectContaining({ kind: 'done' }) }),
+    ]);
+    expect(model.requests('[sched-left]')).toHaveLength(1);
   });
 
   it('asks the user before the model schedules anything, never the classifier, and takes "Allow for this chat" for the rest', async () => {
