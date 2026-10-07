@@ -2,8 +2,11 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, type TurnEvent } from '@g-code/core';
+import { AGENT_SYSTEM_PROMPT, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, WORKSPACE_TRUST_CAPABILITY, type TurnEvent } from '@g-code/core';
+import type { Io } from '../src/command.js';
+import { gcodeAgent } from '../src/serve.js';
 import { renderGenoTools } from '../src/geno-tools.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
@@ -95,5 +98,59 @@ describe('pstack through gcode agent', () => {
     expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Hi'], env, { fetch: transport.fetch })).code).toBe(0);
     expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(existsSync(path.join(home, 'geno-tools.md'))).toBe(false);
+  });
+});
+
+/** pstack's own hook, as its plugin ships it: hooks.json names the script by CLAUDE_PLUGIN_ROOT, and the script reads the override sheet. */
+const PSTACK_HOOKS = { hooks: { SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: '"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh" claude' }] }] } };
+const PSTACK_SESSION_START = [
+  '#!/bin/sh',
+  'set -eu',
+  'case "${1:-}" in',
+  '  claude) sheet="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/pstack-models.md" ;;',
+  '  *) echo "unknown runtime" >&2; exit 2 ;;',
+  'esac',
+  "if grep -qs '^session hook: off$' \"$sheet\"; then",
+  '  exit 0',
+  'fi',
+  'cat "${CLAUDE_PLUGIN_ROOT}/hooks/session-start-context.md"',
+  '',
+].join('\n');
+const MANDATE = '<EXTREMELY_IMPORTANT>\nYou have pstack.\n</EXTREMELY_IMPORTANT>';
+
+describe("a plugin's SessionStart hook", () => {
+  async function withHook() {
+    const set = await setup('pstack');
+    await mkdir(path.join(set.pluginRoot, 'hooks'), { recursive: true });
+    await writeFile(path.join(set.pluginRoot, 'hooks', 'hooks.json'), JSON.stringify(PSTACK_HOOKS));
+    await writeFile(path.join(set.pluginRoot, 'hooks', 'session-start.sh'), PSTACK_SESSION_START, { mode: 0o755 });
+    await writeFile(path.join(set.pluginRoot, 'hooks', 'session-start-context.md'), `${MANDATE}\n`);
+    return set;
+  }
+
+  /** The text of the first request's first message, from an editor that trusts its workspace, as VS Code runs Geno. */
+  async function firstRequest(set: Awaited<ReturnType<typeof setup>>): Promise<string> {
+    const transport = fakeTransport([answer('Ready.', usage)]);
+    const io: Io = { env: set.env, cwd: set.workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, fetch: transport.fetch };
+    const editor = acp.client({ name: 'vscode' }).onNotification(acp.methods.client.session.update, () => {});
+    await editor.connectWith(gcodeAgent(io, set.store, { maxTurns: 5, maxCostUsd: 1 }), async (ctx) => {
+      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: { _meta: { [WORKSPACE_TRUST_CAPABILITY]: true } } });
+      const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: set.workspace, mcpServers: [] });
+      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Fix the bug in a.ts' }] });
+    });
+    const first = transport.requests[0]!.body.messages[0].content as readonly { readonly type: string; readonly text?: string }[];
+    return first.flatMap((block) => (block.type === 'text' ? [block.text!] : [])).join('\n');
+  }
+
+  it("puts pstack's mandate in the first request before the prompt, as Claude Code adds it", async () => {
+    const first = await firstRequest(await withHook());
+    expect(first).toContain(`[Geno] SessionStart:startup hook success: ${MANDATE}`);
+    expect(first.indexOf('You have pstack.')).toBeLessThan(first.indexOf('Fix the bug in a.ts'));
+  });
+
+  it("leaves it out when the user's override sheet turns the hook off", async () => {
+    const set = await withHook();
+    await writeFile(path.join(set.env.CLAUDE_CONFIG_DIR, 'pstack-models.md'), 'session hook: off\n');
+    expect(await firstRequest(set)).not.toContain('You have pstack.');
   });
 });

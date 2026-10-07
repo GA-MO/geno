@@ -363,3 +363,46 @@ export const MATCHED_FIELD: { readonly [E in RunningHookEvent]: (input: HookEven
   SessionStart: (input) => input.source,
   SessionEnd: (input) => input.reason,
 };
+
+/**
+ * Sent by an editor at initialize: whether it trusts its workspace, as VS Code's workspace trust says. Only then do the
+ * workspace's own hooks run; a client that does not send it, such as the command line, runs the user's hooks only.
+ */
+export const WORKSPACE_TRUST_CAPABILITY = 'gcode/workspaceTrusted';
+
+/** Settings' Hooks section: every hook found for a folder, whether each runs, and what is wrong with the files. */
+export const HOOKS_METHOD = '_gcode/hooks';
+
+export type HooksRequest = { readonly cwd: string };
+
+/** `untrusted` is a workspace hook in a workspace the editor does not trust; P14 to P16 and `never` are events Geno does not fire. */
+export type HookStatus = 'runs' | 'untrusted' | Exclude<HookSupport, 'runs'>;
+
+export type HookRow = {
+  readonly event: HookEventName;
+  readonly matcher: string | undefined;
+  readonly command: string;
+  readonly file: string;
+  readonly scope: HookScope;
+  readonly plugin: string | undefined;
+  readonly status: HookStatus;
+};
+
+export type HooksResponse = { readonly workspace: string; readonly trusted: boolean; readonly hooks: readonly HookRow[]; readonly problems: readonly HookProblem[] };
+
+export function hookStatus(entry: HookEntry, trusted: boolean): HookStatus {
+  const support = HOOK_EVENTS[entry.event].support;
+  if (support !== 'runs') return support;
+  return entry.origin.scope === 'project' && !trusted ? 'untrusted' : 'runs';
+}
+
+export const hookRows = (entries: readonly HookEntry[], trusted: boolean): HookRow[] =>
+  entries.map((entry) => ({
+    event: entry.event,
+    matcher: entry.matcher,
+    command: entry.command,
+    file: entry.origin.file,
+    scope: entry.origin.scope,
+    plugin: entry.origin.plugin?.name,
+    status: hookStatus(entry, trusted),
+  }));
