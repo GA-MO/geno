@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { GENO_NOTE } from '@g-code/core';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { twoColorPng } from '../../core/test/png.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
@@ -115,7 +116,10 @@ describe('attachments in VS Code', () => {
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
 
-    const [sent, prompt, attached] = requests[0].messages[0].content.map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block);
+    // The opening also carries Geno's own notes, such as the environment; the user's blocks follow them in order.
+    const [sent, prompt, attached] = requests[0].messages[0].content
+      .map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)
+      .filter((block: { text?: string }) => !block.text?.startsWith(GENO_NOTE));
     expect(sent).toEqual(image(PNGS[IMAGES.flag]));
     expect(prompt.text).toBe('What colors are in the flag, and what does shot.png show?');
     expect(attached.text).toContain(`<context_item kind="file" path="notes.md">\n1\t# Colors\n2\t\n3\tThe flag is red on the left and blue on the right.\n</context_item>`);

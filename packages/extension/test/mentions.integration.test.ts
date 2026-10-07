@@ -4,6 +4,7 @@ import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { GENO_NOTE } from '@g-code/core';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
@@ -96,7 +97,8 @@ describe('mentions in VS Code', () => {
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
 
-    const [prompt, attached] = requests[0].messages[0].content.map((block: { text: string }) => block.text);
+    // The opening also carries Geno's own notes, such as the environment; the user's blocks follow them in order.
+    const [prompt, attached] = requests[0].messages[0].content.map((block: { text: string }) => block.text).filter((text: string) => !text.startsWith(GENO_NOTE));
     expect(prompt).toBe(PROMPT);
     expect(attached).toContain(`<context_item kind="file" path="math.ts">\n1\texport function add(a: number, b: number): number {\n2\t  return a + b;\n3\t}\n4\t${UNSAVED.trimEnd()}\n</context_item>`);
     expect(attached).toContain('<context_item kind="selection" path="notes/selected.ts" lines="2-3">\n2\tconst two = 2;\n3\tconst three = 3;\n</context_item>');
