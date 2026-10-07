@@ -13,7 +13,7 @@ const HARNESS = [
   /^packages\/extension\/build\.mts$/,
   /^packages\/extension\/test\/(launch|vscode-setup|media)\.ts$/,
   /^packages\/extension\/test\/suite\/(index|mac-only)\.ts$/,
-  /^scripts\/test-(tmp|vscode-docker)\./,
+  /^scripts\/(test-tmp|test-vscode-docker|vscode-workers)\./,
 ];
 /** Engine and core changes reach the panel through the protocol: these suites drive whole turns end to end. */
 const ENGINE_SMOKE = ['chat', 'panel', 'working'];

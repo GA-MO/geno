@@ -101,9 +101,14 @@ export async function buildExtension(): Promise<void> {
   await writeFile(path.join(dist, 'engine/package.json'), '{ "type": "module" }\n');
 }
 
-/** Builds, then packs `g-code-<version>.vsix`; everything is bundled, so no dependencies go in. */
+/** Builds, then packs `g-code-<version>.vsix`. */
 export async function packageExtension(packagePath?: string): Promise<void> {
   await buildExtension();
+  await packBuilt(packagePath);
+}
+
+/** Packs the current build; everything is bundled, so no dependencies go in. */
+export async function packBuilt(packagePath?: string): Promise<void> {
   await createVSIX({
     cwd: root,
     dependencies: false,

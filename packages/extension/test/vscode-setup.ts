@@ -7,7 +7,8 @@ const STALE_MS = 15 * 60_000;
 
 /**
  * Every worktree shares one VS Code download, and two runs unzipping into it at once leave a broken install. So the
- * download happens here, once per run and one run at a time; each test's runTests then finds it in place.
+ * download happens here, once per run and one run at a time; each test's runTests then finds it in place. The
+ * extension is built here too, once, since files that run at once load dist while a rebuild would rewrite it.
  */
 export default async function setup(): Promise<void> {
   await mkdir(cachePath, { recursive: true });
@@ -27,4 +28,6 @@ export default async function setup(): Promise<void> {
   } finally {
     await rm(lock, { recursive: true, force: true });
   }
+  const { buildExtension } = await import('../build.mjs');
+  await buildExtension();
 }
