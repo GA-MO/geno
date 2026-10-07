@@ -230,7 +230,7 @@ describe('docs/geno-tools.md', () => {
   it('B/B-25 maps the Agent tool to agent and SendMessage to message_agent when the run offers them', async () => {
     const { renderGenoTools } = await import('../src/geno-tools.js');
     const text = renderGenoTools({ subagents: true });
-    expect(text).toMatch(/^\| Start a subagent \(`Agent`, `Task`\).*\| `agent` with \{ "agent":/m);
+    expect(text).toMatch(/^\| Start a subagent \(`Agent`, `Task`\).*\| `agent` with `\{ "agent":/m);
     expect(text).toMatch(/^\| Steer a running subagent \(`SendMessage`\) \| `message_agent`/m);
     expect(text).not.toMatch(/There are no subagents|in one sequential pass/);
   });

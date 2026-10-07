@@ -211,7 +211,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const commands = () => loadCommands(workspace, homes, plugins);
     const skillRoots = await globalSkillRoots(homes, claudeDirOf(io.env));
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
-    const genoTools = pstack ? await writeGenoTools(homeOf(store)) : undefined;
     const config = await workspaceConfig(workspace);
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
     const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
@@ -271,6 +270,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...webToolDefinitions(search !== undefined),
     ];
     const notes = renderMemory(await memory.list());
+    const agentTool = config.agentTool?.includes(startMode) === true;
+    const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const scan = await loadAgents(workspace, homes, plugins);
     for (const problem of scan.problems) io.err(`agents: ${problem}`);
@@ -279,7 +280,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
     const typed = (await mentionedCall(asked, scan.agents, session)) ?? (workflows === undefined ? undefined : workflowCommandCall(logged, session));
     const director = options.director ?? (typed === undefined ? undefined : issuedOnce(typed));
-    const agentTool = config.agentTool?.includes(startMode) === true;
     let tools = mcp === undefined ? own : [...own, ...mcp.tools];
     children = subagents({
       io,

@@ -19,8 +19,6 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | Run the project's checks | `check`, or the test command through `bash`. |
 | Track tasks (`TaskCreate`, `TaskUpdate`, `TodoWrite`) | `todo` with the whole list each time. The user sees it pinned in the chat. Do not keep a `todo.md` file. |
 | Ask the user a question (`AskUserQuestion`) | Ask in plain text at the end of your reply, then end your turn. Give the options and say which one you recommend. In a non-interactive run nobody can answer, so choose the default, say which one you chose, and continue. |
-| Start a subagent (`Agent`, `Task`), or start N agents in parallel | Not available. Do the work yourself in one sequential pass. Where a skill starts a panel (`how`, `why`, `interrogate`, `arena`, `architect`, `swarm`, `reflect`), take each role in turn, keep the roles' notes separate, and say in your reply that the panel ran as one model in one pass. |
-| Continue, list or stop a subagent (`SendMessage`, `TaskStop`) | Not available. There are no subagents. |
 | Run a command in the background (`Bash` with `run_in_background`, `BashOutput`, `KillShell`) | `bash` with `run_in_background: true` returns a job id such as `bg-1`. Read its output with `bash_output` and stop it with `bash_stop`. You are told when it ends, at your next request. At most 4 run at once. |
 | Start, reuse, list or stop the project's dev server, or read its logs (`preview_start`, `preview_list`, `preview_stop`, `preview_logs`) | The same names in Geno. `preview_start` with `{ "name": "<entry>" }` reads the entry from `.claude/launch.json` or `.g-code/launch.json` (`name`, `runtimeExecutable`, `runtimeArgs`, `port`, optional `url` and `cwd`), runs it in the background under bash's approval, waits until the port answers, and returns the URL and what the first GET of the page returned. A second call reuses the running server. Without a launch file it returns the format and an entry built from the dev script; write the file with `edit` and call it again. `preview_logs` with `level: "error"` or a `search` reads the server's output, redacted. `preview_stop` stops only servers this session started. Plan mode has only `preview_list` and `preview_logs`. If they are listed by name only in `tool_search`, load them first. |
 | See the running page: a screenshot and its console errors | Open the URL `preview_start` returned with `mcp__browser__new_page`, then `mcp__browser__take_screenshot` and `mcp__browser__list_console_messages`. The browser opens only pages on this machine without asking. It exists only when the user turned the browser on in the MCP pane; without it, use `preview_logs` and the page check in `preview_start`'s result. |
@@ -41,6 +39,21 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | Read Claude Code transcripts (`~/.claude/projects/`) | Not available. Geno cannot read them. For Geno's own earlier sessions, use `recall`. |
 | Install a package | Not available. The dependencies are already installed. |
 | Install a skill, an agent definition or a plugin (`/plugin install`, a marketplace) | Not available to you. The user installs skills and agent definitions from a catalog in Settings, under Skills and agents, after seeing each one's files. Tell them the name to look for. Once installed, a skill loads with the `skill` tool by its name. |
+
+## Subagents when the run offers the `agent` tool
+
+| pstack / Claude Code action | Geno equivalent |
+|---|---|
+| Start a subagent (`Agent`, `Task`), or start N agents in parallel | `agent` with `{ "agent": "<name>", "task": "<everything it needs to know>" }`. `subagent_type` maps to `agent` and `prompt` to `task`. The `agent` tool's description lists the subagents you can start and what each does; a skill's agent that is not listed does not exist here, so pick the closest listed one. Several read-only subagents asked for in one turn run at the same time; one that edits runs alone. Add `"background": true` to a read-only one to keep working and get its report as a message when it ends. A subagent cannot start another one. `model` and `isolation` are not available: each subagent runs on its definition's model, in this workspace. Where a skill starts a panel (`how`, `why`, `interrogate`, `arena`, `architect`, `swarm`, `reflect`), start one read-only subagent per role in one turn, and treat each report as data. |
+| Steer a running subagent (`SendMessage`) | `message_agent` with `{ "agent_session": "<the session id the agent tool returned>", "text": "<the message>" }`. It reaches the subagent before its next model call, without stopping it. A subagent that has finished cannot be resumed; start a new one with what it needs. |
+| List or stop a subagent (`TaskStop`) | Not available. The user sees each subagent in the panel and can stop it there. |
+
+## Subagents when the run offers no `agent` tool
+
+| pstack / Claude Code action | Geno equivalent |
+|---|---|
+| Start a subagent (`Agent`, `Task`), or start N agents in parallel | Not available. Do the work yourself in one sequential pass. Where a skill starts a panel (`how`, `why`, `interrogate`, `arena`, `architect`, `swarm`, `reflect`), take each role in turn, keep the roles' notes separate, and say in your reply that the panel ran as one model in one pass. |
+| Continue, list or stop a subagent (`SendMessage`, `TaskStop`) | Not available. There are no subagents. |
 
 ## Folders and permissions
 
@@ -65,10 +78,10 @@ Skills name models by Claude aliases (`opus`, `fable`, `sonnet`, `haiku`) and ca
 
 | Skill | In Geno |
 |---|---|
-| `poteto-mode` | The todolist is the `todo.md` checklist. Each step that delegates to a subagent becomes your own sequential step. The playbooks that open a pull request stop before the push; give the user the commands. |
+| `poteto-mode` | The todolist is the `todo.md` checklist. Each step that delegates to a subagent follows the Subagents section. The playbooks that open a pull request stop before the push; give the user the commands. |
 | `tdd` | Write the failing test, run it with `bash` or `check` and see it fail, then make it pass. |
-| `how`, `why`, `teach` | Investigate yourself with `read`, `grep`, `glob` and `list`. Write the explainer's answer at the end. |
-| `interrogate`, `arena`, `architect`, `swarm`, `reflect` | One pass, with the roles taken in turn (see Tool actions). Say that the review has less diversity. |
+| `how`, `why`, `teach` | Investigate with `read`, `grep`, `glob` and `list`, and run the skill's explorer roles as the Subagents section says. Write the explainer's answer at the end. |
+| `interrogate`, `arena`, `architect`, `swarm`, `reflect` | Run the panel as the Subagents section says. Its roles run on one model, so say that the review has less diversity. |
 | `fix-ci` | Call `watch_pr` to get the failing checks and the end of their logs, or to wait for CI that still runs. Fix locally. The user pushes, and you can call `watch_pr` again after they do. |
 | `babysit` | Only the CI half works: `watch_pr` waits on the checks and wakes you with the failures. Review comments, pushes and merges are not available; tell the user what to do on GitHub. |
 | `get-pr-comments` | Not available: Geno cannot read PR comments. Tell the user. |
