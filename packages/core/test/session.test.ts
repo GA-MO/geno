@@ -235,6 +235,13 @@ describe('buildRequest', () => {
       expect(breakpoints(request)).toEqual([{ type: 'ephemeral' }, { type: 'ephemeral' }]);
     });
 
+    it('sends effort only to a model that takes it: none to Haiku 4.5, which refuses it, or to an unknown model', () => {
+      const haiku: Session = { ...session, provider: 'anthropic', model: 'claude-haiku-4-5' };
+      expect(buildRequest(flash, [start, user(1, 'hi')]).output_config).toEqual({ effort: 'medium' });
+      expect(buildRequest(haiku, [start, user(1, 'hi')])).not.toHaveProperty('output_config');
+      expect(buildRequest(unknown, [start, user(1, 'hi')])).not.toHaveProperty('output_config');
+    });
+
     it('clamps max_tokens to the window minus the input and a 1,000-token margin near a full window', () => {
       const events = [start, user(1, 'hi'), measured(2, 899_995), user(3, 'go on')];
       expect(buildRequest(opus, events).max_tokens).toBe(1_000_000 - 900_000 - 2 - 1_000);

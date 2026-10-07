@@ -52,6 +52,11 @@ describe('the model capability table', () => {
     expect(capabilitiesOf('modelstudio', 'qwen3.8-flash').thinking).toBe('omit');
   });
 
+  it('sends effort to every model that takes it, and never to Haiku 4.5', () => {
+    expect(capabilitiesOf('anthropic', 'claude-haiku-4-5').effort).toBe(false);
+    for (const { provider, model, caps } of rows) if (model !== 'claude-haiku-4-5') expect(caps.effort, `${provider} ${model}`).toBe(true);
+  });
+
   it('puts strong models on the principles tier and cheap ones on the rules tier', () => {
     expect(capabilitiesOf('anthropic', 'claude-opus-5-5').promptTier).toBe('principles');
     expect(capabilitiesOf('anthropic', 'claude-haiku-4-5').promptTier).toBe('rules');
@@ -60,7 +65,7 @@ describe('the model capability table', () => {
 });
 
 describe('capabilitiesOf an unknown model', () => {
-  it('falls back to no window, no auto compaction, no thinking field, the default TTL and the rules tier', () => {
+  it('falls back to no window, no auto compaction, no thinking or effort field, the default TTL and the rules tier', () => {
     for (const [provider, model] of [
       ['openrouter', 'qwen3.8-flash'],
       ['modelstudio', 'toString'],
@@ -69,6 +74,6 @@ describe('capabilitiesOf an unknown model', () => {
     ] as const satisfies readonly (readonly [ProviderName, string])[]) {
       expect(capabilitiesOf(provider, model), `${provider} ${model}`).toEqual(UNKNOWN_MODEL);
     }
-    expect(UNKNOWN_MODEL).toMatchObject({ window: undefined, compactAt: undefined, thinking: 'omit', cacheTtl: '5m', promptTier: 'rules', maxOutput: 64_000 });
+    expect(UNKNOWN_MODEL).toMatchObject({ window: undefined, compactAt: undefined, thinking: 'omit', effort: false, cacheTtl: '5m', promptTier: 'rules', maxOutput: 64_000 });
   });
 });
