@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { restore, shadowRepoFor, snapshot } from '../src/checkpoints.js';
+import { changedSince, restore, shadowRepoFor, snapshot } from '../src/checkpoints.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 
@@ -58,5 +58,25 @@ describe('checkpoints', () => {
 
     expect(await restore(repo, sha)).toEqual([]);
     expect(tree(workspace, (rel) => rel === '.git' || rel === 'build')).toEqual(before);
+  });
+
+  it('gives sessions that write one fresh shadow repository at once each their own checkpoint', async () => {
+    const workspace = makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const a = 1;\n' } }]);
+    const store = openStore({ GCODE_HOME: await mkdtemp(path.join(tmpdir(), 'gcode-home-')) });
+    const repo = shadowRepoFor(store, workspace);
+    const labels = ['s1 before turn 1', 's2 before turn 1', 's3 before turn 1', 's4 before turn 1'];
+
+    const shas = await Promise.all(labels.map((label) => snapshot(repo, label)));
+
+    expect(new Set(shas).size).toBe(4);
+    const subjectOf = (sha: string) => execFileSync('git', ['--git-dir', repo.gitDir, 'log', '-1', '--format=%s', sha], { encoding: 'utf8' }).trim();
+    expect(shas.map(subjectOf)).toEqual(labels);
+
+    await writeFile(path.join(workspace, 'a.ts'), 'export const a = 2;\n');
+    const [restored, changed, later] = await Promise.all([restore(repo, shas[0]!), changedSince(repo, shas[0]!), snapshot(repo, 's5 before turn 2')]);
+    expect(restored).toEqual(['a.ts']);
+    expect(changed).toEqual([]);
+    expect(subjectOf(later)).toBe('s5 before turn 2');
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
   });
 });
