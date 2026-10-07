@@ -324,12 +324,12 @@ export function subagents(env: SubagentEnv): Subagents {
     const total = totalOf(ran);
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
-    const report = [reportOf(ran), ...(lane == null ? [] : [`[${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.]`])]
-      .filter((part) => part !== '')
-      .join('\n\n');
-    const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary: childSummary(report) };
+    const report = reportOf(ran);
+    const notes = lane == null ? [] : [`[${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.]`];
+    const summary = childSummary([report, ...notes].filter((part) => part !== '').join('\n\n'));
+    const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary };
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });
-    return { text: childReport(agent.name, session.id, end, report), ended, failed: end.kind === 'failed' && report === '' };
+    return { text: childReport(agent.name, session.id, end, report, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0 };
   };
 
   const tool = agentToolDefinition(agents);
