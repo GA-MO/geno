@@ -8,6 +8,9 @@ import type { SteerTarget, SteerResult } from './steer-model.js';
 import { taskSteers } from './steer-view.js';
 import type { SpinoffCard } from './spinoff-model.js';
 import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
+import type { ScheduleView } from '@g-code/core';
+import { scheduleSection } from './schedule-view.js';
+import { SCHEDULE_HINT } from './schedule-model.js';
 
 const badge = ({ label, tone }: Badge, extra = ''): HTMLElement =>
   h('span', { class: `mcp-state tone-${tone} ${extra}`.trim() }, tone === 'busy' ? icon('loading', 'codicon-modifier-spin') : undefined, label);
@@ -217,7 +220,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
   );
 }
 
-const TASKS_NOTE = 'No tasks yet. A chat or lane that runs a turn shows here, and goes on running when the panel closes or the window reloads.';
+const TASKS_NOTE = `No tasks yet. A chat or lane that runs a turn shows here, and goes on running when the panel closes or the window reloads. Scheduled tasks show here too. ${SCHEDULE_HINT}`;
 
 /** One section of the Tasks pane. Working folds to one line, and Done shows its newest few until asked for more. */
 function taskSection(section: Section, toggle: () => void) {
@@ -270,13 +273,15 @@ export function tasksPanel(post: (message: FromView) => void, onToggle: (open: b
       ticking = undefined;
     }
   }, () => render());
-  frame.body.append(note, h('div', { class: 'tasks' }, suggested, ...SECTIONS.map((section) => sections[section].element)));
+  const scheduled = scheduleSection(post, () => frame.close());
+  frame.body.append(note, h('div', { class: 'tasks' }, suggested, ...SECTIONS.map((section) => sections[section].element), scheduled.element));
   const steers = taskSteers(post, () => render());
 
   function render(): void {
     if (!frame.isOpen()) return;
-    note.textContent = tasks.length === 0 && suggestions.length === 0 ? TASKS_NOTE : '';
+    note.textContent = tasks.length === 0 && suggestions.length === 0 && scheduled.isEmpty() ? TASKS_NOTE : '';
     note.hidden = note.textContent === '';
+    scheduled.render();
     suggested.hidden = suggestions.length === 0;
     suggestedCount.textContent = String(suggestions.length);
     reconcile(
@@ -329,6 +334,10 @@ export function tasksPanel(post: (message: FromView) => void, onToggle: (open: b
       const target = sections[section].element;
       if (target.hidden) frame.element.scrollTop = 0;
       else target.scrollIntoView({ block: 'start' });
+    },
+    scheduled(next: readonly ScheduleView[]): void {
+      scheduled.listed(next);
+      render();
     },
     suggested(next: readonly SpinoffCard[]): void {
       if (JSON.stringify(next) === JSON.stringify(suggestions)) return;

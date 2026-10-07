@@ -383,3 +383,38 @@ body.vscode-high-contrast-light .button.danger {
   opacity: 0.5;
   cursor: default;
 }
+
+/* The Tasks pane's Scheduled section. */
+.schedule-last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.schedule-last.tone-failed {
+  color: var(--vscode-errorForeground);
+}
+
+.schedule-last.tone-wait {
+  color: var(--warn);
+}
+
+.schedule-last .schedule-open {
+  font-size: var(--small);
+}
+
+.schedule-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.schedule-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

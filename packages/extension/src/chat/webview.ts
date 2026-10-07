@@ -619,6 +619,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     return schedule();
   }
   if (message.type === 'show-tasks') return tasks.open();
+  if (message.type === 'schedules') return tasks.scheduled(message.tasks);
   if (message.type === 'arena') return arena.listed(message.state);
   if (message.type === 'show-arena') return arena.open();
   if (message.type === 'steered') return steered(message);

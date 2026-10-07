@@ -1,4 +1,4 @@
-import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, Section, TaskJob, TaskRecord, TaskStatus } from '@g-code/core';
+import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, SchedulePanelAction, ScheduleView, Section, TaskJob, TaskRecord, TaskStatus } from '@g-code/core';
 import { isWaking, placeTasks, SECTIONS } from '@g-code/core/attention';
 import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
@@ -20,7 +20,9 @@ export type LanesToView =
   | { readonly type: 'tasks'; readonly tasks: readonly TaskRecord[]; readonly shown: string | undefined; readonly seen: SeenMarkers }
   | { readonly type: 'show-tasks' }
   /** A task opened from the list: show what it needs of the user. */
-  | { readonly type: 'task-reveal'; readonly reveal: Reveal };
+  | { readonly type: 'task-reveal'; readonly reveal: Reveal }
+  /** The folder's scheduled tasks, whenever they change. */
+  | { readonly type: 'schedules'; readonly tasks: readonly ScheduleView[] };
 
 export type LanesFromView =
   | { readonly type: 'lanes-list' }
@@ -40,8 +42,10 @@ export type LanesFromView =
   | { readonly type: 'task-job-stop'; readonly sessionId: string; readonly id: string }
   /** The session stops waiting to be woken. */
   | { readonly type: 'task-wake-cancel'; readonly sessionId: string }
-  /** Opens the session a fork came from, from the fork's row. */
-  | { readonly type: 'task-origin'; readonly sessionId: string; readonly workspace: string };
+  /** Opens the session a fork came from, from the fork's row; or a scheduled task's run, from its row. */
+  | { readonly type: 'task-origin'; readonly sessionId: string; readonly workspace: string }
+  /** A scheduled task's Run now, Pause, Resume or Delete. */
+  | { readonly type: 'schedule-act'; readonly id: string; readonly action: SchedulePanelAction };
 
 export type Tone = 'ok' | 'wait' | 'busy' | 'failed' | 'quiet';
 export type Badge = { readonly label: string; readonly tone: Tone };
