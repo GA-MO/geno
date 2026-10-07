@@ -667,3 +667,11 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 .skills-install .skills-scope {
   flex: 1 1 12em;
 }
+
+/* A path is read, not copied, so it drops the inline-code box and wraps as plain small text. */
+.skills-path code,
+.skills-catalog code {
+  padding: 0;
+  background: none;
+  font-size: var(--small);
+}
