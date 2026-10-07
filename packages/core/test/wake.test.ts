@@ -122,6 +122,12 @@ describe('what has not woken the session yet', () => {
     expect(unwokenOf([start, prompt(1, NOW - 9000), answered(2, NOW - 8000), stopped]).triggers).toEqual([]);
   });
 
+  it('leaves out a dev server that exited by itself, whose end waits for the next turn', () => {
+    const base = jobEnd(3, NOW - 4000) as Extract<TurnEvent, { kind: 'background-end' }>;
+    const server: TurnEvent = { ...base, job: { ...base.job, command: 'pnpm dev', preview: { name: 'web', url: 'http://localhost:3000' } } };
+    expect(unwokenOf([start, prompt(1, NOW - 9000), answered(2, NOW - 8000), server]).triggers).toEqual([]);
+  });
+
   it('is nothing after the user cancelled the pending wakes', () => {
     const events = [start, prompt(1, NOW - 9000), answered(2, NOW - 8000), jobEnd(3, NOW - 4000), note(4, NOW - 3000, { kind: 'cancelled' })];
     expect(unwokenOf(events).triggers).toEqual([]);
