@@ -50,8 +50,8 @@ export type Toc = {
 
 /**
  * The table of contents: a small button at the transcript's top left, beside the stuck request, that opens the list
- * of chapters, the current one marked. The list stays open while the chat scrolls, so the current row follows the reading, until the button,
- * Escape, or a choice on a narrow panel closes it. Arrows, Home and End move between rows.
+ * of chapters, the current one marked. The list stays open while the chat scrolls, so the current row follows the
+ * reading, until the button, Escape, or a choice on a narrow panel closes it. Arrows, Home and End move between rows.
  */
 export function chapterToc(jump: (entry: TocEntry) => void): Toc {
   const listId = 'chapter-toc-list';
