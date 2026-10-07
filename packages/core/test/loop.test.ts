@@ -41,6 +41,21 @@ const run: Run = { firstSeq: 1, maxTurns: 3, maxCostUsd: 0.05 };
 const CALL: LoopStep = { kind: 'call-model' };
 const done = (reason: string) => ({ kind: 'done', reason });
 const tools = (...ids: string[]) => ({ kind: 'run-tools', toolUses: ids.map((id) => expect.objectContaining({ id })) });
+const stop = (seq: number, started: string[]): TurnEvent => ({
+  kind: 'error',
+  seq,
+  at,
+  error: 'abort',
+  message: 'interrupted by the user',
+  tools: started.map((toolUseId) => ({ toolUseId, name: 'grep', startAt: 1, endAt: 2 })),
+});
+const STOPPED = /interrupted by user.*may have partly run/;
+const NOT_STARTED = /interrupted by user.*did not run/;
+const CUT_OFF = /output limit.*did not run/;
+const answered = (...answers: [id: string, text: RegExp][]) => ({
+  kind: 'answer-tools',
+  answers: answers.map(([id, text]) => ({ use: expect.objectContaining({ id }), text: expect.stringMatching(text) })),
+});
 
 const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][] = [
   ['a new question calls the model', [start, user(1)], CALL],
@@ -69,9 +84,9 @@ const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][]
   ['a logged max-turns stop ends the run', [start, user(1), error(2, 'max-turns')], done('max-turns')],
   ['a logged budget stop ends the run', [start, user(1), error(2, 'budget')], done('budget')],
   [
-    'a later run resumes over an earlier abort',
+    'a later run resumes over an earlier abort without running what it stopped',
     [start, user(1), assistant(2, 'tool_use', ['a']), error(3, 'abort')],
-    tools('a'),
+    answered(['a', STOPPED]),
     { ...run, firstSeq: 4 },
   ],
   ['a later run resumes over an earlier limit', [start, user(1), error(2, 'max-turns')], CALL, { ...run, firstSeq: 3 }],
@@ -82,9 +97,47 @@ const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][]
     { ...run, firstSeq: 3 },
   ],
   [
-    'pending tools run before a newer question',
-    [start, user(1), assistant(2, 'tool_use', ['a']), error(3, 'abort'), user(4)],
-    tools('a'),
+    'a call the user stopped is answered as stopped, never run, before a newer question',
+    [start, user(1), assistant(2, 'tool_use', ['a']), stop(3, ['a']), user(4)],
+    answered(['a', STOPPED]),
+    { ...run, firstSeq: 4 },
+  ],
+  [
+    'a later run with no new question answers the stopped calls too, and the ones that never started',
+    [start, user(1), assistant(2, 'tool_use', ['a', 'b']), stop(3, ['a'])],
+    answered(['a', STOPPED], ['b', NOT_STARTED]),
+    { ...run, firstSeq: 4 },
+  ],
+  [
+    'an abort logged before batches were timed counts every call as started',
+    [start, user(1), assistant(2, 'tool_use', ['a', 'b']), error(3, 'abort'), user(4)],
+    answered(['a', STOPPED], ['b', STOPPED]),
+    { ...run, firstSeq: 4 },
+  ],
+  [
+    'a call the user issued and then stopped is answered the same way',
+    [start, user(1), { ...(assistant(2, 'tool_use', ['a']) as Extract<TurnEvent, { kind: 'assistant' }>), issuedBy: 'user' }, stop(3, ['a']), user(4)],
+    answered(['a', STOPPED]),
+    { ...run, firstSeq: 4 },
+  ],
+  [
+    'stopped calls answered at the stop leave the next question to the model',
+    [start, user(1), assistant(2, 'tool_use', ['a']), result(3, 'a'), stop(4, []), user(5)],
+    CALL,
+    { ...run, firstSeq: 5 },
+  ],
+  ['a call cut off at max_tokens is answered, never run', [start, user(1), assistant(2, 'max_tokens', ['a', 'b'])], answered(['b', CUT_OFF])],
+  ['the complete calls before the cut one still run', [start, user(1), assistant(2, 'max_tokens', ['a', 'b']), result(3, 'b')], tools('a')],
+  ['a cut-off turn goes on once its calls are answered', [start, user(1), assistant(2, 'max_tokens', ['a', 'b']), result(3, 'b'), result(4, 'a')], CALL],
+  [
+    'a second cut-off in a row ends the run',
+    [start, user(1), assistant(2, 'max_tokens', ['a']), result(3, 'a'), assistant(4, 'max_tokens', ['b']), result(5, 'b')],
+    done('error'),
+  ],
+  [
+    "a cut-off in an earlier run does not count toward this run's",
+    [start, user(1), assistant(2, 'max_tokens', ['a']), result(3, 'a'), user(4), assistant(5, 'max_tokens', ['b']), result(6, 'b')],
+    CALL,
     { ...run, firstSeq: 4 },
   ],
   [

@@ -64,16 +64,20 @@ let loads = 0;
 /** A tool_search call that loads deferred tools, for a turn before their first call. */
 export const loadTools = (...names: string[]): FakeToolUse => ({ id: `tu_load_${loads++}`, name: 'tool_search', input: { select: names } });
 
-/** A Messages stream that says `text`, then asks for each tool use with its input streamed as JSON fragments. */
-export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage): Reply {
+/**
+ * A Messages stream that says `text`, then asks for each tool use with its input streamed as JSON fragments.
+ * `cutOff` stops at `max_tokens` halfway through the last tool use's input, as a provider does at the output limit.
+ */
+export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage, opts: { cutOff?: true } = {}): Reply {
   const blocks = uses.flatMap((use, i): SseEvent[] => {
     const index = i + 1;
     const json = JSON.stringify(use.input);
     const half = Math.ceil(json.length / 2);
+    const cut = opts.cutOff === true && i === uses.length - 1;
     return [
       { type: 'content_block_start', index, content_block: { type: 'tool_use', id: use.id, name: use.name, input: {}, caller: { type: 'direct' } } },
       { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json.slice(0, half) } },
-      { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json.slice(half) } },
+      ...(cut ? [] : [{ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: json.slice(half) } }]),
       { type: 'content_block_stop', index },
     ];
   });
@@ -86,7 +90,7 @@ export function toolCall(text: string, uses: readonly FakeToolUse[], usage: Cach
       ...blocks,
       {
         type: 'message_delta',
-        delta: { stop_reason: 'tool_use', stop_sequence: null, stop_details: null },
+        delta: { stop_reason: opts.cutOff === true ? 'max_tokens' : 'tool_use', stop_sequence: null, stop_details: null },
         usage: { output_tokens: 30 },
       },
       { type: 'message_stop' },
