@@ -83,7 +83,7 @@ describe('gcode serve: chapters', () => {
     };
     const prompt = async (agent: acp.AgentContext, sessionId: string, text: string): Promise<number> => {
       const response = await agent.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
-      return response._meta?.[TURN_SEQ_META] as number;
+      return (response as acp.PromptResponse)._meta?.[TURN_SEQ_META] as number;
     };
     const log = async (id: string) => (await readSessionLog(sessionFile(store, id as never))).events;
 
