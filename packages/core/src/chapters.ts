@@ -116,6 +116,5 @@ export function chaptersOf(events: readonly TurnEvent[]): readonly Chapter[] {
   return placed.toSorted((a, b) => a.at - b.at).map(({ chapter }) => chapter);
 }
 
-/** The chapter the user marked at the message `turnSeq`, if any. */
 export const userChapterAt = (chapters: readonly Chapter[], turnSeq: number): Chapter | undefined =>
   chapters.find((chapter) => chapter.start.kind === 'turn' && chapter.start.turnSeq === turnSeq);
