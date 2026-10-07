@@ -1,5 +1,6 @@
 import type { ImageBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ContextItem } from './context.js';
+import { GENO_NOTE } from './fence.js';
 import { linesOf, numberedPage } from './page.js';
 import type { Brand } from './types.js';
 
@@ -44,7 +45,7 @@ export const NO_ATTACHMENTS: StoredAttachments = new Map();
 
 const missing = (image: ImageAttachment): TextBlockParam => ({
   type: 'text',
-  text: `[The image ${image.name} the user attached is no longer in the session's attachments folder.]`,
+  text: `${GENO_NOTE} The image ${image.name} the user attached is no longer in the session's attachments folder.`,
 });
 
 /** An image reference as the block the model reads; the bytes are the stored ones, so a replay sends what the first request sent. */
@@ -56,7 +57,7 @@ export function imageBlock(image: ImageAttachment, stored: StoredAttachments): I
 /** A file attachment as the context item an `@file` of the same text would be; `shown` is the path the model sees. */
 export function fileItem(file: FileAttachment, stored: StoredAttachments, shown: string): ContextItem {
   const text = stored.get(file.sha256);
-  if (text === undefined) return { kind: 'file', path: shown, text: `[${shown} is no longer in the session's attachments folder.]` };
+  if (text === undefined) return { kind: 'file', path: shown, text: `${GENO_NOTE} ${shown} is no longer in the session's attachments folder.` };
   return { kind: 'file', path: shown, text: text === '' ? `${shown} is empty` : numberedPage(linesOf(text), 1, undefined) };
 }
 

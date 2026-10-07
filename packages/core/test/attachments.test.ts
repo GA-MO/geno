@@ -148,11 +148,11 @@ describe('replayMessages with attachments', () => {
   it('notes an attachment whose bytes are gone instead of failing the request', () => {
     const [message] = replayMessages([start, { ...user, attachments: [shot, notes] }]);
     expect(message!.content).toEqual([
-      { type: 'text', text: "[The image shot.png the user attached is no longer in the session's attachments folder.]" },
+      { type: 'text', text: "[Geno] The image shot.png the user attached is no longer in the session's attachments folder." },
       { type: 'text', text: 'What is in these?' },
       {
         type: 'text',
-        text: "The user attached these from the editor, as they were when the message was sent:\n\n<context_item kind=\"file\" path=\"docs/notes.md\">\n[docs/notes.md is no longer in the session's attachments folder.]\n</context_item>",
+        text: "The user attached these from the editor, as they were when the message was sent:\n\n<context_item kind=\"file\" path=\"docs/notes.md\">\n[Geno] docs/notes.md is no longer in the session's attachments folder.\n</context_item>",
       },
     ]);
   });

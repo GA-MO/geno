@@ -133,7 +133,7 @@ const prose = (body: { readonly messages: readonly { readonly role: string; read
       ? []
       : (m.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') && !b.text.startsWith(ENVIRONMENT_HEADING) ? [b.text] : [])),
   );
-const restoredNote = /^\[The user rewound the workspace/;
+const restoredNote = /^\[Geno\] The user rewound the workspace/;
 
 /** Whether a process whose command line holds `marker` still runs. */
 const running = (marker: string): boolean => {

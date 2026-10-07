@@ -29,6 +29,7 @@ import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
+import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -265,9 +266,9 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
-  `[The user rewound the workspace to how it was before turn ${event.turnSeq}. ${
+  `${GENO_NOTE} The user rewound the workspace to how it was before turn ${event.turnSeq}. ${
     event.files.length === 0 ? 'No files changed.' : `These files were restored: ${event.files.join(', ')}.`
-  } Read a file again before editing it.]`;
+  } Read a file again before editing it.`;
 
 export const sessionModeOf = (events: readonly TurnEvent[]): SessionMode =>
   events.findLast((e) => e.kind === 'mode')?.mode ?? DEFAULT_SESSION_MODE;
@@ -320,6 +321,22 @@ const shownPath = (file: FileAttachment, workspace: string): string => {
   return file.path.startsWith(root) ? file.path.slice(root.length) : file.path;
 };
 
+type UserEvent = Extract<TurnEvent, { kind: 'user' }>;
+
+/**
+ * A user event's text as the model reads it, by who sent it. The log keeps what was sent; only the user's own
+ * prompt goes as it is. A woken turn's text is the arrival notice already.
+ */
+const SENDER_TEXT: Readonly<Record<'prompt' | 'steer' | NonNullable<UserEvent['from']>, (text: string) => string>> = {
+  prompt: (text) => text,
+  steer: userSteerText,
+  parent: arrivalText,
+  child: arrivalText,
+  wake: (text) => text,
+};
+
+const senderOf = (event: UserEvent): keyof typeof SENDER_TEXT => event.from ?? (event.steer === true ? 'steer' : 'prompt');
+
 /** Images first, which the model reads best before the text about them; then the prompt; then mentions and attached files. */
 function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredAttachments, workspace: string): (TextBlockParam | ImageBlockParam)[] {
   const attachments = event.attachments ?? [];
@@ -328,7 +345,7 @@ function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredA
   return [
     ...images,
     // A message of attachments alone has no prompt text, and the API refuses an empty text block.
-    ...(event.content === '' ? [] : [{ type: 'text' as const, text: event.content }]),
+    ...(event.content === '' ? [] : [{ type: 'text' as const, text: SENDER_TEXT[senderOf(event)](event.content) }]),
     ...(items.length === 0 ? [] : [{ type: 'text' as const, text: renderContextItems(items) }]),
   ];
 }

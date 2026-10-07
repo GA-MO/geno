@@ -2,6 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import { neutralizeNoticeLines } from './fence.js';
 
 /**
  * Where a server definition came from. The order is precedence: a later source's server replaces an earlier one's of
@@ -205,7 +206,7 @@ export type McpContent =
 const base64Bytes = (data: string): number => Buffer.byteLength(data, 'base64');
 
 const CONTENT_TEXT: { readonly [K in McpContent['type']]: (block: Extract<McpContent, { type: K }>) => string } = {
-  text: ({ text }) => text,
+  text: ({ text }) => neutralizeNoticeLines(text),
   // The engine attaches the images it can store; one it cannot, such as an unknown format, stays this placeholder.
   image: ({ mimeType, data }) => `[image ${mimeType}, ${base64Bytes(data)} bytes, not shown]`,
   audio: ({ mimeType, data }) => `[audio ${mimeType}, ${base64Bytes(data)} bytes, not shown]`,

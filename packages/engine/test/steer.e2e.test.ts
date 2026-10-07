@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { STEER_META, type SteerOutcome, type TurnEvent } from '@g-code/core';
+import { STEER_META, type SteerOutcome, type TurnEvent, userSteerText } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
@@ -215,7 +215,7 @@ describe('gcode serve: steering a running turn', () => {
     expect(uncached(second!.messages.slice(0, first!.messages.length)), 'the earlier messages go again unchanged').toEqual(uncached(first!.messages));
     expect(lastContent(second!).map((b) => [b.type, b.tool_use_id ?? b.text])).toEqual([
       ['tool_result', 'tu_1'],
-      ['text', 'also look at b.ts'],
+      ['text', userSteerText('also look at b.ts')],
     ]);
     expect(steerChunks(updates)).toEqual(['also look at b.ts']);
   });

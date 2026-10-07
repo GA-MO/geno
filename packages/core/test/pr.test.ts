@@ -2,32 +2,33 @@ import { describe, expect, it } from 'vitest';
 import {
   actionsJobOf,
   AGENT_MODE_TOOLS,
+  type CheckBucket,
   CHILD_TOOL_NAMES,
   ciLogOf,
   ciOutcomeOf,
   countsText,
   failingJobsOf,
   nextPrWatch,
+  NOT_USER_LINE,
   PR_WATCH_LIMITS,
+  type PrCheck,
+  type PrLookup,
   prPollDelayS,
   prStateText,
+  type PrWatch,
   prWatchingText,
   prWatchOutcomeOf,
   prWatchText,
+  type PullRequest,
   replayMessages,
   startPrWatch,
   triggerOf,
+  type TurnEvent,
   unwokenOf,
   waitsForText,
   wakeLabel,
-  wakeNoteText,
-  type CheckBucket,
-  type PrCheck,
-  type PrLookup,
-  type PrWatch,
-  type PullRequest,
-  type TurnEvent,
   type WakeNote,
+  wakeNoteText,
 } from '../src/index.js';
 
 const PR: PullRequest = {
@@ -237,7 +238,7 @@ describe('a watch as a wake', () => {
     expect(unwokenOf(events).triggers).toEqual([{ kind: 'pr', id: 'wake-1', outcome: 'failed' }]);
     expect(wakeLabel([{ kind: 'pr', id: 'wake-1', outcome: 'failed' }])).toBe('woke: CI failed');
     expect(wakeLabel([{ kind: 'pr', id: 'wake-1', outcome: 'passed' }, { kind: 'jobs', job: 'bg-1' }])).toBe('woke: 1 task finished, CI passed');
-    expect(wakeNoteText(note)).toBe('[PR watch wake-1 ended. PR #42: CI failed.]');
+    expect(wakeNoteText(note)).toBe(`${NOT_USER_LINE}\nPR watch wake-1 ended. PR #42: CI failed.`);
   });
 
   it('is named in Tasks', () => {
@@ -246,7 +247,7 @@ describe('a watch as a wake', () => {
 
   it('reaches the next request as text', () => {
     const texts = JSON.stringify(replayMessages(events));
-    expect(texts).toContain('[PR watch wake-1 ended. PR #42: CI failed.]');
+    expect(texts).toContain(JSON.stringify(`${NOT_USER_LINE}\nPR watch wake-1 ended. PR #42: CI failed.`).slice(1, -1));
   });
 
   it('is offered where wakes are: not in Plan and not to a subagent', () => {

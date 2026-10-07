@@ -702,7 +702,7 @@ describe('gcode serve', () => {
     expect(stop).toBe('end_turn');
     const first = transport.requests[0]!.body;
     expect(first.tools.map((tool: { name: string }) => tool.name)).toEqual(['edit']);
-    expect(JSON.stringify(first.system)).toContain("You are g-code's edit applier.");
+    expect(JSON.stringify(first.system)).toContain("You are Geno's edit applier.");
     const message = JSON.stringify(first.messages[0].content);
     expect(message).toContain('Change line 2 of a.ts');
     expect(message).toContain('Flip the flag');

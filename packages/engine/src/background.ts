@@ -5,6 +5,7 @@ import {
   backgroundStartText,
   isJobId,
   MAX_BACKGROUND_JOBS,
+  neutralizeNoticeLines,
   nextJobState,
   showHidden,
   STOP_GRACE_MS,
@@ -197,11 +198,11 @@ export class BackgroundJobs {
           : `${id} was ${state.status}.`;
     if (tail !== undefined) {
       const lines = entry.output.tail(tail);
-      return `${status}\n${lines === '' ? '(no output yet)' : `Its last ${tail} lines:\n${lines}`}`;
+      return `${status}\n${lines === '' ? '(no output yet)' : `Its last ${tail} lines:\n${neutralizeNoticeLines(lines)}`}`;
     }
     const { text, dropped } = entry.output.unread();
     const skipped = dropped > 0 ? `[${dropped} bytes of output were dropped before this read]\n` : '';
-    return `${status}\n${text === '' ? '(no new output since the last read)' : `${skipped}New output:\n${text.replace(/\n$/, '')}`}`;
+    return `${status}\n${text === '' ? '(no new output since the last read)' : `${skipped}New output:\n${neutralizeNoticeLines(text.replace(/\n$/, ''))}`}`;
   }
 
   /**

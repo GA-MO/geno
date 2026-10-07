@@ -1,4 +1,5 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import { neutralizeNoticeLines } from './fence.js';
 import type { ApprovalMode } from './approval.js';
 import { redactSecrets } from './redact.js';
 
@@ -164,7 +165,7 @@ export function pickTerminal<T extends TerminalSummary>(terminals: readonly T[],
 
 const TAG = 'terminal_output';
 const FORGED = new RegExp(`<\\s*(/?)\\s*(${TAG})`, 'gi');
-const unforged = (text: string): string => text.replace(FORGED, '‹$1$2');
+const unforged = (text: string): string => neutralizeNoticeLines(text.replace(FORGED, '‹$1$2'));
 
 const labelOf = (t: TerminalSummary): string => `${t.index} ${JSON.stringify(unforged(t.name))}`;
 
