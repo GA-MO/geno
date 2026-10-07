@@ -40,6 +40,8 @@ export type Mode = {
   readonly arrivals?: () => readonly Arrival[];
   /** What the model must be told at the safe point, such as a mode switch or a memory change; undefined when it knows. */
   readonly notice?: (events: readonly TurnEvent[]) => Promise<Notice | undefined>;
+  /** What to log after a compaction, such as SessionStart's `compact` hook output. */
+  readonly afterCompact?: () => Promise<TurnEvent | undefined>;
 };
 
 export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
@@ -329,6 +331,8 @@ export async function drive(
     if (outcome.kind === 'compacted') {
       const event = await record(outcome.event);
       io.err(`compact (${trigger}): ${event.tokensBefore} -> about ${event.tokensAfter} tokens`);
+      const told = await mode.afterCompact?.();
+      if (told !== undefined) await record(told);
       return true;
     }
     if (outcome.kind === 'failed' && !signal.aborted) io.err(`compact: ${outcome.message}`);

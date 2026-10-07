@@ -25,6 +25,7 @@ import {
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
   noticeFor,
+  HOOK_PERMISSION_MODES,
   pstackNote,
   READ_TERMINAL_TOOL,
   readTerminalToolDefinitions,
@@ -87,6 +88,7 @@ import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
 import type { Wakes } from './wakes.js';
 import { ghCli, githubRemote } from './gh.js';
+import { HookSessions } from './hooks.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -164,6 +166,13 @@ export type AgentOptions = {
   readonly engine?: RunEngine | undefined;
   /** Replaces how web_fetch resolves hosts and web_search reaches its provider, and hears each helper call; for tests and smokes. */
   readonly web?: Pick<WebDeps, 'resolve' | 'searchFetch' | 'onRead'> | undefined;
+  /**
+   * The user's hooks, for the command line and the editor; undefined runs none, as an eval or the Arena's ranking must
+   * not depend on the machine's hooks. The session's first run in the process fires SessionStart.
+   */
+  readonly hooks?: HookSessions | undefined;
+  /** Whether the editor trusts the workspace, which lets its own hooks run. */
+  readonly trustedWorkspace?: boolean | undefined;
 };
 
 export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers; readonly wakes?: RunWakes | undefined };
@@ -340,7 +349,13 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(director === undefined ? {} : { director }),
     };
-    result = await drive(io, store, opened, prompt, options.limits, mode, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
+    const hooks = options.hooks;
+    const started =
+      hooks === undefined
+        ? opened
+        : await hooks.open({ io, store, opened, trusted: options.trustedWorkspace === true, permissionMode: HOOK_PERMISSION_MODES[startMode], workspace, scratchpad });
+    const hooked = hooks === undefined ? mode : { ...mode, afterCompact: () => hooks.sessionStart(session.id, 'compact') };
+    result = await drive(io, store, started, prompt, options.limits, hooked, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
     return result;
   } finally {
     steers.release(session.id, inbox);
@@ -399,18 +414,25 @@ export const agent: Command = async (args, { io, store }) => {
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
     : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch), auto: freshAuto() };
-  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'] };
-  // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
-  if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
-  const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });
+  // The command line runs the user's own hooks and no workspace's: no editor vouches that the user trusts the folder.
+  const hooks = new HookSessions();
+  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'], hooks };
   try {
-    // A one-shot run has only this turn, so it waits for its servers.
-    await hub.start();
-    const mcp = await hub.toolset(approval);
-    for (const problem of hub.problems) io.err(`mcp: ${problem}`);
-    for (const view of hub.views()) if (view.state.status === 'untrusted' || view.state.status === 'failed') io.err(`mcp: ${view.name} is ${describeServerState(view.state)}`);
-    return (await runAgent(io, store, { ...opened, log }, task, { ...options, mcp })).exitCode;
+    // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
+    if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;
+    const hub = await openMcpHub({ store, env: io.env, workspace: await workspaceDir(io.cwd, log.session.workspace), acp: [] });
+    try {
+      // A one-shot run has only this turn, so it waits for its servers.
+      await hub.start();
+      const mcp = await hub.toolset(approval);
+      for (const problem of hub.problems) io.err(`mcp: ${problem}`);
+      for (const view of hub.views()) if (view.state.status === 'untrusted' || view.state.status === 'failed') io.err(`mcp: ${view.name} is ${describeServerState(view.state)}`);
+      return (await runAgent(io, store, { ...opened, log }, task, { ...options, mcp })).exitCode;
+    } finally {
+      await hub.stop();
+    }
   } finally {
-    await hub.stop();
+    // The session ends with the process, as a `claude -p` run does.
+    await hooks.endAll();
   }
 };

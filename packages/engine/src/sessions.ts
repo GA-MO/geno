@@ -357,6 +357,13 @@ const turnEventSchema = z.union([
       mode: z.enum(SESSION_MODES).optional(),
       memory: z.strictObject({ added: z.array(memoryEntrySchema), removed: z.array(memoryEntrySchema) }).optional(),
     }),
+    z.strictObject({
+      kind: z.literal('hook-context'),
+      ...seqFields,
+      event: z.literal('SessionStart'),
+      matched: z.enum(['startup', 'resume', 'compact']),
+      notes: z.array(z.strictObject({ how: z.enum(['success', 'additional-context']), text: z.string() })).min(1),
+    }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
     z.strictObject({

@@ -103,6 +103,8 @@ export async function serveSocket(io: Io, store: Store, limits: Limits, socket: 
   } else {
     io.err('gcode serve: idle, exiting');
     await shared.jobs.kill('engine-exit', 'all');
+    // Only an idle exit waits for SessionEnd: a signal may be followed by SIGKILL.
+    await shared.hooks.endAll();
   }
   shared.externals.closeAll();
   process.off('exit', killJobs);
@@ -152,7 +154,10 @@ export const serve: Command = async (args, { io, store }) => {
   const stopping = stopSignal();
   await Promise.race([connection.closed, new Promise((resolve) => stopping.addEventListener('abort', resolve, { once: true }))]);
   if (stopping.aborted) shared.jobs.killAllNow();
-  else await shared.jobs.kill('engine-exit', 'all');
+  else {
+    await shared.jobs.kill('engine-exit', 'all');
+    await shared.hooks.endAll();
+  }
   shared.externals.closeAll();
   await mcp.stopAll();
   if (stopping.aborted) process.exit(0);

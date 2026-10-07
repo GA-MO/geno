@@ -24,6 +24,10 @@ import {
   scheduleQuestion,
   SCHEDULES_CAPABILITY,
   WORKFLOWS_CAPABILITY,
+  WORKSPACE_TRUST_CAPABILITY,
+  HOOKS_METHOD,
+  hookRows,
+  type HooksResponse,
   WORKFLOW_META,
   WORKFLOW_REASON,
   childReport,
@@ -299,6 +303,9 @@ import { WORKFLOW_TURNS, workflowDriver, workflowTools } from './workflows.js';
 import { loadAgents } from './subagents.js';
 import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner } from './schedules.js';
 import { pidAlive } from './wait-hooks.js';
+import { HookSessions } from './hooks.js';
+import { loadHookConfig } from './hook-config.js';
+import { claudeDirOf } from './plugins.js';
 
 const RESOURCE_NOT_FOUND = -32002;
 
@@ -388,6 +395,8 @@ type Peer = {
   readonly chapters: boolean;
   /** It shows a workflow's preview card and its progress in Tasks, so the model gets workflow and the user /workflow. */
   readonly workflows: boolean;
+  /** Its workspace is one the user trusts, as VS Code's workspace trust says, so the workspace's own hooks may run. */
+  readonly trusted: boolean;
 };
 
 const NO_PEER: Peer = {
@@ -407,6 +416,7 @@ const NO_PEER: Peer = {
   schedules: false,
   chapters: false,
   workflows: false,
+  trusted: false,
 };
 
 /**
@@ -1072,6 +1082,8 @@ export function engineShared(io: Io, options: EngineOptions = {}) {
     scheduleAllowed: new Set<string>(),
     // A scheduled run's budget, which the turns it wakes share.
     runLimits: new Map<string, Limits>(),
+    // The hooks of each session a turn ran in this process; SessionEnd fires for them when the process ends.
+    hooks: new HookSessions(),
   };
 }
 
@@ -1144,7 +1156,7 @@ type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, runLimits } = shared;
+  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, runLimits, hooks } = shared;
   const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -1394,6 +1406,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const event = numbered(outcome.event, log.events);
         await appendEvent(log.file, event);
         notify(compactUpdate(event));
+        const told = await hooks.sessionStart(sessionId, 'compact');
+        if (told !== undefined) await appendEvent(log.file, { ...told, seq: nextSeq([...log.events, event]) });
         const context = lastContextUse(log.session, [event]);
         if (context !== undefined) notify(usageUpdate(context, { model: event.model, costUsd: event.costUsd }));
         return event;
@@ -1571,6 +1585,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 workflows: from.peer.workflows && run.scheduled !== true && run.director === undefined ? workflowToolsFor(sessionId, header.session, shown) : undefined,
                 externals,
                 keyOf: keyOf(sessionId),
+                hooks,
+                trustedWorkspace: from.peer.trusted,
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
@@ -1801,6 +1817,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         schedules: _meta?.[SCHEDULES_CAPABILITY] === true,
         chapters: _meta?.[CHAPTER_CAPABILITY] === true,
         workflows: _meta?.[WORKFLOWS_CAPABILITY] === true,
+        trusted: _meta?.[WORKSPACE_TRUST_CAPABILITY] === true,
       };
       runner ??= { connection: self(), start: startScheduled };
       schedules.connected(runner);
@@ -2207,6 +2224,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(MEMORY_DELETE_METHOD, memoryDeleteRequest, async ({ params }): Promise<MemoryResponse> => ({
       entries: await (await memoryOf(params.sessionId)).remove(params.id).catch(refusedMemory(params.id)),
     }))
+    .onRequest(HOOKS_METHOD, permissionsRequest, async ({ params }): Promise<HooksResponse> => {
+      const workspace = await workspaceDir(io.cwd, params.cwd).catch(refused({ cwd: params.cwd }));
+      const config = await loadHookConfig({ claudeDir: claudeDirOf(io.env), appHome: homeOf(store), workspace, plugins: (await pluginsOf(workspace)).plugins });
+      return { workspace, trusted: peer.trusted, hooks: hookRows(config.entries, peer.trusted), problems: config.problems };
+    })
     .onRequest(PERMISSIONS_METHOD, permissionsRequest, async ({ params }): Promise<PermissionsResponse> => {
       const { rules, answer } = await permissionsOf(params.cwd);
       return answer(rules.list());
