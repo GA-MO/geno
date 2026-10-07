@@ -114,7 +114,7 @@ const userRoots = (dirs: UserDirs): Root[] =>
   [globalRulesFile(dirs.app), ...(dirs.claude === undefined ? [] : [path.join(dirs.claude, 'CLAUDE.md')])].map((file) => ({ file, scope: undefined }));
 
 /** The targets of the lines that are a lone `@path`, outside fenced code blocks. */
-export function importsOf(text: string): string[] {
+function importsOf(text: string): string[] {
   const targets: string[] = [];
   let fence: string | undefined;
   for (const line of text.split('\n')) {
@@ -156,8 +156,9 @@ type ImportLine = { readonly importer: string; readonly target: string };
 /** The file an import names, or why it is skipped. */
 async function importTarget(walk: Walk, root: Root, importer: string, target: string, depth: number): Promise<{ readonly file: string } | { readonly why: string }> {
   if (depth > MAX_IMPORT_DEPTH) return { why: `imports nest at most ${MAX_IMPORT_DEPTH} levels deep` };
-  if (target.startsWith('~/') && walk.home === undefined) return { why: 'the environment names no home directory' };
-  const file = target.startsWith('~/') ? path.join(walk.home!, target.slice(2)) : path.resolve(path.dirname(importer), target);
+  const fromHome = target.startsWith('~/');
+  if (fromHome && walk.home === undefined) return { why: 'the environment names no home directory' };
+  const file = fromHome ? path.join(walk.home ?? '', target.slice(2)) : path.resolve(path.dirname(importer), target);
   const real = await canonical(file);
   if (isSecretPath(posix(file)) || isSecretPath(posix(real))) return { why: 'it names a credentials file' };
   if (root.scope !== undefined && !within(await canonical(root.scope), real)) return { why: `a project file can import only files under ${root.scope}` };
