@@ -14,6 +14,7 @@ const VERBS: Readonly<Record<string, readonly [running: string, finished: string
   reveal: ['Revealing', 'Revealed'],
   show_diff: ['Opening the diff of', 'Showed the diff of'],
   read_terminal: ['Reading the terminal', 'Read the terminal'],
+  watch_pr: ['Checking the PR', 'Checked the PR'],
 };
 
 /** An MCP call reads as its tool's own name, with its server beside it. */
