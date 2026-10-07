@@ -4,7 +4,7 @@ import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, AGENT_TOOL_DEFINITIONS, MODE_NOTICES, asSessionId, CLASSIFIER_TOOL, DEFERRED_TOOLS_NOTE, DENY_RULE_IDS, DENY_RULES, toolRoster, webToolDefinitions, type TurnEvent } from '@g-code/core';
+import { AGENT_PROMPTS, AGENT_TOOL_DEFINITIONS, MODE_NOTICES, asSessionId, CLASSIFIER_TOOL, DEFERRED_TOOLS_NOTE, DENY_RULE_IDS, DENY_RULES, toolRoster, webToolDefinitions, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, offeredTools, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -56,7 +56,7 @@ describe('gcode agent', () => {
     const opening = (i: number) => transport.requests[i]!.body.messages[0].content[0].text as string;
     expect(opening(0)).toContain('<project_instructions path="AGENTS.md">\nRun tests with pnpm test.\n\n</project_instructions>');
     expect(opening(0)).toContain('- .cursor/rules/ts.mdc (*.ts)');
-    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(opening(2)).toBe(opening(0));
     expect(toolResult(transport.requests[1]!.body)).toContain('<project_rule path=".cursor/rules/ts.mdc" matched="a.ts">\nNo default exports.\n</project_rule>');
     const log = await readSessionLog(sessionFile(store, asSessionId(id)));
@@ -91,7 +91,7 @@ describe('gcode agent', () => {
 
     const [first] = transport.requests;
     expect(first!.body.tools).toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)]).offered);
-    expect(first!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(first!.body.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
 
     const id = sessionIdOf(result.stdout);
     const log = await readSessionLog(sessionFile(store, asSessionId(id)));
@@ -406,7 +406,7 @@ describe('gcode agent --mode plan', () => {
 
     const [first] = transport.requests;
     expect(first!.body.tools, 'Plan is offered the tools of every mode, and refuses what it leaves out').toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)]).offered);
-    expect(first!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(first!.body.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(JSON.stringify(first!.body.messages.at(-1).content)).toContain(JSON.stringify(MODE_NOTICES.plan).slice(1, -1));
     expect(asked).toEqual([]);
     expect(transport.requests.filter(isClassifierCall)).toEqual([]);

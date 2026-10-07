@@ -108,7 +108,7 @@ export const EDIT_FORMAT_SPECS: Readonly<Record<EditFormat, FormatSpec>> = {
     tool: {
       name: 'edit',
       description:
-        'Change a file by replacing one exact piece of its text. old_str must match the file exactly, including indentation and line breaks, and must appear exactly once; include enough surrounding lines to make it unique, or pass replace_all: true to change every place it appears, as for a rename. Never include line numbers. To make a new file, or to replace the whole of a file you have read, pass create: true and the whole content as new_str. Call once per separate change.',
+        "Change a file by replacing one exact piece of its text. Read the file first: edit refuses a file you have not read in this session, or one that changed since you last read it; read it again and retry. old_str must match the file exactly, including indentation and line breaks, and must appear exactly once; include enough surrounding lines to make it unique, or pass replace_all: true to change every place it appears, as for a rename. Copy old_str from what read showed you, without the line number and the tab before each line. To make a new file, or to replace the whole of a file you have read, pass create: true and the whole content as new_str. Call once per separate change. When the project has a check command, it runs after each successful edit and its result comes back with this one: fix what your change broke before you move on. Failures that were there before your change are not yours to fix unless the task asks.",
       input_schema: {
         type: 'object',
         properties: {

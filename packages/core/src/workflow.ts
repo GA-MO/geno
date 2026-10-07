@@ -921,7 +921,7 @@ export function workflowProgress(run: WorkflowRun): WorkflowProgress {
 export const WORKFLOW_TOOL_SPEC: Tool = {
   name: WORKFLOW_TOOL,
   description:
-    'Run one of the workspace\'s workflows: a fixed sequence of subagent steps, such as review, then fix, then verify, from .g-code/workflows. It runs in the background, and its report arrives as a message when it ends. The user sees each step\'s cost cap and the total cap and confirms before anything runs. Use it only when the user asks for a workflow by name or for the job one does. Without a name it lists the workflows.',
+    'Run one of the workspace\'s workflows: a fixed sequence of subagent steps, such as review, then fix, then verify, from .g-code/workflows. It runs in the background, and its report arrives as a message when it ends. The user sees each step\'s cost cap and the total cap and confirms before anything runs. Use it only when the user asks you to run a workflow; never start one on your own. Without a name it lists the workflows.',
   input_schema: {
     type: 'object',
     properties: {

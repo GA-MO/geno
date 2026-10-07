@@ -32,6 +32,7 @@ export * from './permission-rules.js';
 export * from './classifier.js';
 export * from './auto.js';
 export * from './agent.js';
+export * from './agent-prompts.js';
 export * from './acp.js';
 export * from './inline-edit.js';
 export * from './mcp.js';

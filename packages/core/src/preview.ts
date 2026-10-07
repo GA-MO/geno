@@ -240,7 +240,7 @@ const nameProperty = (what: string) => ({ type: 'string', description: `The laun
 export const PREVIEW_TOOL_SPECS: Readonly<Record<PreviewToolName, Tool>> = {
   preview_start: {
     name: 'preview_start',
-    description: `Start the project's dev server from its launch file (${LAUNCH_FILES[1]} or ${LAUNCH_FILES[0]}), or reuse it if it already runs. The command runs in the background like bash with run_in_background, under the same approval, and this call waits up to ${PREVIEW_READY_TIMEOUT_S}s for its port to answer. Returns the URL to open with the browser tools. Without a launch file it explains how to write one.`,
+    description: `To check a change on the running app, start the project's dev server from its launch file (${LAUNCH_FILES[1]} or ${LAUNCH_FILES[0]}), or reuse it if it already runs. The command runs in the background like bash with run_in_background, under the same approval, and this call waits up to ${PREVIEW_READY_TIMEOUT_S}s for its port to answer. Returns the URL to open with the browser tools; preview_logs reads the server's errors, and preview_stop stops it. Without a launch file it explains how to write one.`,
     input_schema: {
       type: 'object',
       properties: { name: nameProperty('such as "web"; omit it when the launch file has one entry') },
