@@ -1,0 +1,31 @@
+{
+  "description": "Review the uncommitted changes, fix what the review found, run the check, then verify the fix.",
+  "input": "What to focus on, such as the auth module",
+  "maxCostUsd": 0.4,
+  "steps": [
+    {
+      "id": "review",
+      "role": "review",
+      "prompt": [
+        "Review the uncommitted changes in this repository (git diff HEAD). Focus: {{input}}",
+        "List only real problems: bugs, missing checks, broken types. Give each as path:line and one sentence."
+      ],
+      "schema": { "findings": "string[]" }
+    },
+    {
+      "id": "fix",
+      "role": "worker",
+      "prompt": ["Fix these findings, and nothing else:", "{{review.findings}}", "Say what you changed, file by file."],
+      "maxCostUsd": 0.15,
+      "maxTurns": 20
+    },
+    { "gate": "check" },
+    {
+      "id": "verify",
+      "role": "review",
+      "prompt": ["The findings were:", "{{review.findings}}", "", "The fix reported:", "{{fix}}", "", "Read the changed files and say whether each finding is fixed."],
+      "schema": { "pass": "boolean", "open": "string[]" }
+    },
+    { "gate": { "field": "verify.pass", "equals": true } }
+  ]
+}

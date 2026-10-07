@@ -1,0 +1,29 @@
+{
+  "description": "Review the changes from three angles at once, then fix each finding in turn and run the check.",
+  "input": "What to review, such as the uncommitted changes or a folder",
+  "maxCostUsd": 0.6,
+  "steps": [
+    {
+      "parallel": [
+        { "id": "security", "role": "review", "prompt": "Review {{input}} for security problems only: injection, secrets, unchecked input.", "schema": { "findings": "string[]" } },
+        { "id": "tests", "role": "review", "prompt": "Review {{input}} for missing or weak tests only.", "schema": { "findings": "string[]" } },
+        { "id": "types", "role": "review", "prompt": "Review {{input}} for type and null-safety problems only.", "schema": { "findings": "string[]" } }
+      ]
+    },
+    {
+      "id": "triage",
+      "role": "plan",
+      "prompt": ["Three reviews of {{input}}:", "{{parallel}}", "", "Merge them into at most 5 findings worth fixing, most important first, each as path:line and one sentence."],
+      "schema": { "findings": "string[]" }
+    },
+    {
+      "id": "fixes",
+      "pipeline": {
+        "items": "triage.findings",
+        "maxItems": 5,
+        "stages": [{ "id": "fix", "role": "worker", "prompt": "Fix this one finding, and nothing else: {{item}}", "maxCostUsd": 0.06, "maxTurns": 12 }]
+      }
+    },
+    { "gate": "check" }
+  ]
+}
