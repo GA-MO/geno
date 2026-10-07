@@ -33,6 +33,7 @@ import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
 import { noticeTexts, type Notice } from './notice.js';
+import { hookContextTexts, type HookContextEvent } from './hooks.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -249,6 +250,8 @@ export type TurnEvent =
   | CompactEvent
   /** A file the model read changed on disk; logged at the safe point before the model call that is told of it. */
   | FileChangedEvent
+  /** What a hook told the model, such as SessionStart's output (`hooks.ts`). */
+  | HookContextEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
@@ -281,6 +284,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   cut: false,
   compact: false,
   'file-changed': false,
+  'hook-context': false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
@@ -406,6 +410,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
       const environment = event.environment === undefined ? undefined : renderEnvironment(event.environment, event.session);
       opening = [loaded, memory, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
     }
+    if (event.kind === 'hook-context') (event.matched === 'startup' ? opening : notices).push(...hookContextTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });

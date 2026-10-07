@@ -6,6 +6,7 @@ import { compactedText, contextView, KEEP_TAIL_TOKENS, keepTailTokens, type Comp
 import { renderContextItems } from './context.js';
 import { textTokens } from './context-window.js';
 import { noticeTexts } from './notice.js';
+import { hookContextTexts } from './hooks.js';
 import { TOOL_SEARCH_TOOL } from './deferred-tools.js';
 import { replayMessages, restoredNotice, toolResultText, toolUsesOf, type Session, type Spend, type TurnEvent, type TurnEventKind } from './session.js';
 import type { TodoList } from './todo.js';
@@ -63,6 +64,7 @@ const EVENT_TOKENS: { readonly [K in TurnEventKind]: (event: EventOf<K>) => numb
   retry: none,
   mode: none,
   notice: (event) => textTokens(noticeTexts(event).join('\n')),
+  'hook-context': (event) => textTokens(hookContextTexts(event).join('\n')),
   effort: none,
   title: none,
   'lane-apply': none,

@@ -39,6 +39,8 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   review: true,
   spinoff: true,
   chapter: true,
+  // SessionStart's output is the session's context, like its start.
+  'hook-context': true,
   user: false,
   assistant: false,
   error: false,
