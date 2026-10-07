@@ -17,7 +17,8 @@
     "./wake": "./src/wake.ts",
     "./todo": "./src/todo.ts",
     "./spinoff": "./src/spinoff.ts",
-    "./compact": "./src/compact.ts"
+    "./compact": "./src/compact.ts",
+    "./schedule": "./src/schedule.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."
