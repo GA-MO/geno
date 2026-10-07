@@ -34,6 +34,9 @@ const initPrompt = (args: string): string =>
   ].join('\n');
 
 
+/** What `/workflow` logs as the user's prompt; the engine issues the `workflow` call itself, so no model reads it first. */
+const workflowPrompt = (args: string): string => (args === '' ? 'List the workflows.' : `Run the workflow ${args}`);
+
 export const BUILTIN_COMMANDS = {
   new: { description: 'Start a new chat', runs: 'client' },
   history: { description: 'Open a past chat', runs: 'client' },
@@ -46,6 +49,7 @@ export const BUILTIN_COMMANDS = {
   init: { description: 'Create or update AGENTS.md for this project', runs: 'engine', turn: initPrompt },
   'best-of-n': { description: 'Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models', hint: '<2-4> <task>', runs: 'client' },
   schedule: { description: 'Run a prompt later or on a schedule, as a background task', hint: '<when> [--edits] <prompt>', runs: 'engine' },
+  workflow: { description: 'Run a workflow from .g-code/workflows in the background, after its cost preview', hint: '<name> [input]', runs: 'engine', turn: workflowPrompt },
 } as const satisfies Record<string, BuiltinSpec>;
 
 export type BuiltinName = keyof typeof BUILTIN_COMMANDS;

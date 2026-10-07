@@ -789,10 +789,11 @@ function pipelineIndex(run: WorkflowRun, unit: WorkflowUnit): number {
   return sameRound.findIndex((u) => u.index === unit.index);
 }
 
-/** The user cancelled: every unit still running is cancelled, and nothing more starts. */
-export function cancelWorkflow(run: WorkflowRun): WorkflowRun {
+/** The user cancelled, or the run's session ended under it: every unit still running is cancelled, and nothing more starts. */
+export function cancelWorkflow(run: WorkflowRun, stop: WorkflowStop = { kind: 'cancelled' }): WorkflowRun {
   if (run.status !== 'running') return run;
-  return stopped({ ...run, units: run.units.map((u) => (u.status === 'running' ? { ...u, status: 'cancelled' as const, note: 'cancelled by the user' } : u)) }, { kind: 'cancelled' });
+  const note = stop.kind === 'cancelled' ? 'cancelled by the user' : 'its session ended';
+  return stopped({ ...run, units: run.units.map((u) => (u.status === 'running' ? { ...u, status: 'cancelled' as const, note } : u)) }, stop);
 }
 
 const CHECK_LINE = /^check `.*` (passed|failed \(exit [^)]+\)|timed out)$/m;

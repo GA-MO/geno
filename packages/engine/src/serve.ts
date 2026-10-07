@@ -23,6 +23,18 @@ import {
   scheduleListText,
   scheduleQuestion,
   SCHEDULES_CAPABILITY,
+  WORKFLOWS_CAPABILITY,
+  WORKFLOW_META,
+  WORKFLOW_REASON,
+  childReport,
+  previewQuestion,
+  ratesOf,
+  workflowEnd,
+  workflowProgress,
+  workflowReport,
+  type AgentDefinition,
+  type WorkflowPreview,
+  type WorkflowSpec,
   SCHEDULES_METHOD,
   SCHEDULES_UPDATE_METHOD,
   taskLine,
@@ -254,7 +266,7 @@ import { MemoryError, memoryStore } from './memory.js';
 import { permissionStore, rulesWorkspace } from './permissions.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Io } from './command.js';
-import { workspaceDir, type Limits, type Surface } from './drive.js';
+import { workspaceDir, type Director, type Limits, type Surface } from './drive.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
@@ -282,6 +294,9 @@ import { ghCli, githubRemote, lookUpPr } from './gh.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 import type { ScheduleTools } from './tools/schedule.js';
+import type { WorkflowTools } from './tools/workflow.js';
+import { WORKFLOW_TURNS, workflowDriver, workflowTools } from './workflows.js';
+import { loadAgents } from './subagents.js';
 import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner } from './schedules.js';
 import { pidAlive } from './wait-hooks.js';
 
@@ -371,6 +386,8 @@ type Peer = {
   readonly schedules: boolean;
   /** It draws chapters, so the model gets mark_chapter. */
   readonly chapters: boolean;
+  /** It shows a workflow's preview card and its progress in Tasks, so the model gets workflow and the user /workflow. */
+  readonly workflows: boolean;
 };
 
 const NO_PEER: Peer = {
@@ -389,6 +406,7 @@ const NO_PEER: Peer = {
   spinoffs: false,
   schedules: false,
   chapters: false,
+  workflows: false,
 };
 
 /**
@@ -561,6 +579,8 @@ type Turn = {
   readonly user: UserChannel;
   /** Asks the user about a change to a scheduled task, with its whole question; no rule or classifier answers it. */
   approveSchedule(question: string, signal: AbortSignal): Promise<ScheduleAnswer>;
+  /** Asks the user to run a workflow, with its preview on the card. */
+  approveWorkflow(preview: WorkflowPreview, signal: AbortSignal): Promise<boolean>;
   readonly updates: Updates;
   readonly live: LiveTurn;
   /** What the turn's model calls used so far, for the prompt response; nothing before the first call. */
@@ -734,13 +754,34 @@ function editorTurn(
       );
       return (outcome.outcome === 'selected' && SCHEDULE_ANSWERS[outcome.optionId]) || 'reject';
     },
+    async approveWorkflow(preview, signal) {
+      await sent.flush();
+      const question = previewQuestion(preview);
+      const rawInput: PermissionInput = { command: question, reason: WORKFLOW_REASON, description: `Run workflow ${preview.name}` };
+      const { outcome } = await askEditor(route, signal, 'permission', (viewer) =>
+        viewer.client.request(
+          acp.methods.client.session.requestPermission,
+          { sessionId: route.sessionId, toolCall: { toolCallId: running, title: question, kind: 'other', status: 'pending', rawInput, _meta: { [WORKFLOW_META]: preview } }, options: WORKFLOW_OPTIONS },
+          { cancellationSignal: signal },
+        ),
+      );
+      return outcome.outcome === 'selected' && outcome.optionId === 'allow';
+    },
   };
 }
 
+const WORKFLOW_OPTIONS: acp.PermissionOption[] = [
+  { optionId: 'allow', name: 'Run', kind: 'allow_once' },
+  { optionId: 'reject', name: "Don't run", kind: 'reject_once' },
+];
+
 type ScheduleAnswer = 'allow' | 'allow-session' | 'reject';
 
-/** A scheduled task's run: its budget, in place of the engine's limits, and a prompt that says nobody watches. */
-type ScheduledTurn = { readonly limits?: Limits | undefined; readonly scheduled?: boolean | undefined };
+/**
+ * A background turn the engine starts: a scheduled task's run, with its budget in place of the engine's limits and a
+ * prompt that says nobody watches, or a workflow's, whose director issues its rounds in place of the model.
+ */
+type ScheduledTurn = { readonly limits?: Limits | undefined; readonly scheduled?: boolean | undefined; readonly director?: Director | undefined };
 
 const schedulesRequest = z.object({ cwd: z.string() });
 const scheduleActRequest = z.object({ cwd: z.string(), id: z.string().min(1), action: z.enum(SCHEDULE_PANEL_ACTIONS) });
@@ -1254,6 +1295,60 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       zone: localZone,
     };
   };
+  /** The workflow tool of a session's turn: its workspace's workflows, priced on its model, each run a background session. */
+  const workflowToolsFor = (sessionId: string, session: Session, turn: Turn): WorkflowTools => {
+    const homes = homesOf(store, io.env);
+    return workflowTools({
+      workspace: session.workspace,
+      homes,
+      model: session.model,
+      rates: (model) => ratesOf(session.provider, model),
+      mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
+      agents: async () => (await loadAgents(session.workspace, homes, (await pluginsOf(session.workspace)).plugins)).agents,
+      approve: (preview, signal) => turn.approveWorkflow(preview, signal),
+      run: (spec, input, agents, toolUseId) => runWorkflow(sessionId, session, spec, input, agents, toolUseId),
+    });
+  };
+
+  /**
+   * A workflow's run, as a background session in the starting session's workspace and mode, its steps that session's
+   * children. Its report goes to the starting session as a background child's does: it wakes it, or, with auto-wake
+   * off, joins its running turn or its next one.
+   */
+  const runWorkflow = async (parentId: string, parent: Session, spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], toolUseId: string) => {
+    const driver = workflowDriver(spec, input, agents, parent.model, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)));
+    const prompt = `Run the workflow ${spec.name}${input === '' ? '.' : ` on: ${input}`}`;
+    const limits: Limits = { maxTurns: WORKFLOW_TURNS, maxCostUsd: spec.maxCostUsd };
+    const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director } });
+    let silent = false;
+    const paid = steers.of(parentId)?.owe() ?? (() => {});
+    const reported = wakes.autoWake
+      ? wakes.registry.child(parentId, id, {
+          agent: `workflow ${spec.name}`,
+          toolUseId,
+          silence: () => {
+            silent = true;
+            turns.get(id)?.abort();
+          },
+        })
+      : undefined;
+    void turn
+      .then(
+        ({ end }) => end === 'cancelled',
+        () => false,
+      )
+      .then(async (cancelled) => {
+        const run = driver.finish((await existing(id)).events, cancelled);
+        if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: childReport(`workflow ${spec.name}`, asSessionId(id), workflowEnd(run), workflowReport(run)) });
+      })
+      .catch((error: unknown) => io.err(`workflow ${spec.name} (${id}): could not report: ${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => {
+        paid();
+        reported?.();
+      });
+    return { sessionId: id };
+  };
+
   /** `/schedule`: the user's own request, so it needs no card. With no arguments it says how, and lists the tasks. */
   const scheduleCommand = async (sessionId: string, args: string): Promise<string> => {
     const workspace = await scheduleWorkspace((await existing(sessionId)).session.workspace);
@@ -1469,6 +1564,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 terminal: run.scheduled === true ? undefined : terminal,
                 schedules: from.peer.schedules && run.scheduled !== true ? await scheduleToolsFor(sessionId, header.session.workspace, shown) : undefined,
                 scheduled: run.scheduled,
+                director: run.director,
+                workflows: from.peer.workflows && run.scheduled !== true && run.director === undefined ? workflowToolsFor(sessionId, header.session, shown) : undefined,
                 externals,
                 keyOf: keyOf(sessionId),
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
@@ -1700,6 +1797,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         spinoffs: _meta?.[SPINOFF_CAPABILITY] === true,
         schedules: _meta?.[SCHEDULES_CAPABILITY] === true,
         chapters: _meta?.[CHAPTER_CAPABILITY] === true,
+        workflows: _meta?.[WORKFLOWS_CAPABILITY] === true,
       };
       runner ??= { connection: self(), start: startScheduled };
       schedules.connected(runner);

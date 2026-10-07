@@ -28,11 +28,26 @@ export type Mode = {
   readonly beforeCall?: (events: readonly TurnEvent[]) => Promise<TurnEvent>;
   /** How each call's effort follows from the session's; undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy;
-  /** A tool call the user typed, such as `@explore`: logged in place of the first model call, and the run ends once its tools ran. */
-  readonly issued?: AssistantTurn;
+  /**
+   * Calls the user issued, in place of the model: `@explore`'s one call, or a workflow's rounds. Asked at each point
+   * the model would be called, it answers with the turn to log, or undefined to end the run.
+   */
+  readonly director?: Director;
   /** What reached the session from outside the loop since the last call: taken at the one safe point, before each model call. */
   readonly arrivals?: () => readonly Arrival[];
 };
+
+export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
+
+/** One turn the user issued, such as `@explore <question>`: the run ends once its tools ran. */
+export function issuedOnce(turn: AssistantTurn): Director {
+  let left: AssistantTurn | undefined = turn;
+  return () => {
+    const next = left;
+    left = undefined;
+    return next;
+  };
+}
 
 /**
  * `countFrom` counts the limits from an earlier event than this run's first: a woken turn shares the limits of the
@@ -280,7 +295,6 @@ export async function drive(
     return undefined;
   };
 
-  let issued = mode.issued;
   const loaded = new Map<Sha256, string>();
   const compactAt = compactAtOf(io.env, session);
   // True when a compaction was logged; a failed or empty one leaves the context as it was.
@@ -381,11 +395,11 @@ export async function drive(
       }
     }
     if (step.kind === 'done' && held === undefined) return end(step.reason);
-    if (step.kind === 'call-model' && issued !== undefined) {
+    if (step.kind === 'call-model' && mode.director !== undefined) {
+      const issued = mode.director(events);
+      if (issued === undefined) return end('end_turn');
       await record({ kind: 'assistant', seq: nextSeq(events), at: new Date().toISOString(), ...issued, issuedBy: 'user' });
-      issued = undefined;
-    } else if (step.kind === 'call-model' && mode.issued !== undefined) return end('end_turn');
-    else if (step.kind === 'call-model' || held !== undefined) {
+    } else if (step.kind === 'call-model' || held !== undefined) {
       // A delivery changed the log, so the loop looks at it again, and a limit still applies.
       if (!(await deliver()) && step.kind === 'call-model') await callModel();
     } else if (step.kind === 'run-tools') {
