@@ -23,7 +23,8 @@
     "./chapters": "./src/chapters.ts",
     "./compact": "./src/compact.ts",
     "./schedule": "./src/schedule.ts",
-    "./cron": "./src/cron.ts"
+    "./cron": "./src/cron.ts",
+    "./workflow": "./src/workflow.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."
