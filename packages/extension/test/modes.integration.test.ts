@@ -1,10 +1,10 @@
-import { access, mkdir } from 'node:fs/promises';
+import { access, mkdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL } from '@g-code/core';
+import { CLASSIFIER_TOOL, MODE_NOTICES } from '@g-code/core';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
@@ -36,12 +36,16 @@ const replies: readonly Reply[] = [
   asModel(answer('Cleaned the build; dist needs your OK, and I left a.ts alone.', usage)),
   // Denied in Ask, which ends the turn with no answer after it.
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
-  toolCall('Looking around first.', [bash('ls')], usage),
+  // A model that tries to edit in Plan: every mode offers edit, and Plan refuses the call.
+  toolCall('Looking around first.', [bash('ls'), { id: 'tu_edit_plan', name: 'edit', input: { path: 'a.ts', old_str: 'export const a', new_str: 'export const answer' } }], usage),
   asModel(answer(PLAN, usage)),
   asModel(answer('Renamed it.', usage)),
 ];
 
-const requests: { tool_choice?: unknown; tools: { name: string }[]; messages: { content: { type: string; text?: string }[] }[] }[] = [];
+type Block = { type: string; text?: string; tool_use_id?: string; is_error?: boolean; content?: unknown };
+const requests: { tool_choice?: unknown; system: unknown; tools: { name: string }[]; messages: { content: Block[] }[] }[] = [];
+const lastBlocks = (index: number) => requests[index]!.messages.at(-1)!.content;
+const lastTexts = (index: number) => lastBlocks(index).flatMap((b) => (b.type === 'text' && b.text !== undefined ? [b.text] : []));
 const toolNames = (index: number) => requests[index]!.tools.map((t) => t.name);
 const shots = process.env['GCODE_SCREENSHOTS'];
 let debugPort = 0;
@@ -125,13 +129,17 @@ describe('Ask and Auto in the chat panel', () => {
     expect(requests).toHaveLength(replies.length);
     // Auto asked the classifier three times; Ask and Plan never did.
     expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false, false, false]);
-    expect(toolNames(8)).not.toContain('edit');
-    expect(toolNames(9)).not.toContain('edit');
-    // Start building left Plan for the configured default, Auto, and sent the follow-up.
-    expect(toolNames(10)).toContain('edit');
-    expect(requests[10]!.messages.at(-1)!.content.at(-1)).toMatchObject({ type: 'text', text: FOLLOW_UP });
+    // Every mode offers the same tools and system prompt, so a switch keeps the cached prefix; the notice tells the mode.
+    for (const i of [8, 9, 10]) expect(toolNames(i), `request ${i} offers the tools of request 0`).toEqual(toolNames(0));
+    for (const i of [8, 9, 10]) expect(requests[i]!.system, `request ${i} keeps the system prompt`).toEqual(requests[0]!.system);
+    expect(lastTexts(8), 'the Plan turn tells the model it is in Plan').toContain(MODE_NOTICES.plan);
+    const refused = lastBlocks(9).find((b) => b.type === 'tool_result' && b.tool_use_id === 'tu_edit_plan');
+    expect(refused, 'Plan refuses the edit when it is called').toMatchObject({ is_error: true });
+    expect(JSON.stringify(refused?.content)).toContain('edit is not available: Plan mode is read-only');
+    expect(await readFile(path.join(workspace, 'a.ts'), 'utf8'), 'and a.ts is unchanged').toBe(FILES['a.ts']);
+    // Start building left Plan for the configured default, Auto, told the model so, and sent the follow-up.
+    expect(lastTexts(10)).toEqual([MODE_NOTICES.auto, FOLLOW_UP]);
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
     expect(await exists(path.join(workspace, 'dist'))).toBe(true);
-    expect(await exists(path.join(workspace, 'a.ts'))).toBe(true);
   }, 600_000);
 });

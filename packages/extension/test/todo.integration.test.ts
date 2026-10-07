@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MODE_NOTICES } from '@g-code/core';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
@@ -141,7 +142,8 @@ describe('the todo list in VS Code', () => {
     expect(code).toBe(0);
     expect(requests).toHaveLength(SCRIPT.length);
     expect(requests[0]!.tools?.map((t) => t.name), 'Plan offers the todo tool').toContain('todo');
-    expect(requests[0]!.tools?.map((t) => t.name), 'and no edit').not.toContain('edit');
+    expect(JSON.stringify(requests[0]!.messages), 'the plan turn ran in Plan').toContain(JSON.stringify(MODE_NOTICES.plan));
+    expect(JSON.stringify(requests[2]!.messages.at(-1)), 'and the building turn outside it').toContain(JSON.stringify(MODE_NOTICES.auto));
     expect(todoInputs(requests[2]!), "the building turn's model sees the plan's list").toEqual([JSON.stringify({ items: LISTS.planned })]);
   }, 600_000);
 });
