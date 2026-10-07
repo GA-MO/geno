@@ -5,6 +5,7 @@ import type { Parsed } from './ask-user.js';
 import type { Rates } from './cost.js';
 import { costAt } from './cost.js';
 import { formatUsd as usd } from './spend-view.js';
+import type { WorkflowProgress, WorkflowStatus } from './workflow-progress.js';
 import { ZERO_USAGE, type AssistantTurn, type TurnEvent } from './session.js';
 import { AGENT_TOOL, childEndWords, DEFAULT_CHILD_CAPS, isReadOnly, type AgentDefinition, type ChildCaps, type ChildEnd } from './subagent.js';
 
@@ -562,7 +563,6 @@ export type WorkflowStop =
   | { readonly kind: 'gate'; readonly unit: string; readonly why: string }
   | { readonly kind: 'cancelled' };
 
-export type WorkflowStatus = 'running' | 'done' | 'stopped' | 'cancelled';
 
 export type StepOutput = { readonly report: string; readonly fields: Readonly<Record<string, FieldValue>> | undefined };
 
@@ -905,19 +905,6 @@ export function workflowEnd(run: WorkflowRun): ChildEnd {
   return { kind: 'failed', reason: run.stop === undefined ? 'it ended early' : stopWords(run.stop) };
 }
 
-/** What Tasks shows of a running workflow. `step` is 1-based, over the file's steps. */
-export type WorkflowProgress = {
-  readonly name: string;
-  readonly step: number;
-  readonly steps: number;
-  readonly running: readonly string[];
-  readonly spentUsd: number;
-  readonly capUsd: number;
-  readonly status: WorkflowStatus;
-  /** Why it stopped, in words; absent while it runs or once it finished. */
-  readonly stop?: string | undefined;
-};
-
 export function workflowProgress(run: WorkflowRun): WorkflowProgress {
   return {
     name: run.spec.name,
@@ -929,15 +916,6 @@ export function workflowProgress(run: WorkflowRun): WorkflowProgress {
     status: run.status,
     ...(run.stop === undefined ? {} : { stop: stopWords(run.stop) }),
   };
-}
-
-/** One line for a Tasks row: "Step 2 of 4: fix · $0.01 of $0.40". */
-export function progressLine(progress: WorkflowProgress): string {
-  const money = `${usd(progress.spentUsd)} of ${usd(progress.capUsd)}`;
-  if (progress.status === 'done') return `Finished ${progress.steps} ${progress.steps === 1 ? 'step' : 'steps'} · ${money}`;
-  if (progress.stop !== undefined) return `Step ${progress.step} of ${progress.steps}: ${progress.stop} · ${money}`;
-  const what = progress.running.length === 0 ? '' : `: ${progress.running.join(', ')}`;
-  return `Step ${progress.step} of ${progress.steps}${what} · ${money}`;
 }
 
 export const WORKFLOW_TOOL_SPEC: Tool = {

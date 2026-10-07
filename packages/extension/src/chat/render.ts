@@ -8,6 +8,7 @@ import { showsTokens, turnCost } from './backend-model.js';
 import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { answerWords, settledLine } from './question-model.js';
 import { questionCard } from './question-view.js';
+import { workflowCardBody } from './workflow-view.js';
 import type { ChangedFile } from './fold.js';
 import { headerOf, type EditTool, type Step } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
@@ -469,6 +470,7 @@ const SCOPE_TEXT = {
 } as const;
 
 const MEMORY_LABELS: Readonly<Record<string, string>> = { allow_once: 'Remember', reject_once: "Don't remember" };
+const WORKFLOW_LABELS: Readonly<Record<string, string>> = { allow_once: 'Run', reject_once: "Don't run" };
 
 /** How each kind of waiting card reads: a command to run, a note to keep, or a question to answer. */
 const COMMAND_FACE: CardFace = {
@@ -510,6 +512,16 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
     actions: (block, ui) => choiceButtons(block, ui, MEMORY_LABELS),
     settled: (block) => [
       block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Remembered') : outcomeLine(false, 'close', 'Not remembered'),
+    ],
+  },
+  workflow: {
+    label: 'Geno asks to run a workflow',
+    glyph: 'run-all',
+    title: 'Run this workflow?',
+    body: (block) => (block.ask?.kind === 'workflow' ? workflowCardBody(block.ask.preview) : []),
+    actions: (block, ui) => choiceButtons(block, ui, WORKFLOW_LABELS),
+    settled: (block) => [
+      block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Started, in Tasks') : outcomeLine(false, 'close', 'Not run'),
     ],
   },
   question: {

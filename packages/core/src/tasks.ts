@@ -6,7 +6,7 @@ import type { ForkOrigin } from './rewind.js';
 import type { TurnEvent } from './session.js';
 import type { Waiting } from './waiting.js';
 import type { WakeView } from './wake.js';
-import type { WorkflowProgress } from './workflow.js';
+import type { WorkflowProgress } from './workflow-progress.js';
 
 /**
  * Background sessions. The engine runs as one process per workspace that outlives the editor's window, so a turn goes

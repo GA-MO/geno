@@ -21,6 +21,7 @@ import {
   INLINE_EDIT_META,
   MEMORY_SCOPES,
   REMEMBER_META,
+  WORKFLOW_META,
   RENAME_SESSION_METHOD,
   SEARCH_SESSIONS_METHOD,
   type SearchSessionsRequest,
@@ -112,6 +113,7 @@ import { ComposerHost } from './composer-host.js';
 import type { SeenStore } from './seen.js';
 import { TaskHost } from './tasks-host.js';
 import { schedulesUpdate } from './schedule-wire.js';
+import { workflowPreviewWire } from './workflow-wire.js';
 import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
@@ -1339,6 +1341,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       const input = permissionInput.safeParse(toolCall.rawInput);
       const { command, reason, description, rule } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined };
       const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
+      const workflow = workflowPreviewWire.safeParse(toolCall._meta?.[WORKFLOW_META]);
       this.dispatch({
         type: 'permission',
         id,
@@ -1347,7 +1350,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         ...(description === undefined ? {} : { description }),
         options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),
         classifier: classifierReasonOf(toolCall.title),
-        ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : {}),
+        ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : workflow.success ? { ask: { kind: 'workflow', preview: workflow.data } } : {}),
         toolId: toolCall.toolCallId,
         ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
         ...(rule === undefined ? {} : { rule }),

@@ -3,6 +3,7 @@ import { isWaking, placeTasks, SECTIONS } from '@g-code/core/attention';
 import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
 import { WAKE_PAUSE_TEXT, waitsForText } from '@g-code/core/wake';
+import { progressLine } from '@g-code/core/workflow-progress';
 import { clockOf, formatCost, formatDuration } from './format.js';
 
 /**
@@ -137,6 +138,8 @@ export type TaskRow = {
   readonly forkedFrom: { readonly id: string; readonly title: string; readonly workspace: string } | undefined;
   /** What will wake the session after its turn, in words, with Cancel; undefined while it waits on nothing. */
   readonly wakes: string | undefined;
+  /** How far the session's workflow got and what it spent, in words; undefined for any other session. */
+  readonly workflow: string | undefined;
 };
 
 /** A row in Needs you says what the user is to do, which may be a child's question on a running parent. */
@@ -186,6 +189,7 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: jobLabel(job) })),
     forkedFrom: task.forkedFrom === undefined ? undefined : { id: task.forkedFrom.sessionId, title: task.forkedFrom.title, workspace: task.workspace },
     wakes: wakesOf(task, clock),
+    workflow: task.workflow === undefined ? undefined : progressLine(task.workflow),
   };
 }
 
