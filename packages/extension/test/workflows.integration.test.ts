@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, handBack, sseBody, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -63,7 +63,9 @@ const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Prom
     }
     requests.set(marker, [...(requests.get(marker) ?? []), body]);
     if (marker === SLOW_STEP) await new Promise((resolve) => setTimeout(resolve, SLOW_MS));
-    res.writeHead(200, { 'content-type': 'text/event-stream' }).end(sseBody(asModel(answer(ANSWERS[marker]!, usage))));
+    // A step is a child, which hands its report back through the report tool; the starting session answers.
+    const reply = marker.startsWith('[wf-') ? handBack(ANSWERS[marker]!, usage) : answer(ANSWERS[marker]!, usage);
+    res.writeHead(200, { 'content-type': 'text/event-stream' }).end(sseBody(asModel(reply)));
   },
   'POST /fail': async (req, res) => {
     failure = await bodyOf(req);

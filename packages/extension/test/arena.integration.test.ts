@@ -6,7 +6,7 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SEEDS } from '@g-code/core';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, handBack, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel } from './media.js';
@@ -52,7 +52,7 @@ const SCRIPTS: Readonly<Record<'A' | 'B' | 'C' | 'review', readonly Scripted[]>>
   review: [
     {
       reply: asModel(
-        answer(['B wins.', '```json', JSON.stringify({ ranking: [{ lane: 'B', reason: REASONS.B }, { lane: 'A', reason: REASONS.A }], summary: SUMMARY }), '```'].join('\n'), usage),
+        handBack(['B wins.', '```json', JSON.stringify({ ranking: [{ lane: 'B', reason: REASONS.B }, { lane: 'A', reason: REASONS.A }], summary: SUMMARY }), '```'].join('\n'), usage),
       ),
       hold: 'review',
     },
