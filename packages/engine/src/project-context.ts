@@ -1,8 +1,22 @@
 // Portions ported from Pi (https://github.com/earendil-works/pi) at b2b5c42, Copyright (c) 2025 Mario Zechner, MIT License.
 
+import { execFile } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { isSecretPath, stripHidden, type InstructionFile, type LoadedContext, type ProjectRule, type RuleTrigger, type SkillEntry } from '@g-code/core';
+import { promisify } from 'node:util';
+import {
+  isSecretPath,
+  stripHidden,
+  type InstructionFile,
+  type LoadedContext,
+  type NestedInstructionFile,
+  type ProjectRule,
+  type RuleTrigger,
+  type SkillEntry,
+} from '@g-code/core';
+import { comparePaths } from './tools/ripgrep.js';
+
+const execFileAsync = promisify(execFile);
 
 /** Per directory the first of these that is a file wins. */
 const INSTRUCTION_NAMES = ['AGENTS.override.md', 'AGENTS.md', 'CLAUDE.md'] as const;
@@ -13,6 +27,8 @@ const MAX_INSTRUCTION_BYTES = 4 * 1024 * 1024;
 /** How many `@path` hops below a loaded file are followed, as in Claude Code. */
 const MAX_IMPORT_DEPTH = 4;
 const RULES_DIR = path.join('.cursor', 'rules');
+/** Listing the workspace for nested instruction files stops after this, so a huge tree outside a repository cannot stall a session's start. */
+const NESTED_SCAN_MS = 5_000;
 export const SKILL_ROOTS = [path.join('.agents', 'skills'), path.join('.claude', 'skills')] as const;
 
 const clean = (text: string): string => stripHidden(text.replace(/\r\n?/g, '\n'));
@@ -194,6 +210,58 @@ async function loadLayer(walk: Walk, roots: readonly Root[]): Promise<Instructio
   return loaded;
 }
 
+type ExecFailure = Error & { readonly code?: number | string; readonly killed?: boolean; readonly stdout?: string };
+
+/**
+ * Below the workspace, each directory's instruction file by the same precedence as above it, outer directories first.
+ * ripgrep lists the candidates and skips `.git`, `node_modules`, what the repository ignores, and symlinks.
+ */
+async function nestedInstructionPaths(workspace: string, rg: string): Promise<{ readonly files: readonly string[] } | { readonly why: string }> {
+  const names: readonly string[] = INSTRUCTION_NAMES;
+  const args = ['--files', '--hidden', '--no-config', '--glob', '!.git', '--glob', '!node_modules', ...names.flatMap((name) => ['--glob', name]), '--', '.'];
+  let listed: string;
+  try {
+    listed = (await execFileAsync(rg, args, { cwd: workspace, timeout: NESTED_SCAN_MS, maxBuffer: 64 * 1024 * 1024 })).stdout;
+  } catch (error) {
+    const failure = error as ExecFailure;
+    if (failure.code === 'ENOENT') return { why: `ripgrep (${rg}) is not installed or not on PATH` };
+    if (failure.killed === true) return { why: `listing the workspace took over ${NESTED_SCAN_MS / 1000} s` };
+    // ripgrep exits 1 when nothing matched, and 2 after an unreadable directory, still listing the rest.
+    if (typeof failure.code !== 'number') return { why: `ripgrep failed: ${failure.message}` };
+    listed = failure.stdout ?? '';
+  }
+  const chosen = new Map<string, string>();
+  for (const line of listed.split('\n')) {
+    const file = line.replace(/^\.\//, '');
+    const dir = path.posix.dirname(file);
+    const name = path.posix.basename(file);
+    if (dir === '.' || !names.includes(name)) continue;
+    const held = chosen.get(dir);
+    if (held === undefined || names.indexOf(name) < names.indexOf(held)) chosen.set(dir, name);
+  }
+  return { files: [...chosen].toSorted(([a], [b]) => comparePaths(a, b)).map(([dir, name]) => `${dir}/${name}`) };
+}
+
+/**
+ * Each nested file with its imports, by the rules of the files the session opens with, and never one of those. A file
+ * two directories import is listed under each, with its importer there; the attacher hands it out once.
+ */
+async function loadNested(walk: Walk, rg: string): Promise<NestedInstructionFile[]> {
+  const found = await nestedInstructionPaths(walk.workspace, rg);
+  if ('why' in found) {
+    walk.problems.push(`nested instruction files not loaded: ${found.why}`);
+    return [];
+  }
+  const opened = new Set(walk.seen);
+  const nested: NestedInstructionFile[] = [];
+  for (const file of found.files) {
+    const absolute = path.join(walk.workspace, file);
+    const loaded = await withImports({ ...walk, seen: new Set(opened) }, { file: absolute, scope: walk.workspace }, absolute, undefined, 0);
+    nested.push(...loaded.filter((each) => each.text.trim() !== '').map((each) => ({ ...each, dir: path.posix.dirname(file) })));
+  }
+  return nested;
+}
+
 export type Frontmatter = { readonly fields: Readonly<Record<string, string | readonly string[]>>; readonly body: string };
 
 /** A double-quoted value keeps YAML's escaped quotes and backslashes, as pstack's descriptions use them. */
@@ -297,13 +365,16 @@ export async function ensureGlobalRules(home: string): Promise<string> {
 /** What a session loads, and a line for the user about each file it skipped. */
 export type ContextScan = { readonly context: LoadedContext; readonly problems: readonly string[] };
 
-/** `user` names where the user's own files live, which load first; undefined loads only the workspace's context. */
-export async function loadProjectContext(workspace: string, user?: UserDirs): Promise<ContextScan> {
+/**
+ * `user` names where the user's own files live, which load first; undefined loads only the workspace's context. `rg`
+ * is the ripgrep that lists the nested instruction files.
+ */
+export async function loadProjectContext(workspace: string, user?: UserDirs, rg = 'rg'): Promise<ContextScan> {
   const root = await canonical(workspace);
   const walk: Walk = { workspace: root, home: user?.home, seen: new Set(), problems: [] };
   // The user's files go first, so a project file that is one of them, or imports one, does not load it again.
   const own = user === undefined ? [] : await loadLayer(walk, userRoots(user));
   const instructions = await loadLayer(walk, await projectRoots(root));
-  const [rules, skills] = await Promise.all([loadCursorRules(root), loadSkills(root)]);
-  return { context: { ...(own.length === 0 ? {} : { user: own }), instructions, rules, skills }, problems: walk.problems };
+  const [nested, rules, skills] = await Promise.all([loadNested(walk, rg), loadCursorRules(root), loadSkills(root)]);
+  return { context: { ...(own.length === 0 ? {} : { user: own }), instructions, rules, skills, ...(nested.length === 0 ? {} : { nested }) }, problems: walk.problems };
 }

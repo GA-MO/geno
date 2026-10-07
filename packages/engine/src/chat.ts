@@ -88,7 +88,7 @@ async function newSession(
   // Loaded once and logged, so every later turn and a resumed session send the same text.
   const env = io.env;
   const [{ context, problems }, memory, environment] = await Promise.all([
-    loadProjectContext(workspace, { app: homeOf(store), home: env['HOME'] || undefined, claude: claudeDirOf(env) }),
+    loadProjectContext(workspace, { app: homeOf(store), home: env['HOME'] || undefined, claude: claudeDirOf(env) }, env['GCODE_RG'] || 'rg'),
     memoryStore(homeOf(store), workspace).list(),
     captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
   ]);
@@ -255,7 +255,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...(context === undefined || isEmptyContext(context)
       ? []
       : [
-          `context: ${[...context.instructions.map((f) => f.path), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
+          `context: ${[...context.instructions.map((f) => f.path), ...(context.nested ?? []).map((f) => `${f.path} (nested)`), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
         ]),
   ],
   user: ({ seq, content, context, attachments, wake }) => [

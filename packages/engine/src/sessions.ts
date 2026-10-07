@@ -116,6 +116,7 @@ const loadedContextSchema = z.strictObject({
     }),
   ),
   skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string().min(1), path: z.string().min(1) })),
+  nested: z.array(instructionFileSchema.extend({ dir: z.string().min(1) })).optional(),
 });
 
 const environmentSchema = z.strictObject({
@@ -146,7 +147,7 @@ const contextItemSchema = z.discriminatedUnion('kind', [
     endLine: z.number().int().positive(),
     text: z.string(),
   }),
-  z.strictObject({ kind: z.literal('rule'), path: z.string().min(1), matched: z.string().min(1), text: z.string() }),
+  z.strictObject({ kind: z.literal('rule'), path: z.string().min(1), matched: z.string().min(1), text: z.string(), importedFrom: z.string().min(1).optional() }),
   z.strictObject({ kind: z.literal('skill'), name: z.string().min(1), path: z.string().min(1), text: z.string() }),
 ]);
 

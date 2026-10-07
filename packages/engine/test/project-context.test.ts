@@ -227,6 +227,74 @@ describe('layers and imports', () => {
   });
 });
 
+describe('nested instruction files', () => {
+  it('registers one file per directory below the workspace, outer first, skipping node_modules, .git and ignored directories', async () => {
+    const root = await tree({
+      'AGENTS.md': 'Root, loaded at the start.',
+      '.gitignore': 'build/\n',
+      'pkg/AGENTS.md': 'Package.​‮\r\n',
+      'pkg/CLAUDE.md': 'not beside AGENTS.md',
+      'pkg/sub/CLAUDE.md': 'Sub.',
+      'pkg-two/AGENTS.override.md': 'Override.',
+      'pkg-two/AGENTS.md': 'not beside the override',
+      '.github/AGENTS.md': 'Workflows.',
+      'node_modules/dep/AGENTS.md': 'a dependency',
+      'build/AGENTS.md': 'ignored',
+      'empty/CLAUDE.md': ' \n',
+      'docs/AGENTS.md/x': '',
+    });
+    git(root, 'init', '-q');
+    const { context, problems } = await loadProjectContext(root);
+    expect(context.instructions).toEqual([{ path: 'AGENTS.md', text: 'Root, loaded at the start.' }]);
+    expect(context.nested).toEqual([
+      { path: '.github/AGENTS.md', text: 'Workflows.', dir: '.github' },
+      { path: 'pkg/AGENTS.md', text: 'Package.\n', dir: 'pkg' },
+      { path: 'pkg/sub/CLAUDE.md', text: 'Sub.', dir: 'pkg/sub' },
+      { path: 'pkg-two/AGENTS.override.md', text: 'Override.', dir: 'pkg-two' },
+    ]);
+    expect(problems).toEqual([]);
+  });
+
+  it("follows a nested file's imports by P8's rules: under each directory that imports it, never a file the opening loaded, never outside the workspace or a credentials file", async () => {
+    const root = await tree({
+      'ws/AGENTS.md': '@docs/shared.md',
+      'ws/docs/shared.md': 'Shared, loaded at the start.',
+      'ws/docs/style.md': 'Style.',
+      'ws/.env': 'API_KEY=sk-live-123',
+      'ws/a/AGENTS.md': '@../docs/style.md\n@../docs/shared.md\n@../.env\n@../../outside.md',
+      'ws/b/AGENTS.md': '@../docs/style.md',
+      'outside.md': 'Outside.',
+    });
+    const workspace = path.join(root, 'ws');
+    const { context, problems } = await loadProjectContext(workspace);
+    expect(context.nested).toEqual([
+      { path: 'a/AGENTS.md', text: '@../docs/style.md\n@../docs/shared.md\n@../.env\n@../../outside.md', dir: 'a' },
+      { path: 'docs/style.md', text: 'Style.', importedFrom: 'a/AGENTS.md', dir: 'a' },
+      { path: 'b/AGENTS.md', text: '@../docs/style.md', dir: 'b' },
+      { path: 'docs/style.md', text: 'Style.', importedFrom: 'b/AGENTS.md', dir: 'b' },
+    ]);
+    expect(problems).toEqual([
+      'a/AGENTS.md: @../.env skipped, it names a credentials file',
+      `a/AGENTS.md: @../../outside.md skipped, a project file can import only files under ${workspace}`,
+    ]);
+  });
+
+  it('leaves out a nested file the opening already loaded through an import', async () => {
+    const root = await tree({ 'AGENTS.md': '@pkg/AGENTS.md', 'pkg/AGENTS.md': 'Package.' });
+    const { context } = await loadProjectContext(root);
+    expect(context.instructions.map((file) => file.path)).toEqual(['AGENTS.md', 'pkg/AGENTS.md']);
+    expect(context.nested).toBeUndefined();
+  });
+
+  it('says nested files did not load when ripgrep is missing', async () => {
+    const root = await tree({ 'pkg/AGENTS.md': 'Package.' });
+    const rg = path.join(root, 'no-rg');
+    const { context, problems } = await loadProjectContext(root, undefined, rg);
+    expect(context.nested).toBeUndefined();
+    expect(problems).toEqual([`nested instruction files not loaded: ripgrep (${rg}) is not installed or not on PATH`]);
+  });
+});
+
 describe('.cursor/rules', () => {
   it('sorts rules by when they apply and drops manual ones', async () => {
     const root = await tree({
