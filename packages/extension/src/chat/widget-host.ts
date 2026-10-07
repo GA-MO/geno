@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { FromWidgetTab, ToolWidget, ToWidgetTab, WidgetFromView } from './messages.js';
 import { pageHtml } from './page.js';
-import { standaloneDocument, webLink, type WidgetTheme } from './widget-frame.js';
+import { standaloneDocument, webLink, type WidgetTheme } from '@g-code/core/widget-frame';
 
 export const WIDGET_VIEW = 'gcode.widget';
 

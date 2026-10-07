@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connectWindow, evaluate, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { freePort } from './screenshot.js';
-import { frameCsp, frameDocument, WIDGET_SANDBOX } from '../src/chat/widget-frame.js';
+import { frameCsp, frameDocument, WIDGET_SANDBOX } from '@g-code/core/widget-frame';
 import { ATTACK_NAMES, ATTACKS } from './suite/widget-attacks.js';
 import { bypassCsp, inWidget } from './widget-cdp.js';
 
