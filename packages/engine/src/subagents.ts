@@ -230,7 +230,13 @@ const asker = (approval: Approval, name: string, sessionId: SessionId): Approval
 export function subagents(env: SubagentEnv): Subagents {
   const { io, store, parent, agents } = env;
   const parallel = semaphore(MAX_PARALLEL_CHILDREN);
+  // Each child until its end is logged, so `settled` never returns while an end is still on its way to the log.
   const running = new Set<Promise<unknown>>();
+  const track = <T>(work: Promise<T>): Promise<T> => {
+    running.add(work);
+    void work.finally(() => running.delete(work)).catch(() => {});
+    return work;
+  };
   let committed = 0;
   const byName = (name: string) => agents.find((agent) => agent.name === name);
   // Every child this run started, running or not, so message_agent can tell a finished one from a wrong id.
@@ -273,6 +279,8 @@ export function subagents(env: SubagentEnv): Subagents {
         kind: 'session-start',
         session,
         context: header?.kind === 'session-start' ? header.context : undefined,
+        // The parent's, so a child knows where it runs; it shares the parent's scratchpad.
+        environment: header?.kind === 'session-start' ? header.environment : undefined,
         child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start },
       },
       ...(start === 'fork' ? forkOpening(parentEvents, use.id, session.createdAt) : []),
@@ -371,17 +379,20 @@ export function subagents(env: SubagentEnv): Subagents {
       if (background === true) inBackground.add(stop);
       const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
       const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox, step));
-      running.add(child);
       void child
         .finally(() => {
-          running.delete(child);
           inBackground.delete(stop);
           env.steers.release(id, inbox);
         })
         .catch(() => {});
       if (background !== true) {
-        const { text, ended, failed, rejected } = await child;
-        await ctx.logNote({ ...ended });
+        // Tracked until its end is logged, which can come after a stopped run answered this call.
+        const { text, failed, rejected } = await track(
+          child.then(async (outcome) => {
+            await ctx.logNote!({ ...outcome.ended });
+            return outcome;
+          }),
+        );
         if (failed) throw new ToolError(text);
         // The user's no to the child's call is a no to this one too, so the parent stops as well.
         if (rejected) throw new ToolRejected(`${text}\n${name} stopped because the user rejected one of its calls. ${STOP_AND_WAIT}`);
@@ -409,9 +420,11 @@ export function subagents(env: SubagentEnv): Subagents {
         paid();
         reported?.();
       };
-      void child.then(
-        ({ text, ended }) => report(text, ended),
-        (error: unknown) => report(error instanceof Error ? error.message : String(error), undefined),
+      void track(
+        child.then(
+          ({ text, ended }) => report(text, ended),
+          (error: unknown) => report(error instanceof Error ? error.message : String(error), undefined),
+        ),
       );
       return `Started ${name} in the background as subagent session ${id}. Its report arrives as a message when it finishes; until then message_agent with agent_session "${id}" can steer it.`;
     },
