@@ -143,6 +143,7 @@ describe('a plugin root as a read-only root', () => {
     const ctx: ToolContext = {
       workspace: fixture.workspace,
       spillDir: path.join(fixture.root, 'spill'),
+      spillChars: 24_000,
       attachmentsDir: path.join(fixture.root, 'spill', 'attachments'),
       readRoots: [fixture.pluginRoot],
       rg: rgCommand(),

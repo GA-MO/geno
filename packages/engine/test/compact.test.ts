@@ -4,8 +4,9 @@ import { compactAtOf } from '../src/compact.js';
 const flash = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const;
 
 describe('where a session compacts on its own', () => {
-  it("is 80% of the model's window by default", () => {
+  it("is the model's own compaction point from its capability record", () => {
     expect(compactAtOf({}, flash)).toBe(800_000);
+    expect(compactAtOf({}, { provider: 'anthropic', model: 'claude-haiku-4-5' })).toBe(160_000);
   });
 
   it('is never for a model whose window Geno does not know', () => {

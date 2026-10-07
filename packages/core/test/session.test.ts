@@ -195,8 +195,50 @@ describe('buildRequest', () => {
         ],
       },
     ]);
-    expect(request).toMatchObject({ model: session.model, max_tokens: 64000, output_config: { effort: 'medium' } });
+    expect(request).toMatchObject({ model: session.model, max_tokens: 128_000, output_config: { effort: 'medium' } });
     expect(request).not.toHaveProperty('thinking');
+  });
+
+  describe('with the model capability record', () => {
+    const opus: Session = { ...session, provider: 'anthropic', model: 'claude-opus-5-5' };
+    const flash: Session = { ...session, provider: 'modelstudio', model: 'qwen3.8-flash' };
+    const unknown: Session = { ...session, provider: 'openrouter', model: 'some/model' };
+    const measured = (seq: number, input: number): TurnEvent => ({ ...assistant(seq, 'ok'), usage: { input, cacheRead: 0, cacheWrite: 0, output: 5 } });
+    const breakpoints = (request: ReturnType<typeof buildRequest>) => [
+      ...(request.system as { cache_control?: unknown }[]).map((block) => block.cache_control),
+      ...request.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content.flatMap((b) => ('cache_control' in b && b.cache_control ? [b.cache_control] : [])))),
+    ];
+
+    it('asks Anthropic for adaptive thinking, its full output limit and 1 h cache entries at every breakpoint', () => {
+      const request = buildRequest(opus, [start, user(1, 'hi')]);
+      expect(request).toMatchObject({ max_tokens: 128_000, thinking: { type: 'adaptive', display: 'omitted' }, output_config: { effort: 'medium' } });
+      expect(breakpoints(request)).toEqual([
+        { type: 'ephemeral', ttl: '1h' },
+        { type: 'ephemeral', ttl: '1h' },
+      ]);
+    });
+
+    it('sends Model Studio no thinking field and default-TTL breakpoints, byte for byte as before', () => {
+      const request = buildRequest(flash, [start, user(1, 'hi')]);
+      expect(request).not.toHaveProperty('thinking');
+      expect(request.max_tokens).toBe(131_072);
+      expect(breakpoints(request)).toEqual([{ type: 'ephemeral' }, { type: 'ephemeral' }]);
+    });
+
+    it('clamps max_tokens to the window minus the input and a 1,000-token margin near a full window', () => {
+      const events = [start, user(1, 'hi'), measured(2, 899_995), user(3, 'go on')];
+      expect(buildRequest(opus, events).max_tokens).toBe(1_000_000 - 900_000 - 2 - 1_000);
+    });
+
+    it('still asks for one token when the input alone fills the window, so the provider answers with an overflow', () => {
+      const events = [start, user(1, 'hi'), measured(2, 1_200_000), user(3, 'go on')];
+      expect(buildRequest(opus, events).max_tokens).toBe(1);
+    });
+
+    it('sends the fallback output limit, unclamped, for a model whose window is unknown', () => {
+      const events = [start, user(1, 'hi'), measured(2, 5_000_000), user(3, 'go on')];
+      expect(buildRequest(unknown, events).max_tokens).toBe(64_000);
+    });
   });
 
   it('has a system prompt long enough to cache (512 tokens at roughly 4 characters each)', () => {

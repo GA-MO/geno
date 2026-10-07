@@ -1,4 +1,6 @@
+import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
+import { capabilitiesOf } from '@g-code/core';
 import { call, closeServers, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
 
 afterEach(closeServers);
@@ -20,5 +22,19 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
 
     const passed = await bashResult(wire, COMMANDS.passing);
     expect(passed).toEqual({ id: 'tu_bash', error: false, text: 'export const a = 1;\n[exit code 0]' });
+  });
+
+  it("T-TOOL-07 output up to the model's spill limit comes back whole, and one character more goes to a file", async () => {
+    const limit = (wire === 'anthropic' ? capabilitiesOf('modelstudio', 'qwen3.8-flash') : capabilitiesOf('openai', 'gpt-fake')).spillChars;
+    const status = '[exit code 0]';
+    const output = (chars: number) => `head -c ${chars} /dev/zero | tr '\\0' a`;
+
+    const whole = await bashResult(wire, output(limit - status.length));
+    expect(whole.text).toBe(`${'a'.repeat(limit - status.length)}${status}`);
+
+    const spilled = await bashResult(wire, output(limit - status.length + 1));
+    expect(spilled.text).toMatch(/too long to show/);
+    const file = /The full text is in (\S+);/.exec(spilled.text)![1]!;
+    expect(await readFile(file, 'utf8')).toBe(`${'a'.repeat(limit - status.length + 1)}${status}`);
   });
 });

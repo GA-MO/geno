@@ -35,7 +35,7 @@ beforeAll(async () => {
   await writeFile(path.join(ws, 'src', 'b.tsx'), 'export const B = 1;\n');
   await writeFile(path.join(ws, 'src', 'plain.ts'), 'export const plain = 1;\n');
   await writeFile(path.join(ws, 'big', 'long.txt'), `${'x'.repeat(100)}\n`.repeat(3000));
-  ctx = { workspace: ws, spillDir: path.join(ws, '..', 'spill'), readRoots: [], attachmentsDir: path.join(ws, '..', 'spill', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {} };
+  ctx = { workspace: ws, spillDir: path.join(ws, '..', 'spill'), readRoots: [], attachmentsDir: path.join(ws, '..', 'spill', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
 });
 
 describe('glob rules on read', () => {
@@ -66,6 +66,6 @@ describe('glob rules on read', () => {
     const page = (await read.run({ path: 'big/long.txt' }, ctx)) as string;
     expect(page).toContain('read again with start_line=');
     expect(page.endsWith('<project_rule path=".cursor/rules/big.mdc" matched="big/long.txt">\nThis rule applies to big/long.txt. Read .cursor/rules/big.mdc for it.\n</project_rule>')).toBe(true);
-    expect(await settle(page, path.join(ctx.spillDir, 'never.txt'))).toEqual({ output: page });
+    expect(await settle(page, path.join(ctx.spillDir, 'never.txt'), ctx.spillChars)).toEqual({ output: page });
   });
 });

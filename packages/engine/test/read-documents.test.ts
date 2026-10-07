@@ -28,7 +28,7 @@ beforeAll(async () => {
   const scan = await readFile(path.join(FIXTURES, 'scan.pdf'));
   const start = scan.indexOf(Buffer.from([0xff, 0xd8, 0xff]));
   scanJpeg = scan.subarray(start, scan.indexOf(Buffer.from('endstream'), start) - 1);
-  ctx = { workspace: ws, spillDir: path.join(root, 'spill'), readRoots: [], attachmentsDir: path.join(root, 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {} };
+  ctx = { workspace: ws, spillDir: path.join(root, 'spill'), readRoots: [], attachmentsDir: path.join(root, 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
 });
 
 let nextId = 0;

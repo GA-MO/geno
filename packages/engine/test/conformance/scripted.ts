@@ -17,10 +17,17 @@ export type Wire = (typeof WIRES)[number];
 /** One scripted model turn, as either wire streams it. */
 export type ScriptedTurn =
   | { readonly kind: 'say'; readonly text: string; readonly stop: 'end_turn' | 'model_context_window_exceeded' }
-  | { readonly kind: 'call'; readonly text: string; readonly uses: readonly FakeToolUse[]; readonly cutOff: boolean };
+  | { readonly kind: 'call'; readonly text: string; readonly uses: readonly FakeToolUse[]; readonly cutOff: boolean; readonly input: number | undefined };
 
 export const say = (text: string, stop: 'end_turn' | 'model_context_window_exceeded' = 'end_turn'): ScriptedTurn => ({ kind: 'say', text, stop });
-export const call = (text: string, uses: readonly FakeToolUse[], opts: { cutOff?: true } = {}): ScriptedTurn => ({ kind: 'call', text, uses, cutOff: opts.cutOff === true });
+/** `input` is the input size the Anthropic wire reports for the turn, as a provider does for a long context. */
+export const call = (text: string, uses: readonly FakeToolUse[], opts: { cutOff?: true; input?: number } = {}): ScriptedTurn => ({
+  kind: 'call',
+  text,
+  uses,
+  cutOff: opts.cutOff === true,
+  input: opts.input,
+});
 
 /** A tool result as the model reads it on either wire. */
 export type SeenResult = { readonly id: string; readonly error: boolean; readonly text: string };
@@ -34,7 +41,9 @@ const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 const chatUsage = { prompt: 1000, completion: 30, cached: 0 };
 
 const anthropicReply = (turn: ScriptedTurn): Reply =>
-  turn.kind === 'say' ? answer(turn.text, usage, { stopReason: turn.stop }) : toolCall(turn.text, turn.uses, usage, turn.cutOff ? { cutOff: true } : {});
+  turn.kind === 'say'
+    ? answer(turn.text, usage, { stopReason: turn.stop })
+    : toolCall(turn.text, turn.uses, { ...usage, input: turn.input ?? usage.input }, turn.cutOff ? { cutOff: true } : {});
 
 function openAiReply(turn: ScriptedTurn): ChatReply {
   if (turn.kind === 'call') return chatToolCall(turn.text, turn.uses, chatUsage, turn.cutOff ? { cutOff: true } : {});
@@ -80,33 +89,52 @@ export async function closeServers(): Promise<void> {
 }
 
 /**
+ * Which provider and model the Anthropic wire stands for: Model Studio's default unless a test of a model's own
+ * capabilities names another.
+ */
+export type AnthropicWireModel = { readonly provider: 'modelstudio' | 'anthropic'; readonly model: string };
+
+const MODEL_STUDIO: AnthropicWireModel = { provider: 'modelstudio', model: 'qwen3.8-flash' };
+
+const providerEnv = ({ provider, model }: AnthropicWireModel): Record<string, string> =>
+  provider === 'modelstudio'
+    ? { GCODE_PROVIDER: provider, GCODE_MODEL: model, DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic' }
+    : { GCODE_PROVIDER: provider, GCODE_MODEL: model, ANTHROPIC_API_KEY: 'sk-fake' };
+
+/**
  * A git workspace holding `files`, and a fake provider on `wire` that answers the model calls with `script` in order.
  * `cli` runs the `gcode` command line against it and `io` serves it to an editor; `seen` reads each model request as
- * the model saw it.
+ * the model saw it, and `bodies` gives each request as sent.
  */
-export async function scripted(wire: Wire, script: readonly ScriptedTurn[], files: Readonly<Record<string, string>> = { 'a.ts': 'export const a = 1;\n' }) {
+export async function scripted(
+  wire: Wire,
+  script: readonly ScriptedTurn[],
+  files: Readonly<Record<string, string>> = { 'a.ts': 'export const a = 1;\n' },
+  anthropicModel: AnthropicWireModel = MODEL_STUDIO,
+) {
   const workspace = await realpath(makeRepo('ws', [{ message: 'start', files }]));
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const base = { GCODE_HOME: home, HOME: home, GCODE_RG: rgCommand(), PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
   let env: Record<string, string>;
-  let seen: () => Seen[];
+  let bodies: () => any[];
   let fetch: typeof globalThis.fetch | undefined;
   if (wire === 'anthropic') {
     const transport = fakeTransport(script.map(anthropicReply));
-    env = { ...base, GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic' };
-    seen = () => transport.requests.map((request) => seenAnthropic(request.body));
+    env = { ...base, ...providerEnv(anthropicModel) };
+    bodies = () => transport.requests.map((request) => request.body);
     fetch = transport.fetch;
   } else {
     const server = await fakeOpenAiServer(script.map(openAiReply));
     servers.push(server);
     env = { ...base, GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-fake', OPENAI_API_KEY: 'sk-fake', GCODE_OPENAI_BASE_URL: server.url };
-    seen = () => server.chats().map((request) => seenOpenAi(request.body));
+    bodies = () => server.chats().map((request) => request.body);
   }
+  const seen = (): Seen[] => bodies().map(wire === 'anthropic' ? seenAnthropic : seenOpenAi);
   const store: Store = openStore(env);
   const cli = (argv: readonly string[], options: CliOptions = {}) => runCli([...argv], env, { ...(fetch === undefined ? {} : { fetch }), ...options });
   const events = async (sessionId: string): Promise<readonly TurnEvent[]> => (await readSessionLog(sessionFile(store, asSessionId(sessionId)))).events;
   const log = (stdout: string) => events(sessionIdOf(stdout));
   // For an engine served to an editor over ACP, as `gcode serve` runs.
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, ...(fetch === undefined ? {} : { fetch }) };
-  return { workspace, env, store, io, cli, seen, log, events };
+  return { workspace, env, store, io, cli, seen, bodies, log, events };
 }
