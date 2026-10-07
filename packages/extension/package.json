@@ -290,6 +290,15 @@
           "default": "ask",
           "description": "The approval mode new chats start in. The picker in the composer switches the open chat."
         },
+        "gcode.skills.catalogs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "Catalogs of skills and agent definitions to search in Settings, under Skills and agents: the https URL of a `catalog.json` index, or a folder on this machine that holds one. Geno ships with none. An install copies an entry's files as data after checking each one's sha256, and runs nothing."
+        },
         "gcode.browser.enabled": {
           "type": "boolean",
           "default": false,

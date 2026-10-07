@@ -102,6 +102,7 @@ import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
 import { PermissionsHost } from './permissions-host.js';
+import { SkillsHost } from './skills-host.js';
 import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
 import { setRole, type SettingsPage } from './settings-host.js';
@@ -544,6 +545,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   /** The rules and memory panes. */
   private readonly panes: ContextPanes;
   private readonly permissionRules: PermissionsHost;
+  private readonly skills: SkillsHost;
   /** The providers, keys and roles page. */
   private readonly settingsPage: SettingsPage;
   /** The settings action ran before the webview was ready; it opens the page once it is. */
@@ -600,6 +602,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       const connection = await this.engine.connection();
       return { connection, cwd: this.shownCwd ?? connection.cwd };
     },(message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.skills = new SkillsHost(async () => {
+      const connection = await this.engine.connection();
+      return { connection, cwd: this.shownCwd ?? connection.cwd };
+    }, (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.widgets = widgetHost(this.extensionUri, (toolId) =>
       this.transcript.turns.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'tool' && block.id === toolId ? [block] : []))[0]?.widget,
     );
@@ -711,6 +717,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   dispose(): void {
     this.mcp.dispose();
     this.settingsPage.dispose();
+    this.skills.dispose();
     this.composer.dispose();
     this.switched.dispose();
     this.prStatus.dispose();
@@ -1447,6 +1454,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.panes.handlers,
       ...this.settingsPage.handlers,
       ...this.permissionRules.handlers,
+      ...this.skills.handlers,
       ...this.composer.handlers,
       ...this.widgets.handlers,
       ...this.background.handlers,
