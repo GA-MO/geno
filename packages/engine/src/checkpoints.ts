@@ -43,14 +43,28 @@ const exists = (file: string) =>
     () => false,
   );
 
-export async function snapshot(repo: ShadowRepo, label: string): Promise<string> {
-  if (!(await exists(repo.gitDir))) {
-    await exec('git', ['init', '--quiet', '--bare', repo.gitDir], { env: childEnv(process.env) });
-  }
-  await git(repo, ['add', '--all', '--', '.']);
-  await git(repo, ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', label]);
-  return (await git(repo, ['rev-parse', 'HEAD'])).trim();
+// Sessions of one workspace share its shadow repository, and two that start together would race to create it and
+// then for its index lock; the engine's writes to each take turns.
+const writers = new Map<string, Promise<unknown>>();
+
+function inTurn<T>(repo: ShadowRepo, work: () => Promise<T>): Promise<T> {
+  const next = (writers.get(repo.gitDir) ?? Promise.resolve()).then(work, work);
+  writers.set(
+    repo.gitDir,
+    next.catch(() => {}),
+  );
+  return next;
 }
+
+export const snapshot = (repo: ShadowRepo, label: string): Promise<string> =>
+  inTurn(repo, async () => {
+    if (!(await exists(repo.gitDir))) {
+      await exec('git', ['init', '--quiet', '--bare', repo.gitDir], { env: childEnv(process.env) });
+    }
+    await git(repo, ['add', '--all', '--', '.']);
+    await git(repo, ['commit', '--quiet', '--allow-empty', '--no-verify', '-m', label]);
+    return (await git(repo, ['rev-parse', 'HEAD'])).trim();
+  });
 
 const lines = (out: string) => out.split('\n').filter((line) => line !== '');
 
@@ -59,10 +73,11 @@ export async function changedBetween(repo: ShadowRepo, from: string, to: string)
 }
 
 /** Workspace-relative paths whose text now differs from commit `sha`, untracked files included; it commits nothing. */
-export async function changedSince(repo: ShadowRepo, sha: string): Promise<string[]> {
-  await git(repo, ['add', '--all', '--', '.']);
-  return lines(await git(repo, ['diff', '--cached', '--name-only', '--no-renames', sha, '--'])).sort();
-}
+export const changedSince = (repo: ShadowRepo, sha: string): Promise<string[]> =>
+  inTurn(repo, async () => {
+    await git(repo, ['add', '--all', '--', '.']);
+    return lines(await git(repo, ['diff', '--cached', '--name-only', '--no-renames', sha, '--'])).sort();
+  });
 
 async function pruneEmpty(dir: string, root: string): Promise<void> {
   for (let current = dir; current !== root && current.startsWith(root + path.sep); current = path.dirname(current)) {
