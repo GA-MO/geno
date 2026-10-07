@@ -83,12 +83,16 @@ export type AgentProcess = {
 const STDERR_LIMIT = 4000;
 const INITIALIZE_TIMEOUT_MS = 60_000;
 
-/** Where the sandbox host is: beside this module, built or in source. */
-function sandboxHost(): { readonly command: string; readonly args: readonly string[] } {
+/**
+ * Where the sandbox host is: beside this module, built or in source. In VS Code the engine's runtime is the editor's
+ * Electron helper, which runs a script as Node only when ELECTRON_RUN_AS_NODE says so.
+ */
+function sandboxHost(): { readonly command: string; readonly args: readonly string[]; readonly env: Readonly<Record<string, string>> } {
   const here = fileURLToPath(import.meta.url);
   const extension = path.extname(here);
   const host = path.join(path.dirname(here), `sandbox-host${extension}`);
-  return extension === '.ts' ? { command: process.execPath, args: ['--import', import.meta.resolve('tsx'), host] } : { command: process.execPath, args: [host] };
+  const env = process.versions.electron === undefined ? {} : { ELECTRON_RUN_AS_NODE: '1' };
+  return extension === '.ts' ? { command: process.execPath, args: ['--import', import.meta.resolve('tsx'), host], env } : { command: process.execPath, args: [host], env };
 }
 
 const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -160,7 +164,7 @@ export async function startAgent(options: StartOptions): Promise<AgentProcess> {
     const host = sandboxHost();
     const spec = await sandboxSpec(backend, [options.command, ...args].map(shellQuote).join(' '), options.cwd, options.tempDir, options.writable, options.env);
     // The overlay sits in the temp folder, which is writable; through its links the agent reaches only what the spec allows.
-    child = spawn(host.command, [...host.args, Buffer.from(JSON.stringify(spec)).toString('base64')], { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    child = spawn(host.command, [...host.args, Buffer.from(JSON.stringify(spec)).toString('base64')], { cwd: options.cwd, env: { ...env, ...host.env }, stdio: ['pipe', 'pipe', 'pipe'] });
   } else {
     child = spawn(options.command, args, { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
   }
