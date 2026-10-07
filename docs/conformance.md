@@ -41,6 +41,21 @@ P2 also fixed rows that have no Claude Code conformance test. Their checks are u
 | B/B-25, C/C-77 | `plugins.test.ts` renders geno-tools text with and without the `agent` tool. `plugins.e2e.test.ts` checks that a run with `agentTool` points the model at the text that maps `Agent` to `agent`. |
 | A/B-12 (text) | `context.test.ts` pins the skill listing, which tells the model to call the `skill` tool. |
 
+## Agents (P4)
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-AGENT-02 | A report with instruction-shaped text comes back with every line indented, `<` neutralized, and a `[harness: subagent output matched…]` line first. | `<subagent_report>` keeps its fence and status attributes. Every line of the report is indented by two spaces. Every Geno harness tag in it loses its `<` and every line that starts like a Geno notice (`[Geno`, `[Background command`, `[Monitor`, `[Scheduled wake-up`, `[PR watch`) loses its `[`, both to `‹`. A report that matches a pattern in `INSTRUCTION_PATTERNS` (packages/core/src/fence.ts) gets a `[Geno: this report matched instruction-shaped patterns (…)]` line first. After the fence, the parent reads that the report is not from the user and the permission-laundering sentence. | pass (was fail) | `agents.conformance.test.ts`, both wires |
+| T-AUTO-04 | The security monitor screens a hand-back before the parent sees it. | Adapted: no extra classifier call per report. When a subagent report reached the parent after the user's request, the classifier input for the parent's next flagged command or MCP call says "A subagent report preceded this action". | pass (adapted, was fail) | `agents.conformance.test.ts`, Anthropic wire (the classifier always runs on Model Studio) |
+
+P4 also covers rows whose checks are unit tests:
+
+| ID | Check |
+|---|---|
+| A/A-14, C/C-24, C/C-25 | `subagent.test.ts` pins the indent, the banner, Geno's column-zero notes and the text after the fence. `fence.test.ts` checks that every pattern has examples that match and that an ordinary report matches none. |
+| B/B-83 | `classifier.test.ts` (core) checks when `classifierInputOf` sets the flag and that the note sits outside every fence. `classifier.test.ts` (engine) sends the `report-delete-src` eval case to a fake classifier. The live verdict comes from `gcode eval classifier`, which needs a Model Studio key. |
+| D7 | T-AGENT-02 above. Background-end notices, monitor matches, PR-watch text and a parent's message to its child go through the same `neutralize`. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -102,7 +117,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-PERM-08 | adopt | P5 | no test yet |
 | T-AUTO-01 | skip | none | no test yet |
 | T-AUTO-02 | keep Geno's | none | no test yet |
-| T-AUTO-04 | adapt, skip | P4 | no test yet |
+| T-AUTO-04 | adapt, skip | P4 | pass |
 | T-AUTO-03 | skip | none | no test yet |
 | T-HOOK-01 | adapt | P13 | no test yet |
 | T-HOOK-02 | adopt | P14 | no test yet |
@@ -136,7 +151,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-CTX-06 | skip | none | no test yet |
 | T-CTX-07 | keep Geno's | none | no test yet |
 | T-AGENT-01 | deliberate, adapt; deliberate | P21 | no test yet |
-| T-AGENT-02 | adapt | P4 | no test yet |
+| T-AGENT-02 | adapt | P4 | pass |
 | T-AGENT-03 | adapt | P17 | no test yet |
 | T-AGENT-04 | adopt | P18 | no test yet |
 | T-AGENT-05 | adapt | P20 | no test yet |
