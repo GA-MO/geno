@@ -38,6 +38,7 @@ export type SteerAction = 'deliver' | 'hold' | 'next-turn';
 export const STEER_AT: Readonly<Record<LoopStep['kind'], SteerAction>> = {
   'call-model': 'deliver',
   'run-tools': 'hold',
+  'answer-tools': 'hold',
   done: 'next-turn',
 };
 
