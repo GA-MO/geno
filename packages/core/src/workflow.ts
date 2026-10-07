@@ -533,7 +533,6 @@ export function previewQuestion(preview: WorkflowPreview): string {
 
 export const WORKFLOW_REASON = 'A workflow starts subagents in the background, and each one spends up to its cap.';
 
-// The run.
 
 export type UnitStatus = 'running' | 'done' | 'failed' | 'capped' | 'cancelled' | 'passed';
 
