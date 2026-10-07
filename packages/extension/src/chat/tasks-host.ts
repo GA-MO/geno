@@ -37,7 +37,6 @@ import type { SeenStore } from './seen.js';
 
 export const OS_NOTIFICATIONS_SETTING = 'gcode.tasks.osNotifications';
 
-
 /** What the panel does for the panes: open a session, apply a lane through the shown chat, know what it shows. */
 export type TaskChat = {
   readonly shown: () => string | undefined;
