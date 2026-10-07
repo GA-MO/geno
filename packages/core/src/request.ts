@@ -90,6 +90,6 @@ export function buildRequest(
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
     system: [{ type: 'text', text: system, cache_control: control }],
     messages: withNewestUserBreakpoint(replayMessages(events, stored), control),
-    output_config: { effort: session.effort },
+    ...(capabilities.effort ? { output_config: { effort: session.effort } } : {}),
   };
 }
