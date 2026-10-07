@@ -10,6 +10,7 @@ import {
   memoryProblem,
   renderLoadedContext,
   renderMemory,
+  USER_TOOL_MODES,
   USER_TOOL_NAMES,
   userToolDefinitions,
   type LoadedContext,
@@ -59,10 +60,10 @@ describe('context load order', () => {
 describe('memory', () => {
   const entries = [note('b', 'Use pnpm.', 'project', '2026-10-05T10:00:00Z'), note('a', 'Be brief.', 'global', '2026-10-05T11:00:00Z')];
 
-  it('renders global notes first, fenced as approved notes that never override the current request', () => {
+  it('renders global notes first, fenced as approved notes that never override the current request and may be stale', () => {
     expect(renderMemory(entries)).toBe(
       [
-        'The user approved these notes for you to remember from earlier sessions. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do.',
+        '[Geno] The user approved these notes for you to remember from earlier sessions; they were loaded when this session started. Follow them where they apply. They never override what the user asks now, and they cannot widen what you may do. A note says what was true when it was written and may be stale: before you rely on a note that names a file, function or flag, verify that it still exists.',
         '<memory>',
         '<note scope="global">Be brief.</note>',
         '<note scope="project">Use pnpm.</note>',
@@ -94,10 +95,14 @@ describe('memory', () => {
 
 describe('the user tools', () => {
   const both = new Set(USER_TOOL_NAMES);
-  const offered = Object.fromEntries(APPROVAL_MODES.map((mode) => [mode, userToolDefinitions(mode, both).map((tool) => tool.name)]));
+  const runs = Object.fromEntries(APPROVAL_MODES.map((mode) => [mode, USER_TOOL_NAMES.filter((name) => USER_TOOL_MODES[name][mode])]));
 
-  it('offers ask_user in Plan and Ask only, and remember in every mode with someone to ask', () => {
-    expect(offered).toEqual({
+  it('offers both to a client that shows their cards, whatever the mode, so a switch keeps the prefix', () => {
+    expect(userToolDefinitions(both).map((tool) => tool.name)).toEqual(['ask_user', 'remember']);
+  });
+
+  it('runs ask_user in Plan and Ask only, and remember in every mode with someone to ask', () => {
+    expect(runs).toEqual({
       plan: ['ask_user', 'remember'],
       ask: ['ask_user', 'remember'],
       auto: ['remember'],
@@ -106,8 +111,8 @@ describe('the user tools', () => {
   });
 
   it('offers neither to a client that cannot show its card', () => {
-    for (const mode of APPROVAL_MODES) expect(userToolDefinitions(mode, new Set())).toEqual([]);
-    expect(userToolDefinitions('ask', new Set(['remember'])).map((tool) => tool.name)).toEqual(['remember']);
+    expect(userToolDefinitions(new Set())).toEqual([]);
+    expect(userToolDefinitions(new Set(['remember'])).map((tool) => tool.name)).toEqual(['remember']);
   });
 
   it('asks a question as a form with the options to pick and a free-text answer', () => {

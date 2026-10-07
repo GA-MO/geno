@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_MODE_SYSTEM_PROMPTS,
+  AGENT_SYSTEM_PROMPT,
+  MODE_NOTICES,
   AGENT_MODE_TOOLS,
   asSessionId,
   CHILD_TOOL_NAMES,
@@ -142,8 +143,8 @@ describe('where todo is offered', () => {
     expect(CHILD_TOOL_NAMES).not.toContain('todo');
   });
 
-  it("Plan's prompt asks for the plan as a todo list, and the other modes' prompts do not mention it", () => {
-    expect(AGENT_MODE_SYSTEM_PROMPTS.plan).toMatch(/todo tool/);
-    expect(AGENT_MODE_SYSTEM_PROMPTS.ask).not.toMatch(/todo tool/);
+  it("Plan's notice asks for the plan as a todo list, and the system prompt and the other modes' notices do not mention it", () => {
+    expect(MODE_NOTICES.plan).toMatch(/todo tool/);
+    for (const text of [AGENT_SYSTEM_PROMPT, MODE_NOTICES.ask, MODE_NOTICES.auto]) expect(text).not.toMatch(/todo tool/);
   });
 });

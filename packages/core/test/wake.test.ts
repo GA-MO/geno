@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_MODE_TOOL_DEFINITIONS,
+  AGENT_MODE_TOOLS,
   CHILD_TOOL_NAMES,
   classifierInputOf,
   cutView,
@@ -236,11 +236,10 @@ describe('scheduled wake-ups in the log', () => {
 });
 
 describe('the tools', () => {
-  it('offers monitor and schedule_wakeup where the background tools are, and never in Plan or to a subagent', () => {
-    const names = (mode: keyof typeof AGENT_MODE_TOOL_DEFINITIONS) => AGENT_MODE_TOOL_DEFINITIONS[mode].map((tool) => tool.name);
-    for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(names(mode)).toEqual(expect.arrayContaining(['bash_output', 'monitor', 'schedule_wakeup']));
-    expect(names('plan')).not.toContain('monitor');
-    expect(names('plan')).not.toContain('schedule_wakeup');
+  it('runs monitor and schedule_wakeup where the background tools run, never in Plan, and never offers them to a subagent', () => {
+    for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(AGENT_MODE_TOOLS[mode]).toEqual(expect.arrayContaining(['bash_output', 'monitor', 'schedule_wakeup']));
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('monitor');
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('schedule_wakeup');
     expect(CHILD_TOOL_NAMES).not.toContain('monitor');
     expect(CHILD_TOOL_NAMES).not.toContain('schedule_wakeup');
   });

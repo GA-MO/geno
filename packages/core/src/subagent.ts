@@ -257,7 +257,7 @@ Task: ${task}`;
  * cached prefix.
  */
 export function forkOpening(parent: readonly TurnEvent[], toolUseId: string, at: string): TurnEvent[] {
-  const copied = parent.filter((e) => e.kind !== 'session-start' && IN_CONVERSATION[e.kind]);
+  const copied = parent.filter((e) => e.kind !== 'session-start' && (IN_CONVERSATION[e.kind] || e.kind === 'notice'));
   let seq = nextSeq(copied);
   const answers = pendingToolUses(copied).map(
     (use): TurnEvent => ({

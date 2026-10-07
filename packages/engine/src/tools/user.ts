@@ -60,7 +60,7 @@ const BUILD: { readonly [K in UserToolName]: (env: UserToolEnv, show: NonNullabl
         // Whatever the note says, only the user's yes keeps it: no mode, rule or classifier answers this question.
         if (!(await show({ text: text.trim(), scope }, ctx.signal))) return 'The user declined. Nothing was saved; do not propose it again unless they ask.';
         await memory.add(text, scope, sessionId);
-        return `Saved to ${scope} memory. It applies from the user's next message.`;
+        return `Saved to ${scope} memory. It applies from now on.`;
       },
     }),
   ask_user: (_env, show) =>

@@ -2,7 +2,8 @@ import type { ContentBlockParam, MessageStreamParams } from '@anthropic-ai/sdk/r
 import { compactedText } from './compact.js';
 import { renderContextItems, renderLoadedContext, type ContextItem } from './context.js';
 import { costAt, type Rates } from './cost.js';
-import { MEMORY_PREAMBLE } from './memory.js';
+import { renderMemory } from './memory.js';
+import { noticeTexts } from './notice.js';
 import type { Adapter } from './providers.js';
 import { ZERO_USAGE, addUsage, type TokenUsage, type TurnEvent } from './session.js';
 import { startsTurn } from './steer.js';
@@ -60,6 +61,11 @@ function labelsOf(events: readonly TurnEvent[], adapter: Adapter): Labels {
       const loaded = renderLoadedContext(event.context);
       if (loaded !== undefined) texts.set(loaded, 'context');
     }
+    if (event.kind === 'session-start' && event.memory !== undefined) {
+      const memory = renderMemory(event.memory);
+      if (memory !== undefined) texts.set(memory, 'context');
+    }
+    if (event.kind === 'notice') for (const text of noticeTexts(event)) texts.set(text, 'context');
     if (event.kind === 'user') {
       if (event.content !== '') texts.set(event.content, event.seq >= turnStart ? 'prompt' : 'user');
       const files = (event.attachments ?? []).filter((a) => a.kind === 'file');
@@ -99,8 +105,7 @@ function blockRuns(block: ContentBlockParam, role: 'user' | 'assistant', labels:
 
 function systemRuns(system: MessageStreamParams['system']): PartRun[] {
   const text = typeof system === 'string' ? system : (system ?? []).map((b) => b.text).join('');
-  const at = text.indexOf(MEMORY_PREAMBLE);
-  return at < 0 ? [['system', estimateTokens(text)]] : [['system', estimateTokens(text.slice(0, at))], ['context', estimateTokens(text.slice(at))]];
+  return [['system', estimateTokens(text)]];
 }
 
 /** Adjacent runs of one part merge, so a log line stays short. */

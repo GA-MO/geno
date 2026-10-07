@@ -1,6 +1,6 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { describe, expect, it } from 'vitest';
-import { AGENT_MODE_TOOL_DEFINITIONS } from '../src/agent.js';
+import { AGENT_TOOL_DEFINITIONS } from '../src/agent.js';
 import { BROWSER_TOOLS } from '../src/browser-tools.generated.js';
 import {
   coerceToSchema,
@@ -48,7 +48,7 @@ describe('tool roster', () => {
   });
 
   it('defers what eval runs offer beyond the core: background reads and stops, the dev server tools, recall, wakes, skill and the PR watch', () => {
-    const roster = toolRoster(AGENT_MODE_TOOL_DEFINITIONS['non-interactive']);
+    const roster = toolRoster(AGENT_TOOL_DEFINITIONS);
     expect([...roster.deferred.keys()]).toEqual(['bash_output', 'bash_stop', 'monitor', 'preview_list', 'preview_logs', 'preview_start', 'preview_stop', 'recall', 'schedule_wakeup', 'skill', 'watch_pr']);
     expect(names(roster.offered)).toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo', TOOL_SEARCH_TOOL]);
   });

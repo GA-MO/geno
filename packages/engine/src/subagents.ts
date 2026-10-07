@@ -280,6 +280,7 @@ export function subagents(env: SubagentEnv): Subagents {
         kind: 'session-start',
         session,
         context: header?.kind === 'session-start' ? header.context : undefined,
+        memory: header?.kind === 'session-start' ? header.memory : undefined,
         // The parent's, so a child knows where it runs; it shares the parent's scratchpad.
         environment: header?.kind === 'session-start' ? header.environment : undefined,
         child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start },

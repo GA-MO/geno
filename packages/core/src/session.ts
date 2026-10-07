@@ -31,6 +31,8 @@ import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
 import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
+import { renderMemory, type MemoryEntry } from './memory.js';
+import { noticeTexts, type Notice } from './notice.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -148,12 +150,14 @@ export type Checkpoint = {
 export type TurnEvent =
   /**
    * `context` is absent in logs written before sessions loaded any, `environment` in logs written before sessions
-   * recorded one; `child` is present in a subagent's own log, `fork` in a fork's.
+   * recorded one, and `memory` when there were no notes; `child` is present in a subagent's own log, `fork` in a fork's.
    */
   | {
       readonly kind: 'session-start';
       readonly session: Session;
       readonly context?: LoadedContext | undefined;
+      /** The memory notes when the session started, frozen like the loaded context; a later change arrives as a notice. */
+      readonly memory?: readonly MemoryEntry[] | undefined;
       readonly environment?: Environment | undefined;
       readonly child?: ChildOf | undefined;
       readonly fork?: ForkOrigin | undefined;
@@ -216,6 +220,8 @@ export type TurnEvent =
    * a turn runs has no seq, because the turn numbers its own events and is still writing them.
    */
   | { readonly kind: 'mode'; readonly seq?: number | undefined; readonly at: string; readonly mode: SessionMode }
+  /** What the model was told at a safe point of a mode switch or a memory change (`notice.ts`). */
+  | ({ readonly kind: 'notice'; readonly seq: number; readonly at: string } & Notice)
   /** The user set the session's effort; it holds from the next model call until the next change, across resumes. Like a mode switch, one set during a turn has no seq. */
   | { readonly kind: 'effort'; readonly seq?: number | undefined; readonly at: string; readonly effort: Effort }
   /** A name the user gave the session; the latest one wins over the first prompt. */
@@ -254,6 +260,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   review: false,
   retry: false,
   mode: false,
+  notice: false,
   effort: false,
   title: false,
   'child-start': false,
@@ -358,9 +365,9 @@ function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredA
 
 /**
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
- * results in the order the model asked for them, then any unanswered prompts. The session's loaded context and its
- * environment open the first user message, after the system prompt, so they are cached with the prefix but never part
- * of it, and the system prompt stays the same for every session.
+ * results in the order the model asked for them, then any notices, then any unanswered prompts. The session's loaded
+ * context, its memory and its environment open the first user message, after the system prompt, so they are cached
+ * with the prefix but never part of it, and the system prompt stays the same for every session and every mode.
  * `stored` holds the bytes of the attachments the events reference; one it lacks is replaced by a note. After a
  * compaction, the conversation is its `contextView`: the compaction's text opens it in place of the turns it replaced.
  */
@@ -372,12 +379,15 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
   let workspace = '';
   // Kept apart from the prompts, so a refused prompt does not take the loaded context or the compacted turns with it.
   let opening: TextBlockParam[] = [];
+  // Notices too: a refused prompt leaves the mode it was sent in. They go out only with something to answer.
+  let notices: TextBlockParam[] = [];
   // Before a model turn the opening goes out even alone: a compaction can keep from the middle of a turn.
   const flush = (beforeTurn: boolean) => {
-    const content = [...toolUses.flatMap((use) => results.get(use.id) ?? []), ...prompts];
-    if (content.length > 0 || (beforeTurn && opening.length > 0)) {
-      messages.push({ role: 'user', content: [...opening, ...content] });
+    const answers = toolUses.flatMap((use) => results.get(use.id) ?? []);
+    if (answers.length + prompts.length > 0 || (beforeTurn && opening.length + notices.length > 0)) {
+      messages.push({ role: 'user', content: [...opening, ...answers, ...notices, ...prompts] });
       opening = [];
+      notices = [];
     }
     toolUses = [];
     results = new Map();
@@ -387,9 +397,11 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'session-start') {
       workspace = event.session.workspace;
       const loaded = event.context === undefined ? undefined : renderLoadedContext(event.context);
+      const memory = event.memory === undefined ? undefined : renderMemory(event.memory);
       const environment = event.environment === undefined ? undefined : renderEnvironment(event.environment, event.session);
-      opening = [loaded, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
+      opening = [loaded, memory, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
     }
+    if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });

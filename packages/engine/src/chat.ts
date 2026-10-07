@@ -29,6 +29,7 @@ import { checkId, singleId, UsageError, type Command, type Io } from './command.
 import { captureEnvironment, scratchpadOf } from './environment.js';
 import { gatewayFor, type Gateway } from './gateway.js';
 import { loadProjectContext } from './project-context.js';
+import { memoryStore } from './memory.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import { homeOf, type Store } from './store.js';
 
@@ -83,11 +84,12 @@ async function newSession(
   };
   const file = sessionFile(store, session.id);
   // Loaded once and logged, so every later turn and a resumed session send the same text.
-  const [context, environment] = await Promise.all([
+  const [context, memory, environment] = await Promise.all([
     loadProjectContext(workspace, homeOf(store)),
+    memoryStore(homeOf(store), workspace).list(),
     captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
   ]);
-  const start: TurnEvent = { kind: 'session-start', session, context, environment };
+  const start: TurnEvent = { kind: 'session-start', session, context, ...(memory.length === 0 ? {} : { memory }), environment };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }
@@ -291,6 +293,9 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
   wait: ({ seq, at, wait }) => [`#${seq} ${formatWait(wait, Date.parse(at))}`],
   wake: ({ seq, note }) => [`#${seq} wake ${note.kind}${'id' in note ? ` ${note.id}` : ''}${note.kind === 'scheduled' ? ` at ${new Date(note.dueAt).toISOString()}: ${note.reason}` : note.kind === 'monitor' ? ` on ${note.job}: ${note.outcome}` : note.kind === 'pr' ? ` on PR #${note.pr}: ${note.outcome}` : ''}`],
   mode: ({ seq, mode }) => [`${seq === undefined ? '' : `#${seq} `}mode: ${mode}`],
+  notice: ({ seq, mode, memory }) => [
+    `#${seq} told the model:${mode === undefined ? '' : ` ${mode} mode`}${memory === undefined ? '' : ` ${memory.added.length} notes added, ${memory.removed.length} removed`}`,
+  ],
   effort: ({ seq, effort }) => [`${seq === undefined ? '' : `#${seq} `}effort: ${effort}`],
   title: ({ seq, title }) => [`#${seq} renamed: ${title}`],
   'child-start': ({ seq, child, role, model, effort, caps, start }) => [

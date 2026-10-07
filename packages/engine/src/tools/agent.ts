@@ -159,8 +159,8 @@ export const refusalOf = (record: ApprovalRecord, text = denialText(record)): To
   record.decidedBy === 'user' ? new ToolRejected(text, record) : new ToolDenied(text, record);
 
 /**
- * The tool, refused while the session's mode leaves it out. A run offers only its starting mode's tools, so this
- * holds when the user switches modes mid-turn, say to Plan after an edit was offered.
+ * The tool, refused while the session's mode leaves it out. Every mode is offered every tool, so the cached prefix
+ * holds across a switch; this is what keeps Plan read-only.
  */
 function inMode(name: AgentToolName, tool: Executor, approval: Approval): Executor {
   return {
