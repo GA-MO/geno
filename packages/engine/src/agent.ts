@@ -72,6 +72,7 @@ import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
 import type { Wakes } from './wakes.js';
+import { ghCli, githubRemote } from './gh.js';
 
 /** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
 const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
@@ -195,6 +196,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // The session, its forks and the session it was forked from all hold turns the model already has in context.
     const exclude = forkSource === undefined ? [session.id] : [session.id, forkSource];
     const recall = (query: string) => sessionIndex(store).search(query, project, { ...RECALL_SEARCH, exclude }, io.err);
+    const prTools = { gh: ghCli(io.env), githubRemote };
     const executorsFor = (approval: Approval, own = false) =>
       agentExecutors({
         sandbox,
@@ -211,6 +213,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         permissions,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
         recall: own ? recall : undefined,
+        pr: own ? prTools : undefined,
       });
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);

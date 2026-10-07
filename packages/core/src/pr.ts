@@ -137,7 +137,8 @@ export function nextPrWatch(watch: Extract<PrWatch, { kind: 'watching' }>, looku
 }
 
 /** How a watch's wake reads in the panel: "woke: CI failed". */
-export type PrWatchOutcome = CiOutcome | 'ended';
+export const PR_WATCH_OUTCOMES = ['passed', 'failed', 'ended'] as const;
+export type PrWatchOutcome = (typeof PR_WATCH_OUTCOMES)[number];
 
 export const prWatchOutcomeOf = (end: PrWatchEnd): PrWatchOutcome => (end.kind === 'settled' ? end.outcome : 'ended');
 

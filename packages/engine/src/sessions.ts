@@ -35,6 +35,7 @@ import {
   type JobId,
   isWakeId,
   MONITOR_OUTCOMES,
+  PR_WATCH_OUTCOMES,
   type WakeId,
   spinoffsOf,
   type SpinoffDecision,
@@ -219,11 +220,13 @@ const wakeTriggerSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('jobs'), job: jobId }),
   z.strictObject({ kind: z.literal('monitor'), id: wakeId, outcome: z.enum(MONITOR_OUTCOMES) }),
   z.strictObject({ kind: z.literal('schedule'), id: wakeId }),
+  z.strictObject({ kind: z.literal('pr'), id: wakeId, outcome: z.enum(PR_WATCH_OUTCOMES) }),
 ]);
 const wakeNoteSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('scheduled'), id: wakeId, toolUseId: z.string().min(1), dueAt: z.number().int().nonnegative(), reason: z.string(), by: waiterSchema.optional() }),
   z.strictObject({ kind: z.literal('due'), id: wakeId, toolUseId: z.string().min(1), reason: z.string() }),
   z.strictObject({ kind: z.literal('monitor'), id: wakeId, toolUseId: z.string().min(1), job: jobId, pattern: z.string(), outcome: z.enum(MONITOR_OUTCOMES), line: z.string().optional() }),
+  z.strictObject({ kind: z.literal('pr'), id: wakeId, toolUseId: z.string().min(1), pr: z.number().int().positive(), outcome: z.enum(PR_WATCH_OUTCOMES), text: z.string() }),
   z.strictObject({ kind: z.literal('cancelled') }),
 ]);
 

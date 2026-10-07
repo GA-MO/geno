@@ -1,4 +1,4 @@
-import { realpath } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -36,6 +36,8 @@ import {
   sessionSpend,
   USAGE_METHOD,
   type UsageResponse,
+  PR_STATUS_METHOD,
+  type PrStatusResponse,
   REWIND_TURN_METHOD,
   REWIND_KINDS,
   FORK_AT_META,
@@ -237,6 +239,7 @@ import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import { waitsLeft, waitUpdate } from './wait-hooks.js';
 import { draftNotice, wakeCancelRequest, WakeDriver, wakePolicyOf } from './wake-hooks.js';
+import { ghCli, githubRemote, lookUpPr } from './gh.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 
@@ -767,6 +770,7 @@ const reviewRequest = z.object({
 const checkpointTextRequest = z.object({ sessionId: z.string(), path: z.string(), before: z.string().min(1).optional(), sha: z.string().min(1).optional() });
 const rewindRequest = z.object({ sessionId: z.string(), before: z.string().min(1).optional() });
 const usageRequest = z.object({ sessionId: z.string() });
+const prStatusRequest = z.object({ cwd: z.string().min(1).refine(path.isAbsolute, 'an absolute folder') });
 const rewindPreviewRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive() });
 const rewindTurnRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), choice: z.object({ kind: z.enum(REWIND_KINDS) }) });
 const forkAt = z.number().int().positive().optional();
@@ -1000,6 +1004,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   };
   const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
   wakes.bind(store, io);
+  const gh = ghCli(io.env);
   // An arrival waits behind a running turn's writes, which take it at their next safe point; what is left is logged
   // after, and may wake the session.
   inbox.arrived = (sessionId) =>
@@ -1815,6 +1820,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(USAGE_METHOD, usageRequest, async ({ params }): Promise<UsageResponse> => {
       known(params.sessionId);
       return sessionSpend((await openSessionLog(store, params.sessionId, io)).events);
+    })
+    .onRequest(PR_STATUS_METHOD, prStatusRequest, async ({ params }): Promise<PrStatusResponse> => {
+      if (!(await stat(params.cwd).then((s) => s.isDirectory(), () => false))) throw acp.RequestError.invalidParams({ cwd: params.cwd }, 'not a folder');
+      return lookUpPr(gh, params.cwd, githubRemote);
     })
     .onRequest(REWIND_PREVIEW_METHOD, rewindPreviewRequest, async ({ params }): Promise<RewindPreviewResponse> => {
       const { sessionId, turnSeq } = params;
