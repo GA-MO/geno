@@ -107,9 +107,9 @@ describe('gcode agent', () => {
     }
     const editResults = ofKind(log.events, 'tool-result').filter((r) => r.name === 'edit');
     expect(editResults.map((r) => ('output' in r ? r.output : ''))).toEqual([
-      'Edited a.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
-      'Edited src/b.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
-      'Edited src/c.ts.\n\ncheck `grep -q "a = 10" a.ts` passed',
+      'Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck `grep -q "a = 10" a.ts` passed',
+      'Edited src/b.ts. The file state is current in your context; no need to read it back.\n\ncheck `grep -q "a = 10" a.ts` passed',
+      'Created src/c.ts. The file state is current in your context; no need to read it back.\n\ncheck `grep -q "a = 10" a.ts` passed',
     ]);
 
     const firstEditTurn = checkpoints[1]!.turnSeq;

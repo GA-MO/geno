@@ -68,9 +68,9 @@ describe('the check after an edit', () => {
     const log = await readSessionLog(sessionFile(openStore(env), asSessionId(id)));
     const edits = log.events.filter((e): e is ToolResultEvent => e.kind === 'tool-result' && e.name === 'edit').map((e) => ('output' in e ? e.output : ''));
     expect(edits).toEqual([
-      `Edited a.ts.\n\ncheck \`${CHECK}\` failed (exit 2)\n${plantedError}`,
-      `Edited a.ts.\n\ncheck \`${CHECK}\` passed`,
-      `Edited a.ts.\n\ncheck \`${CHECK}\` failed (exit 2)\n${plantedError}`,
+      `Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck \`${CHECK}\` failed (exit 2)\n${plantedError}`,
+      `Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck \`${CHECK}\` passed`,
+      `Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck \`${CHECK}\` failed (exit 2)\n${plantedError}`,
     ]);
 
     expect((await readdir(workspace)).sort(), 'no build info in the workspace').toEqual(['a.ts', 'node_modules', 'tsconfig.json']);
@@ -98,6 +98,6 @@ describe('the check after an edit', () => {
     const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
     const log = await readSessionLog(sessionFile(openStore(env), asSessionId(id)));
     const edits = log.events.filter((e): e is ToolResultEvent => e.kind === 'tool-result' && e.name === 'edit').map((e) => ('output' in e ? e.output : ''));
-    expect(edits).toEqual([`Edited a.ts.\n\ncheck \`${CHECK}\` passed`, `Edited a.ts.\n\ncheck \`${CHECK}\` failed (exit 2)\n${expected}`]);
+    expect(edits).toEqual([`Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck \`${CHECK}\` passed`, `Edited a.ts. The file state is current in your context; no need to read it back.\n\ncheck \`${CHECK}\` failed (exit 2)\n${expected}`]);
   });
 });

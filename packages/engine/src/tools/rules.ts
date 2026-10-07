@@ -45,12 +45,16 @@ export function withRuleAttachments(read: Executor, rules: RuleAttacher): Execut
     ...read,
     async run(raw, ctx) {
       const reply = await read.run(raw, ctx);
-      if (typeof reply !== 'string') return reply;
+      // Text, bare or stamped with what the model now knows of the file; a reply that is more than that keeps its shape.
+      const text = typeof reply === 'string' ? reply : reply.file === undefined ? undefined : reply.text;
+      if (text === undefined) return reply;
       const file = displayPath(ctx, await resolveInside(ctx, (raw as { path: string }).path));
       if (path.isAbsolute(file)) return reply;
       await ctx.earlierCalls();
       const fresh = rules.take(file);
-      return fresh.length === 0 ? reply : `${reply}\n\n${attachments(reply, fresh, file, ctx.spillChars)}`;
+      if (fresh.length === 0) return reply;
+      const attached = `${text}\n\n${attachments(text, fresh, file, ctx.spillChars)}`;
+      return typeof reply === 'string' ? attached : { ...reply, text: attached };
     },
   };
 }

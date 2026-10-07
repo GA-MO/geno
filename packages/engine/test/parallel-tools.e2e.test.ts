@@ -125,7 +125,7 @@ describe('read-only tools of one turn', () => {
       ['tu_3', 'ok'],
     ]);
     expect(output(logged[0]!)).toContain('export const a = 1;');
-    expect(output(logged[1]!)).toBe('Edited a.ts.');
+    expect(output(logged[1]!)).toBe('Edited a.ts. The file state is current in your context; no need to read it back.');
     expect(output(logged[2]!)).toContain('export const a = 10;');
     expect(timingOf(logged[1]!).startAt).toBeGreaterThanOrEqual(timingOf(logged[0]!).endAt);
     expect(timingOf(logged[2]!).startAt).toBeGreaterThanOrEqual(timingOf(logged[1]!).endAt);

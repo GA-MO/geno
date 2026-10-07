@@ -46,6 +46,7 @@ import {
 import type { JobStart } from '../background.js';
 import type { CheckCommand } from '../check-command.js';
 import type { Classify } from '../classifier.js';
+import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
 import type { PermissionStore } from '../permissions.js';
@@ -223,6 +224,9 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
 
+/** An edit's result, for a file it made or one it changed. The model knows the file as it wrote it, as Claude Code's result says. */
+const editedText = (shown: string, made: boolean): string => `${made ? 'Created' : 'Edited'} ${shown}. The file state is current in your context; no need to read it back.`;
+
 /**
  * The edit tool. `reads` holds what the model last saw of each file, the base an edit must still match;
  * `afterEdit` returns text to append to a successful edit's result, such as a check run.
@@ -240,10 +244,14 @@ export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: Tool
       const raw = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, typeof value === 'string' && key !== 'path' ? restoreHidden(value) : value]));
       const { proposed, change } = await applyEditToFile(ctx.files, file, { path: input.path, format: AGENT_EDIT_FORMAT, raw, base }, null);
       if (proposed.result.kind === 'failed') throw new ToolError(proposed.result.detail);
-      reads.set(file, await currentBase(ctx, file));
+      // The stat goes first, so a change on disk after it is seen as one.
+      const disk = await diskStat(file);
+      const written = await ctx.files.read(file);
+      reads.set(file, baseOf(written, null));
       const after = await afterEdit(ctx);
-      const text = after === undefined ? `Edited ${input.path}.` : `Edited ${input.path}.\n\n${after}`;
-      return change === undefined ? text : { text, change };
+      const done = editedText(input.path, current.hash === null);
+      const text = after === undefined ? done : `${done}\n\n${after}`;
+      return { text, change, file: stampOf(file, written, disk) };
     },
   });
 }
@@ -266,14 +274,23 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   const read: Executor = {
     ...gated,
     async run(raw, ctx) {
-      // The base is the very text the read tool showed, so a change a moment later makes the next edit stale.
+      // The base is the very text the read tool showed, so a change a moment later makes the next edit stale. The disk's
+      // stat is taken before the text is read, so a change on disk after it is seen as one.
       let seen: string | null = null;
-      const files: Files = { ...ctx.files, read: async (file) => (seen = await ctx.files.read(file)) };
-      const text = await gated.run(raw, { ...ctx, files });
+      let disk: DiskStat | undefined;
+      const files: Files = {
+        ...ctx.files,
+        read: async (file) => {
+          disk = await diskStat(file);
+          return (seen = await ctx.files.read(file));
+        },
+      };
+      const reply = await gated.run(raw, { ...ctx, files });
       const file = await resolveInside(ctx, (raw as { path: string }).path);
       await ctx.earlierCalls();
       reads.set(file, baseOf(seen, null));
-      return text;
+      const stamp = stampOf(file, seen, disk);
+      return stamp === undefined ? reply : { ...(typeof reply === 'string' ? { text: reply } : reply), file: stamp };
     },
   };
 
