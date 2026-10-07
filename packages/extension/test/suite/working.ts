@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { AGAIN_REPLIES, ANSWERS, PROMPTS, THEMES, WORK } from './working-fixture.js';
+import { AGAIN_REPLIES, ANSWERS, PROMPTS, THEMES, TROUBLE, WORK } from './working-fixture.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -158,7 +158,8 @@ export async function run(): Promise<void> {
   check(after.avatar !== 'none' && after.spinner === 'none' && after.working === null, 'the finished turn shows its still 24 px avatar again', after);
   check((await textOf('.turn:last-child .markdown'))?.includes(ANSWERS.work) === true, 'the answer shows');
 
-  // A failed read brings sweat; a command Ask holds brings the question mark; a turn without checks hops or rolls.
+  // A failed read brings sweat; a command Ask holds brings the question mark; the user's no ends the turn, and a turn
+  // without checks hops or rolls.
   await watchPoses();
   await send(PROMPTS.trouble);
   await waitFor('the second turn to think', async () => (await pose()) === 'thinking');
@@ -171,11 +172,9 @@ export async function run(): Promise<void> {
   await waitFor('Noodle to ask while the card waits', async () => (await pose()) === 'asking');
   await still('pose-asking-dark-panel', 500);
   await screenshots('asking');
-  await click('.permission-open button', 'Deny');
-  await waitFor('Noodle to sweat after the denied command', async () => (await pose()) === 'sweat');
   await focus(true);
-  await ui({ do: 'release' });
-  await waitFor('the second turn to end', async () => (await count('.turn[aria-busy="true"]')) === 0);
+  await click('.permission-open button', 'Deny');
+  await waitFor('the denied turn to end without another model call', async () => (await count('.turn[aria-busy="true"]')) === 0);
   await waitFor('its turn-end move to finish', async () => (await pose()) === null, 10_000);
   const trouble = await poses();
   check(['hop', 'somersault'].includes(trouble.at(-2)!) && !trouble.includes('flex'), 'a turn without a passing check hops or somersaults, and does not flex', trouble);
@@ -193,7 +192,7 @@ export async function run(): Promise<void> {
   await sleep(800);
   check((await frame()) === held, 'under reduced motion the pose does not animate', [held, await frame()]);
   await ui({ do: 'release' });
-  await waitFor('the plan turn to read', async () => (await arrived()) === WORK.length + 1 + 3 + 2);
+  await waitFor('the plan turn to read', async () => (await arrived()) === WORK.length + 1 + TROUBLE.length + 2);
   check((await pose()) === 'planning', 'a Plan turn keeps the clipboard while it reads', await pose());
   await ui({ do: 'release' });
   await waitFor('the plan turn to end', async () => (await count('.turn[aria-busy="true"]')) === 0);

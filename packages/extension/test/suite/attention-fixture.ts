@@ -23,9 +23,6 @@ export const COMMAND = 'curl -sSo page.html https://example.com';
 export const ANSWERS = {
   seen: 'Hello.',
   slow: 'a.ts exports one.',
-  ask: 'The download was refused.',
-  parent: 'The worker could not download it.',
-  child: 'The download was refused.',
   lane: 'a.ts looks fine.',
 } as const;
 

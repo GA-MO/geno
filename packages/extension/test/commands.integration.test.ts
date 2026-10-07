@@ -23,7 +23,7 @@ const asModel = (reply: Reply): Reply => ({
 const rounds = (prefix: string, calls: typeof LOOK): Reply[] =>
   calls.map((call, i) => toolCall(call.narration, [{ id: `${prefix}${i}`, name: call.name, input: call.input }], usage));
 
-const replies: readonly Reply[] = [...rounds('tu_look_', LOOK), asModel(answer(ANSWERS.look, usage)), ...rounds('tu_remove_', REMOVE), asModel(answer(ANSWERS.remove, usage))];
+const replies: readonly Reply[] = [...rounds('tu_look_', LOOK), asModel(answer(ANSWERS.look, usage)), ...rounds('tu_remove_', REMOVE)];
 
 const requests: unknown[] = [];
 /** GCODE_SCREENSHOTS names a folder for the window captures. */

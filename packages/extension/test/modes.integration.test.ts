@@ -34,8 +34,8 @@ const replies: readonly Reply[] = [
   toolCall('Clearing dist too.', [bash(COMMANDS.removeDist)], usage),
   verdict('ask', REASONS.ask),
   asModel(answer('Cleaned the build; dist needs your OK, and I left a.ts alone.', usage)),
+  // Denied in Ask, which ends the turn with no answer after it.
   toolCall('Removing it again.', [bash(COMMANDS.removeAgain)], usage),
-  asModel(answer('Left it as it is.', usage)),
   toolCall('Looking around first.', [bash('ls')], usage),
   asModel(answer(PLAN, usage)),
   asModel(answer('Renamed it.', usage)),
@@ -124,12 +124,12 @@ describe('Ask and Auto in the chat panel', () => {
     expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     // Auto asked the classifier three times; Ask and Plan never did.
-    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false, false, false, false]);
+    expect(requests.map((r) => r.tool_choice !== undefined)).toEqual([false, true, false, true, false, true, false, false, false, false, false]);
+    expect(toolNames(8)).not.toContain('edit');
     expect(toolNames(9)).not.toContain('edit');
-    expect(toolNames(10)).not.toContain('edit');
     // Start building left Plan for the configured default, Auto, and sent the follow-up.
-    expect(toolNames(11)).toContain('edit');
-    expect(requests[11]!.messages.at(-1)!.content.at(-1)).toMatchObject({ type: 'text', text: FOLLOW_UP });
+    expect(toolNames(10)).toContain('edit');
+    expect(requests[10]!.messages.at(-1)!.content.at(-1)).toMatchObject({ type: 'text', text: FOLLOW_UP });
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
     expect(await exists(path.join(workspace, 'dist'))).toBe(true);
     expect(await exists(path.join(workspace, 'a.ts'))).toBe(true);

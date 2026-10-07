@@ -33,8 +33,8 @@ const AGAIN = WORK.map((call) =>
 const replies: readonly Reply[] = [
   ...rounds('tu_work_', WORK),
   asModel(answer(ANSWERS.work, usage)),
+  // The user denies the command, which ends the turn: no answer follows it.
   ...rounds('tu_trouble_', TROUBLE),
-  asModel(answer(ANSWERS.trouble, usage)),
   ...rounds('tu_plan_', PLAN),
   asModel(answer(ANSWERS.plan, usage)),
   ...rounds('tu_again_', AGAIN),
