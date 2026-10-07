@@ -141,6 +141,18 @@ import {
   PERMISSION_REMOVE_METHOD,
   PERMISSIONS_METHOD,
   RULE_EFFECTS,
+  CATALOG_INSTALL_METHOD,
+  CATALOG_KINDS,
+  CATALOG_PREVIEW_METHOD,
+  CATALOG_SEARCH_METHOD,
+  CATALOG_UNINSTALL_METHOD,
+  INSTALL_SCOPES,
+  SKILLS_METHOD,
+  type CatalogInstallResponse,
+  type CatalogPreviewResponse,
+  type CatalogSearchResponse,
+  type CatalogUninstallResponse,
+  type SkillsResponse,
   type Denial,
   type PermissionRule,
   type PermissionsResponse,
@@ -234,7 +246,8 @@ import { backendInfos, findBackend } from './backends.js';
 import { chosenModelOf, ExternalAgents, modelConfigOptions, runExternalTurn, type KeyOf } from './external.js';
 import { fileAt, shadowRepoFor } from './checkpoints.js';
 import { commandClassifier } from './classifier.js';
-import { homeOf, homesOf, runBuiltin, sessionCommands } from './commands.js';
+import { catalogService } from './catalog.js';
+import { homeOf, homesOf, pluginLoader, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
 import { permissionStore, rulesWorkspace } from './permissions.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
@@ -866,6 +879,11 @@ const sessionRequest = z.object({ sessionId: z.string() });
 const permissionsRequest = z.object({ cwd: z.string() });
 const permissionAddRequest = z.object({ cwd: z.string(), effect: z.enum(RULE_EFFECTS), text: z.string() });
 const permissionRemoveRequest = z.object({ cwd: z.string(), id: z.string().min(1) });
+const skillsRequest = z.object({ cwd: z.string() });
+const catalogSearchRequest = z.object({ cwd: z.string(), catalogs: z.array(z.string()).max(50), query: z.string().max(500) });
+const catalogItemRequest = z.object({ cwd: z.string(), catalog: z.string().min(1), kind: z.enum(CATALOG_KINDS), name: z.string().min(1) });
+const catalogInstallRequest = catalogItemRequest.extend({ scope: z.enum(INSTALL_SCOPES) });
+const catalogUninstallRequest = z.object({ cwd: z.string(), id: z.string().min(1) });
 const memoryEditRequest = z.object({ sessionId: z.string(), id: z.string().min(1), text: z.string() });
 const memoryDeleteRequest = z.object({ sessionId: z.string(), id: z.string().min(1) });
 const inlineEditTarget = z
@@ -1106,6 +1124,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       .then(() => wakes.soon(sessionId))
       .catch((error: unknown) => io.err(`could not log what reached ${sessionId}: ${String(error)}`));
   const commands = sessionCommands(homesOf(store, io.env), io);
+  const pluginsOf = pluginLoader(io);
+  const catalog = catalogService(homesOf(store, io.env), (cwd) => workspaceDir(io.cwd, cwd), async (workspace) => (await pluginsOf(workspace)).plugins);
   /** A session no editor shows and no turn runs in lets go of its MCP servers; a load or resume opens them again. */
   const release = (sessionId: string) => {
     if (viewers.isShown(sessionId) || turns.get(sessionId) !== undefined) return;
@@ -2097,6 +2117,15 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { rules, answer } = await permissionsOf(params.cwd);
       return answer(rules.remove(params.id));
     })
+    .onRequest(SKILLS_METHOD, skillsRequest, ({ params }): Promise<SkillsResponse> => catalog.skills(params.cwd).catch(refused({ cwd: params.cwd })))
+    .onRequest(CATALOG_SEARCH_METHOD, catalogSearchRequest, ({ params }): Promise<CatalogSearchResponse> =>
+      catalog.search(params.cwd, params.catalogs, params.query).catch(refused({ cwd: params.cwd })),
+    )
+    .onRequest(CATALOG_PREVIEW_METHOD, catalogItemRequest, ({ params }): Promise<CatalogPreviewResponse> => catalog.preview(params).catch(refused({ name: params.name })))
+    .onRequest(CATALOG_INSTALL_METHOD, catalogInstallRequest, ({ params }): Promise<CatalogInstallResponse> => catalog.install(params).catch(refused({ name: params.name })))
+    .onRequest(CATALOG_UNINSTALL_METHOD, catalogUninstallRequest, ({ params }): Promise<CatalogUninstallResponse> =>
+      catalog.uninstall(params.cwd, params.id).catch(refused({ id: params.id })),
+    )
     .onRequest(MCP_SERVERS_METHOD, mcpServersRequest, async ({ params }): Promise<McpServersResponse> => {
       known(params.sessionId);
       return mcp.servers(params.sessionId);
