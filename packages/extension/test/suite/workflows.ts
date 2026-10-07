@@ -48,6 +48,8 @@ async function steps(): Promise<void> {
   await screenshots('preview');
   await narrow('preview-300', CARD);
 
+  await panel(`(doc.querySelector('${CARD} .permission-actions').scrollIntoView({ block: 'center' }), 1)`);
+  await sleep(300);
   await ui({ do: 'click', selector: `${CARD} .permission-actions button`, text: 'Run' });
   await waitFor('the card to settle', async () => ((await textOf(`${CARD} .permission-outcome`)) ?? '') === 'Started, in Tasks', 10_000, () => textOf('.transcript'));
 
