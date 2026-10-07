@@ -130,6 +130,10 @@ async function realOrUndefined(target: string): Promise<string | undefined> {
   }
 }
 
+/** A missing path, with the root a relative path resolves against, as Claude Code names its working directory. */
+export const missingPath = (ctx: Pick<ToolContext, 'workspace'>, raw: string): ToolError =>
+  new ToolError(`no such file or directory: ${raw}. Relative paths start at the workspace root, ${ctx.workspace}.`);
+
 /** The real path of `raw` (relative to the workspace, or absolute), rejected unless it is inside a readable root. */
 export async function resolveInside(ctx: ToolContext, raw: string): Promise<string> {
   const target = path.resolve(ctx.workspace, raw);
@@ -138,7 +142,7 @@ export async function resolveInside(ctx: ToolContext, raw: string): Promise<stri
   const real = await realOrUndefined(target);
   if (real === undefined) {
     if ([ctx.workspace, ctx.spillDir, ...ctx.readRoots].some((root) => within(root, target))) {
-      throw new ToolError(`no such file or directory: ${raw}`);
+      throw missingPath(ctx, raw);
     }
     throw outside;
   }

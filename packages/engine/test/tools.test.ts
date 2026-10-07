@@ -69,7 +69,7 @@ describe('read', () => {
     expect(await call('read', { path: 'src/config.ts', start_line: 9 })).toEqual(failure(/past the end of src\/config.ts, which has 3 lines/));
     expect(await call('read', { path: 'src' })).toEqual(failure(/src is a directory; use list/));
     expect(await call('read', { path: 'image.bin' })).toEqual(failure(/binary/));
-    expect(await call('read', { path: 'nope.ts' })).toEqual(failure(/^no such file or directory: nope.ts$/));
+    expect(await call('read', { path: 'nope.ts' })).toEqual(failure(/^no such file or directory: nope.ts\. Relative paths start at the workspace root, \/.+\.$/));
   });
 
   it('returns bad input as an error naming the field, not a throw', async () => {
@@ -140,7 +140,7 @@ describe('grep', () => {
   });
 
   it('fails on a path that does not exist, and when ripgrep searched no files, rather than saying no matches', async () => {
-    expect(await call('grep', { pattern: 'SERVER_URL', path: 'source' })).toEqual(failure(/^no such file or directory: source$/));
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'source' })).toEqual(failure(/^no such file or directory: source\. Relative paths start at the workspace root, \/.+\.$/));
     expect(await call('grep', { pattern: 'SERVER_URL', glob: 'nothing/**' })).toEqual(failure(/searched no files/));
     expect(await call('grep', { pattern: 'SERVER_URL', path: 'src', glob: '*.py' })).toEqual(failure(/searched no files in src/));
   });

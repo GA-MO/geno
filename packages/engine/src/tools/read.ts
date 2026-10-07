@@ -3,7 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { BINARY_SNIFF, formatBytes, isSecretPath, linesOf, MAX_MESSAGE_BYTES, numberedPage, type ApprovalRecord } from '@g-code/core';
 import { AttachmentError, describeImage, storeImage } from '../attachments.js';
-import { displayPath, executor, isSecret, optional, resolveInside, secretRefusal, ToolError, type Executor, type ToolContext, type ToolReply } from './context.js';
+import { displayPath, executor, isSecret, missingPath, optional, resolveInside, secretRefusal, ToolError, type Executor, type ToolContext, type ToolReply } from './context.js';
 import { NotebookError, parseNotebook } from './notebook.js';
 import { openPdf, PdfError, type PdfPage } from './pdf.js';
 import { readSections, type Section } from './sections.js';
@@ -85,7 +85,7 @@ async function readPdf(ctx: ToolContext, shown: string, real: string, size: numb
 async function readNotebook(ctx: ToolContext, shown: string, real: string, size: number, cells: string | undefined): Promise<ToolReply> {
   if (size > MAX_DOCUMENT_BYTES) throw new ToolError(`${shown} is a ${formatBytes(size)} notebook; read opens notebooks up to ${formatBytes(MAX_DOCUMENT_BYTES)}`);
   const text = await ctx.files.read(real);
-  if (text === null) throw new ToolError(`no such file or directory: ${shown}`);
+  if (text === null) throw missingPath(ctx, shown);
   let notebook;
   try {
     notebook = parseNotebook(text);
@@ -166,7 +166,7 @@ async function readResolved(ctx: ToolContext, real: string, { path: raw, start_l
   }
   if (extension === '.ipynb' && !lines) return readNotebook(ctx, displayPath(ctx, real), real, info.size, cells);
   const text = await ctx.files.read(real);
-  if (text === null) throw new ToolError(`no such file or directory: ${raw}`);
+  if (text === null) throw missingPath(ctx, raw);
   if (text.slice(0, BINARY_SNIFF).includes('\0')) throw new ToolError(`${raw} is a binary file`);
   if (text === '') return `${raw} is empty`;
   const all = linesOf(text);
