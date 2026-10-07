@@ -219,7 +219,7 @@ describe('the built-in browser', () => {
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'open http://localhost@evil.example/ (host evil.example)', reason: 'opening a page on another host' });
     expect(permissions[0]!.options.map((option) => option.optionId), 'no allow-for-session for a host').toEqual(['allow', 'reject']);
-    expect(textOf(toolResults(transport.requests[1]!.body)[0]!)).toContain('denied');
+    expect(transport.requests, 'the rejection ends the turn').toHaveLength(1);
     expect(chromes(marker), 'a refused navigation never starts Chrome').toEqual([]);
   }, 120_000);
 
@@ -297,7 +297,7 @@ describe('the built-in browser', () => {
     expect(opened).toContain(`on ${OFF_HOST}:`);
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toMatchObject({ reason: 'acting on a page from another host the user did not approve' });
-    expect(textOf(toolResults(transport.requests[2]!.body).find((r) => r.tool_use_id === 'tu_click')!)).toContain('denied');
+    expect(transport.requests, 'the rejection ends the turn').toHaveLength(2);
   }, 120_000);
 
   it('tells the agent to start the dev server with preview_start when nothing answers on a local port', async () => {

@@ -21,6 +21,7 @@ import {
   isReadOnly,
   mergeAgents,
   MESSAGE_AGENT_TOOL,
+  STOP_AND_WAIT,
   messageAgentResult,
   parseAgentDefinition,
   sessionEffortOf,
@@ -50,7 +51,7 @@ import type { Store } from './store.js';
 import type { SteerInbox, Steers } from './steer.js';
 import type { Wakes } from './wakes.js';
 import type { Approval } from './tools/agent.js';
-import { executor, ToolError, type Executor } from './tools/context.js';
+import { executor, ToolError, ToolRejected, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
 
@@ -167,8 +168,11 @@ type StepOptions = { readonly model?: string | undefined; readonly max_turns?: n
 
 type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
 
-/** A child's report as its parent's tool result, its end for the parent's log, and whether the child failed with nothing to say. */
-type ChildOutcome = { readonly text: string; readonly ended: ChildEndNote; readonly failed: boolean };
+/**
+ * A child's report as its parent's tool result, its end for the parent's log, whether the child failed with nothing to
+ * say, and whether it stopped on a call the user rejected.
+ */
+type ChildOutcome = { readonly text: string; readonly ended: ChildEndNote; readonly failed: boolean; readonly rejected: boolean };
 
 export type Subagents = {
   readonly tool: Tool;
@@ -329,7 +333,8 @@ export function subagents(env: SubagentEnv): Subagents {
     const summary = childSummary([report, ...notes].filter((part) => part !== '').join('\n\n'));
     const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary };
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });
-    return { text: childReport(agent.name, session.id, end, report, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0 };
+    const rejected = ran.some((e) => e.kind === 'tool-result' && e.status === 'rejected');
+    return { text: childReport(agent.name, session.id, end, report, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0, rejected };
   };
 
   const tool = agentToolDefinition(agents);
@@ -375,9 +380,11 @@ export function subagents(env: SubagentEnv): Subagents {
         })
         .catch(() => {});
       if (background !== true) {
-        const { text, ended, failed } = await child;
+        const { text, ended, failed, rejected } = await child;
         await ctx.logNote({ ...ended });
         if (failed) throw new ToolError(text);
+        // The user's no to the child's call is a no to this one too, so the parent stops as well.
+        if (rejected) throw new ToolRejected(`${text}\n${name} stopped because the user rejected one of its calls. ${STOP_AND_WAIT}`);
         return text;
       }
       const parentId = parent.log.session.id;

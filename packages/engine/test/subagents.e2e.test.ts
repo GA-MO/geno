@@ -237,9 +237,10 @@ describe('gcode serve: subagents', () => {
     // The child's own task waits on the card and rolls up into the parent's; the parent's record still runs.
     expect(asking[0]!.find((t) => t.sessionId === child!.child)).toMatchObject({ status: 'needs-input', asking: 'permission', parent: log.session.id, kind: 'subagent' });
     expect(asking[0]!.find((t) => t.sessionId === log.session.id)).toMatchObject({ status: 'running', parent: null });
-    const childSent = toolResults(transport.requests('[child-w]')[1]!.body);
-    expect(childSent[0]!.is_error).toBe(true);
-    expect(childSent[0]!.content).toContain('denied');
+    expect(transport.requests('[child-w]'), "the user's no ends the child's turn").toHaveLength(1);
+    expect(transport.requests('[parent]'), "and the parent's").toHaveLength(1);
+    const handed = log.events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_w');
+    expect(handed).toMatchObject({ status: 'rejected', output: expect.stringMatching(/worker stopped because the user rejected one of its calls\. STOP/) });
   });
 
   it('runs @explore as the user\'s own call: no parent model call, and the report is the turn', async () => {

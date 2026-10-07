@@ -87,7 +87,7 @@ export const TOOL_KINDS: Readonly<Record<string, acp.ToolKind>> = {
   web_search: 'fetch',
 };
 
-export const TOOL_STATUS: Readonly<Record<ToolStatus, acp.ToolCallStatus>> = { ok: 'completed', error: 'failed', denied: 'failed' };
+export const TOOL_STATUS: Readonly<Record<ToolStatus, acp.ToolCallStatus>> = { ok: 'completed', error: 'failed', denied: 'failed', rejected: 'failed' };
 
 /** How a turn that ended in an error shows, as its live stop reason showed it: a stop, a failure, or an answer with the error in it. */
 const ERROR_STATUS: Readonly<Record<TurnErrorKind, ReplayedTurn['status']>> = {

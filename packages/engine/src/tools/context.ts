@@ -36,6 +36,16 @@ export type ToolContext = {
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}
 
+/** A call the user turned down before it ran. It becomes a `rejected` tool result, which ends the turn. */
+export class ToolRejected extends ToolError {
+  constructor(
+    message: string,
+    readonly approval?: ApprovalRecord,
+  ) {
+    super(message);
+  }
+}
+
 /** A command that was refused before it ran. It becomes a `denied` tool result. */
 export class ToolDenied extends ToolError {
   constructor(

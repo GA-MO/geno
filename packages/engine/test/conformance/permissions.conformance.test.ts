@@ -224,7 +224,7 @@ describe.each(WIRES)('B/B-72 a user rejection on the %s wire', (wire) => {
     const said = results.map((e) => ('output' in e ? e.output : ''));
     expect(said[0]).toMatch(/stop what you are doing and wait for the user/i);
     expect(said[0]).not.toMatch(/find another way/i);
-    expect(said[1]).toMatch(/did not run/);
+    expect(said[1]).toMatch(/^The user rejected an earlier call of this turn, so this one did not run\. STOP/);
   });
 
   it('B/B-72 a rule denial with nobody to ask keeps "find another way", and the turn goes on', async () => {

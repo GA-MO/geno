@@ -332,7 +332,7 @@ describe('MCP approval', () => {
     const { open, workspace } = await setup({ global: { mcpServers: { fake: stdioServer({ MARKER: marker }) } } });
     const hub = await open();
     const { executors } = await toolsetOf(hub, approval('ask', 'reject').value);
-    await expect(executors['mcp__fake__crash']!.run({}, ctx(workspace))).rejects.toThrow(/denied/);
+    await expect(executors['mcp__fake__crash']!.run({}, ctx(workspace))).rejects.toThrow(/^The user rejected `mcp__fake__crash`, so it did not run\. STOP/);
     expect(hub.views()[0]!.state).toEqual({ status: 'ready', restarts: 0 });
   });
 
