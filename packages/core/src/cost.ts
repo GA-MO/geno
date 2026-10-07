@@ -20,11 +20,12 @@ export const PRICES: { readonly [P in ProviderName]: Readonly<Record<string, Rat
     'qwen3.8-flash': { input: 0.15, output: 0.47, cacheRead: 0.15, cacheWrite: 0.1875 },
     'qwen3.7-plus': { input: 0.4, output: 1.6, cacheRead: 0.4, cacheWrite: 0.5 },
   },
-  // Anthropic's list price; a five-minute cache write bills at 1.25x input and a read at 0.1x.
+  // Anthropic's list price. Geno writes this provider's cache entries for an hour (MODEL_CAPABILITIES), which bills at
+  // 2x input; reads are listed per model.
   anthropic: {
-    'claude-opus-5-5': { input: 4.0, output: 20.0, cacheRead: 0.2, cacheWrite: 5.0 },
-    'claude-sonnet-5-5': { input: 2.0, output: 10.0, cacheRead: 0.2, cacheWrite: 2.5 },
-    'claude-haiku-4-5': { input: 1.0, output: 5.0, cacheRead: 0.1, cacheWrite: 1.25 },
+    'claude-opus-5-5': { input: 4.0, output: 20.0, cacheRead: 0.2, cacheWrite: 8.0 },
+    'claude-sonnet-5-5': { input: 2.0, output: 10.0, cacheRead: 0.2, cacheWrite: 4.0 },
+    'claude-haiku-4-5': { input: 1.0, output: 5.0, cacheRead: 0.1, cacheWrite: 2.0 },
   },
   bedrock: {},
   vertex: {},

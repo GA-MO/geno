@@ -1,5 +1,8 @@
-import type { MessageParam, MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { CacheControlEphemeral, MessageParam, MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { NO_ATTACHMENTS, type StoredAttachments } from './attachments.js';
+import { contextTokens } from './compaction.js';
+import { textTokens } from './context-window.js';
+import { capabilitiesOf, type CacheTtl, type ModelCapabilities } from './model-capabilities.js';
 import { replayMessages, type Session, type TurnEvent } from './session.js';
 
 // Byte-stable on purpose: it is the cached prefix of every request, so any volatile text here busts the cache.
@@ -35,22 +38,35 @@ How to talk to the user:
 
 When answering questions about the code without changing it, cite the files and functions your answer rests on, so the user can check it. Prefer showing a short excerpt of the relevant code over describing it from memory.`;
 
-export const MAX_TOKENS = 64000;
+/** Room kept free in the window beside the input estimate, whose queued part is counted at 3.5 characters a token. */
+const WINDOW_MARGIN_TOKENS = 1_000;
 
-const EPHEMERAL = { type: 'ephemeral' } as const;
+const cacheControl = (ttl: CacheTtl): CacheControlEphemeral => (ttl === '1h' ? { type: 'ephemeral', ttl } : { type: 'ephemeral' });
 
 // The breakpoint on the newest user block makes the next turn read the prefix this turn writes.
-function withNewestUserBreakpoint(messages: MessageParam[]): MessageParam[] {
+function withNewestUserBreakpoint(messages: MessageParam[], control: CacheControlEphemeral): MessageParam[] {
   const index = messages.findLastIndex((m) => m.role === 'user');
   const newest = messages[index];
   if (newest === undefined || typeof newest.content === 'string') return messages;
   const blocks = newest.content.map((block, i) =>
-    i === newest.content.length - 1 ? { ...block, cache_control: EPHEMERAL } : block,
+    i === newest.content.length - 1 ? { ...block, cache_control: control } : block,
   );
   return messages.with(index, { ...newest, content: blocks as typeof newest.content });
 }
 
-/** Tools precede the system prompt in the cached prefix, so the system block's breakpoint caches them too. */
+/**
+ * The model's output limit, or what its window has left past the input when that is less. At least 1: a request
+ * whose input fills the window still goes out, for the provider to refuse as too long, which compacts and retries.
+ */
+function maxTokensFor({ window, maxOutput }: ModelCapabilities, inputTokens: number): number {
+  if (window === undefined) return maxOutput;
+  return Math.max(1, Math.min(maxOutput, window - inputTokens - WINDOW_MARGIN_TOKENS));
+}
+
+/**
+ * Tools precede the system prompt in the cached prefix, so the system block's breakpoint caches them too. Every
+ * breakpoint has the model's TTL, since an entry may not outlive one before it.
+ */
 export function buildRequest(
   session: Session,
   events: readonly TurnEvent[],
@@ -58,12 +74,18 @@ export function buildRequest(
   system: string = SYSTEM_PROMPT,
   stored: StoredAttachments = NO_ATTACHMENTS,
 ): MessageStreamParams {
+  const capabilities = capabilitiesOf(session.provider, session.model);
+  const control = cacheControl(capabilities.cacheTtl);
+  // A measured call already counted the system prompt and the tools.
+  const measured = events.some((e) => e.kind === 'assistant' || e.kind === 'compact');
+  const inputTokens = contextTokens(events) + (measured ? 0 : textTokens(system) + textTokens(JSON.stringify(tools)));
   return {
     model: session.model,
-    max_tokens: MAX_TOKENS,
+    max_tokens: maxTokensFor(capabilities, inputTokens),
+    ...(capabilities.thinking === 'adaptive' ? { thinking: { type: 'adaptive', display: 'omitted' } } : {}),
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
-    system: [{ type: 'text', text: system, cache_control: EPHEMERAL }],
-    messages: withNewestUserBreakpoint(replayMessages(events, stored)),
+    system: [{ type: 'text', text: system, cache_control: control }],
+    messages: withNewestUserBreakpoint(replayMessages(events, stored), control),
     output_config: { effort: session.effort },
   };
 }

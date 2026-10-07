@@ -50,7 +50,8 @@ describe('request assembly on the Anthropic wire', () => {
   it('T-ASM-06 near a full window, max_tokens shrinks so the input and the answer fit the window', async () => {
     const input = 950_000;
     const { workspace, cli, bodies } = await scripted('anthropic', [call('Looking.', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }], { input }), say('Done.')], undefined, OPUS);
-    expect((await cli(['agent', '--workspace', workspace, '--non-interactive', 'Read a.ts.'])).code).toBe(0);
+    // A 950,000-token call is priced at Opus rates, past the default budget.
+    expect((await cli(['agent', '--workspace', workspace, '--non-interactive', '--max-cost', '10', 'Read a.ts.'])).code).toBe(0);
     const [first, next] = bodies() as { max_tokens: number }[];
     expect(first!.max_tokens).toBe(128_000);
     expect(next!.max_tokens).toBeGreaterThan(0);

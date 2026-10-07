@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contextUseOf, contextWindowOf, lastContextUse, type TurnEvent } from '../src/index.js';
+import { contextUseOf, lastContextUse, type TurnEvent } from '../src/index.js';
 
 const usage = { input: 1200, cacheRead: 30_000, cacheWrite: 800, output: 400 };
 const answer = (seq: number, model: string, tokens = usage): TurnEvent => ({
@@ -14,15 +14,10 @@ const answer = (seq: number, model: string, tokens = usage): TurnEvent => ({
   model,
 });
 
-describe('contextWindowOf', () => {
-  it('knows the windows Model Studio documents for its Qwen models', () => {
-    expect(contextWindowOf('modelstudio', 'qwen3.8-flash')).toBe(1_000_000);
-    expect(contextWindowOf('modelstudio', 'qwen3.7-plus')).toBe(1_000_000);
-  });
-
-  it('says undefined, never a guess, for a model it has no row for', () => {
-    expect(contextWindowOf('openrouter', 'qwen3.8-flash')).toBeUndefined();
-    expect(contextWindowOf('modelstudio', 'toString')).toBeUndefined();
+describe('the window in a context use', () => {
+  it('is undefined, never a guess, for a model the capability record has no row for', () => {
+    expect(contextUseOf('openrouter', 'qwen3.8-flash', usage).window).toBeUndefined();
+    expect(contextUseOf('modelstudio', 'toString', usage).window).toBeUndefined();
   });
 });
 

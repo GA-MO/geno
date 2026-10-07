@@ -2,8 +2,6 @@ import type { MessageParam } from '@anthropic-ai/sdk/resources/messages/messages
 import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
-  COMPACT_AT,
-  compactAtTokens,
   compactedText,
   compactionEvent,
   contextTokens,
@@ -331,13 +329,12 @@ describe('rewind and fork across a compaction', () => {
 });
 
 describe('when to compact', () => {
-  it(`compacts once the context and what is queued pass ${COMPACT_AT * 100}% of the window`, () => {
+  it('compacts once the context and what is queued pass the threshold', () => {
     // The last call measured 10,100 tokens; the bash result queued after it adds about 3,000.
     expect(contextTokens(log)).toBe(10_100 + eventTokens(log.at(-1)!));
-    expect(compactAtTokens(16_000)).toBe(12_800);
-    expect(autoCompaction(log, compactAtTokens(16_000))?.keptFrom).toBe(14);
-    expect(autoCompaction(log, compactAtTokens(17_000))).toBeUndefined();
-    expect(autoCompaction(log, compactAtTokens(undefined))).toBeUndefined();
+    expect(autoCompaction(log, 12_800)?.keptFrom).toBe(14);
+    expect(autoCompaction(log, 13_600)).toBeUndefined();
+    expect(autoCompaction(log, undefined)).toBeUndefined();
   });
 
   it('skips a compaction that could not bring the context back under the threshold', () => {
@@ -349,14 +346,9 @@ describe('when to compact', () => {
     expect(autoCompaction(log, 9_000)).toBeUndefined();
   });
 
-  it("takes the user's own threshold over the window's", () => {
-    expect(compactAtTokens(1_000_000, 12_000)).toBe(12_000);
-    expect(compactAtTokens(undefined, 12_000)).toBe(12_000);
-  });
-
   it('keeps a quarter of the threshold verbatim on a small window', () => {
-    expect(keepTailTokens(compactAtTokens(1_000_000))).toBe(KEEP_TAIL_TOKENS);
-    expect(keepTailTokens(compactAtTokens(32_000))).toBe(6_400);
+    expect(keepTailTokens(800_000)).toBe(KEEP_TAIL_TOKENS);
+    expect(keepTailTokens(25_600)).toBe(6_400);
   });
 
   it('waits for a model call after a compaction before compacting again', () => {

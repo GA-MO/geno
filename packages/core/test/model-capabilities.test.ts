@@ -10,16 +10,16 @@ describe('the model capability table', () => {
     for (const [provider, model] of [...defaults, ...priced]) expect(capabilitiesOf(provider, model), `${provider} ${model}`).not.toBe(UNKNOWN_MODEL);
   });
 
-  it('keeps every row self-consistent: output and the compaction point inside the window, and a read page under the spill limit', () => {
+  it('keeps every row self-consistent: output and the compaction point inside the window, and a read page, its notice and a rule under the spill limit', () => {
     for (const { provider, model, caps } of rows) {
       const name = `${provider} ${model}`;
       expect(caps.window, name).toBeGreaterThan(0);
       expect(caps.maxOutput, name).toBeLessThan(caps.window!);
       expect(caps.compactAt, name).toBeLessThan(caps.window!);
-      expect(caps.spillChars, name).toBeGreaterThan(PAGE_MAX_CHARS);
+      expect(caps.spillChars, name).toBeGreaterThanOrEqual(PAGE_MAX_CHARS + 4_000);
       expect(caps.source, name).toMatch(/^https:\/\//);
     }
-    expect(UNKNOWN_MODEL.spillChars).toBeGreaterThan(PAGE_MAX_CHARS);
+    expect(UNKNOWN_MODEL.spillChars).toBeGreaterThanOrEqual(PAGE_MAX_CHARS + 4_000);
   });
 
   it('gives the windows and output limits the providers document', () => {
@@ -35,6 +35,14 @@ describe('the model capability table', () => {
     expect(capabilitiesOf('vertex', 'claude-opus-5-5').cacheTtl).toBe('1h');
     expect(capabilitiesOf('modelstudio', 'qwen3.8-flash').cacheTtl).toBe('5m');
     expect(capabilitiesOf('openrouter', 'anthropic/claude-opus-5.5').cacheTtl).toBe('5m');
+  });
+
+  it("prices a Claude cache write at the rate of the TTL Geno asks for: 2x input for 1 h, 1.25x for 5 min", () => {
+    for (const provider of ['anthropic', 'openrouter'] as const) {
+      for (const [model, rates] of Object.entries(PRICES[provider])) {
+        expect(rates.cacheWrite / rates.input, `${provider} ${model}`).toBe(capabilitiesOf(provider, model).cacheTtl === '1h' ? 2 : 1.25);
+      }
+    }
   });
 
   it('asks for adaptive thinking only from models that take it', () => {

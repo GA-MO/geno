@@ -8,21 +8,14 @@ import type { TodoList, TodoStatus } from './todo.js';
  * types, so the session's replay and the webview can use it; the cut rule and the summary request are `compaction.ts`.
  */
 
-/** Before a model call whose context would pass this share of the model's window, Geno compacts first. */
-export const COMPACT_AT = 0.8;
-
 /** About this many tokens of the newest events stay verbatim after a compaction; the cut moves to a turn boundary. */
 export const KEEP_TAIL_TOKENS = 20_000;
-
-/** Where auto compaction starts, in tokens: the user's own setting, else COMPACT_AT of a known window, else never. */
-export const compactAtTokens = (window: number | undefined, setting?: number): number | undefined =>
-  setting ?? (window === undefined ? undefined : Math.floor(COMPACT_AT * window));
 
 /** The tail kept verbatim: KEEP_TAIL_TOKENS, or a quarter of the threshold on a small window, so the summary has room. */
 export const keepTailTokens = (compactAt: number | undefined): number =>
   compactAt === undefined ? KEEP_TAIL_TOKENS : Math.min(KEEP_TAIL_TOKENS, Math.floor(compactAt / 4));
 
-/** `auto` passed COMPACT_AT before a call, `overflow` is a call the provider refused as too long, `manual` is /compact. */
+/** `auto` passed the model's `compactAt` before a call, `overflow` is a call the provider refused as too long, `manual` is /compact. */
 export const COMPACT_TRIGGERS = ['auto', 'overflow', 'manual'] as const;
 export type CompactTrigger = (typeof COMPACT_TRIGGERS)[number];
 
