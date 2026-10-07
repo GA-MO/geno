@@ -105,6 +105,23 @@ describe('tool_search', () => {
   it('names what it could not load', () => {
     expect(searchTools(deferred, { select: ['read', 'mcp__browser__click'] }).text).toContain('Not deferred tools: read.');
   });
+
+  it('takes Claude Code\'s select:A,B query as a select, in its order, skipping unknown names with the same note', () => {
+    const { loaded, text } = searchTools(deferred, { query: 'select: mcp__browser__navigate_page ,mcp__browser__click,nope' });
+    expect(loaded).toEqual(['mcp__browser__navigate_page', 'mcp__browser__click']);
+    expect(text).toContain('Not deferred tools: nope.');
+  });
+
+  it('keeps only names that hold a +word, ranked by the other words', () => {
+    const { loaded } = searchTools(deferred, { query: '+screenshot' });
+    expect(loaded).toEqual(['mcp__browser__take_screenshot']);
+    expect(searchTools(deferred, { query: '+console list' }).loaded).toEqual(['mcp__browser__list_console_messages', 'mcp__browser__get_console_message']);
+    expect(searchTools(deferred, { query: '+Console GET' }).loaded).toEqual(['mcp__browser__get_console_message', 'mcp__browser__list_console_messages']);
+  });
+
+  it('loads nothing, with a note, when no name holds the +word', () => {
+    expect(searchTools(deferred, { query: '+kubernetes pods' })).toEqual({ loaded: [], text: 'No deferred tool matches "+kubernetes pods".' });
+  });
 });
 
 describe('loaded tools', () => {

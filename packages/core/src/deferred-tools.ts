@@ -66,7 +66,10 @@ export const toolSearchDefinition = (deferred: ReadonlyMap<string, DeferredTool>
     type: 'object',
     properties: {
       select: { type: 'array', items: { type: 'string' }, description: 'Exact tool names to load, such as ["bash_output"].' },
-      query: { type: 'string', description: 'Words to search for, such as "browser screenshot". Loads the best matches.' },
+      query: {
+        type: 'string',
+        description: 'Words to search for, such as "browser screenshot". Loads the best matches. "+browser screenshot" keeps only names with browser, and "select:a,b" loads those names.',
+      },
     },
     additionalProperties: false,
   },
@@ -107,13 +110,17 @@ const MAX_QUERY_MATCHES = 5;
 
 const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 1);
 
+/** The best matches to `query`'s words. A word written `+word` must be in the name, and the others rank what is left. */
 function matches(deferred: ReadonlyMap<string, DeferredTool>, query: string): string[] {
-  const words = wordsOf(query);
+  const terms = query.toLowerCase().split(/\s+/);
+  const required = terms.flatMap((term) => (term.startsWith('+') && term.length > 1 ? [term.slice(1)] : []));
+  const words = wordsOf(terms.filter((term) => !term.startsWith('+')).join(' '));
   const scored = [...deferred].flatMap(([name, { definition }]) => {
+    if (!required.every((term) => name.toLowerCase().includes(term))) return [];
     const inName = wordsOf(name);
     const inText = new Set(wordsOf(definition.description ?? ''));
     const score = words.reduce((sum, word) => sum + (inName.includes(word) ? 3 : 0) + (inName.some((part) => part.startsWith(word)) ? 1 : 0) + (inText.has(word) ? 1 : 0), 0);
-    return score > 0 ? [{ name, score }] : [];
+    return score > 0 || required.length > 0 ? [{ name, score }] : [];
   });
   return scored
     .toSorted((a, b) => b.score - a.score || (a.name < b.name ? -1 : 1))
@@ -123,14 +130,19 @@ function matches(deferred: ReadonlyMap<string, DeferredTool>, query: string): st
 
 const shown = ({ name, description, input_schema }: Tool): string => JSON.stringify({ name, description, input_schema });
 
+// Claude Code's ToolSearch takes its names in the query, as "select:Read,Edit".
+const SELECT_QUERY = /^\s*select:([\s\S]*)$/;
+
 export function searchTools(deferred: ReadonlyMap<string, DeferredTool>, input: ToolSearchInput): ToolSearchResult {
-  const selected = input.select ?? [];
+  const named = input.query === undefined ? undefined : SELECT_QUERY.exec(input.query)?.[1];
+  const query = named === undefined ? input.query : undefined;
+  const selected = [...(input.select ?? []), ...(named ?? '').split(',').map((name) => name.trim()).filter((name) => name !== '')];
   const unknown = selected.filter((name) => !deferred.has(name));
-  const picked = [...new Set([...selected.filter((name) => deferred.has(name)), ...(input.query === undefined ? [] : matches(deferred, input.query))])];
+  const picked = [...new Set([...selected.filter((name) => deferred.has(name)), ...(query === undefined ? [] : matches(deferred, query))])];
   const notes = [
     ...(unknown.length === 0 ? [] : [`Not deferred tools: ${unknown.join(', ')}. Use the names listed in the tool_search description.`]),
-    ...(selected.length === 0 && input.query === undefined ? ['Pass select or query.'] : []),
-    ...(picked.length === 0 && input.query !== undefined ? [`No deferred tool matches "${input.query}".`] : []),
+    ...(selected.length === 0 && query === undefined ? ['Pass select or query.'] : []),
+    ...(picked.length === 0 && query !== undefined ? [`No deferred tool matches "${query}".`] : []),
   ];
   if (picked.length === 0) return { loaded: [], text: notes.join('\n') };
   const definitions = picked.map((name) => shown(deferred.get(name)!.definition));
