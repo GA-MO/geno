@@ -112,7 +112,7 @@ describe('a workflow in the chat panel', () => {
   it('shows the run in Tasks with its step, its running steps and what it spent, and why it stopped', async () => {
     const panel = await openPanel();
     const children = [task({ sessionId: 'c-1', title: 'worker: Fix', parent: 'wf-1', kind: 'subagent' })];
-    await panel.host.post({ type: 'tasks', tasks: [task({ workflow: progress({}) }), ...children], shown: undefined, seen: {} });
+    await panel.host.post({ type: 'tasks', tasks: [task({ workflow: progress({}), usage: { model: 'qwen3.8-flash', inputTokens: 0, outputTokens: 0, costUsd: 0 } }), ...children], shown: undefined, seen: {} });
     await panel.host.post({ type: 'show-tasks' });
     const row = '.task-row[data-task="wf-1"]';
     await panel.waitFor('the workflow row', async () => (await panel.count(row)) === 1);
@@ -120,6 +120,7 @@ describe('a workflow in the chat panel', () => {
     await panel.waitFor('Working to open', async () => (await panel.eval<string>(`doc.querySelector('.tasks-fold').getAttribute('aria-expanded')`)) === 'true');
     expect(await panel.eval(`doc.querySelector('${row} .task-workflow').textContent`)).toBe('Step 2 of 5: fix · $0.01 of $0.40');
     expect(await panel.eval(`doc.querySelector('${row}').textContent.includes('1 agent running')`)).toBe(true);
+    expect(await panel.count(`${row} .lane-cost`), 'its progress line says what it spent').toBe(0);
     expect(await panel.eval(`[...doc.querySelectorAll('${row} .lane-actions button')].map((b) => b.textContent)`), 'a workflow takes no message; its steps do').toEqual(['Open', 'Stop']);
     await screenshots(panel, 'workflow-tasks');
 
