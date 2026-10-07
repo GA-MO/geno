@@ -561,7 +561,23 @@ const ANNOUNCEMENTS: { readonly [K in ToView['type']]?: (message: Extract<ToView
 };
 const announcement = (message: ToView): string | undefined => (ANNOUNCEMENTS[message.type] as ((m: ToView) => string) | undefined)?.(message);
 
+/**
+ * Whether a message came from a frame inside the panel, such as a widget's or one a widget nested. It posts to this
+ * window like the extension does, but what it says goes only through its own validated channel.
+ */
+function fromOwnFrame(source: MessageEventSource | null): boolean {
+  const within = (parent: Window): boolean => {
+    for (let i = 0; i < parent.frames.length; i++) {
+      const frame = parent.frames[i]!;
+      if (frame === source || within(frame)) return true;
+    }
+    return false;
+  };
+  return source !== null && within(window);
+}
+
 window.addEventListener('message', (event: MessageEvent<ToView>) => {
+  if (fromOwnFrame(event.source)) return;
   const message = event.data;
   if (message.type === 'completions') {
     showCompletions(message.id, message.items);
