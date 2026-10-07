@@ -58,10 +58,11 @@ describe('selectVscode', () => {
     expect(picked(['packages/engine/src/gh.ts']), 'an engine file that shapes no request runs the smoke set').toEqual(['chat', 'panel', 'working']);
   });
 
-  it('picks the eight suites that broke silently when the request shape changed', () => {
+  it('picks the suites that broke silently when P5 to P17 changed the request on purpose', () => {
     const real = readSuites(fileURLToPath(new URL('..', import.meta.url)));
-    const broke = ['attachments', 'background', 'context', 'mentions', 'modes', 'read-terminal', 'todo', 'wake'];
-    for (const file of ['packages/core/src/session.ts', 'packages/core/src/fence.ts', 'packages/core/src/agent.ts', 'packages/engine/src/drive.ts']) {
+    const broke = ['arena', 'attachments', 'background', 'context', 'mentions', 'modes', 'read-terminal', 'todo', 'wake', 'workflows'];
+    const files = ['packages/core/src/session.ts', 'packages/core/src/fence.ts', 'packages/core/src/agent.ts', 'packages/core/src/loop.ts', 'packages/engine/src/drive.ts', 'packages/engine/src/subagents.ts'];
+    for (const file of files) {
       const picked = selectVscode([file], '', real).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
       expect(picked, file).toEqual(expect.arrayContaining(broke));
     }
