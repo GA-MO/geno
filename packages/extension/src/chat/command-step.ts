@@ -9,6 +9,9 @@ const TITLE_MAX = 100;
 /** The engine ends a command's output with its exit line; a clean exit says nothing the step's status does not. */
 const CLEAN_EXIT = '[exit code 0]';
 
+/** A failed command's output also starts with its exit, for the model; the step keeps only the line at the end. */
+const FAILURE_HEAD = /^(?:Exit code \S+|Killed after \d+ seconds)$/;
+
 /**
  * A bash call as its step draws it: a title in plain words, the command in full, and the first lines of its
  * output. `output` is undefined until the command has any; `truncated` says lines past the preview are hidden.
@@ -56,6 +59,7 @@ function titleOf(tool: ToolBlock): string {
 function outputLines(output: string | undefined): readonly string[] | undefined {
   if (output === undefined) return undefined;
   const lines = output.replace(/\s+$/, '').split('\n');
+  if (lines.length > 1 && FAILURE_HEAD.test(lines[0]!)) lines.shift();
   if (lines.at(-1) === CLEAN_EXIT) lines.pop();
   while (lines.length > 0 && lines.at(-1)!.trim() === '') lines.pop();
   return lines;

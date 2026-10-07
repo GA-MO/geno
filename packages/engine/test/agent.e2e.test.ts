@@ -202,7 +202,7 @@ describe('gcode agent', () => {
     expect(asked).toEqual([]);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     const results = ofKind(log.events, 'tool-result');
-    expect(results.map((r) => r.status)).toEqual([...denied.map(() => 'denied'), 'ok']);
+    expect(results.map((r) => r.status).slice(0, denied.length)).toEqual(denied.map(() => 'denied'));
     expect(results.slice(0, denied.length).map((r) => ('output' in r ? r.output.split(' uses ')[1]!.split(',')[0] : ''))).toEqual([
       'rm -rf of the workspace',
       'git push',
@@ -214,7 +214,8 @@ describe('gcode agent', () => {
     ]);
     expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
     const vitest = results.at(-1)!;
-    expect('output' in vitest && vitest.output).toMatch(/\[exit code \d+\]$/);
+    const [, code] = /\[exit code (\d+)\]$/.exec('output' in vitest ? vitest.output : '')!;
+    expect(vitest.status).toBe(code === '0' ? 'ok' : 'error');
     expect(transport.requests[1]!.body.messages.at(-1).content[0]).toMatchObject({ is_error: true });
   });
 

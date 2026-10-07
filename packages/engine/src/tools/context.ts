@@ -44,11 +44,15 @@ export class ToolDenied extends ToolError {
   }
 }
 
-/** What a tool tells the model, the file edit it made, how its command was approved, and images, a widget an editor action or a todo list it returns, if any. */
+/**
+ * What a tool tells the model, the file edit it made, how its command was approved, and images, a widget an editor action
+ * or a todo list it returns, if any. `status: 'error'` marks a result that ran but failed, such as a command's non-zero exit.
+ */
 export type ToolReply =
   | string
   | {
       readonly text: string;
+      readonly status?: 'error' | undefined;
       readonly change?: FileChange | undefined;
       readonly approval?: ApprovalRecord | undefined;
       readonly images?: readonly ImageAttachment[] | undefined;
