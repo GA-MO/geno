@@ -5,13 +5,16 @@ import {
   ruleAttachment,
   rulesMatching,
   toolResultText,
-  type ProjectRule,
+  type RuleText,
   type TurnEvent,
 } from '@g-code/core';
 import { displayPath, resolveInside, type Executor } from './context.js';
 
-/** Hands out each `globs` rule of the session once: the first time a file it matches enters the context. */
-export type RuleAttacher = { take(file: string): ProjectRule[] };
+/**
+ * Hands out each `globs` rule and nested instruction file of the session once: the first time a file it covers enters
+ * the context.
+ */
+export type RuleAttacher = { take(file: string): RuleText[] };
 
 const NO_RULES: RuleAttacher = { take: () => [] };
 
@@ -25,15 +28,19 @@ export function ruleAttacher(events: readonly TurnEvent[]): RuleAttacher {
   );
   return {
     take(file) {
-      const fresh = rulesMatching(context, file).filter((rule) => !attached.has(rule.path));
-      for (const rule of fresh) attached.add(rule.path);
+      const fresh: RuleText[] = [];
+      for (const rule of rulesMatching(context, file)) {
+        if (attached.has(rule.path)) continue;
+        attached.add(rule.path);
+        fresh.push(rule);
+      }
       return fresh;
     },
   };
 }
 
 /** A rule too long to ride along with a read result is named instead, for the model to read. */
-function attachments(text: string, rules: readonly ProjectRule[], file: string, spillChars: number): string {
+function attachments(text: string, rules: readonly RuleText[], file: string, spillChars: number): string {
   const full = rules.map((rule) => ruleAttachment(rule, file));
   if ([text, ...full].join('\n\n').length <= spillChars) return full.join('\n\n');
   return rules.map((rule) => ruleAttachment({ path: rule.path, text: `This rule applies to ${file}. Read ${rule.path} for it.` }, file)).join('\n\n');

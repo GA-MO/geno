@@ -34,6 +34,8 @@ beforeAll(async () => {
   await writeFile(path.join(ws, 'src', 'App.tsx'), 'export const App = () => null;\n');
   await writeFile(path.join(ws, 'src', 'b.tsx'), 'export const B = 1;\n');
   await writeFile(path.join(ws, 'src', 'plain.ts'), 'export const plain = 1;\n');
+  await mkdir(path.join(ws, 'src', 'ui'));
+  await writeFile(path.join(ws, 'src', 'ui', 'Button.tsx'), 'export const Button = 1;\n');
   await writeFile(path.join(ws, 'big', 'long.txt'), `${'x'.repeat(100)}\n`.repeat(3000));
   ctx = { workspace: ws, spillDir: path.join(ws, '..', 'spill'), readRoots: [], attachmentsDir: path.join(ws, '..', 'spill', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
 });
@@ -45,6 +47,22 @@ describe('glob rules on read', () => {
     expect(first).toBe(`1\texport const App = () => null;\n\n${ruleAttachment(context.rules[0]!, 'src/App.tsx')}`);
     expect(await read.run({ path: 'src/b.tsx' }, ctx)).toBe('1\texport const B = 1;');
     expect(await read.run({ path: 'src/plain.ts' }, ctx)).toBe('1\texport const plain = 1;');
+  });
+
+  it('attaches the nested files of every directory above the file, outer first and before the glob rules, a file two of them import once', async () => {
+    const nested: LoadedContext = {
+      ...context,
+      nested: [
+        { path: 'src/AGENTS.md', text: 'Source.', dir: 'src' },
+        { path: 'docs/style.md', text: 'Style.', importedFrom: 'src/AGENTS.md', dir: 'src' },
+        { path: 'src/ui/AGENTS.md', text: 'UI.', dir: 'src/ui' },
+        { path: 'docs/style.md', text: 'Style.', importedFrom: 'src/ui/AGENTS.md', dir: 'src/ui' },
+      ],
+    };
+    const read = withRuleAttachments(EXECUTORS.read, ruleAttacher([{ ...start, context: nested } as TurnEvent]));
+    const attached = [nested.nested![0]!, nested.nested![1]!, nested.nested![2]!, context.rules[0]!].map((rule) => ruleAttachment(rule, 'src/ui/Button.tsx'));
+    expect(await read.run({ path: 'src/ui/Button.tsx' }, ctx)).toBe(['1\texport const Button = 1;', ...attached].join('\n\n'));
+    expect(await read.run({ path: 'src/App.tsx' }, ctx)).toBe('1\texport const App = () => null;');
   });
 
   it('does not attach again in a resumed session that already attached it', async () => {

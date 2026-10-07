@@ -73,6 +73,6 @@ export async function contextItems(mentions: readonly Mention[], workspace: stri
     }
     if (relative !== undefined) matched.push(relative);
   }
-  for (const file of matched) for (const rule of rules.take(file)) items.push({ kind: 'rule', path: rule.path, matched: file, text: rule.text });
+  for (const file of matched) for (const rule of rules.take(file)) items.push({ kind: 'rule', path: rule.path, matched: file, text: rule.text, ...(rule.importedFrom === undefined ? {} : { importedFrom: rule.importedFrom }) });
   return items;
 }
