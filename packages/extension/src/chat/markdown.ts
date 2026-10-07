@@ -89,6 +89,8 @@ const BLOCK: Renderers = {
   },
   blockquote: (t, ctx) => h('blockquote', {}, ...blocks(t.tokens, ctx)),
   hr: () => h('hr'),
+  // A task item's box comes first among its blocks.
+  checkbox: (t) => icon(t.checked ? 'pass-filled' : 'circle-large-outline', 'task'),
   html: (t) => h('p', {}, t.raw),
   list: (t, ctx) =>
     t.ordered
