@@ -43,6 +43,8 @@ describe('a command step', () => {
   it('keeps a failing exit line once, at the end, and shows a short output whole', () => {
     const step = commandStepOf(bash({ target: 'false' }, { output: 'Exit code 1\nnope\n[exit code 1]\n', status: 'failed' }), false);
     expect(step).toMatchObject({ output: ['nope', '[exit code 1]'], truncated: false, lines: 2, status: 'failed' });
+    const printed = commandStepOf(bash({ target: 'cat log' }, { output: 'Exit code 3\nfrom the log\n[exit code 0]\n' }), false);
+    expect(printed).toMatchObject({ output: ['Exit code 3', 'from the log'], status: 'completed' });
   });
 
   it('shows a background command by its job: the newest lines of its output, Stop while it runs, and how it ended', () => {
