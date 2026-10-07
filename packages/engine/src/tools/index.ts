@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import type { ApprovalRecord, ChapterMark, EditorAction, FileChange, ImageAttachment, SpinoffNote, TodoList, ToolName, ToolStatus, WidgetRef } from '@g-code/core';
+import { toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type ImageAttachment, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
 import { ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -32,8 +32,16 @@ const isFsError = (error: unknown): error is NodeJS.ErrnoException =>
 export const describeCall = (use: ToolUseBlock, executors: Executors): string =>
   Object.hasOwn(executors, use.name) ? executors[use.name]!.describe(use.input) : `${use.name} ${JSON.stringify(use.input)}`;
 
-/** Runs one tool use. Anything the model got wrong comes back as an `error` result for it to read. */
+/**
+ * Runs one tool use. Anything the model got wrong comes back as an `error` result for it to read. Hidden characters in
+ * the text are shown or stripped, by the tool (`toolText`).
+ */
 export async function runTool(use: ToolUseBlock, ctx: ToolContext, executors: Executors): Promise<ToolRun> {
+  const run = await runExecutor(use, ctx, executors);
+  return { ...run, text: toolText(use.name, run.text) };
+}
+
+async function runExecutor(use: ToolUseBlock, ctx: ToolContext, executors: Executors): Promise<ToolRun> {
   if (!Object.hasOwn(executors, use.name)) {
     return { status: 'error', text: `unknown tool ${use.name}; the tools are ${Object.keys(executors).sort().join(', ')}` };
   }

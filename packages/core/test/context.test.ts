@@ -9,8 +9,10 @@ import {
   renderContextItems,
   renderLoadedContext,
   replayMessages,
+  restoreHidden,
   ruleAttachment,
   rulesMatching,
+  showHidden,
   stripHidden,
   type LoadedContext,
   type Session,
@@ -159,5 +161,13 @@ describe('attachments', () => {
 
   it('strips invisible characters that could hide instructions', () => {
     expect(stripHidden('a​b‮c⁦d﻿e\u{E0049}f')).toBe('abcdef');
+  });
+
+  it('shows invisible characters as escapes, and puts them back from those escapes alone', () => {
+    const text = 'a­b​c‮d⁦e﻿f\u{E0049}g é \u{1F468}‍\u{1F469}';
+    const shown = showHidden(text);
+    expect(shown).toBe('a[U+00AD]b[U+200B]c[U+202E]d[U+2066]e[U+FEFF]f[U+E0049]g é \u{1F468}[U+200D]\u{1F469}');
+    expect(restoreHidden(shown)).toBe(text);
+    expect(restoreHidden('[U+0041] and [U+1F600] stay as written')).toBe('[U+0041] and [U+1F600] stay as written');
   });
 });

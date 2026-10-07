@@ -4,6 +4,8 @@ import {
   nextWakeId,
   prPollDelayS,
   prWatchOutcomeOf,
+  showHidden,
+  stripHidden,
   type JobId,
   type PrLookup,
   type PrWatch,
@@ -132,7 +134,8 @@ export class Wakes {
     };
     const finish = (result: { readonly outcome: 'matched'; readonly line: string } | { readonly outcome: 'timed-out' }) => {
       if (!end()) return;
-      const note: WakeNote = { kind: 'monitor', id: start.id, toolUseId: start.toolUseId, job: start.job, pattern: start.pattern.source, ...result };
+      const seen = result.outcome === 'matched' ? { ...result, line: showHidden(result.line) } : result;
+      const note: WakeNote = { kind: 'monitor', id: start.id, toolUseId: start.toolUseId, job: start.job, pattern: start.pattern.source, ...seen };
       this.hooks.arrive(sessionId, { kind: 'wake', at: new Date().toISOString(), note });
       this.hooks.changed(sessionId);
     };
@@ -180,7 +183,7 @@ export class Wakes {
       }
       const text = await start.report(next.end, controller.signal).catch((error: unknown) => `The watch ended, and its report failed: ${String(error)}`);
       if (!end()) return;
-      const note: WakeNote = { kind: 'pr', id: start.id, toolUseId: start.toolUseId, pr: watch.pr.number, outcome: prWatchOutcomeOf(next.end), text };
+      const note: WakeNote = { kind: 'pr', id: start.id, toolUseId: start.toolUseId, pr: watch.pr.number, outcome: prWatchOutcomeOf(next.end), text: stripHidden(text) };
       this.hooks.arrive(sessionId, { kind: 'wake', at: new Date().toISOString(), note });
       this.hooks.changed(sessionId);
     };

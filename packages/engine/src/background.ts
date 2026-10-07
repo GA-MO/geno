@@ -6,6 +6,7 @@ import {
   isJobId,
   MAX_BACKGROUND_JOBS,
   nextJobState,
+  showHidden,
   STOP_GRACE_MS,
   type BackgroundEndEvent,
   type BackgroundJob,
@@ -80,9 +81,10 @@ export function jobIdsIn(events: readonly TurnEvent[]): JobId[] {
 
 const numberOf = (id: JobId): number => Number(id.slice(3));
 
+/** The end of a command's output, with hidden characters shown as bash shows them. */
 export const tailOf = (output: CappedOutput): string => {
   const tail = output.tail(BACKGROUND_TAIL_LINES);
-  return tail.length > BACKGROUND_TAIL_CHARS ? tail.slice(-BACKGROUND_TAIL_CHARS) : tail;
+  return showHidden(tail.length > BACKGROUND_TAIL_CHARS ? tail.slice(-BACKGROUND_TAIL_CHARS) : tail);
 };
 
 const viewOf = (entry: Entry): JobView => ({
