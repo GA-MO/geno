@@ -4,11 +4,12 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import {
-  AGENT_SYSTEM_PROMPT,
+  AGENT_PROMPTS,
   AGENT_TOOL,
   AGENT_TOOL_DEFINITIONS,
   APPROVAL_MODES,
   approvalQuestion,
+  capabilitiesOf,
   DEFERRED_TOOLS_NOTE,
   describeServerState,
   editorActionToolDefinitions,
@@ -39,6 +40,7 @@ import {
   widgetToolDefinitions,
   type AssistantTurn,
   type EffortPolicy,
+  type PromptTier,
   type SessionMode,
   type SessionScope,
   type TurnEvent,
@@ -90,8 +92,15 @@ import type { Wakes } from './wakes.js';
 import { ghCli, githubRemote } from './gh.js';
 import { HookSessions } from './hooks.js';
 
-/** `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode. */
-const workspaceConfigSchema = z.looseObject({ check: z.string().min(1).optional(), agentTool: z.array(z.enum(APPROVAL_MODES)).optional() });
+/**
+ * `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
+ * `appendSystemPrompt` is text that ends the system prompt of every agent run in the workspace.
+ */
+const workspaceConfigSchema = z.looseObject({
+  check: z.string().min(1).optional(),
+  agentTool: z.array(z.enum(APPROVAL_MODES)).optional(),
+  appendSystemPrompt: z.string().min(1).optional(),
+});
 
 type WorkspaceConfig = z.infer<typeof workspaceConfigSchema>;
 
@@ -144,6 +153,10 @@ export type AgentOptions = {
   readonly chapters?: boolean | undefined;
   /** Undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy | undefined;
+  /** Replaces the model's prompt tier; for the eval that compares them. */
+  readonly promptTier?: PromptTier | undefined;
+  /** From --append-system-prompt; undefined falls back to `.gcode.json`. It ends the system prompt. */
+  readonly appendSystemPrompt?: string | undefined;
   /** Where subagents show; undefined prints them on the terminal. */
   readonly childHost?: SubagentHost | undefined;
   /** Lets a non-interactive run start subagents that may change files. */
@@ -315,13 +328,15 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools);
+    const appended = options.appendSystemPrompt ?? config.appendSystemPrompt;
     const system = [
-      AGENT_SYSTEM_PROMPT,
+      AGENT_PROMPTS[options.promptTier ?? capabilitiesOf(session.provider, session.model).promptTier],
       ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
       ...(spinoffs && SPINOFF_MODES[startMode] ? [SPINOFF_NOTE] : []),
       ...(options.scheduled === true ? [SCHEDULED_RUN_NOTE] : []),
       ...(chapters && CHAPTER_MODES[startMode] ? [CHAPTER_NOTE] : []),
       ...(genoTools === undefined ? [] : [pstackNote(genoTools)]),
+      ...(appended === undefined ? [] : [appended]),
     ].join('\n\n');
     const mode = {
       tools: roster.offered,
@@ -402,6 +417,7 @@ export const agent: Command = async (args, { io, store }) => {
       mode: { type: 'string' },
       mcp: { type: 'boolean' },
       'allow-worker': { type: 'boolean', default: false },
+      'append-system-prompt': { type: 'string' },
     },
   });
   const task = positionals.join(' ').trim();
@@ -414,9 +430,11 @@ export const agent: Command = async (args, { io, store }) => {
   const approval: Approval = values['non-interactive']
     ? { kind: 'non-interactive', mcp: values.mcp === true }
     : { kind: 'interactive', mode: () => mode, approve: askOnTerminal(io), classify: commandClassifier(io.env, io.fetch), auto: freshAuto() };
+  const appendSystemPrompt = values['append-system-prompt'];
+  if (appendSystemPrompt?.trim() === '') throw new UsageError('--append-system-prompt needs text');
   // The command line runs the user's own hooks and no workspace's: no editor vouches that the user trusts the folder.
   const hooks = new HookSessions();
-  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'], hooks };
+  const options = { limits, check: values.check, checkAfterEdit: values['check-after-edit'], approval, allowWorker: values['allow-worker'], hooks, appendSystemPrompt };
   try {
     // MCP is on for a user at the terminal unless --no-mcp, and off in a non-interactive run unless --mcp.
     if (!(values['non-interactive'] ? values.mcp === true : values.mcp !== false)) return (await runAgent(io, store, { ...opened, log }, task, options)).exitCode;

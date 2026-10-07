@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_SYSTEM_PROMPT,
+  AGENT_PROMPTS,
   AGENT_TOOL_DEFINITIONS,
   asSessionId,
   attachedRulePaths,
@@ -96,8 +96,8 @@ describe('the loaded context', () => {
   });
 
   it('opens the first user message, never the system prompt or the tools', () => {
-    const request = buildRequest(session, [start, user(1, 'hi')], AGENT_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT);
-    expect(request.system).toEqual([{ type: 'text', text: AGENT_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }]);
+    const request = buildRequest(session, [start, user(1, 'hi')], AGENT_TOOL_DEFINITIONS, AGENT_PROMPTS.principles);
+    expect(request.system).toEqual([{ type: 'text', text: AGENT_PROMPTS.principles, cache_control: { type: 'ephemeral' } }]);
     expect(request.tools).toEqual(AGENT_TOOL_DEFINITIONS);
     expect(request.messages[0]!.content).toEqual([
       { type: 'text', text: renderLoadedContext(context) },
@@ -106,8 +106,8 @@ describe('the loaded context', () => {
   });
 
   it('keeps the bytes of every earlier turn as the conversation grows', () => {
-    const first = buildRequest(session, [start, user(1, 'one')], AGENT_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT);
-    const later = buildRequest(session, [start, user(1, 'one'), assistant(2, 'ok'), user(3, 'two')], AGENT_TOOL_DEFINITIONS, AGENT_SYSTEM_PROMPT);
+    const first = buildRequest(session, [start, user(1, 'one')], AGENT_TOOL_DEFINITIONS, AGENT_PROMPTS.principles);
+    const later = buildRequest(session, [start, user(1, 'one'), assistant(2, 'ok'), user(3, 'two')], AGENT_TOOL_DEFINITIONS, AGENT_PROMPTS.principles);
     const prefix = (r: typeof first) => JSON.stringify([r.tools, r.system, r.messages[0]!.content.slice(0, 1)]);
     expect(prefix(later)).toBe(prefix(first));
   });

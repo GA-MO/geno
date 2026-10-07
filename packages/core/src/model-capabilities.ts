@@ -6,6 +6,7 @@ import type { ProviderName } from './providers.js';
  */
 export const PROMPT_TIERS = ['principles', 'rules'] as const;
 export type PromptTier = (typeof PROMPT_TIERS)[number];
+export const isPromptTier = (raw: string): raw is PromptTier => (PROMPT_TIERS as readonly string[]).includes(raw);
 
 /** `adaptive` asks for Anthropic's adaptive thinking; `omit` sends no thinking field, leaving the provider's default. */
 export type Thinking = 'adaptive' | 'omit';

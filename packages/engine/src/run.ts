@@ -26,7 +26,7 @@ import { usage } from './usage.js';
 import { openStore, readTask, readTasks, readTriples, taskDir, type Store } from './store.js';
 
 export const USAGE = `usage:
-  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] <task...>
+  gcode agent [--session <id>] [--workspace <dir>] [--max-turns 40] [--max-cost 0.40] [--check "<cmd>"] [--no-check-after-edit] [--mode ask|auto | --non-interactive] [--mcp | --no-mcp] [--append-system-prompt "<text>"] <task...>
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
@@ -54,7 +54,7 @@ export const USAGE = `usage:
     appliers: noop, oracle, str_replace, apply_patch, whole_file
   gcode eval check-task <task-id>|--all [--verbose] [--keep]
   gcode eval run --agent gcode|claude-code (--task <id> | --all) [--model qwen3.8-flash] [--max-cost-per-task 0.40] [--max-cost 3] [--runs-dir <dir>] [--check "<cmd>"] [--no-check-after-edit]
-  gcode eval speed [--model qwen3.8-flash] [--max-cost-per-task 0.08] [--max-cost 0.25] [--runs-dir <dir>] [--check "<cmd>"] [--effort-policy flat|stepped] [--from <results.jsonl>]
+  gcode eval speed [--model qwen3.8-flash] [--max-cost-per-task 0.08] [--max-cost 0.25] [--runs-dir <dir>] [--check "<cmd>"] [--effort-policy flat|stepped] [--prompt-tier principles|rules] [--from <results.jsonl>]
   gcode eval arena [--task <id>]... [--n 3] [--model qwen3.8-flash] [--max-cost 1.00] [--max-cost-per-lane 0.07] [--max-turns 30] [--check "<cmd>"] [--runs-dir <dir>]
   gcode eval classifier [--dry-run] [--concurrency 4] [--max-cost 0.40]
   gcode tab report [--since <iso>]

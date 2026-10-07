@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { AGENT_SYSTEM_PROMPT, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, WORKSPACE_TRUST_CAPABILITY, type TurnEvent } from '@g-code/core';
+import { AGENT_PROMPTS, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, WORKSPACE_TRUST_CAPABILITY, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { renderGenoTools } from '../src/geno-tools.js';
@@ -68,8 +68,8 @@ describe('pstack through gcode agent', () => {
     const genoTools = path.join(await realpath(home), 'geno-tools.md');
     expect(await readFile(genoTools, 'utf8')).toBe(renderGenoTools({ subagents: false }));
     const system = transport.requests[0]!.body.system[0].text as string;
-    expect(system.startsWith(AGENT_SYSTEM_PROMPT)).toBe(true);
-    expect(system.slice(AGENT_SYSTEM_PROMPT.length)).toBe(
+    expect(system.startsWith(AGENT_PROMPTS.rules)).toBe(true);
+    expect(system.slice(AGENT_PROMPTS.rules.length)).toBe(
       `\n\n${DEFERRED_TOOLS_NOTE}\n\npstack skills are installed. They are written for Claude Code; before you follow one, read ${genoTools}, which maps their tools to yours.`,
     );
 
@@ -96,7 +96,7 @@ describe('pstack through gcode agent', () => {
     const { workspace, env, home } = await setup('other');
     const transport = fakeTransport([answer('Hi.', usage)]);
     expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Hi'], env, { fetch: transport.fetch })).code).toBe(0);
-    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(transport.requests[0]!.body.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(existsSync(path.join(home, 'geno-tools.md'))).toBe(false);
   });
 });

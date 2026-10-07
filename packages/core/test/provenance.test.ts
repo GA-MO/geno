@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_SYSTEM_PROMPT,
+  AGENT_PROMPTS,
   AGENT_TOOL_DEFINITIONS,
   asSessionId,
   childReport,
@@ -120,10 +120,11 @@ describe('tool output', () => {
 });
 
 describe('the system prompt', () => {
-  const prompts = [SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ...BUILTIN_AGENTS.map(childSystemPrompt)];
+  const prompts = [SYSTEM_PROMPT, ...Object.values(AGENT_PROMPTS), ...BUILTIN_AGENTS.map(childSystemPrompt)];
 
   it('names the product Geno', () => {
     expect(SYSTEM_PROMPT.startsWith('You are Geno,')).toBe(true);
+    for (const text of Object.values(AGENT_PROMPTS)) expect(text.startsWith('You are Geno,')).toBe(true);
     for (const agent of BUILTIN_AGENTS) expect(childSystemPrompt(agent)).toMatch(/a subagent of Geno\b/);
   });
 
@@ -131,10 +132,11 @@ describe('the system prompt', () => {
     for (const text of prompts) expect(text).toContain(GENO_NOTES_PROMPT);
   });
 
-  it('asks for dedicated tools over shell commands and for code cited as path:line', () => {
-    const agent = AGENT_SYSTEM_PROMPT;
-    expect(agent).toMatch(/[Pp]refer the dedicated tools/);
-    expect(SYSTEM_PROMPT).toMatch(/path:line/);
+  it('asks for dedicated tools over shell commands and for code cited as path:line in both tiers', () => {
+    for (const text of Object.values(AGENT_PROMPTS)) {
+      expect(text).toMatch(/dedicated tools? (to|when one fits)/);
+      expect(text).toMatch(/path:line/);
+    }
   });
 
   it("marks a fork's task as a Geno note", () => {
@@ -147,7 +149,7 @@ describe('model-facing text', () => {
   const PRODUCT = /(?<![.@/\w-])g-code(?![\w-]*\/)/i;
 
   it('never calls the product g-code', () => {
-    const texts = [SYSTEM_PROMPT, EDIT_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ...Object.values(MODE_NOTICES), MEMORY_PREAMBLE, ...BUILTIN_AGENTS.map(childSystemPrompt), ...AGENT_TOOL_DEFINITIONS.map((tool) => JSON.stringify(tool))];
+    const texts = [SYSTEM_PROMPT, EDIT_SYSTEM_PROMPT, ...Object.values(AGENT_PROMPTS), ...Object.values(MODE_NOTICES), MEMORY_PREAMBLE, ...BUILTIN_AGENTS.map(childSystemPrompt), ...AGENT_TOOL_DEFINITIONS.map((tool) => JSON.stringify(tool))];
     for (const text of texts) expect(text).not.toMatch(PRODUCT);
   });
 

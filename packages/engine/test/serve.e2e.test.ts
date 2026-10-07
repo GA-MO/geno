@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
-  AGENT_SYSTEM_PROMPT,
+  AGENT_PROMPTS,
   AGENT_TOOL_DEFINITIONS,
   MODE_NOTICES,
   DEFERRED_TOOLS_NOTE,
@@ -464,7 +464,7 @@ describe('gcode serve', () => {
     expect(editor.updates).toContainEqual({ sessionUpdate: 'current_mode_update', currentModeId: 'plan' });
     const [plan, ask] = transport.requests.map((request) => request.body);
     expect(plan.tools).toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)]).offered);
-    expect(plan.system[0].text).toBe(`${AGENT_SYSTEM_PROMPT}\n\n${DEFERRED_TOOLS_NOTE}`);
+    expect(plan.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(ask.tools, 'the switch back to Ask keeps the tools').toEqual(plan.tools);
     expect(ask.system, 'and the system prompt').toEqual(plan.system);
     const said = (body: { messages: { content: unknown }[] }) => JSON.stringify(body.messages.at(-1)!.content);
