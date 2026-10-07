@@ -195,20 +195,6 @@ export function frameDocument({ html, nonce, theme }: FrameInput): string {
   ].join('');
 }
 
-const escapeText = (text: string): string => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-
-/** A widget as a page of its own, for Download as HTML: the theme inlined, the same policy, its scripts inline. */
-export function standaloneDocument({ title, html, theme }: { readonly title: string; readonly html: string; readonly theme: WidgetTheme }): string {
-  return [
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">',
-    `<meta http-equiv="Content-Security-Policy" content="${POLICY("'unsafe-inline'")}">`,
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    `<title>${escapeText(title)}</title>`,
-    `<style>${themeCss(theme)}${BASE_CSS}html{background:var(--bg)}body{padding:4px}</style>`,
-    `</head><body><div id="geno-root">${html}</div></body></html>`,
-  ].join('');
-}
-
 /** What a frame may tell the panel. */
 export type FromWidget =
   | { readonly kind: 'height'; readonly height: number }

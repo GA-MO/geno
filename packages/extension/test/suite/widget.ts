@@ -1,6 +1,4 @@
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import { onMac } from './mac-only.js';
@@ -149,7 +147,7 @@ export async function run(): Promise<void> {
   await click('.widget[data-widget="tu_speed"] .widget-more');
   await waitFor('the menu to open', async () => panel<boolean>(`!doc.querySelector('.widget-menu').hidden`));
   const items = await panel<string[]>(`[...doc.querySelectorAll('.widget-menu-item')].map((i) => i.textContent)`);
-  check(JSON.stringify(items) === JSON.stringify(['Copy as Image', 'Download as HTML', 'Open in Editor']), 'the menu offers the three actions', items);
+  check(JSON.stringify(items) === JSON.stringify(['Copy as Image', 'Save as Page', 'Open in Editor']), 'the menu offers the three actions', items);
   check((await panel<string>(`doc.activeElement.dataset.action`)) === 'copy-image', 'the menu takes the keyboard on its first item');
   await screenshots('menu');
   await ui({ do: 'press', key: 'Escape' });
@@ -162,20 +160,6 @@ export async function run(): Promise<void> {
     const { stdout } = await promisify(execFile)('osascript', ['-e', 'clipboard info']);
     check(stdout.includes('PNGf'), 'the clipboard holds a PNG', stdout);
   });
-
-  // Download as HTML saves a page of its own.
-  await openMenu('download');
-  await waitFor('the save dialog', async () => workbench<boolean>(`!!document.querySelector('.quick-input-widget:not([style*="display: none"]) input')`));
-  await sleep(500);
-  await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
-  const saved = path.join(process.env['GCODE_TEST_WORKSPACE']!, 'where-a-run-spends-its-time.html');
-  let page = '';
-  await waitFor('the page to be saved', async () => (page = await readFile(saved, 'utf8')).length > 0);
-  check(
-    page.includes(`<title>${SPEED_TITLE}</title>`) && page.includes("default-src 'none'") && page.includes('--fg:rgb(220, 220, 220)'),
-    'the page carries the title, the no-network policy and the theme',
-    page.slice(0, 400),
-  );
 
   // Open in Editor shows it in a tab of its own.
   await openMenu('open');

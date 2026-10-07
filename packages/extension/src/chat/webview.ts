@@ -42,6 +42,8 @@ import { agentStep, childHead, tickClocks } from './subagent-view.js';
 import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, type SendNow, type SteerToView } from './steer-model.js';
 import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
 import { offersRewind, type RewindState } from './rewind-model.js';
+import { offersPage } from './page-model.js';
+import { drawnDiagrams } from './diagram-view.js';
 import { rewindSlot, type ChapterSlot } from './rewind-view.js';
 import { callAnchor, currentEntry, defaultTitle, START_ANCHOR, tableOf, turnAnchor, type TocEntry } from './chapter-model.js';
 import { chapterDivider, chapterToc } from './chapter-view.js';
@@ -349,6 +351,9 @@ function stepItem(turn: Turn, step: Step, last: boolean, quiet: boolean): Keyed 
   };
 }
 
+/** Save as page from a message's menu: the turn's answer, with the diagrams the panel drew in it as they look now. */
+const saveAnswer = (turnId: string, shell: HTMLElement): void => host.postMessage({ type: 'save-page', page: { kind: 'answer', turnId, diagrams: drawnDiagrams(shell) } });
+
 function turnShell(turn: Turn): HTMLElement {
   return h(
     'article',
@@ -391,8 +396,9 @@ function render(): void {
       const chapter = turn.chapter;
       reconcile(shell.querySelector<HTMLElement>(':scope > .chapter-slot')!, chapter === undefined ? [] : [{ key: 'chapter', deps: [chapter], build: () => chapterDivider(chapter, turnAnchor(turn.id), 'user') }]);
       const editing = chapterEdits.get(turn.id);
+      const saveable = offersPage(turn);
       reconcile(shell.querySelector<HTMLElement>(':scope > .rewind-slot')!, [
-        { key: 'rewind', deps: [offered, rewinding, chapter, editing], build: () => rewindSlot(turn.id, offered, rewinding, (message) => host.postMessage(message), () => rewound(turn.id, undefined), chapterSlot(turn)) },
+        { key: 'rewind', deps: [offered, rewinding, chapter, editing, saveable], build: () => rewindSlot(turn.id, offered, rewinding, (message) => host.postMessage(message), () => rewound(turn.id, undefined), chapterSlot(turn), saveable ? () => saveAnswer(turn.id, shell) : undefined) },
       ]);
       reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage, transcript.backend?.label], build: () => turnHead(turn, transcript.backend) }]);
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.

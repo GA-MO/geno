@@ -134,7 +134,7 @@ async function steps(): Promise<void> {
   await waitFor('the menu to open from the keyboard', () => shown(menuOf(2)));
   check((await focused()) === 'files', 'the first item takes the keyboard', await focused());
   const items = await panel<string[]>(`[...doc.querySelectorAll(${JSON.stringify(`${menuOf(2)} .model-option-name`)})].map((e) => e.textContent)`);
-  check(items.join() === 'Restore files,Restore conversation,Restore both,Fork from here,Mark a chapter here', 'the menu offers the three rewinds, the fork and a chapter (U58)', items);
+  check(items.join() === 'Restore files,Restore conversation,Restore both,Fork from here,Mark a chapter here,Save as page', 'the menu offers the three rewinds, the fork, a chapter (U58) and Save as page (U66)', items);
   await press('ArrowDown');
   check((await focused()) === 'conversation', 'ArrowDown moves on', await focused());
   await press('Escape');
