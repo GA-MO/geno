@@ -8,7 +8,7 @@ import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type * as vscode from 'vscode';
-import { BACKEND_ENV_CAPABILITY, DIAGNOSTICS_CAPABILITY, EDITOR_ACTIONS_CAPABILITY, MEMORY_CAPABILITY, READ_TERMINAL_CAPABILITY, SCHEDULES_CAPABILITY, SPINOFF_CAPABILITY, CHAPTER_CAPABILITY, TASKS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY, WIDGET_CAPABILITY, WORKFLOWS_CAPABILITY } from '@g-code/core';
+import { BACKEND_ENV_CAPABILITY, DIAGNOSTICS_CAPABILITY, EDITOR_ACTIONS_CAPABILITY, MEMORY_CAPABILITY, READ_TERMINAL_CAPABILITY, SCHEDULES_CAPABILITY, SPINOFF_CAPABILITY, CHAPTER_CAPABILITY, TASKS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY, WIDGET_CAPABILITY, WORKFLOWS_CAPABILITY, WORKSPACE_TRUST_CAPABILITY } from '@g-code/core';
 
 const RESTART_DELAY_MS = 1000;
 /** How long a new engine process may take to listen. */
@@ -20,7 +20,8 @@ const SOCKET_PATH_MAX = 103;
 export type Connection = { readonly agent: acp.ClientContext; readonly socket: Socket; readonly cwd: string };
 
 /** `env` is added to VS Code's own environment for the engine, and may hold the API key, so it is never logged. */
-export type EngineSettings = { readonly cliPath: string; readonly cwd: string; readonly env: Readonly<Record<string, string>> };
+/** `trusted` is VS Code's workspace trust for `cwd`, which lets the workspace's own hooks run in the engine. */
+export type EngineSettings = { readonly cliPath: string; readonly cwd: string; readonly env: Readonly<Record<string, string>>; readonly trusted?: boolean | undefined };
 
 /** The parts of VS Code's environment that change what the engine does, beside the settings' own variables. */
 const ENGINE_INHERITS = /^(GCODE_|CLAUDE_CONFIG_DIR$|HOME$)/;
@@ -99,7 +100,7 @@ export class Engine implements vscode.Disposable {
         elicitation: { form: {} },
         // Children are announced with subagent_update, and their own updates stream under their session ids.
         subagents: {},
-        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true, [WIDGET_CAPABILITY]: true, [TASKS_CAPABILITY]: true, [BACKEND_ENV_CAPABILITY]: true, [EDITOR_ACTIONS_CAPABILITY]: true, [READ_TERMINAL_CAPABILITY]: true, [SPINOFF_CAPABILITY]: true, [SCHEDULES_CAPABILITY]: true, [CHAPTER_CAPABILITY]: true, [WORKFLOWS_CAPABILITY]: true },
+        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true, [WIDGET_CAPABILITY]: true, [TASKS_CAPABILITY]: true, [BACKEND_ENV_CAPABILITY]: true, [EDITOR_ACTIONS_CAPABILITY]: true, [READ_TERMINAL_CAPABILITY]: true, [SPINOFF_CAPABILITY]: true, [SCHEDULES_CAPABILITY]: true, [CHAPTER_CAPABILITY]: true, [WORKFLOWS_CAPABILITY]: true, [WORKSPACE_TRUST_CAPABILITY]: settings.trusted === true },
       },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });

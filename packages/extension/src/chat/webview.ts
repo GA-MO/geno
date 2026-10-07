@@ -637,6 +637,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-mcp') return mcp.open();
   if (message.type === 'settings') return settings.listed(message.listing);
   if (message.type === 'permissions') return settings.permissionsListed(message.listing);
+  if (message.type === 'hooks') return settings.hooksListed(message.listing);
   if (message.type === 'skills') return settings.skills.listed(message.listing);
   if (message.type === 'catalog-results') return settings.skills.found(message.results);
   if (message.type === 'catalog-preview') return settings.skills.previewed(message.state);

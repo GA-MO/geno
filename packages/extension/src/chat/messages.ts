@@ -4,6 +4,7 @@ import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
+import type { HooksFromView, HooksToView } from './hooks-model.js';
 import type { PermissionsFromView, PermissionsToView } from './permissions-model.js';
 import type { SkillsFromView, SkillsToView } from './skills-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
@@ -392,6 +393,7 @@ export type ToView =
   | McpToView
   | SettingsToView
   | PermissionsToView
+  | HooksToView
   | SkillsToView
   | ContextToView
   | ComposerToView
@@ -506,6 +508,7 @@ export type FromView =
   | McpFromView
   | SettingsFromView
   | PermissionsFromView
+  | HooksFromView
   | SkillsFromView
   | ContextFromView
   | ComposerFromView

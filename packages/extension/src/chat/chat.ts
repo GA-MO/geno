@@ -104,6 +104,7 @@ import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
 import { formatCost, formatTokens } from './format.js';
 import { ContextPanes } from './context-host.js';
+import { HooksHost } from './hooks-host.js';
 import { PermissionsHost } from './permissions-host.js';
 import { SkillsHost } from './skills-host.js';
 import { browserMeta, browserSettings } from './browser.js';
@@ -567,6 +568,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   /** The rules and memory panes. */
   private readonly panes: ContextPanes;
   private readonly permissionRules: PermissionsHost;
+  private readonly hooks: HooksHost;
   private readonly skills: SkillsHost;
   /** The providers, keys and roles page. */
   private readonly settingsPage: SettingsPage;
@@ -625,6 +627,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       const connection = await this.engine.connection();
       return { connection, cwd: this.shownCwd ?? connection.cwd };
     },(message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.hooks = new HooksHost(async () => {
+      const connection = await this.engine.connection();
+      return { connection, cwd: this.shownCwd ?? connection.cwd };
+    }, (message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.skills = new SkillsHost(async () => {
       const connection = await this.engine.connection();
       return { connection, cwd: this.shownCwd ?? connection.cwd };
@@ -1480,6 +1486,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.panes.handlers,
       ...this.settingsPage.handlers,
       ...this.permissionRules.handlers,
+      ...this.hooks.handlers,
       ...this.skills.handlers,
       ...this.composer.handlers,
       ...this.widgets.handlers,
