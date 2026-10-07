@@ -145,9 +145,9 @@ describe('markdown on a page', () => {
 });
 
 describe('naming a page', () => {
-  it('calls an answer by its first heading, else the first line asked, else Answer', () => {
-    expect(answerTitle('ignored', 'Intro\n\n## The **cache** plan\n\ntext')).toBe('The cache plan');
-    expect(answerTitle('\n  Why is the build slow?\nmore', 'No heading here.')).toBe('Why is the build slow?');
+  it('calls an answer by the first line asked, else its first heading, else Answer', () => {
+    expect(answerTitle('\n  Why is the build slow?\nmore', '## A heading')).toBe('Why is the build slow?');
+    expect(answerTitle('', 'Intro\n\n## The **cache** plan\n\ntext')).toBe('The cache plan');
     expect(answerTitle('', 'text')).toBe('Answer');
     expect(answerTitle('x'.repeat(200), '')).toBe(`${'x'.repeat(79)}…`);
   });

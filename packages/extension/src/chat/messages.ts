@@ -15,6 +15,7 @@ import type { ChapterFromView, ChapterToView } from './chapter-model.js';
 import type { ChapterMark } from '@g-code/core/chapters';
 import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { PrStatusFromView, PrStatusToView } from './pr-status-model.js';
+import type { PageFromView } from './page-model.js';
 import type { WidgetTheme } from '@g-code/core/widget-frame';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -423,12 +424,11 @@ export type ContextFromView =
   | { readonly type: 'memory-edit'; readonly id: string; readonly text: string }
   | { readonly type: 'memory-delete'; readonly id: string };
 
-/** A widget's actions: `theme` is the panel's widget theme as it is now, which a download or a tab keeps. */
+/** A widget's actions: `theme` is the panel's widget theme as it is now, which a tab keeps. */
 export type WidgetFromView =
   /** A link a widget asked to open, which the user approved under the widget. */
   | { readonly type: 'widget-link'; readonly href: string }
   | { readonly type: 'widget-open'; readonly toolId: string; readonly theme: WidgetTheme }
-  | { readonly type: 'widget-download'; readonly toolId: string; readonly theme: WidgetTheme }
   /** The panel could not put the image on the clipboard, so the extension offers to save it. `png` is base64. */
   | { readonly type: 'widget-image'; readonly title: string; readonly png: string };
 
@@ -512,4 +512,5 @@ export type FromView =
   | UsageFromView
   | SpinoffFromView
   | PrStatusFromView
-  | ChapterFromView;
+  | ChapterFromView
+  | PageFromView;

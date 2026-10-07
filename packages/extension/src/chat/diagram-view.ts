@@ -4,6 +4,7 @@ import { DiagramStore, diagramTitle, errorLine, themeOf, type Basis, type Diagra
 import type * as Renderer from './diagram-render.js';
 import { h, icon } from './dom.js';
 import { codeBlock, copyButton } from './markdown.js';
+import type { DrawnDiagram } from './page-model.js';
 
 /**
  * Diagrams as the panel shows them. Each source is drawn once per theme and panel width, and every element that
@@ -175,6 +176,18 @@ function watch(): void {
       }
     }, 200);
   }).observe(document.body);
+}
+
+/** The diagrams drawn under `root`, once each, with the scheme they were drawn for: what a saved page shows of them. */
+export function drawnDiagrams(root: ParentNode): DrawnDiagram[] {
+  const scheme = currentPanel().theme.darkMode ? 'dark' : 'light';
+  const drawn = new Map<string, DrawnDiagram>();
+  for (const element of root.querySelectorAll('.diagram[data-state="rendered"]')) {
+    const diagram = sources.get(element)?.diagram;
+    const state = diagram === undefined ? undefined : store.stateOf(diagram);
+    if (diagram !== undefined && state?.status === 'rendered') drawn.set(diagram.source, { source: diagram.source, svg: state.svg, scheme });
+  }
+  return [...drawn.values()];
 }
 
 /** A diagram fence as the panel shows it: its source while pending or broken, else the drawing and a toolbar. */

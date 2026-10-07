@@ -146,6 +146,7 @@ import { UsageHost } from './usage-host.js';
 import { PrStatusHost } from './pr-status-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
+import { pageHost } from './page-host.js';
 import { widgetOf } from './widget-model.js';
 import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
 import { readTerminalRequest } from './terminals.js';
@@ -555,6 +556,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   /** The composer's effort, context, running cost and model choices. */
   private readonly composer: ComposerHost;
   private readonly widgets: ReturnType<typeof widgetHost>;
+  private readonly pages: ReturnType<typeof pageHost>;
   /** The engine's tasks and this folder's lanes, for their panes and their notices. */
   private readonly background: TaskHost;
   /** How many top-level tasks need the user, for the view's badge. */
@@ -609,6 +611,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.widgets = widgetHost(this.extensionUri, (toolId) =>
       this.transcript.turns.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'tool' && block.id === toolId ? [block] : []))[0]?.widget,
     );
+    this.pages = pageHost(() => this.transcript);
     this.settingsPage = settingsPage((message) => void this.view?.webview.postMessage(message satisfies ToView));
     this.composer = new ComposerHost(
       () => this.link(),
@@ -1457,6 +1460,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.skills.handlers,
       ...this.composer.handlers,
       ...this.widgets.handlers,
+      ...this.pages.handlers,
       ...this.background.handlers,
       ...this.arena.handlers,
       ...this.steers.handlers,

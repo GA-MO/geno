@@ -253,11 +253,10 @@ export function imageHrefs(text: string): string[] {
 
 const TITLE_MAX = 80;
 
-/** What an answer's page is called: its first heading, else the first line of what the user asked, else "Answer". */
+/** What an answer's page is called: the first line the user asked, else the answer's first heading, else "Answer". */
 export function answerTitle(prompt: string, answer: string): string {
   const heading = lexer(answer, { gfm: true }).find((token): token is Tokens.Heading => token.type === 'heading');
-  const plain = heading?.text.replace(/[*_`~]/g, '').trim();
-  const line = plain || prompt.split('\n').find((l) => l.trim() !== '')?.trim() || 'Answer';
+  const line = prompt.split('\n').find((l) => l.trim() !== '')?.trim() || heading?.text.replace(/[*_`~]/g, '').trim() || 'Answer';
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1).trimEnd()}…` : line;
 }
 

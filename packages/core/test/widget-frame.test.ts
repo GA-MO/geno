@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WIDGET_PALETTE } from '../src/widget.js';
-import { FRAME_HEIGHT, frameCsp, frameDocument, fromWidget, standaloneDocument, themeCss, WIDGET_SANDBOX, type WidgetTheme } from '../src/widget-frame.js';
+import { FRAME_HEIGHT, frameCsp, frameDocument, fromWidget, themeCss, WIDGET_SANDBOX, type WidgetTheme } from '../src/widget-frame.js';
 
 const THEME: WidgetTheme = {
   scheme: 'dark',
@@ -81,17 +81,5 @@ describe('messages from a widget', () => {
     ]) {
       expect(fromWidget(data), JSON.stringify(data)?.slice(0, 80)).toBeUndefined();
     }
-  });
-});
-
-describe('the downloaded widget', () => {
-  it('is a whole page with the theme inlined and the same no-network policy, scripts allowed inline', () => {
-    const doc = standaloneDocument({ title: 'Speed <chart>', html: '<p>x</p><script>1</script>', theme: THEME });
-    expect([...doc.matchAll(META)].map((m) => m[1])).toEqual([
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; form-action 'none'; base-uri 'none'; frame-src 'none'; worker-src 'none'",
-    ]);
-    expect(doc).toContain('<title>Speed &lt;chart&gt;</title>');
-    expect(doc).toContain(themeCss(THEME));
-    expect(doc).toContain('<p>x</p><script>1</script>');
   });
 });

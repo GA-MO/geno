@@ -2,6 +2,7 @@
 /// <reference lib="dom.iterable" />
 import { h, icon } from './dom.js';
 import type { WidgetFromView } from './messages.js';
+import type { PageFromView } from './page-model.js';
 import type { WidgetTool } from './rail.js';
 import { FRAME_HEIGHT, frameDocument, fromWidget, themeCss, TO_FRAME, WIDGET_SANDBOX, widgetTheme, type FromWidget, type WidgetTheme } from '@g-code/core/widget-frame';
 
@@ -140,7 +141,7 @@ async function copyImage(frame: HTMLIFrameElement, title: string, post: (message
 type Action = { readonly id: string; readonly label: string; readonly icon: string };
 const ACTIONS: readonly Action[] = [
   { id: 'copy-image', label: 'Copy as Image', icon: 'device-camera' },
-  { id: 'download', label: 'Download as HTML', icon: 'cloud-download' },
+  { id: 'save-page', label: 'Save as Page', icon: 'save' },
   { id: 'open', label: 'Open in Editor', icon: 'link-external' },
 ];
 
@@ -265,7 +266,7 @@ export function askAbout(anchor: HTMLElement, href: string, open: () => void): v
   anchor.after(linkQuestion(href, open));
 }
 
-export type WidgetUi = { readonly post: (message: WidgetFromView) => void };
+export type WidgetUi = { readonly post: (message: WidgetFromView | PageFromView) => void };
 
 /** A show_widget step: the widget with its title and actions, its loading card, or why it is not drawn. */
 export function widgetStep(tool: WidgetTool, ui: WidgetUi): HTMLElement {
@@ -285,7 +286,7 @@ export function widgetStep(tool: WidgetTool, ui: WidgetUi): HTMLElement {
     };
     const run = (action: string) => {
       if (action === 'copy-image') void copyImage(frame, widget.title, ui.post).then((how) => how === 'copied' && flash('Copied'), () => flash('Could not copy'));
-      if (action === 'download') ui.post({ type: 'widget-download', toolId: tool.id, theme: currentTheme() });
+      if (action === 'save-page') ui.post({ type: 'save-page', page: { kind: 'widget', toolId: tool.id } });
       if (action === 'open') ui.post({ type: 'widget-open', toolId: tool.id, theme: currentTheme() });
     };
     head.append(actionsMenu(tool.id, run));

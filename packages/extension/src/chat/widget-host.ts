@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { FromWidgetTab, ToolWidget, ToWidgetTab, WidgetFromView } from './messages.js';
 import { pageHtml } from './page.js';
-import { standaloneDocument, webLink, type WidgetTheme } from '@g-code/core/widget-frame';
+import { webLink, type WidgetTheme } from '@g-code/core/widget-frame';
 
 export const WIDGET_VIEW = 'gcode.widget';
 
@@ -18,7 +18,7 @@ const warn = (error: unknown) => void vscode.window.showWarningMessage(error ins
 
 /**
  * What the extension does for a widget: opens a link the user approved, opens the widget in an editor tab, and saves
- * it as a page or an image. `find` looks a drawn widget up in the transcript by its tool call.
+ * it as an image when the clipboard refuses one. Save as Page is the page host's. `find` looks a drawn widget up in the transcript by its tool call.
  */
 export function widgetHost(extensionUri: vscode.Uri, find: (toolId: string) => ToolWidget | undefined) {
   /** A link the user approved in the panel or the tab: opened in the browser, if it is a web address at all. */
@@ -57,12 +57,6 @@ export function widgetHost(extensionUri: vscode.Uri, find: (toolId: string) => T
     'widget-open': ({ toolId, theme }) => {
       const widget = ready(toolId);
       if (widget !== undefined) open(widget, theme);
-    },
-    'widget-download': ({ toolId, theme }) => {
-      const widget = ready(toolId);
-      if (widget === undefined) return;
-      const page = standaloneDocument({ title: widget.title, html: widget.html, theme });
-      void save(`${slug(widget.title)}.html`, { HTML: ['html'] }, new TextEncoder().encode(page)).catch(warn);
     },
     'widget-image': ({ title, png }) => {
       void vscode.window

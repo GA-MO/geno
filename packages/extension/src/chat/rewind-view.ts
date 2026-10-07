@@ -42,10 +42,10 @@ document.addEventListener('mousedown', (event) => {
 
 /**
  * The message's menu: a small button over the bubble's corner, shown on hover and on keyboard focus, that opens the
- * rewinds and the fork. It keeps the send menu's keys: arrows move, Enter and Space choose, Escape closes onto the
+ * rewinds, the fork, the chapter and Save as page. It keeps the send menu's keys: arrows move, Enter and Space choose, Escape closes onto the
  * button, Tab closes and moves on.
  */
-function rewindMenu(turn: string, post: (message: RewindFromView) => void, chapter: ChapterSlot): HTMLElement {
+function rewindMenu(turn: string, post: (message: RewindFromView) => void, chapter: ChapterSlot, save: (() => void) | undefined): HTMLElement {
   const menuId = `rewind-menu-${turn}`;
   const button = h(
     'button',
@@ -87,6 +87,26 @@ function rewindMenu(turn: string, post: (message: RewindFromView) => void, chapt
         h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, item.label), h('span', { class: 'model-option-detail' }, item.detail)),
       ),
     ),
+    ...(save === undefined
+      ? []
+      : [
+          h('li', { class: 'rewind-separator', role: 'separator' }),
+          h(
+            'li',
+            {
+              class: 'model-option',
+              role: 'menuitem',
+              tabindex: '-1',
+              'data-action': 'save-page',
+              onclick: () => {
+                close();
+                save();
+              },
+            },
+            icon('save', 'send-option-icon'),
+            h('span', { class: 'model-option-text' }, h('span', { class: 'model-option-name' }, 'Save as page'), h('span', { class: 'model-option-detail' }, 'The answer as one HTML file to show someone')),
+          ),
+        ]),
   );
   const wrap = h('div', { class: 'rewind' }, button, menu);
 
@@ -170,8 +190,19 @@ const LINES: { readonly [K in Exclude<RewindState['kind'], 'confirm'>]: (state: 
   failed: ({ message }) => h('p', { class: 'rewind-line failed', role: 'alert' }, icon('error'), h('span', {}, message)),
 };
 
-/** What sits under a message: its menu while it offers one, how a rewind or fork from it goes, and the chapter title field. */
-export function rewindSlot(turn: string, offered: boolean, state: RewindState | undefined, post: (message: RewindFromView) => void, clear: () => void, chapter: ChapterSlot): HTMLElement {
+/**
+ * What sits under a message: its menu while it offers one, how a rewind or fork from it goes, and the chapter title
+ * field. `save` saves the turn's answer as a page, when it has one.
+ */
+export function rewindSlot(
+  turn: string,
+  offered: boolean,
+  state: RewindState | undefined,
+  post: (message: RewindFromView) => void,
+  clear: () => void,
+  chapter: ChapterSlot,
+  save?: () => void,
+): HTMLElement {
   const line =
     state === undefined
       ? undefined
@@ -182,5 +213,5 @@ export function rewindSlot(turn: string, offered: boolean, state: RewindState | 
     chapter.editing !== undefined
       ? chapterForm(turn, chapter.editing, chapter.marked, chapter.problem, chapter.save, chapter.cancel)
       : chapter.problem !== undefined && h('p', { class: 'rewind-line failed', role: 'alert' }, icon('error'), h('span', {}, chapter.problem));
-  return h('div', { class: 'rewind-slot-body' }, offered && rewindMenu(turn, post, chapter), line, field);
+  return h('div', { class: 'rewind-slot-body' }, offered && rewindMenu(turn, post, chapter, save), line, field);
 }
