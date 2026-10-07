@@ -62,16 +62,17 @@ describe('global rules', () => {
   it('load before the project files, and a blank or missing file loads nothing', async () => {
     const { home, workspace } = await dirs();
     await writeFile(path.join(workspace, 'AGENTS.md'), 'Project.');
-    expect((await loadProjectContext(workspace, home)).global).toBeUndefined();
+    const user = { app: home, home: undefined, claude: undefined };
+    expect((await loadProjectContext(workspace, user)).context.user).toBeUndefined();
     const file = await ensureGlobalRules(home);
     expect(await readFile(file, 'utf8')).toBe('');
-    expect((await loadProjectContext(workspace, home)).global, 'the empty file Edit global rules creates loads nothing').toBeUndefined();
+    expect((await loadProjectContext(workspace, user)).context.user, 'the empty file Edit global rules creates loads nothing').toBeUndefined();
     await writeFile(file, 'Mine.');
     await ensureGlobalRules(home);
     expect(await readFile(file, 'utf8'), 'an existing file is never overwritten').toBe('Mine.');
-    const loaded = await loadProjectContext(workspace, home);
-    expect(loaded.global).toEqual({ path: file, text: 'Mine.' });
-    expect(loaded.instructions).toEqual([{ path: 'AGENTS.md', text: 'Project.' }]);
+    const { context } = await loadProjectContext(workspace, user);
+    expect(context.user).toEqual([{ path: file, text: 'Mine.' }]);
+    expect(context.instructions).toEqual([{ path: 'AGENTS.md', text: 'Project.' }]);
   });
 });
 
