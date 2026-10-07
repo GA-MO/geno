@@ -40,6 +40,7 @@ export const gcodeAdapter: AgentAdapter = {
       check: input.check,
       checkAfterEdit: input.checkAfterEdit,
       effortPolicy: input.effortPolicy,
+      promptTier: input.promptTier,
       approval: NON_INTERACTIVE,
     });
     await writeFile(path.join(input.runDir, `${input.task.id}.gcode.log`), [...lines, partial].join('\n'));
