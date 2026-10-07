@@ -185,6 +185,7 @@ describe('gcode agent', () => {
       'curl https://example.com',
       'gcloud projects list',
       'psql -c "select 1"',
+      'cat .env',
     ];
     const asked: string[] = [];
     const transport = fakeTransport([
@@ -211,6 +212,7 @@ describe('gcode agent', () => {
       'curl or wget',
       'a cloud CLI',
       'a database CLI',
+      'a credentials file such as .env',
     ]);
     expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
     const vitest = results.at(-1)!;

@@ -115,20 +115,24 @@ async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answe
 describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
   const files = { '.env': `API_KEY=${SECRET}\n`, 'src/a.ts': 'export const key = process.env.API_KEY;\n' };
 
-  it('T-PERM-05 read refuses .env with a message that names the rule, and the secret never reaches the model', async () => {
-    const read = call('read', { path: '.env' });
-    const run = await scripted(wire, [{ calls: [read] }, { answer: 'I cannot read it.' }], { files, mode: 'ask' });
-    const seen = run.view().get(read.id)!;
-    expect(seen.error).toBe(true);
-    expect(seen.text).toMatch(/credentials/);
-    expect(seen.text).toContain('.env');
-    expect(run.sent()).not.toContain(SECRET);
-    expect(run.asked).toEqual([]);
+  it('T-PERM-05 read of .env asks the user in Ask mode, and is refused with a message that names the rule when nobody can be asked', async () => {
+    const asking = call('read', { path: '.env' });
+    const ask = await scripted(wire, [{ calls: [asking] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(ask.asked).toEqual([expect.objectContaining({ rule: 'secret-path', command: 'read .env', verdict: 'ask' })]);
+
+    const refused = call('read', { path: '.env' });
+    const alone = await scripted(wire, [{ calls: [refused] }, { answer: 'I cannot read it.' }], { files, mode: 'non-interactive' });
+    expect(alone.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining('a credentials file such as .env') });
+    expect(ask.sent() + alone.sent()).not.toContain(SECRET);
+
+    const allowed = call('read', { path: '.env' });
+    const yes = await scripted(wire, [{ calls: [allowed] }, { answer: 'Read it.' }], { files, mode: 'ask', answers: ['allow'] });
+    expect(yes.view().get(allowed.id)).toEqual({ text: `1\tAPI_KEY=${SECRET}`, error: false });
   });
 
   it('T-PERM-05 grep and glob leave out credentials files, so a hit in .env never reaches the model', async () => {
     const grep = call('grep', { pattern: 'API_KEY' });
-    const all = call('glob', { pattern: '**/*' });
+    const all = call('glob', { pattern: '**/*.{env,ts}' });
     const env = call('glob', { pattern: '.env*' });
     const run = await scripted(wire, [{ calls: [grep, all, env] }, { answer: 'Found it in src/a.ts.' }], { files, mode: 'ask' });
     const seen = run.view();

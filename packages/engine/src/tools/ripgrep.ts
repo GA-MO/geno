@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { displayPath, resolveInside, ToolError, type ToolContext } from './context.js';
+import { isSecretPath } from '@g-code/core';
+import { displayPath, isSecret, resolveInside, secretRefusal, ToolError, type ToolContext } from './context.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,6 +65,7 @@ export type SearchTarget = { readonly dir: string; readonly file?: string | unde
 export async function searchRoot(ctx: ToolContext, directory: string | undefined): Promise<string> {
   if (directory === undefined) return ctx.workspace;
   const real = await resolveInside(ctx, directory);
+  if (isSecret(ctx, path.resolve(ctx.workspace, directory)) || isSecret(ctx, real)) throw new ToolError(secretRefusal('glob', directory));
   if (!(await stat(real)).isDirectory()) throw new ToolError(`${directory} is not a directory`);
   return real;
 }
@@ -101,7 +103,8 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
   // NUL after the path keeps a path with a colon in it apart from its line number. A single file is still named.
   const flags = output === 'matches' ? ['--null', '--with-filename', '--stats'] : [];
   const pathOf = (line: string): string => (output === 'matches' ? line.slice(0, line.indexOf('\0')) : line);
-  const shown = (line: string): string => line.replace('\0', ':');
+  // The callers refuse a credentials directory or file, so a path below `dir` is all that can name a credentials file.
+  const shown = (lines: readonly string[]): string[] => lines.filter((line) => !isSecretPath(pathOf(line))).map((line) => line.replace('\0', ':'));
   const run = async (cwd: string, extra: readonly string[]): Promise<Search> => {
     const stdout = await ripgrepOutput(ctx, cwd, [...flags, ...args, ...extra], file ?? '.');
     if (output === 'files') {
@@ -114,7 +117,7 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
   };
   if (buffers.length === 0) {
     const { lines, searched } = await run(dir, []);
-    return { lines: lines.map(shown), searched };
+    return { lines: shown(lines), searched };
   }
 
   const overlay = await mkdtemp(path.join(tmpdir(), 'gcode-unsaved-'));
@@ -127,7 +130,7 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
     const onDisk = buffers.flatMap(({ relative }) => ['--glob', `!/${escapeGlob(relative)}`]);
     const [disk, open] = await Promise.all([file === undefined ? run(dir, onDisk) : { lines: [], searched: 0 }, run(overlay, [])]);
     // A stable sort keeps each file's lines in their order.
-    const lines = [...disk.lines, ...open.lines].toSorted((a, b) => comparePaths(pathOf(a), pathOf(b))).map(shown);
+    const lines = shown([...disk.lines, ...open.lines].toSorted((a, b) => comparePaths(pathOf(a), pathOf(b))));
     return { lines, searched: disk.searched + open.searched };
   } finally {
     await rm(overlay, { recursive: true, force: true });
