@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { argvOf, ghEnv, ghFailure, lookUpPr, parseChecks, parsePr, prReport, type Gh, type GhCall, type GhResult } from '../src/gh.js';
+import type { ToolContext } from '../src/tools/context.js';
+import { NO_PR_WAKES, watchPrExecutor } from '../src/tools/pr.js';
 
 const PR_JSON = JSON.stringify({ number: 7, title: 'Fix it', url: 'https://github.com/o/r/pull/7', state: 'OPEN', isDraft: true, reviewDecision: '', headRefName: 'fix', extra: 1 });
 const ran = (code: number, stdout = '', stderr = ''): Extract<GhResult, { kind: 'ran' }> => ({ kind: 'ran', code, stdout, stderr, timedOut: false });
@@ -97,5 +99,14 @@ describe('one look at the branch', () => {
     expect(calls).toEqual([{ kind: 'failed-log', job: '2' }]);
     await prReport(gh, '/w', { kind: 'settled', outcome: 'passed', pr, checks: [] });
     expect(calls).toHaveLength(1);
+  });
+});
+
+describe('watch_pr where nothing would wake the session', () => {
+  it('refuses, in a command-line run or with auto-wake off, without running gh', async () => {
+    const { gh, calls } = scripted({});
+    const run = watchPrExecutor(undefined, { gh, githubRemote: async () => true }).run({}, { workspace: '/w' } as ToolContext);
+    await expect(run).rejects.toThrow(NO_PR_WAKES);
+    expect(calls).toEqual([]);
   });
 });
