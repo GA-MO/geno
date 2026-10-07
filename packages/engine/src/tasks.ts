@@ -1,4 +1,4 @@
-import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskStatus, type TaskUpdate, type Waiting } from '@g-code/core';
+import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskEnd, type TaskUpdate, type Waiting } from '@g-code/core';
 
 const emptyless = (wake: WakeView | undefined): WakeView | undefined => (wake === undefined || (wake.waitsFor.length === 0 && wake.paused === undefined) ? undefined : wake);
 
@@ -44,7 +44,7 @@ export class Tasks {
   }
 
   /** The turn ended; a task ends once. `wake` is what will wake the session again, given with the end so no notice says it finished. */
-  end(sessionId: string, status: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>, usage: TaskRecord['usage'], wake?: WakeView): void {
+  end(sessionId: string, status: TaskEnd, usage: TaskRecord['usage'], wake?: WakeView): void {
     const record = this.records.get(sessionId);
     if (record === undefined || !isLive(record.status)) return;
     this.asking.delete(sessionId);

@@ -196,16 +196,11 @@ export async function reviewArena(store: Store, io: Io, repo: LaneRepo, run: Are
   return { sessionId: opened.log.session.id, report, costUsd: end?.kind === 'child-end' ? end.costUsd : null };
 }
 
-/** What a lane's session spent, in model calls and dollars, and whether its last run ended on an error. */
-async function laneOutcome(store: Store, io: Io, sessionId: string): Promise<{ turns: number; costUsd: number | null; errored: boolean }> {
+/** What a lane's session spent, in model calls and dollars. */
+async function laneSpend(store: Store, io: Io, sessionId: string): Promise<{ turns: number; costUsd: number | null }> {
   const log = await openSessionLog(store, sessionId, io).catch(() => undefined);
-  if (log === undefined) return { turns: 0, costUsd: null, errored: true };
-  const lastPrompt = log.events.findLastIndex((e) => e.kind === 'user' && e.steer !== true);
-  return {
-    turns: log.events.filter((e) => e.kind === 'assistant').length,
-    costUsd: summarizeSession(log.session, log.events).costUsd,
-    errored: log.events.slice(lastPrompt + 1).some((e) => e.kind === 'error'),
-  };
+  if (log === undefined) return { turns: 0, costUsd: null };
+  return { turns: log.events.filter((e) => e.kind === 'assistant').length, costUsd: summarizeSession(log.session, log.events).costUsd };
 }
 
 export type StartedArena = { readonly run: ArenaRun; readonly finished: Promise<ArenaRun> };
@@ -269,10 +264,8 @@ export async function startArena(deps: ArenaDeps, task: string, variants: readon
 
   const laneDone = async (i: number) => {
     const record = records[i]!;
-    const ended = await started[i]!.ended.catch((): LaneEnd => 'failed');
-    const { turns, costUsd, errored } = await laneOutcome(store, io, started[i]!.sessionId);
-    // A turn that stops on a model or transport error still ends as end_turn over ACP; the log says it failed.
-    const end: LaneEnd = ended === 'done' && errored ? 'failed' : ended;
+    const end = await started[i]!.ended.catch((): LaneEnd => 'failed');
+    const { turns, costUsd } = await laneSpend(store, io, started[i]!.sessionId);
     await step({ kind: 'lane-ended', lane: record.name, task: end, turns, costUsd });
     if (end !== 'done' && end !== 'capped') return;
     const check = await checkLane(store, io, record, deps.check).catch((error: unknown): LaneCheck => ({ outcome: 'failed', tail: `the check could not run: ${String(error)}` }));

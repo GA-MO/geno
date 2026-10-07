@@ -33,6 +33,7 @@ import {
   SESSION_SUMMARY_META,
   TOOL_CALL_META,
   TURN_USAGE_META,
+  TURN_END_META,
   TURN_SEQ_META,
   UNSAVED_BUFFERS_METHOD,
   type AskUserAnswer,
@@ -48,6 +49,7 @@ import {
   laneApplyPrompt,
   NOT_SHOWN_ERROR,
   RUNNING_META,
+  TASK_ENDS,
   TASK_STATUSES,
   TASK_KINDS,
   TASK_UPDATE_METHOD,
@@ -399,13 +401,19 @@ const timeOf = (update: acp.SessionUpdate): number => {
   return typeof at === 'number' ? at : Date.now();
 };
 
-/** How a turn's stop reason shows: its status, and what to tell the user when it did not simply finish. */
-const ENDINGS: Readonly<Record<acp.StopReason, { readonly status: Exclude<TurnStatus, 'streaming'>; readonly message?: string }>> = {
-  end_turn: { status: 'done' },
-  cancelled: { status: 'stopped' },
-  refusal: { status: 'failed', message: 'The model declined to continue.' },
-  max_tokens: { status: 'failed', message: 'The model reached its output limit.' },
-  max_turn_requests: { status: 'failed', message: 'The turn reached its limit on model calls or cost. Send a message to continue.' },
+/** What to tell the user about a stop reason that is not a plain finish or stop. A model error is in the transcript already. */
+const STOP_MESSAGES: Readonly<Partial<Record<acp.StopReason, string>>> = {
+  refusal: 'The model declined to continue.',
+  max_tokens: 'The model reached its output limit.',
+  max_turn_requests: 'The turn reached its limit on model calls or cost. Send a message to continue.',
+};
+
+const turnEnd = z.enum(TASK_ENDS);
+
+/** How the turn ended, as the engine's task end says; the stop reason reads `end_turn` for a model error too. */
+const turnEndOf = (response: acp.PromptResponse): Exclude<TurnStatus, 'streaming'> => {
+  const end = turnEnd.safeParse(response._meta?.[TURN_END_META]);
+  return end.success ? end.data : 'failed';
 };
 
 /** The engine's account of a turn: ACP's token counts, and the model and cost it adds under `_meta`. */
@@ -897,12 +905,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
           prompt: [{ type: 'text', text }, ...(await attachments())],
           ...(meta === undefined ? {} : { _meta: meta }),
         }));
-      stopped = response.stopReason === 'cancelled';
+      const status = turnEndOf(response);
+      stopped = status === 'stopped';
       if (left()) return response.stopReason;
-      const ending = ENDINGS[response.stopReason];
-      if (ending.message !== undefined) this.dispatch({ type: 'error', message: ending.message });
+      const message = STOP_MESSAGES[response.stopReason];
+      if (message !== undefined) this.dispatch({ type: 'error', message });
       const seq = response._meta?.[TURN_SEQ_META];
-      this.dispatch({ type: 'turn-end', at: Date.now(), status: ending.status, usage: usageOf(response), seq: typeof seq === 'number' ? seq : undefined });
+      this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response), seq: typeof seq === 'number' ? seq : undefined });
       return response.stopReason;
     } catch (error) {
       if (mine !== undefined && left()) throw error;
