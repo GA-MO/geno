@@ -233,8 +233,8 @@ export class Wakes {
 
   /**
    * Stops what would wake the session: every wait, for the user's Cancel, or those the tool calls in `uses` started,
-   * for a rewind that cuts their turns. Children end without a report, monitors and PR watches with no note, and a command a
-   * monitor started stops. On Cancel, the session's other commands run on, silenced. True when anything was pending.
+   * for a rewind that cuts their turns. Children end without a report, monitors and PR watches with no note, and a
+   * command a monitor started stops. On Cancel, the session's other commands run on, silenced. True when anything was pending.
    */
   cancel(sessionId: string, uses?: ReadonlySet<string>): boolean {
     // Cancel silences commands a session that never waited on anything else may still run.
