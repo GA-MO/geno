@@ -188,7 +188,7 @@ describe('a session in a lane', () => {
 
     const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
     const results = ofKind((await readSessionLog(sessionFile(store, asSessionId(id)))).events, 'tool-result').map((r) => ({ status: r.status, output: 'output' in r ? String(r.output) : '' }));
-    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'error', 'error', ...escapes.map(() => 'error'), 'ok', 'ok']);
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'error', 'error', ...escapes.map(() => 'error'), 'error', 'ok']);
     expect(results[2]!.output).toContain('../../../a.ts is outside the workspace');
     expect(results[3]!.output).toContain('is outside the workspace');
     expect(results.slice(4, 4 + escapes.length).map((r) => /the command (.+?) \(/.exec(r.output)?.[1])).toEqual([

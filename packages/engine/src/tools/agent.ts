@@ -7,6 +7,7 @@ import {
   checkHeadline,
   commandLineOf,
   classifierInputOf,
+  commandFailureLine,
   commandStatusLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   formatDiagnostics,
@@ -309,10 +310,12 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         timeoutMs: timeout_seconds * 1000,
         signal: ctx.signal,
       });
-      const status = commandStatusLine(result.code, result.timedOut ? timeout_seconds : undefined);
+      const killedAfter = result.timedOut ? timeout_seconds : undefined;
+      const failure = commandFailureLine(result.code, killedAfter);
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
-      const text = `${truncated}${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}${status}`;
-      return approval === undefined ? text : { text, approval };
+      const output = `${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
+      const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${commandStatusLine(result.code, killedAfter)}`;
+      return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };
     },
   });
 

@@ -136,6 +136,10 @@ export const spillNotice = ({ path, bytes, head, tail }: Spill): string =>
 export const commandStatusLine = (code: number | null, killedAfterSeconds: number | undefined): string =>
   killedAfterSeconds === undefined ? `[exit code ${code ?? 'killed'}]` : `[killed after ${killedAfterSeconds} seconds]`;
 
+/** The first line of a failed bash result, so the failure is the first thing the model reads; undefined for a clean exit. */
+export const commandFailureLine = (code: number | null, killedAfterSeconds: number | undefined): string | undefined =>
+  killedAfterSeconds !== undefined ? `Killed after ${killedAfterSeconds} seconds` : code === 0 ? undefined : `Exit code ${code ?? 'killed'}`;
+
 /** The first line of a check run, alone or after an edit's own line. */
 export const checkHeadline = (command: string, code: number | null, timedOut: boolean): string =>
   `check \`${command}\` ${timedOut ? 'timed out' : code === 0 ? 'passed' : `failed (exit ${code ?? 'killed'})`}`;
