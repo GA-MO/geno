@@ -246,8 +246,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const executors = executorsFor(options.approval, true);
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
-    // Every mode is offered the same tools and the same system prompt, so a switch keeps the cached prefix. A switch is
-    // told at the next safe point and refuses what the new mode leaves out from the next call on. MCP tools are offered
+    // Every mode is offered the same tools and the same system prompt, so a switch keeps the cached prefix. The model is
+    // told of a switch at the next safe point, and the new mode refuses the tools it leaves out. MCP tools are offered
     // in every mode, and their rules decide what each mode lets them do.
     const startMode = options.approval.kind === 'interactive' ? options.approval.mode() : 'non-interactive';
     const memory = memoryStore(homeOf(store), workspace);
