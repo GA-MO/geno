@@ -30,6 +30,7 @@ import { captureEnvironment, scratchpadOf } from './environment.js';
 import { gatewayFor, type Gateway } from './gateway.js';
 import { loadProjectContext } from './project-context.js';
 import { memoryStore } from './memory.js';
+import { loggedRequest, snapshotKeeper } from './snapshots.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import { homeOf, type Store } from './store.js';
 
@@ -186,6 +187,7 @@ export const chat: Command = async (args, { io, store }) => {
     session,
     events,
     tools: [],
+    snapshot: snapshotKeeper(store),
     signal: io.interrupts(),
     onText: (delta) => {
       streamed = true;
@@ -326,5 +328,16 @@ export const showSession: Command = async (args, { io, store }) => {
 
   const total = totalOf(events);
   io.out(`total: turns=${total.turns} ${formatUsage(total.usage, total.costUsd)} latency=${total.latencyMs}ms`);
+  return 0;
+};
+
+/** `gcode session request <session-id> <turn>`: prints the JSON body that turn's model call sent. */
+export const showRequest: Command = async (args, { io, store }) => {
+  const { positionals } = parseArgs({ args, strict: true, allowPositionals: true, options: {} });
+  const [id, turn] = positionals;
+  const seq = Number(turn);
+  if (id === undefined || positionals.length !== 2 || !Number.isInteger(seq)) throw new UsageError('usage: gcode session request <session-id> <turn>');
+  const { events } = await openSessionLog(store, id, io);
+  io.out(JSON.stringify(await loggedRequest(store, events, seq), null, 2));
   return 0;
 };

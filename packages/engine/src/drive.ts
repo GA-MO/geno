@@ -12,6 +12,7 @@ import { DISK_FILES, type Files } from './files.js';
 import type { ToolInputDraft } from './gateway.js';
 import { arrivalEvents, type Arrival } from './inbox.js';
 import { appendEvent } from './sessions.js';
+import { snapshotKeeper } from './snapshots.js';
 import { isMissing, type Store } from './store.js';
 import { displayPath } from './tools/context.js';
 import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
@@ -234,6 +235,7 @@ export async function drive(
   }
 
   const signal = io.interrupts();
+  const snapshot = snapshotKeeper(store);
   const ctx: ToolContext = {
     workspace: await workspaceDir(io.cwd, session.workspace),
     spillDir: path.join(store.spillDir, session.id),
@@ -342,6 +344,7 @@ export async function drive(
     let lastWait = left;
     if (mode.beforeCall !== undefined) await record(await mode.beforeCall(events));
     const send = async () => gateway.turn({
+      snapshot,
       session: withTurnEffort(session, events, mode.effortPolicy ?? EFFORT_POLICIES[DEFAULT_EFFORT_POLICY]),
       events,
       tools: mode.tools,

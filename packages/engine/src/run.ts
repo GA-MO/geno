@@ -4,7 +4,7 @@ import { asTaskId, DEFAULT_MINE_LIMITS, type EvalTask } from '@g-code/core';
 import { agent } from './agent.js';
 import { applyCommand, replayCommand } from './apply.js';
 import { ask } from './ask.js';
-import { chat, showSession } from './chat.js';
+import { chat, showRequest, showSession } from './chat.js';
 import { checkTask, formatSeconds, type CheckReport } from './check-task.js';
 import { classifierEvalCommand } from './classifier-eval.js';
 import { childEnv } from './child-env.js';
@@ -30,6 +30,7 @@ export const USAGE = `usage:
   gcode ask [--session <id>] [--workspace <dir>] [--max-turns 25] [--max-cost 0.40] <question...>
   gcode chat [--session <id>] [--model <slug>] [--effort low|medium|high|xhigh|max] <message...>
   gcode session show <session-id>
+  gcode session request <session-id> <turn>
   gcode commands list [--workspace <dir>]
   gcode session list [--all]
   gcode rewind --session <id> --to <turn>
@@ -192,7 +193,7 @@ const commands: Record<string, Command> = {
   providers: group(providerCommands),
   rewind,
   serve,
-  session: group({ show: showSession, list: listSessionsCommand }),
+  session: group({ show: showSession, list: listSessionsCommand, request: showRequest }),
   tab: group(tabCommands),
   usage,
 };

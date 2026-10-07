@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AnthropicError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
-import type { Message, MessageStreamEvent, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { Message, MessageStreamEvent, MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import {
   buildRequest,
   classifyFailure,
@@ -52,6 +52,8 @@ export type TurnInput = {
   readonly wake?: Wake | undefined;
   /** When the attempt that produced the result reached each point of its stream; called once, before the result returns. */
   onMarks?(marks: StreamMarks): void;
+  /** Keeps the request's snapshot before it goes out, and names it, for the turn to record. */
+  snapshot?(request: MessageStreamParams): Promise<string>;
 };
 
 /** A tool call still streaming: its id, its name and its input JSON so far. */
@@ -148,7 +150,7 @@ export function gatewayFor(
   const wire = wireFor(providerName, env, fetch);
   const { sessionHeader, adapter } = specOf(providerName);
 
-  async function call({ session, events, tools, system, stored, signal, onText, onToolInput }: TurnInput, clock: StreamClock): Promise<TurnResult> {
+  async function call({ session, events, tools, system, stored, signal, onText, onToolInput, snapshot }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
     const drafts = new Map<number, ToolInputDraft>();
     const draft = (index: number, next: ToolInputDraft) => {
@@ -156,6 +158,7 @@ export function gatewayFor(
       onToolInput?.(next);
     };
     const request = buildRequest(session, events, tools, system, stored);
+    const kept = await snapshot?.(request);
     const message = await wire.stream(request, {
       signal,
       headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
@@ -188,6 +191,7 @@ export function gatewayFor(
         latencyMs: Math.round(performance.now() - started),
         model: message.model,
         promptParts: requestRuns(request, events, adapter),
+        ...(kept === undefined ? {} : { snapshot: kept }),
       },
     };
   }
