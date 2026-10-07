@@ -1,0 +1,154 @@
+/* The PR status line (U60): one quiet row above the composer with the branch's PR and its checks. */
+
+.pr-status-slot {
+  container: pr-status / inline-size;
+  margin: 0 2px 6px;
+}
+
+.pr-status-slot[hidden] {
+  display: none;
+}
+
+.pr-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--small);
+  text-align: left;
+  white-space: nowrap;
+}
+
+button.pr-status {
+  cursor: pointer;
+}
+
+button.pr-status:hover {
+  color: var(--vscode-foreground);
+  background: var(--surface-2);
+}
+
+.pr-status:focus-visible,
+.pr-status button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.pr-icon {
+  flex: none;
+  font-size: 14px;
+}
+
+.pr-open .pr-icon {
+  color: var(--ok);
+}
+
+.pr-merged .pr-icon {
+  color: var(--vscode-charts-purple, var(--vscode-foreground));
+}
+
+.pr-closed .pr-icon {
+  color: var(--vscode-errorForeground);
+}
+
+.pr-number {
+  flex: none;
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.pr-title {
+  flex: 1 1 0;
+  min-width: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-foreground);
+}
+
+.pr-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pr-checks {
+  display: inline-flex;
+  flex: none;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pr-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pr-count .codicon {
+  font-size: 12px;
+}
+
+.pr-fail {
+  color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground));
+}
+
+.pr-pending {
+  color: var(--warn);
+}
+
+.pr-pass {
+  color: var(--ok);
+}
+
+.pr-help-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pr-help-text:hover {
+  color: var(--vscode-textLink-foreground);
+}
+
+.pr-help-close {
+  display: inline-flex;
+  flex: none;
+  padding: 1px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pr-help-close:hover {
+  color: var(--vscode-foreground);
+  background: var(--surface-2);
+}
+
+/* At a narrow panel the state goes first, then the title shrinks; the number and the counts stay. */
+@container pr-status (max-width: 340px) {
+  .pr-state {
+    display: none;
+  }
+}

@@ -45,6 +45,7 @@ import { offersRewind, type RewindState } from './rewind-model.js';
 import { rewindSlot } from './rewind-view.js';
 import { usageCard, type UsageOpen, type UsageToView } from './usage-model.js';
 import { usageCardView } from './usage-view.js';
+import { prStatusBar } from './pr-status-view.js';
 import type { ReviewMode } from '../review/mode.js';
 import { turnChangesOf } from '../review/summary.js';
 
@@ -176,10 +177,11 @@ const slash = slashPicker(input, {
   wanted: () => host.postMessage({ type: 'want-commands' }),
   submit,
 });
+const prStatus = prStatusBar((message) => host.postMessage(message));
 const peek = peekOver((shown) => peekGate.set('shown', shown));
 const peekGate = motionGate((motion) => peek.setMotion(motion));
 peek.setMotion(peekGate.motion());
-const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, more.menu, peek.element, inputBox);
+const form = h('form', { class: 'composer' }, menu, slash.element, picker.menu, controls.menu, more.menu, peek.element, prStatus.element, inputBox);
 const start = startPage((message) => host.postMessage(message));
 const gate = motionGate((motion) => start.setMotion(motion));
 const working = workingDino();
@@ -621,6 +623,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'show-arena') return arena.open();
   if (message.type === 'steered') return steered(message);
   if (message.type === 'usage-spend' || message.type === 'usage-failed') return spent(message);
+  if (message.type === 'pr-status') return prStatus.show(message.line);
   if (message.type === 'rewind-state') return rewound(message.turn, message.state);
   if (message.type === 'rewind-prompt') return edit(message.text, undefined);
   if (message.type === 'reset' || message.type === 'turn-start') rewinds.clear();

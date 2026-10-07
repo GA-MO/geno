@@ -5,7 +5,7 @@ import path from 'node:path';
 /** A gh call as the fake recorded it: its argv, the names of the variables it saw, and when it ran. */
 export type GhCallSeen = { readonly args: readonly string[]; readonly env: readonly string[]; readonly at: number };
 
-export type FakeGhStage = { readonly pr?: object | undefined; readonly checks: readonly object[]; readonly logs?: Readonly<Record<string, string>> | undefined };
+export type FakeGhStage = { readonly loggedOut?: boolean | undefined; readonly pr?: object | undefined; readonly checks: readonly object[]; readonly logs?: Readonly<Record<string, string>> | undefined };
 
 export const FAKE_PR = {
   number: 42,
@@ -35,6 +35,7 @@ const args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(callsFile)}, JSON.stringify({ args, env: Object.keys(process.env), at: Date.now() }) + '\\n');
 const stage = JSON.parse(fs.readFileSync(${JSON.stringify(stageFile)}, 'utf8'));
 const is = (...want) => want.length === args.length && want.every((w, i) => w === args[i]);
+if (stage.loggedOut) { process.stderr.write('To get started with GitHub CLI, please run:  gh auth login\\n'); process.exit(4); }
 if (is('pr', 'view', '--json', 'number,title,url,state,isDraft,reviewDecision,headRefName')) {
   if (stage.pr === undefined) { process.stderr.write('no pull requests found for branch "cart-total"\\n'); process.exit(1); }
   process.stdout.write(JSON.stringify(stage.pr));

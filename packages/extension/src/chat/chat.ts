@@ -134,6 +134,7 @@ import { SteerHost, steerActionOf } from './steer-host.js';
 import { agentChunkAction } from './compact-host.js';
 import { RewindHost } from './rewind-host.js';
 import { UsageHost } from './usage-host.js';
+import { PrStatusHost } from './pr-status-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { widgetOf } from './widget-model.js';
@@ -241,6 +242,7 @@ const wakeSource = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('jobs'), job: jobId }),
   z.object({ kind: z.literal('monitor'), id: wakeId, job: jobId, pattern: z.string() }),
   z.object({ kind: z.literal('schedule'), id: wakeId, dueAt: z.number() }),
+  z.object({ kind: z.literal('pr'), id: wakeId, pr: z.number() }),
 ]);
 const wakeView = z.object({ waitsFor: z.array(wakeSource), paused: z.enum(['cap', 'limit', 'stopped', 'failed']).optional() });
 
@@ -545,6 +547,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   /** The message menu's rewinds and forks. */
   private readonly rewinds: RewindHost;
   private readonly usage: UsageHost;
+  private readonly prStatus: PrStatusHost;
   /** The folder the shown session works in, when it is one of the folder's lanes. */
   private shownCwd: string | undefined;
   /** The running turn of the shown session that another window started, or Geno woke it for, which the panel took over. */
@@ -638,6 +641,12 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       shown: () => this.shown,
       post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
     });
+    this.prStatus = new PrStatusHost({
+      connection: () => this.engine.connection(),
+      folder: () => this.shownCwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      visible: () => this.view?.visible === true,
+      post: (message) => void this.view?.webview.postMessage(message satisfies ToView),
+    });
     this.transcript = emptyTranscript(modelName());
     this.modes = { current: defaultMode(), available: MODE_FALLBACK };
   }
@@ -687,6 +696,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     this.settingsPage.dispose();
     this.composer.dispose();
     this.switched.dispose();
+    this.prStatus.dispose();
     this.engine.dispose();
   }
 
@@ -1320,6 +1330,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       this.replay.transcript = reduce(this.replay.transcript, action);
       return;
     }
+    if (action.type === 'turn-end') this.prStatus.refresh();
     const next = reduce(this.transcript, action);
     if (next === this.transcript) return;
     this.transcript = next;
@@ -1343,6 +1354,8 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown, seen: background.seen } satisfies ToView);
         void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
         void view.webview.postMessage({ type: 'arena', state: this.arena.current() } satisfies ToView);
+        void view.webview.postMessage(this.prStatus.current() satisfies ToView);
+        this.prStatus.refresh(true);
         this.composer.refreshModels();
         if (this.mcpAsked) void view.webview.postMessage({ type: 'show-mcp' } satisfies ToView);
         this.mcpAsked = false;
@@ -1406,6 +1419,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       ...this.steers.handlers,
       ...this.rewinds.handlers,
       ...this.usage.handlers,
+      ...this.prStatus.handlers,
     };
   }
 
@@ -1431,8 +1445,12 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const focus = vscode.window.onDidChangeWindowState(({ focused }) => {
       void view.webview.postMessage({ type: 'window-focus', focused } satisfies ToView);
       this.background.reshow();
+      if (focused) this.prStatus.refresh();
     });
-    const visible = view.onDidChangeVisibility(() => this.background.reshow());
+    const visible = view.onDidChangeVisibility(() => {
+      this.background.reshow();
+      if (view.visible) this.prStatus.shown();
+    });
     view.onDidDispose(() => {
       focus.dispose();
       visible.dispose();
