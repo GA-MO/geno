@@ -46,6 +46,8 @@ export type Kept = {
   readonly todo: TodoList;
   readonly tools: readonly string[];
   readonly files: CompactFiles;
+  /** The titles of the chapters the agent marked, oldest first; absent in compactions logged before U58. */
+  readonly chapters?: readonly string[] | undefined;
 };
 
 export const EMPTY_KEPT: Kept = { messages: [], droppedMessages: 0, todo: [], tools: [], files: { read: [], changed: [] } };
@@ -98,7 +100,7 @@ const MESSAGE_LABELS: Readonly<Record<KeptMessage['from'], (steer: boolean) => s
 
 /** What the model reads in place of the turns a compaction replaced. Byte-stable for a given event, so the cache holds. */
 export function compactedText({ summary, kept }: Pick<CompactEvent, 'summary' | 'kept'>): string {
-  const { messages, droppedMessages, todo, tools, files } = kept;
+  const { messages, droppedMessages, todo, tools, files, chapters = [] } = kept;
   return [
     '<compacted_context>',
     'The earlier part of this session was compacted to free context. The summary below replaces those turns; the turns after this message follow as they happened. Read a file again before you edit it.',
@@ -116,6 +118,7 @@ export function compactedText({ summary, kept }: Pick<CompactEvent, 'summary' | 
       : ['', `Files read: ${files.read.join(', ') || 'none'}`, `Files changed: ${files.changed.join(', ') || 'none'}`]),
     ...(todo.length === 0 ? [] : ['', 'Your todo list as it stood:', ...todo.map((item) => `${TODO_MARKS[item.status]} ${item.id}: ${item.text}`)]),
     ...(tools.length === 0 ? [] : ['', 'Tools you loaded with tool_search, still callable without loading them again:', ...tools]),
+    ...(chapters.length === 0 ? [] : ['', `Chapters you marked, oldest first; the session is in the last one: ${chapters.join(' | ')}`]),
     '</compacted_context>',
   ].join('\n');
 }

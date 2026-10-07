@@ -26,8 +26,9 @@ export type CutEvent = { readonly kind: 'cut'; readonly seq: number; readonly at
 export type ForkOrigin = { readonly sessionId: SessionId; readonly turnSeq: number; readonly title: string };
 
 /**
- * What a cut keeps of the events it passes over: the settings the user chose and review decisions, which hold after the
- * cut, and nothing of the cut turns themselves.
+ * What a cut keeps of the events it passes over: the settings the user chose, review decisions and the user's chapters,
+ * which hold after the cut, and nothing of the cut turns themselves. A chapter whose message the cut dropped goes with it
+ * in `chaptersOf`.
  */
 const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   'session-start': true,
@@ -37,6 +38,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   title: true,
   review: true,
   spinoff: true,
+  chapter: true,
   user: false,
   assistant: false,
   error: false,
@@ -143,5 +145,8 @@ export function forkEvents(events: readonly TurnEvent[], turnSeq: number, fork: 
     if (skippedByFork(e)) return [];
     return [e.kind === 'checkpoint' ? { ...e, sessionId: fork.id } : e];
   });
-  return [{ kind: 'session-start', session, ...(head.context === undefined ? {} : { context: head.context }), fork: origin }, ...copied];
+  // The user can mark a chapter at a message long after its turn ended; the fork keeps the ones its turns hold.
+  const prompts = new Set(copied.flatMap((e) => (startsTurn(e) ? [e.seq] : [])));
+  const chapters = view.slice(upTo + 1).filter((e) => e.kind === 'chapter' && prompts.has(e.turnSeq));
+  return [{ kind: 'session-start', session, ...(head.context === undefined ? {} : { context: head.context }), fork: origin }, ...copied, ...chapters];
 }

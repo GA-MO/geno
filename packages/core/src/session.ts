@@ -31,6 +31,7 @@ import { compactedText, contextView, type CompactEvent } from './compact.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
+import type { ChapterEvent, ChapterMark } from './chapters.js';
 import type { WidgetRef } from './widget.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
@@ -120,6 +121,8 @@ export type ToolResultEvent = {
   readonly loaded?: readonly string[] | undefined;
   /** The suggestion a spawn_task call offered, or the one a dismiss_task call withdrew (`spinoff.ts`). */
   readonly spinoff?: SpinoffNote | undefined;
+  /** The chapter a mark_chapter call started (`chapters.ts`). */
+  readonly chapter?: ChapterMark | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;
@@ -207,6 +210,8 @@ export type TurnEvent =
   | WakeEvent
   /** The user started or dismissed a suggested task. */
   | SpinoffEvent
+  /** The user marked, renamed or removed a chapter at one of their messages. */
+  | ChapterEvent
   | ChildEvent
   | CutEvent
   | CompactEvent
@@ -237,6 +242,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   'backend-start': false,
   'backend-model': false,
   spinoff: false,
+  chapter: false,
   cut: false,
   compact: false,
 };
