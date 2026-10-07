@@ -18,7 +18,7 @@ import type { Io } from '../src/command.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore, type Store } from '../src/store.js';
-import { answer, fakeTransport, loadTools, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, handBack, loadTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -157,9 +157,10 @@ const wokenWith = (heard: Heard, sessionId: string) =>
 describe('gcode serve: workflows', () => {
   it('runs review, fix, check and verify from /workflow, with the preview first and the report back in the parent', async () => {
     const model = models({
-      '[review]': () => answer('Two findings.\n\n```json\n{"findings": ["a.ts:1 name it better", "a.ts:1 add a type"]}\n```', usage),
-      '[fix]': () => answer('Renamed and typed it.', usage),
-      '[verify]': () => answer('It holds.\n\n```json\n{"pass": true}\n```', usage),
+      // Each step hands back through report, so the JSON blocks readFields parses arrive in report calls.
+      '[review]': () => handBack('Two findings.\n\n```json\n{"findings": ["a.ts:1 name it better", "a.ts:1 add a type"]}\n```', usage),
+      '[fix]': () => handBack('Renamed and typed it.', usage),
+      '[verify]': () => handBack('It holds.\n\n```json\n{"pass": true}\n```', usage),
       [PARENT]: () => answer('The workflow finished: review, fix and verify all passed.', usage),
     });
     const { result, store, heard, sessionId } = await serve(model.fetch, async (window, heard) => {
@@ -211,7 +212,7 @@ describe('gcode serve: workflows', () => {
 
     const parent = await logOf(store, sessionId);
     const report = parent.find((e) => e.kind === 'user' && e.from === 'child');
-    expect(report?.kind === 'user' && report.content).toContain(`<subagent_report agent="workflow three" session="${workflowId}" status="done">`);
+    expect(report?.kind === 'user' && report.content).toMatch(new RegExp(`<subagent_report agent="workflow three" session="${workflowId}" status="done" turns="3" cost="\\$\\d+\\.\\d{4}" duration="\\d+s">`));
     expect(report?.kind === 'user' && report.content).toContain('Workflow three finished: 4 steps ran');
     const woken = texts(model.requests(PARENT)[0]!).join('\n');
     expect(woken).toContain('The last report, from verify:');

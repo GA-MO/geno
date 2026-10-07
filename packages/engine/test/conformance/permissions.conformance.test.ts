@@ -154,7 +154,7 @@ describe('N-02 hidden Unicode from outside the workspace', () => {
   it('N-02 an MCP result and a subagent report reach the model without hidden characters, the rest byte for byte', async () => {
     const ctx = { workspace: tmpdir(), spillDir: tmpdir(), readRoots: [], attachmentsDir: tmpdir(), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 } satisfies ToolContext;
     const returning = (text: string) => ({ input: {} as never, describe: () => '', run: async () => text });
-    const report = childReport('explore', 'c1' as SessionId, { kind: 'done' }, `found ${HIDDEN_LINE}`);
+    const report = childReport('explore', 'c1' as SessionId, { kind: 'done' }, `found ${HIDDEN_LINE}`, { turns: 1, costUsd: 0.001, durationMs: 1000 });
     const executors = { mcp__docs__get: returning(`docs ${HIDDEN_LINE} end`), agent: returning(report) };
     const mcp = await runTool({ type: 'tool_use', id: 'tu_mcp', name: 'mcp__docs__get', input: {} } as never, ctx, executors as never);
     expect(mcp.text).toBe('docs abcd end');

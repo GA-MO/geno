@@ -27,12 +27,18 @@ import {
   forkOpening,
   forkTask,
   GENO_NOTE,
+  handedBack,
+  isPartial,
   isReadOnly,
   mergeAgents,
   MESSAGE_AGENT_TOOL,
   STOP_AND_WAIT,
   messageAgentResult,
   parseAgentDefinition,
+  REPORT_DELIVERED,
+  reportMessageOf,
+  REPORT_TOOL,
+  REPORT_TOOL_DEFINITION,
   type Session,
   sessionEffortOf,
   type SessionId,
@@ -201,6 +207,14 @@ const inputSchema = z.strictObject({
 const STEP_FIELDS = ['model', 'max_turns', 'max_cost_usd', 'lane'] as const;
 const messageSchema = z.strictObject({ agent_session: z.string().min(1), text: z.string().trim().min(1) });
 
+/** A child's report call: it only says it went through, and the loop ends the child's run after it. */
+const reportExecutor = executor({
+  input: z.strictObject({ message: z.string().trim().min(1, 'the report is empty; put everything the agent that started you needs in message') }),
+  concurrent: () => true,
+  describe: () => REPORT_TOOL,
+  run: async () => REPORT_DELIVERED,
+});
+
 function semaphore(size: number) {
   let free = size;
   const waiting: (() => void)[] = [];
@@ -216,11 +230,6 @@ function semaphore(size: number) {
     }
   };
 }
-
-const reportOf = (events: readonly TurnEvent[]): string =>
-  events
-    .flatMap((e) => (e.kind === 'assistant' ? e.content.flatMap((block) => (block.type === 'text' && block.text.trim() !== '' ? [block.text.trim()] : [])) : []))
-    .join('\n\n');
 
 const pick = (executors: Executors, names: readonly string[]): Executors =>
   Object.fromEntries(names.flatMap((name) => (Object.hasOwn(executors, name) ? [[name, executors[name]!]] : [])));
@@ -260,6 +269,7 @@ export function subagents(env: SubagentEnv): Subagents {
   ): Promise<ChildOutcome> => {
     const caps = childCaps(agent, env.limits.maxCostUsd - committed, { maxTurns: step.max_turns, maxCostUsd: step.max_cost_usd });
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
+    const startedAt = Date.now();
     committed += caps.maxCostUsd;
     const parentEvents = ctx.events();
     const parentSession = parent.log.session;
@@ -295,16 +305,36 @@ export function subagents(env: SubagentEnv): Subagents {
     const cancel = () => controller.abort();
     if (ctx.signal.aborted) cancel();
     else ctx.signal.addEventListener('abort', cancel, { once: true });
-    const watcher = await env.host.started(view, cancel);
+    const shown = await env.host.started(view, cancel);
+    // A report shows as the child's text, as session-replay shows it.
+    const watcher: Watcher = {
+      ...shown,
+      toolStart: (use, title) => {
+        const reported = reportMessageOf(use);
+        if (reported === undefined) shown.toolStart(use, title);
+        else shown.text(reported);
+      },
+      toolEnd: (use, status, todo) => {
+        if (use.name !== REPORT_TOOL) shown.toolEnd(use, status, todo);
+      },
+    };
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
     const executors = pick(env.executors(asker(env.approval, agent.name, session.id)), agent.tools);
     const own = new Set<string>(agent.tools);
+    // A fork keeps the parent's tools for the cache, so it has no report tool and its last text is its report.
     // A child starts no background command, so what arrives for it is the steers its parent or the user sends.
     const arrivals = () => env.steers.inbox.take(session.id);
     const mode: Mode =
       start === 'fork'
         ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals }
-        : { tools: AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), system: childSystemPrompt(agent), executors, readRoots: env.readRoots, arrivals };
+        : {
+            tools: [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION],
+            system: childSystemPrompt(agent),
+            executors: { ...executors, [REPORT_TOOL]: reportExecutor },
+            readRoots: env.readRoots,
+            arrivals,
+            handback: true,
+          };
     const opened: OpenSession = { log: { file, session, events: opening, tornLine: undefined, goodBytes: 0 }, gateway: parent.gateway };
 
     let end: ChildEnd;
@@ -338,13 +368,14 @@ export function subagents(env: SubagentEnv): Subagents {
     const total = totalOf(ran);
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
-    const report = reportOf(ran);
+    const report = handedBack(ran, isPartial(end));
     const notes = lane == null ? [] : [`${GENO_NOTE} ${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.`];
     const summary = childSummary([report, ...notes].filter((part) => part !== '').join('\n\n'));
     const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary };
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });
     const rejected = ran.some((e) => e.kind === 'tool-result' && e.status === 'rejected');
-    return { text: childReport(agent.name, session.id, end, report, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0, rejected };
+    const usage = { turns: total.turns, costUsd: total.costUsd, durationMs: Date.now() - startedAt };
+    return { text: childReport(agent.name, session.id, end, report, usage, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0, rejected };
   };
 
   const tool = agentToolDefinition(agents);
@@ -428,7 +459,11 @@ export function subagents(env: SubagentEnv): Subagents {
           (error: unknown) => report(error instanceof Error ? error.message : String(error), undefined),
         ),
       );
-      return `Started ${name} in the background as subagent session ${id}. Its report arrives as a message when it finishes; until then message_agent with agent_session "${id}" can steer it.`;
+      return [
+        `Started ${name} in the background as subagent session ${id}. Its report arrives as a message from Geno when it finishes; until then message_agent with agent_session "${id}" can steer it.`,
+        'You know nothing about its results until that message arrives: do not report, assume or predict them. Go on with other work or answer the user meanwhile; if the user asks how it is going, say it is still running.',
+        'Do not duplicate its work: stay off the files and questions it is working on.',
+      ].join('\n');
     },
   });
   const message = executor({

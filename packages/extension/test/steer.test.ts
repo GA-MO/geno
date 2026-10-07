@@ -79,7 +79,7 @@ describe('reading a steer chunk', () => {
 
   it("unwraps a parent's message from its fence and names the child that reported back", () => {
     expect(steer(parentMessage('only src/'), 1, 'parent')).toEqual({ type: 'steer', seq: 1, shown: { from: 'parent', text: 'only src/' } });
-    const report = childReport('explore', asSessionId('c1'), { kind: 'done' }, 'alpha is in a.ts');
+    const report = childReport('explore', asSessionId('c1'), { kind: 'done' }, 'alpha is in a.ts', { turns: 2, costUsd: 0.002, durationMs: 3000 });
     expect(steer(report, 2, 'child')).toEqual({ type: 'steer', seq: 2, shown: { from: 'child', agent: 'explore' } });
   });
 

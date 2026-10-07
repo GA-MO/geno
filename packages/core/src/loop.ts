@@ -1,4 +1,5 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
+import { REPORT_TOOL } from './handback.js';
 import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
@@ -11,6 +12,8 @@ export type LoopStep =
   | { readonly kind: 'call-model' }
   | { readonly kind: 'run-tools'; readonly toolUses: readonly ToolUseBlock[] }
   | { readonly kind: 'answer-tools'; readonly answers: readonly ToolAnswer[] }
+  /** A child ended its turn without calling report: log the nudge, then call the model again. */
+  | { readonly kind: 'nudge' }
   | { readonly kind: 'done'; readonly reason: DoneReason };
 
 /** What a call the user turned down tells the model, as Claude Code's rejection does. */
@@ -43,6 +46,8 @@ export type Run = {
   readonly firstSeq: number;
   readonly maxTurns: number;
   readonly maxCostUsd: number;
+  /** A subagent's run: a report call that went through ends it, and an end without one is nudged once. */
+  readonly handback?: true | undefined;
 };
 
 const CALL: LoopStep = { kind: 'call-model' };
@@ -77,6 +82,7 @@ const AFTER_EVENT: { [K in ConversationEvent['kind']]: (event: EventOf<K>) => Lo
   'session-start': () => done('end_turn'),
   user: () => CALL,
   'tool-result': () => CALL,
+  'report-nudge': () => CALL,
   assistant: ({ stopReason }) => (stopReason === null ? done('error') : AFTER_STOP[stopReason]),
   error: ({ error }) => done(ERROR_REASON[error]),
 };
@@ -142,14 +148,22 @@ function cutTwice(events: readonly TurnEvent[], run: Run): boolean {
   return turns.length === 2 && turns.every((turn) => cutOff(turn) !== undefined);
 }
 
+const thisRun = (events: readonly TurnEvent[], run: Run): readonly TurnEvent[] => events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
+
 function limitReached(events: readonly TurnEvent[], run: Run): LoopStep | undefined {
-  const ran = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
+  const ran = thisRun(events, run);
   if (ran.filter((e) => e.kind === 'assistant').length >= run.maxTurns) return done('max-turns');
   // A compaction's summary call counts toward the budget, not the turns. An unpriced call counts as free here; its usage line still prints cost=unknown.
   const cost = ran.reduce((sum, e) => sum + (spendOf(e)?.costUsd ?? 0), 0);
   if (cost > run.maxCostUsd) return done('budget');
   return undefined;
 }
+
+const reported = (after: readonly TurnEvent[]): boolean => after.some((e) => e.kind === 'tool-result' && e.name === REPORT_TOOL && e.status === 'ok');
+
+/** A handback run's model ended its turn without a report: nudged once while a call is left, then the run ends. */
+const nudgeDue = (events: readonly TurnEvent[], run: Run): boolean =>
+  !thisRun(events, run).some((e) => e.kind === 'report-nudge') && limitReached(events, run) === undefined;
 
 export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   const last = lastLiveEvent(events, run);
@@ -161,7 +175,10 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   }
   // A no from the user ends the turn; the model next hears from the user, as in Claude Code.
   if (last.kind === 'tool-result' && userRejected(newestTurn(events)!.after)) return done('end_turn');
+  // The report call ends the run, even at a limit: the child said what it had.
+  if (run.handback === true && last.kind === 'tool-result' && reported(newestTurn(events)!.after)) return done('end_turn');
   const step = after(last);
+  if (run.handback === true && last.kind === 'assistant' && step.kind === 'done' && step.reason === 'end_turn' && nudgeDue(events, run)) return { kind: 'nudge' };
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);
 }

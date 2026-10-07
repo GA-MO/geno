@@ -31,7 +31,7 @@ import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
 import { CURSOR_SETUP, type FakeScript, type FakeStep } from './fake-acp-agent.js';
-import { answer, fakeTransport, loadTools, toolCall } from './fake-transport.js';
+import { answer, fakeTransport, handBack, loadTools, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-acp-agent.ts', import.meta.url));
@@ -328,7 +328,7 @@ describe('an external ACP agent as a backend', () => {
     const result = events.find((e) => e.kind === 'tool-result');
     expect(result).toMatchObject({ name: 'agent', status: 'ok' });
     const report = result !== undefined && 'output' in result ? result.output : '';
-    expect(report).toMatch(/^<subagent_report agent="cursor" session="[^"]+" status="done">/);
+    expect(report).toMatch(/^<subagent_report agent="cursor" session="[^"]+" status="done" turns="\d+" cost="unknown" duration="\d+s">/);
     expect(report).toContain('Two is loud now.');
     expect(report).toContain('edits are in lane make-two-loud');
     expect(events.find((e) => e.kind === 'child-end')).toMatchObject({ end: { kind: 'done' }, costUsd: null });
@@ -383,7 +383,7 @@ describe('an external ACP agent as a backend', () => {
 
   it('runs an Arena lane on Cursor beside a Geno lane', async () => {
     const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
-    const ranking = answer(['```json', '{"ranking": [{"lane": "B", "reason": "Cursor did it."}, {"lane": "A", "reason": "Fine too."}], "summary": "B."}', '```'].join('\n'), usage);
+    const ranking = handBack(['```json', '{"ranking": [{"lane": "B", "reason": "Cursor did it."}, {"lane": "A", "reason": "Fine too."}], "summary": "B."}', '```'].join('\n'), usage);
     const config = JSON.stringify({ check: 'true', arena: { variants: [{ seed: 'plain' }, { seed: 'plain', backend: 'cursor', model: 'composer-2.5[fast=true]' }] } });
     const t = await setup([answer('Nothing to change in A.', usage), ranking], false, { '.gcode.json': config });
     const agent = await t.open();

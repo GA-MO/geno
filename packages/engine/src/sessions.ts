@@ -364,6 +364,7 @@ const turnEventSchema = z.union([
       matched: z.enum(['startup', 'resume', 'compact']),
       notes: z.array(z.strictObject({ how: z.enum(['success', 'additional-context']), text: z.string() })).min(1),
     }),
+    z.strictObject({ kind: z.literal('report-nudge'), ...seqFields }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
     z.strictObject({

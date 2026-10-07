@@ -98,6 +98,9 @@ export function toolCall(text: string, uses: readonly FakeToolUse[], usage: Cach
   };
 }
 
+/** A subagent's last turn: its report call, which ends its run. */
+export const handBack = (message: string, usage: CacheUsage, id = 'tu_report'): Reply => toolCall('', [{ id, name: 'report', input: { message } }], usage);
+
 /** A hand-built Messages stream: a thinking block, then the text in chunks of `chunk` characters. */
 export function answer(text: string, usage: CacheUsage, opts: { stopReason?: string; chunk?: number } = {}): Reply {
   const chunk = opts.chunk ?? 8;

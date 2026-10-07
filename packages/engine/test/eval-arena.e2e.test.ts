@@ -8,7 +8,7 @@ import { asTaskId, SEEDS } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { evalArenaCommand, type ArenaTaskResult } from '../src/eval-arena.js';
 import { openStore, taskDir } from '../src/store.js';
-import { answer, sseBody, toolCall, type Reply } from './fake-transport.js';
+import { answer, handBack, sseBody, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -21,7 +21,7 @@ const SCRIPTS: Readonly<Record<'A' | 'B' | 'C' | 'review', readonly Reply[]>> = 
   A: [toolCall('Reading.', [read('a0')], usage), toolCall('Editing.', [edit('a1', 'TWO')], usage), answer('A done.', usage)],
   B: [toolCall('Reading.', [read('b0')], usage), toolCall('Editing.', [edit('b1', 'Two')], usage), answer('B done.', usage)],
   C: [toolCall('Reading.', [read('c0')], usage), toolCall('Editing.', [edit('c1', 'BAD')], usage), answer('C done.', usage)],
-  review: [answer('```json\n{"ranking": [{"lane": "B", "reason": "Reads better."}, {"lane": "A", "reason": "Shouts."}], "summary": "B."}\n```', usage)],
+  review: [handBack('```json\n{"ranking": [{"lane": "B", "reason": "Reads better."}, {"lane": "A", "reason": "Shouts."}], "summary": "B."}\n```', usage)],
 };
 
 const fakeModel: typeof globalThis.fetch = async (_input, init) => {
