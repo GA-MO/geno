@@ -65,6 +65,7 @@ import {
   REWIND_TURN_METHOD,
   REWIND_KINDS,
   FORK_AT_META,
+  TURN_END_META,
   TURN_SEQ_META,
   toolUsesFrom,
   SEVERITIES,
@@ -204,7 +205,7 @@ import {
   type LaneEnd,
   type LaneRecord,
   type VariantSpec,
-  type TaskStatus,
+  type TaskEnd,
   type TaskUsage,
   type TasksResponse,
   RETRY_NOW_METHOD,
@@ -284,15 +285,6 @@ import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner
 import { pidAlive } from './wait-hooks.js';
 
 const RESOURCE_NOT_FOUND = -32002;
-
-const STOP_REASONS: Readonly<Record<DoneReason, acp.StopReason>> = {
-  end_turn: 'end_turn',
-  'max-turns': 'max_turn_requests',
-  // ACP has no budget stop; the turn limit is the nearest, and the logged error says which it was.
-  budget: 'max_turn_requests',
-  refusal: 'refusal',
-  error: 'end_turn',
-};
 
 /** An external agent's question shows as the kind of call it asks about, so an edit's card reads as an edit. */
 const PERMISSION_KINDS: Readonly<Partial<Record<ApprovalRuleId, acp.ToolKind>>> = { 'external-read': 'read', 'external-write': 'edit', 'external-command': 'execute', 'external-other': 'other' };
@@ -1059,7 +1051,7 @@ const arenaRequest = z.object({ cwd: z.string(), id: z.string() });
 const arenaPickRequest = z.object({ cwd: z.string(), id: z.string(), lane: z.string().min(1) });
 const laneGraftMeta = z.strictObject({ lane: z.string().min(1), hunks: z.array(z.string().min(1)).min(1) });
 
-const CHILD_TASK_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>>> = {
+const CHILD_TASK_ENDS: Readonly<Record<ChildEnd['kind'], TaskEnd>> = {
   done: 'done',
   failed: 'failed',
   cancelled: 'stopped',
@@ -1067,7 +1059,7 @@ const CHILD_TASK_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TaskStatus, 'ru
 };
 
 /** An Arena run's own task ends as the run settles: ranked, with no lane that passed, or stopped. */
-const ARENA_TASK_ENDS: { readonly [S in ArenaStatus]: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'> | undefined } = {
+const ARENA_TASK_ENDS: { readonly [S in ArenaStatus]: TaskEnd | undefined } = {
   running: undefined,
   ranking: undefined,
   ranked: 'done',
@@ -1075,23 +1067,31 @@ const ARENA_TASK_ENDS: { readonly [S in ArenaStatus]: Exclude<TaskStatus, 'runni
   stopped: 'stopped',
 };
 
-/** How a lane's turn ended, as the Arena counts it. */
-const ARENA_ENDS: Readonly<Record<acp.StopReason, LaneEnd>> = {
-  end_turn: 'done',
-  max_tokens: 'failed',
-  max_turn_requests: 'capped',
-  refusal: 'failed',
-  cancelled: 'stopped',
+/** How a turn ends: the loop's reason, or the user's stop. A turn with no loop, such as a lane apply, ends `end_turn`. */
+type TurnEnd = DoneReason | 'cancelled';
+
+/**
+ * What each end of a turn is to its task, to an Arena lane, and on ACP's wire. ACP has no stop for a failed model call
+ * or for the budget, so those go out as the nearest stop, and TURN_END_META carries the task end.
+ */
+const TURN_ENDS: { readonly [E in TurnEnd]: { readonly task: TaskEnd; readonly lane: LaneEnd; readonly stop: acp.StopReason } } = {
+  end_turn: { task: 'done', lane: 'done', stop: 'end_turn' },
+  'max-turns': { task: 'failed', lane: 'capped', stop: 'max_turn_requests' },
+  budget: { task: 'failed', lane: 'capped', stop: 'max_turn_requests' },
+  refusal: { task: 'failed', lane: 'failed', stop: 'refusal' },
+  error: { task: 'failed', lane: 'failed', stop: 'end_turn' },
+  cancelled: { task: 'stopped', lane: 'stopped', stop: 'cancelled' },
 };
 
-/** How a turn that ran to its end reads in the tasks list. */
-const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'>>> = {
-  end_turn: 'done',
-  max_tokens: 'failed',
-  max_turn_requests: 'failed',
-  refusal: 'failed',
-  cancelled: 'stopped',
-};
+/** ACP's answer for a turn that ended with `end`, with the task end under TURN_END_META. */
+const turnResponse = (end: TurnEnd, spent: Pick<acp.PromptResponse, 'usage' | '_meta'>): acp.PromptResponse => ({
+  stopReason: TURN_ENDS[end].stop,
+  ...spent,
+  _meta: { ...spent._meta, [TURN_END_META]: TURN_ENDS[end].task },
+});
+
+/** A turn's end, and ACP's answer for it. */
+type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
 
 /**
  * The engine as an ACP agent, for one editor connection. Each prompt runs `gcode agent`'s loop on the session's log,
@@ -1316,7 +1316,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     from: Viewer<Peer>,
     start: 'prompt' | 'resume' | 'wake' = 'prompt',
     run: ScheduledTurn = {},
-  ): Promise<acp.PromptResponse> => {
+  ): Promise<Turned> => {
     known(sessionId);
     if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
     const resume = start !== 'prompt';
@@ -1345,7 +1345,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         },
       });
       if (reply !== '') await from.client.notify(acp.methods.client.session.update, { sessionId, update: textUpdate(reply) });
-      return { stopReason: 'end_turn', ...usageOf(spent, undefined) };
+      return { end: 'end_turn', response: turnResponse('end_turn', usageOf(spent, undefined)) };
     }
     if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
 
@@ -1356,7 +1356,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     let session: Session | undefined;
     const route: Route = { viewers, tasks, sessionId, signal: controller.signal, wake: wakeOf(sessionId) };
     let turn: Turn | undefined;
-    let ended: Exclude<TaskStatus, 'running' | 'needs-input' | 'waiting'> = 'failed';
+    let ended: TaskEnd = 'failed';
     let firstSeq = Number.POSITIVE_INFINITY;
     try {
       const header = await openSessionLog(store, sessionId, io);
@@ -1381,7 +1381,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const diagnostics = from.peer.diagnostics ? editorDiagnostics(route) : undefined;
       const editor = from.peer.editorActions ? editorActions(route) : undefined;
       const terminal = from.peer.terminals ? editorTerminals(route) : undefined;
-      const response = await serially(sessionId, async (): Promise<acp.PromptResponse> => {
+      const ran = await serially(sessionId, async (): Promise<{ readonly reason: DoneReason; readonly spent?: Pick<acp.PromptResponse, 'usage' | '_meta'> }> => {
         if (backend !== undefined) {
           const log = await openSessionLog(store, sessionId, io);
           await dropTornTail(log);
@@ -1392,7 +1392,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
             const repo = await laneRepoOf(log.session.workspace).catch(refused({ sessionId }));
             await applyLaneTurn(store, { log }, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
             await shown.updates.flush();
-            return { stopReason: controller.signal.aborted ? 'cancelled' : 'end_turn' };
+            return { reason: 'end_turn' };
           }
           const result = await runExternalTurn({
             io: turnIo,
@@ -1412,13 +1412,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
             keyOf: keyOf(sessionId),
           });
           await shown.updates.flush();
-          return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...shown.usage() };
+          return { reason: result.reason, spent: shown.usage() };
         }
         const resumed = await resumeSession(store, io, sessionId);
         session = resumed.log.session;
         // What woke the session; another turn may have taken it since the gate opened.
         const woken = start === 'wake' ? unwokenOf(resumed.log.events, wakes.registry.wakes(sessionId)).triggers : [];
-        if (start === 'wake' && woken.length === 0) return { stopReason: 'end_turn' };
+        if (start === 'wake' && woken.length === 0) return { reason: 'end_turn' };
         // A scheduled run's budget holds for the turns it wakes too; the user's own prompt starts afresh.
         if (start === 'prompt') runLimits.delete(sessionId);
         if (run.limits !== undefined) runLimits.set(sessionId, run.limits);
@@ -1435,7 +1435,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
           await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
           await shown.updates.flush();
-          return { stopReason: controller.signal.aborted ? 'cancelled' : 'end_turn' };
+          return { reason: 'end_turn' };
         }
         const opened =
           target === undefined && (hasAttached(attached) || slash !== undefined)
@@ -1499,12 +1499,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
               })
             : await runInlineEdit(turnIo, store, opened, target.data, text, { maxCostUsd: limits.maxCostUsd, surface: shown.surface, diagnostics });
         await shown.updates.flush();
-        return { stopReason: controller.signal.aborted ? 'cancelled' : STOP_REASONS[result.reason], ...shown.usage() };
+        return { reason: result.reason, spent: shown.usage() };
       });
-      ended = TASK_ENDS[response.stopReason];
+      const end: TurnEnd = controller.signal.aborted ? 'cancelled' : ran.reason;
+      ended = TURN_ENDS[end].task;
+      const response = turnResponse(end, ran.spent ?? {});
       const logged = turn.live.events.findLast(startsTurn);
-      if (logged === undefined || logged.seq < firstSeq) return response;
-      return { ...response, _meta: { ...response._meta, [TURN_SEQ_META]: logged.seq } };
+      if (logged === undefined || logged.seq < firstSeq) return { end, response };
+      return { end, response: { ...response, _meta: { ...response._meta, [TURN_SEQ_META]: logged.seq } } };
     } finally {
       turnEnded(controller.signal.aborted);
       live.delete(sessionId);
@@ -1519,7 +1521,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const prompt = (params: acp.PromptRequest): Promise<acp.PromptResponse> => {
     known(params.sessionId);
     if (!viewers.isShown(params.sessionId)) viewers.show(params.sessionId, self());
-    return runTurn(params.sessionId, params.prompt, params._meta, self());
+    return runTurn(params.sessionId, params.prompt, params._meta, self()).then(({ response }) => response);
   };
 
   /** A prompt for the running turn, at its next tool round; one the turn ended without taking runs as the next turn. */
@@ -1969,7 +1971,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
               tasks.start({ sessionId: run, kind: 'arena', parent: null, title: `Best of ${n}: ${params.task}`, workspace: repo.main, lane: null, startedAt: Date.now() });
             }
             const { id, turn } = await startLaneSession(lane, prompt, params.mode, variant, run);
-            return { sessionId: id, ended: turn.then((response) => ARENA_ENDS[response.stopReason]) };
+            return { sessionId: id, ended: turn.then(({ end }) => TURN_ENDS[end].lane) };
           },
           onUpdate: (run) => {
             const end = ARENA_TASK_ENDS[run.status];

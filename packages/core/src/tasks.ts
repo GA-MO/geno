@@ -19,6 +19,10 @@ import type { WakeView } from './wake.js';
 export const TASK_STATUSES = ['running', 'needs-input', 'waiting', 'done', 'failed', 'stopped'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/** How a turn ends, as its task does. A turn that ran into a model error or a limit failed, whatever ACP's stop reason. */
+export const TASK_ENDS = ['done', 'failed', 'stopped'] as const satisfies readonly TaskStatus[];
+export type TaskEnd = (typeof TASK_ENDS)[number];
+
 /** One session's latest turn, as the engine reports it to every editor connected to it. Times are ms since the epoch. */
 export type TaskRecord = {
   readonly sessionId: string;

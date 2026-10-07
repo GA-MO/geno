@@ -113,6 +113,12 @@ export const FORK_AT_META = 'gcode/forkAt';
 /** Key in session/prompt's response `_meta`: the event number of the prompt the turn logged, which rewind and fork name it by. */
 export const TURN_SEQ_META = 'gcode/turnSeq';
 
+/**
+ * Key in session/prompt's response `_meta`: the turn's TaskEnd. ACP has no stop reason for a failed model call, so such
+ * a turn stops with `end_turn`; this says it failed, and the editor reads done or failed here, not from the stop reason.
+ */
+export const TURN_END_META = 'gcode/turnEnd';
+
 /** Key in session/prompt's `_meta`: run the prompt as a one-shot edit of a selection instead of an agent turn. */
 export const INLINE_EDIT_META = 'gcode/inlineEdit';
 

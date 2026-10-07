@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { TASK_UPDATE_METHOD, TASKS_CAPABILITY, type TaskUpdate } from '@g-code/core';
+import { TASK_UPDATE_METHOD, TASKS_CAPABILITY, TURN_END_META, type TaskUpdate } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { mcpSessions } from '../src/mcp/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
@@ -69,6 +69,7 @@ describe('how each end of a turn reaches its task', () => {
     const engine = await setup(replies, limits);
     const { response, ended } = await engine.turn('Explain a.ts');
     expect(response.stopReason, 'ACP still gets one of its own stop reasons').toBe(stopReason);
+    expect(response._meta?.[TURN_END_META], 'the editor reads the task end').toBe(status);
     expect({ status: ended.task.status, notice: ended.notice }).toEqual({ status, notice: status });
     engine.close();
   });
@@ -80,6 +81,7 @@ describe('how each end of a turn reaches its task', () => {
     await engine.cancel();
     const { response, ended } = await turn;
     expect(response.stopReason).toBe('cancelled');
+    expect(response._meta?.[TURN_END_META]).toBe('stopped');
     expect({ status: ended.task.status, notice: ended.notice }).toEqual({ status: 'stopped', notice: null });
     engine.close();
   });
