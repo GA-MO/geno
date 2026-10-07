@@ -39,12 +39,15 @@ const toneOf = (state: JobState): JobTone =>
 function jobOf(job: BackgroundStep): CommandJob {
   const { state } = job;
   const running = state.status === 'running';
-  const line = running ? (state.ending === undefined ? `Running in background as ${job.id}` : `Stopping ${job.id}…`) : `${job.id} ${jobEndText(state)}`;
+  const runs = job.preview === undefined ? `Running in background as ${job.id}` : `Serving ${job.preview.url} as ${job.id}`;
+  const line = running ? (state.ending === undefined ? runs : `Stopping ${job.id}…`) : `${job.id} ${jobEndText(state)}`;
   return { id: job.id, running, line, tone: toneOf(state), fromEnd: true };
 }
 
 /** The model's description, on one line and short enough for a title, or the plain fallback. */
 function titleOf(tool: ToolBlock): string {
+  const preview = tool.background?.preview;
+  if (preview !== undefined) return `Dev server ${preview.name}`;
   const description = tool.description?.replace(/\s+/g, ' ').trim() ?? '';
   if (description === '') return tool.status === 'running' ? 'Running a command' : 'Ran a command';
   return description.length <= TITLE_MAX ? description : `${description.slice(0, TITLE_MAX - 1).trimEnd()}…`;
@@ -65,7 +68,7 @@ export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
   const shown = lines === undefined || !truncated ? lines : background === undefined ? lines.slice(0, PREVIEW_LINES) : lines.slice(-PREVIEW_LINES);
   return {
     title: titleOf(tool),
-    command: tool.target,
+    command: background?.command ?? tool.target,
     output: shown,
     truncated,
     lines: lines?.length ?? 0,

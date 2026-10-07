@@ -86,10 +86,12 @@ describe('the task rows', () => {
     const jobs = [
       { id: 'bg-1' as const, command: 'pnpm dev', description: 'Start the dev server', startedAt: 1000 },
       { id: 'bg-2' as const, command: 'pnpm test --watch', startedAt: 2000 },
+      { id: 'bg-3' as const, command: 'pnpm dev', description: 'Dev server web', startedAt: 2500, preview: { name: 'web', url: 'http://localhost:3000' } },
     ];
     expect(rowOf(task({ status: 'done', endedAt: 3000, jobs }), undefined, 9000).jobs).toEqual([
       { id: 'bg-1', label: 'Start the dev server' },
       { id: 'bg-2', label: 'pnpm test --watch' },
+      { id: 'bg-3', label: 'Dev server web at localhost:3000' },
     ]);
   });
 

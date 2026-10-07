@@ -1,4 +1,4 @@
-import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, Section, TaskRecord, TaskStatus } from '@g-code/core';
+import type { Attention, CheckOutcome, LaneInfo, LaneStatus, NeedsYouReason, PlacedTask, Section, TaskJob, TaskRecord, TaskStatus } from '@g-code/core';
 import { isWaking, placeTasks, SECTIONS } from '@g-code/core/attention';
 import { EXTERNAL_BACKENDS } from '@g-code/core/backends';
 import { waitLabel } from '@g-code/core/waiting';
@@ -37,6 +37,8 @@ export type LanesFromView =
   /** The user looked at an Arena run in its pane. */
   | { readonly type: 'task-seen'; readonly id: string }
   | { readonly type: 'task-stop'; readonly sessionId: string }
+  /** Stops one of the task's background commands, such as its dev server. */
+  | { readonly type: 'task-job-stop'; readonly sessionId: string; readonly id: string }
   /** The session stops waiting to be woken. */
   | { readonly type: 'task-wake-cancel'; readonly sessionId: string }
   /** Opens the session a fork came from, from the fork's row. */
@@ -178,11 +180,15 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     live: isLiveStatus(task.status),
     stop: isLiveStatus(task.status) && task.kind !== 'arena',
     current: task.sessionId === shown,
-    jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: job.description ?? job.command })),
+    jobs: (task.jobs ?? []).map((job) => ({ id: job.id, label: jobLabel(job) })),
     forkedFrom: task.forkedFrom === undefined ? undefined : { id: task.forkedFrom.sessionId, title: task.forkedFrom.title, workspace: task.workspace },
     wakes: wakesOf(task, clock),
   };
 }
+
+/** A dev server reads by its name and address, any other command by its description or itself. */
+const jobLabel = (job: TaskJob): string =>
+  job.preview === undefined ? (job.description ?? job.command) : `Dev server ${job.preview.name} at ${job.preview.url.replace(/^https?:\/\//, '')}`;
 
 /** What a session waits on to be woken, or why its wake-ups wait for the user. */
 function wakesOf(task: TaskRecord, clock: (ms: number) => string): string | undefined {

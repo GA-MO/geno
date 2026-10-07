@@ -338,6 +338,7 @@ const turnEventSchema = z.union([
         id: jobId,
         toolUseId: z.string(),
         command: z.string().min(1),
+        preview: z.strictObject({ name: z.string(), url: z.string() }).optional(),
         state: endedJobStateSchema,
       }),
       tail: z.string(),

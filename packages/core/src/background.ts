@@ -106,7 +106,7 @@ export type BackgroundEndEvent = {
   readonly kind: 'background-end';
   readonly seq: number;
   readonly at: string;
-  readonly job: Pick<BackgroundJob, 'id' | 'toolUseId' | 'command'> & { readonly state: EndedJobState };
+  readonly job: Pick<BackgroundJob, 'id' | 'toolUseId' | 'command' | 'preview'> & { readonly state: EndedJobState };
   readonly tail: string;
 };
 

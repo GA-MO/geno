@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import {
+  BACKGROUND_STOP_METHOD,
   isLive,
   LANE_DISCARD_METHOD,
   LANE_NEW_METHOD,
@@ -10,6 +11,7 @@ import {
   placeTasks,
   TASKS_METHOD,
   type Attention,
+  type BackgroundStopRequest,
   type LaneDiscardRequest,
   type LaneNewRequest,
   type LaneNewResponse,
@@ -227,6 +229,10 @@ export class TaskHost implements vscode.Disposable {
     'task-stop': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.notify(acp.methods.agent.session.cancel, { sessionId }))
+        .catch(warn),
+    'task-job-stop': ({ sessionId, id }) =>
+      void this.connection()
+        .then(({ agent }) => agent.request<unknown, BackgroundStopRequest>(BACKGROUND_STOP_METHOD, { sessionId, id }))
         .catch(warn),
     'task-wake-cancel': ({ sessionId }) =>
       void this.connection()
