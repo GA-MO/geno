@@ -182,7 +182,7 @@ const LOCKFILES: readonly (readonly [string, string])[] = [
 
 /**
  * The command that starts the workspace's dev server, from package.json's scripts and the lockfile beside it, or
- * undefined when it has none of the usual scripts. The agent's sandbox has no network, so the user runs it.
+ * undefined when it has none of the usual scripts. preview_start offers it as the entry of a launch file to write.
  */
 export function devServerCommand(packageJson: unknown, files: ReadonlySet<string>): string | undefined {
   const scripts = typeof packageJson === 'object' && packageJson !== null ? (packageJson as { scripts?: unknown }).scripts : undefined;
@@ -197,7 +197,5 @@ export function devServerCommand(packageJson: unknown, files: ReadonlySet<string
 /** Chrome's errors for a local address where nothing listens. */
 export const NOTHING_LISTENS = /net::ERR_(?:CONNECTION_REFUSED|CONNECTION_RESET|EMPTY_RESPONSE|ADDRESS_UNREACHABLE)/;
 
-export function devServerHint(url: string, command: string | undefined): string {
-  const run = command === undefined ? 'the command that starts the project\'s dev server' : `\`${command}\``;
-  return `Nothing answers at ${url}. The bash sandbox has no network, so do not start a server there. Tell the user to run ${run} in their own terminal, then try again.`;
-}
+export const devServerHint = (url: string): string =>
+  `Nothing answers at ${url}. Start the project's dev server with preview_start, which reads its launch file and waits until the server answers, then open the page again. Without a launch file, preview_start says how to write one.`;

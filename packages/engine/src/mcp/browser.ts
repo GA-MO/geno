@@ -1,4 +1,4 @@
-import { readdir, readFile, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
@@ -13,7 +13,6 @@ import {
   browserServerArgs,
   browserUrlOf,
   classifierInputOf,
-  devServerCommand,
   devServerHint,
   isMcpRule,
   navigationTarget,
@@ -136,15 +135,6 @@ async function withWorkspacePaths(args: Record<string, unknown>, ctx: ToolContex
   return out;
 }
 
-async function devCommand(workspace: string): Promise<string | undefined> {
-  try {
-    const [manifest, files] = await Promise.all([readFile(path.join(workspace, 'package.json'), 'utf8'), readdir(workspace)]);
-    return devServerCommand(JSON.parse(manifest), new Set(files));
-  } catch {
-    return undefined;
-  }
-}
-
 /** Pages now on a host that is not this machine and that the user did not approve, which were not there before. */
 function wandered(state: BrowserState, before: ReadonlyMap<number, string>, workspace: string): string[] {
   return [...state.pages].flatMap(([id, { url }]) => {
@@ -218,14 +208,14 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         reply = await deps.call(args, ctx);
       } catch (error) {
         if (error instanceof ToolError && target !== undefined && NOTHING_LISTENS.test(error.message) && browserUrlOf(target, ctx.workspace).kind === 'local') {
-          throw new ToolError(`${error.message}\n\n${devServerHint(target, await devCommand(ctx.workspace))}`);
+          throw new ToolError(`${error.message}\n\n${devServerHint(target)}`);
         }
         throw error;
       }
       await refreshPages(handle, state, ctx.signal);
       const notes = wandered(state, before, ctx.workspace);
       const local = target !== undefined && browserUrlOf(target, ctx.workspace).kind === 'local';
-      if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target, await devCommand(ctx.workspace)));
+      if (local && NOTHING_LISTENS.test(reply.text)) notes.push(devServerHint(target));
       const text = notes.length === 0 ? reply.text : `${reply.text}\n\n${notes.join('\n')}`;
       const { images } = reply;
       if (record === undefined && images.length === 0) return text;

@@ -86,15 +86,45 @@ export const previewStatusOf = (state: JobState, answers: boolean): PreviewStatu
 export type PreviewServer = PreviewTag & { readonly job: JobId; readonly command: string; readonly status: PreviewStatus };
 
 /**
+ * What one GET of the server's origin returned, once its port answered: the status, with the page title or the
+ * redirect target, or why no response came. A redirect is never followed, since it may lead off this machine.
+ */
+export type PageCheck =
+  | { readonly kind: 'answered'; readonly status: number; readonly title?: string | undefined; readonly location?: string | undefined }
+  | { readonly kind: 'no-answer'; readonly why: string };
+
+/**
  * What a preview_start did: started the server, found it already running in this session, or found its port taken
- * by something this session did not start, in which case nothing runs. `tail` is the end of the server's output.
+ * by something this session did not start, in which case nothing runs. `tail` is the end of the server's output;
+ * `page` is set once the server is ready.
  */
 export type PreviewStart =
-  | { readonly kind: 'started' | 'reused'; readonly server: PreviewServer; readonly waitedS: number; readonly tail: string }
+  | { readonly kind: 'started' | 'reused'; readonly server: PreviewServer; readonly waitedS: number; readonly tail: string; readonly page?: PageCheck | undefined }
   | { readonly kind: 'taken'; readonly config: LaunchConfig };
+
+/** Characters of a page title kept. */
+export const PAGE_TITLE_MAX = 120;
+
+/** The `<title>` of an HTML page, on one line and cut to PAGE_TITLE_MAX, or undefined when it has none. */
+export function pageTitleOf(html: string): string | undefined {
+  const raw = /<title[^>]*>([^<]*)<\/title>/i.exec(html)?.[1]?.replace(/\s+/g, ' ').trim();
+  if (raw === undefined || raw === '') return undefined;
+  return raw.length > PAGE_TITLE_MAX ? `${raw.slice(0, PAGE_TITLE_MAX - 1)}…` : raw;
+}
+
+const pageText = (url: string, page: PageCheck | undefined): string => {
+  if (page === undefined) return '';
+  if (page.kind === 'no-answer') return ` GET ${url}/ got no response: ${page.why}.`;
+  const then = page.location !== undefined ? `, redirecting to ${page.location}` : page.title !== undefined ? `, titled "${page.title}"` : '';
+  const failed = page.status >= 500 ? ' The server failed on the page; read its errors with preview_logs.' : '';
+  return ` GET ${url}/ returned ${page.status}${then}.${failed}`;
+};
 
 /** Seconds preview_start waits for the port to answer before it reports the server as still starting. */
 export const PREVIEW_READY_TIMEOUT_S = 60;
+
+/** Seconds the first GET of a ready server may take; a dev server compiles the page on it. */
+export const PREVIEW_PAGE_TIMEOUT_S = 30;
 
 export const PREVIEW_LOG_LEVELS = ['all', 'warn', 'error'] as const;
 export type PreviewLogLevel = (typeof PREVIEW_LOG_LEVELS)[number];
@@ -157,7 +187,7 @@ export function previewStartText(outcome: PreviewStart): string {
   const head = outcome.kind === 'started' ? `Started ${what} as ${server.job}.` : `The ${what} already runs in this session as ${server.job}.`;
   switch (server.status.kind) {
     case 'ready':
-      return `${head} It answers at ${server.url}. ${OPEN_HINT(server.url, server.name)}`;
+      return `${head} It answers at ${server.url}.${pageText(server.url, outcome.page)} ${OPEN_HINT(server.url, server.name)}`;
     case 'starting':
       return `${head} Nothing answers at ${server.url} after ${waitedS}s; it may still be compiling. Read its output with preview_logs, or call preview_start again to wait longer. ${tailText(tail)}`;
     case 'ended':

@@ -300,7 +300,7 @@ describe('the built-in browser', () => {
     expect(textOf(toolResults(transport.requests[2]!.body).find((r) => r.tool_use_id === 'tu_click')!)).toContain('denied');
   }, 120_000);
 
-  it('tells the agent the dev server command when nothing answers on a local port', async () => {
+  it('tells the agent to start the dev server with preview_start when nothing answers on a local port', async () => {
     const closed = await site();
     const port = new URL(closed).port;
     await cleanups.pop()!();
@@ -309,7 +309,7 @@ describe('the built-in browser', () => {
 
     await connect((ctx, sessionId) => ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'check the app' }] }));
 
-    expect(textOf(toolResults(transport.requests[1]!.body)[0]!)).toContain('Tell the user to run `pnpm dev` in their own terminal');
+    expect(textOf(toolResults(transport.requests[1]!.body)[0]!)).toContain("Start the project's dev server with preview_start");
   }, 120_000);
 
   it('runs Chrome on a fresh temporary profile, never one in the home folder, and removes it when the session closes', async () => {

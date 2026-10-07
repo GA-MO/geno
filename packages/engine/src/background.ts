@@ -14,6 +14,7 @@ import {
   type JobInput,
   type JobView,
   type KillCause,
+  type PreviewTag,
   type StopBy,
   type TaskJob,
   type TurnEvent,
@@ -44,6 +45,8 @@ export type JobStart = {
   readonly toolUseId: string;
   readonly command: string;
   readonly description?: string | undefined;
+  /** The dev server it is, when preview_start runs it. */
+  readonly preview?: PreviewTag | undefined;
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
   /** The session's spill folder; the output goes in a folder under it. */
@@ -87,6 +90,7 @@ const viewOf = (entry: Entry): JobView => ({
   toolUseId: entry.job.toolUseId,
   command: entry.job.command,
   ...(entry.job.description === undefined ? {} : { description: entry.job.description }),
+  ...(entry.job.preview === undefined ? {} : { preview: entry.job.preview }),
   state: entry.job.state,
   tail: tailOf(entry.output),
 });
@@ -133,6 +137,7 @@ export class BackgroundJobs {
       toolUseId: start.toolUseId,
       command: start.command,
       ...(start.description === undefined ? {} : { description: start.description }),
+      ...(start.preview === undefined ? {} : { preview: start.preview }),
       pid: shell.pid,
       state: { status: 'running' },
       startedAt: Date.now(),
@@ -159,12 +164,23 @@ export class BackgroundJobs {
   running(sessionId: string): TaskJob[] {
     return [...(this.sessions.get(sessionId)?.values() ?? [])]
       .filter((entry) => entry.job.state.status === 'running')
-      .map(({ job }) => ({ id: job.id, command: job.command, description: job.description, startedAt: job.startedAt }));
+      .map(({ job }) => ({ id: job.id, command: job.command, description: job.description, startedAt: job.startedAt, ...(job.preview === undefined ? {} : { preview: job.preview }) }));
   }
 
   /** Every job of the session the engine still knows, as the panel shows it. */
   views(sessionId: string): JobView[] {
     return [...(this.sessions.get(sessionId)?.values() ?? [])].map(viewOf);
+  }
+
+  /** Every job of the session the engine still knows, newest first. */
+  jobs(sessionId: string): BackgroundJob[] {
+    return [...(this.sessions.get(sessionId)?.values() ?? [])].map((entry) => entry.job).toReversed();
+  }
+
+  /** All the output the job still keeps, and a promise that settles as it ends. */
+  kept(sessionId: string, id: string): { readonly text: string; readonly ended: Promise<BackgroundJob> } {
+    const entry = this.entry(sessionId, id);
+    return { text: entry.output.tail(Number.MAX_SAFE_INTEGER), ended: entry.done };
   }
 
   /** bash_output: the job's status, then its last `tail` lines, or what it printed since the last read. */
