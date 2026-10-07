@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { NOT_USER_LINE } from '@g-code/core';
 import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
@@ -26,7 +27,9 @@ const replies: readonly Reply[] = [
   asModel(answer('Setting up SQLite.', usage)),
 ];
 
-type Body = { tools: { name: string }[]; system: { text: string }[]; messages: unknown[] };
+type Body = { tools: { name: string }[]; system: { text: string }[]; messages: { role: string; content: string | { type: string; text?: string }[] }[] };
+const userTexts = (body: Body): string[] =>
+  body.messages.flatMap((m) => (m.role !== 'user' || typeof m.content === 'string' ? [] : m.content.flatMap((b) => (b.type === 'text' && b.text !== undefined ? [b.text] : []))));
 const requests: Body[] = [];
 const shots = process.env['GCODE_SCREENSHOTS'];
 let debugPort = 0;
@@ -113,8 +116,10 @@ describe('rules, memory and questions in the chat panel', () => {
     const names = (i: number) => offeredTools(requests[i]!);
     expect(names(0), 'the panel shows both cards, so Ask offers both tools').toEqual(expect.arrayContaining(['ask_user', 'remember']));
     expect(JSON.stringify(requests[2]!.messages)).toContain('Saved to project memory.');
-    expect(requests[0]!.system[0]!.text).not.toContain(NOTE);
-    expect(requests[3]!.system[0]!.text, 'the approved note is in the next prompt').toContain(`<note scope="project">${NOTE}</note>`);
+    expect(JSON.stringify(requests[0]), 'no note before the user approves it').not.toContain(NOTE);
+    const told = userTexts(requests[3]!).filter((text) => text.includes(`<note scope="project">${NOTE}</note>`));
+    expect(told.map((text) => text.startsWith(`${NOT_USER_LINE}\n`)), 'the approved note reaches the next prompt once, as a notice not from the user').toEqual([true]);
+    expect(requests[3]!.system, 'and the system prompt stays byte-stable').toEqual(requests[0]!.system);
     expect(JSON.stringify(requests[4]!.messages)).toContain(`The user answered: ${ANSWER}`);
   }, 600_000);
 });
