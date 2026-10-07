@@ -1,5 +1,5 @@
 // Prints, per mode and client, the tools U46's roster defers and the tokens that saves a call, by the roster's own
-// estimate. Rerun it after adding a tool and update the numbers in docs/u46.md, u48.md, u53.md, u55.md, u57.md and u60.md.
+// estimate. Rerun it after adding a tool and update the numbers in docs/u46.md, u48.md, u53.md, u55.md, u57.md, u59.md and u60.md.
 // Run with: pnpm tsx scripts/roster-savings.ts
 // The tool list mirrors the `own` list that runAgent builds in packages/engine/src/agent.ts, without MCP or subagent tools.
 import {
