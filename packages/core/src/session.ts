@@ -30,6 +30,7 @@ import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
 import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
+import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -128,6 +129,8 @@ export type ToolResultEvent = {
   readonly spinoff?: SpinoffNote | undefined;
   /** The chapter a mark_chapter call started (`chapters.ts`). */
   readonly chapter?: ChapterMark | undefined;
+  /** The file a read showed or an edit wrote, as the model now knows it (`file-tracker.ts`). */
+  readonly file?: FileStamp | undefined;
   /** Absent in logs written before turns were timed. */
   readonly timing?: ToolMarks | undefined;
 } & ToolOutput;
@@ -233,6 +236,8 @@ export type TurnEvent =
   | ChildEvent
   | CutEvent
   | CompactEvent
+  /** A file the model read changed on disk; logged at the safe point before the model call that is told of it. */
+  | FileChangedEvent
   | ToolResultEvent;
 
 export type TurnEventKind = TurnEvent['kind'];
@@ -263,6 +268,7 @@ export const IN_CONVERSATION: Readonly<Record<TurnEventKind, boolean>> = {
   chapter: false,
   cut: false,
   compact: false,
+  'file-changed': false,
 };
 
 export const restoredNotice = (event: Extract<TurnEvent, { kind: 'restored' }>): string =>
@@ -388,6 +394,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
+    if (event.kind === 'file-changed') prompts.push({ type: 'text', text: changedOnDiskNote(event.shown, event.excerpt) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
     if (noted !== undefined) prompts.push({ type: 'text', text: noted });
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];

@@ -55,6 +55,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   'backend-start': false,
   cut: false,
   compact: false,
+  'file-changed': false,
 };
 
 /**
