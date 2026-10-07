@@ -8,7 +8,7 @@ import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import type * as vscode from 'vscode';
-import { BACKEND_ENV_CAPABILITY, DIAGNOSTICS_CAPABILITY, EDITOR_ACTIONS_CAPABILITY, MEMORY_CAPABILITY, READ_TERMINAL_CAPABILITY, SCHEDULES_CAPABILITY, SPINOFF_CAPABILITY, TASKS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY, WIDGET_CAPABILITY } from '@g-code/core';
+import { BACKEND_ENV_CAPABILITY, DIAGNOSTICS_CAPABILITY, EDITOR_ACTIONS_CAPABILITY, MEMORY_CAPABILITY, READ_TERMINAL_CAPABILITY, SCHEDULES_CAPABILITY, SPINOFF_CAPABILITY, CHAPTER_CAPABILITY, TASKS_CAPABILITY, UNSAVED_BUFFERS_CAPABILITY, WIDGET_CAPABILITY } from '@g-code/core';
 
 const RESTART_DELAY_MS = 1000;
 /** How long a new engine process may take to listen. */
@@ -99,7 +99,7 @@ export class Engine implements vscode.Disposable {
         elicitation: { form: {} },
         // Children are announced with subagent_update, and their own updates stream under their session ids.
         subagents: {},
-        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true, [WIDGET_CAPABILITY]: true, [TASKS_CAPABILITY]: true, [BACKEND_ENV_CAPABILITY]: true, [EDITOR_ACTIONS_CAPABILITY]: true, [READ_TERMINAL_CAPABILITY]: true, [SPINOFF_CAPABILITY]: true, [SCHEDULES_CAPABILITY]: true },
+        _meta: { [DIAGNOSTICS_CAPABILITY]: true, [UNSAVED_BUFFERS_CAPABILITY]: true, [MEMORY_CAPABILITY]: true, [WIDGET_CAPABILITY]: true, [TASKS_CAPABILITY]: true, [BACKEND_ENV_CAPABILITY]: true, [EDITOR_ACTIONS_CAPABILITY]: true, [READ_TERMINAL_CAPABILITY]: true, [SPINOFF_CAPABILITY]: true, [SCHEDULES_CAPABILITY]: true, [CHAPTER_CAPABILITY]: true },
       },
       clientInfo: { name: 'g-code', version: '0.0.0' },
     });

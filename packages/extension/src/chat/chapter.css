@@ -1,0 +1,227 @@
+/*
+ * Chapters (U58): the divider where a chapter starts, the title field under a message, and the table of contents
+ * that floats at the transcript's top left, beside the stuck request.
+ */
+
+:root {
+  /* The room the stuck request leaves at its left for the table of contents' button. */
+  --toc-room: 40px;
+}
+
+@media (min-width: 480px) {
+  :root {
+    --toc-room: min(32vw, 220px);
+  }
+}
+
+.chapter-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+  color: var(--vscode-foreground);
+  font-size: var(--small);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.chapter-divider::before,
+.chapter-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--vscode-contrastBorder, color-mix(in srgb, var(--accent) 55%, transparent));
+}
+
+.chapter-divider::before {
+  flex: 0 0 10px;
+}
+
+.chapter-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The user's chapter opens its turn, above the message. */
+.chapter-slot:empty {
+  display: none;
+}
+
+.chapter-slot .chapter-divider {
+  margin: 0 0 10px;
+}
+
+/* A chapter's step is the divider itself; the rail runs on through it without a node. */
+.step-chapter > .node {
+  visibility: hidden;
+}
+
+.chapter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: min(100%, 420px);
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  outline: 1px solid var(--vscode-contrastBorder, transparent);
+  outline-offset: -1px;
+  font-size: var(--small);
+}
+
+.chapter-input {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+}
+
+.chapter-input:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.chapter-problem {
+  display: flex;
+  flex-basis: 100%;
+  gap: 4px;
+  margin: 0;
+  color: var(--vscode-errorForeground);
+}
+
+/* A zero-height row between the header and the transcript, so the button floats over the transcript's top. */
+.chapter-toc-slot {
+  position: relative;
+  flex: none;
+  height: 0;
+  z-index: 6;
+}
+
+.chapter-toc-slot[hidden],
+body:not([data-view='chat']) .chapter-toc-slot {
+  display: none;
+}
+
+/* The stuck request keeps clear of the button. */
+body[data-chapters] .turn > .request {
+  padding-left: var(--toc-room);
+}
+
+.chapter-toc {
+  position: absolute;
+  top: 6px;
+  left: var(--gap);
+}
+
+.chapter-toc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(var(--toc-room) - 8px);
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--vscode-contrastBorder, var(--border));
+  border-radius: 13px;
+  background: var(--bg);
+  color: var(--muted);
+  box-shadow: var(--shadow);
+  font-size: var(--small);
+}
+
+.chapter-toc-toggle:hover,
+.chapter-toc.open .chapter-toc-toggle {
+  color: var(--vscode-foreground);
+}
+
+.chapter-toc-toggle:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.chapter-toc-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-toc-chevron {
+  flex: none;
+  font-size: 12px;
+}
+
+/* Below 480px the button is its icon alone, in the 40px the stuck request leaves it. */
+@media (max-width: 479px) {
+  .chapter-toc-current,
+  .chapter-toc-chevron {
+    display: none;
+  }
+}
+
+.chapter-toc-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(300px, calc(100vw - 2 * var(--gap)));
+  max-height: min(60vh, 360px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-widget-border, var(--border)));
+  border-radius: 8px;
+  background: var(--vscode-editorSuggestWidget-background, var(--vscode-quickInput-background));
+  color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
+}
+
+.chapter-toc-list[hidden] {
+  display: none;
+}
+
+.chapter-toc-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.chapter-toc-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.chapter-toc-item[aria-current='true'] {
+  border-left-color: var(--mark);
+  background: var(--vscode-list-inactiveSelectionBackground, var(--surface-2));
+  font-weight: 600;
+}
+
+.chapter-toc-item:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.chapter-toc-title {
+  overflow-wrap: anywhere;
+}
+
+.chapter-toc-summary {
+  color: var(--muted);
+  font-size: var(--small);
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
