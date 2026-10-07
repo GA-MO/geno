@@ -8,7 +8,8 @@ useTestTmp();
 
 const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
 const WEBVIEW_TESTS = 'packages/extension/test/**/*.webview.test.ts';
-const workers = vscodeWorkers(process.env, 1);
+// A file mostly waits, so three at once take a third of the time; docs/t1-fast-tests.md has the runs at 1 to 4.
+const workers = vscodeWorkers(process.env, 3);
 
 export default defineConfig({
   test: {
