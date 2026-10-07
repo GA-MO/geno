@@ -91,7 +91,7 @@ describe('the task rows', () => {
     expect(rowOf(task({ status: 'done', endedAt: 3000, jobs }), undefined, 9000).jobs).toEqual([
       { id: 'bg-1', label: 'Start the dev server' },
       { id: 'bg-2', label: 'pnpm test --watch' },
-      { id: 'bg-3', label: 'Dev server web at localhost:3000' },
+      { id: 'bg-3', label: 'web on localhost:3000' },
     ]);
   });
 
