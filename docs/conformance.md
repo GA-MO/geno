@@ -161,6 +161,23 @@ P7 also covers rows that have no Claude Code conformance test:
 |---|---|
 | A/D-04, B/B-10 | `file-changes.e2e.test.ts` serves a session to an editor over ACP. The user saves `a.ts` between two model calls; the fake model reverts it unless the note arrives, and the file keeps the user's text. An edit into an unsaved buffer, and the user saving that buffer, get no note. `core/test/file-tracker.test.ts` pins the note, the excerpt (context lines, merged ranges, the 60-line limit, a `[Geno]` line in the file neutralized) and the fold. `engine/test/file-tracker.test.ts` checks that an unchanged stat is not read, a save with the same text is read once, and a deleted or oversized file drops out. A rewind of the conversation only, or a fork, keeps the files, so the next request notes each file the kept conversation knew in an older state (`rewind.e2e.test.ts`). A rewind that restores files drops every tracked file, since its own note says to read them again. |
 
+## Cache-stable session text (P11)
+
+The system prompt is `AGENT_SYSTEM_PROMPT` and the capability notes, the same in every mode and every workspace, and every interactive mode is offered the same tools. A mode switch and a memory change reach the model as a `notice` event, logged at the safe point before the next model call (`core/src/notice.ts`). Plan's text is `MODE_NOTICES.plan`; the tools a mode leaves out are refused when called. Memory is frozen into the opening user message at session start, after the loaded context.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-ASM-07 | Two runs with the same system and tools read more than 90% of the input from cache. | On Model Studio qwen3.8-flash, the first call of a second run read 98.6% from cache, the run after a new memory note 96.9%, and the run after a switch from Ask to Plan 95.4%. Before P11 the last two read 0%. | pass (live) | `packages/engine/test/cache-smoke.ts`, $0.007 a run |
+| T-PERSIST-02 | A prompt snapshot and a wire log of every request. | Each model turn names a snapshot, the request without its messages, kept once per body under `snapshots/` in the app home. `gcode session request <id> <turn>` rebuilds the body the call sent from the snapshot and the log before the turn. `GCODE_WIRE_LOG=<file>` appends each request and its answer as JSON lines, with no headers and every key cut out. | pass (was fail) | `persistence.conformance.test.ts`, both wires |
+
+P11 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| A/B-07, C/C-71 | `cache.conformance.test.ts`, both wires: a note added between two runs leaves the system prompt, the tools and the earlier messages byte for byte, and arrives under the not-user line before the next prompt. Two workspaces, one with project memory, send the same system prompt and tools. `memory-serve.e2e.test.ts` checks the same across a real `remember` over ACP: the next call after the yes carries the note. `notice.test.ts` (core) checks what a notice says, that it is said once, and again after a compaction drops it. |
+| A/B-13 | `cache.conformance.test.ts`, both wires: a switch from Ask to Plan keeps the request prefix, the newest message carries Plan's notice, and an `edit` in Plan is refused. `cacheRead` after the switch is T-ASM-07 above. |
+| C/C-70 | The `remember` description says not to save what the repository records, and the memory snapshot says a note may be stale and to verify a file, function or flag it names. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -190,7 +207,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-ASM-04 | at parity | none | no test yet |
 | T-ASM-05 | adopt | P24 | no test yet |
 | T-ASM-06 | adapt | P23 | pass |
-| T-ASM-07 | adopt | P11 | no test yet |
+| T-ASM-07 | adopt | P11 | pass (live smoke) |
 | T-ASM-08 | skip | none | no test yet |
 | T-ASM-09 | at parity | none | no test yet |
 | T-ASM-10 | adopt; adapt | P8 | no test yet |
@@ -263,5 +280,5 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-WF-01 | adapt | P34 | no test yet |
 | T-WF-02 | adopt | P33 | no test yet |
 | T-PERSIST-01 | keep Geno's | none | no test yet |
-| T-PERSIST-02 | adopt | P11 | no test yet |
+| T-PERSIST-02 | adopt | P11 | pass |
 | T-PERSIST-03 | adapt | P22 | no test yet |
