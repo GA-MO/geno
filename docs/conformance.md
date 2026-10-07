@@ -63,7 +63,7 @@ P4 also covers rows whose checks are unit tests:
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
 | T-ASM-01 | Both system blocks are cached with a 1 h TTL. There is no billing header. | On Anthropic, Bedrock and Vertex, every breakpoint has a 1 h TTL, because an entry may not outlive one before it. Model Studio and OpenRouter keep the default TTL until a longer one is tested there. No system block is a billing header. | pass (adapt) | `assembly.conformance.test.ts`, Anthropic wire only: Chat Completions has no `cache_control` |
-| T-ASM-06 | At effort medium: `output_config.effort` is `medium`, thinking is adaptive with display omitted, and `max_tokens` is 128,000, clamped near a full window. | `claude-opus-5-5` at effort medium sends the same three fields. Near a full window, `max_tokens` is the window minus the input estimate and 1,000 tokens. | pass | `assembly.conformance.test.ts`, Anthropic wire only: Chat Completions sends none of these fields |
+| T-ASM-06 | At effort medium: `output_config.effort` is `medium`, thinking is adaptive with display omitted, and `max_tokens` is 128,000, clamped near a full window. | `claude-opus-5-5` at effort medium sends the same three fields. Near a full window, `max_tokens` is the window minus the input estimate and 1,000 tokens. Since P24, `output_config.effort` goes only to a model whose capability row says it takes effort: Haiku 4.5 refuses it, and an unknown model sends none. | pass | `assembly.conformance.test.ts`, Anthropic wire only: Chat Completions sends none of these fields. `prompt.conformance.test.ts`: a Haiku 4.5 request has no `output_config` |
 | T-TOOL-07 | Output over 30,000 characters goes to a file. | Output over the model's `spillChars`, 24,000 for every model, goes to a file that holds all of it. The model sees 2,000 characters of head and of tail. | partial: the threshold half passes. The MCP cap and note are P10. | `tools.conformance.test.ts`, both wires |
 
 P23 also covers rows that have no Claude Code conformance test. Their checks are unit tests and a live eval:
@@ -163,7 +163,7 @@ P7 also covers rows that have no Claude Code conformance test:
 
 ## Cache-stable session text (P11)
 
-The system prompt is `AGENT_SYSTEM_PROMPT` and the capability notes, the same in every mode and every workspace, and every interactive mode is offered the same tools. A mode switch and a memory change reach the model as a `notice` event, logged at the safe point before the next model call (`core/src/notice.ts`). Plan's text is `MODE_NOTICES.plan`; the tools a mode leaves out are refused when called. Memory is frozen into the opening user message at session start, after the loaded context.
+The system prompt is the model tier's `AGENT_PROMPTS` text (P24) and the capability notes, the same in every mode and every workspace, and every interactive mode is offered the same tools. A mode switch and a memory change reach the model as a `notice` event, logged at the safe point before the next model call (`core/src/notice.ts`). Plan's text is `MODE_NOTICES.plan`; the tools a mode leaves out are refused when called. Memory is frozen into the opening user message at session start, after the loaded context.
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
@@ -258,6 +258,25 @@ P17 also covers these rows:
 
 The eval of the parent's turns that state results before the report ran live on Model Studio qwen3.8-flash with `packages/engine/test/handback-smoke.ts`: a background explore in a small fixture repository, three runs on `main` and four on P17. No parent turn stated results before the report on either side, so this task does not separate the launch text's rules. The parent searched the repository again after the report in 3 of 3 runs on `main` and 1 of 4 on P17. On P17 the child called `report` in all four runs, after the nudge in two. The seven runs cost $0.050.
 
+## Prompt tiers (P24)
+
+`AGENT_PROMPTS` in `core/src/agent-prompts.ts` holds one base prompt per prompt tier. `runAgent` picks the tier from the model's capability row, so the prompt stays byte-stable for as long as the session's model does. `principles` is today's prompt, lightly aligned, for strong models. `rules` follows the sections of Claude Code's Haiku prompt in Geno's words, for `qwen3.8-flash`, Haiku 4.5 and every unknown model. The tool descriptions are the same in both tiers and carry each tool's own rules. `--append-system-prompt <text>` on `gcode agent`, or `appendSystemPrompt` in `.gcode.json`, ends the system prompt. The flag replaces the setting. The A/B that kept the rules tier for flash is [results/p24-prompt-tier.md](results/p24-prompt-tier.md).
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-ASM-05 | `--append-system-prompt X` makes X the last part of the system prompt. | The flag's text, or the workspace setting's, is the last block of the system prompt, after the capability notes. A resumed run with the same flag sends the same bytes. | pass (was fail: no flag) | `prompt.conformance.test.ts`, both wires |
+
+P24 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| A/B-01 | `prompt.conformance.test.ts`: flash and an unknown model open with the rules tier on both wires, and Opus with the principles tier. The eval in `results/p24-prompt-tier.md`: 10/10 on both tiers, and on the rules tier 12.6% fewer tool calls, 10.7% less cost and 18.6% fewer output tokens on average, all within the run-to-run spread. |
+| A/B-09, A/B-10 | Both tiers carry the "no need to wrap up early" and "act; do not re-derive or narrate" lines. A long eval with a low `GCODE_COMPACT_AT` was not run. |
+| B/B-01 | `edit` says to read first and that the check runs after each edit, `bash` says how to run in the background and what a denial means, `read` says a file is current after an edit, and `preview_start` says when to use it. First-try tool failures were 5.6% on the rules tier and 5.8% on the principles tier. |
+| B/B-18 | `bash` lists the git rules: no interactive flags, commit or push only when asked, no `--no-verify` or force-push unless asked, and `gh` for GitHub. There is no sandbox escape parameter. |
+| C/C-44 | `workflow` runs only when the user asks for a workflow. The permission card stays. |
+| T-ASM-06 (effort) | `session.test.ts` (core) and `prompt.conformance.test.ts`: a Haiku 4.5 request has no `output_config`, and an unknown model sends none. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -285,7 +304,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-ASM-01 | adapt | P23 | pass |
 | T-ASM-03 | adopt | P5 | pass |
 | T-ASM-04 | at parity | none | no test yet |
-| T-ASM-05 | adopt | P24 | no test yet |
+| T-ASM-05 | adopt | P24 | pass |
 | T-ASM-06 | adapt | P23 | pass |
 | T-ASM-07 | adopt | P11 | pass (live smoke) |
 | T-ASM-08 | skip | none | no test yet |
