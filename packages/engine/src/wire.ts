@@ -9,12 +9,16 @@ import {
   type ProviderName,
 } from '@g-code/core';
 import { EngineError } from './errors.js';
+import { wireLogFetch } from './wire-log.js';
 import { openaiWire } from './wire-openai.js';
 import { probeHost, redactor, type Wire, type WireConfig } from './wire-shape.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** The provider's values from `env`. Throws an EngineError naming the first required variable that is not set. */
+/**
+ * The provider's values from `env`. Throws an EngineError naming the first required variable that is not set. With
+ * GCODE_WIRE_LOG set, every request goes to that file as well (`wire-log.ts`).
+ */
 export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof globalThis.fetch): WireConfig {
   const spec = specOf(provider);
   const values = providerValues(spec, env);
@@ -22,7 +26,9 @@ export function wireConfig(provider: ProviderName, env: Env, fetch?: typeof glob
   if (missing !== undefined) {
     throw new EngineError(`${missing.env} is not set; put ${missing.id === 'apiKey' ? `your ${provider} API key` : missing.hint} in it`);
   }
-  return { spec, values, baseUrl: baseUrlOf(spec, values), fetch };
+  const config: WireConfig = { spec, values, baseUrl: baseUrlOf(spec, values), fetch };
+  const log = env['GCODE_WIRE_LOG'];
+  return log ? { ...config, fetch: wireLogFetch(log, fetch ?? globalThis.fetch, redactor(config)) } : config;
 }
 
 // maxRetries: 0 because retries are the gateway's: the SDK's would retry an exhausted quota, unseen, and never a

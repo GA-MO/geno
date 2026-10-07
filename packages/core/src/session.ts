@@ -89,6 +89,11 @@ export type AssistantTurn = {
   readonly model: string;
   /** The request split into parts by the tokenizer estimate; absent in logs written before requests were split. */
   readonly promptParts?: readonly PartRun[] | undefined;
+  /**
+   * The name of the request's snapshot, the request without its messages, kept by the engine; with the log before
+   * the turn it rebuilds the request. Absent in logs written before requests were kept.
+   */
+  readonly snapshot?: string | undefined;
 };
 
 export type TurnResult =

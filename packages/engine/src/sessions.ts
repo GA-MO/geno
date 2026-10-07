@@ -295,6 +295,7 @@ const turnEventSchema = z.union([
       timing: modelMarksSchema.optional(),
       issuedBy: z.literal('user').optional(),
       promptParts: z.array(z.tuple([z.enum(INPUT_PARTS), count])).optional(),
+      snapshot: z.string().min(1).optional(),
     }),
     z.strictObject({
       kind: z.literal('error'),
