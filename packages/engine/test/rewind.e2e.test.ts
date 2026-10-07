@@ -6,6 +6,7 @@ import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  changedOnDiskNote,
   FORK_AT_META,
   REPLAYED_TURN_META,
   REWIND_PREVIEW_METHOD,
@@ -134,6 +135,7 @@ const prose = (body: { readonly messages: readonly { readonly role: string; read
       : (m.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') && !b.text.startsWith(ENVIRONMENT_HEADING) ? [b.text] : [])),
   );
 const restoredNote = /^\[Geno\] The user rewound the workspace/;
+const THREE_NOTE = changedOnDiskNote('a.ts', '1\texport const a = "three";');
 
 /** Whether a process whose command line holds `marker` still runs. */
 const running = (marker: string): boolean => {
@@ -193,7 +195,7 @@ describe('gcode serve: rewind to here', () => {
 
       const response = await editor.prompt('make it 3');
       expect(response._meta?.[TURN_SEQ_META]).toBeGreaterThan(editor.turn2);
-      expect(editor.sent().at(-1)).toEqual(['make it two', 'make it 3']);
+      expect(editor.sent().at(-1), 'the model knew a.ts from turn 1, and is told it now holds turn 2\'s edit').toEqual(['make it two', 'make it 3', THREE_NOTE]);
       expect(prompts(await editor.log())).toEqual(['make it two', 'make it 3']);
     });
   });
@@ -269,7 +271,7 @@ describe('gcode serve: fork from here', () => {
       expect(turns, 'the fork replays its one turn by its seq').toEqual([1]);
 
       await editor.prompt('make it 2.5', forkId);
-      expect(editor.sent().at(-1)).toEqual(['make it two', 'make it 2.5']);
+      expect(editor.sent().at(-1), 'the fork knew a.ts from turn 1, and is told it now holds turn 2\'s edit').toEqual(['make it two', 'make it 2.5', THREE_NOTE]);
       const { tasks } = await editor.ctx.request<TasksResponse>(TASKS_METHOD, {});
       expect(tasks.find((t) => t.sessionId === forkId)?.forkedFrom).toEqual({ sessionId: editor.sessionId, turnSeq: 1, title: 'make it two' });
 
