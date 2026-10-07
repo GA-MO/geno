@@ -92,6 +92,7 @@ describe('read of an image', () => {
     const ctx: ToolContext = {
       workspace: ws,
       spillDir: path.join(root, 'spill'), readRoots: [],
+      spillChars: 24_000,
       attachmentsDir: path.join(root, 'attachments'),
       rg: rgCommand(),
       signal: new AbortController().signal,
