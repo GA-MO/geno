@@ -58,6 +58,8 @@ import {
   WIDGET_META,
   WIDGET_TOOL,
   type WidgetRef,
+  reportMessageOf,
+  REPORT_TOOL,
 } from '@g-code/core';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { EXECUTORS } from './tools/index.js';
@@ -281,7 +283,10 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
       if (event.kind === 'assistant') {
         for (const block of event.content) {
           if (block.type === 'text' && block.text !== '') updates.push(textUpdate(block.text));
-          if (block.type === 'tool_use') {
+          const reported = block.type === 'tool_use' ? reportMessageOf(block) : undefined;
+          // A subagent's report shows as its text, where the user reads its answer.
+          if (reported !== undefined) updates.push(textUpdate(reported));
+          else if (block.type === 'tool_use') {
             updates.push({
               sessionUpdate: 'tool_call',
               toolCallId: block.id,
@@ -294,7 +299,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
           }
         }
       }
-      if (event.kind === 'tool-result') {
+      if (event.kind === 'tool-result' && event.name !== REPORT_TOOL) {
         updates.push(
           toolResultUpdate(
             event,

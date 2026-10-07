@@ -405,7 +405,7 @@ describe('the log', () => {
     const child = asSessionId('c-a');
     const events: TurnEvent[] = [
       { kind: 'child-end', seq: 3, at: '', child, toolUseId: unitToolId(1), end: { kind: 'done' }, turns: 2, costUsd: 0.004, summary: '' },
-      { kind: 'tool-result', seq: 4, at: '', toolUseId: unitToolId(1), name: 'agent', status: 'ok', output: childReport('review', child, { kind: 'done' }, 'all good') },
+      { kind: 'tool-result', seq: 4, at: '', toolUseId: unitToolId(1), name: 'agent', status: 'ok', output: childReport('review', child, { kind: 'done' }, 'all good', { turns: 2, costUsd: 0.004, durationMs: 4000 }) },
       { kind: 'child-end', seq: 5, at: '', child: asSessionId('c-b'), toolUseId: unitToolId(2), end: { kind: 'cancelled' }, turns: 1, costUsd: 0.001, summary: '' },
     ];
     const next = absorbOutcomes(run, events);

@@ -319,6 +319,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...conflicts.map((conflict) => `  conflict ${conflict.path}: ${conflict.reason}`),
   ],
   'file-changed': ({ seq, shown, now }) => [`#${seq} ${shown} ${now === null ? 'is gone from disk or too large to track' : 'changed on disk'}; the model was told`],
+  'report-nudge': ({ seq }) => [`#${seq} the subagent ended without a report and was nudged once`],
   'background-end': ({ seq, job, tail }) => [`#${seq} background ${job.id} ${jobEndText(job.state)}: ${job.command}`, ...(tail === '' ? [] : tail.split('\n').map((line) => `  ${line}`))],
 };
 

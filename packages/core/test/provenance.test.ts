@@ -58,7 +58,7 @@ const ARRIVALS: Readonly<Record<string, TurnEvent>> = {
   'a monitor match': { kind: 'wake', seq: 4, at, note: { kind: 'monitor', id: 'wake-1', toolUseId: 'tu_0', job: 'bg-1', pattern: 'ready', outcome: 'matched', line: 'ready on 3000' } },
   'a wake-up coming due': { kind: 'wake', seq: 4, at, note: { kind: 'due', id: 'wake-2', toolUseId: 'tu_0', reason: 'check CI again' } },
   'a PR watch ending': { kind: 'wake', seq: 4, at, note: { kind: 'pr', id: 'wake-3', toolUseId: 'tu_0', pr: 12, outcome: 'failed', text: 'CI failed on PR #12.' } },
-  "a subagent's report": steerEvent({ text: childReport('explore', asSessionId('c-1'), { kind: 'done' }, 'alpha is in a.ts:1.'), from: 'child' }, 4, at),
+  "a subagent's report": steerEvent({ text: childReport('explore', asSessionId('c-1'), { kind: 'done' }, 'alpha is in a.ts:1.', { turns: 2, costUsd: 0.003, durationMs: 4000 }), from: 'child' }, 4, at),
   "the parent agent's message": steerEvent({ text: 'Only look at src.', from: 'parent' }, 4, at),
 };
 

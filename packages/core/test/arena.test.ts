@@ -109,7 +109,7 @@ const passing = [
   { lane: 'fix-b', letter: 'B' },
   { lane: 'fix-c', letter: 'C' },
 ];
-const fenced = (text: string) => childReport('review', 'child-1' as SessionId, { kind: 'done' }, text);
+const fenced = (text: string) => childReport('review', 'child-1' as SessionId, { kind: 'done' }, text, { turns: 2, costUsd: 0.003, durationMs: 4000 });
 
 describe('ranking parsing', () => {
   it('reads the JSON block inside the fence, by letter or by name', () => {

@@ -31,6 +31,7 @@ import {
   WORKFLOW_META,
   WORKFLOW_REASON,
   childReport,
+  childrenUsage,
   previewQuestion,
   ratesOf,
   workflowEnd,
@@ -1353,8 +1354,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         () => false,
       )
       .then(async (cancelled) => {
-        const run = driver.finish((await existing(id)).events, cancelled);
-        if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: childReport(`workflow ${spec.name}`, asSessionId(id), workflowEnd(run), workflowReport(run)) });
+        const log = await existing(id);
+        const run = driver.finish(log.events, cancelled);
+        const usage = childrenUsage(log.events, Date.now() - Date.parse(log.session.createdAt));
+        if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: childReport(`workflow ${spec.name}`, asSessionId(id), workflowEnd(run), workflowReport(run), usage) });
       })
       .catch((error: unknown) => io.err(`workflow ${spec.name} (${id}): could not report: ${error instanceof Error ? error.message : String(error)}`))
       .finally(() => {

@@ -2,6 +2,7 @@ import type { ContentBlockParam, MessageParam, ToolResultBlockParam } from '@ant
 import { NO_ATTACHMENTS, type StoredAttachments } from './attachments.js';
 import { backgroundEndNotice } from './background.js';
 import { changedOnDiskNote } from './file-tracker.js';
+import { REPORT_NUDGE } from './handback.js';
 import { compactedText, contextView, KEEP_TAIL_TOKENS, keepTailTokens, type CompactEvent, type CompactTrigger, type Kept, type KeptMessage } from './compact.js';
 import { renderContextItems } from './context.js';
 import { textTokens } from './context-window.js';
@@ -56,6 +57,7 @@ const EVENT_TOKENS: { readonly [K in TurnEventKind]: (event: EventOf<K>) => numb
   restored: (event) => textTokens(restoredNotice(event)),
   'background-end': (event) => textTokens(backgroundEndNotice(event)),
   'file-changed': ({ shown, excerpt }) => textTokens(changedOnDiskNote(shown, excerpt)),
+  'report-nudge': () => textTokens(REPORT_NUDGE),
   wake: ({ note }) => textTokens(wakeNoteText(note) ?? ''),
   compact: (event) => textTokens(compactedText(event)),
   error: none,

@@ -45,6 +45,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   assistant: false,
   error: false,
   'tool-result': false,
+  'report-nudge': false,
   checkpoint: false,
   restored: false,
   retry: false,

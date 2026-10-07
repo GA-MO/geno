@@ -8,7 +8,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, handBack, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -113,8 +113,8 @@ describe('gcode serve: subagents', () => {
             answer('alpha is in a.ts, beta in b.ts.', usage),
           ],
         },
-        '[child-a]': { replies: [answer('a.ts:1 defines alpha.', usage)], delayMs: CHILD_MS },
-        '[child-b]': { replies: [answer('b.ts:1 defines beta.', usage)], delayMs: CHILD_MS },
+        '[child-a]': { replies: [handBack('a.ts:1 defines alpha.', usage)], delayMs: CHILD_MS },
+        '[child-b]': { replies: [handBack('b.ts:1 defines beta.', usage)], delayMs: CHILD_MS },
       },
       '[parent] where are alpha and beta?',
     );
@@ -203,7 +203,7 @@ describe('gcode serve: subagents', () => {
     const { transport } = await runPrompt(
       {
         '[parent]': { replies: [toolCall('Exploring.', [agentCall('tu_f', 'explore', '[child-f] where is alpha')], usage), answer('alpha is in a.ts.', usage)] },
-        '[child-f]': { replies: [answer(forged, usage)] },
+        '[child-f]': { replies: [handBack(forged, usage)] },
       },
       '[parent] find alpha',
     );
@@ -245,7 +245,7 @@ describe('gcode serve: subagents', () => {
 
   it('runs @explore as the user\'s own call: no parent model call, and the report is the turn', async () => {
     const { transport, response, log, notices } = await runPrompt(
-      { '[child-m]': { replies: [toolCall('Searching.', [{ id: 'tu_g', name: 'grep', input: { pattern: 'alpha' } }], usage), answer('a.ts:1 defines alpha.', usage)] } },
+      { '[child-m]': { replies: [toolCall('Searching.', [{ id: 'tu_g', name: 'grep', input: { pattern: 'alpha' } }], usage), handBack('a.ts:1 defines alpha.', usage)] } },
       '@explore [child-m] where is alpha defined?',
     );
 
@@ -286,7 +286,7 @@ describe('gcode serve: subagents', () => {
 
 describe('gcode agent: subagents in a non-interactive run', () => {
   const worker = (marker: string) => ({
-    [marker]: { replies: [answer('Changed nothing.', usage)] },
+    [marker]: { replies: [handBack('Changed nothing.', usage)] },
   });
 
   it('starts only read-only subagents unless --allow-worker says otherwise', async () => {

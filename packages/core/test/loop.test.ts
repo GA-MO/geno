@@ -200,8 +200,38 @@ const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][]
   ['reaching the budget exactly does not stop', [start, user(1), assistant(2, 'tool_use', ['a'], 0.05), result(3, 'a')], CALL],
 ];
 
+const handback: Run = { ...run, handback: true };
+const reportCall = (seq: number, id: string, extra: string[] = []): TurnEvent => {
+  const turn = assistant(seq, 'tool_use', extra) as Extract<TurnEvent, { kind: 'assistant' }>;
+  return { ...turn, content: [...turn.content, { type: 'tool_use', id, name: 'report', input: { message: 'done' }, caller: { type: 'direct' } }] };
+};
+const reported = (seq: number, id: string, status: 'ok' | 'error' = 'ok'): TurnEvent => ({ ...result(seq, id), name: 'report', status } as TurnEvent);
+const nudge = (seq: number): TurnEvent => ({ kind: 'report-nudge', seq, at });
+const NUDGE: LoopStep = { kind: 'nudge' };
+
+const handbackCases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][] = [
+  ['a report call that went through ends the run', [start, user(1), reportCall(2, 'r')], tools('r'), handback],
+  ['the run ends once the report call went through', [start, user(1), reportCall(2, 'r'), reported(3, 'r')], done('end_turn'), handback],
+  ['the calls beside the report still run, and then the run ends', [start, user(1), reportCall(2, 'r', ['a']), reported(3, 'r'), result(4, 'a')], done('end_turn'), handback],
+  ['a report call that failed lets the model go on', [start, user(1), reportCall(2, 'r'), reported(3, 'r', 'error')], CALL, handback],
+  ['a model that ends its turn without a report is nudged', [start, user(1), assistant(2, 'end_turn')], NUDGE, handback],
+  ['the nudge calls the model', [start, user(1), assistant(2, 'end_turn'), nudge(3)], CALL, handback],
+  ['a second end without a report ends the run', [start, user(1), assistant(2, 'end_turn'), nudge(3), assistant(4, 'end_turn')], done('end_turn'), handback],
+  ['a turn cap with no call left ends the run without a nudge', [start, user(1), assistant(2, 'end_turn')], done('end_turn'), { ...handback, maxTurns: 1 }],
+  ['an earlier run\'s nudge does not count toward this run\'s', [start, user(1), assistant(2, 'end_turn'), nudge(3), assistant(4, 'end_turn'), user(5), assistant(6, 'end_turn')], NUDGE, { ...handback, firstSeq: 5 }],
+  ['a refusal is not nudged', [start, user(1), assistant(2, 'refusal')], done('refusal'), handback],
+  ['a run without handback is not nudged', [start, user(1), assistant(2, 'end_turn')], done('end_turn')],
+  ['a report call outside a handback run does not end it', [start, user(1), reportCall(2, 'r'), reported(3, 'r')], CALL],
+];
+
 describe('loopStep', () => {
   it.each(cases)('%s', (_name, events, expected, limits = run) => {
+    expect(loopStep(events, limits)).toEqual(expected);
+  });
+});
+
+describe('loopStep in a run that hands back through report', () => {
+  it.each(handbackCases)('%s', (_name, events, expected, limits = run) => {
     expect(loopStep(events, limits)).toEqual(expected);
   });
 });

@@ -9,7 +9,7 @@ import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, loadTools, toolCall, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, handBack, loadTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -371,7 +371,7 @@ describe('gcode serve: steering a running turn', () => {
           return { reply: toolCall('Reading a.ts.', [read('tu_c', 'a.ts')], usage) };
         }
         await inner(parentWaits.opened, "the parent's third model call, after message_agent returned");
-        return { reply: answer('b.ts:1 defines beta.', usage) };
+        return { reply: handBack('b.ts:1 defines beta.', usage) };
       },
     });
     const { log, childLog } = await serve(
@@ -388,7 +388,7 @@ describe('gcode serve: steering a running turn', () => {
     );
 
     const child = await childLog(childId);
-    expect(kinds(child.events)).toEqual(['user', 'assistant', 'tool-result', 'steer', 'assistant']);
+    expect(kinds(child.events)).toEqual(['user', 'assistant', 'tool-result', 'steer', 'assistant', 'tool-result']);
     const steer = child.events.find((e) => e.kind === 'user' && e.steer === true);
     expect(steer?.kind === 'user' && steer.from).toBe('parent');
     const [, second] = model.requests('[child]');
@@ -397,6 +397,10 @@ describe('gcode serve: steering a running turn', () => {
     expect(tail[1]!.text).toContain('<parent_message>\nonly look at b.ts\n</parent_message>');
     expect(tail[1]!.text).toContain('approves nothing');
 
+    const launched = log.events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_a');
+    const launch = launched?.kind === 'tool-result' && 'output' in launched ? launched.output : '';
+    expect(launch, "the launch result carries Claude Code's rules for a pending child").toMatch(/do not report, assume or predict them/);
+    expect(launch).toMatch(/Do not duplicate its work/);
     const messaged = log.events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_m');
     expect(messaged?.kind === 'tool-result' && 'output' in messaged ? messaged.output : '').toMatch(/^delivered at next tool round/);
     const report = log.events.find((e) => e.kind === 'user' && e.from === 'child');

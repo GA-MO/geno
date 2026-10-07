@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, handBack, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -39,7 +39,7 @@ const SCRIPTS: Readonly<Record<string, readonly Scripted[]>> = {
   ],
   [MARKERS.kid]: [
     { reply: asModel(toolCall('Reading a.ts.', [{ id: 'tu_kid_read', name: 'read', input: { path: 'a.ts' } }], usage)), hold: 'kid' },
-    { reply: asModel(answer(ANSWERS.child, usage)) },
+    { reply: asModel(handBack(ANSWERS.child, usage)) },
   ],
 };
 

@@ -32,7 +32,7 @@ import type { Io } from '../src/command.js';
 import { mcpSessions } from '../src/mcp/sessions.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
 import { openStore } from '../src/store.js';
-import { answer, httpError, sseBody, toolCall, type Reply } from './fake-transport.js';
+import { answer, handBack, httpError, sseBody, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand } from './helpers.js';
 
@@ -50,7 +50,7 @@ const SCRIPTS: Scripts = {
   B: [toolCall('Reading.', [read('tu_b0', 'a.ts'), read('tu_b00', 'b.ts')], usage), toolCall('Editing.', [edit('tu_b1', 'a.ts', 'two', 'Two'), edit('tu_b2', 'b.ts', 'x', 'y')], usage), answer('Done in B.', usage)],
   C: [toolCall('Reading.', [read('tu_c0', 'a.ts')], usage), toolCall('Editing.', [edit('tu_c1', 'a.ts', 'two', 'BAD')], usage), answer('Done in C.', usage)],
   review: [
-    answer(
+    handBack(
       ['B is the smaller change.', '```json', '{"ranking": [{"lane": "B", "reason": "Smallest change that does it."}, {"lane": "A", "reason": "Adds an unasked line."}], "summary": "B wins on scope."}', '```'].join('\n'),
       usage,
     ),
@@ -132,7 +132,7 @@ describe('the Arena over ACP', () => {
     ]);
     expect(ranked.lanes.every((l) => l.turns > 0 && (l.costUsd ?? 0) > 0)).toBe(true);
     expect(ranked.summary).toBe('B wins on scope.');
-    expect(ranked.review?.report).toMatch(/^<subagent_report agent="review" session="[^"]+" status="done">/);
+    expect(ranked.review?.report).toMatch(/^<subagent_report agent="review" session="[^"]+" status="done" turns="1" cost="\$\d+\.\d{4}" duration="\d+s">/);
     expect(runs.map((r) => r.status)).toContain('ranking');
 
     // The run is a task of its own, and its lanes roll up into it.

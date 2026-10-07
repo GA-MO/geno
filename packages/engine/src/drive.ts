@@ -42,6 +42,8 @@ export type Mode = {
   readonly notice?: (events: readonly TurnEvent[]) => Promise<Notice | undefined>;
   /** What to log after a compaction, such as SessionStart's `compact` hook output. */
   readonly afterCompact?: () => Promise<TurnEvent | undefined>;
+  /** A subagent's run, which hands its report back through the report tool (`handback.ts`). */
+  readonly handback?: true | undefined;
 };
 
 export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
@@ -227,7 +229,7 @@ export async function drive(
     );
     return written;
   };
-  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd };
+  const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback };
   if (prompt !== '') {
     await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });
   } else {
@@ -441,6 +443,8 @@ export async function drive(
         await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user', tools: interrupted });
         io.err('abort: interrupted by the user');
       }
+    } else if (step.kind === 'nudge') {
+      await record({ kind: 'report-nudge', seq: nextSeq(events), at: new Date().toISOString() });
     } else if (step.kind === 'answer-tools') {
       const at = new Date().toISOString();
       for (const answer of step.answers) {

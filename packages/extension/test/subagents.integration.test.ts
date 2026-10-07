@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
+import { answer, handBack, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -33,9 +33,9 @@ const SCRIPTS: Readonly<Record<string, readonly Scripted[]>> = {
   ],
   [MARKERS.alpha]: [
     { reply: asModel(toolCall('Reading a.ts.', [{ id: 'tu_read_a', name: 'read', input: { path: 'a.ts' } }], usage)) },
-    { reply: asModel(answer(ANSWERS.alpha, usage)), hold: 'alpha' },
+    { reply: asModel(handBack(ANSWERS.alpha, usage)), hold: 'alpha' },
   ],
-  [MARKERS.beta]: [{ reply: asModel(answer(ANSWERS.beta, usage)), hold: 'beta' }],
+  [MARKERS.beta]: [{ reply: asModel(handBack(ANSWERS.beta, usage)), hold: 'beta' }],
   [MARKERS.cancel]: [
     { reply: asModel(toolCall('Asking an explorer.', [agent('tu_gamma', TASKS.gamma)], usage)) },
     { reply: asModel(answer(ANSWERS.cancelled, usage)) },

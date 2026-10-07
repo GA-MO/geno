@@ -29,6 +29,9 @@ export const call = (text: string, uses: readonly FakeToolUse[], opts: { cutOff?
   input: opts.input,
 });
 
+/** A subagent's last turn: its report call, which ends its run. */
+export const report = (message: string, id = 'tu_report'): ScriptedTurn => call('', [{ id, name: 'report', input: { message } }]);
+
 /** A tool result as the model reads it on either wire. */
 export type SeenResult = { readonly id: string; readonly error: boolean; readonly text: string };
 

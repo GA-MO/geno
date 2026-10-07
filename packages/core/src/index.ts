@@ -55,6 +55,7 @@ export * from './spinoff.js';
 export * from './chapters.js';
 export * from './lanes.js';
 export * from './subagent.js';
+export * from './handback.js';
 export * from './fence.js';
 export * from './file-tracker.js';
 export * from './attention.js';
