@@ -282,13 +282,15 @@ export async function drive(
           );
         }
         await Promise.all(calls);
+        // After the user turns a call down, the turn's later calls do not start; loopStep answers them.
+        if (results.some((result) => result?.status === 'rejected')) break;
         start = batch.end;
       }
       return results;
     })();
     const outcome = await unlessAborted(work, signal);
     if (outcome !== ABORTED) {
-      for (const result of outcome) await record(result);
+      for (const result of outcome) if (result !== undefined) await record(result);
       return undefined;
     }
     // Calls that finished keep their results; the rest are answered as stopped, so no later run runs them again.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { parseWorkflowInput, WORKFLOW_TOOL, type WorkflowPreview } from '@g-code/core';
-import { executor, ToolError, type Executor } from './context.js';
+import { parseWorkflowInput, STOP_AND_WAIT, WORKFLOW_TOOL, type WorkflowPreview } from '@g-code/core';
+import { executor, ToolError, ToolRejected, type Executor } from './context.js';
 
 /** The session's workflows, and the user's yes to a run's preview, which no mode or classifier gives. */
 export type WorkflowTools = {
@@ -17,7 +17,7 @@ export type PreparedWorkflow = {
   readonly start: (toolUseId: string) => Promise<{ readonly sessionId: string }>;
 };
 
-const DECLINED = 'The user did not run the workflow. Nothing ran; do not start it again unless they ask.';
+const DECLINED = `The user did not run the workflow. Nothing ran. ${STOP_AND_WAIT}`;
 
 export function workflowExecutor(tools: WorkflowTools): Executor {
   const input = z.unknown().transform((raw, ctx) => {
@@ -33,7 +33,7 @@ export function workflowExecutor(tools: WorkflowTools): Executor {
       if (name === undefined) return tools.list();
       if (ctx.toolUseId === undefined) throw new ToolError('a workflow starts only inside an agent run');
       const prepared = await tools.prepare(name, text);
-      if (!(await tools.approve(prepared.preview, ctx.signal))) return DECLINED;
+      if (!(await tools.approve(prepared.preview, ctx.signal))) throw new ToolRejected(DECLINED);
       const { sessionId } = await prepared.start(ctx.toolUseId);
       return `Started workflow ${name} in the background as session ${sessionId}. The user follows it in Tasks. Its report arrives as a message when it ends; until then, do not start it again or redo its steps.`;
     },

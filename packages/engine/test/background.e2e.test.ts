@@ -149,7 +149,7 @@ describe('background sessions', () => {
     const done = await second.taskBecomes(sessionId, 'done');
     expect(second.heard.permissions).toEqual([expect.objectContaining({ sessionId, toolCall: expect.objectContaining({ toolCallId: remove.id }) })]);
     expect(done.notice).toBe('done');
-    expect(model.requests).toHaveLength(2);
+    expect(model.requests, 'the rejection ends the turn without another model call').toHaveLength(1);
     window2.close();
   });
 

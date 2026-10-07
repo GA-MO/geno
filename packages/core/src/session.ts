@@ -90,8 +90,11 @@ export type TurnResult =
   | { readonly kind: 'answer'; readonly turn: AssistantTurn }
   | { readonly kind: 'error'; readonly error: TurnErrorKind; readonly message: string };
 
-/** `denied` is a command the user, or the non-interactive policy, refused to run. */
-export const TOOL_STATUSES = ['ok', 'error', 'denied'] as const;
+/**
+ * `denied` is a call a rule, the classifier or the non-interactive policy refused to run. `rejected` is one the user
+ * turned down on its card, which ends the turn there (loop.ts).
+ */
+export const TOOL_STATUSES = ['ok', 'error', 'denied', 'rejected'] as const;
 export type ToolStatus = (typeof TOOL_STATUSES)[number];
 
 /** A result is either short enough to keep inline or spilled to a file the model can read in ranges. */

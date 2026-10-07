@@ -206,34 +206,36 @@ describe('web_fetch against a local server', () => {
   it('asks again when a redirect goes to another host, not when it stays, and refuses one back to this machine', async () => {
     const { local, remote, hits } = await site();
     const port = local.split(':')[2];
-    const { asked, results, output } = await run(
+    const { asked, results, output, requests } = await run(
       [
         toolCall('', [{ id: 'tu_same', name: 'web_fetch', input: { url: `${local}/same-host`, question: 'q' } }], usage),
         answer('4321', usage),
         toolCall('', [{ id: 'tu_off', name: 'web_fetch', input: { url: `${local}/off-host`, question: 'q' } }], usage),
         answer('You reached the other host.', usage),
-        toolCall('', [{ id: 'tu_off2', name: 'web_fetch', input: { url: `${local}/off-host`, question: 'q' } }], usage),
         toolCall('', [{ id: 'tu_back', name: 'web_fetch', input: { url: `${remote}/back-home`, question: 'q' } }], usage),
-        answer('Done.', usage),
+        toolCall('', [{ id: 'tu_off2', name: 'web_fetch', input: { url: `${local}/off-host`, question: 'q' } }], usage),
+        answer('Never asked: the rejection ends the turn.', usage),
       ],
-      { mode: 'ask', answers: ['allow', 'reject', 'allow'] },
+      { mode: 'ask', answers: ['allow', 'allow', 'reject'] },
     );
-    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied']);
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'rejected']);
     expect(asked.map((d) => [d.rule, d.command])).toEqual([
       ['web-remote-url', `fetch ${remote}/landed (host ${REMOTE}:${port}), redirected from ${local}/off-host`],
-      ['web-remote-url', `fetch ${remote}/landed (host ${REMOTE}:${port}), redirected from ${local}/off-host`],
       ['web-remote-url', `fetch ${remote}/back-home (host ${REMOTE}:${port})`],
+      ['web-remote-url', `fetch ${remote}/landed (host ${REMOTE}:${port}), redirected from ${local}/off-host`],
     ]);
     expect(output(1)).toContain(`Redirected from ${local}/off-host.`);
     expect(results[1]!.approval).toMatchObject({ rule: 'web-remote-url', decidedBy: 'user', verdict: 'allow' });
-    expect(output(3)).toContain(`a page on ${REMOTE}:${port} redirected to this machine`);
+    expect(output(2)).toContain(`a page on ${REMOTE}:${port} redirected to this machine`);
+    expect(output(3)).toMatch(/^The user rejected .*STOP what you are doing and wait for the user/);
+    expect(requests).toHaveLength(6);
     expect(hits).toEqual([
       `127.0.0.1:${port}/same-host`,
       `127.0.0.1:${port}/docs`,
       `127.0.0.1:${port}/off-host`,
       `${REMOTE}:${port}/landed`,
-      `127.0.0.1:${port}/off-host`,
       `${REMOTE}:${port}/back-home`,
+      `127.0.0.1:${port}/off-host`,
     ]);
   });
 

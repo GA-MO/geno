@@ -67,6 +67,33 @@ const cases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][]
     tools('b'),
   ],
   ['all results logged calls the model', [start, user(1), assistant(2, 'tool_use', ['a']), result(3, 'a')], CALL],
+  [
+    'a call the user rejected ends the turn, wherever it sits in the batch',
+    [start, user(1), assistant(2, 'tool_use', ['a', 'b']), { ...result(3, 'a'), status: 'rejected' } as TurnEvent, result(4, 'b')],
+    done('end_turn'),
+  ],
+  [
+    'the calls after one the user rejected are answered, not run',
+    [start, user(1), assistant(2, 'tool_use', ['a', 'b', 'c']), { ...result(3, 'a'), status: 'rejected' } as TurnEvent],
+    answered(['b', /^The user rejected an earlier call.*did not run\. STOP what you are doing/], ['c', /^The user rejected an earlier call/]),
+  ],
+  [
+    'a rule denial lets the model go on',
+    [start, user(1), assistant(2, 'tool_use', ['a']), { ...result(3, 'a'), status: 'denied' } as TurnEvent],
+    CALL,
+  ],
+  [
+    'the next question after a rejection calls the model',
+    [start, user(1), assistant(2, 'tool_use', ['a']), { ...result(3, 'a'), status: 'rejected' } as TurnEvent, user(4)],
+    CALL,
+    { ...run, firstSeq: 4 },
+  ],
+  [
+    "an earlier turn's rejection does not end a later one",
+    [start, user(1), assistant(2, 'tool_use', ['a']), { ...result(3, 'a'), status: 'rejected' } as TurnEvent, user(4), assistant(5, 'tool_use', ['b']), result(6, 'b')],
+    CALL,
+    { ...run, firstSeq: 4 },
+  ],
   ['end_turn is done', [start, user(1), assistant(2, 'end_turn')], done('end_turn')],
   ['stop_sequence is done', [start, user(1), assistant(2, 'stop_sequence')], done('end_turn')],
   ['pause_turn continues', [start, user(1), assistant(2, 'pause_turn')], CALL],

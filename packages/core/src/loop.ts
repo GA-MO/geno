@@ -13,11 +13,15 @@ export type LoopStep =
   | { readonly kind: 'answer-tools'; readonly answers: readonly ToolAnswer[] }
   | { readonly kind: 'done'; readonly reason: DoneReason };
 
-/** Worded after Claude Code's interrupt and output-limit results, so the model knows why a call has no output. */
+/** What a call the user turned down tells the model, as Claude Code's rejection does. */
+export const STOP_AND_WAIT = 'STOP what you are doing and wait for the user to tell you how to proceed.';
+
+/** Worded after Claude Code's interrupt, output-limit and rejection results, so the model knows why a call has no output. */
 export const UNRUN_TEXTS = {
   stopped: '[Request interrupted by user for tool use] The user stopped this call while it ran, so it may have partly run.',
   'not-started': '[Request interrupted by user for tool use] The user stopped the turn before this call started, so it did not run.',
   'cut-off': 'Your response hit the output limit and cut this tool call short, so it did not run. Continue, and keep each tool call smaller.',
+  rejected: `The user rejected an earlier call of this turn, so this one did not run. ${STOP_AND_WAIT}`,
 } as const;
 
 /** The answers to calls the user stopped, so no later run runs them: `started` tells a call that began from one that never did. */
@@ -112,12 +116,17 @@ function cutOff(turn: AssistantEvent): ToolUseBlock | undefined {
   return turn.stopReason === 'max_tokens' && last?.type === 'tool_use' ? last : undefined;
 }
 
+/** Whether the user turned down a call of the newest model turn, which ends the turn there. */
+const userRejected = (after: readonly TurnEvent[]): boolean => after.some((e) => e.kind === 'tool-result' && e.status === 'rejected');
+
 /**
- * Pending tool uses that must never run: every one the user stopped, or the one the output limit cut short. An abort
- * logged before batches were timed names no started calls, so each counts as started.
+ * Pending tool uses that must never run: every one the user stopped, every one after a call the user rejected, or the
+ * one the output limit cut short. An abort logged before batches were timed names no started calls, so each counts as
+ * started.
  */
 function unrunnable(events: readonly TurnEvent[], pending: readonly ToolUseBlock[]): ToolAnswer[] {
   const { turn, after } = newestTurn(events)!;
+  if (userRejected(after)) return pending.map((use) => ({ use, text: UNRUN_TEXTS.rejected }));
   const stop = after.find((e): e is EventOf<'error'> => e.kind === 'error' && e.error === 'abort');
   if (stop !== undefined) {
     const started = stop.tools === undefined ? undefined : new Set(stop.tools.map((tool) => tool.toolUseId));
@@ -150,6 +159,8 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
     const answers = unrunnable(events, toolUses);
     return answers.length > 0 ? { kind: 'answer-tools', answers } : { kind: 'run-tools', toolUses };
   }
+  // A no from the user ends the turn; the model next hears from the user, as in Claude Code.
+  if (last.kind === 'tool-result' && userRejected(newestTurn(events)!.after)) return done('end_turn');
   const step = after(last);
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);

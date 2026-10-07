@@ -39,8 +39,8 @@ import {
 import { CLASSIFIER_ENV } from '../classifier.js';
 import { messagesOf, usageOf } from '../gateway.js';
 import { wireFor } from '../wire.js';
-import { denialText, modeOf, settle, type Approval } from './agent.js';
-import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from './context.js';
+import { denialText, modeOf, refusalOf, settle, type Approval } from './agent.js';
+import { executor, ToolError, type Executor, type ToolContext } from './context.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 type Address = { readonly address: string; readonly family: number };
@@ -290,7 +290,7 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       ctx.signal,
     );
     if (record.verdict === 'deny') {
-      throw new ToolDenied(denial.rule === 'web-refused-url' ? `denied: web_fetch may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record), record);
+      throw refusalOf(record, denial.rule === 'web-refused-url' ? `denied: web_fetch may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record));
     }
     return record;
   };

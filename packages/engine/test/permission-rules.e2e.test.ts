@@ -146,7 +146,7 @@ describe('remembered permission rules', () => {
 
   it('still asks before a hard ask that an allow rule names, offers no rule for it, and refuses to save an allow rule for one', async () => {
     const forced = bash('git push --force origin main');
-    const { workspace, permissions, session, prompt, results } = await setup([toolCall('Pushing.', [forced], usage), answer('Not pushed.', usage)]);
+    const { workspace, permissions, transport, session, prompt, results } = await setup([toolCall('Pushing.', [forced], usage), answer('Not pushed.', usage)]);
 
     await session(async (ctx, sessionId) => {
       await add(ctx, workspace, 'allow', 'git push');
@@ -158,6 +158,7 @@ describe('remembered permission rules', () => {
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'git push --force origin main', reason: 'git push' });
     expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
-    expect(results().get(forced.id)).toMatch(/^denied: /);
+    expect(results().get(forced.id), 'the rejection ends the turn, so no request carries its result').toBeUndefined();
+    expect(transport.requests).toHaveLength(1);
   });
 });

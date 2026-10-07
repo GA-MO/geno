@@ -255,7 +255,9 @@ describe('gcode agent', () => {
     expect(asked).toEqual(['Allow `rm -rf node_modules`? It uses rm -rf of a path inside the workspace.']);
     expect(existsSync(path.join(workspace, 'node_modules/pkg/index.js'))).toBe(true);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
-    expect(ofKind(log.events, 'tool-result').map((r) => r.status)).toEqual(['denied', 'ok']);
+    // The user's no ends the turn: the second delete does not run, and the model is not called again.
+    expect(ofKind(log.events, 'tool-result').map((r) => r.status)).toEqual(['rejected', 'error']);
+    expect(transport.requests).toHaveLength(1);
   });
 
   it('runs rm -rf inside the workspace without asking in non-interactive mode', async () => {
@@ -335,7 +337,7 @@ describe('gcode agent --mode auto', () => {
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(ofKind(log.events, 'mode').map((e) => e.mode)).toEqual(['auto']);
     const results = ofKind(log.events, 'tool-result');
-    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied', 'denied']);
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'denied', 'denied', 'rejected']);
     expect('output' in results[1]! && results[1].output).toContain('42');
     expect('output' in results[2]! && results[2].output).toContain('the request did not ask to delete dependencies');
     expect('output' in results[3]! && results[3].output).toContain('Auto mode blocked `node -e console.log(7)` without asking the user, because the safety classifier would not allow it: unclear why this is needed');

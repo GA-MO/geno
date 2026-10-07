@@ -354,8 +354,7 @@ describe('gcode serve', () => {
         options: expect.any(Array),
       }),
     ]);
-    expect(toolResultOf(transport.requests[1]!.body)).toMatchObject({ is_error: true });
-    expect(toolResultOf(transport.requests[1]!.body).content).toMatch(/^denied: `git push origin main`/);
+    expect(transport.requests, 'the rejection ends the turn').toHaveLength(1);
     expect(editor.updates).toContainEqual(expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: push.id, status: 'failed' }));
   });
 

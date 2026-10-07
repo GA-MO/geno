@@ -28,8 +28,8 @@ import { AttachmentError, describeImage, storeImage } from '../attachments.js';
 import type { Env } from '../child-env.js';
 import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
-import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
-import { executor, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
+import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { browserExecutor, browserServerConfig, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
@@ -184,7 +184,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
                   allowed.add(name);
                 },
               );
-        if (record?.verdict === 'deny') throw new ToolDenied(denialText(record), record);
+        if (record?.verdict === 'deny') throw refusalOf(record);
         const { text, images } = await callTool(handle, name, info, args, ctx);
         if (record === undefined && images.length === 0) return text;
         return { text, ...(record === undefined ? {} : { approval: record }), ...(images.length === 0 ? {} : { images }) };

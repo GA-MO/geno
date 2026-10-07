@@ -20,6 +20,7 @@ import {
   nextAutoState,
   OUTCOME_VERDICTS,
   restoreHidden,
+  STOP_AND_WAIT,
   ruledDenial,
   secretReadDenial,
   type AgentToolName,
@@ -52,6 +53,7 @@ import {
   resolveWritable,
   ToolDenied,
   ToolError,
+  ToolRejected,
   type Executor,
   type ToolContext,
 } from './context.js';
@@ -130,6 +132,7 @@ export async function settle(
 }
 
 export function denialText({ mode, rule, command, reason, classifier, decidedBy }: ApprovalRecord): string {
+  if (decidedBy === 'user') return `The user rejected \`${command}\`, so it did not run. ${STOP_AND_WAIT}`;
   if (rule === 'workspace-deny') {
     return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
@@ -144,6 +147,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy 
         : `uses ${reason}. ${MODE_REFUSALS[mode]}`
   }. Do not retry it; find another way.`;
 }
+
+/** The error a refused call throws: a user's no ends the turn, and a rule's or the classifier's lets the model go on. */
+export const refusalOf = (record: ApprovalRecord, text = denialText(record)): ToolError =>
+  record.decidedBy === 'user' ? new ToolRejected(text, record) : new ToolDenied(text, record);
 
 /**
  * The tool, refused while the session's mode leaves it out. A run offers only its starting mode's tools, so this
@@ -246,7 +253,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const denial = secretReadDenial(shown, mode);
     if (denial === undefined) return undefined;
     const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx.signal);
-    if (approval.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
+    if (approval.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
   const gated = readTool(askSecret);
@@ -280,7 +287,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     };
     const approval =
       denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal, keep);
-    if (approval?.verdict === 'deny') throw new ToolDenied(denialText(approval), approval);
+    if (approval?.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
 

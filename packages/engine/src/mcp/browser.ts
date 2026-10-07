@@ -24,8 +24,8 @@ import {
   type McpServerConfig,
   type McpToolInfo,
 } from '@g-code/core';
-import { denialText, modeOf, settle, type Approval } from '../tools/agent.js';
-import { executor, resolveInside, resolveWritable, ToolDenied, ToolError, type Executor, type ToolContext } from '../tools/context.js';
+import { denialText, modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
+import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import type { McpServerHandle } from './server.js';
 
 /** How the server process is started; the flags that matter for safety are added after it by browserServerConfig. */
@@ -194,7 +194,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
         );
         if (record.verdict === 'deny') {
           const text = denial.rule === 'browser-refused-url' ? `denied: the browser may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record);
-          throw new ToolDenied(text, record);
+          throw refusalOf(record, text);
         }
         if (denial.rule === 'browser-remote-url' && target !== undefined) {
           const url = browserUrlOf(target, ctx.workspace);
