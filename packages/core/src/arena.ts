@@ -2,6 +2,7 @@ import { EXTERNAL_BACKENDS, type ExternalBackendId } from './backends.js';
 import type { Hunk } from './hunks.js';
 import type { FileChange } from './review.js';
 import type { Effort } from './session.js';
+import { reportBody } from './fence.js';
 import type { CheckOutcome } from './tasks.js';
 import type { Brand } from './types.js';
 
@@ -215,18 +216,6 @@ export function trivialRanking(passing: readonly ArenaLane[]): Ranking {
   return { order: [{ lane: passing[0]!.lane, rank: 1, reason: 'The only lane whose task finished and whose check passed.' }], summary: 'One lane passed, so the review did not run.', source: 'fallback' };
 }
 
-const FENCE_OPEN = /<subagent_report\b[^>]*>/;
-const FENCE_CLOSE = '</subagent_report>';
-
-/** The text inside a child report's fence; a report with no fence is read as it is. */
-export function unfenced(report: string): string {
-  const open = FENCE_OPEN.exec(report);
-  if (open === null) return report;
-  const start = open.index + open[0].length;
-  const end = report.indexOf(FENCE_CLOSE, start);
-  return report.slice(start, end === -1 ? undefined : end);
-}
-
 type LaneKey = { readonly lane: string; readonly letter: string };
 
 /** A lane as the review may name it: its name, its letter, or "Lane B". */
@@ -281,7 +270,7 @@ const UNRANKED_REASON = 'The review did not rank this lane.';
  * not pass, or names twice, is dropped, and a passing lane it leaves out goes last, so every passing lane has a rank.
  */
 export function parseRanking(report: string, passing: readonly LaneKey[]): Ranking {
-  const text = unfenced(report);
+  const text = reportBody(report);
   const json = fromJson(text, passing);
   const list = json === undefined || json.picks.length === 0 ? fromList(text, passing) : [];
   const picks = json !== undefined && json.picks.length > 0 ? json.picks : list;

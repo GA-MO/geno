@@ -1,6 +1,6 @@
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
-import { unfenced } from './arena.js';
+import { reportBody } from './fence.js';
 import type { Parsed } from './ask-user.js';
 import type { Rates } from './cost.js';
 import { costAt } from './cost.js';
@@ -634,7 +634,7 @@ const FIELD_CHECK: Readonly<Record<FieldType, (value: unknown) => boolean>> = {
 
 /** The fields of the last JSON block in a report that holds every field the schema names, with its type. */
 export function readFields(report: string, schema: OutputSchema): Parsed<Record<string, FieldValue>> {
-  const text = unfenced(report);
+  const text = reportBody(report);
   const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]!).reverse();
   for (const block of blocks) {
     let raw: unknown;
@@ -886,7 +886,7 @@ export function workflowReport(run: WorkflowRun): string {
     .filter((id) => !reached.has(id));
   const notRun = run.status === 'done' || skipped.length === 0 ? [] : [`Did not run: ${skipped.join(', ')}.`];
   const last = run.units.findLast((unit) => unit.kind === 'agent' && unit.status === 'done');
-  const lastReport = last === undefined ? undefined : unfenced(lastReportOf(run, last) ?? '').trim();
+  const lastReport = last === undefined ? undefined : reportBody(lastReportOf(run, last) ?? '').trim();
   return [head, '', ...lines, ...notRun, ...(lastReport === undefined || lastReport === '' ? [] : ['', `The last report, from ${last!.label}:`, lastReport])].join('\n');
 }
 
