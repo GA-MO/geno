@@ -113,13 +113,32 @@ describe('grep', () => {
     );
   });
 
-  it('limits the search to a path glob and can ignore case', async () => {
-    expect(await call('grep', { pattern: 'server_url', path: 'src/*.ts' })).toEqual(
-      ok('src/config.ts:3:export const server_url_lower = 1;'),
-    );
+  it('limits the search with a glob, still takes a glob in path, and can ignore case', async () => {
+    expect(await call('grep', { pattern: 'server_url', glob: 'src/*.ts' })).toEqual(ok('src/config.ts:3:export const server_url_lower = 1;'));
     expect((await call('grep', { pattern: 'server_url', path: 'src/lib/**', ignore_case: true })).text).toBe(
       'src/lib/util.ts:1:export const util = SERVER_URL;',
     );
+  });
+
+  it('N-01 searches the directory or the file that path names', async () => {
+    const lib = ['src/lib/util.ts:1:export const util = SERVER_URL;'];
+    const config = ["src/config.ts:1:export const SERVER_URL = process.env.SERVER_URL ?? '';", "src/config.ts:2:export const trimmed = SERVER_URL.replace(/\\/$/, '');"];
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'src' })).toEqual(ok([...config, ...lib].join('\n')));
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'src/lib' })).toEqual(ok(lib.join('\n')));
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'src/config.ts' })).toEqual(ok(config.join('\n')));
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'src', glob: '*.ts' })).toEqual(ok([...config, ...lib].join('\n')));
+  });
+
+  it('N-01 finds pendingToolUses in packages/core/src of this repository, as the parity review searched it', async () => {
+    const repo = { ...ctx, workspace: await realpath(path.join(import.meta.dirname, '..', '..', '..')) };
+    const use = { type: 'tool_use', id: 'tu_repo', name: 'grep', input: { pattern: 'export function pendingToolUses', path: 'packages/core/src' }, caller: { type: 'direct' } } as const;
+    expect(await runTool(use, repo, EXECUTORS)).toEqual(ok(expect.stringMatching(/^packages\/core\/src\/loop\.ts:\d+:export function pendingToolUses\(/)));
+  });
+
+  it('fails on a path that does not exist, and when ripgrep searched no files, rather than saying no matches', async () => {
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'source' })).toEqual(failure(/^no such file or directory: source$/));
+    expect(await call('grep', { pattern: 'SERVER_URL', glob: 'nothing/**' })).toEqual(failure(/searched no files/));
+    expect(await call('grep', { pattern: 'SERVER_URL', path: 'src', glob: '*.py' })).toEqual(failure(/searched no files in src/));
   });
 
   it('says when nothing matched and reports a bad regex', async () => {
@@ -149,6 +168,10 @@ describe('unsaved buffers', () => {
     expect((await grep({ pattern: 'SERVER_URL', path: 'src/**' })).text).toBe(
       ['src/a:b.ts:1:SERVER_URL in a new file', 'src/config.ts:1:export const SERVER_URL = 1;', 'src/config.ts:2:const a = { b: SERVER_URL };', 'src/lib/util.ts:1:export const util = SERVER_URL;'].join('\n'),
     );
+    expect((await grep({ pattern: 'SERVER_URL', path: 'src' })).text).toBe(
+      ['src/a:b.ts:1:SERVER_URL in a new file', 'src/config.ts:1:export const SERVER_URL = 1;', 'src/config.ts:2:const a = { b: SERVER_URL };', 'src/lib/util.ts:1:export const util = SERVER_URL;'].join('\n'),
+    );
+    expect((await grep({ pattern: 'SERVER_URL', path: 'src/config.ts' })).text).toBe('src/config.ts:1:export const SERVER_URL = 1;\nsrc/config.ts:2:const a = { b: SERVER_URL };');
     const glob = await runTool({ type: 'tool_use', id: 'tu_g', name: 'glob', input: { pattern: 'src/**/*.ts' }, caller: { type: 'direct' } } as ToolUseBlock, editor, EXECUTORS);
     expect(glob.text).toBe('src/a:b.ts\nsrc/config.ts\nsrc/lib/util.ts');
   });
@@ -192,7 +215,7 @@ describe('the tool table', () => {
 
   it('prints each call as one line', () => {
     const use = (name: string, input: unknown) => ({ type: 'tool_use', id: 'x', name, input, caller: { type: 'direct' } }) as const;
-    expect(describeCall(use('grep', { pattern: 'SERVER_URL', path: 'src/**' }), EXECUTORS)).toBe('grep "SERVER_URL" src/**');
+    expect(describeCall(use('grep', { pattern: 'SERVER_URL', path: 'src', glob: '*.ts' }), EXECUTORS)).toBe('grep "SERVER_URL" src *.ts');
     expect(describeCall(use('read', { path: 'a.ts', start_line: 3, end_line: 9 }), EXECUTORS)).toBe('read a.ts:3-9');
     expect(describeCall(use('list', {}), EXECUTORS)).toBe('list .');
     expect(describeCall(use('glob', { pattern: '*.md' }), EXECUTORS)).toBe('glob "*.md"');

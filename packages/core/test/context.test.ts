@@ -67,6 +67,25 @@ describe('the loaded context', () => {
     expect(text.startsWith('The text below comes from files in the user')).toBe(true);
   });
 
+  it('A/B-12 tells the model to load a listed skill with the skill tool', () => {
+    const text = renderLoadedContext({ instructions: [], rules: [], skills: [{ name: 'deploy', description: 'Ship it', path: '.agents/skills/deploy/SKILL.md' }] })!;
+    expect(text.slice(text.indexOf('The following skills'))).toBe(
+      [
+        'The following skills provide specialized instructions for specific tasks.',
+        "When the task matches a skill's description, load the skill by calling the skill tool with its name. Without a skill tool, read the file at its location.",
+        "When a skill file references a relative path, resolve it against the skill's directory.",
+        '',
+        '<available_skills>',
+        '  <skill>',
+        '    <name>deploy</name>',
+        '    <description>Ship it</description>',
+        '    <location>.agents/skills/deploy/SKILL.md</location>',
+        '  </skill>',
+        '</available_skills>',
+      ].join('\n'),
+    );
+  });
+
   it('renders nothing for a workspace without context', () => {
     expect(renderLoadedContext({ instructions: [], rules: [], skills: [] })).toBeUndefined();
     expect(replayMessages([{ kind: 'session-start', session, context: { instructions: [], rules: [], skills: [] } }, user(1, 'hi')])).toEqual([

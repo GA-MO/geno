@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AGENT_MODE_SYSTEM_PROMPTS, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, type TurnEvent } from '@g-code/core';
-import { GENO_TOOLS } from '../src/geno-tools.generated.js';
+import { renderGenoTools } from '../src/geno-tools.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, loadTools, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -63,7 +63,7 @@ describe('pstack through gcode agent', () => {
     expect(run.code).toBe(0);
 
     const genoTools = path.join(await realpath(home), 'geno-tools.md');
-    expect(await readFile(genoTools, 'utf8')).toBe(GENO_TOOLS);
+    expect(await readFile(genoTools, 'utf8')).toBe(renderGenoTools({ subagents: false }));
     const system = transport.requests[0]!.body.system[0].text as string;
     expect(system.startsWith(AGENT_MODE_SYSTEM_PROMPTS.ask)).toBe(true);
     expect(system.slice(AGENT_MODE_SYSTEM_PROMPTS.ask.length)).toBe(
@@ -74,8 +74,19 @@ describe('pstack through gcode agent', () => {
     const [, skill, read, bash] = results(log.events);
     expect(skill).toEqual({ name: 'skill', status: 'ok', output: expect.stringContaining('# How\n\nRead references/explorer.md first.') });
     expect(read).toEqual({ name: 'read', status: 'ok', output: '1\tExplore with grep.' });
-    expect(bash).toMatchObject({ name: 'bash', status: 'ok', output: expect.stringMatching(/Operation not permitted[\s\S]*\[exit code 1\]/) });
+    expect(bash).toMatchObject({ name: 'bash', status: 'error', output: expect.stringMatching(/^Exit code 1\n[\s\S]*Operation not permitted[\s\S]*\[exit code 1\]$/) });
     expect(existsSync(escaped)).toBe(false);
+  });
+
+  it('C/C-77 points the model at the geno-tools text that maps Agent to agent when the run offers it', async () => {
+    const { workspace, env, home } = await setup('pstack');
+    await writeFile(path.join(workspace, '.gcode.json'), '{ "agentTool": ["non-interactive"] }\n');
+    const transport = fakeTransport([answer('Hi.', usage)]);
+    expect((await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Hi'], env, { fetch: transport.fetch })).code).toBe(0);
+    const system = transport.requests[0]!.body.system[0].text as string;
+    const pointed = /before you follow one, read (\S+), which maps/.exec(system)![1]!;
+    expect(path.dirname(pointed)).toBe(await realpath(home));
+    expect(await readFile(pointed, 'utf8')).toBe(renderGenoTools({ subagents: true }));
   });
 
   it('leaves the system prompt as it was when no pstack skill is installed', async () => {

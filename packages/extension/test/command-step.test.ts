@@ -40,8 +40,8 @@ describe('a command step', () => {
     expect(commandStepOf(tool, true)).toMatchObject({ output: lines(9).split('\n'), truncated: false, lines: 9 });
   });
 
-  it('keeps a failing exit line, and shows a short output whole', () => {
-    const step = commandStepOf(bash({ target: 'false' }, { output: 'nope\n[exit code 1]\n', status: 'failed' }), false);
+  it('keeps a failing exit line once, at the end, and shows a short output whole', () => {
+    const step = commandStepOf(bash({ target: 'false' }, { output: 'Exit code 1\nnope\n[exit code 1]\n', status: 'failed' }), false);
     expect(step).toMatchObject({ output: ['nope', '[exit code 1]'], truncated: false, lines: 2, status: 'failed' });
   });
 
