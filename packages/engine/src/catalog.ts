@@ -42,11 +42,13 @@ import {
 import type { Homes } from './commands.js';
 import { loadCommands } from './commands.js';
 import { EngineError } from './errors.js';
+import { holdingLock } from './file-lock.js';
 import { writeAtomically } from './memory.js';
 import type { InstalledPlugin } from './plugins.js';
 import { parseFrontmatter } from './project-context.js';
 import { isMissing } from './store.js';
 import { loadAgents } from './subagents.js';
+import { pidAlive } from './wait-hooks.js';
 import { get, guardedResolve, type Resolve } from './tools/web.js';
 
 /**
@@ -183,15 +185,17 @@ function manifestStore(appHome: string) {
     if (!parsed.success) throw new CatalogError(`${file}: ${z.prettifyError(parsed.error)}`);
     return parsed.data.installs;
   };
-  // Changes in this process take turns, so two installs at once never lose one another's record.
+  // Changes take turns in this process, and hold a lock against other engines, so no install loses another's record.
   let queue: Promise<unknown> = Promise.resolve();
   const change = <T>(work: (records: readonly InstallRecord[]) => Promise<{ readonly records: readonly InstallRecord[]; readonly result: T }>): Promise<T> => {
-    const next = queue.then(async () => {
-      const { records, result } = await work(await read());
-      const manifest: InstallManifest = { version: 1, installs: records };
-      await writeAtomically(file, manifest);
-      return result;
-    });
+    const next = queue.then(() =>
+      holdingLock(file, process.pid, pidAlive, async () => {
+        const { records, result } = await work(await read());
+        const manifest: InstallManifest = { version: 1, installs: records };
+        await writeAtomically(file, manifest);
+        return result;
+      }),
+    );
     queue = next.catch(() => {});
     return next;
   };
@@ -269,6 +273,13 @@ export function catalogService(
     return { items, existing, pluginSkills };
   }
 
+  /** A path as Settings shows it: inside the workspace relative to it, inside the home under `~`. */
+  const shown = (workspace: string, file: string): string => {
+    if (within(workspace, file)) return path.relative(workspace, file).split(path.sep).join('/');
+    if (homes.user !== undefined && within(homes.user, file)) return `~/${path.relative(homes.user, file)}`;
+    return file;
+  };
+
   async function skills(workspace: string): Promise<SkillsResponse> {
     const { items, pluginSkills } = await loaded(workspace);
     const records = installsFor(await manifest.read(), workspace);
@@ -276,7 +287,7 @@ export function catalogService(
     const listed: InstalledItem[] = items.map(({ target, file, ...item }) => {
       const record = byTarget.get(target);
       byTarget.delete(target);
-      return { ...item, path: file, loads: true, ...(record === undefined ? {} : { install: { id: record.id, version: record.version, catalog: record.catalog } }) };
+      return { ...item, path: shown(workspace, file), loads: true, ...(record === undefined ? {} : { install: { id: record.id, version: record.version, catalog: record.catalog } }) };
     });
     for (const record of byTarget.values()) {
       listed.push({
@@ -284,7 +295,7 @@ export function catalogService(
         name: record.name,
         description: record.description,
         where: record.scope === 'user' ? 'user' : 'workspace',
-        path: record.target,
+        path: shown(workspace, record.target),
         install: { id: record.id, version: record.version, catalog: record.catalog },
         loads: false,
       });
@@ -390,21 +401,27 @@ export function catalogService(
       const { source, entry } = await entryOf(request);
       const bases = { user: homes.app, project: workspace };
       const { target } = installTargetOf(entry, request.scope, bases);
+      const plan = async (records: readonly InstallRecord[]) => {
+        const outcome = planInstall({ entry, source, scope: request.scope, bases, existing: (await loaded(workspace)).existing, records: installsFor(records, workspace), occupied: await occupied(target) });
+        if (outcome.kind === 'refused') throw new CatalogError(outcome.why);
+        return outcome;
+      };
+      const first = await plan(await manifest.read());
+      if (first.kind === 'installed') return { record: first.record, already: true, skills: await skills(workspace) };
+      // Fetched and checked before taking the manifest's lock, which another window may be waiting on.
+      const files: { readonly rel: string; readonly bytes: Buffer }[] = [];
+      let total = 0;
+      for (const write of first.writes) {
+        const bytes = await verified(source, entry, write.file.path, write.origin);
+        total += bytes.byteLength;
+        if (total > CATALOG_LIMITS.entryBytes) throw new CatalogError(`${entry.name}'s files add up to more than ${formatBytes(CATALOG_LIMITS.entryBytes)}; nothing was installed`);
+        files.push({ rel: write.file.path, bytes });
+      }
+      const problem = mainFileProblem(entry, files.find((f) => f.rel === mainFileOf(entry))!.bytes.toString('utf8'));
+      if (problem !== undefined) throw new CatalogError(`${problem}; nothing was installed`);
       const record = await manifest.change(async (all) => {
-        const { existing } = await loaded(workspace);
-        const plan = planInstall({ entry, source, scope: request.scope, bases, existing, records: installsFor(all, workspace), occupied: await occupied(target) });
-        if (plan.kind === 'refused') throw new CatalogError(plan.why);
-        if (plan.kind === 'installed') return { records: all, result: { record: plan.record, already: true } };
-        const files: { readonly rel: string; readonly bytes: Buffer }[] = [];
-        let total = 0;
-        for (const write of plan.writes) {
-          const bytes = await verified(source, entry, write.file.path, write.origin);
-          total += bytes.byteLength;
-          if (total > CATALOG_LIMITS.entryBytes) throw new CatalogError(`${entry.name}'s files add up to more than ${formatBytes(CATALOG_LIMITS.entryBytes)}; nothing was installed`);
-          files.push({ rel: write.file.path, bytes });
-        }
-        const problem = mainFileProblem(entry, files.find((f) => f.rel === mainFileOf(entry))!.bytes.toString('utf8'));
-        if (problem !== undefined) throw new CatalogError(`${problem}; nothing was installed`);
+        const planned = await plan(all);
+        if (planned.kind === 'installed') return { records: all, result: { record: planned.record, already: true } };
         const parent = await checkedParent(target, bases[request.scope]);
         // Written beside the target and renamed into place, so a failure halfway leaves no partial skill behind.
         const staged = path.join(parent, `.geno-install-${randomUUID()}`);
@@ -414,12 +431,11 @@ export function catalogService(
             await mkdir(path.dirname(dest), { recursive: true });
             await writeFile(dest, file.bytes, { flag: 'wx', mode: 0o644 });
           }
-          if (await occupied(target)) throw new CatalogError(`${target} appeared while installing; nothing was installed`);
           await rename(entry.kind === 'skill' ? staged : path.join(staged, mainFileOf(entry)), target);
         } finally {
           await rm(staged, { recursive: true, force: true });
         }
-        const made = recordOf(plan, randomUUID(), now());
+        const made = recordOf(planned, randomUUID(), now());
         return { records: [...all, made], result: { record: made, already: false } };
       });
       return { ...record, skills: await skills(workspace) };
