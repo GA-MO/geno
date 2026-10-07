@@ -1960,6 +1960,10 @@ body.diagram-tab {
   color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-foreground));
   box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent);
   z-index: 10;
+  /* An agent can offer dozens of models; the menu scrolls within the room above the composer that open() measures. */
+  max-height: var(--menu-room, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .mode-menu[hidden],
