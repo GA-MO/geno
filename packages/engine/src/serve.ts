@@ -12,6 +12,25 @@ import {
   EDITOR_ACTION_METHOD,
   EDITOR_ACTIONS_CAPABILITY,
   SPINOFF_CAPABILITY,
+  localZone,
+  parseScheduleCommand,
+  runEndOf,
+  SCHEDULE_ACT_METHOD,
+  SCHEDULE_PANEL_ACTIONS,
+  SCHEDULE_POLICY,
+  SCHEDULE_REASON,
+  SCHEDULE_USAGE,
+  scheduleListText,
+  scheduleQuestion,
+  SCHEDULES_CAPABILITY,
+  SCHEDULES_METHOD,
+  SCHEDULES_UPDATE_METHOD,
+  taskLine,
+  type RunEnd,
+  type ScheduleChange,
+  type ScheduledTask,
+  type SchedulePolicy,
+  type SchedulesResponse,
   SPINOFF_DISMISS_METHOD,
   SPINOFF_START_METHOD,
   laneNameFor,
@@ -242,6 +261,9 @@ import { draftNotice, wakeCancelRequest, WakeDriver, wakePolicyOf } from './wake
 import { ghCli, githubRemote, lookUpPr } from './gh.js';
 import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
+import type { ScheduleTools } from './tools/schedule.js';
+import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner } from './schedules.js';
+import { pidAlive } from './wait-hooks.js';
 
 const RESOURCE_NOT_FOUND = -32002;
 
@@ -334,9 +356,26 @@ type Peer = {
   readonly terminals: boolean;
   /** It shows suggested tasks and starts them, so the model gets spawn_task and dismiss_task. */
   readonly spinoffs: boolean;
+  /** It lists scheduled tasks and asks the user about a change, so the model gets schedule_task. */
+  readonly schedules: boolean;
 };
 
-const NO_PEER: Peer = { files: false, diagnostics: false, unsaved: false, notices: false, elicitation: false, memory: false, widgets: false, subagents: false, tasks: false, backendEnv: false, editorActions: false, terminals: false, spinoffs: false };
+const NO_PEER: Peer = {
+  files: false,
+  diagnostics: false,
+  unsaved: false,
+  notices: false,
+  elicitation: false,
+  memory: false,
+  widgets: false,
+  subagents: false,
+  tasks: false,
+  backendEnv: false,
+  editorActions: false,
+  terminals: false,
+  spinoffs: false,
+  schedules: false,
+};
 
 /**
  * How a turn reaches the editor that shows its session, whichever that is now: the one that sent the prompt, one that
@@ -506,6 +545,8 @@ type Turn = {
   readonly surface: Surface;
   readonly approve: Approver;
   readonly user: UserChannel;
+  /** Asks the user about a change to a scheduled task, with its whole question; no rule or classifier answers it. */
+  approveSchedule(question: string, signal: AbortSignal): Promise<ScheduleAnswer>;
   readonly updates: Updates;
   readonly live: LiveTurn;
   /** What the turn's model calls used so far, for the prompt response; nothing before the first call. */
@@ -667,8 +708,36 @@ function editorTurn(
         throw error;
       }
     },
+    async approveSchedule(question, signal) {
+      await sent.flush();
+      const rawInput: PermissionInput = { command: question, reason: SCHEDULE_REASON, description: 'Schedule a task' };
+      const { outcome } = await askEditor(route, signal, 'permission', (viewer) =>
+        viewer.client.request(
+          acp.methods.client.session.requestPermission,
+          { sessionId: route.sessionId, toolCall: { toolCallId: running, title: question, kind: 'other', status: 'pending', rawInput }, options: SCHEDULE_OPTIONS },
+          { cancellationSignal: signal },
+        ),
+      );
+      return (outcome.outcome === 'selected' && SCHEDULE_ANSWERS[outcome.optionId]) || 'reject';
+    },
   };
 }
+
+type ScheduleAnswer = 'allow' | 'allow-session' | 'reject';
+
+/** A scheduled task's run: its budget, in place of the engine's limits, and a prompt that says nobody watches. */
+type ScheduledTurn = { readonly limits?: Limits | undefined; readonly scheduled?: boolean | undefined };
+
+const schedulesRequest = z.object({ cwd: z.string() });
+const scheduleActRequest = z.object({ cwd: z.string(), id: z.string().min(1), action: z.enum(SCHEDULE_PANEL_ACTIONS) });
+
+const SCHEDULE_OPTIONS: acp.PermissionOption[] = [
+  { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+  { optionId: 'allow-session', name: 'Allow schedule changes in this chat', kind: 'allow_always' },
+  { optionId: 'reject', name: "Don't allow", kind: 'reject_once' },
+];
+
+const SCHEDULE_ANSWERS: Readonly<Record<string, ScheduleAnswer>> = { allow: 'allow', 'allow-session': 'allow-session' };
 
 const REMEMBER_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow', name: 'Remember', kind: 'allow_once' },
@@ -872,7 +941,10 @@ async function appendDecisions(store: Store, io: Io, sessionId: string, decision
  * What outlives one editor connection: the sessions' turns, modes and Auto state, which editor shows each session,
  * the tasks, and each running turn's live state. One engine process keeps one, shared by every connection to it.
  */
-export function engineShared(io: Io) {
+/** What tests replace: the clock the scheduler keeps time by, and its grace window. */
+export type EngineOptions = { readonly clock?: Clock | undefined; readonly schedulePolicy?: SchedulePolicy | undefined };
+
+export function engineShared(io: Io, options: EngineOptions = {}) {
   const viewers = new Viewers<Peer>(io.err);
   const tasks = new Tasks();
   const background = backgroundShared(viewers, tasks);
@@ -925,6 +997,18 @@ export function engineShared(io: Io) {
       autoWake: io.env['GCODE_AUTO_WAKE'] !== 'off',
       policy: wakePolicyOf(io.env),
     }),
+    schedules: new Scheduler({
+      clock: options.clock ?? SYSTEM_CLOCK,
+      policy: options.schedulePolicy ?? SCHEDULE_POLICY,
+      zone: localZone,
+      pid: process.pid,
+      alive: pidAlive,
+      random: Math.random,
+    }),
+    // Sessions whose user allowed every schedule change for the chat.
+    scheduleAllowed: new Set<string>(),
+    // A scheduled run's budget, which the turns it wakes share.
+    runLimits: new Map<string, Limits>(),
   };
 }
 
@@ -988,7 +1072,7 @@ const TASK_ENDS: Readonly<Record<acp.StopReason, Exclude<TaskStatus, 'running' |
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes } = shared;
+  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, runLimits } = shared;
   const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
@@ -1005,6 +1089,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   const autoOf = (sessionId: string) => autos.get(sessionId) ?? autos.set(sessionId, freshAuto()).get(sessionId)!;
   wakes.bind(store, io);
   const gh = ghCli(io.env);
+  schedules.bind(homeOf(store), io.err);
   // An arrival waits behind a running turn's writes, which take it at their next safe point; what is left is logged
   // after, and may wake the session.
   inbox.arrived = (sessionId) =>
@@ -1115,6 +1200,46 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     return { configOptions: modelConfigOptions(setup, chosenModelOf(events)), meta: { [BACKEND_META]: backendShown(binding.id, lane) } };
   };
 
+  /** The workspace whose scheduled tasks a folder or session sees: its main checkout, for a lane. */
+  const scheduleWorkspace = async (cwd: string) => rulesWorkspace(await workspaceDir(io.cwd, cwd).catch(refused({ cwd })), io.env['HOME'] || homedir());
+  const toolRefusal = <T>(work: Promise<T>): Promise<T> =>
+    work.catch((error: unknown) => {
+      throw error instanceof ScheduleError ? new ToolError(error.message) : error;
+    });
+  /** schedule_task for a session: the workspace's tasks, and a card for each change unless the user allowed them for the chat. */
+  const scheduleToolsFor = async (sessionId: string, cwd: string, turn: Turn): Promise<ScheduleTools> => {
+    const workspace = await scheduleWorkspace(cwd);
+    return {
+      list: async () => (await schedules.list(workspace)).tasks,
+      create: (draft) => toolRefusal(schedules.create(workspace, draft, { kind: 'model', sessionId })),
+      update: (id, change) => toolRefusal(schedules.update(workspace, id, change)),
+      remove: (id) => toolRefusal(schedules.remove(workspace, id)),
+      approve: async (change: ScheduleChange, signal) => {
+        if (scheduleAllowed.has(sessionId)) return true;
+        const answer = await turn.approveSchedule(scheduleQuestion(change, localZone(), schedules.now()), signal);
+        if (answer === 'allow-session') scheduleAllowed.add(sessionId);
+        return answer !== 'reject';
+      },
+      now: () => schedules.now(),
+      zone: localZone,
+    };
+  };
+  /** `/schedule`: the user's own request, so it needs no card. With no arguments it says how, and lists the tasks. */
+  const scheduleCommand = async (sessionId: string, args: string): Promise<string> => {
+    const workspace = await scheduleWorkspace((await existing(sessionId)).session.workspace);
+    const now = schedules.now();
+    if (args.trim() === '') return `${SCHEDULE_USAGE}\n\n${scheduleListText((await schedules.list(workspace)).tasks, localZone(), now)}`;
+    const draft = parseScheduleCommand(args, now, localZone());
+    if (!draft.ok) return `Nothing was scheduled: ${draft.problem}.\n\n${SCHEDULE_USAGE}`;
+    try {
+      const task = await schedules.create(workspace, draft.value, { kind: 'user' });
+      return `Scheduled ${task.id} ${taskLine(task, localZone(), now)}. It is in Tasks under Scheduled, with Run now, Pause and Delete; each run shows there as a task of its own.`;
+    } catch (error) {
+      if (error instanceof ScheduleError) return `Nothing was scheduled: ${error.message}.`;
+      throw error;
+    }
+  };
+
   /**
    * `/compact` between turns: it holds the session as a turn does, so no prompt starts while the summary is written, and
    * Stop stops it. Every editor showing the session gets the divider and the smaller context. A string is the reply.
@@ -1161,6 +1286,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     meta: Record<string, unknown> | null | undefined,
     from: Viewer<Peer>,
     start: 'prompt' | 'resume' | 'wake' = 'prompt',
+    run: ScheduledTurn = {},
   ): Promise<acp.PromptResponse> => {
     known(sessionId);
     if (turns.get(sessionId) !== undefined) throw acp.RequestError.invalidRequest({ sessionId }, 'a turn is already running');
@@ -1181,6 +1307,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       let spent: Spent | undefined;
       const reply = await runBuiltin(slash, {
         setMode: (mode) => switchMode(from.client, sessionId, mode),
+        schedule: (args) => scheduleCommand(sessionId, args),
         compact: async (focus) => {
           const outcome = await compactBetweenTurns(sessionId, focus);
           if (typeof outcome === 'string') return outcome;
@@ -1263,7 +1390,11 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         // What woke the session; another turn may have taken it since the gate opened.
         const woken = start === 'wake' ? unwokenOf(resumed.log.events, wakes.registry.wakes(sessionId)).triggers : [];
         if (start === 'wake' && woken.length === 0) return { stopReason: 'end_turn' };
-        const wakeLimits = start === 'wake' ? { ...limits, countFrom: lastUserPromptSeq(resumed.log.events) } : limits;
+        // A scheduled run's budget holds for the turns it wakes too; the user's own prompt starts afresh.
+        if (start === 'prompt') runLimits.delete(sessionId);
+        if (run.limits !== undefined) runLimits.set(sessionId, run.limits);
+        const turnLimits = runLimits.get(sessionId) ?? limits;
+        const wakeLimits = start === 'wake' ? { ...turnLimits, countFrom: lastUserPromptSeq(resumed.log.events) } : turnLimits;
         const base = start === 'wake' ? await logWake(resumed, woken) : resumed;
         shown.live.events.push(...base.log.events);
         const wake = base.log.events.at(-1);
@@ -1299,11 +1430,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 surface: shown.surface,
                 diagnostics,
                 mcp: await mcp.toolset(sessionId, approval),
-                user: shown.user,
+                // Nobody is at a scheduled run to answer a card, and nobody wants the editor moved by one at 9:00.
+                user: run.scheduled === true ? {} : shown.user,
                 widgets: from.peer.widgets,
                 spinoffs: from.peer.spinoffs,
-                editor,
-                terminal,
+                editor: run.scheduled === true ? undefined : editor,
+                terminal: run.scheduled === true ? undefined : terminal,
+                schedules: from.peer.schedules && run.scheduled !== true ? await scheduleToolsFor(sessionId, header.session.workspace, shown) : undefined,
+                scheduled: run.scheduled,
                 externals,
                 keyOf: keyOf(sessionId),
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
@@ -1381,30 +1515,57 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   };
 
   /**
-   * A new session in `lane` running `prompt` in the background, as Run in a new lane, each Arena lane and a started
-   * suggestion start one. A `title` names it before its first prompt, so its task shows that title from the start.
+   * A new session in `where` running `prompt` in the background, as Run in a new lane, each Arena lane, a started
+   * suggestion and a scheduled run start one. A `title` names it before its first prompt, so its task shows that title
+   * from the start. A session in a lane is bound to it now, so the Lanes pane names the task from the first update on.
    */
-  const startLaneSession = async (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec, parent?: string, title?: string) => {
+  const startBackground = async (
+    where: string,
+    lane: LaneRecord | undefined,
+    prompt: string,
+    rawMode: string | undefined,
+    how: { readonly variant?: VariantSpec | undefined; readonly parent?: string | undefined; readonly title?: string | undefined; readonly run?: ScheduledTurn | undefined } = {},
+  ) => {
+    const { variant, parent, title } = how;
     const log =
       variant?.backend !== undefined
-        ? await startExternalSession(store, io, lane.path, { id: variant.backend })
-        : (await startSession(store, io, { workspace: lane.path, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined })).log;
+        ? await startExternalSession(store, io, where, { id: variant.backend })
+        : (await startSession(store, io, { workspace: where, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined })).log;
     const { id } = log.session;
     if (title !== undefined) await renameSession(store, io, id, title);
-    // Bound now, so the Lanes pane names the task from the first update on.
-    const bound = await laneAt(lane.path, undefined);
+    const bound = lane === undefined ? undefined : await laneAt(lane.path, undefined);
     if (bound !== undefined) await bindSession(bound, id);
     const mode = rawMode !== undefined && isSessionMode(rawMode) ? rawMode : DEFAULT_SESSION_MODE;
     turns.set(id, undefined);
     modes.set(id, mode);
     if (mode !== DEFAULT_SESSION_MODE) await logSetting(id, { kind: 'mode', mode });
     if (variant?.backend !== undefined && variant.model !== null) await logSetting(id, { kind: 'backend-model', model: variant.model });
-    mcp.register(id, lane.path, [], undefined);
-    io.err(`lane: ${lane.name} at ${lane.path}, session ${id}`);
+    mcp.register(id, where, [], undefined);
+    io.err(lane === undefined ? `background: session ${id} in ${where}` : `lane: ${lane.name} at ${lane.path}, session ${id}`);
     if (parent !== undefined) tasks.adopt(id, parent);
-    const turn = runTurn(id, [{ type: 'text', text: prompt }], undefined, self());
-    void turn.catch((error: unknown) => io.err(`lane ${lane.name}: ${String(error)}`));
+    const turn = runTurn(id, [{ type: 'text', text: prompt }], undefined, self(), 'prompt', how.run);
+    void turn.catch((error: unknown) => io.err(`session ${id}${lane === undefined ? '' : ` in lane ${lane.name}`}: ${String(error)}`));
     return { id, turn };
+  };
+
+  const startLaneSession = (lane: LaneRecord, prompt: string, rawMode: string | undefined, variant?: VariantSpec, parent?: string, title?: string) =>
+    startBackground(lane.path, lane, prompt, rawMode, { variant, parent, title });
+
+  /**
+   * A scheduled task's run, as a new session: read-only in Plan in the main checkout, or in its own lane in Auto when
+   * the task makes edits, held to the task's budget. Its end is read from its log once its turn is over.
+   */
+  const startScheduled = async (workspace: string, task: ScheduledTask) => {
+    const repo = task.edits ? await laneRepo(workspace) : undefined;
+    const lane = repo === undefined ? undefined : await laneFor(repo, task.prompt, store, io, laneNameFor(task.title, await takenLaneNames(repo)));
+    const where = lane?.path ?? workspace;
+    const limits: Limits = { maxTurns: task.budget.maxTurns, maxCostUsd: task.budget.maxCostUsd };
+    const { id, turn } = await startBackground(where, lane, task.prompt, task.edits ? 'auto' : 'plan', { title: task.title, run: { limits, scheduled: true } });
+    const ended: Promise<RunEnd> = turn.then(
+      async () => runEndOf((await existing(id)).events, schedules.now()),
+      (error: unknown) => ({ kind: 'failed', at: schedules.now(), costUsd: null, message: error instanceof Error ? error.message : String(error) }),
+    );
+    return { sessionId: id, workspace: where, lane: lane?.name ?? null, ended };
   };
 
   /** A session the engine may not hold open any more, such as one its window closed, before a turn of its own. */
@@ -1423,6 +1584,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       .then(() => runTurn(sessionId, [], undefined, self(), 'wake'))
       .catch((error: unknown) => io.err(`session ${sessionId}: the woken turn did not run: ${error instanceof Error ? error.message : String(error)}`));
   };
+
+  /** This connection's way to start scheduled runs, once it said what it can show. */
+  let runner: ScheduleRunner | undefined;
 
   /** Runs on in the background each turn an engine that stopped left waiting, as the first editor connects. */
   const takeUpWaits = async () => {
@@ -1465,10 +1629,15 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       };
       arenaWatchers.add(watch);
       wakes.connected({ connection: shows, run: wakeTurn });
+      const unlistenSchedules = schedules.listen((update) => {
+        if (peer.schedules) void connection.client.notify(SCHEDULES_UPDATE_METHOD, update).catch(() => {});
+      });
       void connection.closed.then(() => {
         unlisten();
+        unlistenSchedules();
         arenaWatchers.delete(watch);
         wakes.disconnected(shows);
+        schedules.disconnected(shows);
         for (const sessionId of viewers.shownBy(shows)) {
           viewers.hide(sessionId, shows);
           commands.detach(sessionId);
@@ -1496,7 +1665,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         editorActions: _meta?.[EDITOR_ACTIONS_CAPABILITY] === true,
         terminals: _meta?.[READ_TERMINAL_CAPABILITY] === true,
         spinoffs: _meta?.[SPINOFF_CAPABILITY] === true,
+        schedules: _meta?.[SCHEDULES_CAPABILITY] === true,
       };
+      runner ??= { connection: self(), start: startScheduled };
+      schedules.connected(runner);
+      void rulesWorkspace(io.cwd, io.env['HOME'] || homedir())
+        .then((workspace) => schedules.watch(workspace))
+        .catch((error: unknown) => io.err(`schedules: could not watch ${io.cwd}: ${String(error)}`));
       return {
         protocolVersion: acp.PROTOCOL_VERSION,
         agentCapabilities: {
@@ -1692,6 +1867,10 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       childCancels.get(params.sessionId)?.();
     })
     .onRequest(TASKS_METHOD, z.object({}).loose(), async (): Promise<TasksResponse> => tasks.list())
+    .onRequest(SCHEDULES_METHOD, schedulesRequest, async ({ params }): Promise<SchedulesResponse> => schedules.list(await scheduleWorkspace(params.cwd)))
+    .onRequest(SCHEDULE_ACT_METHOD, scheduleActRequest, async ({ params }): Promise<SchedulesResponse> =>
+      schedules.act(await scheduleWorkspace(params.cwd), params.id, params.action, runner).catch(refused(params)),
+    )
     .onRequest(BACKENDS_METHOD, z.object({}).loose(), async (): Promise<BackendsResponse> => ({ backends: await backendInfos(io.env) }))
     .onRequest(BACKGROUND_STOP_METHOD, backgroundStopRequest, async ({ params }) => {
       await jobs.stop(params.sessionId, params.id, 'user').catch((error: unknown) => {

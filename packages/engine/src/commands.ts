@@ -244,7 +244,7 @@ export function watchCommands(workspace: string, homes: Homes, onChange: () => v
  * What the engine does with the built-ins it runs; the reply is shown as agent text. Only /compact calls the model, to
  * write its summary, and it runs no agent turn.
  */
-export type BuiltinContext = { setMode(mode: SessionMode): Promise<void>; compact(focus: string): Promise<string> };
+export type BuiltinContext = { setMode(mode: SessionMode): Promise<void>; compact(focus: string): Promise<string>; schedule(args: string): Promise<string> };
 
 const ENGINE_ACTIONS: Readonly<Record<EngineBuiltin, (args: string, ctx: BuiltinContext) => Promise<string>>> = {
   async mode(args, ctx) {
@@ -253,6 +253,7 @@ const ENGINE_ACTIONS: Readonly<Record<EngineBuiltin, (args: string, ctx: Builtin
     return `Approval mode: ${args}.`;
   },
   compact: (args, ctx) => ctx.compact(args),
+  schedule: (args, ctx) => ctx.schedule(args),
 };
 
 const isEngineBuiltin = (name: string): name is EngineBuiltin => Object.hasOwn(ENGINE_ACTIONS, name);
