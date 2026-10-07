@@ -1,4 +1,6 @@
-/** Which VS Code integration files a change can break, and why. Pure, so its rules are testable without git. */
+/** Which VS Code integration files a change can break, and why. selectVscode is pure; readSuites reads the suites from disk. */
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 /** One integration file: its name, every file of its suite (repo-relative), and their joined text. */
 export type Suite = { readonly name: string; readonly files: readonly string[]; readonly text: string };
@@ -17,6 +19,17 @@ const HARNESS = [
 ];
 /** Engine and core changes reach the panel through the protocol: these suites drive whole turns end to end. */
 const ENGINE_SMOKE = ['chat', 'panel', 'working'];
+/**
+ * Core and engine files that shape what the model receives or what a turn logs: the opening and its environment and
+ * memory, Geno's notices and arrivals, the prompt and tools each mode offers, tool result text, and the turn loop.
+ */
+const REQUEST_SHAPERS = [
+  /^packages\/core\/src\/(agent|agent-prompts|approval|background|compaction|context|environment|fence|hidden|loop|memory|notice|request|session|subagent|terminal|tools|wake)\.ts$/,
+  /^packages\/engine\/src\/(agent|background|chat|drive|environment|memory|serve|sessions|subagents|wakes)\.ts$/,
+  /^packages\/engine\/src\/tools\//,
+];
+/** A suite that reads a request's messages, system prompt, tools or tool choice, or a session's log. */
+const READS_REQUESTS = /\.(messages|system|tools|tool_choice)\b|\bofferedTools\(|['"]sessions['"]/;
 /** A panel change that names nothing a suite checks still runs the suites that cover the panel at large. */
 const PANEL_SMOKE = ['panel', 'chat', 'composer'];
 
@@ -51,6 +64,10 @@ export function selectVscode(changed: readonly string[], panelDiff: string, suit
 
   const engine = changed.filter((p) => /^packages\/(engine|core)\/src\//.test(p));
   if (engine.length > 0) for (const name of ENGINE_SMOKE) add(name, `engine or core changed (${engine.length} files)`);
+  const shapers = changed.filter((p) => REQUEST_SHAPERS.some((rule) => rule.test(p)));
+  if (shapers.length > 0) {
+    for (const s of suites) if (READS_REQUESTS.test(s.text)) add(s.name, `it reads requests or the log, and ${shapers.length} files that shape them changed`);
+  }
 
   if (changed.some((p) => /^packages\/extension\/src\//.test(p))) {
     const common = Math.ceil(suites.length * 0.6);
@@ -79,4 +96,17 @@ export function suiteFilesOf(integrationText: string, suiteNames: readonly strin
   const files = new Set<string>();
   for (const base of named) for (const s of suiteNames) if (s === base || s.startsWith(`${base}-`)) files.add(s);
   return [...files].sort().map((s) => `packages/extension/test/suite/${s}.ts`);
+}
+
+/** Every integration file under `root` as a Suite, with the text of all its parts. */
+export function readSuites(root: string): Suite[] {
+  const testDir = path.join(root, 'packages/extension/test');
+  const suiteNames = readdirSync(path.join(testDir, 'suite')).filter((f) => f.endsWith('.ts')).map((f) => f.slice(0, -3));
+  return readdirSync(testDir)
+    .filter((f) => f.endsWith('.integration.test.ts'))
+    .map((f) => {
+      const own = `packages/extension/test/${f}`;
+      const files = [own, ...suiteFilesOf(readFileSync(path.join(root, own), 'utf8'), suiteNames)];
+      return { name: f.replace('.integration.test.ts', ''), files, text: files.map((p) => readFileSync(path.join(root, p), 'utf8')).join('\n') };
+    });
 }

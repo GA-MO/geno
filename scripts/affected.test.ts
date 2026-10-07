@@ -1,5 +1,6 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
+import { readSuites, selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
 
 const suite = (name: string, text: string, extra: string[] = []): Suite => ({
   name,
@@ -40,6 +41,30 @@ describe('selectVscode', () => {
   it('runs the engine smoke set for an engine change, and nothing for docs', () => {
     expect(names(['packages/engine/src/drive.ts'])).toEqual(['chat', 'panel', 'working']);
     expect(names(['docs/u44.md'])).toEqual([]);
+  });
+
+  it('runs every suite that reads requests or the session log when a file that shapes them changes', () => {
+    const readers = [
+      ...SUITES,
+      suite('mentions', 'const [prompt] = requests[0].messages[0].content'),
+      suite('modes-x', 'expect(offeredTools(requests[8]))'),
+      suite('context', 'expect(requests[3]!.system).toEqual(requests[0]!.system)'),
+      suite('review', "readFile(path.join(home, 'sessions', log))"),
+    ];
+    const picked = (changed: string[]) => selectVscode(changed, '', readers).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
+    const all = ['chat', 'context', 'mentions', 'modes-x', 'panel', 'review', 'working'];
+    expect(picked(['packages/core/src/session.ts'])).toEqual(all);
+    expect(picked(['packages/engine/src/tools/agent.ts'])).toEqual(all);
+    expect(picked(['packages/engine/src/gh.ts']), 'an engine file that shapes no request runs the smoke set').toEqual(['chat', 'panel', 'working']);
+  });
+
+  it('picks the eight suites that broke silently when the request shape changed', () => {
+    const real = readSuites(fileURLToPath(new URL('..', import.meta.url)));
+    const broke = ['attachments', 'background', 'context', 'mentions', 'modes', 'read-terminal', 'todo', 'wake'];
+    for (const file of ['packages/core/src/session.ts', 'packages/core/src/fence.ts', 'packages/core/src/agent.ts', 'packages/engine/src/drive.ts']) {
+      const picked = selectVscode([file], '', real).map((p) => p.file.replace(/.*\/|\.integration\.test\.ts/g, ''));
+      expect(picked, file).toEqual(expect.arrayContaining(broke));
+    }
   });
 
   it('runs everything when the harness changes', () => {

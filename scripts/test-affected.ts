@@ -4,9 +4,8 @@
  * can break.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { selectVscode, suiteFilesOf, type Suite } from './affected.js';
+import { readSuites, selectVscode } from './affected.js';
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -23,16 +22,7 @@ const changed = [
 ].filter(Boolean);
 const panelDiff = git('diff', mergeBase, '--', 'packages/extension/src');
 
-const testDir = path.join(root, 'packages/extension/test');
-const suiteNames = readdirSync(path.join(testDir, 'suite')).filter((f) => f.endsWith('.ts')).map((f) => f.slice(0, -3));
-const suites: Suite[] = readdirSync(testDir)
-  .filter((f) => f.endsWith('.integration.test.ts'))
-  .map((f) => {
-    const own = `packages/extension/test/${f}`;
-    const text = readFileSync(path.join(root, own), 'utf8');
-    const files = [own, ...suiteFilesOf(text, suiteNames)];
-    return { name: f.replace('.integration.test.ts', ''), files, text: files.map((p) => readFileSync(path.join(root, p), 'utf8')).join('\n') };
-  });
+const suites = readSuites(root);
 
 const picks = selectVscode(changed, panelDiff, suites);
 console.log(`changed since ${base} (${mergeBase.slice(0, 7)}): ${changed.length} files`);
