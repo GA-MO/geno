@@ -215,7 +215,7 @@ export class Wakes {
   /** What the session waits on, oldest kind first, as the Tasks list names it. */
   waitsFor(sessionId: string): WakeSource[] {
     const waits = this.sessions.get(sessionId);
-    const running = this.jobs.running(sessionId).filter((job) => waits?.quiet.has(job.id as JobId) !== true);
+    const running = this.jobs.running(sessionId).filter((job) => job.preview === undefined && waits?.quiet.has(job.id as JobId) !== true);
     return [
       ...[...(waits?.children ?? [])].map(([child, wait]): WakeSource => ({ kind: 'children', child, agent: wait.agent })),
       ...running.map((job): WakeSource => ({ kind: 'jobs', job: job.id as JobId })),
