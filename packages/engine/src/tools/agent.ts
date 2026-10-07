@@ -5,6 +5,7 @@ import {
   baseOf,
   CLASSIFIER_OUTCOMES,
   checkHeadline,
+  commandLineOf,
   classifierInputOf,
   commandStatusLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
@@ -33,6 +34,7 @@ import {
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
+import type { JobStart } from '../background.js';
 import type { CheckCommand } from '../check-command.js';
 import type { Classify } from '../classifier.js';
 import { applyEditToFile, type Files } from '../files.js';
@@ -51,6 +53,7 @@ import {
   type ToolContext,
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
+import { previewExecutors } from './preview.js';
 import { EXECUTORS } from './index.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
@@ -264,7 +267,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     return approval;
   };
 
-  const startInBackground = (background: SessionBackground, command: string, description: string | undefined, ctx: ToolContext) =>
+  const startInBackground = (
+    background: SessionBackground,
+    command: string,
+    description: string | undefined,
+    ctx: ToolContext,
+    server?: Pick<JobStart, 'preview' | 'cwd' | 'env'>,
+  ) =>
     background.jobs.start({
       sessionId: background.sessionId,
       toolUseId: ctx.toolUseId ?? '',
@@ -275,6 +284,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       spillDir: ctx.spillDir,
       events: ctx.events(),
       sandbox: tools.sandbox,
+      ...server,
     });
 
   const bash = executor({
@@ -329,6 +339,14 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const approval = await approveCommand(command, ctx, true);
       const { job, text } = await startInBackground(tools.background!, command, description, ctx);
       return { job: job.id, text, approval };
+    }),
+    ...previewExecutors(tools.background, async (config, cwd, ctx) => {
+      const command = commandLineOf(config);
+      const approval = await approveCommand(command, ctx, true);
+      // PORT is how Next.js and most dev servers pick their port, so the entry's port holds without a flag.
+      const server = { preview: { name: config.name, url: config.url }, cwd, env: { ...tools.env, PORT: String(config.port) } };
+      const { job } = await startInBackground(tools.background!, command, `Dev server ${config.name}`, ctx, server);
+      return { job, approval };
     }),
     check,
     recall: recallExecutor(tools.recall),

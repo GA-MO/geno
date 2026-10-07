@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AGENT_MODE_TOOLS,
+  AGENT_TOOL_DEFINITIONS,
+  CHILD_TOOL_NAMES,
   commandLineOf,
   filterLog,
   launchUrlOf,
   mergeLaunchFiles,
   missingLaunchText,
+  PAGE_TITLE_MAX,
+  pageTitleOf,
+  PREVIEW_TOOL_NAMES,
   previewListText,
   previewLogsText,
   previewStartText,
   previewStatusOf,
   type LaunchConfig,
+  type PageCheck,
   type PreviewServer,
 } from '../src/index.js';
 
@@ -128,6 +135,21 @@ describe('preview status and texts', () => {
     expect(text).toContain('"level": "error"');
   });
 
+  it('adds what the first GET of the page returned, and sends a failing page to the logs', () => {
+    const ready = (page: PageCheck) => previewStartText({ kind: 'started', server: server(), waitedS: 1, tail: '', page });
+    expect(ready({ kind: 'answered', status: 200, title: 'Payload Admin' })).toContain('GET http://localhost:3000/ returned 200, titled "Payload Admin".');
+    expect(ready({ kind: 'answered', status: 307, location: '/admin/login' })).toContain('returned 307, redirecting to /admin/login.');
+    expect(ready({ kind: 'answered', status: 500 })).toContain('returned 500. The server failed on the page; read its errors with preview_logs.');
+    expect(ready({ kind: 'no-answer', why: 'no response within 30s' })).toContain('GET http://localhost:3000/ got no response: no response within 30s.');
+  });
+
+  it('reads a page title on one line, cut to its limit', () => {
+    expect(pageTitleOf('<html><head><TITLE lang="en">\n  My   app\n</TITLE>')).toBe('My app');
+    expect(pageTitleOf('<title></title>')).toBeUndefined();
+    expect(pageTitleOf('x'.repeat(10))).toBeUndefined();
+    expect(pageTitleOf(`<title>${'a'.repeat(200)}</title>`)).toHaveLength(PAGE_TITLE_MAX);
+  });
+
   it('says a reused server runs already, a slow one may be compiling, and a dead one ended with its output', () => {
     expect(previewStartText({ kind: 'reused', server: server(), waitedS: 0, tail: '' })).toMatch(/already runs in this session as bg-1\. It answers/);
     expect(previewStartText({ kind: 'started', server: server({ status: { kind: 'starting' } }), waitedS: 60, tail: 'compiling' })).toContain('Nothing answers at http://localhost:3000 after 60s');
@@ -166,5 +188,16 @@ describe('preview status and texts', () => {
     const json = /\{[\s\S]*\n\}/.exec(text)![0];
     expect(JSON.parse(json)).toEqual({ version: '0.0.1', configurations: [{ name: 'dev', runtimeExecutable: 'pnpm', runtimeArgs: ['dev'], port: 3000 }] });
     expect(missingLaunchText(undefined)).toContain('ask the user which command starts the server');
+  });
+});
+
+describe('the preview tools by mode', () => {
+  it('offers listing and logs in every mode, starting and stopping outside Plan, and nothing to a subagent', () => {
+    for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(AGENT_MODE_TOOLS[mode]).toEqual(expect.arrayContaining([...PREVIEW_TOOL_NAMES]));
+    expect(AGENT_MODE_TOOLS.plan).toEqual(expect.arrayContaining(['preview_list', 'preview_logs']));
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('preview_start');
+    expect(AGENT_MODE_TOOLS.plan).not.toContain('preview_stop');
+    for (const name of PREVIEW_TOOL_NAMES) expect(CHILD_TOOL_NAMES).not.toContain(name);
+    expect(AGENT_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual(expect.arrayContaining([...PREVIEW_TOOL_NAMES]));
   });
 });
