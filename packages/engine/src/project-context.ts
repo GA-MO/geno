@@ -2,10 +2,16 @@
 
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { stripHidden, type InstructionFile, type LoadedContext, type ProjectRule, type RuleTrigger, type SkillEntry } from '@g-code/core';
+import { isSecretPath, stripHidden, type InstructionFile, type LoadedContext, type ProjectRule, type RuleTrigger, type SkillEntry } from '@g-code/core';
 
 /** Per directory the first of these that is a file wins. */
 const INSTRUCTION_NAMES = ['AGENTS.override.md', 'AGENTS.md', 'CLAUDE.md'] as const;
+/** Claude Code's project files beside the workspace's own, loaded after it. */
+const WORKSPACE_EXTRAS = [path.join('.claude', 'CLAUDE.md'), 'CLAUDE.local.md'] as const;
+/** Claude Code skips a larger instruction file. */
+const MAX_INSTRUCTION_BYTES = 4 * 1024 * 1024;
+/** How many `@path` hops below a loaded file are followed, as in Claude Code. */
+const MAX_IMPORT_DEPTH = 4;
 const RULES_DIR = path.join('.cursor', 'rules');
 export const SKILL_ROOTS = [path.join('.agents', 'skills'), path.join('.claude', 'skills')] as const;
 
@@ -23,12 +29,14 @@ export async function readIfFile(file: string): Promise<string | undefined> {
 
 const canonical = (file: string): Promise<string> => realpath(file).catch(() => file);
 
-async function instructionFileIn(dir: string): Promise<{ readonly file: string; readonly text: string } | undefined> {
-  for (const name of INSTRUCTION_NAMES) {
-    const file = path.join(dir, name);
-    const text = await readIfFile(file);
-    if (text !== undefined) return { file, text };
-  }
+const isFile = (file: string): Promise<boolean> =>
+  stat(file).then(
+    (info) => info.isFile(),
+    () => false,
+  );
+
+async function instructionFileIn(dir: string): Promise<string | undefined> {
+  for (const name of INSTRUCTION_NAMES) if (await isFile(path.join(dir, name))) return path.join(dir, name);
   return undefined;
 }
 
@@ -67,7 +75,7 @@ async function shadowedInstructionFile(workspace: string): Promise<string | unde
   // Only a main checkout of the same repository holds that git dir; a bare layout or a submodule does not.
   if ((await canonical(path.join(mainRepoRoot, '.git'))) !== commonGitDir) return undefined;
   const own = await instructionFileIn(worktreeRoot);
-  return own === undefined ? undefined : path.join(mainRepoRoot, path.basename(own.file));
+  return own === undefined ? undefined : path.join(mainRepoRoot, path.basename(own));
 }
 
 export const shownPath = (workspace: string, file: string): string => {
@@ -75,20 +83,114 @@ export const shownPath = (workspace: string, file: string): string => {
   return relative.startsWith('..') || path.isAbsolute(relative) ? file : relative.split(path.sep).join('/');
 };
 
-/** From the filesystem root down to the workspace, one instruction file per directory. */
-export async function loadInstructionFiles(workspace: string): Promise<InstructionFile[]> {
+/**
+ * A file loaded on its own, and how far its imports may reach: a project file's stay under `scope`, while the user's
+ * own files, with no scope, may import any file but a credentials file.
+ */
+type Root = { readonly file: string; readonly scope: string | undefined };
+
+/** From the filesystem root down to the workspace, one instruction file per directory, then Claude Code's extras. */
+async function projectRoots(workspace: string): Promise<Root[]> {
   const shadowed = await shadowedInstructionFile(workspace);
-  const found: InstructionFile[] = [];
+  const roots: Root[] = [];
   const seen = new Set<string>();
   for (let dir = workspace; ; dir = path.dirname(dir)) {
-    const candidate = await instructionFileIn(dir);
-    const real = candidate === undefined ? undefined : await canonical(candidate.file);
-    if (candidate !== undefined && real !== undefined && real !== shadowed && !seen.has(real)) {
-      found.unshift({ path: shownPath(workspace, candidate.file), text: candidate.text });
+    const file = await instructionFileIn(dir);
+    const real = file === undefined ? undefined : await canonical(file);
+    // Walking up, a file reached twice is shown by its nearest path.
+    if (file !== undefined && real !== undefined && real !== shadowed && !seen.has(real)) {
+      roots.unshift({ file, scope: dir });
       seen.add(real);
     }
-    if (path.dirname(dir) === dir) return found;
+    if (path.dirname(dir) === dir) break;
   }
+  return [...roots, ...WORKSPACE_EXTRAS.map((name) => ({ file: path.join(workspace, name), scope: workspace }))];
+}
+
+/** Where the user's own instruction files live: Geno's app home, the home `~` names, and Claude Code's config dir. */
+export type UserDirs = { readonly app: string; readonly home: string | undefined; readonly claude: string | undefined };
+
+const userRoots = (dirs: UserDirs): Root[] =>
+  [globalRulesFile(dirs.app), ...(dirs.claude === undefined ? [] : [path.join(dirs.claude, 'CLAUDE.md')])].map((file) => ({ file, scope: undefined }));
+
+/** The targets of the lines that are a lone `@path`, outside fenced code blocks. */
+export function importsOf(text: string): string[] {
+  const targets: string[] = [];
+  let fence: string | undefined;
+  for (const line of text.split('\n')) {
+    const marker = /^\s*(```|~~~)/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) fence = marker;
+      else if (fence === marker) fence = undefined;
+      continue;
+    }
+    const target = /^\s*@(\S+)\s*$/.exec(line)?.[1];
+    if (fence === undefined && target !== undefined) targets.push(target);
+  }
+  return targets;
+}
+
+type Read = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'missing' } | { readonly kind: 'too-big'; readonly bytes: number };
+
+async function readInstruction(file: string): Promise<Read> {
+  const info = await stat(file).catch(() => undefined);
+  if (info === undefined || !info.isFile()) return { kind: 'missing' };
+  if (info.size > MAX_INSTRUCTION_BYTES) return { kind: 'too-big', bytes: info.size };
+  const text = await readIfFile(file);
+  return text === undefined ? { kind: 'missing' } : { kind: 'text', text };
+}
+
+const posix = (file: string): string => file.split(path.sep).join('/');
+
+const within = (dir: string, file: string): boolean => {
+  const relative = path.relative(dir, file);
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
+};
+
+/** One load of every instruction file: a file reached twice, by any route, loads the first time only. */
+type Walk = { readonly workspace: string; readonly home: string | undefined; readonly seen: Set<string>; readonly problems: string[] };
+
+/** The line that imported a file: the importer as shown, and the `@path` as written. */
+type ImportLine = { readonly importer: string; readonly target: string };
+
+/** The file an import names, or why it is skipped. */
+async function importTarget(walk: Walk, root: Root, importer: string, target: string, depth: number): Promise<{ readonly file: string } | { readonly why: string }> {
+  if (depth > MAX_IMPORT_DEPTH) return { why: `imports nest at most ${MAX_IMPORT_DEPTH} levels deep` };
+  if (target.startsWith('~/') && walk.home === undefined) return { why: 'the environment names no home directory' };
+  const file = target.startsWith('~/') ? path.join(walk.home!, target.slice(2)) : path.resolve(path.dirname(importer), target);
+  const real = await canonical(file);
+  if (isSecretPath(posix(file)) || isSecretPath(posix(real))) return { why: 'it names a credentials file' };
+  if (root.scope !== undefined && !within(await canonical(root.scope), real)) return { why: `a project file can import only files under ${root.scope}` };
+  return { file };
+}
+
+/** `file`, then depth first the files its `@path` lines import, each right after its importer. */
+async function withImports(walk: Walk, root: Root, file: string, from: ImportLine | undefined, depth: number): Promise<InstructionFile[]> {
+  const real = await canonical(file);
+  if (walk.seen.has(real)) return [];
+  const shown = shownPath(walk.workspace, file);
+  const skipped = (why: string) => walk.problems.push(from === undefined ? `${shown}: skipped, ${why}` : `${from.importer}: @${from.target} skipped, ${why}`);
+  const read = await readInstruction(file);
+  if (read.kind === 'too-big') skipped(`it is ${read.bytes.toLocaleString('en-US')} bytes, over the 4 MiB limit`);
+  // A file loaded on its own is optional; one a line names should be there.
+  if (read.kind === 'missing' && from !== undefined) skipped('there is no such file');
+  if (read.kind !== 'text') return [];
+  // The user's rules file starts out empty (ensureGlobalRules), and an empty file of theirs says nothing.
+  if (root.scope === undefined && read.text.trim() === '') return [];
+  walk.seen.add(real);
+  const loaded: InstructionFile[] = [{ path: shown, text: read.text, ...(from === undefined ? {} : { importedFrom: from.importer }) }];
+  for (const target of importsOf(read.text)) {
+    const next = await importTarget(walk, root, file, target, depth + 1);
+    if ('why' in next) walk.problems.push(`${shown}: @${target} skipped, ${next.why}`);
+    else loaded.push(...(await withImports(walk, root, next.file, { importer: shown, target }, depth + 1)));
+  }
+  return loaded;
+}
+
+async function loadLayer(walk: Walk, roots: readonly Root[]): Promise<InstructionFile[]> {
+  const loaded: InstructionFile[] = [];
+  for (const root of roots) loaded.push(...(await withImports(walk, root, root.file, undefined, 0)));
+  return loaded;
 }
 
 export type Frontmatter = { readonly fields: Readonly<Record<string, string | readonly string[]>>; readonly body: string };
@@ -181,13 +283,6 @@ export async function loadSkills(workspace: string): Promise<SkillEntry[]> {
 
 export const globalRulesFile = (home: string): string => path.join(home, 'AGENTS.md');
 
-/** `$GCODE_HOME/AGENTS.md`, the user's rules for every project; undefined when it is missing or blank. */
-export async function loadGlobalInstructions(home: string): Promise<InstructionFile | undefined> {
-  const file = globalRulesFile(home);
-  const text = await readIfFile(file);
-  return text === undefined || text.trim() === '' ? undefined : { path: file, text };
-}
-
 /** The global rules file, created empty when missing; one that exists is left as it is. */
 export async function ensureGlobalRules(home: string): Promise<string> {
   const file = globalRulesFile(home);
@@ -198,19 +293,16 @@ export async function ensureGlobalRules(home: string): Promise<string> {
   return file;
 }
 
-/** `home` is the app home, whose AGENTS.md loads first; undefined loads only the workspace's context. */
-export async function loadProjectContext(workspace: string, home?: string): Promise<LoadedContext> {
+/** What a session loads, and a line for the user about each file it skipped. */
+export type ContextScan = { readonly context: LoadedContext; readonly problems: readonly string[] };
+
+/** `user` names where the user's own files live, which load first; undefined loads only the workspace's context. */
+export async function loadProjectContext(workspace: string, user?: UserDirs): Promise<ContextScan> {
   const root = await canonical(workspace);
-  const [global, loaded, rules, skills] = await Promise.all([
-    home === undefined ? undefined : loadGlobalInstructions(home),
-    loadInstructionFiles(root),
-    loadCursorRules(root),
-    loadSkills(root),
-  ]);
-  if (global === undefined) return { instructions: loaded, rules, skills };
-  // A home inside the workspace's ancestry would otherwise load the same file twice.
-  const globalReal = await canonical(global.path);
-  const instructions = [];
-  for (const file of loaded) if ((await canonical(path.resolve(root, file.path))) !== globalReal) instructions.push(file);
-  return { global, instructions, rules, skills };
+  const walk: Walk = { workspace: root, home: user?.home, seen: new Set(), problems: [] };
+  // The user's files go first, so a project file that is one of them, or imports one, does not load it again.
+  const own = user === undefined ? [] : await loadLayer(walk, userRoots(user));
+  const instructions = await loadLayer(walk, await projectRoots(root));
+  const [rules, skills] = await Promise.all([loadCursorRules(root), loadSkills(root)]);
+  return { context: { ...(own.length === 0 ? {} : { user: own }), instructions, rules, skills }, problems: walk.problems };
 }

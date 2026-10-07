@@ -72,7 +72,7 @@ Skills name models by Claude aliases (`opus`, `fable`, `sonnet`, `haiku`) and ca
 |---|---|
 | `run`, or the project's `verify` skill | Start the app or the CLI with `bash` and read its real output. For a web app, start its dev server with `preview_start` and look at the page with the browser tools. A workspace skill under `.claude/skills/` or `.agents/skills/` loads with the `skill` tool by its name. |
 | `plugin-dev:skill-development` | Not installed. Follow the Agent Skills format: `name` and `description` frontmatter, a folder named after the skill, and details moved into reference files. |
-| Your instructions file | `AGENTS.md` or `CLAUDE.md`. Geno loads them when the session starts. |
+| Your instructions file | `AGENTS.md` or `CLAUDE.md`, plus `.claude/CLAUDE.md`, `CLAUDE.local.md` and the user's `~/.claude/CLAUDE.md`, with the files they import by `@path` lines. Geno loads them when the session starts. |
 
 ## Per-skill notes
 
