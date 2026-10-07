@@ -207,10 +207,17 @@ async function terminate(engine: ChildProcess, started: readonly number[]) {
 
 const SLEEP = toolCall('Waiting.', [{ id: 'tu_sleep', name: 'bash', input: { command: 'sleep 37' } }], usage);
 
+const RUNTIMES: [string, typeof vscodeHelper][] = [
+  ['Node', () => ({ ok: true, runtime: NODE })],
+  ['VS Code’s Electron helper', vscodeHelper],
+];
+
 describe('an engine sent SIGTERM', () => {
-  it('on a socket stops the command its turn runs in Geno’s sandbox and its agents, removes its socket and exits within two seconds', async () => {
+  it.for(RUNTIMES)('on a socket, on %s, stops the command its turn runs in Geno’s sandbox and its agents, removes its socket and exits within two seconds', { timeout: 60_000 }, async ([, find], { skip }) => {
+    const found = find();
+    if (!found.ok) return skip(found.reason);
     const t = await world([SLEEP]);
-    const engine = t.start(NODE);
+    const engine = t.start(found.runtime);
     const agent = await t.dial();
     const cursor = await agent.request(acp.methods.agent.session.new, { cwd: t.repo, mcpServers: [], _meta: { [BACKEND_META]: { id: 'cursor' } } });
     await t.prompt(agent, cursor.sessionId, 'Reply with one word only: ready.');
@@ -220,7 +227,7 @@ describe('an engine sent SIGTERM', () => {
     expect(exit, t.stderr()).toMatchObject({ code: 0, signal: null, ms: expect.toSatisfy((ms: number) => ms < 2000) });
     expect(existsSync(t.socket), 'the socket is gone').toBe(false);
     expect(left, 'every process the engine started is gone').toEqual([]);
-  }, 60_000);
+  });
 
   it('on stdio stops the command its turn runs in Geno’s sandbox and exits within two seconds', async () => {
     const t = await world([SLEEP]);
