@@ -29,6 +29,13 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      prismjs:
+        specifier: ^1.30.0
+        version: 1.30.0
+    devDependencies:
+      '@types/prismjs':
+        specifier: ^1.26.6
+        version: 1.26.6
 
   packages/engine:
     dependencies:
@@ -84,16 +91,10 @@ importers:
       mermaid:
         specifier: ^12.1.0
         version: 12.1.0
-      prismjs:
-        specifier: ^1.30.0
-        version: 1.30.0
       zod:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
-      '@types/prismjs':
-        specifier: ^1.26.6
-        version: 1.26.6
       '@types/vscode':
         specifier: ~1.95.0
         version: 1.95.0

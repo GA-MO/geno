@@ -542,11 +542,9 @@
     "@vscode/codicons": "0.0.46-24",
     "marked": "^18.0.14",
     "mermaid": "^12.1.0",
-    "prismjs": "^1.30.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/prismjs": "^1.26.6",
     "@types/vscode": "~1.95.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
