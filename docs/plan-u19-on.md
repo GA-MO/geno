@@ -21,6 +21,10 @@ Every unit follows "Shared rules for every unit" in `docs/plan-u11-u14.md`. That
 ค้นพบ: Arena ช่วยงานง่ายแต่ไม่ช่วยงานยาก (pass@3 1/3, pick 0/3 บน E5 ที่ fail); review child หมด 8 turn ก่อนจัดอันดับ 2/4 ครั้ง (docs/u26.md)
 ถัดไป: merge U40 แล้ว U15+U33 (Cursor ต้อง login ก่อน)
 
+## External ACP backends: paused (2026-10-07)
+
+The user paused work on Cursor and Claude Code as ACP backends. Through ACP the other agent's own harness does the work, so Geno's prompt, tools, compaction, subagents and Auto classifier are not used; that is not the goal, and access through a plan may be closed by the vendors later. What exists stays as built (U33, U40, the sandbox host fix 68bc7e0): no new ACP work, no Claude Code stream-json bridge, no work on Cursor's start latency. Claude models run in Geno's own loop through the `anthropic`, `bedrock` or `vertex` providers with the user's key.
+
 ## U34: boundary lint
 
 Keep each part of Geno cheap to lift out into a library later. Add a dependency-rules check that runs with `pnpm test`, or as its own `pnpm lint:deps` called from `pnpm test`, and fails on a crossing.
