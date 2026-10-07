@@ -186,9 +186,8 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
   };
 }
 
-/** A dev server reads by its name and address, any other command by its description or itself. */
-const jobLabel = (job: TaskJob): string =>
-  job.preview === undefined ? (job.description ?? job.command) : `Dev server ${job.preview.name} at ${job.preview.url.replace(/^https?:\/\//, '')}`;
+/** A dev server reads by its name and address, short enough for 300px; any other command by its description or itself. */
+const jobLabel = (job: TaskJob): string => (job.preview === undefined ? (job.description ?? job.command) : `${job.preview.name} on ${job.preview.url.replace(/^https?:\/\//, '')}`);
 
 /** What a session waits on to be woken, or why its wake-ups wait for the user. */
 function wakesOf(task: TaskRecord, clock: (ms: number) => string): string | undefined {
