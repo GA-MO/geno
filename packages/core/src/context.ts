@@ -37,6 +37,16 @@ export type ProjectRule = {
   readonly text: string;
 };
 
+/**
+ * An instruction file in a directory below the workspace, or a file it imports. Like Claude Code's subdirectory
+ * CLAUDE.md it does not open the session: it is attached to the result of the first read of a file under `dir`
+ * (relative to the workspace, slash-separated), once per session even when two directories import it.
+ */
+export type NestedInstructionFile = InstructionFile & { readonly dir: string };
+
+/** What a read attaches: a `globs` rule, or a nested instruction file with the importer it names. */
+export type RuleText = Pick<ProjectRule, 'path' | 'text'> & { readonly importedFrom?: string | undefined };
+
 /** A `SKILL.md` under `.agents/skills/*` or `.claude/skills/*`, listed so the model can load it with the skill tool when a task needs it. */
 export type SkillEntry = { readonly name: string; readonly description: string; readonly path: string };
 
@@ -59,6 +69,8 @@ export type LoadedContext = {
   readonly instructions: readonly InstructionFile[];
   readonly rules: readonly ProjectRule[];
   readonly skills: readonly SkillEntry[];
+  /** Outer directories first, each file followed by the files it imports; absent when there are none. */
+  readonly nested?: readonly NestedInstructionFile[] | undefined;
 };
 
 export const EMPTY_CONTEXT: LoadedContext = { instructions: [], rules: [], skills: [] };
@@ -66,7 +78,7 @@ export const EMPTY_CONTEXT: LoadedContext = { instructions: [], rules: [], skill
 export const isEmptyContext = (context: LoadedContext): boolean =>
   context.global === undefined &&
   (context.user ?? []).length === 0 &&
-  context.instructions.length === 0 && context.rules.length === 0 && context.skills.length === 0;
+  context.instructions.length === 0 && context.rules.length === 0 && context.skills.length === 0 && (context.nested ?? []).length === 0;
 
 /**
  * Something attached to one prompt, as the model sees it. `text` is final: a file is numbered and paged like a read,
@@ -75,8 +87,8 @@ export const isEmptyContext = (context: LoadedContext): boolean =>
 export type ContextItem =
   | { readonly kind: 'file'; readonly path: string; readonly text: string }
   | { readonly kind: 'selection'; readonly path: string; readonly startLine: number; readonly endLine: number; readonly text: string }
-  /** A `globs` rule that a mentioned file matched. */
-  | { readonly kind: 'rule'; readonly path: string; readonly matched: string; readonly text: string }
+  /** A `globs` rule or a nested instruction file that a mentioned file matched. */
+  | { readonly kind: 'rule'; readonly path: string; readonly matched: string; readonly text: string; readonly importedFrom?: string | undefined }
   /** The SKILL.md of a skill the user invoked as a slash command. */
   | { readonly kind: 'skill'; readonly name: string; readonly path: string; readonly text: string };
 
@@ -125,16 +137,17 @@ function skillsSection(skills: readonly SkillEntry[]): string[] {
 export function renderLoadedContext(context: LoadedContext): string | undefined {
   if (isEmptyContext(context)) return undefined;
   const always = [...context.instructions.map(instructionBlock), ...rulesOf(context, 'always').map(instructionBlock)];
-  const globs = rulesOf(context, 'globs');
+  const globs = [
+    ...(context.nested ?? []).map((file) => `- ${file.path} (${file.dir}/**)`),
+    ...rulesOf(context, 'globs').map((rule) => `- ${rule.path} (${rule.trigger.globs.join(', ')})`),
+  ];
   const requested = rulesOf(context, 'requested');
   const project = [
     ...(always.length === 0 ? [] : ['Project-specific instructions and guidelines:', ...always]),
     ...(globs.length === 0
       ? []
       : [
-          `These rules apply to particular files. Each is attached once, to the result of the first read of a file it matches:\n${globs
-            .map((rule) => `- ${rule.path} (${rule.trigger.globs.join(', ')})`)
-            .join('\n')}`,
+          `These rules apply to particular files. Each is attached once, to the result of the first read of a file it matches:\n${globs.join('\n')}`,
         ]),
     ...(requested.length === 0
       ? []
@@ -159,13 +172,19 @@ const posixMatches = (file: string, glob: string): boolean => {
   return path.posix.matchesGlob(file, pattern);
 };
 
-/** The `globs` rules that `file` (relative to the workspace, slash-separated) matches. */
-export const rulesMatching = (context: LoadedContext, file: string): ProjectRule[] =>
-  rulesOf(context, 'globs').filter((rule) => rule.trigger.globs.some((glob) => posixMatches(file, glob)));
+/**
+ * What a read of `file` (relative to the workspace, slash-separated) attaches, in load order: the nested instruction
+ * files of its directories, then the `globs` rules it matches. A directory is a prefix, not a glob, so a dotfile or a
+ * name with `[` in it is still under it.
+ */
+export const rulesMatching = (context: LoadedContext, file: string): RuleText[] => [
+  ...(context.nested ?? []).filter((nested) => file.startsWith(`${nested.dir}/`)),
+  ...rulesOf(context, 'globs').filter((rule) => rule.trigger.globs.some((glob) => posixMatches(file, glob))),
+];
 
-/** A `globs` rule attached to a read result or a prompt. The opening tag is how a later run sees it was attached. */
-export const ruleAttachment = (rule: Pick<ProjectRule, 'path' | 'text'>, matched: string): string =>
-  `<project_rule path="${escapeXml(rule.path)}" matched="${escapeXml(matched)}">\n${neutralize(rule.text)}\n</project_rule>`;
+/** A rule attached to a read result or a prompt. The opening tag is how a later run sees it was attached. */
+export const ruleAttachment = (rule: RuleText, matched: string): string =>
+  `<project_rule path="${escapeXml(rule.path)}" matched="${escapeXml(matched)}"${rule.importedFrom === undefined ? '' : ` imported_from="${escapeXml(rule.importedFrom)}"`}>\n${neutralize(rule.text)}\n</project_rule>`;
 
 const ATTACHED = /<project_rule path="([^"]*)"/g;
 
@@ -220,6 +239,7 @@ export function appliedRules(context: LoadedContext, workspace: string): Applied
   return [
     ...[...(context.global === undefined ? [] : [context.global]), ...(context.user ?? [])].map((file) => ({ source: 'global' as const, path: file.path, file: at(file.path), trigger: ALWAYS })),
     ...context.instructions.map((file) => ({ source: 'instructions' as const, path: file.path, file: at(file.path), trigger: ALWAYS })),
+    ...(context.nested ?? []).map((file) => ({ source: 'instructions' as const, path: file.path, file: at(file.path), trigger: { kind: 'globs' as const, globs: [`${file.dir}/**`] } })),
     ...context.rules.map((rule) => ({ source: 'cursor-rule' as const, path: rule.path, file: at(rule.path), trigger: rule.trigger })),
   ];
 }

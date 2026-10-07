@@ -43,6 +43,18 @@ describe('context load order', () => {
     ]);
   });
 
+  it('lists a nested instruction file after the opening ones, as instructions for the files under its directories', () => {
+    const nested: LoadedContext = { ...context, nested: [{ path: 'pkg/AGENTS.md', text: 'Package.', dir: 'pkg' }] };
+    expect(appliedRules(nested, '/repo/ws').map((rule) => [rule.source, rule.path, rule.trigger])).toEqual([
+      ['global', '/home/u/.g-code/AGENTS.md', { kind: 'always' }],
+      ['instructions', '/repo/AGENTS.md', { kind: 'always' }],
+      ['instructions', 'AGENTS.md', { kind: 'always' }],
+      ['instructions', 'pkg/AGENTS.md', { kind: 'globs', globs: ['pkg/**'] }],
+      ['cursor-rule', '.cursor/rules/style.mdc', { kind: 'always' }],
+      ['cursor-rule', '.cursor/rules/react.mdc', { kind: 'globs', globs: ['*.tsx'] }],
+    ]);
+  });
+
   it('renders the global rules before the project instructions, marked as the user\'s own', () => {
     const text = renderLoadedContext(context)!;
     const global = text.indexOf('<global_instructions path="/home/u/.g-code/AGENTS.md">\nAnswer in British English.\n</global_instructions>');
