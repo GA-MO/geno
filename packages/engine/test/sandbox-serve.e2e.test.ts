@@ -42,7 +42,7 @@ describe('gcode serve: two chats in one engine', () => {
       PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     };
     const transport = routedTransport({
-      '[first]': [toolCall('Waiting.', [{ id: 'tu_slow', name: 'bash', input: { command: 'sleep 2; echo first > made.txt' } }], usage), answer('Done.', usage)],
+      '[first]': [toolCall('Waiting.', [{ id: 'tu_slow', name: 'bash', input: { command: 'echo first > made.txt && sleep 2' } }], usage), answer('Done.', usage)],
       '[second]': [toolCall('Writing.', [{ id: 'tu_fast', name: 'bash', input: { command: 'echo second > made.txt' } }], usage), answer('Done.', usage)],
     });
     const io: Io = {
