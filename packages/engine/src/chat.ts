@@ -307,6 +307,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...deleted.map((file) => `  deleted ${file}`),
     ...conflicts.map((conflict) => `  conflict ${conflict.path}: ${conflict.reason}`),
   ],
+  'file-changed': ({ seq, shown, now }) => [`#${seq} ${shown} ${now === null ? 'is gone from disk or too large to track' : 'changed on disk'}; the model was told`],
   'background-end': ({ seq, job, tail }) => [`#${seq} background ${job.id} ${jobEndText(job.state)}: ${job.command}`, ...(tail === '' ? [] : tail.split('\n').map((line) => `  ${line}`))],
 };
 

@@ -55,6 +55,7 @@ export * from './chapters.js';
 export * from './lanes.js';
 export * from './subagent.js';
 export * from './fence.js';
+export * from './file-tracker.js';
 export * from './attention.js';
 export * from './steer.js';
 export * from './tasks.js';

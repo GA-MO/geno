@@ -201,6 +201,8 @@ const keptSchema = z.strictObject({
 });
 const chapterMarkSchema = z.strictObject({ title: z.string().min(1).max(CHAPTER_LIMITS.title), summary: z.string().min(1).max(CHAPTER_LIMITS.summary).optional() });
 
+const diskStateFields = { hash: z.string().min(1), size: count, mtimeMs: z.number().nonnegative() };
+
 const toolResultFields = {
   kind: z.literal('tool-result'),
   ...seqFields,
@@ -216,6 +218,7 @@ const toolResultFields = {
   loaded: z.array(z.string()).optional(),
   spinoff: spinoffNoteSchema.optional(),
   chapter: chapterMarkSchema.optional(),
+  file: z.strictObject({ path: z.string().min(1), ...diskStateFields }).optional(),
   timing: z.strictObject(toolMarks).optional(),
 };
 
@@ -316,6 +319,14 @@ const turnEventSchema = z.union([
       files: z.array(z.string()),
     }),
     z.strictObject({ kind: z.literal('cut'), ...seqFields, turnSeq: seqFields.seq }),
+    z.strictObject({
+      kind: z.literal('file-changed'),
+      ...seqFields,
+      path: z.string().min(1),
+      shown: z.string().min(1),
+      now: z.strictObject(diskStateFields).nullable(),
+      excerpt: z.string().optional(),
+    }),
     z.strictObject({
       kind: z.literal('compact'),
       ...seqFields,
