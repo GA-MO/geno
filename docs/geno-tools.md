@@ -7,12 +7,12 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | pstack / Claude Code action | Geno equivalent |
 |---|---|
 | Invoke a skill (the `Skill` tool, or a `/command` such as `/pstack:how`) | The `skill` tool with `{ "name": "pstack:how" }`. It returns the SKILL.md body and the skill's folder. Resolve each relative path in the skill against that folder. A skill the user typed as a slash command is already attached to the message, so do not load it again. |
-| Load a deferred tool (`ToolSearch`) | `tool_search` with `{ "select": ["<name>"] }` or `{ "query": "<words>" }`. Tools listed by name only in its description must be loaded once before their first call; they then stay callable for the session. |
+| Load a deferred tool (`ToolSearch`) | `tool_search` with `{ "select": ["<name>"] }` or `{ "query": "<words>" }`. Claude Code's query forms work too: `{ "query": "select:<name>,<name>" }` loads those names, and a `+word` in the query keeps only tools whose name holds the word. Tools listed by name only in its description must be loaded once before their first call; they then stay callable for the session. |
 | Read a file | `read`. A file in a skill's folder needs its absolute path, for example `<folder>/references/notes.md`. |
-| Edit a file | `edit`. It replaces one exact text that occurs once in the file. Read the file first. |
-| Create a file | `edit` with `create: true` and the whole content as `new_str`. |
+| Edit a file | `edit`. It replaces one exact text that occurs once in the file. `replace_all: true` replaces every occurrence, as Claude Code's `replace_all` does. Read the file first. |
+| Create a file, or overwrite one (`Write`) | `edit` with `create: true` and the whole content as `new_str`. It overwrites an existing file only when you read it in this session and it has not changed since. |
 | Delete a file | `bash` with `rm`, inside the workspace only. |
-| Run a shell command (`Bash`) | `bash`. It runs in a sandbox with no network beyond localhost. It writes only inside the workspace and a temp folder. Some commands need the user's approval and can be refused. |
+| Run a shell command (`Bash`) | `bash`. It runs in a sandbox with no network beyond localhost. It writes only inside the workspace and a temp folder. Some commands need the user's approval and can be refused. Every command starts at the workspace root, so a `cd` lasts only for the command it is in. A foreground command that starts with `sleep 2` or longer before other commands is refused; wait with `monitor` or `run_in_background` instead. |
 | Search file contents (`Grep`) | `grep`. `path` names the file or directory to search, and `glob` narrows it, as in Claude Code. To search a skill's folder, pass its absolute path as `path`. |
 | Find files (`Glob`) | `glob`. To search a skill's folder, pass its absolute path as `directory`. |
 | List a directory (`ls`) | `list`. |
