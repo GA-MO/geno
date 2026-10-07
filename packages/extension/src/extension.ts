@@ -45,6 +45,7 @@ async function engineSettings(context: vscode.ExtensionContext, output: vscode.O
   return {
     cliPath: engineCli(context),
     cwd: folder.uri.fsPath,
+    trusted: vscode.workspace.isTrusted,
     env: { ...engineEnvOf(runtime), ...resumeEnvOf(vscode.workspace.getConfiguration('gcode')), ...wakeEnvOf(vscode.workspace.getConfiguration('gcode')), ...(rg === undefined ? {} : { GCODE_RG: rg }) },
   };
 }

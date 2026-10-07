@@ -3,6 +3,8 @@ import type { ProviderName } from '@g-code/core';
 import { agentCard, CONFIRMS_IN, type Confirming } from './agents-panel.js';
 import { EXTERNAL_AGENTS, type AgentId, type AgentState } from './agents-model.js';
 import { h, icon, reconcile } from './dom.js';
+import type { HooksFromView } from './hooks-model.js';
+import { hooksSection } from './hooks-panel.js';
 import type { PermissionsFromView } from './permissions-model.js';
 import { permissionsSection } from './permissions-panel.js';
 import type { SkillsFromView } from './skills-model.js';
@@ -205,8 +207,9 @@ function roleRow(role: RoleView, providers: readonly ProviderView[], post: (mess
  * Geno's providers, keys and roles, in the transcript's place while open, styled as the MCP panel is. Keys are
  * write-only: a field takes one and empties, and the page only ever hears whether each is set.
  */
-export function settingsPanel(post: (message: SettingsFromView | PermissionsFromView | SkillsFromView) => void, onToggle: (open: boolean) => void) {
+export function settingsPanel(post: (message: SettingsFromView | PermissionsFromView | HooksFromView | SkillsFromView) => void, onToggle: (open: boolean) => void) {
   const permissions = permissionsSection(post);
+  const hooks = hooksSection(post);
   const skills = skillsSection(post);
   let open = false;
   let listing: SettingsListing | undefined;
@@ -243,6 +246,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
     h('p', { class: 'settings-intro' }, 'A search key lets Geno search the web with web_search. Without one, Geno does not offer search; web_fetch still reads pages.'),
     search,
     permissions.element,
+    hooks.element,
     skills.element,
   );
 
@@ -303,6 +307,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
     post({ type: 'settings-list' });
     post({ type: 'agents-check' });
     permissions.refresh();
+    hooks.refresh();
     skills.refresh();
     render();
     requestAnimationFrame(() => element.querySelector<HTMLElement>('.history-back')?.focus());
@@ -339,6 +344,7 @@ export function settingsPanel(post: (message: SettingsFromView | PermissionsFrom
       render();
     },
     permissionsListed: permissions.listed,
+    hooksListed: hooks.listed,
     skills,
     agentChanged(id: AgentId, state: AgentState): void {
       agentStates.set(id, state);
