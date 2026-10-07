@@ -69,6 +69,7 @@ const EVENT_TOKENS: { readonly [K in TurnEventKind]: (event: EventOf<K>) => numb
   'child-end': none,
   cut: none,
   spinoff: none,
+  chapter: none,
 };
 
 export const eventTokens = (event: TurnEvent): number => (EVENT_TOKENS[event.kind] as (e: TurnEvent) => number)(event);
@@ -145,8 +146,10 @@ export function keptOf(view: readonly TurnEvent[]): Kept {
   const tools = new Map<string, string>();
   let read: string[] = [];
   let changed: string[] = [];
+  let chapters: string[] = [];
   for (const event of view) {
     if (event.kind === 'compact') {
+      chapters = [...(event.kept.chapters ?? [])];
       messages = [...event.kept.messages];
       dropped = event.kept.droppedMessages;
       todo = event.kept.todo;
@@ -167,6 +170,7 @@ export function keptOf(view: readonly TurnEvent[]): Kept {
     }
     if (event.kind === 'tool-result') {
       if (event.todo !== undefined) todo = event.todo;
+      if (event.chapter !== undefined && event.status === 'ok') chapters.push(event.chapter.title);
       if (event.change !== undefined) changed.push(relativeTo(workspace, event.change.path));
       for (const [name, line] of loadedDefinitions(event)) tools.set(name, line);
     }
@@ -178,6 +182,7 @@ export function keptOf(view: readonly TurnEvent[]): Kept {
     todo,
     tools: [...tools.values()],
     files: { read: unique(read), changed: unique(changed) },
+    ...(chapters.length === 0 ? {} : { chapters }),
   };
 }
 
