@@ -21,6 +21,9 @@ const NO_SANDBOX: Sandbox = {
   run: async () => {
     throw new Error('no command runs in this test');
   },
+  wrap: async () => {
+    throw new Error('no command runs in this test');
+  },
   spawn: async () => {
     throw new Error('no command runs in this test');
   },

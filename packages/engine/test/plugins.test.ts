@@ -57,7 +57,7 @@ describe('installed Claude Code plugins', () => {
   it('lists each plugin skill as <plugin>:<skill> with its absolute path, after the workspace and global skills', async () => {
     const { claude, workspace, home, pluginRoot } = await withPstack({ 'ws/.claude/skills/local/SKILL.md': '---\nname: local\ndescription: Local\n---\nbody\n' });
     const scan = await loadPlugins(claude, workspace);
-    expect(scan).toEqual({ plugins: [{ name: 'pstack', root: pluginRoot }], problems: [] });
+    expect(scan).toEqual({ plugins: [{ name: 'pstack', root: pluginRoot, key: 'pstack@pstack-claude' }], problems: [] });
 
     const commands = await loadCommands(workspace, { app: home, user: undefined }, scan.plugins);
     expect(skillNames(commands)).toEqual(['local workspace', 'pstack:how plugin', 'pstack:principle-x plugin']);
@@ -95,7 +95,7 @@ describe('installed Claude Code plugins', () => {
         'beta@market': [{ scope: 'project', projectPath: path.join(root, 'elsewhere'), installPath: path.join(root, 'cache', 'b') }],
       }),
     );
-    expect(await loadPlugins(path.join(root, 'claude'), path.join(root, 'ws'))).toEqual({ plugins: [{ name: 'alpha', root: path.join(root, 'cache', 'a') }], problems: [] });
+    expect(await loadPlugins(path.join(root, 'claude'), path.join(root, 'ws'))).toEqual({ plugins: [{ name: 'alpha', root: path.join(root, 'cache', 'a'), key: 'alpha@market', project: true }], problems: [] });
   });
 
   it('never makes a read root of a plugin folder that holds the Claude config dir, where Claude Code keeps its credentials', async () => {
