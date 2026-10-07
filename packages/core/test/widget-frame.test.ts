@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WIDGET_PALETTE } from '@g-code/core/widget';
-import { FRAME_HEIGHT, frameCsp, frameDocument, fromWidget, standaloneDocument, themeCss, WIDGET_SANDBOX, type WidgetTheme } from '../src/chat/widget-frame.js';
+import { WIDGET_PALETTE } from '../src/widget.js';
+import { FRAME_HEIGHT, frameCsp, frameDocument, fromWidget, standaloneDocument, themeCss, WIDGET_SANDBOX, type WidgetTheme } from '../src/widget-frame.js';
 
 const THEME: WidgetTheme = {
   scheme: 'dark',

@@ -8,6 +8,7 @@
     "./tab": "./src/tab/index.ts",
     "./attachments": "./src/attachments.ts",
     "./widget": "./src/widget.ts",
+    "./widget-frame": "./src/widget-frame.ts",
     "./arena": "./src/arena.ts",
     "./waiting": "./src/waiting.ts",
     "./spend-view": "./src/spend-view.ts",

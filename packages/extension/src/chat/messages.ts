@@ -15,7 +15,7 @@ import type { ChapterFromView, ChapterToView } from './chapter-model.js';
 import type { ChapterMark } from '@g-code/core/chapters';
 import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { PrStatusFromView, PrStatusToView } from './pr-status-model.js';
-import type { WidgetTheme } from './widget-frame.js';
+import type { WidgetTheme } from '@g-code/core/widget-frame';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
 import type { CompactMark } from '@g-code/core/compact';

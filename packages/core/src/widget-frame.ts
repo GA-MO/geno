@@ -1,4 +1,4 @@
-import { WIDGET_PALETTE, WIDGET_VARIABLES, type WidgetVariable } from '@g-code/core/widget';
+import { WIDGET_PALETTE, WIDGET_VARIABLES, type WidgetVariable } from './widget.js';
 
 /**
  * The document a widget runs in, and the messages it may send back. Pure, so the chat panel, the widget's editor

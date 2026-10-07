@@ -3,7 +3,7 @@
 import { h, icon } from './dom.js';
 import type { WidgetFromView } from './messages.js';
 import type { WidgetTool } from './rail.js';
-import { FRAME_HEIGHT, frameDocument, fromWidget, themeCss, TO_FRAME, WIDGET_SANDBOX, widgetTheme, type FromWidget, type WidgetTheme } from './widget-frame.js';
+import { FRAME_HEIGHT, frameDocument, fromWidget, themeCss, TO_FRAME, WIDGET_SANDBOX, widgetTheme, type FromWidget, type WidgetTheme } from '@g-code/core/widget-frame';
 
 /**
  * Widgets as a page shows them: the loading card while the model writes one, then its sandboxed frame. A frame says

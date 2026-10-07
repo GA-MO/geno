@@ -6,7 +6,7 @@ import type { ToolBlock, ToolStatus, ToolWidget, Turn } from '../src/chat/messag
 import { railOf } from '../src/chat/rail.js';
 import { emptyTranscript, reduce } from '../src/chat/transcript.js';
 import { widgetOf } from '../src/chat/widget-model.js';
-import { widgetTheme } from '../src/chat/widget-frame.js';
+import { widgetTheme } from '@g-code/core/widget-frame';
 import { workOf } from '../src/chat/working.js';
 
 const REF = { sha256: 'a'.repeat(64), title: 'Speed', bytes: 12 };
