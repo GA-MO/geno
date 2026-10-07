@@ -56,10 +56,10 @@ function titleOf(tool: ToolBlock): string {
   return description.length <= TITLE_MAX ? description : `${description.slice(0, TITLE_MAX - 1).trimEnd()}…`;
 }
 
-function outputLines(output: string | undefined): readonly string[] | undefined {
+function outputLines(output: string | undefined, status: ToolStatus): readonly string[] | undefined {
   if (output === undefined) return undefined;
   const lines = output.replace(/\s+$/, '').split('\n');
-  if (lines.length > 1 && FAILURE_HEAD.test(lines[0]!)) lines.shift();
+  if (status === 'failed' && lines.length > 1 && FAILURE_HEAD.test(lines[0]!)) lines.shift();
   if (lines.at(-1) === CLEAN_EXIT) lines.pop();
   while (lines.length > 0 && lines.at(-1)!.trim() === '') lines.pop();
   return lines;
@@ -67,7 +67,7 @@ function outputLines(output: string | undefined): readonly string[] | undefined 
 
 export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
   const { background } = tool;
-  const lines = background === undefined ? outputLines(tool.output) : background.tail === '' ? [] : background.tail.split('\n');
+  const lines = background === undefined ? outputLines(tool.output, tool.status) : background.tail === '' ? [] : background.tail.split('\n');
   const truncated = !expanded && lines !== undefined && lines.length > PREVIEW_LINES;
   const shown = lines === undefined || !truncated ? lines : background === undefined ? lines.slice(0, PREVIEW_LINES) : lines.slice(-PREVIEW_LINES);
   return {
