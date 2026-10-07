@@ -241,14 +241,17 @@ export class Scheduler {
     return { ...task, nextAt: task.paused ? null : nextOccurrence(task.when, task.since, this.deps.zone()) };
   }
 
-  private serially<T>(workspace: string, work: () => Promise<T>): Promise<T> {
-    const held = () => holdingLock(this.file(workspace), this.deps.pid, this.deps.alive, work);
-    const next = (this.chains.get(workspace) ?? Promise.resolve()).then(held, held);
+  private inTurn<T>(workspace: string, work: () => Promise<T>): Promise<T> {
+    const next = (this.chains.get(workspace) ?? Promise.resolve()).then(work, work);
     this.chains.set(
       workspace,
       next.catch(() => {}),
     );
     return next;
+  }
+
+  private serially<T>(workspace: string, work: () => Promise<T>): Promise<T> {
+    return this.inTurn(workspace, () => holdingLock(this.file(workspace), this.deps.pid, this.deps.alive, work));
   }
 
   /** One change to the workspace's file, after the ones before it; every editor hears the result, and the timer moves. */
@@ -273,12 +276,20 @@ export class Scheduler {
     if (bound === undefined) return;
     this.timers.get(workspace)?.();
     this.timers.delete(workspace);
-    void this.serially(workspace, () => this.look(workspace)).catch((error: unknown) => bound.err(`schedules: could not look at ${workspace}: ${error instanceof Error ? error.message : String(error)}`));
+    void this.inTurn(workspace, () => this.look(workspace)).catch((error: unknown) => bound.err(`schedules: could not look at ${workspace}: ${error instanceof Error ? error.message : String(error)}`));
   }
 
   private async look(workspace: string): Promise<void> {
-    const { clock, policy, zone, pid, alive } = this.deps;
+    const { clock, pid, alive } = this.deps;
     const file = this.file(workspace);
+    // A workspace with no tasks has nothing to start or record, so its look takes no lock and creates nothing.
+    const wait = (await readTasks(file)).length === 0 ? LOOK_EVERY_MS : await holdingLock(file, pid, alive, () => this.settle(workspace, file));
+    this.timers.set(workspace, clock.setTimer(() => this.soon(workspace), wait));
+  }
+
+  /** Starts or records what came due, under the file's lock, and says how long until the next look. */
+  private async settle(workspace: string, file: string): Promise<number> {
+    const { clock, policy, zone, pid, alive } = this.deps;
     const now = clock.now();
     const before = await readTasks(file);
     const runner = this.runner();
@@ -300,8 +311,7 @@ export class Scheduler {
       return plan.kind === 'wait' ? [plan.at] : [];
     });
     // Another engine may add a task to the file, so even a workspace with nothing to wait for is looked at again.
-    const wait = waits.length === 0 ? LOOK_EVERY_MS : Math.min(Math.max(0, Math.min(...waits) - clock.now()), LOOK_EVERY_MS);
-    this.timers.set(workspace, clock.setTimer(() => this.soon(workspace), wait));
+    return waits.length === 0 ? LOOK_EVERY_MS : Math.min(Math.max(0, Math.min(...waits) - clock.now()), LOOK_EVERY_MS);
   }
 
   /** Starts a run of `task` and records it; its end is recorded once its turn is over. A start that fails is recorded too. */
