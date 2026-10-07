@@ -26,7 +26,7 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
 
   it("T-TOOL-07 output up to the model's spill limit comes back whole, and one character more goes to a file", async () => {
     const limit = (wire === 'anthropic' ? capabilitiesOf('modelstudio', 'qwen3.8-flash') : capabilitiesOf('openai', 'gpt-fake')).spillChars;
-    const status = '[exit code 0]';
+    const status = '\n[exit code 0]';
     const output = (chars: number) => `head -c ${chars} /dev/zero | tr '\\0' a`;
 
     const whole = await bashResult(wire, output(limit - status.length));

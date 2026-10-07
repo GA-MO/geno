@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -233,6 +233,7 @@ export async function drive(
   const ctx: ToolContext = {
     workspace: await workspaceDir(io.cwd, session.workspace),
     spillDir: path.join(store.spillDir, session.id),
+    spillChars: capabilitiesOf(session.provider, session.model).spillChars,
     readRoots: mode.readRoots ?? [],
     attachmentsDir: attachmentsDir(store, session.id),
     rg: io.env['GCODE_RG'] || 'rg',
@@ -261,7 +262,7 @@ export async function drive(
       watcher.toolStart(use, describeCall(use, mode.executors));
       const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter } = await runTool(use, toolCtx, mode.executors);
       watcher.toolEnd(use, status, todo);
-      const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
+      const output = await settle(text, spillFile(ctx.spillDir, seq, use.name), ctx.spillChars);
       const timing = { startAt: started.startAt, endAt: Date.now() };
       running.delete(i);
       results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, ...output, timing };

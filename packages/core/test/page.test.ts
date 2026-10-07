@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linesOf, needsSpill, numberedPage, PAGE_MAX_CHARS, PAGE_MAX_LINES } from '../src/index.js';
+import { linesOf, numberedPage, PAGE_MAX_CHARS, PAGE_MAX_LINES, UNKNOWN_MODEL } from '../src/index.js';
 
 const numbered = (count: number, text = (n: number) => `line ${n}`) => Array.from({ length: count }, (_, i) => text(i + 1));
 
@@ -25,7 +25,7 @@ describe('numberedPage', () => {
     expect(shown.at(-1)).toBe(`${String(last).padStart(4)}\t${lines[last - 1]}`);
     expect(page).toContain(`read again with start_line=${last + 1} to continue.]`);
     expect(page.length).toBeLessThanOrEqual(PAGE_MAX_CHARS + 200);
-    expect(needsSpill(page)).toBe(false);
+    expect(page.length).toBeLessThanOrEqual(UNKNOWN_MODEL.spillChars);
     expect(numberedPage(lines, last + 1, undefined).trimStart().startsWith(`${last + 1}\t`)).toBe(true);
   });
 

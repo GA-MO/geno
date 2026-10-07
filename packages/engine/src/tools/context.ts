@@ -10,6 +10,8 @@ export type ToolContext = {
   readonly workspace: string;
   /** This session's spill directory, readable though outside the workspace. */
   readonly spillDir: string;
+  /** The session's model's spill limit: a longer result goes to the spill directory. */
+  readonly spillChars: number;
   /** Real paths of other roots the read tools may see but nothing may change, such as installed plugins. */
   readonly readRoots: readonly string[];
   /** This session's attachments folder, where an image a tool returns is stored by its hash. */
