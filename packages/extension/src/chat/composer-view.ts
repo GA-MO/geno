@@ -82,7 +82,9 @@ function modelMenu(post: (message: FromView) => void, button: HTMLButtonElement)
     // A chat with no session yet learns its effort from the session's response; asking opens one.
     if (shown.efforts.length === 0) post({ type: 'want-commands' });
     draw();
+    menu.style.removeProperty('--menu-room');
     menu.hidden = false;
+    menu.style.setProperty('--menu-room', `${Math.max(120, menu.getBoundingClientRect().bottom - 8)}px`);
     button.setAttribute('aria-expanded', 'true');
     // The current model takes the keyboard, over the current backend above it.
     const checked = items().filter((item) => item.getAttribute('aria-checked') === 'true');
