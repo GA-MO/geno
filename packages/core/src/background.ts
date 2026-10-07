@@ -1,3 +1,5 @@
+import type { PreviewTag } from './preview.js';
+
 /**
  * Background commands (U45). A `bash` call with `run_in_background` returns at once with a job id; the command runs
  * on in the engine process, its output kept in a capped file, and the session hears when it ends.
@@ -72,6 +74,8 @@ export type BackgroundJob = {
   readonly toolUseId: string;
   readonly command: string;
   readonly description?: string | undefined;
+  /** Set when preview_start ran it: the dev server it is. */
+  readonly preview?: PreviewTag | undefined;
   readonly pid: number;
   readonly state: JobState;
   readonly startedAt: number;
@@ -83,6 +87,7 @@ export type BackgroundJob = {
 /** What the panel and the Tasks pane show of a job. `tail` is the end of its output. */
 export type JobView = Pick<BackgroundJob, 'id' | 'toolUseId' | 'command' | 'state'> & {
   readonly description?: string | undefined;
+  readonly preview?: PreviewTag | undefined;
   readonly tail: string;
 };
 
