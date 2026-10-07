@@ -5,6 +5,7 @@ import type { ComposerFromView, ComposerToView } from './composer-model.js';
 import type { LanesFromView, LanesToView } from './lanes-model.js';
 import type { McpFromView, McpToView } from './mcp-model.js';
 import type { PermissionsFromView, PermissionsToView } from './permissions-model.js';
+import type { SkillsFromView, SkillsToView } from './skills-model.js';
 import type { SettingsFromView, SettingsToView } from './settings-model.js';
 import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { RewindFromView, RewindToView } from './rewind-model.js';
@@ -386,6 +387,7 @@ export type ToView =
   | McpToView
   | SettingsToView
   | PermissionsToView
+  | SkillsToView
   | ContextToView
   | ComposerToView
   | LanesToView
@@ -500,6 +502,7 @@ export type FromView =
   | McpFromView
   | SettingsFromView
   | PermissionsFromView
+  | SkillsFromView
   | ContextFromView
   | ComposerFromView
   | LanesFromView

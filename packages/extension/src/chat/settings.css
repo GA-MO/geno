@@ -516,3 +516,154 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
 .perm-refused[hidden] {
   display: none;
 }
+
+.skills-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skills-section [hidden] {
+  display: none;
+}
+
+.settings-subheading {
+  margin: 6px 2px 0;
+  font-size: var(--small);
+  font-weight: 600;
+}
+
+.skills-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 12px;
+}
+
+.skills-row + .skills-row {
+  border-top: 1px solid var(--border);
+}
+
+.skills-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.skills-name {
+  overflow-wrap: anywhere;
+}
+
+.skills-description,
+.skills-path {
+  margin: 0;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.skills-path {
+  color: var(--muted);
+}
+
+.skills-hit-description {
+  padding: 0 12px 8px 30px;
+  margin-top: -4px;
+}
+
+.skills-source {
+  color: var(--muted);
+}
+
+.skills-catalog .codicon {
+  flex: none;
+  color: var(--muted);
+}
+
+.skills-search {
+  display: flex;
+}
+
+.skills-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skills-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  font-size: var(--small);
+  list-style: none;
+}
+
+.skills-files li {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skills-files code {
+  overflow-wrap: anywhere;
+}
+
+.skills-size {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.skills-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.skills-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 0;
+  font-size: var(--small);
+}
+
+.skills-fields dt {
+  color: var(--muted);
+}
+
+.skills-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.skills-body {
+  max-height: 16em;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background, var(--surface-2));
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.skills-body:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+
+.skills-install .skills-scope {
+  flex: 1 1 12em;
+}
