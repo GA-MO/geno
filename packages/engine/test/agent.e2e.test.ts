@@ -148,7 +148,7 @@ describe('gcode agent', () => {
     const resumed = await runCli(['agent', '--session', id, '--non-interactive', 'What changed?'], env, { fetch: transport.fetch });
     expect(resumed.code).toBe(0);
     expect(transport.requests[3]!.body.messages.at(-1).content.map((b: { text: string }) => b.text)).toEqual([
-      '[The user rewound the workspace to how it was before turn 6. These files were restored: a.ts. Read a file again before editing it.]',
+      '[Geno] The user rewound the workspace to how it was before turn 6. These files were restored: a.ts. Read a file again before editing it.',
       'What changed?',
     ]);
   });

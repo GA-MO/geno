@@ -13,7 +13,7 @@ export const MAX_EDIT_CALLS = 8;
 
 // The agent's prompt promises read, search and shell tools; here the file is in the message and the edit
 // tool is the only one, so the model must not go looking for others.
-export const EDIT_SYSTEM_PROMPT = `You are g-code's edit applier. You change exactly one file to carry out an instruction from an experienced engineer.
+export const EDIT_SYSTEM_PROMPT = `You are Geno's edit applier. You change exactly one file to carry out an instruction from an experienced engineer.
 
 The user's message holds the file's complete current content, every line prefixed with its number and a tab. Those prefixes are not part of the file.
 

@@ -277,7 +277,7 @@ describe('gcode serve: subagents', () => {
     expect(childCall!.body.messages.slice(0, -1), "every message before the call's answers").toEqual(parentNext!.body.messages.slice(0, -1));
     expect(childCall!.body.messages).toHaveLength(3);
     expect(JSON.stringify(childCall!.body.messages.at(-1))).toContain('This call started you, a forked subagent.');
-    expect(JSON.stringify(childCall!.body.messages.at(-1))).toContain('[You are now explore');
+    expect(JSON.stringify(childCall!.body.messages.at(-1))).toContain('[Geno] You are now explore');
     const [child] = childrenOf(log.events);
     expect(child).toMatchObject({ start: 'fork', model: log.session.model });
     expect((await childLog(child!.child)).events.map((e) => e.kind)).toEqual(['session-start', 'user', 'assistant', 'tool-result', 'user', 'assistant']);

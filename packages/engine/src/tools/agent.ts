@@ -17,6 +17,7 @@ import {
   AGENT_MODE_TOOLS,
   AGENT_TOOL_NAMES,
   MODE_REFUSALS,
+  neutralizeNoticeLines,
   nextAutoState,
   OUTCOME_VERDICTS,
   restoreHidden,
@@ -213,7 +214,7 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
     writable,
   });
   const output = tail(result.output);
-  return { passed: result.code === 0, text: `${checkHeadline(shown, result.code, result.timedOut)}${output === '' ? '' : `\n${output}`}` };
+  return { passed: result.code === 0, text: `${checkHeadline(shown, result.code, result.timedOut)}${output === '' ? '' : `\n${neutralizeNoticeLines(output)}`}` };
 }
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
@@ -336,7 +337,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const killedAfter = result.timedOut ? timeout_seconds : undefined;
       const failure = commandFailureLine(result.code, killedAfter);
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
-      const output = `${result.output}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
+      const output = `${neutralizeNoticeLines(result.output)}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
       const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${commandStatusLine(result.code, killedAfter)}`;
       return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };
     },

@@ -17,6 +17,7 @@ import {
   type Session,
   type SteerAction,
   type TurnEvent,
+  userSteerText,
 } from '../src/index.js';
 
 const at = '2026-10-06T00:00:01.000Z';
@@ -75,7 +76,7 @@ describe('steer events', () => {
     const was = replayMessages(before);
     const now = replayMessages(after);
     expect(now.slice(0, -1)).toEqual(was.slice(0, -1));
-    expect(now.at(-1)).toEqual({ role: 'user', content: [...(was.at(-1)!.content as unknown[]), { type: 'text', text: 'and look at b.ts' }] });
+    expect(now.at(-1)).toEqual({ role: 'user', content: [...(was.at(-1)!.content as unknown[]), { type: 'text', text: userSteerText('and look at b.ts') }] });
   });
 
   it('marks the log event, and only a non-user steer says who sent it', () => {

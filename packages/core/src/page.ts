@@ -1,5 +1,6 @@
 // Portions ported from Pi (https://github.com/earendil-works/pi) at b2b5c42, Copyright (c) 2025 Mario Zechner, MIT License.
 
+import { neutralizeNoticeLines } from './fence.js';
 import { PAGE_MAX_CHARS, PAGE_MAX_LINES } from './tools.js';
 
 const formatCount = (n: number): string => n.toLocaleString('en-US');
@@ -17,7 +18,7 @@ export function numberedPage(lines: readonly string[], first: number, last: numb
   let chars = 0;
   let line = first;
   for (; line <= wanted && shown.length < PAGE_MAX_LINES; line++) {
-    const numbered = `${String(line).padStart(width)}\t${lines[line - 1]!}`;
+    const numbered = `${String(line).padStart(width)}\t${neutralizeNoticeLines(lines[line - 1]!)}`;
     if (chars + numbered.length + 1 > PAGE_MAX_CHARS) {
       if (shown.length > 0) break;
       const cut = numbered.slice(0, PAGE_MAX_CHARS);

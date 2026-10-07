@@ -5,38 +5,39 @@ import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/me
 import {
   AGENT_TOOL,
   AGENT_TOOL_DEFINITIONS,
+  type AgentDefinition,
   agentMention,
+  type AgentSource,
   agentToolDefinition,
   asSessionId,
+  type AssistantTurn,
   BUILTIN_AGENTS,
   childCaps,
+  type ChildCaps,
+  type ChildEnd,
   childEndOf,
   childEndWords,
+  type ChildNote,
   childReport,
+  type ChildStart,
   childSummary,
   childSystemPrompt,
+  type Effort,
   EXTERNAL_BACKENDS,
   forkOpening,
   forkTask,
+  GENO_NOTE,
   isReadOnly,
   mergeAgents,
   MESSAGE_AGENT_TOOL,
   STOP_AND_WAIT,
   messageAgentResult,
   parseAgentDefinition,
-  sessionEffortOf,
-  ZERO_USAGE,
-  type AgentDefinition,
-  type AgentSource,
-  type AssistantTurn,
-  type ChildCaps,
-  type ChildEnd,
-  type ChildNote,
-  type ChildStart,
-  type Effort,
   type Session,
+  sessionEffortOf,
   type SessionId,
   type TurnEvent,
+  ZERO_USAGE,
 } from '@g-code/core';
 import { formatCost, totalOf, type OpenSession } from './chat.js';
 import type { Io } from './command.js';
@@ -337,7 +338,7 @@ export function subagents(env: SubagentEnv): Subagents {
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
     const report = reportOf(ran);
-    const notes = lane == null ? [] : [`[${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.]`];
+    const notes = lane == null ? [] : [`${GENO_NOTE} ${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.`];
     const summary = childSummary([report, ...notes].filter((part) => part !== '').join('\n\n'));
     const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary };
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });

@@ -61,7 +61,7 @@ async function setup() {
 type Body = { messages: { role: string; content: { type: string; text?: string; content?: string; tool_use_id?: string }[] }[] };
 const lastUser = (body: Body) => body.messages.at(-1)!.content;
 const resultOf = (body: Body, id: string): string => lastUser(body).find((block) => block.tool_use_id === id)!.content!;
-const notices = (body: Body): string[] => lastUser(body).flatMap((block) => (block.type === 'text' && block.text?.startsWith('[Background command') ? [block.text] : []));
+const notices = (body: Body): string[] => lastUser(body).flatMap((block) => (block.type === 'text' && block.text?.includes('\nBackground command') ? [block.text] : []));
 const ofKind = <K extends TurnEvent['kind']>(events: readonly TurnEvent[], kind: K) => events.filter((e): e is Extract<TurnEvent, { kind: K }> => e.kind === kind);
 
 describe('background commands in a run', () => {
@@ -114,7 +114,7 @@ describe('background commands in a run', () => {
     // One the rules let by still runs in the sandbox, which writes only inside the workspace.
     expect(resultOf(bodies[7]!, escape.id)).toMatch(/^Started background command bg-3\./);
     expect(existsSync(outside)).toBe(false);
-    expect(bodies.flatMap(notices).filter((text) => text.includes('bg-3'))).toEqual([expect.stringMatching(/^\[Background command bg-3 \(`echo x > .*escaped\.txt"`\) exited with code 1\. The end of its output:\n.*(Operation not permitted|Read-only file system)/s)]);
+    expect(bodies.flatMap(notices).filter((text) => text.includes('bg-3'))).toEqual([expect.stringMatching(/^\[Geno\] .*\nBackground command bg-3 \(`echo x > .*escaped\.txt"`\) exited with code 1\. .*(Operation not permitted|Read-only file system)/s)]);
 
     const id = /^session: (\S+)$/m.exec(result.stdout)![1]!;
     const log = await readSessionLog(sessionFile(store, asSessionId(id)));
@@ -206,7 +206,7 @@ describe('background commands in the engine process', () => {
 
     expect((await prompt(first, sessionId, 'Is it done?')).stopReason).toBe('end_turn');
     const next = lastUser(model.requests[2]!.body as Body).map((block) => block.text);
-    expect(next).toEqual([expect.stringMatching(/^\[Background command bg-1 .* exited with code 0\. The end of its output:\nserved\n\]$/), 'Is it done?']);
+    expect(next).toEqual([expect.stringMatching(/^\[Geno\] .*\nBackground command bg-1 .* exited with code 0\. .*\n<command_output id="bg-1">\nserved\n<\/command_output>$/), 'Is it done?']);
 
     expect((await prompt(first, sessionId, 'Start a long one')).stopReason).toBe('end_turn');
     expect((await first.agent.request<TasksResponse>(TASKS_METHOD, {})).tasks[0]!.jobs).toEqual([expect.objectContaining({ id: 'bg-2', command: 'sleep 63.29' })]);

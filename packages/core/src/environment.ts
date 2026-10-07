@@ -52,8 +52,8 @@ export const GIT_COMMITS = 5;
 export const KEY_SCRIPTS = ['dev', 'build', 'start', 'test', 'lint', 'typecheck', 'check', 'format'] as const;
 export const KEY_PACKAGES = ['next', 'payload', 'react'] as const;
 
-/** What Geno's bash runs each command with (engine/src/process.ts). */
-const COMMAND_SHELL = '/bin/sh';
+/** What Geno's bash runs each command with: the sandbox wraps it in `bash -c` (sandbox-runtime's default shell). */
+const COMMAND_SHELL = 'bash';
 
 const PLATFORM_NOTES: Readonly<Record<string, string>> = {
   darwin: " (macOS). Commands use the BSD tools: edit a file in place with sed -i '' -e '…' file, and GNU-only flags may fail.",
@@ -91,7 +91,7 @@ export function renderEnvironment(env: Environment, session: SessionFacts): stri
     ` - Is a git repository: ${env.git !== undefined}`,
     ` - Platform: ${env.platform}${PLATFORM_NOTES[env.platform] ?? ''}`,
     ` - OS version: ${env.osVersion}`,
-    ` - Shell: bash runs each command with ${COMMAND_SHELL} -c in the workspace${env.loginShell === undefined ? '' : `; the user's login shell is ${env.loginShell}`}.`,
+    ` - Shell: the bash tool runs each command with ${COMMAND_SHELL} -c in the workspace${env.loginShell === undefined ? '' : `; the user's login shell is ${env.loginShell}`}.`,
     ` - Scratchpad directory: ${env.scratchpad}. Use it for temporary files, such as scripts and intermediate output, instead of /tmp or the workspace. It is this session's own, and writing there needs no approval.`,
     ` - Date: ${env.date}, the local date when this session started. Run date for the current time.`,
     ` - Model: ${session.model} on ${specOf(session.provider).label}`,

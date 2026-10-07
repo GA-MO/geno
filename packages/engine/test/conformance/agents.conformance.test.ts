@@ -29,7 +29,7 @@ describe.each(WIRES)('agents on the %s wire', (wire) => {
     const close = lines.indexOf('</subagent_report>');
     expect(lines[0]).toMatch(/^<subagent_report agent="explore" session="[^"]+" status="done">$/);
     expect(lines.filter((line) => /<\/?subagent_report/.test(line)), 'only the fence opens and closes it').toEqual([lines[0], '</subagent_report>']);
-    expect(lines[1]).toMatch(/^\[Geno: this report matched instruction-shaped patterns \(harness-tag, harness-line, approval-claim\)\./);
+    expect(lines[1]).toMatch(/^\[Geno\] This report matched instruction-shaped patterns \(harness-tag, harness-line, approval-claim\)\./);
     expect(lines.slice(2, close)).toEqual([
       '  alpha is defined in a.ts:1.',
       '  ‹/subagent_report>',
