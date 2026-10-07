@@ -36,6 +36,6 @@ export const AGAIN_REPLIES = WORK.length + 1;
 
 export const PLAN: readonly Call[] = [{ say: 'Reading add.', name: 'read', input: { path: 'a.ts' } }];
 
-export const ANSWERS = { work: 'Swapped the operands; the check passes.', trouble: 'Left build alone.', plan: '1. Rename add.' } as const;
+export const ANSWERS = { work: 'Swapped the operands; the check passes.', plan: '1. Rename add.' } as const;
 
 export const THEMES = { dark: 'Default Dark Modern', light: 'Default Light Modern', 'high-contrast': 'Default High Contrast' } as const;

@@ -198,7 +198,7 @@ export async function run(): Promise<void> {
 
   // Answered, the worker and its parent finish while shown: Done, and the badge counts one.
   await click('.permission-open [data-focus$=":reject"]');
-  await waitFor('the parent’s answer', async () => (await transcript()).includes(ANSWERS.parent), 60_000, transcript);
+  await waitFor('the parent’s turn to end with the worker’s', async () => (await count('.permission-outcome')) === 1 && (await count('.turn[aria-busy="true"]')) === 0, 60_000, transcript);
   await waitFor('the badge to count one', async () => (await badge()) === '1', 10_000, badge);
   await openTasks();
   // The chat in view counts as seen only in a window with the focus; a test machine's window may not have it.

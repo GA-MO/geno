@@ -8,7 +8,7 @@ import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-tr
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { captureWindow, freePort } from './screenshot.js';
-import { ASKING, ASKING_ANSWER, FILES, LONG, LONG_ANSWER } from './suite/fold-fixture.js';
+import { ASKING, FILES, LONG, LONG_ANSWER } from './suite/fold-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
 const MODEL = 'qwen3.8-flash';
@@ -22,7 +22,7 @@ const asModel = (reply: Reply): Reply => ({
 const rounds = (prefix: string, calls: typeof LONG): Reply[] =>
   calls.map((call, i) => toolCall(call.narration, [{ id: `${prefix}${i}`, name: call.name, input: call.input }], usage));
 
-const replies: readonly Reply[] = [...rounds('tu_long_', LONG), asModel(answer(LONG_ANSWER, usage)), ...rounds('tu_ask_', ASKING), asModel(answer(ASKING_ANSWER, usage))];
+const replies: readonly Reply[] = [...rounds('tu_long_', LONG), asModel(answer(LONG_ANSWER, usage)), ...rounds('tu_ask_', ASKING)];
 
 const requests: unknown[] = [];
 /** GCODE_SCREENSHOTS names a folder for the window captures. */

@@ -1,4 +1,4 @@
-import { ANSWERS, MARKERS } from './attention-fixture.js';
+import { MARKERS } from './attention-fixture.js';
 import { badge, openTasks, rowOf, sectionOf, sectionsShown } from './attention.js';
 import { check, click, count, openPanel, panelWidth, press, shown, textOf, ui, view, waitFor } from './lanes-ui.js';
 
@@ -18,7 +18,7 @@ export async function run(): Promise<void> {
   await click(`${rowOf(MARKERS.ask)} .task-title`);
   await waitFor('the card in the chat', async () => (await view()) === 'chat' && (await count('.permission-open[data-permission]')) === 1, 30_000, async () => textOf('.transcript'));
   await click('.permission-open [data-focus$=":reject"]');
-  await waitFor('the refused turn’s answer', async () => ((await textOf('.transcript')) ?? '').includes(ANSWERS.ask), 60_000, async () => textOf('.transcript'));
+  await waitFor('the refused turn to end', async () => (await count('.permission-outcome')) === 1 && (await count('.turn[aria-busy="true"]')) === 0, 60_000, async () => textOf('.transcript'));
   await ui({ do: 'release', name: 'slow' });
   await openTasks();
   await waitFor('nothing left working or waiting', async () => (await listed()).order.join() === 'ready,done', 60_000, listed);

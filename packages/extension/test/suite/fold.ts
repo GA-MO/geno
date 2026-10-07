@@ -150,7 +150,8 @@ export async function run(): Promise<void> {
   await click('.permission-open button', 'Deny');
   await waitFor('the denied turn to finish', async () => (await count('.turn-footer')) === 2);
   const denied = await railOf('t1');
-  check(denied.fold === ASKING_SUMMARY && JSON.stringify(denied.steps) === JSON.stringify(['fold', 'text']), 'the finished turn counts the denied command in its summary', denied);
+  // The user's no ends the turn, so no answer follows it: the summary is all the finished turn shows.
+  check(denied.fold === ASKING_SUMMARY && JSON.stringify(denied.steps) === JSON.stringify(['fold']), 'the finished turn counts the denied command in its summary', denied);
 
   await vscode.workspace.getConfiguration('gcode').update('chat.detail', undefined, vscode.ConfigurationTarget.Global);
 }

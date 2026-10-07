@@ -33,12 +33,12 @@ const SCRIPTS: Readonly<Record<string, readonly Scripted[]>> = {
     { reply: asModel(toolCall('Reading a.ts.', [{ id: 'tu_slow_read', name: 'read', input: { path: 'a.ts' } }], usage)) },
     { reply: asModel(answer(ANSWERS.slow, usage)), hold: 'slow' },
   ],
-  [MARKERS.ask]: [{ reply: asModel(toolCall('Downloading.', [bash('tu_ask_curl')], usage)) }, { reply: asModel(answer(ANSWERS.ask, usage)) }],
+  // The user rejects these downloads, which ends the child's turn and its parent's: no answer follows.
+  [MARKERS.ask]: [{ reply: asModel(toolCall('Downloading.', [bash('tu_ask_curl')], usage)) }],
   [MARKERS.parent]: [
     { reply: asModel(toolCall('Handing it over.', [{ id: 'tu_worker', name: 'agent', input: { agent: 'worker', task: CHILD_TASK } }], usage)) },
-    { reply: asModel(answer(ANSWERS.parent, usage)) },
   ],
-  [MARKERS.child]: [{ reply: asModel(toolCall('Downloading.', [bash('tu_child_curl')], usage)) }, { reply: asModel(answer(ANSWERS.child, usage)) }],
+  [MARKERS.child]: [{ reply: asModel(toolCall('Downloading.', [bash('tu_child_curl')], usage)) }],
   [MARKERS.lane]: [{ reply: asModel(answer(ANSWERS.lane, usage)) }],
 };
 
@@ -149,14 +149,15 @@ describe('the Tasks list, by what each task needs of the user', () => {
       });
 
     expect(await launch(suite)).toBe(0);
-    expect(requests[MARKERS.child], 'the worker asked once and answered after the refusal').toHaveLength(2);
-    expect(requests[MARKERS.parent]).toHaveLength(2);
+    // The user's no ends the worker's turn and its parent's, so neither calls the model again.
+    expect(requests[MARKERS.child], 'the worker asked once').toHaveLength(1);
+    expect(requests[MARKERS.parent]).toHaveLength(1);
 
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
     window?.browser.close();
     window = undefined;
     expect(await launch(await buildSuite(work, 'attention-reload'))).toBe(0);
-    expect(requests[MARKERS.ask], 'the card waited through the reload, and its turn was not sent again').toHaveLength(2);
+    expect(requests[MARKERS.ask], 'the card waited through the reload, its turn was not sent again, and the no ended it').toHaveLength(1);
     expect(requests[MARKERS.slow]).toHaveLength(2);
   }, 900_000);
 });

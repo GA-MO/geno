@@ -38,7 +38,6 @@ const replies: readonly Reply[] = [
   toolCall('Making the three edits.', [tool(TOOL_IDS.editA, 'edit', EDITS.addOrder), tool(TOOL_IDS.editB, 'edit', EDITS.greeting), tool(TOOL_IDS.editC, 'edit', EDITS.double)], usage),
   asModel(answer(ANSWER, usage)),
   toolCall('Removing the build output.', [tool('tu_rm_1', 'bash', { command: 'rm -rf build' })], usage),
-  asModel(answer('You declined, so `build` stays.', usage)),
   toolCall('Removing it.', [tool('tu_rm_2', 'bash', { command: 'rm -rf build' })], usage),
   asModel(answer('Removed `build`.', usage)),
   stalled(),
