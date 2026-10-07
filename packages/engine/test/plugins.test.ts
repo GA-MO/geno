@@ -162,7 +162,7 @@ describe('a plugin root as a read-only root', () => {
     const how = path.join(pluginRoot, 'skills', 'how');
     expect(await call(ctx, 'read', { path: path.join(how, 'references', 'explorer.md') })).toEqual({ status: 'ok', text: '1\tExplore with grep.' });
     expect(await call(ctx, 'list', { directory: how })).toEqual({ status: 'ok', text: [`${how}/SKILL.md`, `${how}/references/`, `${how}/references/explorer.md`].join('\n') });
-    expect(await call(ctx, 'grep', { pattern: 'grep', directory: pluginRoot })).toEqual({ status: 'ok', text: `${how}/references/explorer.md:1:Explore with grep.` });
+    expect(await call(ctx, 'grep', { pattern: 'grep', path: pluginRoot })).toEqual({ status: 'ok', text: `${how}/references/explorer.md:1:Explore with grep.` });
     expect(await call(ctx, 'glob', { pattern: '**/SKILL.md', directory: pluginRoot })).toEqual({
       status: 'ok',
       text: [`${how}/SKILL.md`, `${pluginRoot}/skills/principle-x/SKILL.md`].join('\n'),
@@ -172,7 +172,7 @@ describe('a plugin root as a read-only root', () => {
   it('still refuses a path outside every root', async () => {
     const { ctx, root } = await setup();
     expect(await call(ctx, 'read', { path: path.join(root, 'outside', 'secret.txt') })).toEqual({ status: 'error', text: expect.stringMatching(/outside the workspace/) });
-    expect(await call(ctx, 'grep', { pattern: 'secret', directory: path.join(root, 'outside') })).toEqual({ status: 'error', text: expect.stringMatching(/outside the workspace/) });
+    expect(await call(ctx, 'grep', { pattern: 'secret', path: path.join(root, 'outside') })).toEqual({ status: 'error', text: expect.stringMatching(/outside the workspace/) });
   });
 
   it('refuses an edit or a new file there', async () => {
@@ -225,5 +225,30 @@ describe('docs/geno-tools.md', () => {
   it('is shipped in the engine bundle byte for byte; run scripts/geno-tools.ts after editing it', async () => {
     const { GENO_TOOLS } = await import('../src/geno-tools.generated.js');
     expect(GENO_TOOLS).toBe(await readFile(path.join(import.meta.dirname, '..', '..', '..', 'docs', 'geno-tools.md'), 'utf8'));
+  });
+
+  it('B/B-25 maps the Agent tool to agent and SendMessage to message_agent when the run offers them', async () => {
+    const { renderGenoTools } = await import('../src/geno-tools.js');
+    const text = renderGenoTools({ subagents: true });
+    expect(text).toMatch(/^\| Start a subagent \(`Agent`, `Task`\).*\| `agent` with \{ "agent":/m);
+    expect(text).toMatch(/^\| Steer a running subagent \(`SendMessage`\) \| `message_agent`/m);
+    expect(text).not.toMatch(/There are no subagents|in one sequential pass/);
+  });
+
+  it('B/B-25 says there are no subagents when the run offers no agent tool', async () => {
+    const { renderGenoTools } = await import('../src/geno-tools.js');
+    const text = renderGenoTools({ subagents: false });
+    expect(text).toMatch(/^\| Start a subagent \(`Agent`, `Task`\).*\| Not available\. Do the work yourself in one sequential pass\./m);
+    expect(text).not.toMatch(/`agent` with|message_agent/);
+  });
+
+  it('renders one Subagents section, the one that matches, from the two in the doc', async () => {
+    const { renderGenoTools } = await import('../src/geno-tools.js');
+    for (const subagents of [true, false]) {
+      const text = renderGenoTools({ subagents });
+      expect(text.match(/^## Subagents$/gm), String(subagents)).toHaveLength(1);
+      expect(text).not.toMatch(/^## Subagents\b.+$/m);
+      expect(text).not.toMatch(/<!--/);
+    }
   });
 });
