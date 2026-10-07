@@ -31,6 +31,11 @@ import {
   parseSpawnTask,
   SPAWN_TASK_TOOL,
   SPINOFF_META,
+  CHAPTER_META,
+  chaptersOf,
+  MARK_CHAPTER_TOOL,
+  parseChapterMark,
+  userChapterAt,
   spinoffShownOf,
   spinoffsOf,
   type Spinoff,
@@ -112,6 +117,10 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseSpawnTask(input);
     return parsed.ok ? `${SPAWN_TASK_TOOL} ${parsed.value.title}` : SPAWN_TASK_TOOL;
   },
+  [MARK_CHAPTER_TOOL]: (input) => {
+    const parsed = parseChapterMark(input);
+    return parsed.ok ? `${MARK_CHAPTER_TOOL} ${parsed.value.title}` : MARK_CHAPTER_TOOL;
+  },
   [DISMISS_TASK_TOOL]: (input) => {
     const parsed = parseDismissTask(input);
     return parsed.ok ? `${DISMISS_TASK_TOOL} ${parsed.value}` : DISMISS_TASK_TOOL;
@@ -165,6 +174,7 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
     ...(event.widget === undefined ? {} : { [WIDGET_META]: event.widget }),
     ...(event.editorAction === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction }),
     ...(event.todo === undefined ? {} : { [TODO_META]: { items: event.todo } }),
+    ...(event.chapter === undefined || event.status !== 'ok' ? {} : { [CHAPTER_META]: event.chapter }),
     ...meta,
   };
   return {
@@ -210,7 +220,7 @@ function runsOf(events: readonly TurnEvent[]): Run[] {
 }
 
 /** What is logged after a turn ended without being part of it: background reports, and the user's settings and decisions. */
-const LOGGED_AROUND_TURNS: ReadonlySet<TurnEvent['kind']> = new Set(['background-end', 'child-end', 'wake', 'mode', 'effort', 'backend-model', 'title', 'review', 'spinoff']);
+const LOGGED_AROUND_TURNS: ReadonlySet<TurnEvent['kind']> = new Set(['background-end', 'child-end', 'wake', 'mode', 'effort', 'backend-model', 'title', 'review', 'spinoff', 'chapter']);
 
 /** A turn the user started with a prompt, as opposed to a lane apply or a /compact, which have no prompt to rewind to. */
 const isPromptRun = (events: readonly TurnEvent[]): boolean => events[0]?.kind !== 'lane-apply' && !(events[0]?.kind === 'compact' && events[0].trigger === 'manual');
@@ -254,12 +264,18 @@ const reviewed = (change: FileChange, status: ReadonlyMap<HunkId, HunkStatus>): 
 export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: WidgetRef) => ShownWidget = NO_WIDGETS): acp.SessionUpdate[] {
   const status = new Map(reviewState(events).map((hunk) => [hunk.id, hunk.status]));
   const spinoffs = spinoffsOf(events);
+  const chapters = chaptersOf(events);
   const start = events[0];
   const workspace = start?.kind === 'session-start' ? start.session.workspace : undefined;
   return runsOf(events).flatMap((run) => {
     const meta: ReplayedTurn = turnOf(run);
+    const chapter = meta.seq === undefined ? undefined : userChapterAt(chapters, meta.seq);
     const updates: acp.SessionUpdate[] = [
-      { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: run.prompt.content }, _meta: { [REPLAYED_TURN_META]: meta, ...wakeMetaOf(run.prompt) } },
+      {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: run.prompt.content },
+        _meta: { [REPLAYED_TURN_META]: meta, ...wakeMetaOf(run.prompt), ...(chapter === undefined ? {} : { [CHAPTER_META]: { title: chapter.title, ...(chapter.summary === undefined ? {} : { summary: chapter.summary }) } }) },
+      },
     ];
     for (const event of run.events) {
       if (event.kind === 'assistant') {

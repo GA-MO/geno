@@ -31,6 +31,11 @@ import {
   type ScheduledTask,
   type SchedulePolicy,
   type SchedulesResponse,
+  CHAPTER_CAPABILITY,
+  CHAPTER_MARK_METHOD,
+  parseChapterMark,
+  promptAt,
+  type ChapterMarkResponse,
   SPINOFF_DISMISS_METHOD,
   SPINOFF_START_METHOD,
   laneNameFor,
@@ -358,6 +363,8 @@ type Peer = {
   readonly spinoffs: boolean;
   /** It lists scheduled tasks and asks the user about a change, so the model gets schedule_task. */
   readonly schedules: boolean;
+  /** It draws chapters, so the model gets mark_chapter. */
+  readonly chapters: boolean;
 };
 
 const NO_PEER: Peer = {
@@ -375,6 +382,7 @@ const NO_PEER: Peer = {
   terminals: false,
   spinoffs: false,
   schedules: false,
+  chapters: false,
 };
 
 /**
@@ -1018,6 +1026,7 @@ const lanePrompt = z.object({ cwd: z.string(), prompt: z.string().trim().min(1),
 const laneDiscardRequest = z.object({ cwd: z.string(), name: z.string().min(1), discardChanges: z.boolean() });
 const lanesRequest = z.object({ cwd: z.string() });
 const spinoffRequest = z.object({ sessionId: z.string(), id: z.string().min(1), mode: z.string().optional() });
+const chapterRequest = z.object({ sessionId: z.string(), turnSeq: z.number().int().positive(), mark: z.unknown() });
 const arenaSizeOf = (n: number, params: unknown): 2 | 3 | 4 => {
   if (!isArenaSize(n)) throw acp.RequestError.invalidParams(params, `best-of-n runs 2 to 4 lanes, not ${n}`);
   return n;
@@ -1434,6 +1443,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 user: run.scheduled === true ? {} : shown.user,
                 widgets: from.peer.widgets,
                 spinoffs: from.peer.spinoffs,
+                chapters: from.peer.chapters,
                 editor: run.scheduled === true ? undefined : editor,
                 terminal: run.scheduled === true ? undefined : terminal,
                 schedules: from.peer.schedules && run.scheduled !== true ? await scheduleToolsFor(sessionId, header.session.workspace, shown) : undefined,
@@ -1666,6 +1676,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         terminals: _meta?.[READ_TERMINAL_CAPABILITY] === true,
         spinoffs: _meta?.[SPINOFF_CAPABILITY] === true,
         schedules: _meta?.[SCHEDULES_CAPABILITY] === true,
+        chapters: _meta?.[CHAPTER_CAPABILITY] === true,
       };
       runner ??= { connection: self(), start: startScheduled };
       schedules.connected(runner);
@@ -1904,6 +1915,16 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(SPINOFF_DISMISS_METHOD, spinoffRequest, async ({ params }): Promise<SpinoffResponse> => ({
       spinoff: await decideSpinoff(params.sessionId, await openSpinoff(params.sessionId, params.id), { kind: 'dismissed' }),
     }))
+    .onRequest(CHAPTER_MARK_METHOD, chapterRequest, async ({ params }): Promise<ChapterMarkResponse> => {
+      const parsed = params.mark === null ? ({ ok: true, value: null } as const) : parseChapterMark(params.mark);
+      if (!parsed.ok) throw acp.RequestError.invalidParams(params, parsed.problem);
+      const log = await existing(params.sessionId);
+      if (promptAt(log.events, params.turnSeq) === undefined) throw acp.RequestError.invalidParams(params, `no message of the user's starts a turn at ${params.turnSeq}`);
+      const change = { kind: 'chapter', turnSeq: params.turnSeq, mark: parsed.value } as const;
+      // Logged at once, turn or no turn, as a spin-off decision is; only a torn tail waits for the log's next writer.
+      if (!(await logBesideTurn(log, change))) await logSetting(params.sessionId, change);
+      return { mark: parsed.value };
+    })
     .onRequest(ARENA_PREVIEW_METHOD, arenaPreviewRequest, async ({ params }): Promise<ArenaPreviewResponse> => {
       const n = arenaSizeOf(params.n, params);
       const repo = await laneRepo(params.cwd);

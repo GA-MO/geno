@@ -14,6 +14,11 @@ import {
   editorActionToolDefinitions,
   SPINOFF_MODES,
   SPINOFF_NOTE,
+  CHAPTER_MODES,
+  CHAPTER_NOTE,
+  chaptersOf,
+  chapterToolDefinitions,
+  MARK_CHAPTER_TOOL,
   spinoffsOf,
   spinoffToolDefinitions,
   isSessionMode,
@@ -68,6 +73,7 @@ import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
 import { spinoffExecutors } from './tools/spinoff.js';
 import { scheduleExecutor, type ScheduleTools } from './tools/schedule.js';
+import { chapterExecutor } from './tools/chapters.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { webExecutors, type WebDeps } from './tools/web.js';
@@ -128,6 +134,8 @@ export type AgentOptions = {
   readonly schedules?: ScheduleTools | undefined;
   /** The run is a scheduled task's, which nobody watches; its prompt says so. */
   readonly scheduled?: boolean | undefined;
+  /** Whether the editor draws chapters; a non-interactive run ignores it. */
+  readonly chapters?: boolean | undefined;
   /** Undefined uses the default policy. */
   readonly effortPolicy?: EffortPolicy | undefined;
   /** Where subagents show; undefined prints them on the terminal. */
@@ -237,6 +245,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const terminal = options.approval.kind === 'interactive' ? options.terminal : undefined;
     const spinoffs = options.approval.kind === 'interactive' && options.spinoffs === true;
     const schedules = options.approval.kind === 'interactive' ? options.schedules : undefined;
+    const chapters = options.approval.kind === 'interactive' && options.chapters === true;
     const search = searchConfigOf(io.env);
     const web = webExecutors({ approval: options.approval, env: io.env, session, modelFetch: io.fetch, search, ...options.web });
     const own = [
@@ -247,6 +256,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...readTerminalToolDefinitions(startMode, terminal !== undefined),
       ...spinoffToolDefinitions(startMode, spinoffs),
       ...scheduleToolDefinitions(startMode, schedules !== undefined),
+      ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
     const notes = renderMemory(await memory.list());
@@ -284,6 +294,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
       ...(spinoffs && SPINOFF_MODES[startMode] ? [SPINOFF_NOTE] : []),
       ...(options.scheduled === true ? [SCHEDULED_RUN_NOTE] : []),
+      ...(chapters && CHAPTER_MODES[startMode] ? [CHAPTER_NOTE] : []),
       ...(genoTools === undefined ? [] : [pstackNote(genoTools)]),
       ...(notes === undefined ? [] : [notes]),
     ].join('\n\n');
@@ -297,6 +308,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
         ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
         ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
+        ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
         ...web,
         ...(agentTool || issued !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
         ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),

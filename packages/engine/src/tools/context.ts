@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import type { ApprovalRecord, ChildNote, EditorAction, FileChange, ImageAttachment, SpinoffNote, TodoList, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
+import type { ApprovalRecord, ChapterMark, ChildNote, EditorAction, FileChange, ImageAttachment, SpinoffNote, TodoList, TurnEvent, WakeArrival, WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -58,6 +58,7 @@ export type ToolReply =
       /** The deferred tools a tool_search call loaded. */
       readonly loaded?: readonly string[] | undefined;
       readonly spinoff?: SpinoffNote | undefined;
+      readonly chapter?: ChapterMark | undefined;
     };
 
 /** A tool's executor, typed on its parsed input. */
