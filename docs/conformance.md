@@ -122,6 +122,31 @@ P6 also covers rows that have no Claude Code conformance test:
 | A/B-03 | `provenance.test.ts` checks that the system prompts, the child prompts, the edit applier's prompt and every tool definition never call the product g-code, and that no string in core or engine source does, but the git identity of checkpoints. |
 | A/B-05 | `provenance.test.ts` checks the `[Geno]` line in the agent's and every subagent's prompt, "Prefer the dedicated tools" and `path:line`. |
 
+## Tool gaps (P27)
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-TOOL-01 | Read with offset 59998 of a 60,000-line file gives lines 59998 to 60000 with their numbers. | `read` with `start_line: 59998` gives the same three lines with their own numbers, then Geno's `[lines 59998-60000 of 60000]` line. | pass | `tools.conformance.test.ts`, both wires |
+| T-TOOL-02 | Read of a directory is an `EISDIR` error. | An error that says the path is a directory and to use `list`. | pass | `tools.conformance.test.ts`, both wires |
+| T-TOOL-03 | Read of a PNG gives an image block. | The image bytes reach the model: in the tool result on the Anthropic wire, in a user message after the tool message on the OpenAI-compatible wire. | pass | `tools.conformance.test.ts`, both wires |
+| T-TOOL-10 | An empty file reads with a warning, a missing file is an error that names the working directory, and a notebook reads as cells. | An empty file is not an error and says it is empty. A missing path is an error that names the workspace root relative paths start at, from `read`, `grep`, `glob` and `list`. A notebook reads as its cells. | pass (was partial: the missing-file error named no directory) | `tools.conformance.test.ts`, both wires |
+| T-TOOL-04 | An Edit whose `old_string` appears 10 times is an error that names the count and `replace_all`. | The error names the count, the start lines and `replace_all: true`. `edit` takes `replace_all`, which replaces every exact match. A count made ignoring whitespace says that `replace_all` needs the exact text. | pass (was fail: no `replace_all`) | `tools.conformance.test.ts`, both wires |
+| T-TOOL-11 | Edit not found, Edit applied and Write applied, with Write overwriting a file that was read. | A miss is an error that shows the closest text, an edit applies, and `edit` with `create: true` writes a new file. It overwrites an existing file only when it was read in this session and has not changed since; otherwise it refuses as any edit does. | pass (adapt, was fail: `create` refused an existing file) | `tools.conformance.test.ts`, both wires |
+| T-TOOL-06b | A `cd` outside the working directories resets, with "Shell cwd was reset to <dir>". | Every command starts at the workspace root. A command that runs `cd`, `pushd` or `popd` gets "Shell cwd was reset to <workspace>" before its exit line. | pass (was fail: no notice) | `tools.conformance.test.ts`, both wires |
+| T-TOOL-08 | A foreground `sleep 45; cat x` is blocked, with advice to use Monitor or `run_in_background`. | A foreground command that starts with `sleep` of 2 s or more and goes on to more commands is refused before it runs, with Claude Code's wording pointed at `monitor` and `run_in_background`. A shorter sleep, a lone sleep, a background command and a subagent's command run as before. | pass (was fail: the sleep ran) | `tools.conformance.test.ts`, both wires |
+| T-DEFER-03 | ToolSearch skips an unknown name without an error. | `tool_search` takes `select:A,B` in `query` as well as the `select` array. An unknown name among known ones is skipped with a "Not deferred tools" note and the call succeeds. A call that loads nothing stays an error that names the unknown name. | pass (adapt) | `deferred.conformance.test.ts`, both wires |
+| T-DEFER-04 | `+chrome screenshot` returns only tools whose name holds chrome. | A `+word` in `query` keeps only tools whose name holds the word, ranked by the other words. | pass (was fail: no `+word`) | `deferred.conformance.test.ts`, both wires |
+
+P27 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-13 | `tools.conformance.test.ts`, both wires: `read` and `edit` take an absolute path inside the workspace. |
+| B/B-14 | T-TOOL-01, -02, -03 and -10 above. `tools.test.ts` (engine) pins the missing-path error of `read` and `grep`. |
+| B/B-15, B/B-16 | T-TOOL-11 and T-TOOL-04 above. `edit.test.ts` (core) checks `replace_all` over exact and whitespace-normalized matches, literal `$` in `new_str`, and `create` over a matching base and a stale one. |
+| B/B-20 | T-TOOL-08 above. `tools.test.ts` (core) checks which commands `leadingSleep` finds, and `changesDirectory` for T-TOOL-06b. |
+| A/C-07 | T-DEFER-03 and T-DEFER-04 above. `deferred-tools.test.ts` checks the `select:` form, its order and note, and `+word` ranking. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -133,18 +158,18 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-LOOP-03 | adopt | P15 | no test yet |
 | T-LOOP-04 | adopt | P1 | pass |
 | T-LOOP-05 | keep Geno's | none | no test yet |
-| T-TOOL-01 | keep Geno's, adopt | P27 | no test yet |
-| T-TOOL-02 | keep Geno's, adopt | P27 | no test yet |
-| T-TOOL-03 | keep Geno's, adopt | P27 | no test yet |
-| T-TOOL-04 | keep Geno's, adopt | P27 | no test yet |
+| T-TOOL-01 | keep Geno's, adopt | P27 | pass |
+| T-TOOL-02 | keep Geno's, adopt | P27 | pass |
+| T-TOOL-03 | keep Geno's, adopt | P27 | pass |
+| T-TOOL-04 | keep Geno's, adopt | P27 | pass |
 | T-TOOL-05 | keep Geno's | none | no test yet |
 | T-TOOL-06a | deliberate | none | no test yet |
-| T-TOOL-06b | adopt | P27 | no test yet |
+| T-TOOL-06b | adopt | P27 | pass |
 | T-TOOL-07 | keep Geno's | P10, P23 | partial |
-| T-TOOL-10 | keep Geno's, adopt | P27 | no test yet |
-| T-TOOL-11 | adapt | P27 | no test yet |
+| T-TOOL-10 | keep Geno's, adopt | P27 | pass |
+| T-TOOL-11 | adapt | P27 | pass |
 | T-TOOL-12 | adopt | P2 | pass |
-| T-TOOL-08 | adopt | P27 | no test yet |
+| T-TOOL-08 | adopt | P27 | pass |
 | T-TOOL-09 | adopt | P36 | no test yet |
 | T-ASM-01 | adapt | P23 | pass |
 | T-ASM-03 | adopt | P5 | pass |
@@ -164,8 +189,8 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-ASM-14 | at parity | none | no test yet |
 | T-DEFER-01 | keep Geno's | none | no test yet |
 | T-DEFER-02 | keep Geno's | none | no test yet |
-| T-DEFER-03 | adapt | P27 | no test yet |
-| T-DEFER-04 | adapt | P27 | no test yet |
+| T-DEFER-03 | adapt | P27 | pass |
+| T-DEFER-04 | adapt | P27 | pass |
 | T-MCP-01 | adopt | P10 | no test yet |
 | T-MCP-02 | adapt | P38 | no test yet |
 | T-MCP-03 | adapt | P10 | no test yet |
