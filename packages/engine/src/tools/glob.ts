@@ -8,7 +8,7 @@ export const glob = executor({
   describe: ({ pattern, directory }) => [`glob ${JSON.stringify(pattern)}`, ...(directory === undefined ? [] : [directory])].join(' '),
   async run({ pattern, directory }, ctx) {
     const dir = await searchRoot(ctx, directory);
-    const files = await searchWorkspace(ctx, ['--files', '--sort=path', '--glob', pattern], 'files', dir);
-    return files.length === 0 ? 'no files match' : files.join('\n');
+    const { lines } = await searchWorkspace(ctx, ['--files', '--sort=path', '--glob', pattern], 'files', { dir });
+    return lines.length === 0 ? 'no files match' : lines.join('\n');
   },
 });

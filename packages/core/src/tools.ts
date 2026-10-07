@@ -49,13 +49,11 @@ export const TOOL_SPECS: Readonly<Record<ToolName, ToolSpec>> = {
         pattern: { type: 'string', description: 'Regular expression in Rust regex syntax.' },
         path: {
           type: 'string',
-          description: 'Optional glob limiting which files are searched, relative to the directory searched, such as src/** or **/*.ts.',
+          description:
+            "File or directory to search, such as src/lib or src/app.ts: relative to the workspace root, or an absolute path in a skill's folder. Defaults to the workspace root. Paths outside the workspace come back absolute.",
         },
+        glob: { type: 'string', description: 'Glob limiting which files are searched, relative to the directory searched, such as *.ts or src/**/*.tsx.' },
         ignore_case: { type: 'boolean', description: 'Match case-insensitively. Defaults to false.' },
-        directory: {
-          type: 'string',
-          description: "Directory to search instead of the workspace root: relative to it, or the absolute path of a skill's folder. Paths outside the workspace come back absolute.",
-        },
       },
       required: ['pattern'],
       additionalProperties: false,
