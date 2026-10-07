@@ -1,4 +1,20 @@
-import { MONITOR_LINE_CHARS, nextWakeId, type JobId, type TurnEvent, type WakeArrival, type WakeId, type WakeNote, type WakeSource, type WakeTrigger } from '@g-code/core';
+import {
+  MONITOR_LINE_CHARS,
+  nextPrWatch,
+  nextWakeId,
+  prPollDelayS,
+  prWatchOutcomeOf,
+  type JobId,
+  type PrLookup,
+  type PrWatch,
+  type PrWatchEnd,
+  type TurnEvent,
+  type WakeArrival,
+  type WakeId,
+  type WakeNote,
+  type WakeSource,
+  type WakeTrigger,
+} from '@g-code/core';
 import type { BackgroundJobs } from './background.js';
 
 /** A background child that still owes its parent's session a report. `silence` cancels it with no report. */
@@ -13,12 +29,15 @@ type MonitorWait = {
   end(): void;
 };
 
+type PrWait = { readonly pr: number; readonly toolUseId: string; end(): void };
+
 type ScheduleWait = { readonly dueAt: number; readonly reason: string; readonly toolUseId: string; readonly timer: ReturnType<typeof setTimeout> };
 
 type SessionWaits = {
   readonly children: Map<string, ChildWait>;
   readonly monitors: Map<WakeId, MonitorWait>;
   readonly schedules: Map<WakeId, ScheduleWait>;
+  readonly prs: Map<WakeId, PrWait>;
   /** Commands that run on but no longer wake the session, after the user cancelled its wakes. */
   readonly quiet: Set<JobId>;
 };
@@ -28,6 +47,20 @@ export type WakeHooks = {
   arrive(sessionId: string, arrival: WakeArrival): void;
   /** What the session waits on changed. */
   changed(sessionId: string): void;
+};
+
+/**
+ * A pull request watch: `look` reads the PR and its checks once, and `report` writes what the model reads when the
+ * watch ends, failing logs and all. Delays and the timeout are in seconds of `secondMs`.
+ */
+export type PrWatchStart = {
+  readonly id: WakeId;
+  readonly toolUseId: string;
+  readonly watch: Extract<PrWatch, { kind: 'watching' }>;
+  readonly timeoutS: number;
+  readonly secondMs: number;
+  look(signal: AbortSignal): Promise<PrLookup>;
+  report(end: PrWatchEnd, signal: AbortSignal): Promise<string>;
 };
 
 export type MonitorStart = { readonly id: WakeId; readonly job: JobId; readonly pattern: RegExp; readonly toolUseId: string; readonly timeoutMs: number; readonly ownsJob: boolean };
@@ -53,7 +86,7 @@ export class Wakes {
   private of(sessionId: string): SessionWaits {
     let waits = this.sessions.get(sessionId);
     if (waits === undefined) {
-      waits = { children: new Map(), monitors: new Map(), schedules: new Map(), quiet: new Set() };
+      waits = { children: new Map(), monitors: new Map(), schedules: new Map(), prs: new Map(), quiet: new Set() };
       this.sessions.set(sessionId, waits);
     }
     return waits;
@@ -112,6 +145,50 @@ export class Wakes {
     return { kind: 'watching' };
   }
 
+  /** The watch of a PR the session already runs, so a second watch_pr of it starts nothing. */
+  prWatchOf(sessionId: string, pr: number): WakeId | undefined {
+    return [...(this.sessions.get(sessionId)?.prs ?? [])].find(([, wait]) => wait.pr === pr)?.[0];
+  }
+
+  /** Polls a PR's checks until they settle, the watch ends otherwise, or it is cancelled, then reports once. */
+  pr(sessionId: string, start: PrWatchStart): void {
+    const waits = this.of(sessionId);
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    const deadline = startedAt + start.timeoutS * start.secondMs;
+    let watch = start.watch;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const end = () => {
+      if (controller.signal.aborted) return false;
+      controller.abort();
+      clearTimeout(timer);
+      waits.prs.delete(start.id);
+      return true;
+    };
+    const arm = () => {
+      const delay = prPollDelayS((Date.now() - startedAt) / start.secondMs) * start.secondMs;
+      timer = setTimeout(() => void poll(), Math.max(0, Math.min(delay, deadline - Date.now())));
+    };
+    const poll = async () => {
+      const lookup = await start.look(controller.signal).catch((error: unknown): PrLookup => ({ kind: 'failed', message: String(error) }));
+      if (controller.signal.aborted) return;
+      const next = nextPrWatch(watch, lookup, Date.now() >= deadline);
+      if (next.kind === 'watching') {
+        watch = next;
+        arm();
+        return;
+      }
+      const text = await start.report(next.end, controller.signal).catch((error: unknown) => `The watch ended, and its report failed: ${String(error)}`);
+      if (!end()) return;
+      const note: WakeNote = { kind: 'pr', id: start.id, toolUseId: start.toolUseId, pr: watch.pr.number, outcome: prWatchOutcomeOf(next.end), text };
+      this.hooks.arrive(sessionId, { kind: 'wake', at: new Date().toISOString(), note });
+      this.hooks.changed(sessionId);
+    };
+    waits.prs.set(start.id, { pr: watch.pr.number, toolUseId: start.toolUseId, end });
+    arm();
+    this.hooks.changed(sessionId);
+  }
+
   /** Arms a wake-up, once per id: a record logged again after a restart replaces the timer it had. */
   schedule(sessionId: string, note: Extract<WakeNote, { kind: 'scheduled' }>): void {
     const waits = this.of(sessionId);
@@ -132,7 +209,7 @@ export class Wakes {
   /** The session's next wake id, past every one its log used and every monitor or wake-up it has now. */
   nextId(sessionId: string, events: readonly TurnEvent[]): WakeId {
     const waits = this.sessions.get(sessionId);
-    return nextWakeId(events, waits === undefined ? [] : [...waits.monitors.keys(), ...waits.schedules.keys()]);
+    return nextWakeId(events, waits === undefined ? [] : [...waits.monitors.keys(), ...waits.schedules.keys(), ...waits.prs.keys()]);
   }
 
   /** What the session waits on, oldest kind first, as the Tasks list names it. */
@@ -144,6 +221,7 @@ export class Wakes {
       ...running.map((job): WakeSource => ({ kind: 'jobs', job: job.id as JobId })),
       ...[...(waits?.monitors ?? [])].map(([id, wait]): WakeSource => ({ kind: 'monitor', id, job: wait.job, pattern: wait.pattern })),
       ...[...(waits?.schedules ?? [])].map(([id, wait]): WakeSource => ({ kind: 'schedule', id, dueAt: wait.dueAt })),
+      ...[...(waits?.prs ?? [])].map(([id, wait]): WakeSource => ({ kind: 'pr', id, pr: wait.pr })),
     ];
   }
 
@@ -155,7 +233,7 @@ export class Wakes {
 
   /**
    * Stops what would wake the session: every wait, for the user's Cancel, or those the tool calls in `uses` started,
-   * for a rewind that cuts their turns. Children end without a report and monitors with no note, and a command a
+   * for a rewind that cuts their turns. Children end without a report, monitors and PR watches with no note, and a command a
    * monitor started stops. On Cancel, the session's other commands run on, silenced. True when anything was pending.
    */
   cancel(sessionId: string, uses?: ReadonlySet<string>): boolean {
@@ -174,6 +252,11 @@ export class Wakes {
       if (!chosen(monitor.toolUseId)) continue;
       monitor.end();
       if (monitor.ownsJob) void this.jobs.stop(sessionId, monitor.job, 'user').catch(() => {});
+      any = true;
+    }
+    for (const watch of [...waits.prs.values()]) {
+      if (!chosen(watch.toolUseId)) continue;
+      watch.end();
       any = true;
     }
     for (const [id, schedule] of waits.schedules) {

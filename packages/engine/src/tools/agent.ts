@@ -56,6 +56,7 @@ import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
 import { skillExecutor } from './skill.js';
 import { wakeExecutors, type SessionWakes } from './wake.js';
+import { watchPrExecutor, type PrTools } from './pr.js';
 import { todo } from './todo.js';
 
 /**
@@ -179,6 +180,8 @@ export type AgentToolEnv = {
   readonly wakes?: SessionWakes | undefined;
   /** Searches the workspace's earlier sessions; undefined for a subagent, which is not offered recall. */
   readonly recall?: Recall | undefined;
+  /** The user's gh, for watch_pr; undefined for a subagent, which is not offered it. */
+  readonly pr?: PrTools | undefined;
 };
 
 export const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
@@ -331,6 +334,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     recall: recallExecutor(tools.recall),
     skill: skillExecutor(tools.commands),
     todo,
+    watch_pr: watchPrExecutor(tools.wakes, tools.pr),
   };
   return Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
 }
