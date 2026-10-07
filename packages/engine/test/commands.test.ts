@@ -193,6 +193,7 @@ describe('gcode commands list', () => {
       '/memory              built-in, editor    Show what Geno remembers',
       '/init                built-in, engine    Create or update AGENTS.md for this project',
       '/best-of-n <2-4> <task> built-in, editor    Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models',
+      '/schedule <when> [--edits] <prompt> built-in, engine    Run a prompt later or on a schedule, as a background task',
       '/review <file>       .claude/commands/review.md    Review a file',
       `/tidy                ${path.join(home, 'skills', 'tidy', 'SKILL.md')}    Tidy the repo`,
     ]);

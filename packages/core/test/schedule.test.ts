@@ -318,7 +318,7 @@ describe('runs', () => {
 
   const session = { id: asSessionId('s'), createdAt: '2026-10-01T00:00:00Z', workspace: '/ws', provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' } as const;
   const at = '2026-10-01T00:00:01Z';
-  const answer = (costUsd: number | null): TurnEvent => ({ kind: 'assistant', seq: 2, at, content: [{ type: 'text', text: 'ok' }], stopReason: 'end_turn', usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1 }, costUsd, latencyMs: 1 }) as TurnEvent;
+  const answer = (costUsd: number | null): TurnEvent => ({ kind: 'assistant', seq: 2, at, content: [{ type: 'text', text: 'ok', citations: null }], stopReason: 'end_turn', usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1 }, model: 'qwen3.8-flash', costUsd, latencyMs: 1 });
   const events = (...more: TurnEvent[]): TurnEvent[] => [{ kind: 'session-start', session } as TurnEvent, { kind: 'user', seq: 1, at, content: 'go' }, ...more];
   const error = (kind: 'budget' | 'max-turns' | 'abort' | 'transport'): TurnEvent => ({ kind: 'error', seq: 9, at, error: kind, message: `${kind} message` });
 
