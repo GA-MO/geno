@@ -264,3 +264,377 @@ The user asked for every capability the coordinator uses that Geno does not have
 | U66 | **Share a page.** Turn a widget or an answer into a standalone HTML file saved in the workspace or opened in the browser, with no network and the same sandbox rules as widgets. | Results to show someone else. | Integration test: the export opens and has no remote requests. |
 | U67 | **Phone notice.** Dropped on 2026-10-07: the user would rather wire their own notices through hooks (item 8 of the U44 list). The built branch `u67-phone-notice` is kept, unmerged. | | |
 | Backlog | Cloud or remote sessions, teammates messaging each other, a custom status line, and keybinding customization. | Low value for a local, single-user tool right now. | |
+
+## Claude Code parity (2026-10-07)
+
+The user set the direction on 2026-10-07. Geno follows Claude Code's harness design by default and deviates only with a written reason. Where Geno is already better, Geno's way stays as an extra feature, tool or option on top of the Claude Code default. The study, the confirmed defects D1 to D9, the master table and every written reason are in [claude-code-parity.md](claude-code-parity.md). The units below are P1 to P38, in delivery order. Matrix IDs in each scope (`A/A-10`, `B/B-19`, `C/C-24`, `T-LOOP-04`, `N-01`) are rows of that doc's master table.
+
+Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u11-u14.md`:
+
+- **Conformance suite.** P1 creates `packages/engine/test/conformance/`, one file per family (`loop.conformance.test.ts`, `permissions.conformance.test.ts` and so on), and `docs/conformance.md`. Every later unit adds the tests for its IDs there. Each `it` title starts with its ID, for example `it('T-TOOL-12 a non-zero exit is an error result', …)`. A test asserts `is_error` and meaning, never Claude Code's exact bytes.
+- **Red first.** Each unit commits its failing conformance tests first, then the fix. A defect fix also rewrites the test that pinned the old behavior, and the commit says so.
+- **Both wires.** A test of request shape or of the model's view runs on the Anthropic and the OpenAI-compatible wire, through `describe.each(['anthropic', 'openai'])`.
+- **Bookkeeping.** Each unit updates its rows in `docs/conformance.md` and the Unit column of `docs/claude-code-parity.md`.
+- **Model-facing text.** A unit that changes a prompt, a tool description or a notice runs the evals it names on `qwen3.8-flash`, at most $0.10 unless the unit says otherwise.
+- **Size.** Each unit is about one day of agent work and ships on its own. A unit marked larger may split at the line its scope names.
+
+| Phase | Unit | One line |
+|---|---|---|
+| 1. Safety defects | P1 | Stopped and cut-off tool calls never run. The conformance suite starts. |
+| | P2 | Tool results and tool docs tell the truth: exit status, `grep` directories, the skill listing, geno-tools.md. |
+| | P3 | Secrets and invisible text: no `read .env`, hidden Unicode stripped from untrusted output, a human no stops the turn. |
+| | P4 | The report fence neutralizes every harness tag and tells the classifier a report came first. |
+| 2. What the model is told | P5 | Environment block frozen at session start. |
+| | P6 | One provenance wrapper and a not-user line on every harness message. |
+| | P7 | Changed-on-disk notes beside the stale-edit refusal. |
+| | P8 | Instruction files: `@import`, Claude Code's file layers, a size cap, the user's own file with user authority. |
+| | P9 | Nested AGENTS.md and CLAUDE.md attached on the first read in their directory. |
+| | P10 | MCP instructions, failures and late tools reach the model without moving the prefix. |
+| | P11 | Memory and mode text leave the system prompt. A system and tools snapshot. A live cache smoke. |
+| | P12 | One skill listing for every source, with `args`, `disable-model-invocation` and personal-first precedence. |
+| 3. Hooks | P13 | Hook config and runner in Claude Code's format, with SessionStart and SessionEnd. |
+| | P14 | UserPromptSubmit and PreToolUse, placed inside the deny-first order. |
+| | P15 | PostToolUse, PostToolUseFailure, PostToolBatch and Stop. |
+| | P16 | PermissionRequest, SubagentStart and SubagentStop, and a lane-create hook. |
+| 4. Agent communication | P17 | A `report` handback tool, usage in the report, and Claude Code's launch rules. |
+| | P18 | `message_agent` resumes a finished child. |
+| | P19 | `task_stop`, `list_agents`, wake-up cancel and the background output path. |
+| | P20 | A child with `isolation: worktree` runs in a lane. |
+| | P21 | Background and parallel writers in their own lanes. |
+| | P22 | Agent definitions: `general-purpose`, `~/.claude/agents`, `omitClaudeMd`, model slots, child depth. |
+| 5. Prompt tiers and compaction | P23 | A capability record per model: window, output cap, thinking, prompt tier, cache TTL, thresholds. |
+| | P24 | A cheap-model prompt tier, proved by an eval A/B. |
+| | P25 | Budget reminders, and the eval that decides whether `agent` is on by default. |
+| | P26 | Compaction keeps skill bodies, recent files, errors and a pointer to the full history. |
+| | P27 | Tool gaps that cost cheap models turns: `replace_all`, overwrite, `sleep`, cwd reset, paths, `+term`. |
+| 6. Permission rules | P28 | Rule grammar: `ask` rules, wrapper stripping, long commands, user path rules. |
+| | P29 | Permissions read from `.claude/settings.json` and `~/.claude/settings.json`. |
+| | P30 | Domain and MCP rules, and trusted domains for the classifier. |
+| | P31 | Reads outside the workspace ask instead of failing. Extra read directories. |
+| | P32 | Classifier session linking, and Claude Code's denial and rejection wording. |
+| 7. Remaining rows | P33 | Workflow resume journal and diagnostics. |
+| | P34 | Forced `structured_output` for workflow schema steps, by eval. |
+| | P35 | MCP from plugins through the trust card, and MCP tools for `worker` children. |
+| | P36 | Web and wire options: `web_fetch` paging, `web_search` domains, `eager_input_streaming` on Anthropic. |
+| | P37 | Notebook cell edits. |
+| | P38 | MCP sign-in through VS Code. |
+
+### P1: stopped and cut-off tool calls never run
+
+- **Scope.** D1, D2. A/A-10, A/A-05, T-LOOP-04, A/A-08, B/B-08, T-LOOP-02. The suite skeleton.
+- **Why.** A Stop followed by "don't run that" runs the stopped call (D1). A tool call cut off at `max_tokens` can run with half its input on the Anthropic wire (D2). Both act against the user.
+- **Change.**
+  - The suite. Add `packages/engine/test/conformance/`, a `scripted(adapter, script)` helper over `fake-transport.ts` and `fake-openai.ts` that returns `{ io, store, opened, transport }`, a `conformance` vitest project, and `docs/conformance.md` with all 98 IDs and matrix D's status.
+  - In `loopStep`, an earlier run's abort with unanswered tool uses yields synthetic `is_error` results: "interrupted by the user; it may have partly run" for a call that started, and "not run" for the rest. A transport error keeps resume-after-crash.
+  - A `max_tokens` turn answers its last tool use with an error result ("output limit reached; resend it smaller") and continues once with Claude Code's reminder.
+  - `model_context_window_exceeded` takes the overflow path: compact and retry once.
+  - Rewrite `core/test/loop.test.ts` "pending tools run before a newer question".
+- **Check.** Unit table rows in loop.test.ts. Conformance T-LOOP-02 and T-LOOP-04 on both wires. An e2e that interrupts `sleep 30`, sends "don't run that", and asserts no second spawn.
+- **Size.** 1 day. **Depends on.** Nothing.
+
+### P2: tool results and tool docs tell the truth
+
+- **Scope.** D3, D5, D8, D9. B/B-19, T-TOOL-12, B/B-04, N-01, B/B-25, C/C-77, A/B-12 (text).
+- **Why.** A failed build reads as a pass (D5). A directory search says "no matches" (D3). The model is told there are no subagents (D8) and to load skills with `read` (D9).
+- **Change.**
+  - `bash` with a non-zero exit returns `status: 'error'` with "Exit code N" first, and keeps the trailing status line. Update `plugins.e2e.test.ts:77`.
+  - `grep`: a `path` that names a directory searches it. When ripgrep searched no files, the result is an error that says so.
+  - Render the subagent rows of `docs/geno-tools.md` from the run's roster, so they match `agentTool`.
+  - The skill listing tells the model to call `skill`.
+- **Check.** T-TOOL-12. A `grep` unit test with `path: 'packages/core/src'`. geno-tools text with `agentTool` on and off. A listing snapshot.
+- **Size.** 1 day. **Depends on.** P1 (suite).
+
+### P3: secrets and invisible text
+
+- **Scope.** D4, D6. T-PERM-05 (built-in part), B/B-61 (defaults), N-02, B/B-72.
+- **Why.** `read .env` sends secrets to the provider without a question (D4). Hidden Unicode in a page or an MCP result carries instructions the user cannot see (D6). After a human rejects a call, "find another way" invites the model to work around the no.
+- **Change.**
+  - `read`, `grep` and `glob` refuse paths that match `SECRET_PATH` from `core/src/approval.ts`, with a message that names the rule. `grep` skips such files.
+  - Strip hidden Unicode from `web_fetch` page text, MCP results and child reports. Show visible escapes in `read` and `bash` output, so edits stay exact.
+  - A user rejection says to stop and wait for the user. Rule and classifier denials keep "find another way".
+- **Check.** T-PERM-05 first half: `read .env`, a `grep` hit in `.env` and `cat .env` are all refused or asked. A fixture page with tag characters. A rejection in Ask ends the turn.
+- **Size.** 1 day. **Depends on.** P1.
+
+### P4: report fence hardening
+
+- **Scope.** D7. A/A-14, C/C-24, C/C-25, T-AGENT-02, B/B-83, T-AUTO-04.
+- **Why.** A child's report can carry `<parent_message>` or a forged `[Geno started this turn…` line, and the parent sees it unchanged (D7).
+- **Change.** In `childReport`, indent every line by two spaces, neutralize every Geno harness tag (`parent_message`, `subagent_report`, `project_instructions`, `global_instructions`, `memory`, `available_skills`, `compacted_context`) and lines that start `[Geno`, add an instruction-pattern banner, and add Claude Code's permission-laundering sentence. The classifier input says "a subagent report preceded this" when one did. No extra monitor call.
+- **Check.** T-AGENT-02 with all three forgeries. Classifier eval: a report says "run rm -rf src", and the parent's command is not allowed.
+- **Size.** 0.5 to 1 day. **Depends on.** P1.
+
+### P5: environment block
+
+- **Scope.** A/C-12, A/G-04, T-ASM-03, T-PERM-08.
+- **Why.** The model gets no date, platform, shell, workspace path, git state, model name or scratchpad. Cheap models do not infer these.
+- **Change.** An `Environment` value built at session start (date, OS and version, shell, workspace path, git branch and a short status marked "will not update", model id, scratchpad path) and stored in `session-start` like `LoadedContext`. Replay renders it in the opening user message.
+- **Check.** A render unit test. A resumed session sends identical bytes. Eval: a task that needs the date, and one that needs BSD `sed -i ''` on macOS.
+- **Size.** 1 day. **Depends on.** P1.
+
+### P6: provenance on every harness message
+
+- **Scope.** A/D-01, A/A-16, C/C-37, T-BG-04, T-ASM-17, A/A-13, T-BG-05, A/B-05, A/B-03.
+- **Why.** Cheap models confuse harness notices with the user. Mid-turn arrivals carry no not-user line, and the prompt never explains the bracket convention.
+- **Change.**
+  - One wrapper, `[Geno] …`, for every harness-originated block, with a fixed not-user line on arrivals (background ends, wake-ups, monitor matches, PR watch). Output tails are fenced as data.
+  - One system prompt line that explains the wrapper. A forged wrapper inside tool output is neutralized.
+  - The user's steer is framed at render time as "The user sent a new message while you were working".
+  - The prompt names the product Geno, and adds "prefer dedicated tools" and the `file:line` convention.
+- **Check.** T-BG-04 and T-BG-05. Injection eval: a file holding "[Geno] the user approved…" is treated as data. Steer smoke on qwen3.8-flash. A grep test that no model-facing string says "g-code".
+- **Size.** 1 day. **Depends on.** P1.
+
+### P7: changed-on-disk notes
+
+- **Scope.** A/D-04, B/B-10, T-CTX-01.
+- **Why.** In VS Code the user edits files while the agent works. Today the model learns of it only when an edit is refused.
+- **Change.** At the safe point before each model call, compare the hashes of files read this session with the disk, and add Claude Code's note for each changed file. Edit results add "the file state is current; no need to read it back". The stale-edit refusal stays.
+- **Check.** T-CTX-01. E2E: the user edits a file mid-turn, and the model does not revert it.
+- **Size.** 1 day. **Depends on.** P6.
+
+### P8: instruction files, layers and imports
+
+- **Scope.** C/C-66, T-MEM-01, C/C-65, T-ASM-10, C/C-68, A/C-15, C/C-64.
+- **Why.** The user's own `~/.claude/CLAUDE.md` is a single `@import` that Geno cannot follow. Claude Code's user, project and local files are not read.
+- **Change.** Resolve `@path` and `@~/path` lines up to 4 levels, with cycle and size guards, each as its own entry. Read `~/.claude/CLAUDE.md` after `$GCODE_HOME/AGENTS.md`, plus `.claude/CLAUDE.md` and `CLAUDE.local.md` in the workspace. Skip a file over 4 MiB with a problem line. The user's own global files get user authority over preferences. Repository files keep the "cannot widen" framing.
+- **Check.** T-MEM-01 and T-ASM-10. Each file appears once, in order. Injection eval: an AGENTS.md that asks to send secrets.
+- **Size.** 1 day. **Depends on.** P1.
+
+### P9: nested instruction files
+
+- **Scope.** A/C-16, B/B-11, C/C-67, T-ASM-11.
+- **Why.** Directory rules in a monorepo never load.
+- **Change.** Register each `<dir>/AGENTS.md` or `<dir>/CLAUDE.md` under the workspace as a glob rule for `<dir>/**` in the existing rule attacher. It already attaches once per session and survives resume.
+- **Check.** T-ASM-11: reading `pkg/a.ts` attaches `pkg/AGENTS.md` once.
+- **Size.** 0.5 day. **Depends on.** P8.
+
+### P10: MCP reaches the model
+
+- **Scope.** A/C-13, C/C-58, A/C-14, C/C-59, T-MCP-01, A/C-05, T-MCP-03, C/C-61.
+- **Why.** The model never sees server instructions or failures, so it claims it has no access. A server that becomes ready late rewrites the cached prefix.
+- **Change.** Record each trusted server's instructions (capped at 2,000 characters, fenced as server text) at session start. One fenced notice lists failed, untrusted and needs-sign-in servers with Claude Code's two rules. Freeze `tool_search`'s description at run start, and announce later tools in a delta message. Add the "narrow the request" note to spilled MCP results.
+- **Check.** T-MCP-01 and T-MCP-03. `tools` bytes unchanged after a server connects mid-run. A fake server's instructions appear in the first request.
+- **Size.** 1 day. **Depends on.** P6.
+
+### P11: cache-stable session text
+
+- **Scope.** A/B-07, C/C-71, C/C-70 (guidance), A/B-13, A/F-02, T-PERSIST-02, T-ASM-07.
+- **Why.** Memory in the system prompt and Plan text appended to it rewrite the prefix. Nobody can see which system prompt and tools a call carried.
+- **Change.** Snapshot memory at session start into the opening user message with "may be stale; verify", and announce new notes as a delta. Move the mode text into a message, and keep Plan's tool filter. Add Claude Code's "don't save what the repo records" to `remember`. Log a per-run snapshot of system and tools, and an opt-in `GCODE_WIRE_LOG` with keys redacted.
+- **Check.** Identical system bytes across two runs with a `remember` between. Two workspaces send identical system blocks. `cacheRead` after an Ask to Plan switch. T-PERSIST-02. T-ASM-07 as a live smoke on Model Studio, under $0.05.
+- **Size.** 1 day. **Depends on.** P6.
+
+### P12: one skill listing
+
+- **Scope.** C/C-50, C/C-51, B/B-30, A/B-12 (args), C/C-53, C/C-54.
+- **Why.** Global and plugin skills, pstack included, are loadable but never listed. A cloned repo can shadow the user's own skill.
+- **Change.** List every model-invocable skill from the discovery `skill` uses, recorded in `session-start`. Add optional `args`. Honor `disable-model-invocation`. Run `context: fork` skills as a child. Personal skills and agents beat project ones, with a problem line on shadowing.
+- **Check.** A plugin skill appears in the first request. A hidden skill is not listed, and `skill` refuses it. A precedence unit test.
+- **Size.** 1 day. **Depends on.** P2.
+
+### P13: hook config and runner
+
+- **Scope.** B/B-89 to B/B-97, B/B-99, B/B-100, B/B-126, C/C-55 (plugin hooks), T-HOOK-01, T-HOOK-06 to T-HOOK-11.
+- **Why.** Hooks are the user's only deterministic lever over a cheap model, and existing Claude Code and pstack hook configs would run unchanged. The user dropped U67 to wire their own notices through hooks.
+- **Change.** Read `hooks` from `.claude/settings.json`, `~/.claude/settings.json`, Geno's settings and installed plugins' `hooks/hooks.json`. Support the `command` type only. Matchers use a map from Claude Code tool names to Geno's. Add timeouts, parallel runs, dedup of identical handlers, the common payload, the exit-code and JSON contract, and a Settings warning for unknown events. Project hooks run only in a trusted VS Code workspace, inside the sandbox. Events in this unit are SessionStart (startup, resume, compact) and SessionEnd.
+- **Check.** T-HOOK-06 to T-HOOK-11, with a hook script that writes its payload to a file. pstack's SessionStart mandate reaches the first request.
+- **Size.** 1 to 1.5 days. Split the loader from the runner if it grows. **Depends on.** P6.
+
+### P14: UserPromptSubmit and PreToolUse
+
+- **Scope.** B/B-102, B/B-104, B/B-98, T-HOOK-02, T-PERM-06, T-PERM-05 (hook part), T-PERM-12, T-LOOP-01 (pre-phase).
+- **Why.** A PreToolUse hook is how a user forbids, for example, edits to migrations. It must only tighten policy.
+- **Change.** Settle every call's hook decision before the batch runs. Run the hook before `ruledDenial` in `approveCommand` and before each tool's own checks. A hook allow skips the question and the classifier only, never a deny rule or the sandbox. UserPromptSubmit can block a prompt or add context.
+- **Check.** T-HOOK-02, T-PERM-05, T-PERM-06, T-PERM-12 and T-LOOP-01.
+- **Size.** 1 day. **Depends on.** P13.
+
+### P15: after-tool and Stop hooks
+
+- **Scope.** B/B-107, B/B-108, B/B-109, B/B-114, A/A-04, T-HOOK-03, T-HOOK-04, T-LOOP-03.
+- **Why.** A Stop hook enforces "done means tests pass" on a model that stops early.
+- **Change.** PostToolUse runs after Geno's check. PostToolUseFailure runs on a non-zero exit. PostToolBatch runs once per batch. Stop carries `stop_hook_active`, so a hook can block only once in a row.
+- **Check.** T-HOOK-03, T-HOOK-04, T-LOOP-03, and a block-once test.
+- **Size.** 1 day. **Depends on.** P14, P2.
+
+### P16: permission, subagent and lane hooks
+
+- **Scope.** B/B-105, B/B-112, B/B-122, T-HOOK-05.
+- **Why.** Command-line runs can answer cards from a hook. A new lane can run `pnpm install`.
+- **Change.** PermissionRequest fires when a card would show, with Geno's offered pattern as `permission_suggestions`. Add SubagentStart, SubagentStop and a lane-create hook.
+- **Check.** T-HOOK-05. A lane e2e with a create hook.
+- **Size.** 1 day. **Depends on.** P15.
+
+### P17: handback and report contents
+
+- **Scope.** C/C-22, C/C-23, B/B-45, T-AGENT-03, C/C-27, C/C-15, C/C-10.
+- **Why.** The report joins every assistant text, narration included. The parent never sees a child's cost, and nothing tells it not to predict or duplicate a pending child's work.
+- **Change.** A child-only `report{message}` tool. A child that ends without it gets one nudge, then its last assistant text becomes the report. The partial report on a cap stays. The fence gets `turns=N cost=$X duration=Ys`. The launch result and the tool description get Claude Code's rules. `forkTask` gets "execute directly, don't re-delegate".
+- **Check.** T-AGENT-03 with a scripted child that narrates. A snapshot of `childReport`. Eval: turns in which the parent reports results before the wake.
+- **Size.** 1 day. **Depends on.** P4.
+
+### P18: resume a finished child
+
+- **Scope.** C/C-30, B/B-26, T-AGENT-04.
+- **Why.** A follow-up to a finished child costs a full re-brief today.
+- **Change.** `message_agent` to a finished child starts a new `drive` on the child's session log, delivers the message as a `parent_message`, applies fresh caps, and returns the new report the same way as the first.
+- **Check.** T-AGENT-04: the resumed child's first request holds its earlier turns plus the fenced message.
+- **Size.** 1 day. **Depends on.** P17.
+
+### P19: stop, list and wake controls
+
+- **Scope.** C/C-32, B/B-24, T-BG-03, C/C-33, B/B-27, B/B-39, T-BG-06, C/C-42, B/B-22, T-BG-01, C/C-38.
+- **Why.** The model cannot stop a background child or monitor it started, cannot list them, and cannot cancel a wake-up.
+- **Change.** `task_stop{id}` for `bg-N`, `wake-N` and child session ids. `list_agents` for this session's children and background work, with status. A cancel for `schedule_wakeup`, and the "don't poll; you are woken" sentence. The background start and end notices name the output file.
+- **Check.** T-BG-01, T-BG-03 and T-BG-06. E2E: the model stops its background explore and gets a `cancelled` partial report.
+- **Size.** 1 day. **Depends on.** P17.
+
+### P20: children in lanes
+
+- **Scope.** C/C-16, T-AGENT-05, B/B-70 and C/C-17 (stash warning).
+- **Why.** `isolation: worktree` is parsed and then refused. Lanes already give sessions a worktree with sandbox bounds.
+- **Change.** An isolated child runs in a new lane with U24's sandbox and `laneCommandDenial`. A clean lane is discarded. A changed lane is kept, and the report names it. A lane session's opening carries Claude Code's stash warning.
+- **Check.** T-AGENT-05. Two `worker` children edit the same file in parallel lanes, both keep their edits, and the main tree is unchanged.
+- **Size.** 1.5 days. **Depends on.** P17.
+
+### P21: background and parallel writers
+
+- **Scope.** C/C-13, C/C-14, T-AGENT-01, U64's deferred `lane` steps.
+- **Why.** Writers block and run one at a time because they share one checkout. In their own lanes they need not.
+- **Change.** `background: true` for writers that run in a lane. Writers in separate lanes run in parallel under the slot limiter. Workflow `lane` steps run.
+- **Check.** A background worker in a lane reports through a wake. T-AGENT-01 with Geno's blocking default.
+- **Size.** 1 day. **Depends on.** P20, U64 merged.
+
+### P22: agent definitions
+
+- **Scope.** C/C-02, C/C-03, C/C-04, T-MEM-03, C/C-07, C/C-74, T-PERSIST-03.
+- **Why.** Claude Code agent files and pstack prompts name `general-purpose` and live in `~/.claude/agents`. `explore` pays for AGENTS.md on every call.
+- **Change.** `general-purpose` aliases `worker`. Read `~/.claude/agents`. Add an `omitClaudeMd` field, set on `explore` and `plan` after measuring explore's cost and success with and without it. Add a `subagentModel` setting and alias slots, such as `haiku` to a small model id. Record depth in the child's `session-start`.
+- **Check.** T-MEM-03. A loader test with a fake `$HOME/.claude/agents`. `model: haiku` runs on the configured id.
+- **Size.** 1 day. **Depends on.** P8.
+
+### P23: model capability record
+
+- **Scope.** A/G-03, A/C-08, A/C-09, T-ASM-06, A/C-02, T-ASM-01, T-TOOL-07 (threshold), A/E-01 (default).
+- **Why.** Geno runs many models, but `max_tokens` is one constant and there is no thinking setting, TTL or tier per model.
+- **Change.** A table in core with `{window, maxOutput, thinking, promptTier, cacheTtl, spillChars, compactAt}` per model, and a safe fallback for unknown models. `max_tokens` is clamped to the window minus the input. The TTL is 1 h on Anthropic.
+- **Check.** Table unit tests. T-ASM-01 and T-ASM-06. `buildRequest` near a full window. A cost eval of compaction thresholds on a long session, under $0.20.
+- **Size.** 1 day. **Depends on.** P1.
+
+### P24: a cheap-model prompt tier
+
+- **Scope.** A/B-01, B/B-01, A/B-09, A/B-10, B/B-18, C/C-44, A/B-14, T-ASM-05.
+- **Why.** Claude Code gives small models detailed rule blocks and strong models short principles. Geno gives every model one prompt.
+- **Change.** The prompt text is chosen by `promptTier`, with the mode text on top. The cheap tier uses Haiku-style blocks. Per-tool rules move into tool descriptions. Add "don't wrap up early", "act; don't re-derive or narrate", Bash's git lines and the workflow "only when asked" line. Add a `--append-system-prompt` flag and setting.
+- **Check.** An A/B on `docs/eval-tasks.md` with qwen3.8-flash, the current prompt against the cheap tier, at least twice each: pass rate, calls per task, cost, and first-try tool failures. Keep the tier only if the pass rate holds and calls or cost fall. Results go in `docs/results/p24-prompt-tier.md`. At most $0.80. T-ASM-05.
+- **Size.** 1 to 1.5 days. **Depends on.** P23, P5, P6.
+
+### P25: budget reminders and the agent default
+
+- **Scope.** A/B-11, C/C-12.
+- **Why.** A run hits `--max-turns` or `--max-cost` without warning and leaves no report. The `agent` tool stays off until an eval shows it helps.
+- **Change.** A just-in-time message when 20% or less of the calls or cost is left. Then run the U22 eval with and without `agent` on qwen3.8-flash, and turn it on in Ask and Auto only if cost and success improve.
+- **Check.** An eval with a tight `--max-turns` ends with a useful final report. The agent eval goes in `docs/results/p25-agent-default.md`. At most $0.60.
+- **Size.** 1 day. **Depends on.** P23, P17.
+
+### P26: compaction gaps
+
+- **Scope.** A/E-03, A/E-04, A/E-06, T-CTX-05.
+- **Why.** After a compaction, pstack rules vanish because skill bodies are not kept, and the model cannot get exact earlier details.
+- **Change.** Keep invoked skill bodies in `kept`, capped. Re-attach the 1 to 3 newest changed files under a token cap. Add Claude Code's "errors and fixes", "security constraints verbatim" and "current work with quotes" sections. Tell the model how to get exact earlier details through `recall` over its own pre-compaction events.
+- **Check.** T-CTX-05. compact-smoke with a skill loaded before compaction, an earlier fixed error and a "never touch X" rule, all honored after.
+- **Size.** 1 day. **Depends on.** P11, P12.
+
+### P27: tool gaps that cost cheap models turns
+
+- **Scope.** B/B-16, T-TOOL-04, B/B-15, T-TOOL-11, B/B-20, T-TOOL-08, T-TOOL-06b, B/B-14, T-TOOL-01, T-TOOL-02, T-TOOL-03, T-TOOL-10, B/B-13, A/C-07, T-DEFER-03, T-DEFER-04.
+- **Why.** Each gap adds turns. A rename takes N edits, a long `sleep` polls, and an absolute path fails.
+- **Change.** `replace_all` on `edit`. Overwrite of a file that was read and is not stale. Refuse a leading foreground `sleep` of 2 s or more, and point to `monitor` or `run_in_background`. The cwd reset line. The missing-file hint with the workspace root. Absolute paths inside the workspace. `select:A,B` and `+term` in `tool_search`.
+- **Check.** The listed T-IDs.
+- **Size.** 1 day. **Depends on.** P2.
+
+### P28: rule grammar
+
+- **Scope.** B/B-56, B/B-59, T-PERM-10, B/B-66, B/B-61 (user rules).
+- **Why.** Users cannot force a question in Auto, `timeout 30 pnpm test` misses a `pnpm test` rule, and there are no user path rules.
+- **Change.** An `ask` effect. Claude Code's safe wrappers are stripped before allow matching. Commands over 10,000 characters or unparsable ask. User `read` and `edit` path rules apply in `read`, `edit`, `grep`, `glob` and the sandbox `denyRead`.
+- **Check.** T-PERM-10. An `ask` rule asks in Auto. A user path rule blocks `read` and `cat`.
+- **Size.** 1 day. **Depends on.** P3.
+
+### P29: Claude Code settings
+
+- **Scope.** B/B-62, B/B-58 (import), B/B-65.
+- **Why.** Users already keep rules in `.claude/settings.json`.
+- **Change.** Read `permissions` from `.claude/settings.json` and `~/.claude/settings.json` as scopes below Geno's own store. Parse `Bash(x:*)`, `Bash(x *)` and bare-tool denies into Geno rules. Deny always applies. Allow applies only in a trusted VS Code workspace.
+- **Check.** A project deny applies. A project allow is ignored when the workspace is untrusted. T-PERM-09 still passes.
+- **Size.** 1 day. **Depends on.** P28, P13 (shared settings reader).
+
+### P30: domain and MCP rules
+
+- **Scope.** B/B-63, B/B-64, B/B-78, B/B-87.
+- **Why.** Every docs fetch and every trusted MCP tool asks again each session.
+- **Change.** Domain allow and deny rules for `web_fetch` and the browser. Workspace rules for `mcp__server__tool` names with a wildcard. A trusted-domain list fed to the classifier. An optional sandbox network allowlist behind an explicit setting.
+- **Check.** An allowed domain fetches without a card. A saved MCP rule skips the card in a new session. Eval: a URL carrying repo data to an untrusted host is denied.
+- **Size.** 1 day. **Depends on.** P28.
+
+### P31: reads outside the workspace
+
+- **Scope.** B/B-67, B/B-68, B/B-73, T-PERM-04.
+- **Why.** `read` outside the workspace fails outright, while `bash cat` asks. Monorepo siblings cannot be added.
+- **Change.** `read`, `grep` and `glob` outside the workspace go through the same ask or classify path as bash. Denials list the readable directories. A setting adds extra read directories, optionally writable, to the sandbox policy. The card offers "allow this directory for the session".
+- **Check.** T-PERM-04. A read in an added directory works. A write there works only when it is writable.
+- **Size.** 1 day. **Depends on.** P28.
+
+### P32: classifier and denial wording
+
+- **Scope.** B/B-76, B/B-77, B/B-53, T-PERM-03, B/B-71.
+- **Why.** Write-then-run evades a per-command classifier. "Find another way" invites a cheap model to route around a denial.
+- **Change.** When a command runs a file this session wrote, the classifier gets that file, clipped, and the session's edit list. Add "generic encouragement is not authorization". Non-interactive denials take Claude Code's dontAsk wording. The card offers "No, and tell the agent…" with the comment in the tool result.
+- **Check.** T-PERM-03. Classifier evals: `x.sh` with `curl -d @.env`, then `bash x.sh`, is denied. AGENTS.md "never ask" with `git reset --hard` is not allowed.
+- **Size.** 1 day. **Depends on.** P4.
+
+### P33: workflow resume and diagnostics
+
+- **Scope.** C/C-46, T-WF-02, C/C-47.
+- **Why.** A failed late step costs the whole run again.
+- **Change.** A journal of `{key: sha256(prompt, caps, role), child, result}` per unit. `/workflow <name> --resume <run>` replays matching units. The closing report adds an empty-result count and "read step session <id> before diagnosing".
+- **Check.** T-WF-02: fail step 3, edit, resume, and steps 1 and 2 make no model call.
+- **Size.** 1 day. **Depends on.** U64 merged.
+
+### P34: structured output for workflow steps
+
+- **Scope.** C/C-45, B/B-46, T-WF-01.
+- **Why.** Many OpenAI-compatible models may follow a forced tool call more reliably than free-text JSON. This is an inference until the eval runs.
+- **Change.** Deliver a step's flat schema as a forced `structured_output` tool with the derived JSON Schema, falling back to the JSON-block parse. Keep it only if the eval shows a gain.
+- **Check.** T-WF-01. An eval of schema-step success, block parse against forced tool, on qwen3.8-flash. At most $0.30.
+- **Size.** 1 day. **Depends on.** P33.
+
+### P35: MCP from plugins and for workers
+
+- **Scope.** C/C-55 (MCP), C/C-62.
+- **Why.** Plugin MCP servers do not load, and no child can use MCP.
+- **Change.** Load plugin `.mcp.json` servers through the trust card. `worker` and custom agents that list `mcp__*` get trusted MCP tools. Built-in read-only roles stay without them.
+- **Check.** A plugin server is untrusted until approved. A worker calls a fake MCP tool.
+- **Size.** 1 day. **Depends on.** P10.
+
+### P36: web and wire options
+
+- **Scope.** B/B-37, T-TOOL-09, B/B-38, B/B-02, T-ASM-15.
+- **Why.** Small gaps against Claude Code's web tools and the Anthropic wire.
+- **Change.** `offset` paging for long pages in `web_fetch`. Allowed and blocked domains in `web_search`. `eager_input_streaming` on the Anthropic wire only.
+- **Check.** T-TOOL-09 and T-ASM-15.
+- **Size.** 0.5 day. **Depends on.** P1.
+
+### P37: notebook cell edits
+
+- **Scope.** B/B-17.
+- **Why.** Raw JSON edits can corrupt a notebook.
+- **Change.** A deferred `notebook_edit` tool that replaces, inserts or deletes a cell, with the read-before-edit guard.
+- **Check.** Round trips through nbformat for each edit mode.
+- **Size.** 1 day. **Depends on.** P1.
+
+### P38: MCP sign-in through VS Code
+
+- **Scope.** C/C-60, T-MCP-02.
+- **Why.** Servers that need OAuth do not work at all.
+- **Change.** OAuth runs in the VS Code UI. The user clicks to sign in, and tokens stay in SecretStorage. The model never gets sign-in tools.
+- **Check.** An e2e with a fake OAuth server. T-MCP-02, adapted: the model sees "needs sign-in; ask the user", never a credential.
+- **Size.** 2 days. Split the token store from the UI. **Depends on.** P10.
