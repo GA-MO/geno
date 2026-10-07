@@ -57,7 +57,8 @@ const mountDoc = (view: any, name: string, doc: string, sandbox: string | null) 
       if (${JSON.stringify(sandbox)} !== null) f.setAttribute('sandbox', ${JSON.stringify(sandbox)});
       f.style.cssText = 'width:100%;height:80px;border:0';
       f.srcdoc = ${JSON.stringify(doc)}.replaceAll(${JSON.stringify(NONCE)}, nonce);
-      doc.querySelector('.transcript').append(f);
+      // Not in .transcript: the panel's next render, such as after a window focus change, removes what it did not build.
+      (doc.getElementById('attack-frames') ?? doc.body.appendChild(Object.assign(doc.createElement('div'), { id: 'attack-frames' }))).append(f);
       return 1;
     })()`,
   );
