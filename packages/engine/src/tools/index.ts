@@ -41,10 +41,18 @@ export async function runTool(use: ToolUseBlock, ctx: ToolContext, executors: Ex
   return { ...run, text: toolText(use.name, run.text) };
 }
 
+/** Writing tools other harnesses have; models trained on those harnesses call them here. */
+const WRITE_TOOL_NAMES = new Set(['create', 'write', 'create_file', 'write_file', 'Write']);
+
+function unknownTool(name: string, executors: Executors): string {
+  const tools = Object.keys(executors).sort().join(', ');
+  return WRITE_TOOL_NAMES.has(name) && Object.hasOwn(executors, 'edit')
+    ? `unknown tool ${name}; to create or overwrite a file, call edit with create: true and the whole content as new_str. The tools are ${tools}`
+    : `unknown tool ${name}; the tools are ${tools}`;
+}
+
 async function runExecutor(use: ToolUseBlock, ctx: ToolContext, executors: Executors): Promise<ToolRun> {
-  if (!Object.hasOwn(executors, use.name)) {
-    return { status: 'error', text: `unknown tool ${use.name}; the tools are ${Object.keys(executors).sort().join(', ')}` };
-  }
+  if (!Object.hasOwn(executors, use.name)) return { status: 'error', text: unknownTool(use.name, executors) };
   try {
     const reply = await executors[use.name]!.run(use.input, ctx);
     return typeof reply === 'string' ? { status: 'ok', text: reply } : { status: 'ok', ...reply };

@@ -242,6 +242,15 @@ describe('the tool table', () => {
     expect(await call('bash', { command: 'ls' })).toEqual(failure(/^unknown tool bash; the tools are glob, grep, list, read$/));
   });
 
+  it('names the call to make for a writing tool another harness has, when this run has it', async () => {
+    const withEdit = { ...EXECUTORS, edit: EXECUTORS.read };
+    for (const name of ['create', 'write', 'create_file', 'write_file', 'Write']) {
+      const run = await runTool({ type: 'tool_use', id: 'x', name, input: {}, caller: { type: 'direct' } } as ToolUseBlock, ctx, withEdit);
+      expect(run).toMatchObject({ status: 'error', text: expect.stringMatching(new RegExp(`^unknown tool ${name}; to create or overwrite a file, call edit with create: true and the whole content as new_str\\. The tools are `)) });
+    }
+    expect(await call('create', {})).toEqual(failure(/^unknown tool create; the tools are glob, grep, list, read$/));
+  });
+
   it('prints each call as one line', () => {
     const use = (name: string, input: unknown) => ({ type: 'tool_use', id: 'x', name, input, caller: { type: 'direct' } }) as const;
     expect(describeCall(use('grep', { pattern: 'SERVER_URL', path: 'src', glob: '*.ts' }), EXECUTORS)).toBe('grep "SERVER_URL" src *.ts');
