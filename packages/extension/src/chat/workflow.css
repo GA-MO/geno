@@ -1,0 +1,84 @@
+/*
+ * Workflows (U64): the card that asks to run one, with each step's estimate and caps. Each step is three lines, so it
+ * stays readable at a 300px panel without a table to scroll.
+ */
+
+.workflow-name {
+  margin: 8px 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.workflow-name code {
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--code-size);
+  font-weight: 600;
+}
+
+.workflow-input {
+  margin: 0 0 6px;
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.workflow-label {
+  color: var(--muted);
+}
+
+.workflow-steps {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 8px;
+  padding: 0 0 0 20px;
+}
+
+.workflow-step {
+  padding: 4px 0 4px 2px;
+  border-bottom: 1px solid var(--vscode-contrastBorder, color-mix(in srgb, var(--vscode-foreground) 10%, transparent));
+}
+
+.workflow-step:last-child {
+  border-bottom: none;
+}
+
+.workflow-step::marker {
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.workflow-step-name {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.workflow-step-what,
+.workflow-step-cost {
+  display: block;
+  color: var(--muted);
+  font-size: var(--small);
+  overflow-wrap: anywhere;
+}
+
+.workflow-step-check .workflow-step-name,
+.workflow-step-gate .workflow-step-name {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.workflow-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.workflow-total .codicon {
+  flex: none;
+  color: var(--muted);
+}
+
+.workflow-path code {
+  font-family: var(--vscode-editor-font-family);
+  overflow-wrap: anywhere;
+}

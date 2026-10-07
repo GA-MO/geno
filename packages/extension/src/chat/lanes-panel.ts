@@ -201,6 +201,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
           ),
         ),
       ),
+    row.workflow !== undefined && h('p', { class: 'task-wakes task-workflow', title: row.workflow }, icon('run-all', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.workflow)),
     row.wakes !== undefined && h('p', { class: 'task-wakes', title: row.wakes }, icon('bell', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.wakes)),
     h(
       'div',
@@ -209,7 +210,7 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
         ? h('span', { class: 'task-here' }, 'Shown in the chat')
         : h('button', { type: 'button', class: 'button small secondary', 'data-action': 'open', 'data-focus': `task-open:${row.id}`, onclick: open }, 'Open'),
       row.stop && h('button', { type: 'button', class: 'button small ghost', 'data-action': 'stop', title: 'Stop the task', onclick: () => post({ type: 'task-stop', sessionId: row.id }) }, 'Stop'),
-      row.stop && !row.current && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'message', title: 'Send it a message that lands at its next tool round', onclick: message }, 'Message'),
+      row.stop && !row.current && row.workflow === undefined && h('button', { type: 'button', class: 'button small secondary', 'data-action': 'message', title: 'Send it a message that lands at its next tool round', onclick: message }, 'Message'),
       row.wakes !== undefined &&
         h(
           'button',

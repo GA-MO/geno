@@ -24,7 +24,7 @@
     "./compact": "./src/compact.ts",
     "./schedule": "./src/schedule.ts",
     "./cron": "./src/cron.ts",
-    "./workflow": "./src/workflow.ts"
+    "./workflow-progress": "./src/workflow-progress.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

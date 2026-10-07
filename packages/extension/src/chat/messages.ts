@@ -1,4 +1,4 @@
-import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList } from '@g-code/core';
+import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -187,10 +187,14 @@ export type PermissionOutcome =
   | { readonly kind: 'cancelled' };
 
 /**
- * What a card asks besides running a command: to keep a note across sessions (`remember`), or one to four questions
- * (`ask_user`), each with its options and an Other answer in the user's own words.
+ * What a card asks besides running a command: to keep a note across sessions (`remember`), one to four questions
+ * (`ask_user`), each with its options and an Other answer in the user's own words, or to run a workflow.
  */
-export type PermissionAsk = { readonly kind: 'memory'; readonly text: string; readonly scope: MemoryScope } | { readonly kind: 'question'; readonly request: AskUserRequest };
+export type PermissionAsk =
+  | { readonly kind: 'memory'; readonly text: string; readonly scope: MemoryScope }
+  | { readonly kind: 'question'; readonly request: AskUserRequest }
+  /** To run a workflow, with what each step may spend. */
+  | { readonly kind: 'workflow'; readonly preview: WorkflowPreview };
 
 /**
  * The engine waiting on the user: before it runs a command its rules hold back, or, with `ask`, before it keeps a
