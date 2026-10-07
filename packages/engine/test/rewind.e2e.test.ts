@@ -20,6 +20,7 @@ import {
   type SessionSummaryMeta,
   type TasksResponse,
   type TurnEvent,
+  ENVIRONMENT_HEADING,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
@@ -130,7 +131,7 @@ const prose = (body: { readonly messages: readonly { readonly role: string; read
   body.messages.flatMap((m) =>
     m.role !== 'user' || typeof m.content === 'string'
       ? []
-      : (m.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') ? [b.text] : [])),
+      : (m.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' && b.text !== undefined && !b.text.startsWith('<') && !b.text.startsWith(ENVIRONMENT_HEADING) ? [b.text] : [])),
   );
 const restoredNote = /^\[The user rewound the workspace/;
 

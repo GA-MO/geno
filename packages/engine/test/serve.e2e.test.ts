@@ -188,6 +188,9 @@ const toolResultOf = (body: { messages: { content: unknown }[] }, index = -1): {
   return content.find((block) => block.type === 'tool_result')!;
 };
 
+/** The environment block that opens every session's first message. */
+const anEnvironment = { type: 'text', text: expect.stringMatching(/^\[Geno\] The environment of this session/) };
+
 describe('gcode serve', () => {
   it('reads the unsaved buffer, writes the edit through the editor, and streams the turn as session updates', async () => {
     const read = use('read', { path: 'a.ts' });
@@ -257,8 +260,9 @@ describe('gcode serve', () => {
     });
 
     const [first, second] = transport.requests.map((r) => r.body.messages);
-    expect(first[0].content.map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)).toEqual(attached);
-    expect(JSON.stringify(second[0].content)).toBe(JSON.stringify(attached));
+    const sentFirst = first[0].content.map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block);
+    expect(sentFirst).toEqual([anEnvironment, ...attached]);
+    expect(JSON.stringify(second[0].content)).toBe(JSON.stringify(sentFirst));
     const shown = (await runCli(['session', 'show', sessionId], env)).stdout;
     expect(shown).toContain('  attached file a.ts');
     expect(shown).toContain('  attached selection b.ts:2-3');
@@ -727,6 +731,7 @@ describe('gcode serve', () => {
 
     const firsts = transport.requests.map((r) => r.body.messages[0].content);
     expect(firsts[0].map(({ cache_control: _, ...block }: { cache_control?: unknown }) => block)).toEqual([
+      anEnvironment,
       image,
       { type: 'text', text: 'What colors are in this?' },
       {

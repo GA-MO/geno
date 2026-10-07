@@ -28,6 +28,7 @@ import type { BackendBinding, BackendStart } from './backends.js';
 import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
+import { renderEnvironment, type Environment } from './environment.js';
 import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
@@ -141,8 +142,18 @@ export type Checkpoint = {
 };
 
 export type TurnEvent =
-  /** `context` is absent in logs written before sessions loaded any; `child` is present in a subagent's own log, `fork` in a fork's. */
-  | { readonly kind: 'session-start'; readonly session: Session; readonly context?: LoadedContext | undefined; readonly child?: ChildOf | undefined; readonly fork?: ForkOrigin | undefined }
+  /**
+   * `context` is absent in logs written before sessions loaded any, `environment` in logs written before sessions
+   * recorded one; `child` is present in a subagent's own log, `fork` in a fork's.
+   */
+  | {
+      readonly kind: 'session-start';
+      readonly session: Session;
+      readonly context?: LoadedContext | undefined;
+      readonly environment?: Environment | undefined;
+      readonly child?: ChildOf | undefined;
+      readonly fork?: ForkOrigin | undefined;
+    }
   | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
   | {
       readonly kind: 'restored';
@@ -324,8 +335,9 @@ function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredA
 
 /**
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
- * results in the order the model asked for them, then any unanswered prompts. The session's loaded context opens
- * the first user message, after the system prompt, so it is cached with the prefix but never part of it.
+ * results in the order the model asked for them, then any unanswered prompts. The session's loaded context and its
+ * environment open the first user message, after the system prompt, so they are cached with the prefix but never part
+ * of it, and the system prompt stays the same for every session.
  * `stored` holds the bytes of the attachments the events reference; one it lacks is replaced by a note. After a
  * compaction, the conversation is its `contextView`: the compaction's text opens it in place of the turns it replaced.
  */
@@ -352,7 +364,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'session-start') {
       workspace = event.session.workspace;
       const loaded = event.context === undefined ? undefined : renderLoadedContext(event.context);
-      if (loaded !== undefined) opening = [{ type: 'text', text: loaded }];
+      const environment = event.environment === undefined ? undefined : renderEnvironment(event.environment, event.session);
+      opening = [loaded, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
     }
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });

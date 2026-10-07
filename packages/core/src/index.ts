@@ -7,6 +7,7 @@ export * from './providers.js';
 export * from './openai.js';
 export * from './timing.js';
 export * from './context.js';
+export * from './environment.js';
 export * from './hidden.js';
 export * from './commands.js';
 export * from './request.js';

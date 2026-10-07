@@ -6,7 +6,7 @@ import { asSessionId, replayMessages, SYSTEM_PROMPT } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport } from './fake-transport.js';
-import { runCli } from './helpers.js';
+import { environmentBlock, runCli } from './helpers.js';
 
 async function setup() {
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-chat-'));
@@ -43,7 +43,7 @@ describe('gcode chat', () => {
     expect(sent.headers.get('x-session-id')).toBe(id);
     expect(sent.body.system).toEqual([{ type: 'text', text: SYSTEM_PROMPT, cache_control: ephemeral }]);
     expect(sent.body.messages).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'Say hi' }] },
+      { role: 'user', content: [environmentBlock(log.events), { type: 'text', text: 'Say hi' }] },
       {
         role: 'assistant',
         content: [
@@ -83,7 +83,7 @@ describe('gcode chat', () => {
     const resumed = await runCli(['chat', '--session', id], env, { fetch: transport.fetch });
     expect(resumed.code).toBe(0);
     expect(transport.requests[1]!.body.messages).toEqual([
-      { role: 'user', content: [{ type: 'text', text: 'Write a long essay.', cache_control: ephemeral }] },
+      { role: 'user', content: [environmentBlock(log.events), { type: 'text', text: 'Write a long essay.', cache_control: ephemeral }] },
     ]);
     expect((await readSessionLog(file)).events.map((e) => e.kind)).toEqual([
       'session-start',
