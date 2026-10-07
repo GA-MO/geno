@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -389,6 +390,28 @@ describe('gcode serve: scheduled tasks', () => {
 
     expect(model.requests('[sched-added]')).toHaveLength(1);
     expect(ranOf(named(result, '[sched-added] look at the queue'))).toEqual([expect.objectContaining({ dueAt: T0 + HOUR, end: expect.objectContaining({ kind: 'done' }) })]);
+  });
+
+  it('looks at a workspace with no scheduled tasks without writing anything to the app home, at connect and each minute after', async () => {
+    const at = await fixture();
+    const dir = path.dirname(scheduleFile(at.env.GCODE_HOME, at.workspace));
+    const clock = new FakeClock(T0);
+    const seen = new Set<string>();
+    const now = clock.now;
+    clock.now = () => {
+      if (existsSync(dir)) for (const name of readdirSync(dir)) seen.add(name);
+      return now();
+    };
+    const { result } = await serve(at, clock, models({}).fetch, async () => {
+      await until(() => clock.armed(), 'the look at connect');
+      const atConnect = existsSync(dir);
+      clock.advance(MINUTE);
+      await until(() => clock.armed(), 'the look a minute later');
+      return { atConnect, aMinuteLater: existsSync(dir) };
+    });
+
+    expect(result, 'no schedules folder appears').toEqual({ atConnect: false, aMinuteLater: false });
+    expect([...seen], 'no lock file exists while a look reads the clock').toEqual([]);
   });
 
   it('asks the user before the model schedules anything, never the classifier, and takes "Allow for this chat" for the rest', async () => {
