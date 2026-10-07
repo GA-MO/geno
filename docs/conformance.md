@@ -147,6 +147,20 @@ P27 also covers rows that have no Claude Code conformance test:
 | B/B-20 | T-TOOL-08 above. `tools.test.ts` (core) checks which commands `leadingSleep` finds, and `changesDirectory` for T-TOOL-06b. |
 | A/C-07 | T-DEFER-03 and T-DEFER-04 above. `deferred-tools.test.ts` checks the `select:` form, its order and note, and `+word` ranking. |
 
+## Changed on disk (P7)
+
+A read or an edit logs the file as the model now knows it: the hash of its text, and the disk's size and change time from before the text was read (`trackedFiles` in `core/src/file-tracker.ts`). At the safe point before each model call, `changedOnDisk` in `engine/src/file-tracker.ts` stats the 50 files touched most recently and reads only those whose stat moved. A file whose text no longer matches gets a `file-changed` event, and the next request carries Claude Code's note under `[Geno]`, with the changed lines numbered as `read` numbers them when they fit in 60 lines. Geno's own edits stamp what they wrote, so they get no note. The stale-edit refusal stays as the backstop.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-CTX-01 | A file read or edited and then changed outside gets an `edited_text_file` reminder: "Note: <path> changed on disk since you last read it…", with the relevant changes when they are short. | Adapted: the same note as a `[Geno]` block after the tool results of the next request, once per change, from a log event, so a resume sends the same bytes. An edit's result says "Edited <path>." or, for a new file, "Created <path>.", then "The file state is current in your context; no need to read it back." | pass (adapt, was fail) | `context.conformance.test.ts`, both wires |
+
+P7 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| A/D-04, B/B-10 | `file-changes.e2e.test.ts` serves a session to an editor over ACP. The user saves `a.ts` between two model calls; the fake model reverts it unless the note arrives, and the file keeps the user's text. An edit into an unsaved buffer, and the user saving that buffer, get no note. `core/test/file-tracker.test.ts` pins the note, the excerpt (context lines, merged ranges, the 60-line limit, a `[Geno]` line in the file neutralized) and the fold. `engine/test/file-tracker.test.ts` checks that an unchanged stat is not read, a save with the same text is read once, and a deleted or oversized file drops out. A rewind of the conversation only, or a fork, keeps the files, so the next request notes each file the kept conversation knew in an older state (`rewind.e2e.test.ts`). A rewind that restores files drops every tracked file, since its own note says to read them again. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -233,7 +247,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-MEM-01 | adopt | P8 | no test yet |
 | T-MEM-02 | keep Geno's | P11 | no test yet |
 | T-MEM-03 | adapt | P22 | no test yet |
-| T-CTX-01 | adapt | P7 | no test yet |
+| T-CTX-01 | adapt | P7 | pass |
 | T-CTX-02 | keep Geno's | none | no test yet |
 | T-CTX-03 | at parity | none | no test yet |
 | T-CTX-04 | skip | none | no test yet |
