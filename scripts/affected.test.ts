@@ -44,6 +44,7 @@ describe('selectVscode', () => {
 
   it('runs everything when the harness changes', () => {
     expect(names(['packages/extension/test/launch.ts'])).toHaveLength(SUITES.length);
+    expect(names(['scripts/vscode-workers.ts']), 'how many files run at once').toHaveLength(SUITES.length);
   });
 });
 

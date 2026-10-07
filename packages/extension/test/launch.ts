@@ -39,14 +39,16 @@ export async function makeWorkspace(files: Readonly<Record<string, string>>, set
   return { work, workspace, home };
 }
 
-/** A workspace as makeWorkspace makes it, with the extension and the named suite built. */
+/**
+ * A workspace as makeWorkspace makes it, with the named suite built. The extension is built once per run, in
+ * vscode-setup.ts, so no file rewrites dist while another file's VS Code loads it.
+ */
 export async function setUp(suiteName: string, files: Readonly<Record<string, string>>, settings: Record<string, unknown>, user: Record<string, unknown> = {}) {
   const { work, workspace, home } = await makeWorkspace(files, settings, user);
-  const { buildExtension } = await import('../build.mjs');
-  await buildExtension();
   const suite = await buildSuite(work, suiteName);
-  // A user-data dir under the repo makes VS Code's IPC socket path longer than macOS allows.
-  const launchArgs = [workspace, '--disable-extensions', '--skip-welcome', '--skip-release-notes', '--force-disable-user-env', `--user-data-dir=${work}/ud`];
+  // A user-data dir under the repo makes VS Code's IPC socket path longer than macOS allows. The extensions dir would
+  // otherwise default to one under the checkout, which files running at once would share.
+  const launchArgs = [workspace, '--disable-extensions', '--skip-welcome', '--skip-release-notes', '--force-disable-user-env', `--user-data-dir=${work}/ud`, `--extensions-dir=${work}/extensions`];
   return { work, workspace, home, suite, launchArgs };
 }
 
@@ -66,9 +68,9 @@ export const BARE_PATH = '/usr/bin:/bin';
  * rather than one resolved from the login shell.
  */
 export async function installClean(work: string) {
-  const { packageExtension } = await import('../build.mjs');
+  const { packBuilt } = await import('../build.mjs');
   const vsix = path.join(work, 'g-code.vsix');
-  await packageExtension(vsix);
+  await packBuilt(vsix);
   // GCODE_VSCODE_VERSION pins the editor build, for checking the version the user actually runs.
   const executable = await downloadAndUnzipVSCode({ cachePath, ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}) });
   const extensionsDir = path.join(work, 'extensions');
