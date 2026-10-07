@@ -13,7 +13,7 @@ pstack skills are written for Claude Code. They name Claude Code tools (`Skill`,
 | Create a file | `edit` with `create: true` and the whole content as `new_str`. |
 | Delete a file | `bash` with `rm`, inside the workspace only. |
 | Run a shell command (`Bash`) | `bash`. It runs in a sandbox with no network beyond localhost. It writes only inside the workspace and a temp folder. Some commands need the user's approval and can be refused. |
-| Search file contents (`Grep`) | `grep`. To search a skill's folder, pass its absolute path as `directory`. |
+| Search file contents (`Grep`) | `grep`. `path` names the file or directory to search, and `glob` narrows it, as in Claude Code. To search a skill's folder, pass its absolute path as `path`. |
 | Find files (`Glob`) | `glob`. To search a skill's folder, pass its absolute path as `directory`. |
 | List a directory (`ls`) | `list`. |
 | Run the project's checks | `check`, or the test command through `bash`. |
