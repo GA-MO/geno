@@ -59,16 +59,12 @@ function strReplaceEdit(input: Input, file: FileState): ApplyOutcome {
   if (wrong !== undefined) return wrong;
   const newStr = stringField(input, 'edit', 'new_str');
   if (typeof newStr !== 'string') return newStr;
-  if (input['create'] === true) {
-    if (file.text !== null) {
-      return failed('wrong-file', `${file.path} already exists; replace text in it with old_str and new_str instead of create`);
-    }
-    return { kind: 'applied', after: newStr };
-  }
+  // proposeChange has checked that an existing file is still the base the model was shown, so create may replace it.
+  if (input['create'] === true) return { kind: 'applied', after: newStr };
   if (file.text === null) return failed('wrong-file', `${file.path} does not exist; pass create: true to make it`);
   const oldStr = stringField(input, 'edit', 'old_str');
   if (typeof oldStr !== 'string') return oldStr;
-  return strReplace(file.path, file.text, oldStr, newStr);
+  return strReplace(file.path, file.text, oldStr, newStr, input['replace_all'] === true);
 }
 
 const PATCH_OPS: { [K in PatchOp['kind']]: (op: Extract<PatchOp, { kind: K }>, text: string | null) => ApplyOutcome } = {
@@ -112,14 +108,15 @@ export const EDIT_FORMAT_SPECS: Readonly<Record<EditFormat, FormatSpec>> = {
     tool: {
       name: 'edit',
       description:
-        'Change a file by replacing one exact piece of its text. old_str must match the file exactly, including indentation and line breaks, and must appear exactly once; include enough surrounding lines to make it unique. Never include line numbers. To make a new file, pass create: true and the whole content as new_str. Call once per separate change.',
+        'Change a file by replacing one exact piece of its text. old_str must match the file exactly, including indentation and line breaks, and must appear exactly once; include enough surrounding lines to make it unique, or pass replace_all: true to change every place it appears, as for a rename. Never include line numbers. To make a new file, or to replace the whole of a file you have read, pass create: true and the whole content as new_str. Call once per separate change.',
       input_schema: {
         type: 'object',
         properties: {
           path: pathProperty,
           old_str: { type: 'string', description: 'The exact text to replace. Omit when create is true.' },
-          new_str: { type: 'string', description: 'The text that replaces old_str, or the content of a new file.' },
-          create: { type: 'boolean', description: 'Make a new file whose content is new_str. Defaults to false.' },
+          new_str: { type: 'string', description: 'The text that replaces old_str, or the whole content of the file.' },
+          replace_all: { type: 'boolean', description: 'Replace every place old_str appears exactly, not just one. Defaults to false.' },
+          create: { type: 'boolean', description: 'Write new_str as the whole file: a new file, or one you have read, which it replaces. Defaults to false.' },
         },
         required: ['path', 'new_str'],
         additionalProperties: false,

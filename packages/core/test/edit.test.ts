@@ -45,18 +45,33 @@ describe('strReplace', () => {
     expect(outcome).toMatchObject({ kind: 'failed', reason: 'zero-matches' });
   });
 
-  it('gives the count and start lines of several matches', () => {
+  it('gives the count and start lines of several matches, and offers replace_all', () => {
     expect(strReplace('m.js', file, '  return a - b;', '  return 0;')).toEqual({
       kind: 'failed',
       reason: 'multiple-matches',
       detail:
-        'old_str appears 2 times in m.js, starting at lines 2 and 6. Include more of the surrounding lines in old_str so it matches exactly one place.',
+        'old_str appears 2 times in m.js, starting at lines 2 and 6. Include more of the surrounding lines in old_str so it matches exactly one place, or pass replace_all: true to change every one.',
     });
   });
 
-  it('counts several whitespace-normalized matches too', () => {
+  it('counts several whitespace-normalized matches too, and says replace_all needs the exact text', () => {
     const outcome = strReplace('m.js', file, 'return a - b;  ', '');
-    expect(outcome).toMatchObject({ kind: 'failed', reason: 'multiple-matches', detail: expect.stringContaining('lines 2 and 6') });
+    expect(outcome).toEqual({
+      kind: 'failed',
+      reason: 'multiple-matches',
+      detail:
+        'old_str appears 2 times in m.js when indentation and trailing whitespace are ignored, starting at lines 2 and 6. Include more of the surrounding lines in old_str so it matches exactly one place, or copy it exactly from the file and pass replace_all: true to change every one.',
+    });
+  });
+
+  it('replaces every exact match with replace_all', () => {
+    expect(strReplace('m.js', file, 'a - b', 'a * b', true)).toEqual({ kind: 'applied', after: file.replaceAll('a - b', 'a * b') });
+    expect(strReplace('m.js', 'a = 1; a = 2;', 'a', '$&$1', true), 'new_str is literal text').toEqual({ kind: 'applied', after: '$&$1 = 1; $&$1 = 2;' });
+  });
+
+  it('replaces a single match with replace_all, and still forgives its indentation', () => {
+    expect(strReplace('m.js', file, 'function add(a, b) {', 'function plus(a, b) {', true)).toEqual({ kind: 'applied', after: file.replace('add(', 'plus(') });
+    expect(strReplace('m.js', file, ' function sub(a, b) {', 'function minus(a, b) {', true)).toEqual({ kind: 'applied', after: file.replace('sub(', 'minus(') });
   });
 });
 
@@ -71,10 +86,21 @@ describe('proposeChange', () => {
     expect(change.hunks).toEqual([{ startLine: 1, lineCount: 0, oldText: '', newText: 'hello\n', status: 'pending' }]);
   });
 
-  it('refuses create over an existing file', () => {
-    const { change, after } = propose('str_replace', { path: 'm.js', new_str: 'x', create: true }, file);
+  it('overwrites a file whose base still matches with str_replace create', () => {
+    const { change, after } = propose('str_replace', { path: 'm.js', new_str: 'x\n', create: true }, file);
+    expect(after).toBe('x\n');
+    expect(change.result).toEqual({ kind: 'applied' });
+  });
+
+  it('refuses create over a file that changed since it was read', () => {
+    const { change, after } = propose('str_replace', { path: 'm.js', new_str: 'x\n', create: true }, `${file}// edited elsewhere\n`, file);
     expect(after).toBeNull();
-    expect(change.result).toMatchObject({ kind: 'failed', reason: 'wrong-file' });
+    expect(change.result).toMatchObject({ kind: 'failed', reason: 'stale-base' });
+  });
+
+  it('passes replace_all through str_replace', () => {
+    const { after } = propose('str_replace', { path: 'm.js', old_str: 'a - b', new_str: 'a * b', replace_all: true }, file);
+    expect(after).toBe(file.replaceAll('a - b', 'a * b'));
   });
 
   it('reports a stale base and applies nothing when the file changed since it was read', () => {
