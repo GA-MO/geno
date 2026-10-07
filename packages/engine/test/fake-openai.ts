@@ -41,20 +41,21 @@ export function chatAnswer(text: string, usage: ChatUsageFake): ChatReply {
 
 export type FakeCall = { readonly id: string; readonly name: string; readonly input: unknown };
 
-/** `text`, then each call with its arguments streamed in two halves. */
-export function chatToolCall(text: string, calls: readonly FakeCall[], usage: ChatUsageFake): ChatReply {
+/** `text`, then each call with its arguments streamed in two halves. `cutOff` stops at the output limit halfway through the last call. */
+export function chatToolCall(text: string, calls: readonly FakeCall[], usage: ChatUsageFake, opts: { cutOff?: true } = {}): ChatReply {
   return {
     chunks: [
       chunk({ role: 'assistant', content: text }),
       ...calls.flatMap((call, index) => {
         const json = JSON.stringify(call.input);
         const half = Math.ceil(json.length / 2);
+        const cut = opts.cutOff === true && index === calls.length - 1;
         return [
           chunk({ tool_calls: [{ index, id: call.id, type: 'function', function: { name: call.name, arguments: json.slice(0, half) } }] }),
-          chunk({ tool_calls: [{ index, function: { arguments: json.slice(half) } }] }),
+          ...(cut ? [] : [chunk({ tool_calls: [{ index, function: { arguments: json.slice(half) } }] })]),
         ];
       }),
-      chunk({}, 'tool_calls'),
+      chunk({}, opts.cutOff === true ? 'length' : 'tool_calls'),
       usageChunk(usage),
     ],
   };

@@ -204,7 +204,7 @@ describe('gcode ask', () => {
     expect(turnTimings(events)).toEqual([expect.objectContaining({ seq: 2, outcome: 'aborted', tools: [expect.objectContaining({ toolUseId: 'tu_1', name: 'glob' })] })]);
   });
 
-  it('logs an interrupt during tool execution as an abort, exits 130, and runs those tools on resume', async () => {
+  it('logs an interrupt during tool execution as an abort with the calls answered as stopped, exits 130, and never runs them on resume', async () => {
     const { workspace, env, store } = await setup();
     const transport = fakeTransport([
       toolCall('Searching.', [{ id: 'tu_1', name: 'glob', input: { pattern: '**/*.ts' } }], usage),
@@ -221,19 +221,15 @@ describe('gcode ask', () => {
     expect(interrupted.stderr).toContain('abort: interrupted by the user');
     const id = sessionIdOf(interrupted.stdout);
     const file = sessionFile(store, asSessionId(id));
-    expect(kinds((await readSessionLog(file)).events)).toEqual(['session-start', 'user', 'assistant', 'error:abort']);
+    const { events } = await readSessionLog(file);
+    expect(kinds(events)).toEqual(['session-start', 'user', 'assistant', 'tool-result', 'error:abort']);
+    expect(events[3]).toMatchObject({ toolUseId: 'tu_1', status: 'error', output: expect.stringMatching(/interrupted by user/) });
 
     const resumed = await runCli(['ask', '--session', id], env, { fetch: transport.fetch });
     expect(resumed.code).toBe(0);
-    expect(resumed.stdout).toContain('> glob "**/*.ts"');
-    expect(kinds((await readSessionLog(file)).events)).toEqual([
-      'session-start',
-      'user',
-      'assistant',
-      'error:abort',
-      'tool-result',
-      'assistant',
-    ]);
+    expect(resumed.stdout).not.toContain('> glob');
+    expect(kinds((await readSessionLog(file)).events)).toEqual(['session-start', 'user', 'assistant', 'tool-result', 'error:abort', 'assistant']);
+    expect(transport.requests[1]!.body.messages.at(-1).content).toEqual([expect.objectContaining({ type: 'tool_result', tool_use_id: 'tu_1', is_error: true })]);
   });
 
   it('retries an overloaded provider, logs the retry, and finishes the turn', async () => {
