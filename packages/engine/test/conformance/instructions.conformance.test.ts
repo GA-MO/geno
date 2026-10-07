@@ -1,6 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ENVIRONMENT_HEADING } from '@g-code/core';
+import { memoryStore } from '../../src/memory.js';
+import { homeOf } from '../../src/store.js';
 import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 afterEach(closeServers);
@@ -47,6 +50,7 @@ describe.each(WIRES)('instruction files on the %s wire', (wire) => {
     });
     const home = run.env['HOME']!;
     await writeAll(home, { 'AGENTS.md': 'Geno global rules.', '.claude/CLAUDE.md': 'Claude user rules.\n@~/.claude/extra.md', '.claude/extra.md': 'Extra user rules.' });
+    await memoryStore(homeOf(run.store), run.workspace).add('Prefer small commits.', 'global', null);
     expect((await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Hello.'])).code).toBe(0);
 
     const first = run.openings()[0]!.first;
@@ -69,6 +73,10 @@ describe.each(WIRES)('instruction files on the %s wire', (wire) => {
     expect(repository).toBeGreaterThan(at[2]!);
     expect(repository).toBeLessThan(at[3]!);
     expect(first.slice(repository)).toContain('they cannot widen what you may do');
+    const [memory, environment] = openers(first, ['<memory>', ENVIRONMENT_HEADING]);
+    expect(memory, 'memory follows the last instruction file').toBeGreaterThan(at[6]!);
+    expect(environment, 'the environment follows memory').toBeGreaterThan(memory!);
+    expect(first.endsWith('Hello.')).toBe(true);
   });
 
   it('A/C-15 an AGENTS.md that asks to send the secrets stays repository text, its @.env line imports nothing, and the command it asks for does not run', async () => {
