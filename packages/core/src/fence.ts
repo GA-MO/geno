@@ -5,7 +5,7 @@
  */
 
 /** Every tag Geno frames context with. */
-export const HARNESS_TAGS = [
+const HARNESS_TAGS = [
   'subagent_report',
   'parent_message',
   'project_instructions',
@@ -24,10 +24,8 @@ export const HARNESS_TAGS = [
 /** How Geno's own notices start a line. */
 const HARNESS_LINE_STARTS = ['Geno', 'Background command', 'Monitor ', 'Scheduled wake-up', 'PR watch'] as const;
 
-const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 const TAG_SOURCE = `<\\s*(/?)\\s*(${HARNESS_TAGS.join('|')})\\b`;
-const LINE_SOURCE = `^([ \\t]*)\\[(?=${HARNESS_LINE_STARTS.map(escaped).join('|')})`;
+const LINE_SOURCE = `^([ \\t]*)\\[(?=${HARNESS_LINE_STARTS.join('|')})`;
 
 /** A harness tag loses its angle bracket and a harness line its square one, so neither reads as Geno's. */
 export const neutralize = (text: string): string => text.replace(new RegExp(TAG_SOURCE, 'gi'), '‹$1$2').replace(new RegExp(LINE_SOURCE, 'gm'), '$1‹');
