@@ -87,10 +87,10 @@ describe('the provider registry', () => {
 });
 
 describe('costOf per provider', () => {
-  it('prices Anthropic’s own models at its list price, cache writes at 1.25x input', () => {
-    expect(costOf('anthropic', 'claude-opus-5-5', million)).toBeCloseTo(4 + 0.2 + 5 + 20);
-    expect(costOf('anthropic', 'claude-sonnet-5-5', million)).toBeCloseTo(2 + 0.2 + 2.5 + 10);
-    expect(costOf('anthropic', 'claude-haiku-4-5', million)).toBeCloseTo(1 + 0.1 + 1.25 + 5);
+  it('prices Anthropic’s own models at its list price, cache writes at 2x input for the 1 h entries Geno writes', () => {
+    expect(costOf('anthropic', 'claude-opus-5-5', million)).toBeCloseTo(4 + 0.2 + 8 + 20);
+    expect(costOf('anthropic', 'claude-sonnet-5-5', million)).toBeCloseTo(2 + 0.2 + 4 + 10);
+    expect(costOf('anthropic', 'claude-haiku-4-5', million)).toBeCloseTo(1 + 0.1 + 2 + 5);
   });
 
   it('keeps a model’s price to the provider that charges it', () => {

@@ -52,7 +52,7 @@ describe('gatewayFor', () => {
     expect(request?.headers.get('authorization')).toBe('Bearer test-key');
     expect(request?.headers.get('x-api-key')).toBeNull();
     expect(request?.headers.get('x-session-id')).toBe('sess-1');
-    expect(request?.body).toMatchObject({ stream: true, max_tokens: 64000, output_config: { effort: 'high' } });
+    expect(request?.body).toMatchObject({ stream: true, max_tokens: 128_000, output_config: { effort: 'high' } });
     expect(request?.body).not.toHaveProperty('thinking');
   });
 

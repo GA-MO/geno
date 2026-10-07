@@ -203,7 +203,17 @@ describe('buildRequest', () => {
     const opus: Session = { ...session, provider: 'anthropic', model: 'claude-opus-5-5' };
     const flash: Session = { ...session, provider: 'modelstudio', model: 'qwen3.8-flash' };
     const unknown: Session = { ...session, provider: 'openrouter', model: 'some/model' };
-    const measured = (seq: number, input: number): TurnEvent => ({ ...assistant(seq, 'ok'), usage: { input, cacheRead: 0, cacheWrite: 0, output: 5 } });
+    const measured = (seq: number, input: number): TurnEvent => ({
+      kind: 'assistant',
+      seq,
+      at,
+      content: [{ type: 'text', text: 'ok', citations: null }],
+      stopReason: 'end_turn',
+      usage: { input, cacheRead: 0, cacheWrite: 0, output: 5 },
+      costUsd: 0.001,
+      latencyMs: 100,
+      model: opus.model,
+    });
     const breakpoints = (request: ReturnType<typeof buildRequest>) => [
       ...(request.system as { cache_control?: unknown }[]).map((block) => block.cache_control),
       ...request.messages.flatMap((m) => (typeof m.content === 'string' ? [] : m.content.flatMap((b) => ('cache_control' in b && b.cache_control ? [b.cache_control] : [])))),

@@ -1,9 +1,8 @@
 import {
+  capabilitiesOf,
   CHARS_PER_TOKEN,
-  compactAtTokens,
   compactionEvent,
   contextTokens,
-  contextWindowOf,
   keepTailTokens,
   nextSeq,
   planCompaction,
@@ -23,17 +22,17 @@ import {
 import type { Gateway } from './gateway.js';
 import { UsageError } from './command.js';
 
-/** Sets the context size, in tokens, at which auto compaction starts, in place of 80% of the model's window. */
+/** Sets the context size, in tokens, at which auto compaction starts, in place of the model's own `compactAt`. */
 export const COMPACT_AT_ENV = 'GCODE_COMPACT_AT';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** Where this session compacts on its own, from the environment and the model's window; undefined when the window is unknown and nothing is set. */
+/** Where this session compacts on its own: the setting, else the model's `compactAt`; undefined when neither is known. */
 export function compactAtOf(env: Env, { provider, model }: Pick<Session, 'provider' | 'model'>): number | undefined {
   const raw = env[COMPACT_AT_ENV]?.trim();
   const setting = raw === undefined || raw === '' ? undefined : Number(raw);
   if (setting !== undefined && !(Number.isInteger(setting) && setting > 0)) throw new UsageError(`${COMPACT_AT_ENV} must be a positive whole number of tokens`);
-  return compactAtTokens(contextWindowOf(provider, model), setting);
+  return setting ?? capabilitiesOf(provider, model).compactAt;
 }
 
 export type CompactOutcome =
