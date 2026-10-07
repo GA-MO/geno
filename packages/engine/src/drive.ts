@@ -398,6 +398,8 @@ export async function drive(
     if (step.kind === 'call-model' && mode.director !== undefined) {
       const issued = mode.director(events);
       if (issued === undefined) return end('end_turn');
+      // Text the user's side issues, such as a workflow's closing report, reaches a live viewer as a model's would.
+      for (const block of issued.content) if (block.type === 'text') watcher.text(block.text);
       await record({ kind: 'assistant', seq: nextSeq(events), at: new Date().toISOString(), ...issued, issuedBy: 'user' });
     } else if (step.kind === 'call-model' || held !== undefined) {
       // A delivery changed the log, so the loop looks at it again, and a limit still applies.
