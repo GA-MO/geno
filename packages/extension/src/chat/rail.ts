@@ -5,6 +5,7 @@ import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
 import type { Child, CompactBlock, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
 import { workedMs } from './transcript.js';
 import type { EditorTool } from './editor-step.js';
+import { isChapterCall, type ChapterTool } from './chapter-model.js';
 
 /**
  * A turn as the panel draws it: one rail of steps from the prompt to the answer. Runs of reads or edits fold
@@ -28,6 +29,8 @@ export type Step =
   | { readonly kind: 'widget'; readonly key: string; readonly tool: WidgetTool }
   /** A spawn_task call's suggestion, as a card: open, or started. Dismissed or withdrawn, it is gone. */
   | { readonly kind: 'spinoff'; readonly key: string; readonly tool: SpinoffTool }
+  /** Where the agent started a chapter: a thin divider with its title. */
+  | { readonly kind: 'chapter'; readonly key: string; readonly tool: ChapterTool }
   /** The todo list: pinned above a running turn's latest step, and once the turn ends, where it last changed. */
   | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly pinned: boolean }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
@@ -82,7 +85,8 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
       if (!streaming && block === lastSet && block.todo!.length > 0) steps.push({ kind: 'todo', key: 'todo', turn: turn.id, list: block.todo!, pinned: false });
     } else if (block.kind === 'tool' && block.name === SPAWN_TASK_TOOL && block.spinoff !== undefined) {
       if (block.spinoff.state.kind === 'offered' || block.spinoff.state.kind === 'started') steps.push({ kind: 'spinoff', key: `spinoff:${block.id}`, tool: block as SpinoffTool });
-    } else if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
+    } else if (block.kind === 'tool' && isChapterCall(block)) steps.push({ kind: 'chapter', key: `chapter:${block.id}`, tool: block });
+    else if (block.kind === 'text') steps.push({ kind: 'text', key: block.id, block });
     else if (block.kind === 'permission') steps.push({ kind: 'permission', key: `permission:${block.id}`, block });
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
@@ -126,6 +130,7 @@ export function nodeOf(step: Step): NodeState {
     case 'editor':
     case 'spinoff':
     case 'compact':
+    case 'chapter':
       return 'done';
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';

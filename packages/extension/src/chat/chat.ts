@@ -83,6 +83,12 @@ import {
   SPINOFF_START_METHOD,
   type SpinoffRequest,
   type SpinoffResponse,
+  CHAPTER_MARK_METHOD,
+  CHAPTER_META,
+  parseChapterMark,
+  type ChapterMark,
+  type ChapterMarkRequest,
+  type ChapterMarkResponse,
 } from '@g-code/core';
 import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, UNDO_COMMAND, UNDO_TURN_COMMAND } from '../review/controller.js';
 import { DEFAULT_REVIEW_MODE, REVIEW_MODE_SETTING, REVIEW_MODES, type ReviewMode } from '../review/mode.js';
@@ -368,13 +374,21 @@ function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf
   const editorAction = update.sessionUpdate === 'tool_call_update' ? editorActionOf(update._meta) : undefined;
   const todo = todoOfUpdate(update);
   const spinoff = update.sessionUpdate === 'tool_call_update' ? parseSpinoffShown(update._meta?.[SPINOFF_META]) : undefined;
+  const chapter = update.sessionUpdate === 'tool_call_update' ? chapterOf(update._meta) : undefined;
   return {
     ...action,
     ...(widget === undefined ? {} : { widget }),
     ...(editorAction === undefined ? {} : { editorAction }),
     ...(todo === undefined ? {} : { todo }),
     ...(spinoff === undefined ? {} : { spinoff }),
+    ...(chapter === undefined ? {} : { chapter }),
   };
+}
+
+/** The chapter an update's `_meta` carries, checked, since it crossed the process boundary. */
+function chapterOf(meta: Record<string, unknown> | null | undefined): ChapterMark | undefined {
+  const parsed = meta?.[CHAPTER_META] === undefined ? undefined : parseChapterMark(meta[CHAPTER_META]);
+  return parsed?.ok === true ? parsed.value : undefined;
 }
 
 /** When an update happened: now, or for a replayed tool call, when it was logged. */
@@ -787,6 +801,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         // A woken turn has no message of the user's to rewind to.
         seq: start.success && !woke.success ? start.data.seq : undefined,
         wake: woke.success ? woke.data.label : undefined,
+        chapter: chapterOf(update._meta),
       });
       this.replay.end = replayedEnd(update);
       return;
@@ -993,6 +1008,20 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (spinoff.state.kind === 'started') this.background.handlers['lanes-list']({ type: 'lanes-list' });
     } catch (error) {
       void this.view?.webview.postMessage({ type: 'spinoff-failed', id, message: messageOf(error) } satisfies ToView);
+    }
+  }
+
+  /** Marks, renames or removes the user's chapter at a message; a refusal goes back under that message. */
+  private async markChapter(turn: string, title: string | null): Promise<void> {
+    const sessionId = this.shown;
+    const turnSeq = this.transcript.turns.find((t) => t.id === turn)?.seq;
+    if (sessionId === undefined || turnSeq === undefined) return;
+    try {
+      const { agent } = await this.engine.connection();
+      const { mark } = await agent.request<ChapterMarkResponse, ChapterMarkRequest>(CHAPTER_MARK_METHOD, { sessionId, turnSeq, mark: title === null ? null : { title } });
+      if (this.shown === sessionId) this.dispatch({ type: 'chapter', turn, mark });
+    } catch (error) {
+      void this.view?.webview.postMessage({ type: 'chapter-failed', turn, message: messageOf(error) } satisfies ToView);
     }
   }
 
@@ -1390,6 +1419,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'spinoff-start': ({ id }) => void this.decideSpinoff(SPINOFF_START_METHOD, id),
       'spinoff-dismiss': ({ id }) => void this.decideSpinoff(SPINOFF_DISMISS_METHOD, id),
       'spinoff-open': ({ id }) => void this.openSpinoff(id).catch(warn),
+      'mark-chapter': ({ turn, title }) => void this.markChapter(turn, title),
       drafting: ({ typing }) => this.drafting(typing),
       permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),

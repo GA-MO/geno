@@ -97,7 +97,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
   reset: (_transcript, { transcript }) => transcript,
   model: (transcript, { model }) => (transcript.model === model ? transcript : { ...transcript, model }),
   backend: (transcript, { backend }) => (JSON.stringify(transcript.backend) === JSON.stringify(backend) ? transcript : { ...transcript, backend }),
-  'turn-start': (transcript, { id, at, prompt, attachments, mode, command, seq, wake }) => ({
+  'turn-start': (transcript, { id, at, prompt, attachments, mode, command, seq, wake, chapter }) => ({
     ...transcript,
     turns: [
       ...transcript.turns,
@@ -114,6 +114,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
         ...(command === undefined ? {} : { command }),
         ...(seq === undefined ? {} : { seq }),
         ...(wake === undefined ? {} : { wake }),
+        ...(chapter === undefined ? {} : { chapter }),
       },
     ],
   }),
@@ -143,6 +144,13 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     return spinoff === undefined ? next : withSpinoff(next, spinoff);
   },
   spinoff: (transcript, { shown }) => withSpinoff(transcript, shown),
+  chapter: (transcript, { turn: id, mark }) => {
+    const at = transcript.turns.findIndex((turn) => turn.id === id);
+    const turn = transcript.turns[at];
+    if (turn === undefined) return transcript;
+    const { chapter: _, ...rest } = turn;
+    return { ...transcript, turns: transcript.turns.with(at, mark === null ? rest : { ...rest, chapter: mark }) };
+  },
   diff: (transcript, { toolId, at, diff }) => onLast(transcript, (turn) => withTool(turn, toolId, at, (tool) => ({ ...tool, diff }))),
   background: (transcript, { toolId, job }) => {
     let changed = false;

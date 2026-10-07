@@ -1,6 +1,7 @@
 import type { CheckpointRef } from '@g-code/core';
 import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
+import { MARK_CHAPTER_TOOL } from '@g-code/core/chapters';
 import { TOOL_KINDS, type Block, type ChatDetail, type PermissionBlock, type ToolBlock, type ToolKind, type Turn } from './messages.js';
 import { isEdit, nodeOf, railOf, type EditTool, type Step } from './rail.js';
 
@@ -69,8 +70,8 @@ function deniedCalls(blocks: readonly Block[]): ReadonlySet<string> {
 }
 
 export function summaryOf(turn: Turn): Summary {
-  // The list shows its own progress, and a suggestion its own card, so their calls are not work to count.
-  const tools = turn.blocks.filter((block): block is ToolBlock => block.kind === 'tool' && block.name !== TODO_TOOL && block.name !== SPAWN_TASK_TOOL);
+  // The list shows its own progress, a suggestion its own card and a chapter its divider, so their calls are not work to count.
+  const tools = turn.blocks.filter((block): block is ToolBlock => block.kind === 'tool' && block.name !== TODO_TOOL && block.name !== SPAWN_TASK_TOOL && block.name !== MARK_CHAPTER_TOOL);
   const denied = deniedCalls(turn.blocks);
   const kinds = Object.fromEntries(TOOL_KINDS.map((kind) => [kind, new Set(tools.filter((t) => t.toolKind === kind).map(KINDS[kind].key)).size])) as Record<ToolKind, number>;
   return { kinds, failed: tools.filter((t) => t.status === 'failed' && !denied.has(t.id)).length, denied: denied.size };
@@ -133,8 +134,8 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 /** What a compact turn keeps in view while folded, widgets included, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  // What the user said mid-turn shapes the answer below it, as a decided question does; a compaction marks where the model stopped reading the chat word for word.
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'compact' || step.kind === 'todo' || step.kind === 'spinoff');
+  // What the user said mid-turn shapes the answer below it, as a decided question does; a compaction marks where the model stopped reading the chat word for word, and a chapter is where the table of contents jumps to.
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'compact' || step.kind === 'todo' || step.kind === 'spinoff' || step.kind === 'chapter');
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => (step.kind !== 'text' || step === narration) && step.kind !== 'todo').slice(-RECENT));

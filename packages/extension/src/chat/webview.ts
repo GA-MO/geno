@@ -42,7 +42,9 @@ import { agentStep, childHead, tickClocks } from './subagent-view.js';
 import { followupAtTurnEnd, followupSteered, pillOf, sendNowOf, type Followup, type SendNow, type SteerToView } from './steer-model.js';
 import { childSteer, isSendNowKey, sendNowButton, steerStep, taskSteers } from './steer-view.js';
 import { offersRewind, type RewindState } from './rewind-model.js';
-import { rewindSlot } from './rewind-view.js';
+import { rewindSlot, type ChapterSlot } from './rewind-view.js';
+import { callAnchor, currentEntry, defaultTitle, START_ANCHOR, tableOf, turnAnchor, type TocEntry } from './chapter-model.js';
+import { chapterDivider, chapterToc } from './chapter-view.js';
 import { usageCard, type UsageOpen, type UsageToView } from './usage-model.js';
 import { usageCardView } from './usage-view.js';
 import { prStatusBar } from './pr-status-view.js';
@@ -191,6 +193,7 @@ const helpers = helperDinos();
 const helperGate = motionGate((motion) => helpers.setMotion(motion));
 helpers.setMotion(helperGate.motion());
 
+const toc = chapterToc((entry) => jumpTo(entry));
 const childSlot = h('div', { class: 'child-head-slot' });
 const childRail = h('ol', { class: 'rail child-rail' });
 const childField = childSteer((message) => host.postMessage(message));
@@ -258,7 +261,7 @@ const child: Pane = {
 const panes: Readonly<Record<string, Pane>> = { history, mcp, rules, memory, settings, lanes, tasks, arena, child };
 const anyPaneOpen = (): boolean => Object.values(panes).some((pane) => pane.isOpen());
 document.body.dataset['view'] = 'chat';
-document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, lanes.element, tasks.element, arena.element, childView, log, form, status);
+document.body.append(header, mcp.notice, history.element, mcp.element, rules.element, memory.element, settings.element, lanes.element, tasks.element, arena.element, childView, toc.element, log, form, status);
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
 tray.insertBefore(attachments.element, chips);
 inputBox.insertBefore(attachments.note, input);
@@ -307,6 +310,8 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [step.block], build: () => steerStep(step.block) };
     case 'compact':
       return { deps: [step.block], build: () => compactStep(step.block, ui) };
+    case 'chapter':
+      return { deps: [step.tool.chapter], build: () => chapterDivider(step.tool.chapter, callAnchor(step.tool.id), 'agent') };
     // Rebuilt only when the widget or the call's status changes: a frame moved or rebuilt would load again.
     case 'widget':
       return { deps: [step.tool.widget, step.tool.status], build: () => widgetStep(step.tool, ui) };
@@ -348,6 +353,7 @@ function turnShell(turn: Turn): HTMLElement {
   return h(
     'article',
     { class: 'turn', 'data-turn': turn.id },
+    h('div', { class: 'chapter-slot' }),
     // A woken turn has no message of the user's; its head says why it started.
     turn.wake === undefined && userMessage(turn.prompt, turn.attachments, ui, turn.command),
     h('div', { class: 'rewind-slot' }),
@@ -382,7 +388,12 @@ function render(): void {
       shell.setAttribute('aria-busy', String(turn.status === 'streaming'));
       const offered = offersRewind(turn, transcript);
       const rewinding = rewinds.get(turn.id);
-      reconcile(shell.querySelector<HTMLElement>(':scope > .rewind-slot')!, [{ key: 'rewind', deps: [offered, rewinding], build: () => rewindSlot(turn.id, offered, rewinding, (message) => host.postMessage(message), () => rewound(turn.id, undefined)) }]);
+      const chapter = turn.chapter;
+      reconcile(shell.querySelector<HTMLElement>(':scope > .chapter-slot')!, chapter === undefined ? [] : [{ key: 'chapter', deps: [chapter], build: () => chapterDivider(chapter, turnAnchor(turn.id), 'user') }]);
+      const editing = chapterEdits.get(turn.id);
+      reconcile(shell.querySelector<HTMLElement>(':scope > .rewind-slot')!, [
+        { key: 'rewind', deps: [offered, rewinding, chapter, editing], build: () => rewindSlot(turn.id, offered, rewinding, (message) => host.postMessage(message), () => rewound(turn.id, undefined), chapterSlot(turn)) },
+      ]);
       reconcile(shell.querySelector<HTMLElement>(':scope > .head-slot')!, [{ key: 'head', deps: [turn.status, turn.endedAt, isWaiting(turn), turn.waiting?.kind, turn.waitedMs, turn.mode, turn.usage, transcript.backend?.label], build: () => turnHead(turn, transcript.backend) }]);
       // Compact detail folds the turn's work until the user opens it; full detail, or an opened turn, draws every step.
       const open = ui.isOpen(foldId(turn.id));
@@ -406,6 +417,10 @@ function render(): void {
       animating ||= turn.status === 'streaming' && pendingText(turn);
     });
   }
+
+  entries = tableOf(transcript);
+  if (entries.length === 0) delete document.body.dataset['chapters'];
+  else document.body.dataset['chapters'] = '';
 
   animating ||= renderChild();
   tasks.suggested(openSpinoffs(transcript).map((spinoff) => spinoffCardOf(spinoff, spinoffPending)));
@@ -436,6 +451,7 @@ function render(): void {
   focusNewPermission();
   if (!keepPlace() && atBottom) log.scrollTop = log.scrollHeight;
   revealAsked();
+  markCurrent();
   if (animating) schedule();
 }
 
@@ -631,6 +647,12 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
   if (message.type === 'reset') {
     usage = undefined;
     spinoffPending = {};
+    chapterEdits.clear();
+  }
+  if (message.type === 'chapter') chapterEdits.delete(message.turn);
+  if (message.type === 'chapter-failed') {
+    const was = chapterEdits.get(message.turn);
+    return editChapter(message.turn, { editing: was?.editing, problem: message.message });
   }
   if (message.type === 'spinoff-failed') {
     spinoffPending = { ...spinoffPending, [message.id]: { kind: 'failed', message: message.message } };
@@ -685,6 +707,82 @@ const usageSlot = (open: UsageOpen, seq: number | undefined): HTMLElement =>
     },
     closeUsage,
   );
+
+/** The title field under a message while the user marks or renames its chapter, and why the engine refused, by turn id. */
+const chapterEdits = new Map<string, { readonly editing: string | undefined; readonly problem: string | undefined }>();
+
+function editChapter(turn: string, edit: { readonly editing: string | undefined; readonly problem: string | undefined } | undefined): void {
+  if (edit === undefined) chapterEdits.delete(turn);
+  else chapterEdits.set(turn, edit);
+  schedule();
+}
+
+function chapterSlot(turn: Turn): ChapterSlot {
+  const edit = chapterEdits.get(turn.id);
+  const mark = (title: string | null) => host.postMessage({ type: 'mark-chapter', turn: turn.id, title } satisfies FromView);
+  return {
+    marked: turn.chapter !== undefined,
+    editing: edit?.editing,
+    problem: edit?.problem,
+    edit: () => {
+      editChapter(turn.id, { editing: turn.chapter?.title ?? defaultTitle(turn.prompt), problem: undefined });
+      requestAnimationFrame(() => log.querySelector<HTMLInputElement>(`[data-focus="chapter-title:${CSS.escape(turn.id)}"]`)?.select());
+    },
+    save: (title) => {
+      editChapter(turn.id, { editing: title, problem: undefined });
+      mark(title);
+    },
+    remove: () => {
+      editChapter(turn.id, undefined);
+      mark(null);
+    },
+    cancel: () => {
+      editChapter(turn.id, undefined);
+      requestAnimationFrame(() => log.querySelector<HTMLElement>(`[data-focus="rewind:${CSS.escape(turn.id)}"]`)?.focus());
+    },
+  };
+}
+
+/** The table of contents' rows as the last render drew them. */
+let entries: readonly TocEntry[] = [];
+
+const anchorOf = (entry: TocEntry): HTMLElement | null => log.querySelector<HTMLElement>(`[data-chapter="${CSS.escape(entry.anchor)}"]`);
+
+/**
+ * Scrolls a chapter to the top: the agent's divider lands below its turn's stuck request, as a revealed turn does; the
+ * user's opens its turn, so it goes to the very top.
+ */
+function jumpTo(entry: TocEntry): void {
+  const target = anchorOf(entry);
+  if (entry.anchor === START_ANCHOR) log.scrollTop = 0;
+  else if (target === null) return;
+  else if (entry.by === 'user') log.scrollTop += target.getBoundingClientRect().top - log.getBoundingClientRect().top - 4;
+  else target.scrollIntoView({ block: 'start' });
+  markCurrent();
+}
+
+/** Where a chapter counts as reached: just below the stuck request, which the transcript's scroll padding leaves room for. */
+const readingLine = (): number => (Number.parseFloat(getComputedStyle(log).scrollPaddingTop) || 0) + 8;
+
+function markCurrent(): void {
+  if (entries.length === 0) return toc.show(entries, 0);
+  const box = log.getBoundingClientRect();
+  const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 2;
+  const line = atEnd ? box.bottom : box.top + readingLine();
+  toc.show(entries, currentEntry(entries.map((entry) => (entry.anchor === START_ANCHOR ? -Infinity : anchorOf(entry)?.getBoundingClientRect().top)), line));
+}
+
+let tocFrame: number | undefined;
+log.addEventListener(
+  'scroll',
+  () => {
+    tocFrame ??= requestAnimationFrame(() => {
+      tocFrame = undefined;
+      markCurrent();
+    });
+  },
+  { passive: true },
+);
 
 /** How a rewind or fork from each message goes, by turn id, until the next turn or session. */
 const rewinds = new Map<string, RewindState>();

@@ -10,6 +10,8 @@ import type { SteerFromView, SteerShown, SteerToView } from './steer-model.js';
 import type { RewindFromView, RewindToView } from './rewind-model.js';
 import type { UsageFromView, UsageToView } from './usage-model.js';
 import type { SpinoffFromView, SpinoffToView } from './spinoff-model.js';
+import type { ChapterFromView, ChapterToView } from './chapter-model.js';
+import type { ChapterMark } from '@g-code/core/chapters';
 import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { PrStatusFromView, PrStatusToView } from './pr-status-model.js';
 import type { WidgetTheme } from './widget-frame.js';
@@ -58,6 +60,8 @@ export type Turn = {
   readonly children?: Readonly<Record<string, Child>> | undefined;
   /** Why Geno started the turn by itself, such as "woke: 2 tasks finished"; undefined for a turn the user sent. */
   readonly wake?: string | undefined;
+  /** The chapter the user marked at this message, drawn above it. */
+  readonly chapter?: ChapterMark | undefined;
 };
 
 /**
@@ -129,6 +133,8 @@ export type ToolBlock = {
   readonly todo?: TodoList | undefined;
   /** The task a spawn_task call suggested, as it stands now. */
   readonly spinoff?: Spinoff | undefined;
+  /** The chapter a mark_chapter call started. */
+  readonly chapter?: ChapterMark | undefined;
   /** The background command a bash call started, as the engine last reported it. */
   readonly background?: BackgroundStep | undefined;
   /** What an open_file, reveal or show_diff call showed in the editor, which its step shows again. */
@@ -235,6 +241,7 @@ export type Action =
       readonly command?: SentCommand | undefined;
       readonly seq?: number | undefined;
       readonly wake?: string | undefined;
+      readonly chapter?: ChapterMark | undefined;
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
@@ -256,6 +263,7 @@ export type Action =
       readonly widget?: ToolWidget;
       readonly editorAction?: EditorAction;
       readonly todo?: TodoList;
+      readonly chapter?: ChapterMark;
       /** An offer sets this call's card; a move, such as from dismiss_task, changes the card with its id. */
       readonly spinoff?: SpinoffShown;
     }
@@ -264,6 +272,8 @@ export type Action =
   | { readonly type: 'background'; readonly toolId: string; readonly job: BackgroundStep }
   /** A suggested task changed outside any tool call, such as by the user's Start; it may be on any turn. */
   | { readonly type: 'spinoff'; readonly shown: SpinoffShown }
+  /** The user marked, renamed or removed the chapter at the message of turn `turn`; it may be any turn. */
+  | { readonly type: 'chapter'; readonly turn: string; readonly mark: ChapterMark | null }
   /** The review status of hunks, whichever surface decided them; hunks the transcript lacks are ignored. */
   | { readonly type: 'review'; readonly hunks: Readonly<Record<string, HunkStatus>> }
   | {
@@ -384,7 +394,8 @@ export type ToView =
   | RewindToView
   | UsageToView
   | SpinoffToView
-  | PrStatusToView;
+  | PrStatusToView
+  | ChapterToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -497,4 +508,5 @@ export type FromView =
   | RewindFromView
   | UsageFromView
   | SpinoffFromView
-  | PrStatusFromView;
+  | PrStatusFromView
+  | ChapterFromView;
