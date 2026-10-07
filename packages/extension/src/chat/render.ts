@@ -165,7 +165,6 @@ const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
  */
 export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui, quiet = false): HTMLElement {
   const first = tools[0]!;
-  // A dev server shows as the command it runs, once preview_start started it.
   if (name === 'bash' || (name === 'preview_start' && first.background !== undefined)) return commandStep(first, ui, quiet);
   const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
