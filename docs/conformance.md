@@ -79,14 +79,14 @@ P23 also covers rows that have no Claude Code conformance test. Their checks are
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-PERM-05 | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. | Built in, for the paths `SECRET_PATH` names (`.env` files, keys, `.ssh` and the like): `read .env` asks in Ask mode, and is refused with a message that names the rule when nobody can be asked. `grep` and `glob` leave those files out, and a `path` or `glob` that names one is refused. `cat .env` asks in Ask mode and is refused when nobody can be asked. The secret never reaches the model. | fail | `permissions.conformance.test.ts`, both wires |
+| T-PERM-05 | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. | Built in, for the paths `SECRET_PATH` names (`.env` files, keys, `.ssh` and the like): `read .env` asks in Ask mode, and is refused with a message that names the rule when nobody can be asked. `grep` and `glob` leave those files out, and a `path` or `glob` that names one is refused. `cat .env` asks in Ask mode and is refused when nobody can be asked. The secret never reaches the model. | partial: the built-in half passes (was fail: `read .env` and a `grep` hit in `.env` reached the model, and `cat .env` ran unasked in Ask mode). User path rules come in P28 | `permissions.conformance.test.ts`, both wires |
 
 P3 also covers rows that have no Claude Code conformance test:
 
 | ID | Check | Status |
 |---|---|---|
-| N-02 | `permissions.conformance.test.ts`: `read` and `bash` show hidden Unicode as visible escapes such as `[U+200B]`, and an edit written from those escapes lands on the real characters, on both wires. A `web_fetch` page with tag characters reaches the helper and the agent without them. An MCP result and a subagent report lose hidden characters and keep every other byte. | fail |
-| B/B-72 | `permissions.conformance.test.ts`, both wires: a user rejection in Ask ends the turn, with no further model call, no later call of the same turn, and a result that says to stop and wait for the user. A rule denial keeps "find another way" and the turn goes on. `workflows.e2e.test.ts` checks the same for "Don't run" on a workflow card. | fail |
+| N-02 | `permissions.conformance.test.ts`: `read` and `bash` show hidden Unicode as visible escapes such as `[U+200B]`, and an edit written from those escapes lands on the real characters, on both wires. A `web_fetch` page with tag characters reaches the helper and the agent without them. An MCP result and a subagent report lose hidden characters and keep every other byte. | pass (was fail) |
+| B/B-72 | `permissions.conformance.test.ts`, both wires: a user rejection in Ask ends the turn, with no further model call, no later call of the same turn, and a result that says to stop and wait for the user. A rule denial keeps "find another way" and the turn goes on. `workflows.e2e.test.ts` checks the same for "Don't run" on a workflow card, and `subagents.e2e.test.ts` checks that a no to a subagent's call ends the subagent's turn and the parent's. | pass (was fail) |
 
 ## Every conformance test
 
@@ -139,7 +139,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-PERM-02 | deliberate | none | no test yet |
 | T-PERM-03 | adapt | P32 | no test yet |
 | T-PERM-04 | adapt | P31 | no test yet |
-| T-PERM-05 | adapt; adopt | P3, P28, P14 | no test yet |
+| T-PERM-05 | adapt; adopt | P3, P28, P14 | partial |
 | T-PERM-09 | at parity | none | no test yet |
 | T-PERM-10 | adapt | P28 | no test yet |
 | T-PERM-11 | keep Geno's | none | no test yet |
