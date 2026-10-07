@@ -185,7 +185,10 @@ export type TurnEvent =
       readonly message: string;
       /** The model call that failed or was interrupted. */
       readonly timing?: ModelMarks | undefined;
-      /** The tools of a batch the user interrupted, which log no results. */
+      /**
+       * The calls the user interrupted while they ran, timed up to the stop. Their stopped results are logged before
+       * this event; in logs written before that, the batch's calls have no results and every call here had started.
+       */
       readonly tools?: readonly InterruptedTool[] | undefined;
     }
   | { readonly kind: 'review'; readonly seq: number; readonly at: string; readonly hunk: HunkId; readonly status: HunkStatus }

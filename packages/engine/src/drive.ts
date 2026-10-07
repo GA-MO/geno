@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { changesCourse, steerEvent, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -65,6 +65,8 @@ export type Watcher = {
    * along, so the user sees it while a slower call of the same batch still runs.
    */
   toolEnd(use: ToolUseBlock, status: ToolStatus, todo?: TodoList): void;
+  /** A tool use that will never run, such as one the user stopped before it started; its error result is logged next. */
+  toolSkipped?(use: ToolUseBlock, title: string): void;
   /** Every event, as it is appended to the session log. */
   logged(event: TurnEvent): void;
   /** A tool call the model is still writing. */
@@ -246,10 +248,9 @@ export async function drive(
   const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.(use.input) === true;
 
   // Batch by batch (see ToolBatch): an edit or command runs alone, after every call before it and before every call after.
-  // Returns the tools of a batch the user interrupted, timed up to the interruption, or undefined when all ran.
+  // Returns the calls the user interrupted while they ran, timed up to the interruption, or undefined when all ran.
   const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<InterruptedTool[] | undefined> => {
     const firstSeq = nextSeq(events);
-    const ran = new Map<number, InterruptedTool>();
     const running = new Map<number, Omit<InterruptedTool, 'endAt'>>();
     const results: ToolResultEvent[] = [];
     const runOne = async (i: number, toolCtx: ToolContext) => {
@@ -262,7 +263,6 @@ export async function drive(
       watcher.toolEnd(use, status, todo);
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name));
       const timing = { startAt: started.startAt, endAt: Date.now() };
-      ran.set(i, { ...started, ...timing });
       running.delete(i);
       results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, ...output, timing };
     };
@@ -286,13 +286,22 @@ export async function drive(
       return results;
     })();
     const outcome = await unlessAborted(work, signal);
-    if (outcome === ABORTED) {
-      const now = Date.now();
-      const cut = [...running].map(([i, tool]): [number, InterruptedTool] => [i, { ...tool, endAt: now }]);
-      return [...ran, ...cut].sort(([a], [b]) => a - b).map(([, tool]) => tool);
+    if (outcome !== ABORTED) {
+      for (const result of outcome) await record(result);
+      return undefined;
     }
-    for (const result of outcome) await record(result);
-    return undefined;
+    // Calls that finished keep their results; the rest are answered as stopped, so no later run runs them again.
+    const now = Date.now();
+    const finished = [...results];
+    const cut = [...running.values()].map((tool): InterruptedTool => ({ ...tool, endAt: now }));
+    const started = new Set(cut.map((tool) => tool.toolUseId));
+    const answers = stoppedAnswers(toolUses, (id) => started.has(id));
+    const at = new Date(now).toISOString();
+    for (const [i, use] of toolUses.entries()) {
+      if (finished[i] === undefined && !started.has(use.id)) watcher.toolSkipped?.(use, describeCall(use, mode.executors));
+      await record(finished[i] ?? answerEvent(answers[i]!, 0, at));
+    }
+    return cut;
   };
 
   const loaded = new Map<Sha256, string>();
@@ -410,6 +419,12 @@ export async function drive(
         await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: 'abort', message: 'interrupted by the user', tools: interrupted });
         io.err('abort: interrupted by the user');
       }
+    } else if (step.kind === 'answer-tools') {
+      const at = new Date().toISOString();
+      for (const answer of step.answers) {
+        watcher.toolSkipped?.(answer.use, describeCall(answer.use, mode.executors));
+        await record(answerEvent(answer, 0, at));
+      }
     }
   }
 }
@@ -428,8 +443,10 @@ async function finish(
     const message = LIMIT_MESSAGES[reason](run, total.costUsd ?? 0);
     await record({ kind: 'error', seq: nextSeq(events), at: new Date().toISOString(), error: reason, message });
     io.err(`${reason}: ${message}`);
-  } else if (reason === 'error' && last?.kind === 'assistant') {
-    io.err(`error: the model stopped with ${last.stopReason ?? 'no stop reason'}`);
+  } else if (reason === 'error' && last?.kind !== 'error') {
+    // The newest turn's stop ended the run, even when the answer to a call it cut short was logged after it.
+    const turn = events.findLast((e) => e.kind === 'assistant');
+    if (turn?.kind === 'assistant') io.err(`error: the model stopped with ${turn.stopReason ?? 'no stop reason'}`);
   }
   io.out(`usage: ${formatUsage(total.usage, total.costUsd)} turns=${total.turns}`);
   const final = events.at(-1);

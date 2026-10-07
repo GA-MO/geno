@@ -173,6 +173,10 @@ export function gatewayFor(
     if (message.stop_reason === 'refusal') {
       return { kind: 'error', error: 'refusal', message: refusalMessage(message) };
     }
+    // The answer stopped because the conversation filled the window, so it takes the too-long path: compact, then send again.
+    if (message.stop_reason === 'model_context_window_exceeded') {
+      return { kind: 'error', error: 'overflow', message: 'the conversation filled the model’s context window' };
+    }
     const usage = usageOf(message);
     return {
       kind: 'answer',

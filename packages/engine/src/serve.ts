@@ -668,6 +668,9 @@ function editorTurn(
           runningDescription = use.name === 'bash' ? bashDescriptionOf(use.input) : undefined;
           sent.send({ sessionUpdate: 'tool_call', toolCallId: use.id, title, kind: TOOL_KINDS[use.name] ?? 'other', status: 'in_progress', rawInput: use.input });
         },
+        toolSkipped(use, title) {
+          sent.send({ sessionUpdate: 'tool_call', toolCallId: use.id, title, kind: TOOL_KINDS[use.name] ?? 'other', status: 'pending', rawInput: use.input });
+        },
         toolEnd(use, status, todo) {
           sent.send({ sessionUpdate: 'tool_call_update', toolCallId: use.id, status: TOOL_STATUS[status], ...(todo === undefined ? {} : { _meta: { [TODO_META]: { items: todo } } }) });
         },
