@@ -23,7 +23,8 @@ describe('the model capability table', () => {
   });
 
   it('gives the windows and output limits the providers document', () => {
-    expect(capabilitiesOf('modelstudio', 'qwen3.8-flash')).toMatchObject({ window: 1_000_000, maxOutput: 131_072, compactAt: 800_000 });
+    expect(capabilitiesOf('modelstudio', 'qwen3.8-flash')).toMatchObject({ window: 1_000_000, maxOutput: 131_072, compactAt: 200_000 });
+    expect(capabilitiesOf('modelstudio', 'qwen3.7-plus').compactAt).toBe(800_000);
     expect(capabilitiesOf('modelstudio', 'qwen3.6-flash')).toMatchObject({ window: 1_000_000, maxOutput: 65_536 });
     expect(capabilitiesOf('anthropic', 'claude-opus-5-5')).toMatchObject({ window: 1_000_000, maxOutput: 128_000 });
     expect(capabilitiesOf('anthropic', 'claude-haiku-4-5')).toMatchObject({ window: 200_000, maxOutput: 64_000, compactAt: 160_000 });

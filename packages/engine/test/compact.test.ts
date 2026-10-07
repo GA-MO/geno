@@ -5,7 +5,7 @@ const flash = { provider: 'modelstudio', model: 'qwen3.8-flash' } as const;
 
 describe('where a session compacts on its own', () => {
   it("is the model's own compaction point from its capability record", () => {
-    expect(compactAtOf({}, flash)).toBe(800_000);
+    expect(compactAtOf({}, flash)).toBe(200_000);
     expect(compactAtOf({}, { provider: 'anthropic', model: 'claude-haiku-4-5' })).toBe(160_000);
   });
 
@@ -16,7 +16,7 @@ describe('where a session compacts on its own', () => {
   it('is GCODE_COMPACT_AT when set, for any model', () => {
     expect(compactAtOf({ GCODE_COMPACT_AT: '150000' }, flash)).toBe(150_000);
     expect(compactAtOf({ GCODE_COMPACT_AT: '64000' }, { provider: 'openrouter', model: 'some/model' })).toBe(64_000);
-    expect(compactAtOf({ GCODE_COMPACT_AT: ' ' }, flash)).toBe(800_000);
+    expect(compactAtOf({ GCODE_COMPACT_AT: ' ' }, flash)).toBe(200_000);
   });
 
   it('refuses a setting that is not a whole number of tokens', () => {
