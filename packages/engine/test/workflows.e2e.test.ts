@@ -326,6 +326,24 @@ describe('gcode serve: workflows', () => {
     expect(result).toContain('<subagent_report agent="workflow fanout"');
   });
 
+  it("B/B-72 ends the model's turn when the user says Don't run, and tells it to wait for the user", async () => {
+    const model = models({
+      '[model-parent]': (n) =>
+        n === 0
+          ? toolCall('Loading it.', [loadTools('workflow')], usage)
+          : n === 1
+            ? toolCall('Starting it.', [{ id: 'tu_wf', name: 'workflow', input: { name: 'fanout' } }], usage)
+            : answer('I will do the looks myself instead.', usage),
+      '[p1]': () => answer('never', usage),
+    });
+    const { heard, store, sessionId } = await serve(model.fetch, async (window) => window.prompt('[model-parent] run the fanout workflow'), () => 'reject');
+    expect(heard.cards).toHaveLength(1);
+    expect(model.requests('[model-parent]')).toHaveLength(2);
+    expect(model.requests('[p1]')).toEqual([]);
+    const result = (await logOf(store, sessionId)).findLast((e) => e.kind === 'tool-result');
+    expect(result).toMatchObject({ status: 'rejected', output: expect.stringMatching(/wait for the user/) });
+  });
+
   it('lists the workflows for /workflow with no name, and names the one it does not know', async () => {
     const model = models({ [PARENT]: () => answer('never', usage), 'List the workflows': () => answer('never', usage) });
     const { store, sessionId } = await serve(model.fetch, async (window) => {

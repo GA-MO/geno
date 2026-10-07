@@ -75,6 +75,19 @@ P23 also covers rows that have no Claude Code conformance test. Their checks are
 | A/C-02 | T-ASM-01 above. `model-capabilities.test.ts` holds Anthropic's cache write price at 2x input, the 1 h rate. The live check on Anthropic (`cacheRead` above 0 after 10 minutes) is not run: the repository has no Anthropic key. |
 | A/E-01 (default) | `packages/engine/test/compact-cost.ts`, a live eval on qwen3.8-flash that spent $0.14. A long flash session costs about 30% as much at 200,000 tokens as at 800,000, so flash now compacts at 200,000. Other models keep 80% of their window. Results in [results/p23-compaction-cost.md](results/p23-compaction-cost.md). |
 
+## Permissions (P3)
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-PERM-05 | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. | Built in, for the paths `SECRET_PATH` names (`.env` files, keys, `.ssh` and the like): `read .env` asks in Ask mode, and is refused with a message that names the rule when nobody can be asked. `grep` and `glob` leave those files out, and a `path` or `glob` that names one is refused. `cat .env` asks in Ask mode and is refused when nobody can be asked. The secret never reaches the model. | fail | `permissions.conformance.test.ts`, both wires |
+
+P3 also covers rows that have no Claude Code conformance test:
+
+| ID | Check | Status |
+|---|---|---|
+| N-02 | `permissions.conformance.test.ts`: `read` and `bash` show hidden Unicode as visible escapes such as `[U+200B]`, and an edit written from those escapes lands on the real characters, on both wires. A `web_fetch` page with tag characters reaches the helper and the agent without them. An MCP result and a subagent report lose hidden characters and keep every other byte. | fail |
+| B/B-72 | `permissions.conformance.test.ts`, both wires: a user rejection in Ask ends the turn, with no further model call, no later call of the same turn, and a result that says to stop and wait for the user. A rule denial keeps "find another way" and the turn goes on. `workflows.e2e.test.ts` checks the same for "Don't run" on a workflow card. | fail |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
