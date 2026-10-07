@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   absorbOutcomes,
@@ -464,5 +466,21 @@ describe('the tool and the command', () => {
 
   it('reads the last JSON block that has every field', () => {
     expect(readFields('```json\n{"pass": true}\n```\nthen\n```json\n{"pass": "yes"}\n```', { pass: 'boolean' })).toEqual({ ok: true, value: { pass: true } });
+  });
+});
+
+describe('the example workflows in docs/workflows', () => {
+  const dir = path.join(import.meta.dirname, '..', '..', '..', 'docs', 'workflows');
+  const names = readdirSync(dir).filter((file) => file.endsWith('.json'));
+
+  it.each(names)('%s parses, runs in Ask with the built-in roles, and fits its own cap', (file) => {
+    const parsed = parseWorkflow(JSON.parse(readFileSync(path.join(dir, file), 'utf8')), { name: file.slice(0, -5), source: 'workspace', path: `docs/workflows/${file}` });
+    if (!parsed.ok) throw new Error(parsed.problem);
+    expect(workflowRefusal(parsed.value, BUILTIN_AGENTS, 'ask')).toBeUndefined();
+    expect(workflowPreview(parsed.value, '', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] }).stopsBefore).toBeUndefined();
+  });
+
+  it('ships both examples', () => {
+    expect(names).toEqual(['review-fix-verify.json', 'three-angle-review.json']);
   });
 });

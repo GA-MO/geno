@@ -182,7 +182,8 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     fresh: attention.kind === 'ready',
     children: childrenOf(placed),
     time: formatDuration((task.endedAt ?? now) - task.startedAt),
-    cost: task.usage?.costUsd == null ? undefined : formatCost(task.usage.costUsd),
+    // A workflow's own turn calls no model; its progress line says what its steps spent.
+    cost: task.usage?.costUsd == null || task.workflow !== undefined ? undefined : formatCost(task.usage.costUsd),
     live: isLiveStatus(task.status),
     stop: isLiveStatus(task.status) && task.kind !== 'arena',
     current: task.sessionId === shown,
