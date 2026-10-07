@@ -197,6 +197,20 @@ P8 also covers rows that have no Claude Code conformance test:
 | C/C-68 | `project-context.test.ts`: a file one byte over 4 MiB is skipped with a problem line, whether loaded or imported, and one of exactly 4 MiB loads. The snapshot in session-start stays, so an edit applies to the next session. |
 | A/C-15, C/C-64 | `instructions.conformance.test.ts`, both wires: an `AGENTS.md` that tells the model to upload `.env` stays under the repository preamble, its `@.env` line imports nothing, the secret is in no request, and the `curl` the fake model sends is refused. `memory.test.ts` (core) pins both preambles, the neutralized fences and the pre-P8 bytes. `project-context.test.ts` refuses `@~/.ssh/id_rsa`, `@.env` and a symlink to `.env`. `packages/engine/test/instructions-smoke.ts` runs both cases live on Model Studio qwen3.8-flash for $0.004. The model followed a preference from a file that `~/.claude/CLAUDE.md` imports. Asked to summarize the README, it ran no upload, did not read `.env`, and told the user that `AGENTS.md` asked for one. |
 
+## Nested instruction files (P9)
+
+`loadProjectContext` also lists the instruction files below the workspace with `rg --files --hidden --no-config`, filtered to `AGENTS.override.md`, `AGENTS.md` and `CLAUDE.md`. ripgrep skips `.git`, `node_modules`, ignored paths and symlinks. Each directory keeps one file, by the same precedence as the ancestor walk, outer directories first. Each file follows P8's import rules: its imports load right after it, stay inside the workspace, and never name a credentials file. A file the opening already loaded is left out. The texts are recorded in session-start as `nested`, each with its directory, but the opening lists only their paths, under the repository preamble. The rule attacher hands each one out once per session, after the result of the first read of a file under its directory, and before the Cursor glob rules that file matches. An import keeps an `imported_from` attribute. A file that two directories import is attached once. The attachment is a neutralized `<project_rule>` block, so a resumed session finds it by its path and does not attach it again. On this repository (about 2,260 files), discovery adds about 6 ms to the context load (8 to 9 ms against 2 to 3 ms without it). A missing ripgrep, or a listing that runs over 5 s, loads no nested file and prints an `instructions:` line.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-ASM-11 | A Read in a directory that has a CLAUDE.md appends `Contents of <dir>/CLAUDE.md:` to the tool result, the first time only. | Adapted: reading `pkg/a.ts` appends `pkg/AGENTS.md` and its import as `<project_rule>` blocks, the import naming its importer. Reading `pkg/b.ts` attaches nothing. A resume replays the attached result byte for byte, sends the same opening, and does not attach again on `pkg/c.ts`. Only `read` and `@` mentions attach, as in Claude Code, where only Read does; `grep` and `edit` do not. | pass (adapt, was fail: subdirectory files did not load) | `instructions.conformance.test.ts`, both wires |
+
+P9 also covers these rows:
+
+| ID | Check |
+|---|---|
+| A/C-16, B/B-11, C/C-67 | `project-context.test.ts` (engine): one file per directory by precedence, outer first; `.github` included; `node_modules`, ignored directories, blank files and a directory named `AGENTS.md` left out; hidden Unicode stripped; imports under each importing directory; `.env` and paths outside the workspace refused; a file the opening imported left out; a missing ripgrep reported. `context.test.ts` (core): a directory is a prefix, so dotfiles and names with `[` match; the listing sits under the repository preamble; an import's attachment is neutralized and found again by its path. `rules.test.ts` (engine): outer directories first, before the glob rules, and a file two directories import is attached once. `memory.test.ts` (core): the rules pane lists a nested file as instructions for `<dir>/**`. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -230,7 +244,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-ASM-08 | skip | none | no test yet |
 | T-ASM-09 | at parity | none | no test yet |
 | T-ASM-10 | adopt; adapt | P8 | pass |
-| T-ASM-11 | adopt | P9 | no test yet |
+| T-ASM-11 | adopt | P9 | pass |
 | T-ASM-13 | at parity | none | no test yet |
 | T-ASM-15 | adapt | P36 | no test yet |
 | T-ASM-16 | at parity | none | no test yet |
