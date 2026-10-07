@@ -11,6 +11,7 @@ import type { RewindFromView, RewindToView } from './rewind-model.js';
 import type { UsageFromView, UsageToView } from './usage-model.js';
 import type { SpinoffFromView, SpinoffToView } from './spinoff-model.js';
 import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
+import type { PrStatusFromView, PrStatusToView } from './pr-status-model.js';
 import type { WidgetTheme } from './widget-frame.js';
 import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
@@ -379,7 +380,8 @@ export type ToView =
   | SteerToView
   | RewindToView
   | UsageToView
-  | SpinoffToView;
+  | SpinoffToView
+  | PrStatusToView;
 
 /** What a rules or memory pane shows: nothing yet, the engine's answer, or why it failed. */
 export type Listing<T> = { readonly kind: 'loading' } | ({ readonly kind: 'loaded' } & T) | { readonly kind: 'failed'; readonly message: string };
@@ -491,4 +493,5 @@ export type FromView =
   | SteerFromView
   | RewindFromView
   | UsageFromView
-  | SpinoffFromView;
+  | SpinoffFromView
+  | PrStatusFromView;

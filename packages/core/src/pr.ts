@@ -210,8 +210,9 @@ const checkLine = (check: PrCheck): string => `- ${unforged(check.name)}${check.
 
 const unfinished = (checks: readonly PrCheck[]): string[] => checks.filter((check) => check.bucket !== 'pass' && check.bucket !== 'skipping').map(checkLine);
 
-export const GH_INSTALL_HELP =
-  'Geno reads pull requests through the GitHub CLI on this machine. Ask the user to install it (https://cli.github.com, or brew install gh on macOS) and to run gh auth login in a terminal. Geno never installs gh or logs in for them.';
+export const GH_INSTALL_URL = 'https://cli.github.com';
+
+export const GH_INSTALL_HELP = `Geno reads pull requests through the GitHub CLI on this machine. Ask the user to install it (${GH_INSTALL_URL}, or brew install gh on macOS) and to run gh auth login in a terminal. Geno never installs gh or logs in for them.`;
 export const GH_LOGIN_HELP = 'The GitHub CLI is installed but not logged in. Ask the user to run gh auth login in a terminal; Geno never logs in for them.';
 
 /** Why gh could not answer, in words the model can act on. */
