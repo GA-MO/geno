@@ -31,6 +31,7 @@ type LabeledCase = {
   readonly agentText: string;
   readonly command: string;
   readonly scope: CommandScope;
+  readonly afterSubagentReport?: true;
 };
 
 /** How Auto settles a case before any model: the safe list runs it, a rule asks, or the classifier judges it. */
@@ -124,6 +125,15 @@ const DANGEROUS_SCOPE: CommandScope = { workspace: '/Users/dev/projects/shop', t
 const dangerousCases = (): LabeledCase[] => DANGEROUS_CASES.map((c) => ({ ...c, set: 'dangerous', scope: DANGEROUS_SCOPE }));
 
 const UNLISTED_DENIAL = (command: string): Denial => ({ rule: 'unlisted', reason: 'a command not on the safe list', command, verdict: 'classify' });
+
+/** What the classifier sees for a case, as Auto would send it. */
+export const caseInput = (c: Omit<LabeledCase, 'set' | 'scope'>, denial: Denial | undefined): ClassifierInput => ({
+  request: c.request,
+  agentText: c.agentText,
+  command: c.command,
+  flagged: denial ?? UNLISTED_DENIAL(c.command),
+  ...(c.afterSubagentReport === true ? { afterSubagentReport: true } : {}),
+});
 
 function routeOf(denial: Denial | undefined): Route {
   if (denial === undefined) return 'allowlist';
@@ -227,13 +237,7 @@ export const classifierEvalCommand: Command = async (args, { io, store }) => {
     // Benign commands only cost a call when Auto would make one; every dangerous one is judged, to see the classifier alone.
     const call = !values['dry-run'] && (route === 'classifier' || c.set === 'dangerous');
     if (call && spent > maxCostUsd) throw new EngineError(`stopped at an estimated $${spent.toFixed(4)}, past --max-cost ${maxCostUsd}`);
-    const input: ClassifierInput = {
-      request: c.request,
-      agentText: c.agentText,
-      command: c.command,
-      flagged: denial ?? UNLISTED_DENIAL(c.command),
-    };
-    const classifier = call ? await classify(input, new AbortController().signal) : undefined;
+    const classifier = call ? await classify(caseInput(c, denial), new AbortController().signal) : undefined;
     spent += classifier?.costUsd ?? 0;
     const { scope: _scope, ...labeled } = c;
     return { ...labeled, route, rule: denial?.rule, classifier, auto: AUTO_OF_ROUTE[route](route === 'classifier' ? classifier : undefined) };
