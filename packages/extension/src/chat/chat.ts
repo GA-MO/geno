@@ -51,6 +51,7 @@ import {
   TASK_STATUSES,
   TASK_KINDS,
   TASK_UPDATE_METHOD,
+  SCHEDULES_UPDATE_METHOD,
   ARENA_UPDATE_METHOD,
   LANE_GRAFT_META,
   laneGraftPrompt,
@@ -101,6 +102,7 @@ import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
 import type { SeenStore } from './seen.js';
 import { TaskHost } from './tasks-host.js';
+import { schedulesUpdate } from './schedule-wire.js';
 import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
@@ -728,6 +730,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       .onRequest(BACKEND_ENV_METHOD, backendEnvRequest, ({ params }) => this.backendEnv(params.backend))
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
       .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))
+      .onNotification(SCHEDULES_UPDATE_METHOD, schedulesUpdate, ({ params }) => this.background.scheduled(params))
       .onNotification(ARENA_UPDATE_METHOD, arenaUpdate, ({ params }) => this.arena.updated(params));
   }
 
@@ -1354,6 +1357,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         const background = this.background.current();
         void view.webview.postMessage({ type: 'tasks', tasks: background.tasks, shown: this.shown, seen: background.seen } satisfies ToView);
         void view.webview.postMessage({ type: 'lanes', listing: background.lanes } satisfies ToView);
+        void view.webview.postMessage({ type: 'schedules', tasks: background.schedules } satisfies ToView);
         void view.webview.postMessage({ type: 'arena', state: this.arena.current() } satisfies ToView);
         void view.webview.postMessage(this.prStatus.current() satisfies ToView);
         this.prStatus.refresh(true);

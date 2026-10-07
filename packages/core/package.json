@@ -18,7 +18,8 @@
     "./todo": "./src/todo.ts",
     "./spinoff": "./src/spinoff.ts",
     "./compact": "./src/compact.ts",
-    "./schedule": "./src/schedule.ts"
+    "./schedule": "./src/schedule.ts",
+    "./cron": "./src/cron.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

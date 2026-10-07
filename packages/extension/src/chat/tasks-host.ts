@@ -9,7 +9,13 @@ import {
   LANES_METHOD,
   needsYouCount,
   placeTasks,
+  SCHEDULE_ACT_METHOD,
+  SCHEDULES_METHOD,
   TASKS_METHOD,
+  type ScheduleActRequest,
+  type SchedulesRequest,
+  type SchedulesResponse,
+  type ScheduleView,
   type Attention,
   type BackgroundStopRequest,
   type LaneDiscardRequest,
@@ -30,6 +36,7 @@ import { attentionNotice, channelsOf, noticeText, osNotification, type Attention
 import type { SeenStore } from './seen.js';
 
 export const OS_NOTIFICATIONS_SETTING = 'gcode.tasks.osNotifications';
+
 
 /** What the panel does for the panes: open a session, apply a lane through the shown chat, know what it shows. */
 export type TaskChat = {
@@ -63,6 +70,7 @@ export class TaskHost implements vscode.Disposable {
   private readonly tasks = new Map<string, TaskRecord>();
   private lanes: LanesListing = { kind: 'loading' };
   private lanesAsked = 0;
+  private schedules: readonly ScheduleView[] = [];
 
   constructor(
     private readonly connection: () => Promise<Connection>,
@@ -74,8 +82,12 @@ export class TaskHost implements vscode.Disposable {
 
   dispose(): void {}
 
-  /** A new connection to the engine: what it runs now, and the notices no window heard. */
+  /** A new connection to the engine: what it runs now, its scheduled tasks, and the notices no window heard. */
   async connected(connection: Connection): Promise<void> {
+    void connection.agent
+      .request<SchedulesResponse, SchedulesRequest>(SCHEDULES_METHOD, { cwd: connection.cwd })
+      .then((listing) => this.scheduled(listing))
+      .catch(() => {});
     const { tasks, missed } = await connection.agent.request<TasksResponse>(TASKS_METHOD, {});
     this.tasks.clear();
     for (const task of tasks) this.tasks.set(task.sessionId, task);
@@ -101,9 +113,15 @@ export class TaskHost implements vscode.Disposable {
     if (task.lane !== null && before?.status !== task.status) void this.listLanes();
   }
 
+  /** The folder's scheduled tasks changed, or were listed. */
+  scheduled({ tasks }: SchedulesResponse): void {
+    this.schedules = tasks;
+    this.post({ type: 'schedules', tasks });
+  }
+
   /** The tasks as the pane last heard them, for a webview created later. */
-  current(): { readonly tasks: readonly TaskRecord[]; readonly lanes: LanesListing; readonly seen: SeenMarkers } {
-    return { tasks: [...this.tasks.values()], lanes: this.lanes, seen: this.seen.current() };
+  current(): { readonly tasks: readonly TaskRecord[]; readonly lanes: LanesListing; readonly seen: SeenMarkers; readonly schedules: readonly ScheduleView[] } {
+    return { tasks: [...this.tasks.values()], lanes: this.lanes, seen: this.seen.current(), schedules: this.schedules };
   }
 
   get(sessionId: string): TaskRecord | undefined {
@@ -234,6 +252,11 @@ export class TaskHost implements vscode.Disposable {
       void this.connection()
         .then(({ agent }) => agent.request<unknown, BackgroundStopRequest>(BACKGROUND_STOP_METHOD, { sessionId, id }))
         .catch(warn),
+    'schedule-act': ({ id, action }) =>
+      void (async () => {
+        const { agent, cwd } = await this.connection();
+        this.scheduled(await agent.request<SchedulesResponse, ScheduleActRequest>(SCHEDULE_ACT_METHOD, { cwd, id, action }));
+      })().catch(warn),
     'task-wake-cancel': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.request<unknown, WakeCancelRequest>(WAKE_CANCEL_METHOD, { sessionId }))
