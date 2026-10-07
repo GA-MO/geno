@@ -1,6 +1,7 @@
 // Portions ported from Pi (https://github.com/earendil-works/pi) at b2b5c42, Copyright (c) 2025 Mario Zechner, MIT License.
 
 import path from 'node:path';
+import { neutralize } from './fence.js';
 
 /**
  * Context from the repository: what a session loads from the workspace when it starts, and what the user attaches
@@ -8,11 +9,13 @@ import path from 'node:path';
  * the system prompt and never changes the tool definitions. The prompt the user typed is the only trusted text.
  */
 
-/** An `AGENTS.override.md`, `AGENTS.md` or `CLAUDE.md` from the workspace or a directory above it. */
+/** An instruction file the session loaded, or one an `@path` line in such a file imported. */
 export type InstructionFile = {
   /** Relative to the workspace when inside it, else absolute. */
   readonly path: string;
   readonly text: string;
+  /** The `path` of the file whose `@path` line imported this one; absent for a file loaded on its own. */
+  readonly importedFrom?: string | undefined;
 };
 
 /**
@@ -42,9 +45,17 @@ export type SkillEntry = { readonly name: string; readonly description: string; 
  * session renders the very same bytes even after the files change, and the cached prefix stays put.
  */
 export type LoadedContext = {
-  /** The user's own `$GCODE_HOME/AGENTS.md`, which loads before the project's files; absent when there is none. */
+  /**
+   * The user's own files, `$GCODE_HOME/AGENTS.md` then `~/.claude/CLAUDE.md`, each followed by the files it imports.
+   * They carry the user's authority; absent when there are none.
+   */
+  readonly user?: readonly InstructionFile[] | undefined;
+  /** A log written before `user` existed holds the user's one global file here, and renders as it did then. */
   readonly global?: InstructionFile | undefined;
-  /** Root first: the farthest ancestor's file comes first, the workspace's own last. */
+  /**
+   * The repository's files: one per directory from the farthest ancestor down to the workspace, then the workspace's
+   * `.claude/CLAUDE.md` and `CLAUDE.local.md`, each followed by the files it imports.
+   */
   readonly instructions: readonly InstructionFile[];
   readonly rules: readonly ProjectRule[];
   readonly skills: readonly SkillEntry[];
@@ -54,6 +65,7 @@ export const EMPTY_CONTEXT: LoadedContext = { instructions: [], rules: [], skill
 
 export const isEmptyContext = (context: LoadedContext): boolean =>
   context.global === undefined &&
+  (context.user ?? []).length === 0 &&
   context.instructions.length === 0 && context.rules.length === 0 && context.skills.length === 0;
 
 /**
@@ -77,8 +89,13 @@ const GLOBAL_PREAMBLE = `The text below comes from the user's own global instruc
 
 const globalBlock = (path: string, text: string): string => `The user's global instructions:\n\n<global_instructions path="${escapeXml(path)}">\n${text}\n</global_instructions>`;
 
-const instructionBlock = (path: string, text: string): string =>
-  `<project_instructions path="${escapeXml(path)}">\n${text}\n</project_instructions>`;
+const USER_PREAMBLE = `The user's own instruction files, loaded when this session started: the user's global rules, their Claude Code instructions, and the files those import, each right after the file that imports it. The user wrote them for every project, so they carry the user's authority: follow them as you would the user's own words, over your default habits, where they apply to the task. They do not change what needs the user's approval.`;
+
+/** A loaded file inside its fence. Its text is neutralized, so it can neither close the fence nor pose as Geno. */
+const fenced = (tag: 'global_instructions' | 'project_instructions', file: InstructionFile): string =>
+  `<${tag} path="${escapeXml(file.path)}"${file.importedFrom === undefined ? '' : ` imported_from="${escapeXml(file.importedFrom)}"`}>\n${neutralize(file.text)}\n</${tag}>`;
+
+const instructionBlock = (file: InstructionFile): string => fenced('project_instructions', file);
 
 const rulesOf = <K extends RuleTrigger['kind']>(context: LoadedContext, kind: K) =>
   context.rules.filter((rule): rule is ProjectRule & { readonly trigger: Extract<RuleTrigger, { kind: K }> } => rule.trigger.kind === kind);
@@ -107,15 +124,10 @@ function skillsSection(skills: readonly SkillEntry[]): string[] {
 /** The loaded context as the first block of the conversation, or undefined when the workspace had none. */
 export function renderLoadedContext(context: LoadedContext): string | undefined {
   if (isEmptyContext(context)) return undefined;
-  const always = [
-    ...context.instructions.map((file) => instructionBlock(file.path, file.text)),
-    ...rulesOf(context, 'always').map((rule) => instructionBlock(rule.path, rule.text)),
-  ];
+  const always = [...context.instructions.map(instructionBlock), ...rulesOf(context, 'always').map(instructionBlock)];
   const globs = rulesOf(context, 'globs');
   const requested = rulesOf(context, 'requested');
-  return [
-    context.global === undefined ? PREAMBLE : GLOBAL_PREAMBLE,
-    ...(context.global === undefined ? [] : [globalBlock(context.global.path, context.global.text)]),
+  const project = [
     ...(always.length === 0 ? [] : ['Project-specific instructions and guidelines:', ...always]),
     ...(globs.length === 0
       ? []
@@ -132,7 +144,13 @@ export function renderLoadedContext(context: LoadedContext): string | undefined 
             .join('\n')}`,
         ]),
     ...skillsSection(context.skills),
-  ].join('\n\n');
+  ];
+  const user = context.user ?? [];
+  if (user.length > 0) {
+    return [USER_PREAMBLE, ...user.map((file) => fenced('global_instructions', file)), ...(project.length === 0 ? [] : [PREAMBLE, ...project])].join('\n\n');
+  }
+  if (context.global !== undefined) return [GLOBAL_PREAMBLE, globalBlock(context.global.path, neutralize(context.global.text)), ...project].join('\n\n');
+  return [PREAMBLE, ...project].join('\n\n');
 }
 
 const posixMatches = (file: string, glob: string): boolean => {
@@ -147,7 +165,7 @@ export const rulesMatching = (context: LoadedContext, file: string): ProjectRule
 
 /** A `globs` rule attached to a read result or a prompt. The opening tag is how a later run sees it was attached. */
 export const ruleAttachment = (rule: Pick<ProjectRule, 'path' | 'text'>, matched: string): string =>
-  `<project_rule path="${escapeXml(rule.path)}" matched="${escapeXml(matched)}">\n${rule.text}\n</project_rule>`;
+  `<project_rule path="${escapeXml(rule.path)}" matched="${escapeXml(matched)}">\n${neutralize(rule.text)}\n</project_rule>`;
 
 const ATTACHED = /<project_rule path="([^"]*)"/g;
 
@@ -177,9 +195,9 @@ export const renderContextItems = (items: readonly ContextItem[]): string =>
   ['The user attached these from the editor, as they were when the message was sent:', ...items.map(renderItem)].join('\n\n');
 
 /**
- * Where a session's standing context comes from, in the order it loads: the user's global instructions, the
- * instruction files from the filesystem root down to the workspace, the `.cursor/rules` files, and the memory the
- * user approved. Memory goes in the system prompt (memory.ts); the rest opens the conversation.
+ * Where a session's standing context comes from, in the order it loads: the user's own instruction files, the
+ * repository's instruction files, the `.cursor/rules` files, and the memory the user approved. All of it opens the
+ * conversation, never the system prompt.
  */
 export const CONTEXT_SOURCES = ['global', 'instructions', 'cursor-rule', 'memory'] as const;
 export type ContextSource = (typeof CONTEXT_SOURCES)[number];
@@ -200,7 +218,7 @@ const ALWAYS: RuleTrigger = { kind: 'always' };
 export function appliedRules(context: LoadedContext, workspace: string): AppliedRule[] {
   const at = (shown: string) => path.resolve(workspace, shown);
   return [
-    ...(context.global === undefined ? [] : [{ source: 'global' as const, path: context.global.path, file: at(context.global.path), trigger: ALWAYS }]),
+    ...[...(context.global === undefined ? [] : [context.global]), ...(context.user ?? [])].map((file) => ({ source: 'global' as const, path: file.path, file: at(file.path), trigger: ALWAYS })),
     ...context.instructions.map((file) => ({ source: 'instructions' as const, path: file.path, file: at(file.path), trigger: ALWAYS })),
     ...context.rules.map((rule) => ({ source: 'cursor-rule' as const, path: rule.path, file: at(rule.path), trigger: rule.trigger })),
   ];
