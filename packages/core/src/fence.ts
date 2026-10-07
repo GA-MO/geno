@@ -4,6 +4,9 @@
  * so the webview can bundle what imports it.
  */
 
+/** How every block Geno writes into the conversation starts, so the model can tell Geno's notes from the user and from data. */
+export const GENO_NOTE = '[Geno]';
+
 /** Every tag Geno frames context with. */
 const HARNESS_TAGS = [
   'subagent_report',

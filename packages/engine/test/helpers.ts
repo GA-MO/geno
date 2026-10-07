@@ -1,3 +1,4 @@
+import { renderEnvironment, type TurnEvent } from '@g-code/core';
 import { run } from '../src/run.js';
 
 /** The ripgrep the tool tests run: GCODE_RG when set, else rg on PATH. */
@@ -40,4 +41,11 @@ export async function runCli(argv: string[], env: Record<string, string>, option
     ...(fetch === undefined ? {} : { fetch }),
   });
   return { code, stdout: [...stdout, ...(partial ? [partial] : [])].join('\n'), stderr: stderr.join('\n') };
+}
+
+/** The environment block that opens a session's first message, as the model reads it; the log must record one. */
+export function environmentBlock(events: readonly TurnEvent[]): { readonly type: 'text'; readonly text: string } {
+  const head = events[0];
+  if (head?.kind !== 'session-start' || head.environment === undefined) throw new Error('the log records no environment');
+  return { type: 'text', text: renderEnvironment(head.environment, head.session) };
 }

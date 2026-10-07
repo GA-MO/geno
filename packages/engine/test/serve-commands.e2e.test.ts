@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { asSessionId, COMMAND_META, REPLAYED_TURN_META, type TurnEvent } from '@g-code/core';
+import { asSessionId, COMMAND_META, REPLAYED_TURN_META, type TurnEvent, ENVIRONMENT_HEADING } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
@@ -64,8 +64,11 @@ const listings = (updates: readonly acp.SessionUpdate[]) =>
   updates.filter((u): u is Listed => u.sessionUpdate === 'available_commands_update').map((u) => u.availableCommands.map((c) => c.name));
 
 /** The first user message after the workspace's loaded context, which the skill folder makes non-empty. */
-const firstMessage = (body: { messages: { content: { cache_control?: unknown }[] }[] }) =>
-  body.messages[0]!.content.slice(1).map(({ cache_control: _, ...block }) => block);
+const firstMessage = (body: { messages: { content: { text?: string; cache_control?: unknown }[] }[] }) =>
+  body.messages[0]!.content
+    .slice(1)
+    .filter((block) => block.text?.startsWith(ENVIRONMENT_HEADING) !== true)
+    .map(({ cache_control: _, ...block }) => block);
 
 describe('gcode serve slash commands', () => {
   it('publishes the commands once the session exists, and again when a command file is added', async () => {

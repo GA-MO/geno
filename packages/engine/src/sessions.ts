@@ -116,6 +116,25 @@ const loadedContextSchema = z.strictObject({
   skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string().min(1), path: z.string().min(1) })),
 });
 
+const environmentSchema = z.strictObject({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  platform: z.string().min(1),
+  osVersion: z.string(),
+  loginShell: z.string().min(1).optional(),
+  scratchpad: z.string().refine(path.isAbsolute, 'must be an absolute path'),
+  git: z
+    .strictObject({ branch: z.string().min(1).optional(), status: z.array(z.string()), moreStatus: count, commits: z.array(z.string()) })
+    .optional(),
+  project: z
+    .strictObject({
+      packageManager: z.string().min(1).optional(),
+      scripts: z.array(z.tuple([z.string(), z.string()])),
+      otherScripts: z.array(z.string()),
+      versions: z.array(z.tuple([z.string(), z.string()])),
+    })
+    .optional(),
+});
+
 const contextItemSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('file'), path: z.string().min(1), text: z.string() }),
   z.strictObject({
@@ -244,6 +263,7 @@ const turnEventSchema = z.union([
       kind: z.literal('session-start'),
       session: sessionSchema,
       context: loadedContextSchema.optional(),
+      environment: environmentSchema.optional(),
       child: childOfSchema.optional(),
       fork: z.strictObject({ sessionId: childId, turnSeq: seqFields.seq, title: z.string() }).optional(),
     }),

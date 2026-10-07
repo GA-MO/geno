@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -196,7 +196,12 @@ function modeFlag(raw: string | undefined): SessionMode | undefined {
 export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt: string, options: AgentOptions): Promise<DriveResult> {
   const { session } = opened.log;
   const workspace = await workspaceDir(io.cwd, session.workspace);
-  const tempDir = await mkdtemp(path.join(tmpdir(), 'gcode-agent-'));
+  const head = opened.log.events[0];
+  // The scratchpad the session's environment names, which outlives the run; a log from before sessions had one gets a
+  // temp dir for this run only.
+  const scratchpad = head?.kind === 'session-start' ? head.environment?.scratchpad : undefined;
+  if (scratchpad !== undefined) await mkdir(scratchpad, { recursive: true, mode: 0o700 });
+  const tempDir = scratchpad ?? (await mkdtemp(path.join(tmpdir(), 'gcode-agent-')));
   const home = io.env['HOME'] || homedir();
   const lane = await laneAt(workspace, home);
   if (lane !== undefined) await bindSession(lane, session.id);
@@ -215,7 +220,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
     const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
     const project: SessionScope = { kind: 'project', workspace: lane?.repo.main ?? session.workspace };
-    const head = opened.log.events[0];
     const forkSource = head?.kind === 'session-start' ? head.fork?.sessionId : undefined;
     // The session, its forks and the session it was forked from all hold turns the model already has in context.
     const exclude = forkSource === undefined ? [session.id] : [session.id, forkSource];
@@ -348,7 +352,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       await children?.settled();
       if (options.engine === undefined) await jobs.kill('engine-exit', { sessionId: session.id });
       await sandbox.close();
-      await rm(tempDir, { recursive: true, force: true });
+      if (scratchpad === undefined) await rm(tempDir, { recursive: true, force: true });
     };
     if (wakeLater) void cleanUp().catch((error: unknown) => io.err(`could not clean up after ${session.id}'s background children: ${String(error)}`));
     else await cleanUp();

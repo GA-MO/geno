@@ -148,5 +148,15 @@ export function forkEvents(events: readonly TurnEvent[], turnSeq: number, fork: 
   // The user can mark a chapter at a message long after its turn ended; the fork keeps the ones its turns hold.
   const prompts = new Set(copied.flatMap((e) => (startsTurn(e) ? [e.seq] : [])));
   const chapters = view.slice(upTo + 1).filter((e) => e.kind === 'chapter' && prompts.has(e.turnSeq));
-  return [{ kind: 'session-start', session, ...(head.context === undefined ? {} : { context: head.context }), fork: origin }, ...copied, ...chapters];
+  return [
+    {
+      kind: 'session-start',
+      session,
+      ...(head.context === undefined ? {} : { context: head.context }),
+      ...(head.environment === undefined ? {} : { environment: head.environment }),
+      fork: origin,
+    },
+    ...copied,
+    ...chapters,
+  ];
 }

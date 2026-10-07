@@ -12,6 +12,7 @@ import {
   type TaskUpdate,
   type TurnEvent,
   type WorkflowPreview,
+  ENVIRONMENT_HEADING,
 } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { engineShared, gcodeAgent } from '../src/serve.js';
@@ -59,7 +60,8 @@ function models(scripts: Readonly<Record<string, Script>>) {
   return { fetch, requests: (marker: string) => requests.get(marker)!, at: (marker: string) => at.get(marker)! };
 }
 
-const texts = (body: Body): string[] => (body.messages.at(-1)!.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' ? [b.text!] : []));
+const texts = (body: Body): string[] =>
+  (body.messages.at(-1)!.content as { type: string; text?: string }[]).flatMap((b) => (b.type === 'text' && !b.text!.startsWith(ENVIRONMENT_HEADING) ? [b.text!] : []));
 
 const WORKFLOWS: Readonly<Record<string, unknown>> = {
   three: {

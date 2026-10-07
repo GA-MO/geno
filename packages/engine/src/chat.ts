@@ -26,6 +26,7 @@ import {
   waitLabel,
 } from '@g-code/core';
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
+import { captureEnvironment, scratchpadOf } from './environment.js';
 import { gatewayFor, type Gateway } from './gateway.js';
 import { loadProjectContext } from './project-context.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
@@ -64,6 +65,7 @@ export async function openSessionLog(store: Store, rawId: string, io: Io): Promi
 
 async function newSession(
   store: Store,
+  env: Io['env'],
   workspace: string,
   provider: ProviderName,
   model: string,
@@ -81,7 +83,11 @@ async function newSession(
   };
   const file = sessionFile(store, session.id);
   // Loaded once and logged, so every later turn and a resumed session send the same text.
-  const start: TurnEvent = { kind: 'session-start', session, context: await loadProjectContext(workspace, homeOf(store)) };
+  const [context, environment] = await Promise.all([
+    loadProjectContext(workspace, homeOf(store)),
+    captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
+  ]);
+  const start: TurnEvent = { kind: 'session-start', session, context, environment };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }
@@ -113,13 +119,13 @@ export async function startSession(store: Store, io: Io, choice: SessionChoice):
   if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
   const { provider, model } = chooseModel(io, choice);
   const gateway = gatewayFor(provider, io.env, io.fetch);
-  return { log: await newSession(store, choice.workspace, provider, model, effort), gateway };
+  return { log: await newSession(store, io.env, choice.workspace, provider, model, effort), gateway };
 }
 
 /** A session on an external agent, which needs no Geno model or key: the agent brings its own. */
 export async function startExternalSession(store: Store, io: Io, workspace: string, backend: BackendBinding): Promise<SessionLog> {
   const named = io.env['GCODE_PROVIDER'] ?? '';
-  return newSession(store, workspace, isProviderName(named) ? named : DEFAULT_PROVIDER, backend.id, DEFAULT_EFFORT, backend);
+  return newSession(store, io.env, workspace, isProviderName(named) ? named : DEFAULT_PROVIDER, backend.id, DEFAULT_EFFORT, backend);
 }
 
 export async function resumeSession(store: Store, io: Io, rawId: string): Promise<OpenSession> {

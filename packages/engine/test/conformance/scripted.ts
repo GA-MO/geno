@@ -35,6 +35,9 @@ export type SeenResult = { readonly id: string; readonly error: boolean; readonl
 /** What one request carried after the model's last turn: the tool results, then the text of what came with them. */
 export type Seen = { readonly results: readonly SeenResult[]; readonly text: string };
 
+/** What one request opened with: its system prompt, and the text of its first user message. */
+export type Opening = { readonly system: string; readonly first: string };
+
 export const sessionIdOf = (stdout: string): string => /^session: (\S+)$/m.exec(stdout)![1]!;
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -66,6 +69,16 @@ function seenAnthropic(body: { readonly messages: readonly AnthropicMessage[] })
     text: textOf(blocks.filter((b) => b.type === 'text')),
   };
 }
+
+const openingAnthropic = (body: { readonly system?: readonly Block[]; readonly messages: readonly AnthropicMessage[] }): Opening => ({
+  system: textOf(body.system),
+  first: textOf(body.messages[0]!.content),
+});
+
+const openingOpenAi = (body: { readonly messages: readonly ChatMessage[] }): Opening => ({
+  system: body.messages.filter((m) => m.role === 'system').map((m) => textOf(m.content)).join('\n'),
+  first: textOf(body.messages.find((m) => m.role === 'user')!.content),
+});
 
 const CHAT_ERROR = '[error] ';
 
@@ -104,7 +117,8 @@ const providerEnv = ({ provider, model }: AnthropicWireModel): Record<string, st
 /**
  * A git workspace holding `files`, and a fake provider on `wire` that answers the model calls with `script` in order.
  * `cli` runs the `gcode` command line against it and `io` serves it to an editor; `seen` reads each model request as
- * the model saw it, and `bodies` gives each request as sent.
+ * the model saw it, `bodies` gives each request as sent, and `openings` how each began. `more` adds turns to the
+ * script, for one that needs a value the run made, such as the session's scratchpad.
  */
 export async function scripted(
   wire: Wire,
@@ -117,17 +131,23 @@ export async function scripted(
   const base = { GCODE_HOME: home, HOME: home, GCODE_RG: rgCommand(), PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
   let env: Record<string, string>;
   let bodies: () => any[];
+  let more: (...turns: readonly ScriptedTurn[]) => void;
   let fetch: typeof globalThis.fetch | undefined;
   if (wire === 'anthropic') {
-    const transport = fakeTransport(script.map(anthropicReply));
+    // The fakes read each reply when its request comes, so turns pushed later are served in order.
+    const replies = script.map(anthropicReply);
+    const transport = fakeTransport(replies);
     env = { ...base, ...providerEnv(anthropicModel) };
     bodies = () => transport.requests.map((request) => request.body);
+    more = (...turns) => void replies.push(...turns.map(anthropicReply));
     fetch = transport.fetch;
   } else {
-    const server = await fakeOpenAiServer(script.map(openAiReply));
+    const replies = script.map(openAiReply);
+    const server = await fakeOpenAiServer(replies);
     servers.push(server);
     env = { ...base, GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-fake', OPENAI_API_KEY: 'sk-fake', GCODE_OPENAI_BASE_URL: server.url };
     bodies = () => server.chats().map((request) => request.body);
+    more = (...turns) => void replies.push(...turns.map(openAiReply));
   }
   const seen = (): Seen[] => bodies().map(wire === 'anthropic' ? seenAnthropic : seenOpenAi);
   const store: Store = openStore(env);
@@ -136,5 +156,6 @@ export async function scripted(
   const log = (stdout: string) => events(sessionIdOf(stdout));
   // For an engine served to an editor over ACP, as `gcode serve` runs.
   const io: Io = { env, cwd: workspace, out: () => {}, err: () => {}, write: () => {}, interrupts: () => new AbortController().signal, confirm: async () => false, ...(fetch === undefined ? {} : { fetch }) };
-  return { workspace, env, store, io, cli, seen, bodies, log, events };
+  const openings = (): Opening[] => bodies().map(wire === 'anthropic' ? openingAnthropic : openingOpenAi);
+  return { workspace, env, store, io, cli, seen, bodies, openings, more, log, events };
 }
