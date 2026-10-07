@@ -46,7 +46,7 @@ export const SYSTEM_CLOCK: Clock = {
 
 /**
  * Node's timers count the monotonic clock, which stands still while the Mac sleeps, so the engine looks again at least
- * this often and a run due during sleep starts within a minute of waking.
+ * this often and a run due during sleep starts within a minute of waking. A task another engine added is seen as soon.
  */
 export const LOOK_EVERY_MS = 60_000;
 
@@ -336,8 +336,9 @@ export class Scheduler {
       const plan = planDue(t, now, zone(), policy, hasOpenRun(t));
       return plan.kind === 'wait' ? [plan.at] : [];
     });
-    if (waits.length === 0) return;
-    this.timers.set(workspace, clock.setTimer(() => this.soon(workspace), Math.min(Math.max(0, Math.min(...waits) - clock.now()), LOOK_EVERY_MS)));
+    // Another engine may add a task to the file, so even a workspace with nothing to wait for is looked at again.
+    const wait = waits.length === 0 ? LOOK_EVERY_MS : Math.min(Math.max(0, Math.min(...waits) - clock.now()), LOOK_EVERY_MS);
+    this.timers.set(workspace, clock.setTimer(() => this.soon(workspace), wait));
   }
 
   /** Starts a run of `task` and records it; its end is recorded once its turn is over. A start that fails is recorded too. */

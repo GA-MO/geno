@@ -350,6 +350,28 @@ describe('gcode serve: scheduled tasks', () => {
     expect(ranOf(named(result, '[sched-two] look at the queue'))).toHaveLength(1);
   });
 
+  it('runs a task another engine added, once that engine is gone', async () => {
+    const at = await fixture();
+    const lane = new FakeClock(T0);
+    const main = new FakeClock(T0);
+    const model = models({ '[sched-added]': () => answer('The queue is empty.', usage) });
+    const { result } = await serve(at, lane, model.fetch, async (window) => {
+      await until(() => lane.armed(), 'the lane window\'s engine to look');
+      await serve(at, main, model.fetch, async (other) => {
+        await other.prompt('/schedule in 1h [sched-added] look at the queue');
+        await until(() => main.armed(), 'the main window\'s engine to finish its look');
+      });
+      lane.advance(MINUTE);
+      await until(async () => (await window.list()).tasks.length === 1 && lane.armed(), 'the lane window\'s engine to look again');
+      lane.advance(HOUR);
+      await until(() => ended(window, '[sched-added] look at the queue'), 'the run to end');
+      return window.list();
+    });
+
+    expect(model.requests('[sched-added]')).toHaveLength(1);
+    expect(ranOf(named(result, '[sched-added] look at the queue'))).toEqual([expect.objectContaining({ dueAt: T0 + HOUR, end: expect.objectContaining({ kind: 'done' }) })]);
+  });
+
   it('asks the user before the model schedules anything, never the classifier, and takes "Allow for this chat" for the rest', async () => {
     const at = await fixture();
     const clock = new FakeClock(T0);
