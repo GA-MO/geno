@@ -52,7 +52,7 @@ export type ToolReply =
   | string
   | {
       readonly text: string;
-      readonly status?: 'error' | undefined;
+      readonly status?: 'error';
       readonly change?: FileChange | undefined;
       readonly approval?: ApprovalRecord | undefined;
       readonly images?: readonly ImageAttachment[] | undefined;
