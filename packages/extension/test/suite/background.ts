@@ -38,7 +38,7 @@ export async function run(): Promise<void> {
 
   await vscode.commands.executeCommand('gcode.chat.tasks');
   await waitFor('the Tasks pane', async () => (await view()) === 'tasks');
-  await waitFor('the running job under its session', async () => (await textOf('.task-row.current .task-job[data-job="bg-1"]')) === 'bg-1Start the dev server');
+  await waitFor('the running job under its session', async () => (await textOf('.task-row.current .task-job[data-job="bg-1"]')) === 'bg-1Start the dev serverStop');
   check((await count('.task-job')) === 1, 'only the running command is listed', await count('.task-job'));
   await screenshots('tasks-job');
   await press('Escape');
