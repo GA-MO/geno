@@ -328,7 +328,7 @@ const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 's
 };
 
 const approvalRecord = z.object({
-  decidedBy: z.enum(['rule', 'classifier', 'user']),
+  decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: z.enum(['allow', 'deny']),
   classifier: z.object({ reason: z.string() }).optional(),
 });

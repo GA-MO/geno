@@ -10,7 +10,14 @@ function hookRow(hook: HookRow): HTMLElement {
   return h(
     'li',
     { class: 'perm-row hook-row', 'data-event': hook.event, 'data-status': hook.status },
-    h('div', { class: 'hook-text' }, h('span', { class: 'hook-event' }, hook.matcher === undefined || hook.matcher === '' ? hook.event : `${hook.event} (${hook.matcher})`), h('code', { class: 'perm-pattern' }, hook.command), h('span', { class: 'hook-source' }, `From ${sourceOf(hook)}`)),
+    h(
+      'div',
+      { class: 'hook-text' },
+      h('span', { class: 'hook-event' }, hook.matcher === undefined || hook.matcher === '' ? hook.event : `${hook.event} (${hook.matcher})`),
+      h('code', { class: 'perm-pattern' }, hook.command),
+      h('span', { class: 'hook-source' }, `From ${sourceOf(hook)}`),
+      ...(hook.why === undefined ? [] : [h('span', { class: 'hook-why' }, hook.why)]),
+    ),
     h('span', { class: `hook-status mcp-state tone-${tone}` }, label),
   );
 }
@@ -33,7 +40,7 @@ export function hooksSection(post: (message: HooksFromView) => void) {
     h(
       'p',
       { class: 'settings-intro' },
-      'Commands that run at session events, in Claude Code’s format: from ~/.claude/settings.json, the workspace’s .claude/settings.json and .claude/settings.local.json, Geno’s ~/.g-code/settings.json and .gcode.json, and installed plugins. Geno runs SessionStart and SessionEnd. A workspace’s own hooks run only when VS Code trusts the workspace, inside the sandbox.',
+      'Commands that run at session events, in Claude Code’s format: from ~/.claude/settings.json, the workspace’s .claude/settings.json and .claude/settings.local.json, Geno’s ~/.g-code/settings.json and .gcode.json, and installed plugins. Geno runs SessionStart, SessionEnd, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStart, SubagentStop, and its own LaneCreated; each other event says why Geno never fires it. A workspace’s own hooks run only when VS Code trusts the workspace, inside the sandbox.',
     ),
     problems,
     note,

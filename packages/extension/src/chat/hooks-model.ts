@@ -13,6 +13,5 @@ export type HooksFromView = { readonly type: 'hooks-list' };
 export const HOOK_STATUS_LABELS: Readonly<Record<HookStatus, { readonly label: string; readonly tone: 'ok' | 'wait' | 'quiet' }>> = {
   runs: { label: 'Runs', tone: 'ok' },
   untrusted: { label: 'Needs a trusted workspace', tone: 'wait' },
-  P16: { label: 'Not run yet', tone: 'quiet' },
   never: { label: 'Geno never fires it', tone: 'quiet' },
 };

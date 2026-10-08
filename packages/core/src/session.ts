@@ -384,6 +384,9 @@ function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredA
   ];
 }
 
+/** The hooks whose text goes with the prompts, in the order logged, rather than with the opening or the notices. */
+const PROMPT_HOOKS: ReadonlySet<HookContextEvent['event']> = new Set(['UserPromptSubmit', 'Stop', 'SubagentStop', 'SubagentStart']);
+
 /**
  * The conversation to send next. Everything after an assistant turn becomes one user message: its tool
  * results in the order the model asked for them, then any notices, then any unanswered prompts. The session's loaded
@@ -429,7 +432,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
         if (result !== undefined) results.set(event.toolUseId, { ...result, content: [...(typeof result.content === 'string' ? [{ type: 'text' as const, text: result.content }] : (result.content ?? [])), ...texts] });
       } else {
         // UserPromptSubmit's output goes with its prompt, and is dropped with it; Stop's is what the model answers next.
-        const place = event.event === 'UserPromptSubmit' || event.event === 'Stop' ? prompts : event.event === 'SessionStart' && event.matched === 'startup' ? opening : notices;
+        // SubagentStart's is logged just before the subagent's task or its parent's message, so it comes first.
+        const place = PROMPT_HOOKS.has(event.event) ? prompts : event.event === 'SessionStart' && event.matched === 'startup' ? opening : notices;
         place.push(...texts);
       }
     }

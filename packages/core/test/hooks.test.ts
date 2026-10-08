@@ -20,6 +20,13 @@ import {
   stopHookActive,
   stopMayContinue,
   toolHookVerdict,
+  finishedResponding,
+  hookMayAnswer,
+  hookRows,
+  lastResponseText,
+  permissionRequestDecision,
+  permissionSuggestions,
+  type Denial,
   type HookEntry,
   type HookOrigin,
   type HookOutcome,
@@ -57,16 +64,23 @@ describe('parseHookSettings', () => {
     expect(parsed.problems).toEqual([{ severity: 'warning', text: expect.stringMatching(/\/ws\/\.claude\/settings\.json: SesionStart is not a hook event/) }]);
   });
 
-  it('keeps events Geno does not fire yet or ever, and notes that they do not run', () => {
+  it('keeps events Geno never fires, and says why each does not run', () => {
     const parsed = parseHookSettings(
       { hooks: { SubagentStop: [{ hooks: [{ type: 'command', command: 'notify' }] }], Notification: [{ hooks: [{ type: 'command', command: 'notify' }] }] } },
       user,
     );
     expect(parsed.entries.map((e) => e.event)).toEqual(['SubagentStop', 'Notification']);
     expect(parsed.problems).toEqual([]);
-    expect(HOOK_EVENTS.SubagentStop.support).toBe('P16');
-    expect(HOOK_EVENTS.Stop.support).toBe('runs');
+    for (const event of ['PermissionRequest', 'SubagentStart', 'SubagentStop', 'LaneCreated', 'Stop'] as const) expect(HOOK_EVENTS[event].support, event).toBe('runs');
     expect(HOOK_EVENTS.Notification.support).toBe('never');
+    expect(HOOK_EVENTS.WorktreeCreate.support).toBe('never');
+    for (const [event, spec] of Object.entries(HOOK_EVENTS)) {
+      if (spec.support === 'never') expect(spec.why, `${event} says why Geno never fires it`).toMatch(/\w/);
+    }
+    expect(hookRows([{ event: 'WorktreeCreate', matcher: undefined, command: 'svn co', timeoutSec: undefined, origin: user }], true)[0]).toMatchObject({
+      status: 'never',
+      why: HOOK_EVENTS.WorktreeCreate.why,
+    });
   });
 
   it('skips a handler of another type with a note, and keeps the command handlers beside it', () => {
@@ -479,5 +493,79 @@ describe('after-tool and Stop hook text in the loop', () => {
       said(6, 'Tests ran.'),
     ];
     expect(stopMayContinue(worked, run), 'a tool call since the last block resets the count').toBe(true);
+  });
+});
+
+describe('PermissionRequest', () => {
+  const asked = (outcome: HookOutcome): HookResult => ({ entry: entry({ event: 'PermissionRequest', command: 'x' }), outcome });
+  const behave = (decision: object, code = 0) => asked(json({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }, code));
+
+  it("T-HOOK-05 answers a card with the decision object's behavior, and updatedInput only with an allow", () => {
+    expect(permissionRequestDecision([behave({ behavior: 'allow' })])).toEqual({ kind: 'allow' });
+    expect(permissionRequestDecision([behave({ behavior: 'allow', updatedInput: { command: 'npm run lint' } })])).toEqual({ kind: 'allow', input: { command: 'npm run lint' } });
+    expect(permissionRequestDecision([behave({ behavior: 'deny', message: 'Not on Fridays.', updatedInput: { command: 'x' } })])).toEqual({ kind: 'deny', message: 'Not on Fridays.', interrupt: false });
+    expect(permissionRequestDecision([behave({ behavior: 'deny', interrupt: true })])).toEqual({ kind: 'deny', message: undefined, interrupt: true });
+  });
+
+  it('lets a deny outrank an allow, and leaves the card alone without a decision object', () => {
+    expect(permissionRequestDecision([behave({ behavior: 'allow' }), behave({ behavior: 'deny', message: 'no' })])).toMatchObject({ kind: 'deny', message: 'no' });
+    expect(permissionRequestDecision([asked({ kind: 'error', code: 2, message: 'exit code 2: no' })]), 'exit 2 is not honored, as in Claude Code').toEqual({ kind: 'none' });
+    expect(permissionRequestDecision([asked(json({ hookSpecificOutput: { hookEventName: 'PermissionRequest', permissionDecision: 'allow' } }))]), "PreToolUse's field decides nothing here").toEqual({ kind: 'none' });
+    expect(permissionRequestDecision([behave({ behavior: 'maybe' })])).toEqual({ kind: 'none' });
+    expect(permissionRequestDecision([behave({ behavior: 'allow' }, 1)]), 'valid JSON on exit 1 still decides').toEqual({ kind: 'allow' });
+    expect(permissionRequestDecision([])).toEqual({ kind: 'none' });
+  });
+
+  it("offers Geno's allow rule as permission_suggestions: a command's pattern for the workspace, an MCP tool for the session", () => {
+    const offered: Denial = { rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl get pods', verdict: 'ask', offer: ['kubectl', 'get'] };
+    expect(permissionSuggestions(offered, 'Bash')).toEqual([{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'kubectl get' }], behavior: 'allow', destination: 'localSettings' }]);
+    expect(permissionSuggestions({ rule: 'mcp-tool', reason: 'an MCP tool', command: 'mcp__gh__create_issue {}', verdict: 'ask' }, 'mcp__gh__create_issue')).toEqual([
+      { type: 'addRules', rules: [{ toolName: 'mcp__gh__create_issue' }], behavior: 'allow', destination: 'session' },
+    ]);
+    expect(permissionSuggestions({ rule: 'secret-path', reason: 'a credentials file', command: 'cat .env', verdict: 'ask' }, 'Bash')).toEqual([]);
+  });
+
+  it("is asked where the user would be: a card in Ask or Auto, or a refusal only because nobody can answer; never a deny rule's refusal", () => {
+    const secret: Denial = { rule: 'secret-path', reason: 'a credentials file', command: 'cat .env', verdict: 'ask' };
+    expect(hookMayAnswer(secret, 'ask')).toBe(true);
+    expect(hookMayAnswer({ ...secret, verdict: 'deny' }, 'non-interactive'), 'a run nobody can answer').toBe(true);
+    expect(hookMayAnswer({ ...secret, verdict: 'deny' }, 'plan'), 'Plan is read-only').toBe(false);
+    expect(hookMayAnswer({ rule: 'workspace-deny', reason: 'the workspace rule', command: 'pnpm publish', verdict: 'deny' }, 'non-interactive')).toBe(false);
+    expect(hookMayAnswer({ rule: 'web-refused-url', reason: 'a URL web_fetch may not fetch', command: 'fetch file:///etc', verdict: 'deny' }, 'non-interactive')).toBe(false);
+    expect(hookMayAnswer({ rule: 'hook-ask', reason: 'A PreToolUse hook asks first.', command: 'ls', verdict: 'ask' }, 'non-interactive')).toBe(true);
+    expect(hookMayAnswer({ rule: 'cloud-cli', reason: 'a cloud CLI', command: 'kubectl delete ns', verdict: 'deny' }, 'auto'), 'a refusal in a mode with someone to ask is firm').toBe(false);
+  });
+});
+
+describe('SubagentStop in the loop', () => {
+  const session: Session = { id: asSessionId('c-1'), createdAt: '2026-10-08T03:00:00.000Z', workspace: '/ws', provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' };
+  const at = '2026-10-08T03:00:01.000Z';
+  const usage = { input: 1, cacheRead: 0, cacheWrite: 0, output: 1 };
+  const turn = (seq: number, content: Extract<TurnEvent, { kind: 'assistant' }>['content'], stopReason: 'end_turn' | 'tool_use'): TurnEvent => ({ kind: 'assistant', seq, at, content, stopReason, usage, costUsd: 0, latencyMs: 1, model: 'm' });
+  const reportCall = (seq: number, message: string): TurnEvent[] => [
+    turn(seq, [{ type: 'text', text: 'Wrapping up.', citations: null }, { type: 'tool_use', id: `tu_r${seq}`, name: 'report', input: { message }, caller: { type: 'direct' } }], 'tool_use'),
+    { kind: 'tool-result', seq: seq + 1, at, toolUseId: `tu_r${seq}`, name: 'report', status: 'ok', output: 'Report delivered to the agent that started you.' },
+  ];
+  const blocked = (seq: number): TurnEvent => ({ kind: 'hook-context', seq, at, event: 'SubagentStop', notes: [{ how: 'blocking', text: 'Name the file.' }] });
+  const run = { firstSeq: 1, maxTurns: 10, maxCostUsd: 1, handback: true } as const;
+  const start: TurnEvent[] = [{ kind: 'session-start', session }, { kind: 'user', seq: 1, at, content: 'Find alpha' }];
+
+  it("finishes responding with a report call or an end_turn, and the report is the child's last message", () => {
+    const reported = [...start, ...reportCall(2, 'alpha is in a.ts')];
+    expect(finishedResponding(reported, run)).toBe(true);
+    expect(lastResponseText(reported)).toBe('alpha is in a.ts');
+    const said = [...start, turn(2, [{ type: 'text', text: 'It is in a.ts.', citations: null }], 'end_turn')];
+    expect(finishedResponding(said, run)).toBe(true);
+    expect(lastResponseText(said)).toBe('It is in a.ts.');
+    expect(finishedResponding(start, run)).toBe(false);
+  });
+
+  it("delivers a block as the child's next instruction, and a report call does not let a second block count", () => {
+    const events = [...start, ...reportCall(2, 'alpha is in a.ts'), blocked(4)];
+    expect(loopStep(events, run)).toEqual({ kind: 'call-model' });
+    expect(replayMessages(events).at(-1)!.content.at(-1)).toEqual({ type: 'text', text: `${GENO_NOTE} SubagentStop hook blocking error: Name the file.` });
+    const again = [...events, ...reportCall(5, 'alpha is in a.ts, line 1')];
+    expect(stopHookActive(again, run)).toBe(true);
+    expect(stopMayContinue(again, run), 'the report call alone does not reset the count').toBe(false);
   });
 });

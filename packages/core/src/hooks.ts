@@ -1,6 +1,8 @@
 import path from 'node:path';
-import type { SessionMode } from './approval.js';
+import { BROWSER_RULES, DENY_RULES, isMcpRule, MCP_RULES, WEB_RULES, type ApprovalMode, type ApprovalRuleId, type Denial, type SessionMode, type Verdicts } from './approval.js';
+import { EXTERNAL_RULES } from './backend-permissions.js';
 import { GENO_NOTE, neutralize } from './fence.js';
+import { patternText } from './permission-rules.js';
 
 /**
  * User hooks in Claude Code's format: commands the harness runs at loop events, configured as
@@ -9,11 +11,13 @@ import { GENO_NOTE, neutralize } from './fence.js';
  * which Geno fires, how a matcher picks a handler, and what a handler's exit code and output mean.
  */
 
-/** Whether Geno fires an event now, which plan unit adds it, or never: Geno has no trigger for it, or another event covers it. */
-export type HookSupport = 'runs' | 'P16' | 'never';
+/** Whether Geno fires an event: `runs`, or `never`, because Geno has no trigger for it or another event covers it. */
+export type HookSupport = 'runs' | 'never';
 
 type EventSpec = {
   readonly support: HookSupport;
+  /** Why Geno never fires the event, as Settings shows it. */
+  readonly why?: string;
   /**
    * Exit 2 decides, with stderr as the reason, whatever stdout says: it blocks what the event is about, such as a tool
    * call or a prompt, or, after a call that already ran, gives the model the reason beside its result.
@@ -27,50 +31,51 @@ type EventSpec = {
   readonly stdoutIsContext: boolean;
 };
 
-const spec = (support: HookSupport, opts: Partial<Omit<EventSpec, 'support'>> = {}): EventSpec => ({
-  support,
-  blocks: false,
-  timeoutSec: 600,
-  matcher: false,
-  stdoutIsContext: false,
-  ...opts,
-});
+type Opts = Partial<Omit<EventSpec, 'support' | 'why'>>;
 
-/** Every event Claude Code fires (research/claude-code-harness/05-hooks.md, spec/03-runtime.md §3). */
+const runs = (opts: Opts = {}): EventSpec => ({ support: 'runs', blocks: false, timeoutSec: 600, matcher: false, stdoutIsContext: false, ...opts });
+const never = (why: string, opts: Opts = {}): EventSpec => ({ ...runs(opts), support: 'never', why });
+
+/**
+ * Every event Claude Code fires (research/claude-code-harness/05-hooks.md, spec/03-runtime.md §3), and Geno's own
+ * LaneCreated, which Claude Code does not have.
+ */
 export const HOOK_EVENTS = {
-  SessionStart: spec('runs', { matcher: true, stdoutIsContext: true }),
-  SessionEnd: spec('runs', { matcher: true }),
-  UserPromptSubmit: spec('runs', { blocks: true, timeoutSec: 30, stdoutIsContext: true }),
-  PreToolUse: spec('runs', { blocks: true, matcher: true }),
-  PostToolUse: spec('runs', { blocks: true, matcher: true }),
-  PostToolUseFailure: spec('runs', { blocks: true, matcher: true }),
-  PostToolBatch: spec('runs', { blocks: true }),
-  Stop: spec('runs', { blocks: true }),
-  PermissionRequest: spec('P16', { matcher: true }),
-  SubagentStart: spec('P16', { matcher: true }),
-  SubagentStop: spec('P16', { blocks: true, matcher: true }),
-  WorktreeCreate: spec('P16', { blocks: true }),
-  WorktreeRemove: spec('P16'),
-  Setup: spec('never'),
-  UserPromptExpansion: spec('never', { blocks: true }),
-  PermissionDenied: spec('never', { matcher: true }),
-  Notification: spec('never', { matcher: true }),
-  MessageDisplay: spec('never', { timeoutSec: 10 }),
-  TaskCreated: spec('never', { blocks: true }),
-  TaskCompleted: spec('never', { blocks: true }),
-  StopFailure: spec('never'),
-  TeammateIdle: spec('never', { blocks: true }),
-  InstructionsLoaded: spec('never'),
-  ConfigChange: spec('never', { blocks: true }),
-  CwdChanged: spec('never'),
-  DirectoryAdded: spec('never'),
-  FileChanged: spec('never'),
-  PreCompact: spec('never', { blocks: true, matcher: true }),
-  PostCompact: spec('never', { matcher: true }),
-  PreModelSwitch: spec('never', { blocks: true }),
-  PostModelSwitch: spec('never'),
-  Elicitation: spec('never', { blocks: true }),
-  ElicitationResult: spec('never', { blocks: true }),
+  SessionStart: runs({ matcher: true, stdoutIsContext: true }),
+  SessionEnd: runs({ matcher: true }),
+  UserPromptSubmit: runs({ blocks: true, timeoutSec: 30, stdoutIsContext: true }),
+  PreToolUse: runs({ blocks: true, matcher: true }),
+  // Exit 2 is not honored: only the decision object answers a card.
+  PermissionRequest: runs({ matcher: true }),
+  PostToolUse: runs({ blocks: true, matcher: true }),
+  PostToolUseFailure: runs({ blocks: true, matcher: true }),
+  PostToolBatch: runs({ blocks: true }),
+  Stop: runs({ blocks: true }),
+  SubagentStart: runs({ matcher: true }),
+  SubagentStop: runs({ blocks: true, matcher: true }),
+  LaneCreated: runs(),
+  WorktreeCreate: never('Its hook replaces creating the worktree and prints the new path, but a lane must be a git worktree on its own branch. Use LaneCreated to set up a new lane.', { blocks: true }),
+  WorktreeRemove: never('It removes what a WorktreeCreate hook made, and Geno runs no WorktreeCreate hook.'),
+  Setup: never('Geno has no --init or --maintenance run.'),
+  UserPromptExpansion: never('Geno has no hook on expanding a slash command; UserPromptSubmit sees the prompt.', { blocks: true }),
+  PermissionDenied: never("Auto's classifier refuses a call without a card, and the model reads why in the call's result.", { matcher: true }),
+  Notification: never('Geno shows its cards and notices in the editor. PermissionRequest and Stop fire at the same moments.', { matcher: true }),
+  MessageDisplay: never('Geno has no hook on the text it shows.', { timeoutSec: 10 }),
+  TaskCreated: never('Geno has a todo list, not a task list.', { blocks: true }),
+  TaskCompleted: never('Geno has a todo list, not a task list.', { blocks: true }),
+  StopFailure: never('A failed model call ends the turn with the error, which Geno shows.'),
+  TeammateIdle: never('Geno has no agent teams.', { blocks: true }),
+  InstructionsLoaded: never('Geno loads instruction files when a session starts, which SessionStart covers.'),
+  ConfigChange: never('Geno reads hooks once per session and does not watch the settings files.', { blocks: true }),
+  CwdChanged: never('A Geno session keeps its workspace.'),
+  DirectoryAdded: never('Geno has no /add-dir.'),
+  FileChanged: never('Geno tells the model itself about files that changed on disk, before each model call.'),
+  PreCompact: never('SessionStart with the source compact runs after a compaction.', { blocks: true, matcher: true }),
+  PostCompact: never('SessionStart with the source compact runs after a compaction.', { matcher: true }),
+  PreModelSwitch: never('Geno has no hook on a model switch.', { blocks: true }),
+  PostModelSwitch: never('Geno has no hook on a model switch.'),
+  Elicitation: never('Geno answers no MCP elicitation.', { blocks: true }),
+  ElicitationResult: never('Geno answers no MCP elicitation.', { blocks: true }),
 } as const satisfies Readonly<Record<string, EventSpec>>;
 
 export type HookEventName = keyof typeof HOOK_EVENTS;
@@ -382,6 +387,65 @@ export function preToolDecision(results: readonly HookResult[]): PreToolDecision
   return strictest.permission === 'allow' ? { kind: 'allow', ...input } : { kind: 'ask', reason: strictest.reason, from: sourceOf(strictest.result), ...input };
 }
 
+/**
+ * What a card's PermissionRequest hooks decided, standing in for the user's answer. `input` is an allow's
+ * `updatedInput`, in Claude Code's shape. A deny's `message` is for the model, and `interrupt` ends the turn as the
+ * user's no does.
+ */
+export type PermissionHookAnswer =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'allow'; readonly input?: Readonly<Record<string, unknown>> }
+  | { readonly kind: 'deny'; readonly message: string | undefined; readonly interrupt: boolean };
+
+function answerOf(result: HookResult): PermissionHookAnswer {
+  const decision = outputOf(result)?.hookSpecificOutput?.['decision'];
+  if (!isRecord(decision)) return { kind: 'none' };
+  if (decision['behavior'] === 'deny') return { kind: 'deny', message: textOf(decision['message']), interrupt: decision['interrupt'] === true };
+  if (decision['behavior'] !== 'allow') return { kind: 'none' };
+  const updated = decision['updatedInput'];
+  return isRecord(updated) ? { kind: 'allow', input: updated } : { kind: 'allow' };
+}
+
+/** Only the decision object answers, as in Claude Code: exit 2 leaves the card as it was. A deny outranks an allow. */
+export function permissionRequestDecision(results: readonly HookResult[]): PermissionHookAnswer {
+  const answers = results.map(answerOf);
+  return answers.find((answer) => answer.kind === 'deny') ?? answers.find((answer) => answer.kind === 'allow') ?? { kind: 'none' };
+}
+
+/** Claude Code's permission update entry, as `permission_suggestions` carries one. */
+export type PermissionSuggestion = {
+  readonly type: 'addRules';
+  readonly rules: readonly { readonly toolName: string; readonly ruleContent?: string }[];
+  readonly behavior: 'allow';
+  readonly destination: 'localSettings' | 'session';
+};
+
+/**
+ * What the card offers to keep, as Claude Code's suggestions: a command's offered allow rule, which Geno saves for the
+ * workspace, or an MCP tool for the rest of the session. Every other card offers only a yes for this call.
+ */
+export function permissionSuggestions(denial: Denial, toolName: string): PermissionSuggestion[] {
+  if (denial.offer !== undefined) return [{ type: 'addRules', rules: [{ toolName, ruleContent: patternText(denial.offer) }], behavior: 'allow', destination: 'localSettings' }];
+  if (isMcpRule(denial.rule)) return [{ type: 'addRules', rules: [{ toolName }], behavior: 'allow', destination: 'session' }];
+  return [];
+}
+
+const ruleTables: readonly Readonly<Record<string, { readonly verdicts: Verdicts }>>[] = [DENY_RULES, MCP_RULES, BROWSER_RULES, WEB_RULES];
+
+/** Whether a rule asks the user in Ask mode; the rules no table holds are a workspace's deny and a hook's. */
+function asksInAsk(rule: ApprovalRuleId): boolean {
+  if (rule === 'hook-ask') return true;
+  const verdicts = ruleTables.find((table) => Object.hasOwn(table, rule))?.[rule]?.verdicts ?? Object.values(EXTERNAL_RULES).find((one) => one.rule === rule)?.verdicts;
+  return verdicts?.ask === 'ask';
+}
+
+/**
+ * Whether a PermissionRequest hook may answer `denial`: where a card shows, or where a run nobody can answer refuses
+ * only because nobody can. A refusal that holds whoever answers, such as a deny rule's or Plan's, is never asked.
+ */
+export const hookMayAnswer = (denial: Denial, mode: ApprovalMode): boolean =>
+  denial.verdict !== 'deny' || (mode === 'non-interactive' && asksInAsk(denial.rule));
+
 /** What a prompt's UserPromptSubmit hooks decided: block it, with the reason for the user, or send it with their notes. */
 export type PromptDecision = { readonly kind: 'block'; readonly reason: string } | { readonly kind: 'go'; readonly notes: readonly HookNote[] };
 
@@ -538,8 +602,9 @@ export type CallHookEvent = Exclude<ToolHookEvent, 'PostToolBatch'>;
  * Hook output the model reads, logged so a resumed session sends the same bytes. `matched` is what the matcher saw,
  * such as SessionStart's source, or the call's Claude Code tool name. A startup's output opens the first message and
  * any other SessionStart's joins the next one; UserPromptSubmit's follows the prompt it was about. A call's hooks
- * append to the result of `toolUseId`, and PostToolBatch's follows the batch's results. Stop's is the message that
- * keeps the turn going after the model ended it.
+ * append to the result of `toolUseId`, and PostToolBatch's follows the batch's results. Stop's, or a subagent's
+ * SubagentStop's, is the message that keeps the turn going after the model ended it. SubagentStart's opens the
+ * subagent's next request, before its task.
  */
 export type HookContextEvent = {
   readonly kind: 'hook-context';
@@ -548,8 +613,8 @@ export type HookContextEvent = {
   readonly notes: readonly HookNote[];
 } & (
   | { readonly event: 'SessionStart'; readonly matched: SessionStartSource }
-  | { readonly event: 'UserPromptSubmit' | 'PostToolBatch'; readonly matched?: undefined }
-  | { readonly event: 'Stop'; readonly matched?: undefined }
+  | { readonly event: 'UserPromptSubmit' | 'PostToolBatch' | 'SubagentStart'; readonly matched?: undefined }
+  | { readonly event: StopEvent; readonly matched?: undefined }
   | { readonly event: CallHookEvent; readonly matched: string; readonly toolUseId: string }
 );
 
@@ -593,7 +658,16 @@ export type BatchCall = { readonly tool_name: string; readonly tool_input: unkno
 /** The subagent a hook fires for, as Claude Code names it; a hook of the session's own model has neither field. */
 type AgentFields = { readonly agent_id?: string; readonly agent_type?: string };
 
-/** Each running event's own fields. P16 adds its events here. */
+/** The subagent a subagent event is about: its own session, and its agent's name, which the matcher reads. */
+type Subagent = { readonly agent_id: string; readonly agent_type: string };
+
+/** The fields Stop and SubagentStop share. Geno sends no `background_tasks` or `session_crons`. */
+export type StopInput = { readonly stop_hook_active: boolean; readonly last_assistant_message: string };
+
+/** The events that fire as a model ends its turn: the session's own, or a subagent's. */
+export type StopEvent = 'Stop' | 'SubagentStop';
+
+/** Each running event's own fields. */
 export type HookEventInputs = {
   readonly SessionStart: { readonly source: SessionStartSource };
   readonly SessionEnd: { readonly reason: SessionEndReason };
@@ -604,17 +678,27 @@ export type HookEventInputs = {
   /** `error` is the result the model reads, `Exit code 1` and the output for a command. Geno runs no hook for a call the user stopped. */
   readonly PostToolUseFailure: PreToolUseInput & { readonly error: string; readonly is_interrupt: false; readonly duration_ms: number };
   readonly PostToolBatch: AgentFields & { readonly tool_calls: readonly BatchCall[] };
-  /** Geno sends no `background_tasks` or `session_crons`. */
-  readonly Stop: { readonly stop_hook_active: boolean; readonly last_assistant_message: string };
+  readonly Stop: StopInput;
+  /** Like PreToolUse's call, without `tool_use_id`. `permission_suggestions` is what the card offers to keep. */
+  readonly PermissionRequest: AgentFields & { readonly tool_name: string; readonly tool_input: unknown; readonly permission_suggestions?: readonly PermissionSuggestion[] };
+  readonly SubagentStart: Subagent;
+  /** `agent_transcript_path` is the subagent's own session log; `transcript_path` stays the parent's. */
+  readonly SubagentStop: Subagent & StopInput & { readonly agent_transcript_path: string };
+  /**
+   * Geno's own event, after a new lane is set up and before a session runs in it. A lane has no session yet, so the
+   * payload has no `session_id`, `transcript_path` or `permission_mode`. `cwd` is the lane.
+   */
+  readonly LaneCreated: { readonly name: string; readonly worktree_path: string; readonly branch: string; readonly base_commit: string; readonly main_checkout: string };
 };
 
 export type RunningHookEvent = keyof HookEventInputs;
 
-const toolMatched = (input: PreToolUseInput): string => CLAUDE_TOOL_NAMES[input.tool_name] ?? input.tool_name;
+const toolMatched = (input: { readonly tool_name: string }): string => CLAUDE_TOOL_NAMES[input.tool_name] ?? input.tool_name;
 
 /**
  * The value an event's matcher is tested against: Geno's tool name for a tool event, which a matcher may also name by
- * Claude Code's (`matcherMatches`). UserPromptSubmit, PostToolBatch and Stop have no matcher.
+ * Claude Code's (`matcherMatches`). The subagent events match the agent's name. UserPromptSubmit, PostToolBatch, Stop
+ * and LaneCreated have no matcher.
  */
 export const MATCHED_FIELD: { readonly [E in RunningHookEvent]: (input: HookEventInputs[E]) => string | undefined } = {
   SessionStart: (input) => input.source,
@@ -625,6 +709,10 @@ export const MATCHED_FIELD: { readonly [E in RunningHookEvent]: (input: HookEven
   PostToolUseFailure: toolMatched,
   PostToolBatch: () => undefined,
   Stop: () => undefined,
+  PermissionRequest: toolMatched,
+  SubagentStart: (input) => input.agent_type,
+  SubagentStop: (input) => input.agent_type,
+  LaneCreated: () => undefined,
 };
 
 /**
@@ -638,7 +726,7 @@ export const HOOKS_METHOD = '_gcode/hooks';
 
 export type HooksRequest = { readonly cwd: string };
 
-/** `untrusted` is a workspace hook in a workspace the editor does not trust; P16 and `never` are events Geno does not fire. */
+/** `untrusted` is a workspace hook in a workspace the editor does not trust; `never` is an event Geno does not fire. */
 export type HookStatus = 'runs' | 'untrusted' | Exclude<HookSupport, 'runs'>;
 
 export type HookRow = {
@@ -649,6 +737,8 @@ export type HookRow = {
   readonly scope: HookScope;
   readonly plugin: string | undefined;
   readonly status: HookStatus;
+  /** Why Geno never fires the hook's event. */
+  readonly why?: string;
 };
 
 export type HooksResponse = { readonly workspace: string; readonly trusted: boolean; readonly hooks: readonly HookRow[]; readonly problems: readonly HookProblem[] };
@@ -668,4 +758,5 @@ export const hookRows = (entries: readonly HookEntry[], trusted: boolean): HookR
     scope: entry.origin.scope,
     plugin: entry.origin.plugin?.name,
     status: hookStatus(entry, trusted),
+    ...(HOOK_EVENTS[entry.event].why === undefined ? {} : { why: HOOK_EVENTS[entry.event].why }),
   }));
