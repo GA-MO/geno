@@ -11,7 +11,23 @@ import type { TurnEvent } from './session.js';
  * model call and read as a message, so the system prompt and the tools stay byte-stable for the whole session and the
  * cached prefix holds across a change. The session's first MCP notice is its whole briefing, in the first request.
  */
-export type Notice = { readonly mode?: SessionMode | undefined; readonly memory?: MemoryDelta | undefined; readonly mcp?: McpDelta | undefined };
+export type Notice = {
+  readonly mode?: SessionMode | undefined;
+  readonly memory?: MemoryDelta | undefined;
+  readonly mcp?: McpDelta | undefined;
+  readonly budget?: BudgetLeft | undefined;
+};
+
+/** What a run has left of its limits, told once when 20% or less of its model calls or its cost is left. */
+export type BudgetLeft = { readonly calls: number; readonly maxCalls: number; readonly costUsd: number; readonly maxCostUsd: number };
+
+/** The share of a limit at or under which the model is told what is left. */
+export const BUDGET_REMINDER_SHARE = 0.2;
+
+const usd = (value: number): string => `$${value.toFixed(value < 0.1 ? 4 : 2)}`;
+
+export const renderBudgetLeft = ({ calls, maxCalls, costUsd, maxCostUsd }: BudgetLeft): string =>
+  `${GENO_NOTE} This run is near its limits: ${calls} of its ${maxCalls} model calls and about ${usd(costUsd)} of its ${usd(maxCostUsd)} cost limit are left. When either runs out, the run stops and you get no further turn. Use what is left on the most important remaining step, then end your turn with a short report: what you did, how you checked it, and what is still open.`;
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
@@ -63,9 +79,10 @@ export function noticeFor(events: readonly TurnEvent[], now: Now): Notice | unde
   return { ...(mode === undefined ? {} : { mode }), ...(memory === undefined ? {} : { memory }), ...(mcp === undefined ? {} : { mcp }) };
 }
 
-/** A notice as the model reads it: the mode's text, then the memory change, then the MCP change. */
+/** A notice as the model reads it: the mode's text, then the memory change, then the MCP change, then the budget. */
 export const noticeTexts = (notice: Notice): string[] => [
   ...(notice.mode === undefined ? [] : [MODE_NOTICES[notice.mode]]),
   ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
   ...(notice.mcp === undefined ? [] : [renderMcpDelta(notice.mcp)]),
+  ...(notice.budget === undefined ? [] : [renderBudgetLeft(notice.budget)]),
 ];

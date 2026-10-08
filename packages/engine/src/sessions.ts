@@ -388,6 +388,7 @@ const turnEventSchema = z.union([
             .optional(),
         })
         .optional(),
+      budget: z.strictObject({ calls: count, maxCalls: z.number().int().positive(), costUsd: z.number(), maxCostUsd: z.number().positive() }).optional(),
     }),
     z.discriminatedUnion('event', [
       z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal('SessionStart'), matched: z.enum(['startup', 'resume', 'compact']), notes: hookNotesSchema }),

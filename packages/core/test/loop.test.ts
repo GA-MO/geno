@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StopReason } from '@anthropic-ai/sdk/resources/messages/messages';
-import { asSessionId, loopStep, type LoopStep, type Run, type TurnErrorKind, type TurnEvent } from '../src/index.js';
+import { asSessionId, budgetReminder, loopStep, noticeTexts, type LoopStep, type Run, type TurnErrorKind, type TurnEvent } from '../src/index.js';
 
 const at = '2026-10-04T00:00:01.000Z';
 const start: TurnEvent = {
@@ -233,5 +233,45 @@ describe('loopStep', () => {
 describe('loopStep in a run that hands back through report', () => {
   it.each(handbackCases)('%s', (_name, events, expected, limits = run) => {
     expect(loopStep(events, limits)).toEqual(expected);
+  });
+});
+
+describe('budgetReminder', () => {
+  const ten: Run = { firstSeq: 1, maxTurns: 10, maxCostUsd: 1 };
+  const calls = (n: number, costUsd = 0.01, from = 2): TurnEvent[] =>
+    Array.from({ length: n }, (_, i) => [assistant(from + 2 * i, 'tool_use', [`t${i}`], costUsd), result(from + 1 + 2 * i, `t${i}`)]).flat();
+  const told = (seq: number): TurnEvent => ({ kind: 'notice', seq, at, budget: { calls: 2, maxCalls: 10, costUsd: 0.92, maxCostUsd: 1 } });
+
+  it('stays quiet while more than 20% of the calls and the cost is left', () => {
+    expect(budgetReminder([start, user(1), ...calls(7)], ten)).toBeUndefined();
+  });
+
+  it('tells what is left once 20% or less of the calls is left', () => {
+    expect(budgetReminder([start, user(1), ...calls(8)], ten)).toEqual({ calls: 2, maxCalls: 10, costUsd: expect.closeTo(0.92, 6), maxCostUsd: 1 });
+  });
+
+  it('tells what is left once 20% or less of the cost is left, however many calls remain', () => {
+    expect(budgetReminder([start, user(1), ...calls(2, 0.4)], ten)).toMatchObject({ calls: 8, costUsd: expect.closeTo(0.2, 6) });
+  });
+
+  it('tells it once a run', () => {
+    expect(budgetReminder([start, user(1), ...calls(8), told(18), ...calls(1, 0.01, 19)], ten)).toBeUndefined();
+  });
+
+  it('tells it again in a later run, whose limits are its own', () => {
+    const earlier = [start, user(1), ...calls(8), told(18)];
+    expect(budgetReminder([...earlier, user(19), ...calls(8, 0.01, 20)], { ...ten, firstSeq: 19 })).toMatchObject({ calls: 2 });
+  });
+
+  it('says nothing at a limit, where the run stops instead', () => {
+    expect(budgetReminder([start, user(1), ...calls(10)], ten)).toBeUndefined();
+  });
+
+  it('reads as a notice that names both limits and asks for a closing report', () => {
+    const [text] = noticeTexts({ budget: { calls: 2, maxCalls: 10, costUsd: 0.0123, maxCostUsd: 0.4 } });
+    expect(text).toMatch(/^\[Geno\] /);
+    expect(text).toContain('2 of its 10 model calls');
+    expect(text).toContain('$0.0123 of its $0.40 cost limit');
+    expect(text).toMatch(/end your turn with a short report/);
   });
 });
