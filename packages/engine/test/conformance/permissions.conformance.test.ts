@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -50,14 +50,18 @@ type Options = {
   readonly checkAfterEdit?: boolean;
   /** Auto's classifier; without one a classified call fails the test. */
   readonly classify?: (input: ClassifierInput) => Promise<ClassifierRun>;
+  /** More variables for the engine, such as the editor's `gcode.additionalDirectories`. */
+  readonly env?: Readonly<Record<string, string>>;
+  /** The directories the session was allowed to read in an earlier run, as the engine keeps them. */
+  readonly sessionDirectories?: Set<string>;
 };
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
-async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted, check, checkAfterEdit = false, classify }: Options) {
+async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted, check, checkAfterEdit = false, classify, env: more = {}, sessionDirectories }: Options) {
   const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
   const { workspace, io: served, env, store, seen } = await scriptedWire(wire, script, files);
   const warnings: string[] = [];
-  const io = { ...served, err: (line: string) => warnings.push(line) };
+  const io = { ...served, env: { ...served.env, ...more }, err: (line: string) => warnings.push(line) };
   for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
   if (userSettings !== undefined) {
     await mkdir(path.join(env['HOME']!, '.claude'), { recursive: true });
@@ -87,6 +91,7 @@ async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answe
     checkAfterEdit,
     approval,
     trustedWorkspace: trusted,
+    sessionDirectories,
     ...(web === undefined ? {} : { web }),
   });
   /** Every tool result the model was sent, by tool use id, as the model reads it on this wire. */
@@ -227,6 +232,163 @@ describe.each(WIRES)('T-PERM-05 user path rules on the %s wire', (wire) => {
     const run = await scripted(wire, [{ calls: [hidden] }, { answer: 'It failed.' }], { files, mode: 'non-interactive', rules });
     expect(run.view().get(hidden.id)!.text).toMatch(/Operation not permitted|Permission denied/);
     expect(run.sent()).not.toContain(PRIVATE);
+  });
+});
+
+describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wire) => {
+  const NOTE = 'the shared design notes';
+  const OTHER = 'the other package';
+  /** A directory beside the workspace with two notes and a credentials file, as a monorepo sibling would be. */
+  async function sibling(): Promise<string> {
+    const dir = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-sibling-')));
+    await writeFile(path.join(dir, 'notes.md'), `${NOTE}\n`);
+    await writeFile(path.join(dir, 'other.md'), `${OTHER}\n`);
+    await writeFile(path.join(dir, '.env'), `API_KEY=${SECRET}\n`);
+    return dir;
+  }
+  const files = { 'a.ts': 'export const a = 1;\n' };
+  const added = (entries: unknown) => ({ GCODE_ADDITIONAL_DIRECTORIES: JSON.stringify(entries) });
+
+  it('T-PERM-04 read and list outside the workspace ask in Ask, as cat of the same path does, and offer the directory for the session', async () => {
+    const dir = await sibling();
+    const read = call('read', { path: path.join(dir, 'notes.md') });
+    const asking = await scripted(wire, [{ calls: [read] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(asking.asked).toEqual([{ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: `read ${path.join(dir, 'notes.md')}`, verdict: 'ask', directory: dir }]);
+
+    const list = call('list', { directory: dir });
+    const listing = await scripted(wire, [{ calls: [list] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(listing.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', command: `list ${dir}`, directory: dir })]);
+
+    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const catting = await scripted(wire, [{ calls: [cat] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(catting.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace', verdict: 'ask' })]);
+    expect(asking.sent() + listing.sent() + catting.sent()).not.toContain(NOTE);
+  });
+
+  it('T-PERM-04 a read outside is refused naming the readable directories when nobody can answer, and the text never reaches the model', async () => {
+    const dir = await sibling();
+    const extra = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-extra-')));
+    const read = call('read', { path: path.join(dir, 'notes.md') });
+    const grep = call('grep', { pattern: 'design', path: dir });
+    const glob = call('glob', { pattern: '*.md', directory: dir });
+    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const run = await scripted(wire, [{ calls: [read, grep, glob, cat] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive', env: added([extra]) });
+    for (const refused of [read, grep, glob, cat]) {
+      expect(run.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining(`Geno may read only in these directories in this session: '${run.workspace}', '${extra}'.`) });
+    }
+    expect(run.view().get(read.id)!.text).toMatch(/^denied: `read .*notes\.md` uses a path outside the workspace/);
+    expect(run.sent()).not.toContain(NOTE);
+  });
+
+  it('T-PERM-04 in Auto a read outside goes to the classifier, as cat does', async () => {
+    const dir = await sibling();
+    const seen: ClassifierInput[] = [];
+    const classify = async (input: ClassifierInput): Promise<ClassifierRun> => {
+      seen.push(input);
+      return { verdict: 'allow', reason: 'The request is about that file.', model: 'fake', latencyMs: 1, costUsd: 0 };
+    };
+    const read = call('read', { path: path.join(dir, 'notes.md') });
+    const run = await scripted(wire, [{ calls: [read] }, { answer: 'Read it.' }], { files, mode: 'auto', classify });
+    expect(seen).toEqual([expect.objectContaining({ command: `read ${path.join(dir, 'notes.md')}`, flagged: expect.objectContaining({ rule: 'path-outside-workspace' }) })]);
+    expect(run.view().get(read.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+  });
+
+  it('T-PERM-04 "Allow this directory for the session" reads the rest of the directory without a card, cat included, and keeps credentials files asking', async () => {
+    const dir = await sibling();
+    const first = call('read', { path: path.join(dir, 'notes.md') });
+    const again = call('read', { path: path.join(dir, 'other.md') });
+    const grep = call('grep', { pattern: 'package|API_KEY', path: dir });
+    const cat = call('bash', { command: `cat ${path.join(dir, 'other.md')}` });
+    const secret = call('read', { path: path.join(dir, '.env') });
+    const kept = new Set<string>();
+    const run = await scripted(wire, [{ calls: [first] }, { calls: [again, grep, cat] }, { calls: [secret] }, { answer: 'Stopped.' }], {
+      files,
+      mode: 'ask',
+      answers: ['allow-session', 'reject'],
+      sessionDirectories: kept,
+    });
+    expect(run.asked.map((denial) => [denial.rule, denial.command])).toEqual([
+      ['path-outside-workspace', `read ${path.join(dir, 'notes.md')}`],
+      ['secret-path', `read ${path.join(dir, '.env')}`],
+    ]);
+    expect(run.view().get(first.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+    expect(run.view().get(again.id)).toEqual({ error: false, text: `1\t${OTHER}` });
+    expect(run.view().get(grep.id)).toEqual({ error: false, text: `${path.join(dir, 'other.md')}:1:${OTHER}` });
+    expect(run.view().get(cat.id)!.text).toContain(OTHER);
+    expect(run.sent()).not.toContain(SECRET);
+    expect([...kept]).toEqual([dir]);
+
+    const later = call('read', { path: path.join(dir, 'other.md') });
+    const next = await scripted(wire, [{ calls: [later] }, { answer: 'Read it.' }], { files, mode: 'ask', sessionDirectories: kept });
+    expect(next.asked).toEqual([]);
+    expect(next.view().get(later.id)).toEqual({ error: false, text: `1\t${OTHER}` });
+  });
+
+  it('B/B-68 a read in an added directory needs no card, in a run nobody can answer too, and credentials files there stay protected', async () => {
+    const dir = await sibling();
+    const read = call('read', { path: path.join(dir, 'notes.md') });
+    const list = call('list', { directory: dir });
+    const grep = call('grep', { pattern: 'API_KEY|design', path: dir });
+    const cat = call('bash', { command: `cat ${path.join(dir, 'notes.md')}` });
+    const secret = call('read', { path: path.join(dir, '.env') });
+    const run = await scripted(wire, [{ calls: [read, list, grep, cat, secret] }, { answer: 'Read them.' }], { files, mode: 'non-interactive', env: added([dir]) });
+    expect(run.view().get(read.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+    expect(run.view().get(list.id)!.text).toContain(`${path.join(dir, 'notes.md')}`);
+    expect(run.view().get(grep.id)).toEqual({ error: false, text: `${path.join(dir, 'notes.md')}:1:${NOTE}` });
+    expect(run.view().get(cat.id)!.text).toContain(NOTE);
+    expect(run.view().get(secret.id)).toMatchObject({ error: true, text: expect.stringContaining('a credentials file such as .env') });
+    expect(run.sent()).not.toContain(SECRET);
+
+    const asking = call('read', { path: path.join(dir, 'notes.md') });
+    const ask = await scripted(wire, [{ calls: [asking] }, { answer: 'Read it.' }], { files, mode: 'ask', env: added([dir]) });
+    expect(ask.asked).toEqual([]);
+  });
+
+  it('B/B-68 a write in an added directory works only when it is writable, by edit and by a command', async () => {
+    const readOnly = await sibling();
+    const writable = await sibling();
+    const turns = (dir: string) => [
+      { calls: [call('edit', { path: path.join(dir, 'made.md'), create: true, new_str: 'made\n' })] },
+      { calls: [call('bash', { command: `touch ${path.join(dir, 'touched.md')}` })] },
+      { answer: 'Done.' },
+    ];
+    const refused = await scripted(wire, turns(readOnly), { files, mode: 'ask', env: added([readOnly]) });
+    expect(refused.asked).toEqual([]);
+    expect(existsSync(path.join(readOnly, 'made.md'))).toBe(false);
+    expect(existsSync(path.join(readOnly, 'touched.md'))).toBe(false);
+
+    const run = await scripted(wire, turns(writable), { files, mode: 'ask', env: added([{ path: writable, writable: true }]) });
+    expect(run.asked).toEqual([]);
+    expect(readFileSync(path.join(writable, 'made.md'), 'utf8')).toBe('made\n');
+    expect(existsSync(path.join(writable, 'touched.md'))).toBe(true);
+  });
+
+  it("B/B-68 additionalDirectories in .claude/settings.json waits for a trusted workspace, and the user's own file applies without one", async () => {
+    const dir = await sibling();
+    const project = { ...files, '.claude/settings.json': JSON.stringify({ permissions: { additionalDirectories: [dir] } }) };
+    const held = call('read', { path: path.join(dir, 'notes.md') });
+    const untrusted = await scripted(wire, [{ calls: [held] }, { answer: 'Stopped.' }], { files: project, mode: 'ask', answers: ['reject'], trusted: false });
+    expect(untrusted.asked).toEqual([expect.objectContaining({ rule: 'path-outside-workspace' })]);
+    expect(untrusted.warnings).toEqual(['permissions: .claude/settings.json: additionalDirectories waits for a trusted workspace']);
+
+    const read = call('read', { path: path.join(dir, 'notes.md') });
+    const trusted = await scripted(wire, [{ calls: [read] }, { answer: 'Read it.' }], { files: project, mode: 'ask', trusted: true });
+    expect(trusted.asked).toEqual([]);
+    expect(trusted.view().get(read.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+
+    const own = call('read', { path: path.join(dir, 'notes.md') });
+    const user = await scripted(wire, [{ calls: [own] }, { answer: 'Read it.' }], { files, mode: 'ask', userSettings: { permissions: { additionalDirectories: [dir] } } });
+    expect(user.asked).toEqual([]);
+    expect(user.view().get(own.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+  });
+
+  it('T-PERM-05 list follows a Read deny: it leaves the files out, and a directory the rule names is refused', async () => {
+    const rules: readonly NewRule[] = [{ effect: 'deny', tool: 'read', path: 'private/**' }];
+    const all = call('list', {});
+    const named = call('list', { directory: 'private' });
+    const run = await scripted(wire, [{ calls: [all, named] }, { answer: 'Listed.' }], { files: { 'private/plan.md': 'x\n', 'src/a.ts': '' }, mode: 'ask', rules });
+    expect(run.view().get(all.id)).toEqual({ error: false, text: 'src/\nsrc/a.ts' });
+    expect(run.view().get(named.id)).toMatchObject({ error: true, text: expect.stringContaining('`Read(private/**)`') });
   });
 });
 

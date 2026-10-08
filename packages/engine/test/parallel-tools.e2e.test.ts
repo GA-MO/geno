@@ -8,6 +8,7 @@ import type { Io } from '../src/command.js';
 import { drive, type Surface } from '../src/drive.js';
 import { DISK_FILES, type Files } from '../src/files.js';
 import { openStore } from '../src/store.js';
+import { workingDirectories } from '../src/directories.js';
 import { agentExecutors, NON_INTERACTIVE } from '../src/tools/agent.js';
 import { ruleAttacher } from '../src/tools/rules.js';
 import type { Sandbox } from '../src/sandbox.js';
@@ -69,6 +70,7 @@ async function runTurn(files: Record<string, string>, uses: readonly FakeToolUse
     diagnostics: undefined,
     rules: ruleAttacher([{ ...start, context: ruleContext } as TurnEvent]),
     commands: async () => [],
+    directories: workingDirectories([], new Set()),
   });
   const started: string[] = [];
   const surface: Surface = {

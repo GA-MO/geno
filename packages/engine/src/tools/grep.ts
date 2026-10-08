@@ -6,7 +6,7 @@ import { isSecretPath } from '@g-code/core';
 import { ALWAYS, displayPath, executor, isSecret, optional, pathRuleRefusal, resolveInside, searchRule, secretRefusal, ToolError, type ToolContext } from './context.js';
 import { searchWorkspace, type SearchTarget } from './ripgrep.js';
 
-const GLOB_CHARS = /[*?[\]{}]/;
+export const GLOB_CHARS = /[*?[\]{}]/;
 
 const exists = (file: string): Promise<boolean> =>
   stat(file).then(

@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
-import { ALWAYS, displayPath, executor, optional, resolveInside, ToolError } from './context.js';
+import { ALWAYS, displayPath, executor, optional, pathRuleRefusal, resolveInside, searchRule, ToolError } from './context.js';
 import { ripgrep } from './ripgrep.js';
 
 const DEFAULT_DEPTH = 2;
@@ -36,8 +37,10 @@ export const list = executor({
   describe: ({ directory, depth }) => `list ${directory}${depth === undefined ? '' : ` depth=${depth}`}`,
   async run({ directory, depth = DEFAULT_DEPTH }, ctx) {
     const real = await resolveInside(ctx, directory);
+    const named = searchRule(ctx, path.resolve(ctx.workspace, directory)) ?? searchRule(ctx, real);
+    if (named !== undefined) throw new ToolError(pathRuleRefusal('list', directory, named));
     if (!(await stat(real)).isDirectory()) throw new ToolError(`${directory} is not a directory; use read`);
-    const files = await ripgrep(ctx, real, ['--files', '--sort=path']);
+    const files = (await ripgrep(ctx, real, ['--files', '--sort=path'])).filter((file) => searchRule(ctx, path.join(real, file)) === undefined);
     const shown = displayPath(ctx, real);
     const prefix = shown === '.' ? '' : `${shown}/`;
     const entries = listEntries(files, depth).map((entry) => prefix + entry);

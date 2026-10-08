@@ -10,6 +10,8 @@ export type DeniedTool = { readonly tool: string; readonly text: string };
 export type ClaudePermissions = {
   readonly rules: readonly NewRule[];
   readonly deniedTools: readonly DeniedTool[];
+  /** `additionalDirectories` as written, for the engine to resolve against the workspace. */
+  readonly directories: readonly string[];
   readonly skipped: readonly string[];
 };
 
@@ -21,15 +23,23 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 
 /**
  * The rules of a Claude Code settings file Geno can apply: `Bash(...)`, `Read(...)`, `Edit(...)`, `WebFetch(domain:...)`
- * and MCP names as Geno parses them in Settings, and a deny on a bare tool name. Parameter rules of other tools and a
- * bare allow or ask are skipped.
+ * and MCP names as Geno parses them in Settings, a deny on a bare tool name, and `additionalDirectories`. Parameter
+ * rules of other tools and a bare allow or ask are skipped.
  */
 export function claudePermissions(settings: unknown, scope: CommandScope): ClaudePermissions {
   const permissions = isRecord(settings) ? settings['permissions'] : undefined;
   const rules: NewRule[] = [];
   const deniedTools: DeniedTool[] = [];
+  const directories: string[] = [];
   const skipped: string[] = [];
-  if (!isRecord(permissions)) return { rules, deniedTools, skipped };
+  if (!isRecord(permissions)) return { rules, deniedTools, directories, skipped };
+  const added = permissions['additionalDirectories'];
+  if (Array.isArray(added)) {
+    for (const entry of added) {
+      if (typeof entry === 'string' && entry.trim() !== '') directories.push(entry.trim());
+      else skipped.push(`additionalDirectories ${JSON.stringify(entry)}`);
+    }
+  } else if (added !== undefined) skipped.push('additionalDirectories (not a list)');
   for (const effect of RULE_EFFECTS) {
     const list = permissions[effect];
     if (list === undefined) continue;
@@ -57,5 +67,5 @@ export function claudePermissions(settings: unknown, scope: CommandScope): Claud
       } else skipped.push(text);
     }
   }
-  return { rules, deniedTools, skipped };
+  return { rules, deniedTools, directories, skipped };
 }
