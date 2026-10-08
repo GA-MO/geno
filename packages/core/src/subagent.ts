@@ -308,6 +308,9 @@ export function forkOpening(parent: readonly TurnEvent[], toolUseId: string, at:
   return [...copied, ...answers];
 }
 
+/** The depth of a child of the session `parent` heads: one below its parent, which a log without a depth puts at 1. */
+export const childDepth = (parent: ChildOf | undefined): number => (parent === undefined ? 1 : (parent.depth ?? 1) + 1);
+
 /** What one child may use, settled when it starts. */
 export type ChildCaps = { readonly maxTurns: number; readonly maxCostUsd: number };
 
@@ -336,6 +339,8 @@ export type ChildOf = {
   readonly role: string;
   readonly caps: ChildCaps;
   readonly start: ChildStart;
+  /** 1 for a child of a top-level session, one more for each child level above it; absent in logs from before it was kept. */
+  readonly depth?: number | undefined;
   /** It ran beside its parent's turn and reported as a message; a message that resumes it runs it the same way. */
   readonly background?: true | undefined;
   /** The lane it works in, which a message that resumes it opens again; undefined works in its parent's checkout. */

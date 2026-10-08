@@ -7,6 +7,7 @@ import {
   builtinAgents,
   CHILD_STATUS_KINDS,
   childCaps,
+  childDepth,
   childEndOf,
   childReport,
   childSystemPrompt,
@@ -126,6 +127,15 @@ describe('parseAgentDefinition', () => {
   it('names a plugin agent <plugin>:<name>', () => {
     const result = parseAgentDefinition({ description: 'Plugin.' }, '', { source: 'plugin', path: '/p/agents/how.md', fallbackName: 'how', namespace: 'pstack:' }, NO_SUBAGENT_MODELS);
     expect(result.kind === 'agent' && result.agent.name).toBe('pstack:how');
+  });
+});
+
+describe('childDepth', () => {
+  it('is 1 under a top-level session and one more under a child, which a log without a depth puts at 1', () => {
+    const of = { parentId: asSessionId('p'), toolUseId: 'tu', role: 'explore', caps: { maxTurns: 1, maxCostUsd: 0.01 }, start: 'fresh' } as const;
+    expect(childDepth(undefined)).toBe(1);
+    expect(childDepth(of)).toBe(2);
+    expect(childDepth({ ...of, depth: 2 })).toBe(3);
   });
 });
 
