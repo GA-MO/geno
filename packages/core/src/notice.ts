@@ -18,16 +18,33 @@ export type Notice = {
   readonly budget?: BudgetLeft | undefined;
 };
 
-/** What a run has left of its limits, told once when 20% or less of its model calls or its cost is left. */
-export type BudgetLeft = { readonly calls: number; readonly maxCalls: number; readonly costUsd: number; readonly maxCostUsd: number };
+/**
+ * What a run has left of its limits, told once when 20% or less of its model calls or its cost is left. `perCallUsd`
+ * is the run's mean cost a call so far, undefined before a priced call.
+ */
+export type BudgetLeft = {
+  readonly calls: number;
+  readonly maxCalls: number;
+  readonly costUsd: number;
+  readonly maxCostUsd: number;
+  readonly perCallUsd?: number | undefined;
+};
 
 /** The share of a limit at or under which the model is told what is left. */
 export const BUDGET_REMINDER_SHARE = 0.2;
 
 const usd = (value: number): string => `$${value.toFixed(value < 0.1 ? 4 : 2)}`;
 
-export const renderBudgetLeft = ({ calls, maxCalls, costUsd, maxCostUsd }: BudgetLeft): string =>
-  `${GENO_NOTE} This run is near its limits: ${calls} of its ${maxCalls} model calls and about ${usd(costUsd)} of its ${usd(maxCostUsd)} cost limit are left. When either runs out, the run stops and you get no further turn. Use what is left on the most important remaining step, then end your turn with a short report: what you did, how you checked it, and what is still open.`;
+// A model reads a dollar figure badly, so the cost left is also counted in calls. A call starts while the spend is
+// within the limit, so the last one may pass it.
+export const callsLeft = ({ calls, costUsd, perCallUsd }: BudgetLeft): number =>
+  perCallUsd === undefined || perCallUsd <= 0 ? calls : Math.max(1, Math.min(calls, Math.ceil(costUsd / perCallUsd)));
+
+export function renderBudgetLeft(left: BudgetLeft): string {
+  const n = callsLeft(left);
+  const perCall = left.perCallUsd === undefined ? '' : `, at about ${usd(left.perCallUsd)} a call`;
+  return `${GENO_NOTE} This run is near its limits: about ${n} more model call${n === 1 ? ' is' : 's are'} left (${left.calls} of its ${left.maxCalls} calls, and ${usd(left.costUsd)} of its ${usd(left.maxCostUsd)} cost limit${perCall}). When either runs out, the run stops and you get no further turn. Start no new exploration or checks. Finish the step in hand, then end your turn with a short report: what you did, how you checked it, and what is still open.`;
+}
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and

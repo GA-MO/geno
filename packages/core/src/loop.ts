@@ -181,7 +181,13 @@ function limitReached(events: readonly TurnEvent[], run: Run): LoopStep | undefi
 export function budgetReminder(events: readonly TurnEvent[], run: Run): BudgetLeft | undefined {
   if (limitReached(events, run) !== undefined || thisRun(events, run).some((e) => e.kind === 'notice' && e.budget !== undefined)) return undefined;
   const { calls, costUsd } = spent(events, run);
-  const left: BudgetLeft = { calls: run.maxTurns - calls, maxCalls: run.maxTurns, costUsd: run.maxCostUsd - costUsd, maxCostUsd: run.maxCostUsd };
+  const left: BudgetLeft = {
+    calls: run.maxTurns - calls,
+    maxCalls: run.maxTurns,
+    costUsd: run.maxCostUsd - costUsd,
+    maxCostUsd: run.maxCostUsd,
+    ...(calls > 0 && costUsd > 0 ? { perCallUsd: costUsd / calls } : {}),
+  };
   const low = left.calls <= run.maxTurns * BUDGET_REMINDER_SHARE || left.costUsd <= run.maxCostUsd * BUDGET_REMINDER_SHARE;
   return low ? left : undefined;
 }
