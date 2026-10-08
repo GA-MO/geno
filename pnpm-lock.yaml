@@ -85,6 +85,9 @@ importers:
       '@g-code/core':
         specifier: workspace:*
         version: link:../core
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.0
+        version: 1.32.0(zod@4.6.5)
       '@vscode/codicons':
         specifier: 0.0.46-24
         version: 0.0.46-24
