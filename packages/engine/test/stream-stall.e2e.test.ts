@@ -9,14 +9,17 @@ import { runCli } from './helpers.js';
 // A stall waits out its limit and the backoff before the next try, so each case takes about two seconds.
 const STALL_TEST_MS = 15_000;
 const LIMITS = { GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS: '400', GCODE_STREAM_IDLE_TIMEOUT_MS: '400' };
+// A live stream's gaps stay four times inside its limit, so a loaded machine's late timer does not read as silence.
+const LIVE_LIMITS = { GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS: '1000', GCODE_STREAM_IDLE_TIMEOUT_MS: '1000' };
+const LIVE_GAP_MS = 250;
 const usage = { input: 10, cacheRead: 0, cacheWrite: 0 };
 
 const home = () => mkdtemp(path.join(tmpdir(), 'gcode-stall-'));
 
 describe('a model call that goes quiet, on the Messages wire (Model Studio)', () => {
-  async function chatOver(replies: readonly Reply[]) {
+  async function chatOver(replies: readonly Reply[], limits = LIMITS) {
     const transport = fakeTransport(replies);
-    const env = { GCODE_HOME: await home(), GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'test-key', DASHSCOPE_BASE_URL: 'https://dashscope.test/apps/anthropic', ...LIMITS };
+    const env = { GCODE_HOME: await home(), GCODE_PROVIDER: 'modelstudio', DASHSCOPE_API_KEY: 'test-key', DASHSCOPE_BASE_URL: 'https://dashscope.test/apps/anthropic', ...limits };
     const result = await runCli(['chat', 'hi'], env, { fetch: transport.fetch });
     return { ...result, requests: transport.requests.length };
   }
@@ -44,16 +47,16 @@ describe('a model call that goes quiet, on the Messages wire (Model Studio)', ()
   });
 
   it('keeps a slow stream whose every gap is shorter than the limit, however long it runs', { timeout: STALL_TEST_MS }, async () => {
-    const result = await chatOver([{ ...answer('A slow but steady answer.', usage, { chunk: 2 }), everyMs: 150 }]);
+    const result = await chatOver([{ ...answer('Slow and steady.', usage, { chunk: 2 }), everyMs: LIVE_GAP_MS }], LIVE_LIMITS);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('A slow but steady answer.');
+    expect(result.stdout).toContain('Slow and steady.');
     expect(result.stderr).toBe('');
   });
 
   it('counts the provider’s keepalive pings as the stream being alive', { timeout: STALL_TEST_MS }, async () => {
     const reply = answer('After a long think.', usage);
     const pings = Array.from({ length: 8 }, () => ({ type: 'ping' }));
-    const result = await chatOver([{ events: [reply.events[0]!, ...pings, ...reply.events.slice(1)], everyMs: 150 }]);
+    const result = await chatOver([{ events: [reply.events[0]!, ...pings, ...reply.events.slice(1)], everyMs: LIVE_GAP_MS }], LIVE_LIMITS);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('After a long think.');
     expect(result.stderr).toBe('');
@@ -67,10 +70,10 @@ describe('a model call that goes quiet, on the Chat Completions wire', () => {
     servers = [];
   });
 
-  async function chatOver(replies: readonly ChatReply[]) {
+  async function chatOver(replies: readonly ChatReply[], limits = LIMITS) {
     const server = await fakeOpenAiServer(replies);
     servers.push(server);
-    const env = { GCODE_HOME: await home(), GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-fake', OPENAI_API_KEY: 'sk-test-0123456789', GCODE_OPENAI_BASE_URL: server.url, ...LIMITS };
+    const env = { GCODE_HOME: await home(), GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-fake', OPENAI_API_KEY: 'sk-test-0123456789', GCODE_OPENAI_BASE_URL: server.url, ...limits };
     const result = await runCli(['chat', 'hi'], env);
     return { ...result, requests: server.chats().length };
   }
@@ -100,14 +103,15 @@ describe('a model call that goes quiet, on the Chat Completions wire', () => {
   });
 
   it('keeps a slow stream whose every gap is shorter than the limit, however long it runs', { timeout: STALL_TEST_MS }, async () => {
-    const result = await chatOver([{ ...chatAnswer('A slow but steady answer here.', chatUsage), everyMs: 150 }]);
+    const result = await chatOver([{ ...chatAnswer('A slow but steady answer here.', chatUsage), everyMs: LIVE_GAP_MS }], LIVE_LIMITS);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('A slow but steady answer here.');
     expect(result.stderr).toBe('');
   });
 
   it('counts keepalive comments as the stream being alive', { timeout: STALL_TEST_MS }, async () => {
-    const result = await chatOver([{ ...chatAnswer('Late.', chatUsage), everyMs: 700, keepAliveMs: 150 }]);
+    const late = chatAnswer('Late.', chatUsage);
+    const result = await chatOver([{ chunks: late.chunks.slice(1), everyMs: 1200, keepAliveMs: LIVE_GAP_MS }], LIVE_LIMITS);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Late.');
     expect(result.stderr).toBe('');

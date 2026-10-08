@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, type ResumeAfterLimit, type Session, type StreamMarks, type TurnEvent, type Waiting, type WaitPolicy } from '@g-code/core';
-import { gatewayFor } from '../src/gateway.js';
+import { asSessionId, type CallProgress, type ResumeAfterLimit, type Session, type StreamMarks, type TurnEvent, type Waiting, type WaitPolicy } from '@g-code/core';
+import { gatewayFor, waitOptionsOf } from '../src/gateway.js';
 import { modelSlots } from '../src/model-slots.js';
 import { Wake } from '../src/waits.js';
-import { answer, fakeTransport, httpError, OFFLINE, type Reply } from './fake-transport.js';
+import { answer, fakeTransport, httpError, OFFLINE, toolCall, type Reply } from './fake-transport.js';
 
 const session: Session = {
   id: asSessionId('sess-1'),
@@ -336,6 +336,60 @@ describe('gatewayFor retries', () => {
       expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
       expect(marks).toEqual([expect.objectContaining({ firstTokenAt: expect.any(Number), firstAnswerAt: null, lastTokenAt: expect.any(Number) })]);
       expect(marks[0]!.endAt - marks[0]!.lastTokenAt!).toBeGreaterThanOrEqual(40);
+    });
+  });
+
+  describe('silence and progress', () => {
+    const progressOf = async (reply: Reply, signal: AbortSignal, limits = { firstByteMs: 10_000, idleMs: 10_000 }) => {
+      const transport = fakeTransport([reply, answer('Not asked for.', usage)]);
+      const reports: CallProgress[] = [];
+      const retries: unknown[] = [];
+      const started = Date.now();
+      const result = await gatewayFor('openrouter', env, transport.fetch, fast, modelSlots(4), waitOptionsOf({}), limits).turn({
+        session,
+        events,
+        signal,
+        tools: [],
+        onText: () => {},
+        onRetry: (retry) => {
+          retries.push(retry);
+        },
+        onProgress: (progress) => reports.push(progress),
+      });
+      return { result, reports, retries, requests: transport.requests.length, tookMs: Date.now() - started };
+    };
+
+    it('ends at once, with no retry, when stopped while the provider is silent', async () => {
+      const stop = new AbortController();
+      setTimeout(() => stop.abort(), 50);
+      const { result, retries, requests, tookMs } = await progressOf({ ...answer('Never.', usage), hang: true }, stop.signal);
+      expect(result).toEqual({ kind: 'error', error: 'abort', message: 'interrupted by the user' });
+      expect(retries).toEqual([]);
+      expect(requests).toBe(1);
+      expect(tookMs).toBeLessThan(1000);
+    });
+
+    it('reports a try as it goes out, then what it writes and about how many tokens, a few times a second', async () => {
+      const edit = { id: 'tu_edit', name: 'edit', input: { path: 'src/game.ts', old_string: 'a', new_string: 'b'.repeat(400) } };
+      const reply = { ...toolCall('Editing.', [edit], usage), everyMs: 60 };
+      const { result, reports } = await progressOf(reply, new AbortController().signal);
+      expect(result.kind).toBe('answer');
+      expect(reports[0]).toEqual({ requestAt: expect.any(Number), lastByteAt: null, limitMs: 10_000, writing: null, tokens: 0 });
+      expect(reports.at(-1)).toMatchObject({ writing: { kind: 'tool', name: 'edit', target: 'src/game.ts' }, tokens: expect.any(Number) });
+      expect(reports.at(-1)!.tokens).toBeGreaterThan(50);
+      const tokens = reports.map((r) => r.tokens);
+      expect(tokens).toEqual(tokens.toSorted((a, b) => a - b));
+      // Ten events over about 600 ms: a report each 250 ms, not one per event.
+      expect(reports.length).toBeGreaterThanOrEqual(2);
+      expect(reports.length).toBeLessThanOrEqual(4);
+    });
+
+    it('never gives up on a silent call when its limits are off', async () => {
+      const stop = new AbortController();
+      setTimeout(() => stop.abort(), 300);
+      const { result, retries } = await progressOf({ ...answer('Never.', usage), hang: true }, stop.signal, { firstByteMs: Infinity, idleMs: Infinity });
+      expect(result).toMatchObject({ kind: 'error', error: 'abort' });
+      expect(retries).toEqual([]);
     });
   });
 });

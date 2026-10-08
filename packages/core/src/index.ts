@@ -13,6 +13,7 @@ export * from './commands.js';
 export * from './request.js';
 export * from './effort.js';
 export * from './cost.js';
+export * from './call-progress.js';
 export * from './context-window.js';
 export * from './model-capabilities.js';
 export * from './tools.js';

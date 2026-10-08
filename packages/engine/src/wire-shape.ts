@@ -8,6 +8,8 @@ export type StreamOptions = {
   onEvent(event: MessageStreamEvent): void;
   /** The provider answered the request with a stream, before any of its events. */
   onAnswered?(): void;
+  /** Bytes of the response arrived: its headers, or a piece of its body, keepalives included. */
+  onBytes?(): void;
 };
 
 /**
