@@ -37,6 +37,7 @@ const ruleSchema = z.union([
     id: z.string().min(1),
     effect: z.enum(RULE_EFFECTS),
     pattern: z.tuple([z.string().min(1)], z.string()),
+    exact: z.literal(true).optional(),
     createdAt: z.string(),
   }),
   z.strictObject({

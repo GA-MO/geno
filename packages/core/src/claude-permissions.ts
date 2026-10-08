@@ -1,8 +1,9 @@
+import { SHELL_TOOLS } from './agent.js';
 import type { CommandScope } from './approval.js';
 import { CLAUDE_TOOL_NAMES } from './hooks.js';
 import { parseRule, RULE_EFFECTS, type NewRule } from './permission-rules.js';
 
-/** A Claude Code deny on a whole tool, such as `WebFetch`, and the Geno tool it stops. */
+/** A Claude Code deny on a whole tool, such as `WebFetch`, and a Geno tool it stops; `Bash` stops every shell tool. */
 export type DeniedTool = { readonly tool: string; readonly text: string };
 
 /** What Geno takes from the `permissions` of one Claude Code settings file, and the rules it cannot apply. */
@@ -45,8 +46,8 @@ export function claudePermissions(settings: unknown, scope: CommandScope): Claud
       const tool = form?.[1];
       if (form === null || tool === undefined) skipped.push(text);
       else if (form[2] === undefined) {
-        const genoTool = CLAUDE_TOOL_NAMES[tool];
-        if (effect === 'deny' && genoTool !== undefined) deniedTools.push({ tool: genoTool, text });
+        const genoTools = tool === 'Bash' ? SHELL_TOOLS : CLAUDE_TOOL_NAMES[tool] === undefined ? [] : [CLAUDE_TOOL_NAMES[tool]];
+        if (effect === 'deny' && genoTools.length > 0) deniedTools.push(...genoTools.map((genoTool) => ({ tool: genoTool, text })));
         else skipped.push(text);
       } else if (!GENO_FORMS.has(tool)) skipped.push(text);
       else {

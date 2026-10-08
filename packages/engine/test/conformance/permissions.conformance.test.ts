@@ -244,18 +244,35 @@ describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
     expect(run.warnings).toEqual([]);
   });
 
-  it('B/B-65 a bare deny refuses the tool: WebFetch in .claude/settings.local.json stops web_fetch, Bash stops bash', async () => {
-    const load = call('tool_search', { select: ['web_fetch'] });
+  it('B/B-65 a bare deny refuses the tool: WebFetch stops web_fetch, and Bash stops every tool that runs a shell command', async () => {
+    const load = call('tool_search', { select: ['web_fetch', 'monitor', 'preview_start'] });
     const fetch = call('web_fetch', { url: 'https://example.com', prompt: 'Summarize it.' });
-    const bash = call('bash', { command: 'ls' });
-    const run = await scripted(wire, [{ calls: [load] }, { calls: [fetch, bash] }, { answer: 'Both refused.' }], {
+    const shells = [
+      call('bash', { command: 'touch made.txt' }),
+      call('check', {}),
+      call('monitor', { command: 'touch made.txt', pattern: 'x' }),
+      call('preview_start', { name: 'dev' }),
+    ];
+    const run = await scripted(wire, [{ calls: [load] }, { calls: [fetch, ...shells] }, { answer: 'All refused.' }], {
       files: { 'a.ts': '', '.claude/settings.local.json': settings({ deny: ['WebFetch', 'Bash'] }) },
-      mode: 'ask',
+      mode: 'auto',
       trusted: false,
     });
     expect(run.asked).toEqual([]);
     expect(run.view().get(fetch.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `WebFetch`, which the user set in .claude/settings.local.json') });
-    expect(run.view().get(bash.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `Bash`, which the user set in .claude/settings.local.json') });
+    for (const shell of shells) {
+      expect(run.view().get(shell.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `Bash`, which the user set in .claude/settings.local.json') });
+    }
+    expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
+  });
+
+  it('B/B-58 an imported Bash(git push) allow matches exactly: git push runs unasked, and git push origin main asks', async () => {
+    const files = { 'a.ts': '', '.claude/settings.json': settings({ allow: ['Bash(git push)'] }) };
+    const exact = call('bash', { command: 'git push' });
+    const wider = call('bash', { command: 'git push origin main' });
+    const run = await scripted(wire, [{ calls: [exact] }, { calls: [wider] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'], trusted: true });
+    expect(run.view().get(exact.id)!.text).not.toMatch(/denied|rejected/);
+    expect(run.asked).toEqual([expect.objectContaining({ command: 'git push origin main', verdict: 'ask' })]);
   });
 
   it('B/B-62 a Read deny in ~/.claude/settings.json refuses read, and the text never reaches the model', async () => {

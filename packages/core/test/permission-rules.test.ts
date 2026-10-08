@@ -361,6 +361,31 @@ describe('parseRule', () => {
       expect(parsed.ok && ruleText(parsed.rule)).toBe(text);
     }
   });
+
+  it('reads an allow typed as Bash(words) without a star as exact, and a deny or ask as a prefix', () => {
+    expect(parseRule('allow', 'Bash(npm test)', scope)).toEqual({ ok: true, rule: { effect: 'allow', pattern: ['npm', 'test'], exact: true } });
+    expect(parseRule('allow', 'npm test', scope)).toEqual({ ok: true, rule: { effect: 'allow', pattern: ['npm', 'test'] } });
+    expect(parseRule('deny', 'Bash(npm test)', scope)).toEqual({ ok: true, rule: { effect: 'deny', pattern: ['npm', 'test'] } });
+    expect(parseRule('ask', 'Bash(npm test)', scope)).toEqual({ ok: true, rule: { effect: 'ask', pattern: ['npm', 'test'] } });
+    const exact = parseRule('allow', 'Bash(npm test)', scope);
+    expect(exact.ok && ruleText(exact.rule)).toBe('Bash(npm test)');
+  });
+});
+
+describe('ruledDenial with an exact allow', () => {
+  const exact = (text: string): PermissionRule => ({ ...allow(text), exact: true });
+  const ROWS: readonly Row[] = [
+    ['auto', 'npm install', [exact('npm install')], 'runs'],
+    ['auto', 'timeout 30 npm install', [exact('npm install')], 'runs'],
+    ['auto', 'npm install left-pad', [exact('npm install')], 'classifies'],
+    ['auto', 'npm install left-pad', [allow('npm install')], 'runs'],
+    ['ask', 'git push origin main', [exact('git push')], 'asks'],
+    ['ask', 'git push', [exact('git push')], 'runs'],
+    ['auto', 'npm install && npm install left-pad', [exact('npm install')], 'classifies'],
+  ];
+  it.each(ROWS)('%s: %s', (mode, command, rules, outcome) => {
+    expect(outcomeOf(ruledDenial(command, scope, mode, rules))).toBe(outcome);
+  });
 });
 
 describe('ruledDenial under a PreToolUse hook allow', () => {

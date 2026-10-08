@@ -20,6 +20,9 @@ export const MAX_BASH_TIMEOUT_SECONDS = 600;
 export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
+/** The tools that run a shell command: the model's own, the check command, a monitored command and a dev server. */
+export const SHELL_TOOLS: readonly AgentToolName[] = ['bash', 'check', 'monitor', 'preview_start'];
+
 /**
  * What a subagent cannot use: it ends with its call, so it has no background command, dev server or subagent to run,
  * read, list or stop and is never woken; its own todo list would show nowhere; and its task comes from its parent,
