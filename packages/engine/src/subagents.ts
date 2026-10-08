@@ -22,6 +22,7 @@ import {
   childReport,
   type ChildStart,
   childrenOf,
+  findAgent,
   childSummary,
   childSystemPrompt,
   type Effort,
@@ -323,7 +324,7 @@ export function subagents(env: SubagentEnv): Subagents {
     return work;
   };
   let committed = 0;
-  const byName = (name: string) => agents.find((agent) => agent.name === name);
+  const byName = (name: string) => findAgent(agents, name);
   const inBackground = new Set<AbortController>();
   // The background children that run now, each by its session id, for task_stop.
   const stoppers = new Map<string, () => Promise<string>>();

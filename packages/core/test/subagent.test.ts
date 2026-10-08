@@ -13,6 +13,7 @@ import {
   handedBack,
   childrenOf,
   DONE_REASONS,
+  findAgent,
   isReadOnly,
   mergeAgents,
   parseAgentDefinition,
@@ -317,6 +318,15 @@ describe('agentMention', () => {
     expect(agentMention('@review', BUILTIN_AGENTS)).toEqual({ agent: builtin('review'), task: '' });
     expect(agentMention('@nobody hi', BUILTIN_AGENTS)).toBeUndefined();
     expect(agentMention('see @explore', BUILTIN_AGENTS)).toBeUndefined();
+  });
+
+  it("takes Claude Code's general-purpose, Explore and Plan as worker, explore and plan, unless a definition has that name", () => {
+    expect(agentMention('@general-purpose fix it', BUILTIN_AGENTS)).toEqual({ agent: builtin('worker'), task: 'fix it' });
+    expect(agentMention('@Explore where?', BUILTIN_AGENTS)?.agent).toBe(builtin('explore'));
+    expect(agentMention('@Plan a change', BUILTIN_AGENTS)?.agent).toBe(builtin('plan'));
+    const own = { ...builtin('worker'), name: 'general-purpose', source: 'global' as const };
+    expect(findAgent([own, ...BUILTIN_AGENTS], 'general-purpose')).toBe(own);
+    expect(findAgent(BUILTIN_AGENTS, 'toString')).toBeUndefined();
   });
 });
 

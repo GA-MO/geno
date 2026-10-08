@@ -7,7 +7,7 @@ import { costAt } from './cost.js';
 import { formatUsd as usd } from './spend-view.js';
 import type { WorkflowProgress, WorkflowStatus } from './workflow-progress.js';
 import { ZERO_USAGE, type AssistantTurn, type TurnEvent } from './session.js';
-import { AGENT_TOOL, childEndWords, DEFAULT_CHILD_CAPS, isReadOnly, type AgentDefinition, type ChildCaps, type ChildEnd } from './subagent.js';
+import { AGENT_TOOL, childEndWords, DEFAULT_CHILD_CAPS, findAgent, isReadOnly, type AgentDefinition, type ChildCaps, type ChildEnd } from './subagent.js';
 
 /**
  * Workflows: a small JSON file that runs subagents in a fixed order, such as review, then fix, then verify. The file
@@ -418,10 +418,9 @@ export function stepCaps(step: AgentStep, role: AgentDefinition | undefined): Ch
  * writer in Plan mode. Writers side by side are safe: the loop runs a call that edits alone, one after another.
  */
 export function workflowRefusal(spec: WorkflowSpec, agents: readonly AgentDefinition[], mode: ApprovalMode): string | undefined {
-  const byName = new Map(agents.map((agent) => [agent.name, agent]));
   for (const node of spec.steps) {
     for (const step of agentSteps(node)) {
-      const role = byName.get(step.role);
+      const role = findAgent(agents, step.role);
       if (role === undefined) return `step ${step.id} names the role "${step.role}", and the subagents are ${agents.map((a) => a.name).join(', ')}`;
       if (role.backend !== undefined) return `step ${step.id}'s role ${step.role} runs on an external agent, which a workflow cannot cap`;
       if (!isReadOnly(role) && mode === 'plan') return `step ${step.id} uses ${step.role}, which changes files, and Plan mode changes nothing; switch to Ask or Auto`;
@@ -477,11 +476,10 @@ export function workflowPreview(
   agents: readonly AgentDefinition[],
   session: { readonly model: string; readonly rates: (model: string) => Rates | undefined },
 ): WorkflowPreview {
-  const byName = new Map(agents.map((agent) => [agent.name, agent]));
   const rows: PreviewRow[] = [];
   const unpriced = new Set<string>();
   const agentRow = (step: AgentStep, count: number, dynamic: boolean): PreviewRow => {
-    const role = byName.get(step.role);
+    const role = findAgent(agents, step.role);
     const caps = stepCaps(step, role);
     const model = step.model ?? role?.model ?? session.model;
     const call = costAt(session.rates(model), { ...ZERO_USAGE, ...ESTIMATE_CALL });
@@ -682,7 +680,6 @@ export type Round = { readonly run: WorkflowRun; readonly calls: readonly UnitCa
  */
 export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]): Round {
   if (run.status !== 'running' || run.units.some((unit) => unit.status === 'running')) return { run, calls: [] };
-  const byName = new Map(agents.map((agent) => [agent.name, agent]));
   let current = run;
   for (;;) {
     const node = nodeOf(current);
@@ -705,7 +702,7 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
     }
     type Planned = { readonly unit: Omit<WorkflowUnit, 'index'>; readonly call: (index: number) => UnitCall };
     const planAgent = (step: AgentStep, label: string, item: PipelineItem | undefined): Planned => {
-      const role = byName.get(step.role);
+      const role = findAgent(agents, step.role);
       const caps = stepCaps(step, role);
       const task = [render(step.prompt, current, item).trim(), ...(step.schema === undefined ? [] : ['', schemaNote(step.schema)])].join('\n');
       const unit = { node: current.at.node, kind: 'agent' as const, step: step.id, label, role: step.role, caps, status: 'running' as const, costUsd: null, turns: 0, sessionId: undefined, note: undefined };
