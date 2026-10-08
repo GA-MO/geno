@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAX_MCP_INSTRUCTIONS_CHARS, MCP_SERVERS_METHOD, NOT_USER_LINE, type McpServersResponse } from '@g-code/core';
 import { mcpSessions, type McpSessions } from '../../src/mcp/sessions.js';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
+import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
 
 const FIXTURE = fileURLToPath(new URL('../fake-mcp-server.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
@@ -18,7 +18,6 @@ const fake = (env: Record<string, string> = {}) => ({ command: process.execPath,
 const http: Server[] = [];
 const hubs: McpSessions[] = [];
 afterEach(async () => {
-  await closeServers();
   await Promise.all(hubs.splice(0).map((mcp) => mcp.stopAll()));
   await Promise.all(http.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
 });

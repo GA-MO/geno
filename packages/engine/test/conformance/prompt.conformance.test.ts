@@ -1,8 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AGENT_PROMPTS } from '@g-code/core';
-import { closeServers, say, scripted, sessionIdOf, WIRES, type AnthropicWireModel, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { say, scripted, sessionIdOf, WIRES, type AnthropicWireModel, type Wire } from './scripted.js';
 
 const OPUS: AnthropicWireModel = { provider: 'anthropic', model: 'claude-opus-5-5' };
 const APPENDED = 'Answer every question in French.';

@@ -1,10 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ENVIRONMENT_HEADING, type TurnEvent } from '@g-code/core';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 const scratchpadOf = (events: readonly TurnEvent[]): string => {
   const head = events[0];

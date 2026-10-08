@@ -1,12 +1,10 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GENO_NOTE, WORKSPACE_TRUST_CAPABILITY } from '@g-code/core';
 import { gcodeAgent } from '../src/serve.js';
-import { call, closeServers, say, scripted } from './conformance/scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted } from './conformance/scripted.js';
 
 const CONTEXT = 'prettier formatted the file; it now uses single quotes.';
 

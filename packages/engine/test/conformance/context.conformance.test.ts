@@ -1,12 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { changedOnDiskNote, type TurnEvent } from '@g-code/core';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 const FILES = { 'a.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 2;\n' };
 const USER_TEXT = 'export const a = 1;\nexport const fromUser = true;\n';

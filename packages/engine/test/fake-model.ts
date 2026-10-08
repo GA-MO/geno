@@ -8,6 +8,7 @@ import { chatAnswer, chatToolCall, type ChatReply } from './fake-openai.js';
 import { answer, replyResponse, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
 import { requestKey, type Wire } from './request-normal.js';
 
+export type { FakeToolUse } from './fake-transport.js';
 export type { Wire } from './request-normal.js';
 
 /** One model turn, which the fake streams on whichever wire the request came in on. */
