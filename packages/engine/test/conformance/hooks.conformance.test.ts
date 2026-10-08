@@ -840,6 +840,23 @@ describe.each(WIRES)('SubagentStart and SubagentStop on the %s wire', (wire: Wir
     expect(run.openings()[0]!.first, 'the parent never reads it').not.toContain('Search only under src.');
   });
 
+  it('B/B-112 SubagentStart runs again when the parent resumes the child, and its context goes in only once', async () => {
+    const run = await scripted(wire, [explore, report('In a.ts.'), say('alpha is in a.ts.')], subagentFiles);
+    const start = await hookScript(run, 'start', { stdout: context('SubagentStart', 'Search only under src.') });
+    await userHooks(run, { SubagentStart: group(start.command) });
+    const first = await run.cli(agent(run.workspace, 'Where is alpha defined?'));
+    const parentId = sessionIdOf(first.stdout);
+    const childId = (await start.payloads())[0]!['agent_id'] as string;
+    const load = call('', [{ id: 'tu_load', name: 'tool_search', input: { select: ['message_agent'] } }]);
+    const message = call('', [{ id: 'tu_msg', name: 'message_agent', input: { agent_session: childId, text: 'And beta?' } }]);
+    run.more(load, message, report('Not found.', 'tu_report_2'), say('No beta.'));
+    expect((await run.cli(resume(parentId, 'And beta?'))).code).toBe(0);
+
+    expect((await start.payloads()).map((p) => p['agent_id'])).toEqual([childId, childId]);
+    const resumed = JSON.stringify(run.bodies()[5]!.messages);
+    expect(resumed.split('SubagentStart hook additional context: Search only under src.').length - 1, 'the copy from the launch stays, and no second one joins it').toBe(1);
+  });
+
   it("B/B-112 SubagentStop gets the child's report and transcript, and a block keeps the child going once", async () => {
     const run = await scripted(wire, [explore, report('In a.ts.', 'tu_r1'), report('In a.ts, line 1.', 'tu_r2'), say('alpha is in a.ts.')], subagentFiles);
     const stop = await hookScript(run, 'stop', { stderr: 'Name the line.', code: 2 });
