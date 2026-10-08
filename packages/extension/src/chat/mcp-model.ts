@@ -19,6 +19,7 @@ export type McpFromView =
 /** Where each source's servers are defined, as the panel says it. `acp` servers are the ones the extension forwards. */
 export const SOURCE_LABELS: Readonly<Record<McpSource, string>> = {
   global: '~/.g-code/mcp.json',
+  plugin: 'Claude Code plugin',
   'vscode-mcp-json': '.vscode/mcp.json',
   'mcp-json': '.mcp.json',
   acp: 'VS Code user settings',

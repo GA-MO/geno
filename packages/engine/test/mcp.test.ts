@@ -161,6 +161,46 @@ describe('MCP trust', () => {
     expect(reopened.views()[0]!.state).toEqual({ status: 'untrusted' });
   });
 
+  it("reads a plugin's servers from its .mcp.json and its manifest, named plugin_<plugin>_<server>, and starts none until approved", async () => {
+    const marker = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-marker-')), 'spawned');
+    const { open, home } = await setup();
+    const docs = path.join(home, 'plugin-cache', 'docs');
+    const tools = path.join(home, 'plugin-cache', 'tools');
+    const pluginFiles: Record<string, unknown> = {
+      [path.join(docs, '.claude-plugin', 'plugin.json')]: { name: 'docs' },
+      // Claude Code's own plugins put their servers at the top of the file.
+      [path.join(docs, '.mcp.json')]: { fake: { ...stdioServer({ MARKER: marker }), args: [...stdioServer().args, '${CLAUDE_PLUGIN_ROOT}/data'] } },
+      [path.join(tools, '.claude-plugin', 'plugin.json')]: { name: 'my.tools', mcpServers: ['./servers.json', { inline: { type: 'http', url: 'https://tools.example/mcp' } }] },
+      [path.join(tools, 'servers.json')]: { mcpServers: { wrapped: stdioServer() } },
+      [path.join(home, '.claude', 'plugins', 'installed_plugins.json')]: {
+        version: 2,
+        plugins: { 'docs@market': [{ scope: 'user', installPath: docs }], 'my.tools@market': [{ scope: 'user', installPath: tools }] },
+      },
+    };
+    for (const [file, value] of Object.entries(pluginFiles)) {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(value));
+    }
+    const hub = await open();
+    const realDocs = await realpath(docs);
+
+    expect(hub.problems).toEqual([]);
+    expect(hub.views().map((view) => [view.name, view.source, view.state.status])).toEqual([
+      ['plugin_docs_fake', 'plugin', 'untrusted'],
+      ['plugin_my_tools_inline', 'plugin', 'untrusted'],
+      ['plugin_my_tools_wrapped', 'plugin', 'untrusted'],
+    ]);
+    expect(hub.views()[0]!.definition).toMatchObject({ kind: 'stdio', commandLine: expect.stringContaining(`${realDocs}/data`), env: expect.arrayContaining([['CLAUDE_PLUGIN_ROOT', realDocs]]) });
+    expect((await toolsetOf(hub, approval('ask', 'allow').value)).tools).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(existsSync(marker), 'an unapproved plugin server never spawns').toBe(false);
+
+    await hub.trust('plugin_docs_fake');
+    const toolset = await toolsetOf(hub, approval('auto', 'allow').value);
+    expect(existsSync(marker)).toBe(true);
+    expect(toolset.tools.map((tool) => tool.name)).toContain('mcp__plugin_docs_fake__echo');
+  });
+
   it('trusts global and editor-provided servers without asking', async () => {
     const { open } = await setup({ global: { mcpServers: { globalfake: stdioServer() } } });
     const hub = await open([{ name: 'editorfake', ...stdioServer(), args: stdioServer().args, env: [] }]);

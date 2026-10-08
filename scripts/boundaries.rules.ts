@@ -53,6 +53,8 @@ export const BOUNDARIES: Boundaries = {
         // `gcode mcp list` and `gcode mcp trust` plug into the CLI's command table.
         'packages/engine/src/command.ts',
         'packages/engine/src/workspace.ts',
+        // The installed Claude Code plugins, whose `.mcp.json` servers join the session's.
+        'packages/engine/src/plugins.ts',
       ],
     },
   ],

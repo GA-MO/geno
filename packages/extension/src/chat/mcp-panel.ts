@@ -37,7 +37,7 @@ function trustCard(server: McpServerView, post: (message: McpFromView) => void):
     h(
       'p',
       { class: 'permission-reason' },
-      `${SOURCE_LABELS[server.source]} in this workspace defines it, so whoever wrote the repository chose it. ${WHERE[server.definition.kind]} A changed definition asks again.`,
+      `${server.source === 'plugin' ? 'A Claude Code plugin you installed defines it, so whoever wrote the plugin chose it.' : `${SOURCE_LABELS[server.source]} in this workspace defines it, so whoever wrote the repository chose it.`} ${WHERE[server.definition.kind]} A changed definition asks again.`,
     ),
     h(
       'div',
