@@ -23,6 +23,7 @@ const facts = (more: Partial<ComposerFacts> = {}): ComposerFacts => ({ ...NO_FAC
 const browser = (status: 'ready' | 'stopped'): McpListing => ({
   kind: 'loaded',
   problems: [],
+  signIns: {},
   servers: [
     {
       name: 'browser',

@@ -1,9 +1,15 @@
 import type { McpServerState, McpServerView, McpSource } from '@g-code/core';
 
-/** What the MCP panel shows: the shown session's servers as the engine reports them, and the problems in their files. */
+/** Where the user's sign-in to an HTTP server stands; a server missing from `signIns` has none. */
+export type McpSignIn = 'signed-in' | 'signing-in';
+
+/**
+ * What the MCP panel shows: the shown session's servers as the engine reports them, the problems in their files, and
+ * the user's sign-ins to them, which the extension keeps and the engine never sees.
+ */
 export type McpListing =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'loaded'; readonly servers: readonly McpServerView[]; readonly problems: readonly string[] }
+  | { readonly kind: 'loaded'; readonly servers: readonly McpServerView[]; readonly problems: readonly string[]; readonly signIns: Readonly<Record<string, McpSignIn>> }
   | { readonly kind: 'failed'; readonly message: string };
 
 /** What the extension tells the webview about MCP. */
@@ -14,7 +20,9 @@ export type McpFromView =
   | { readonly type: 'mcp-list' }
   /** `hash` is the definition the trust card showed; the engine refuses another. */
   | { readonly type: 'mcp-trust'; readonly name: string; readonly hash: string }
-  | { readonly type: 'mcp-enable'; readonly name: string; readonly enabled: boolean };
+  | { readonly type: 'mcp-enable'; readonly name: string; readonly enabled: boolean }
+  | { readonly type: 'mcp-sign-in'; readonly name: string }
+  | { readonly type: 'mcp-sign-out'; readonly name: string };
 
 /** Where each source's servers are defined, as the panel says it. `acp` servers are the ones the extension forwards. */
 export const SOURCE_LABELS: Readonly<Record<McpSource, string>> = {
@@ -36,7 +44,7 @@ const BADGES: { readonly [S in McpServerState['status']]: (state: Extract<McpSer
   stopped: (_state, _tools, { startsOn }) => (startsOn === 'first-use' ? { label: 'Starts on first use', tone: 'quiet' } : { label: 'Starting', tone: 'busy' }),
   starting: ({ restarts }) => ({ label: restarts === 0 ? 'Starting' : 'Restarting', tone: 'busy' }),
   ready: (_state, tools) => ({ label: tools === 1 ? 'Ready, 1 tool' : `Ready, ${tools} tools`, tone: 'ok' }),
-  failed: ({ needsSignIn, reason }) => (needsSignIn ? { label: 'Needs sign-in', tone: 'wait', detail: 'Geno does not support MCP sign-in yet.' } : { label: 'Failed', tone: 'failed', detail: reason }),
+  failed: ({ needsSignIn, reason }) => (needsSignIn ? { label: 'Needs sign-in', tone: 'wait' } : { label: 'Failed', tone: 'failed', detail: reason }),
 };
 
 export const badgeOf = (server: McpServerView): StateBadge =>
@@ -44,6 +52,9 @@ export const badgeOf = (server: McpServerView): StateBadge =>
 
 /** A server waits on the user when it is untrusted and not turned off. */
 export const awaitsApproval = (server: McpServerView): boolean => server.state.status === 'untrusted';
+
+/** Sign-in comes after approval: only a server that connected and was refused, which an untrusted one never does, offers it. */
+export const offersSignIn = (server: McpServerView): boolean => server.state.status === 'failed' && server.state.needsSignIn && server.definition.kind !== 'stdio';
 
 /**
  * A server still on its way: starting, or trusted and about to start, since the engine starts every trusted server of

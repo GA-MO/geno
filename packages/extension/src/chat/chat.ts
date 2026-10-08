@@ -74,6 +74,8 @@ import {
   type RetryNowRequest,
   type RetryNowResponse,
   BACKEND_ENV_METHOD,
+  MCP_TOKEN_METHOD,
+  type McpTokenResponse,
   BACKEND_META,
   BACKENDS_METHOD,
   EXTERNAL_BACKEND_IDS,
@@ -112,6 +114,7 @@ import { PermissionsHost } from './permissions-host.js';
 import { SkillsHost } from './skills-host.js';
 import { browserMeta, browserSettings } from './browser.js';
 import { McpServers } from './mcp-host.js';
+import type { McpTokenStore } from './mcp-tokens.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
 import type { SeenStore } from './seen.js';
@@ -311,6 +314,7 @@ void namesEveryTaskField;
 
 const backendShown = z.object({ id: z.enum(EXTERNAL_BACKEND_IDS), label: z.string(), plan: z.string(), lane: z.string().nullable() });
 const backendEnvRequest = z.object({ backend: z.enum(EXTERNAL_BACKEND_IDS) });
+const mcpTokenRequest = z.object({ sessionId: z.string(), server: z.string().min(1), url: z.string().min(1), rejected: z.boolean() });
 
 /** The backend a session response or info update names under BACKEND_META; undefined for Geno's own loop. */
 const backendOf = (meta: Record<string, unknown> | null | undefined): BackendShown | undefined => {
@@ -634,9 +638,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     private readonly backendEnv: (backend: ExternalBackendId) => Promise<BackendEnvResponse>,
     /** The user's terminals as the recorder holds them, redacted and capped, for read_terminal. */
     private readonly readTerminal: (request: Omit<ReadTerminalRequest, 'sessionId'>) => ReadTerminalResponse,
+    /** The user's sign-ins to HTTP MCP servers, whose access tokens the engine asks for. */
+    private readonly mcpTokens: McpTokenStore,
   ) {
     this.engine = new Engine(settings, () => this.client(), output);
-    this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
+    this.mcp = new McpServers(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView), mcpTokens);
     this.panes = new ContextPanes(() => this.link(), (message) => void this.view?.webview.postMessage(message satisfies ToView));
     // The folder alone: opening Settings must not start a session before the user picks its provider.
     this.permissionRules = new PermissionsHost(async () => {
@@ -799,6 +805,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       })
       .onRequest(READ_TERMINAL_METHOD, readTerminalRequest, ({ params }) => this.readTerminal(params))
       .onRequest(BACKEND_ENV_METHOD, backendEnvRequest, ({ params }) => this.backendEnv(params.backend))
+      .onRequest(MCP_TOKEN_METHOD, mcpTokenRequest, async ({ params }): Promise<McpTokenResponse> => {
+        const accessToken = await this.mcpTokens.accessToken({ name: params.server, url: params.url }, params.rejected);
+        return accessToken === undefined ? {} : { accessToken };
+      })
       .onNotification(acp.methods.client.session.update, ({ params }) => this.updated(params.sessionId, params.update))
       .onNotification(TASK_UPDATE_METHOD, taskUpdate, ({ params }) => this.background.updated(params))
       .onNotification(SCHEDULES_UPDATE_METHOD, schedulesUpdate, ({ params }) => this.background.scheduled(params))

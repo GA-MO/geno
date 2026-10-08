@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 import type { McpDefinitionView, McpServerView } from '@g-code/core';
 import { h, icon, reconcile, type Child } from './dom.js';
-import { awaitsApproval, badgeOf, setServerNames, SOURCE_LABELS, type McpFromView, type McpListing } from './mcp-model.js';
+import { awaitsApproval, badgeOf, offersSignIn, setServerNames, SOURCE_LABELS, type McpFromView, type McpListing, type McpSignIn } from './mcp-model.js';
 
 /** A labeled line of a definition: what runs, where, with what. */
 const field = (label: string, ...values: readonly string[]): HTMLElement =>
@@ -52,7 +52,32 @@ const BUILTIN_NOTE = 'Chrome with a fresh profile that is thrown away after each
 
 const shortTool = (server: string, tool: string): string => tool.replace(new RegExp(`^mcp__${server.replace(/[^A-Za-z0-9_]/g, '_')}__`), '');
 
-function serverRow(server: McpServerView, post: (message: McpFromView) => void): HTMLElement {
+/**
+ * Sign-in for a server that wants it, and sign-out once signed in. The browser does the signing in; the tokens stay
+ * in VS Code's secret storage, and the model only learns that the server needs sign-in.
+ */
+function signInRow(server: McpServerView, signIn: McpSignIn | undefined, post: (message: McpFromView) => void): HTMLElement | undefined {
+  if (signIn === 'signing-in') return h('p', { class: 'mcp-sign-in tone-busy' }, icon('loading', 'codicon-modifier-spin'), h('span', {}, 'Finish signing in in your browser.'));
+  if (offersSignIn(server)) {
+    return h(
+      'p',
+      { class: 'mcp-sign-in tone-wait' },
+      h('span', {}, 'It needs you to sign in before Geno can use its tools.'),
+      h('button', { type: 'button', class: 'button', 'data-focus': `sign-in:${server.name}`, onclick: () => post({ type: 'mcp-sign-in', name: server.name }) }, 'Sign in'),
+    );
+  }
+  if (signIn === 'signed-in') {
+    return h(
+      'p',
+      { class: 'mcp-sign-in tone-quiet' },
+      h('span', {}, 'Signed in.'),
+      h('button', { type: 'button', class: 'link-button', 'data-focus': `sign-out:${server.name}`, onclick: () => post({ type: 'mcp-sign-out', name: server.name }) }, 'Sign out'),
+    );
+  }
+  return undefined;
+}
+
+function serverRow(server: McpServerView, signIn: McpSignIn | undefined, post: (message: McpFromView) => void): HTMLElement {
   const badge = badgeOf(server);
   const on = server.state.status !== 'disabled';
   return h(
@@ -84,6 +109,7 @@ function serverRow(server: McpServerView, post: (message: McpFromView) => void):
     badge.detail !== undefined && h('p', { class: `mcp-detail tone-${badge.tone}` }, badge.detail),
     server.source === 'builtin' && h('p', { class: 'mcp-detail tone-quiet' }, BUILTIN_NOTE),
     awaitsApproval(server) && trustCard(server, post),
+    signInRow(server, signIn, post),
     server.tools.length > 0 && h('p', { class: 'mcp-tools' }, server.tools.map((tool) => shortTool(server.name, tool)).join(', ')),
   );
 }
@@ -136,7 +162,8 @@ export function mcpPanel(post: (message: McpFromView) => void, onToggle: (open: 
             ? 'No MCP servers. Add them to .mcp.json or .vscode/mcp.json in the workspace, or to your VS Code user mcp.json.'
             : '';
     note.hidden = note.textContent === '';
-    reconcile(list, servers.map((server) => ({ key: server.name, deps: [server], build: () => serverRow(server, post) })));
+    const signIns = listing.kind === 'loaded' ? listing.signIns : {};
+    reconcile(list, servers.map((server) => ({ key: server.name, deps: [server, signIns[server.name]], build: () => serverRow(server, signIns[server.name], post) })));
     const found = listing.kind === 'loaded' ? listing.problems : [];
     problems.hidden = found.length === 0;
     problems.replaceChildren(...found.map((problem) => h('li', { class: 'mcp-problem' }, icon('warning'), h('span', {}, problem))));
