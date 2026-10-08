@@ -505,6 +505,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** An isolated child runs in a new lane with U24's sandbox and `laneCommandDenial`. A clean lane is discarded. A changed lane is kept, and the report names it. A lane session's opening carries Claude Code's stash warning.
 - **Check.** T-AGENT-05. Two `worker` children edit the same file in parallel lanes, both keep their edits, and the main tree is unchanged.
 - **Size.** 1.5 days. **Depends on.** P17.
+- **Status.** Done. The `agent` tool takes `isolation: "worktree"`, as Claude Code's does, besides the definition's field. Workflow steps with `lane` run too, since they followed from the same path, so P21 keeps only background and parallel writers. Writers in lanes still run one after another. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P21: background and parallel writers
 
