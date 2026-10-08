@@ -5,6 +5,7 @@ import {
   DENY_RULE_IDS,
   DENY_RULES,
   outsideReadDenial,
+  filesRun,
   credentialPlaces,
   inCredentialPlace,
   splitCommand,
@@ -455,6 +456,26 @@ describe('splitCommand', () => {
       ['ls', '..'],
       ['echo', '`ls ..`', 'done'],
     ]);
+  });
+});
+
+describe('B/B-76 the files a command runs', () => {
+  it.each([
+    ['bash x.sh', ['/Users/me/ws/x.sh']],
+    ['sh -x scripts/build.sh --fast', ['/Users/me/ws/scripts/build.sh']],
+    ['./x.sh && node tools/gen.js', ['/Users/me/ws/x.sh', '/Users/me/ws/tools/gen.js']],
+    ['python3 -u x.py', ['/Users/me/ws/x.py']],
+    ['deno run x.ts', ['/Users/me/ws/x.ts']],
+    ['source ./env.sh', ['/Users/me/ws/env.sh']],
+    ['F=x.sh; bash $F', ['/Users/me/ws/x.sh']],
+    ['bash ~/bin/tool.sh', ['/Users/me/bin/tool.sh']],
+    ['bash -c "echo hi"', []],
+    ['node -e "console.log(1)"', []],
+    ['python -m pytest', []],
+    ['/usr/bin/env node', []],
+    ['git status', []],
+  ])('%s runs %j', (command, files) => {
+    expect(filesRun(command, scope)).toEqual(files);
   });
 });
 
