@@ -42,6 +42,7 @@ import {
   widgetToolDefinitions,
   type AssistantTurn,
   type EffortPolicy,
+  type LaneBounds,
   type PromptTier,
   type SessionMode,
   type SessionScope,
@@ -56,19 +57,21 @@ import {
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
-import { checkCommand } from './check-command.js';
+import { checkCommand, type CheckCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
 import { workspaceDir } from './workspace.js';
 import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
+import { EngineError } from './errors.js';
 import { writeGenoTools } from './geno-tools.js';
 import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
-import { bindSession, laneAt } from './lanes.js';
+import { laneFor } from './lane-hooks.js';
+import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
-import { openSandbox, sandboxPolicy } from './sandbox.js';
+import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
 import { permissionStore } from './permissions.js';
 import { logMode } from './sessions.js';
@@ -88,7 +91,7 @@ import { chapterExecutor } from './tools/chapters.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { webExecutors, type WebDeps } from './tools/web.js';
-import { loadAgents, mentionedCall, resumeCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
+import { loadAgents, mentionedCall, resumeCall, subagents, terminalChildHost, type OpenChildLane, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
@@ -256,18 +259,27 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const exclude = forkSource === undefined ? [session.id] : [session.id, forkSource];
     const recall = (query: string) => sessionIndex(store).search(query, project, { ...RECALL_SEARCH, exclude }, io.err);
     const prTools = { gh: ghCli(io.env), githubRemote };
-    const executorsFor = (approval: Approval, own = false) =>
+    // Where the tools work: the session's workspace, or a subagent's lane with a sandbox of its own and no editor.
+    type Place = {
+      readonly sandbox: Sandbox;
+      readonly workspace: string;
+      readonly lane: LaneBounds | undefined;
+      readonly check: CheckCommand | undefined;
+      readonly diagnostics: Diagnostics | undefined;
+    };
+    const here: Place = { sandbox, workspace, lane: lane?.bounds, check, diagnostics: options.diagnostics };
+    const executorsFor = (approval: Approval, own = false, place: Place = here) =>
       agentExecutors({
-        sandbox,
+        sandbox: place.sandbox,
         env: childEnv(io.env),
-        scope: { workspace, tempDir, home },
-        check,
+        scope: { workspace: place.workspace, tempDir, home },
+        check: place.check,
         checkAfterEdit: options.checkAfterEdit,
         approval,
-        diagnostics: options.diagnostics,
+        diagnostics: place.diagnostics,
         rules: ruleAttacher(opened.log.events),
         commands,
-        lane: lane?.bounds,
+        lane: place.lane,
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
@@ -282,6 +294,17 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         pr: own ? prTools : undefined,
       });
     const executors = executorsFor(options.approval, true);
+    const childLane: OpenChildLane = async (name, child) => {
+      const repo = await laneRepoOf(workspace);
+      const record = (await findLane(repo, name)) ?? (await laneFor(repo, '', store, io, name));
+      const bound = await laneAt(record.path, home);
+      if (bound === undefined) throw new EngineError(`lane ${name} at ${record.path} is not a lane checkout`);
+      await bindSession(bound, child);
+      const laneCheck = await checkCommand(options.check ?? config.check, record.path, homeOf(store));
+      const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: bound.gitWritable }));
+      const place: Place = { sandbox: laneSandbox, workspace: record.path, lane: bound.bounds, check: laneCheck, diagnostics: undefined };
+      return { lane: bound, executors: (approval) => executorsFor(approval, false, place), close: () => laneSandbox.close() };
+    };
     const repo = shadowRepoFor(store, session.workspace);
     const mcp = options.mcp;
     // Every mode is offered the same tools and the same system prompt, so a switch keeps the cached prefix. The model is
@@ -348,6 +371,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       // A subagent's calls meet the user's tool hooks too, as in Claude Code, named by agent_id and agent_type.
       toolHooks: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.toolHooks(session.id, approval, agent),
       subagentHooks: options.hooks === undefined ? undefined : (agent, transcript, approval) => options.hooks!.subagentHooks(session.id, agent, transcript, approval),
+      lanes: childLane,
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools, mcp?.tools);

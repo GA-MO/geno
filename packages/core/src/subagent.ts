@@ -20,7 +20,7 @@ export const AGENT_TOOL = 'agent';
 /** Where a definition came from. A workspace one shadows a global one, which shadows a built-in. */
 export type AgentSource = 'workspace' | 'global' | 'plugin' | 'builtin';
 
-/** `worktree` is read and kept, but no child runs in a worktree yet. */
+/** `worktree` runs each child of the definition in a lane of its own. */
 export const ISOLATIONS = ['none', 'worktree'] as const;
 export type Isolation = (typeof ISOLATIONS)[number];
 
@@ -130,7 +130,6 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
   const rawIsolation = text(fields['isolation']);
   const isolation: Isolation = rawIsolation === 'worktree' ? 'worktree' : 'none';
   if (rawIsolation !== '' && rawIsolation !== 'worktree' && rawIsolation !== 'none') notes.push(`isolation ${rawIsolation} is not worktree`);
-  if (isolation === 'worktree') notes.push('isolation: worktree is not supported yet, so the agent cannot run');
 
   const rawBackend = text(fields['backend']);
   const backend = rawBackend === '' || rawBackend === 'geno' ? undefined : isExternalBackendId(rawBackend) ? rawBackend : undefined;
@@ -228,7 +227,7 @@ Report findings, most severe first. Each finding is one line: the severity (high
   }),
   builtin({
     name: 'worker',
-    description: 'May edit files and run commands. Runs one at a time in the main tree.',
+    description: 'May edit files and run commands. Runs one at a time, in the main tree unless isolation is worktree.',
     tools: CHILD_TOOL_NAMES.toSorted(),
     effort: undefined,
     maxTurns: 30,
@@ -307,6 +306,8 @@ export type ChildOf = {
   readonly start: ChildStart;
   /** It ran beside its parent's turn and reported as a message; a message that resumes it runs it the same way. */
   readonly background?: true | undefined;
+  /** The lane it works in, which a message that resumes it opens again; undefined works in its parent's checkout. */
+  readonly lane?: string | undefined;
 };
 
 export const CHILD_CAPS = ['turns', 'cost'] as const;
@@ -495,6 +496,12 @@ export function agentToolDefinition(agents: readonly AgentDefinition[]): Tool {
         background: {
           type: 'boolean',
           description: 'Read-only subagents only: return at once with the subagent session id, and get the report as a message when it finishes. message_agent can steer it meanwhile.',
+        },
+        isolation: {
+          type: 'string',
+          enum: ['worktree'],
+          description:
+            'worktree runs the subagent in a lane of its own: a new git worktree of this repository on a geno/ branch, so its edits stay out of your checkout. A lane it leaves unchanged is removed when it ends; a changed one is kept, and the report names its branch, path and files for review.',
         },
       },
       required: ['agent', 'task'],

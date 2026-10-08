@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CLASSIFIER_TOOL, NOT_USER_LINE, type TurnEvent } from '@g-code/core';
@@ -163,5 +164,53 @@ describe('the Auto classifier after a report', () => {
     expect(classified, 'one classifier call, for the command only').toHaveLength(1);
     expect(classified[0]!.text).toMatch(/A subagent report preceded this action/);
     expect(existsSync(path.join(workspace, 'src/b.ts'))).toBe(true);
+  });
+});
+
+describe.each(WIRES)('a child in a lane on the %s wire', (wire) => {
+  const isolated = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'worker', task: 'Make alpha 2 in a.ts.', isolation: 'worktree' } }]);
+  const read = call('', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }]);
+  const edit = call('', [{ id: 'tu_edit', name: 'edit', input: { path: 'a.ts', old_str: 'alpha = 1', new_str: 'alpha = 2' } }]);
+  const escape = call('', [{ id: 'tu_escape', name: 'bash', input: { command: 'cd ../../.. && touch escaped.txt' } }]);
+  const git = (dir: string, ...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' });
+
+  it('T-AGENT-05 isolation: worktree runs the child in a lane of its own on geno/<name>, keeps the changed lane, and names it in the report', async () => {
+    const { workspace, cli, seen, openings, log } = await scripted(wire, [isolated, read, edit, escape, report('Changed a.ts:1 to alpha = 2.'), say('Done in a lane.')], files(['non-interactive']));
+    const result = await cli(['agent', '--workspace', workspace, '--non-interactive', '--allow-worker', 'Make alpha 2.']);
+    expect(result.code, result.stderr).toBe(0);
+
+    const start = (await log(result.stdout)).find((e) => e.kind === 'child-start')!;
+    const name = `worker-${start.kind === 'child-start' ? start.child.slice(0, 8) : ''}`;
+    const lane = path.join(workspace, '.geno', 'worktrees', name);
+    const opening = openings()[1]!.first;
+    expect(opening, "the child's workspace is the lane").toContain(` - Workspace: ${lane}\n`);
+    expect(opening).toContain(` - Lane: ${name}, a git worktree on branch geno/${name}; the main checkout is ${workspace}.`);
+    expect(opening, "Claude Code's stash warning, in Geno's words").toMatch(/stash stack is shared by the main checkout and every lane/);
+
+    const refused = seen()[4]!.results[0]!;
+    expect(refused.error, "the child's commands are held to the lane").toBe(true);
+    expect(refused.text).toMatch(/^denied: this session runs in a lane, and the command changes to a folder outside the lane/);
+    expect(existsSync(path.join(workspace, 'escaped.txt'))).toBe(false);
+    expect(readFileSync(path.join(lane, 'a.ts'), 'utf8')).toBe('export const alpha = 2;\n');
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8'), 'the main checkout is untouched').toBe('export const alpha = 1;\n');
+    expect(git(workspace, 'status', '--porcelain')).toBe('');
+    expect(git(lane, 'branch', '--show-current').trim()).toBe(`geno/${name}`);
+
+    const handed = seen()[5]!.results[0]!.text;
+    expect(handed).toContain('  Changed a.ts:1 to alpha = 2.');
+    expect(handed).toContain(`[Geno] worker's edits are in lane ${name}, on branch geno/${name} at ${lane}, not in your checkout. Files changed: a.ts.`);
+    expect(handed).toContain(`gcode lane apply ${name}`);
+  });
+
+  it('T-AGENT-05 a lane the child left clean is removed with its branch when the child ends, and the report names no lane', async () => {
+    const { workspace, cli, seen, openings } = await scripted(wire, [isolated, report('Nothing needed changing.'), say('Nothing changed.')], files(['non-interactive']));
+    expect((await cli(['agent', '--workspace', workspace, '--non-interactive', '--allow-worker', 'Make alpha 2.'])).code).toBe(0);
+
+    expect(openings()[1]!.first, 'it ran in a lane').toMatch(/ - Lane: worker-/);
+    const lanes = path.join(workspace, '.geno', 'worktrees');
+    expect(existsSync(lanes) ? readdirSync(lanes) : []).toEqual([]);
+    expect(git(workspace, 'branch', '--list', 'geno/*')).toBe('');
+    expect(git(workspace, 'worktree', 'list', '--porcelain').match(/^worktree /gm)).toHaveLength(1);
+    expect(seen()[2]!.results[0]!.text).not.toMatch(/lane/);
   });
 });

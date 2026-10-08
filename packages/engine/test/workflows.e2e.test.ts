@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -89,6 +90,13 @@ const WORKFLOWS: Readonly<Record<string, unknown>> = {
       { id: 'look', role: 'explore', prompt: '[look] look' },
       { id: 'fix', role: 'worker', prompt: '[costly] fix', maxCostUsd: 0.02 },
       { id: 'after', role: 'review', prompt: '[after] never' },
+    ],
+  },
+  laned: {
+    description: 'Two fixes in one lane.',
+    steps: [
+      { id: 'fix', role: 'worker', prompt: '[lfix] make alpha 2', lane: 'fix' },
+      { id: 'again', role: 'worker', prompt: '[lagain] make alpha 3', lane: 'fix' },
     ],
   },
   slow: { description: 'One slow look.', steps: [{ id: 'hang', role: 'explore', prompt: '[hang] look slowly' }, { id: 'after', role: 'review', prompt: '[after] never' }] },
@@ -347,6 +355,30 @@ describe('gcode serve: workflows', () => {
     expect(result).toMatchObject({ status: 'rejected', output: expect.stringMatching(/wait for the user/) });
   });
 
+  it('runs two steps in one lane of the run, each after the other, and leaves the main checkout unchanged', async () => {
+    const read = { id: 'tu_r', name: 'read', input: { path: 'a.ts' } };
+    const edit = (from: string, to: string) => ({ id: 'tu_e', name: 'edit', input: { path: 'a.ts', old_str: from, new_str: to } });
+    const step = (from: string, to: string): Script => (n) => (n === 0 ? toolCall('Reading.', [read], usage) : n === 1 ? toolCall('Editing.', [edit(from, to)], usage) : handBack(`alpha is ${to}.`, usage));
+    const model = models({ '[lfix]': step('alpha = 1', 'alpha = 2'), '[lagain]': step('alpha = 2', 'alpha = 3'), [PARENT]: () => answer('Done.', usage) });
+    const { result, store } = await serve(model.fetch, async (window, heard) => {
+      await window.prompt('/workflow laned');
+      await until(() => workflowTask(heard, 'laned')?.status === 'done', 'the workflow to finish');
+      return workflowTask(heard, 'laned')!;
+    });
+    expect(result.workflow?.status).toBe('done');
+    const workflowId = result.sessionId;
+    const events = await logOf(store, workflowId);
+    const head = events[0]!;
+    const workspace = head.kind === 'session-start' ? head.session.workspace : '';
+    const name = `fix-${workflowId.slice(0, 8)}`;
+    const lane = path.join(workspace, '.geno', 'worktrees', name);
+    expect(readFileSync(path.join(lane, 'a.ts'), 'utf8'), "the second step's edit found the first one's").toBe('export const alpha = 3;\n');
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const alpha = 1;\n');
+    const reports = events.flatMap((e) => (e.kind === 'tool-result' && e.name === 'agent' && 'output' in e ? [e.output] : []));
+    expect(reports).toHaveLength(2);
+    for (const report of reports) expect(report).toContain(`lane ${name}, on branch geno/${name}`);
+  });
+
   it('lists the workflows for /workflow with no name, and names the one it does not know', async () => {
     const model = models({ [PARENT]: () => answer('never', usage), 'List the workflows': () => answer('never', usage) });
     const { store, sessionId } = await serve(model.fetch, async (window) => {
@@ -356,6 +388,6 @@ describe('gcode serve: workflows', () => {
     const outputs = (await logOf(store, sessionId)).flatMap((e) => (e.kind === 'tool-result' && 'output' in e ? [e.output] : []));
     expect(outputs[0]).toContain('- capped: A fix that runs out of money.');
     expect(outputs[0]).toContain('- three: Review, fix, check and verify. Input: What to focus on');
-    expect(outputs[1]).toContain('no workflow nope; the workflows are capped, fanout, slow, three');
+    expect(outputs[1]).toContain('no workflow nope; the workflows are capped, fanout, laned, slow, three');
   });
 });
