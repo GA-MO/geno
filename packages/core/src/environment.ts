@@ -1,4 +1,5 @@
 import { GENO_NOTE } from './fence.js';
+import { laneSentence, type LanePlace } from './lanes.js';
 import { specOf, type ProviderName } from './providers.js';
 
 /** The workspace's git state when the session started. */
@@ -45,6 +46,8 @@ export type Environment = {
   readonly git?: GitSnapshot | undefined;
   /** Absent when the workspace has no package.json. */
   readonly project?: ProjectFacts | undefined;
+  /** The lane the workspace is, when it is one; absent for the main checkout. */
+  readonly lane?: LanePlace | undefined;
 };
 
 export const GIT_STATUS_LINES = 20;
@@ -89,6 +92,7 @@ export function renderEnvironment(env: Environment, session: SessionFacts): stri
     `${ENVIRONMENT_HEADING}, recorded when this session started. It will not update; run a command for the current state.`,
     ` - Workspace: ${session.workspace}`,
     ` - Is a git repository: ${env.git !== undefined}`,
+    ...(env.lane === undefined ? [] : [` - Lane: ${laneSentence(env.lane)}`]),
     ` - Platform: ${env.platform}${PLATFORM_NOTES[env.platform] ?? ''}`,
     ` - OS version: ${env.osVersion}`,
     ` - Shell: the bash tool runs each command with ${COMMAND_SHELL} -c in the workspace${env.loginShell === undefined ? '' : `; the user's login shell is ${env.loginShell}`}.`,

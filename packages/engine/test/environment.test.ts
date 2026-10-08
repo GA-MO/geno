@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GIT_STATUS_LINES } from '@g-code/core';
 import { captureEnvironment, scratchpadOf } from '../src/environment.js';
+import { createLane, laneRepoOf } from '../src/lanes.js';
 import { makeRepo } from './git-fixture.js';
 
 const write = (dir: string, files: Readonly<Record<string, string>>) => {
@@ -70,6 +71,13 @@ describe('captureEnvironment', () => {
     expect((await captureEnvironment({ workspace: dir, scratchpad: '/tmp/s', env: {} })).project?.packageManager).toBe('yarn');
     write(dir, { 'package.json': '{ not json' });
     expect((await captureEnvironment({ workspace: dir, scratchpad: '/tmp/s', env: {} })).project).toBeUndefined();
+  });
+
+  it('names the lane of a session whose workspace is one, so its opening carries the stash warning, and no lane for the main checkout', async () => {
+    const main = realpathSync(makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'x\n' } }]));
+    const lane = await createLane(await laneRepoOf(main), 'fix-login', 'head');
+    expect((await captureEnvironment({ workspace: lane.path, scratchpad: '/tmp/s', env: {} })).lane).toEqual({ name: 'fix-login', branch: 'geno/fix-login', main });
+    expect((await captureEnvironment({ workspace: main, scratchpad: '/tmp/s', env: {} })).lane).toBeUndefined();
   });
 });
 
