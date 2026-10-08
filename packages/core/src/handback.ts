@@ -8,6 +8,8 @@ import type { TurnEvent } from './session.js';
  */
 
 export const REPORT_TOOL = 'report';
+/** A workflow schema step's forced last call, after its report, whose input is the step's fields (`workflow.ts`). */
+export const STRUCTURED_OUTPUT_TOOL = 'structured_output';
 
 export const REPORT_TOOL_DEFINITION: Tool = {
   name: REPORT_TOOL,

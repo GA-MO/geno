@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
 import { reportBody } from './fence.js';
+import { STRUCTURED_OUTPUT_TOOL } from './handback.js';
 import type { Parsed } from './ask-user.js';
 import type { Rates } from './cost.js';
 import { costAt } from './cost.js';
@@ -609,7 +610,16 @@ export const workflowSpent = (run: WorkflowRun): number => run.units.reduce((sum
 export const unitToolId = (index: number): string => `toolu_gcode_wf_${index}`;
 
 export type UnitCall =
-  | { readonly kind: 'agent'; readonly index: number; readonly role: string; readonly task: string; readonly model: string | undefined; readonly lane: string | undefined; readonly caps: ChildCaps }
+  | {
+      readonly kind: 'agent';
+      readonly index: number;
+      readonly role: string;
+      readonly task: string;
+      readonly model: string | undefined;
+      readonly lane: string | undefined;
+      readonly caps: ChildCaps;
+      readonly schema: OutputSchema | undefined;
+    }
   | { readonly kind: 'check'; readonly index: number };
 
 /**
@@ -654,6 +664,16 @@ const FIELD_CHECK: Readonly<Record<FieldType, (value: unknown) => boolean>> = {
   'string[]': (value) => Array.isArray(value) && value.every((v) => typeof v === 'string'),
 };
 
+const fieldsIn = (raw: unknown, schema: OutputSchema): Record<string, FieldValue> | undefined =>
+  isRecord(raw) && Object.entries(schema).every(([field, type]) => FIELD_CHECK[type](raw[field]))
+    ? Object.fromEntries(Object.keys(schema).map((field) => [field, raw[field] as FieldValue]))
+    : undefined;
+
+const fieldList = (schema: OutputSchema): string =>
+  Object.entries(schema)
+    .map(([field, type]) => `${field} (${type})`)
+    .join(', ');
+
 /** The fields of the last JSON block in a report that holds every field the schema names, with its type. */
 export function readFields(report: string, schema: OutputSchema): Parsed<Record<string, FieldValue>> {
   const text = reportBody(report);
@@ -666,13 +686,41 @@ export function readFields(report: string, schema: OutputSchema): Parsed<Record<
     } catch {
       continue;
     }
-    if (!isRecord(raw)) continue;
-    if (Object.entries(schema).every(([field, type]) => FIELD_CHECK[type](raw[field]))) {
-      return { ok: true, value: Object.fromEntries(Object.keys(schema).map((field) => [field, raw[field] as FieldValue])) };
-    }
+    const fields = fieldsIn(raw, schema);
+    if (fields !== undefined) return { ok: true, value: fields };
   }
-  return fail(`its report has no JSON block with ${Object.entries(schema).map(([field, type]) => `${field} (${type})`).join(', ')}`);
+  return fail(`its report has no JSON block with ${fieldList(schema)}`);
 }
+
+const JSON_TYPE: Readonly<Record<FieldType, Readonly<Record<string, unknown>>>> = {
+  string: { type: 'string' },
+  number: { type: 'number' },
+  boolean: { type: 'boolean' },
+  'string[]': { type: 'array', items: { type: 'string' } },
+};
+
+/** A schema step's forced last call, after its report: the step's flat schema as the JSON Schema of the call's input. */
+export function structuredOutputTool(schema: OutputSchema): Tool {
+  return {
+    name: STRUCTURED_OUTPUT_TOOL,
+    description: 'Give the fields the workflow asked for, from your work and the report you delivered. Call it once: the call ends your run.',
+    input_schema: {
+      type: 'object',
+      properties: Object.fromEntries(Object.entries(schema).map(([field, type]) => [field, JSON_TYPE[type]])),
+      required: Object.keys(schema),
+      additionalProperties: false,
+    },
+  };
+}
+
+/** A structured_output call's input as the step's fields; a missing field, or one of another type, fails it. */
+export function structuredFields(input: unknown, schema: OutputSchema): Parsed<Record<string, FieldValue>> {
+  const fields = fieldsIn(input, schema);
+  return fields === undefined ? fail(`${STRUCTURED_OUTPUT_TOOL} takes ${fieldList(schema)}`) : { ok: true, value: fields };
+}
+
+/** A report with the fields its forced call gave as its last block, which `readFields` reads first, so a journal replays them with the report. */
+export const withFields = (report: string, fields: Readonly<Record<string, FieldValue>>): string => `${report}\n\n\`\`\`json\n${JSON.stringify(fields)}\n\`\`\``;
 
 const nodeOf = (run: WorkflowRun): WorkflowNode | undefined => run.spec.steps[run.at.node];
 
@@ -734,7 +782,7 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
       const task = [render(step.prompt, current, item).trim(), ...(step.schema === undefined ? [] : ['', schemaNote(step.schema)])].join('\n');
       const key = unitKey({ task, caps, role: step.role, model: step.model, lane: step.lane });
       const unit = { node: current.at.node, kind: 'agent' as const, step: step.id, label, role: step.role, caps, status: 'running' as const, costUsd: null, turns: 0, sessionId: undefined, note: undefined, key, report: undefined, empty: false };
-      return { unit, call: (index) => ({ kind: 'agent', index, role: step.role, task, model: step.model, lane: step.lane, caps }) };
+      return { unit, call: (index) => ({ kind: 'agent', index, role: step.role, task, model: step.model, lane: step.lane, caps, schema: step.schema }) };
     };
     const planned: Planned[] =
       node.kind === 'agent'
@@ -919,7 +967,15 @@ export function workflowTurn(calls: readonly UnitCall[], model: string): Assista
     name: call.kind === 'agent' ? AGENT_TOOL : WORKFLOW_CHECK_TOOL,
     input:
       call.kind === 'agent'
-        ? { agent: call.role, task: call.task, max_turns: call.caps.maxTurns, max_cost_usd: call.caps.maxCostUsd, ...(call.model === undefined ? {} : { model: call.model }), ...(call.lane === undefined ? {} : { lane: call.lane }) }
+        ? {
+            agent: call.role,
+            task: call.task,
+            max_turns: call.caps.maxTurns,
+            max_cost_usd: call.caps.maxCostUsd,
+            ...(call.model === undefined ? {} : { model: call.model }),
+            ...(call.lane === undefined ? {} : { lane: call.lane }),
+            ...(call.schema === undefined ? {} : { schema: call.schema }),
+          }
         : {},
     caller: { type: 'direct' },
   }));

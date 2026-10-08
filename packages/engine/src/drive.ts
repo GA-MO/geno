@@ -26,6 +26,8 @@ export type Mode = {
   readonly executors: Executors;
   /** Undefined keeps the gateway's default prompt. */
   readonly system?: string;
+  /** The one tool each model call must make, such as a schema step's structured_output. */
+  readonly forced?: string;
   /** Real paths the read tools may see outside the workspace, read-only. */
   readonly readRoots?: readonly string[];
   /** An event to log before each model call, such as a checkpoint. */
@@ -413,6 +415,7 @@ export async function drive(
       tools: mode.tools,
       stored: await loadAttachments(ctx.attachmentsDir, events, loaded),
       ...(mode.system === undefined ? {} : { system: mode.system }),
+      ...(mode.forced === undefined ? {} : { forced: mode.forced }),
       signal,
       onText: (delta) => watcher.text(delta),
       onToolInput: (draft) => watcher.toolInput?.(draft),

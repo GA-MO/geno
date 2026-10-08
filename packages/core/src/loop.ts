@@ -1,5 +1,5 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { REPORT_TOOL, reportMessageOf } from './handback.js';
+import { REPORT_TOOL, reportMessageOf, STRUCTURED_OUTPUT_TOOL } from './handback.js';
 import { BUDGET_REMINDER_SHARE, type BudgetLeft } from './notice.js';
 import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
 
@@ -214,6 +214,8 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   if (last.kind === 'tool-result' && userRejected(newestTurn(events)!.after)) return done('end_turn');
   // The report call ends the run, even at a limit: the child said what it had.
   if (run.handback === true && last.kind === 'tool-result' && reported(newestTurn(events)!.after)) return done('end_turn');
+  // So does a schema step's forced call after it, valid or not: one that fails leaves the report's JSON block to stand.
+  if (last.kind === 'tool-result' && last.name === STRUCTURED_OUTPUT_TOOL) return done('end_turn');
   const step = after(last);
   if (run.handback === true && last.kind === 'assistant' && step.kind === 'done' && step.reason === 'end_turn' && nudgeDue(events, run)) return { kind: 'nudge' };
   if (step.kind !== 'call-model') return step;
