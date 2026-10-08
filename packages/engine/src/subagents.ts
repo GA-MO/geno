@@ -56,6 +56,7 @@ import {
   type SessionId,
   type TurnEvent,
   type Waiter,
+  withoutInstructions,
   ZERO_USAGE,
 } from '@g-code/core';
 import { formatCost, totalOf, type OpenSession } from './chat.js';
@@ -363,8 +364,12 @@ export function subagents(env: SubagentEnv): Subagents {
     const inherited = header?.kind === 'session-start' ? header.environment : undefined;
     const workspace = place?.lane.record.path ?? parentSession.workspace;
     // A fresh child in a lane is told of its lane by its own environment; a fork keeps its parent's, for the cache.
-    const environment =
+    const placed =
       place === undefined || inherited === undefined || start === 'fork' ? inherited : await captureEnvironment({ workspace, scratchpad: inherited.scratchpad, env: io.env });
+    // A fork keeps all of its parent's opening, for the cache.
+    const lean = agent.omitClaudeMd && start === 'fresh';
+    const environment = lean && placed?.git !== undefined ? { ...placed, git: 'omitted' as const } : placed;
+    const context = header?.kind === 'session-start' ? header.context : undefined;
     const session: Session = {
       id,
       createdAt: new Date().toISOString(),
@@ -380,8 +385,8 @@ export function subagents(env: SubagentEnv): Subagents {
       {
         kind: 'session-start',
         session,
-        context: header?.kind === 'session-start' ? header.context : undefined,
-        memory: header?.kind === 'session-start' ? header.memory : undefined,
+        context: lean && context !== undefined ? withoutInstructions(context, agent) : context,
+        memory: lean || header?.kind !== 'session-start' ? undefined : header.memory,
         // The parent's, so a child knows where it runs; it shares the parent's scratchpad.
         environment,
         child: {

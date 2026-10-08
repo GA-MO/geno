@@ -42,8 +42,8 @@ export type Environment = {
   readonly loginShell?: string | undefined;
   /** The session's own temp folder, which commands may write without approval. */
   readonly scratchpad: string;
-  /** Absent when the workspace is not in a git repository. */
-  readonly git?: GitSnapshot | undefined;
+  /** Absent when the workspace is not in a git repository; `omitted` in one whose status the session was not given. */
+  readonly git?: GitSnapshot | 'omitted' | undefined;
   /** Absent when the workspace has no package.json. */
   readonly project?: ProjectFacts | undefined;
   /** The lane the workspace is, when it is one; absent for the main checkout. */
@@ -100,5 +100,5 @@ export function renderEnvironment(env: Environment, session: SessionFacts): stri
     ` - Date: ${env.date}, the local date when this session started. Run date for the current time.`,
     ` - Model: ${session.model} on ${specOf(session.provider).label}`,
   ].join('\n');
-  return [facts, ...(env.project === undefined ? [] : [projectSection(env.project)]), ...(env.git === undefined ? [] : [gitSection(env.git)])].join('\n\n');
+  return [facts, ...(env.project === undefined ? [] : [projectSection(env.project)]), ...(env.git === undefined || env.git === 'omitted' ? [] : [gitSection(env.git)])].join('\n\n');
 }
