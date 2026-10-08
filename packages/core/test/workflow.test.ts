@@ -617,6 +617,10 @@ describe('the tool and the command', () => {
   it('reads the last JSON block that has every field', () => {
     expect(readFields('```json\n{"pass": true}\n```\nthen\n```json\n{"pass": "yes"}\n```', { pass: 'boolean' })).toEqual({ ok: true, value: { pass: true } });
   });
+
+  it('pairs the fences of a block with a language tag, so the JSON block after it is still read', () => {
+    expect(readFields('Line 3:\n```ts\nfor (let i = 0; i <= n; i++) {}\n```\n\n```json\n{"pass": false}\n```', { pass: 'boolean' })).toEqual({ ok: true, value: { pass: false } });
+  });
 });
 
 describe('the example workflows in docs/workflows', () => {

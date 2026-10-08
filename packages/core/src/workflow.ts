@@ -657,7 +657,8 @@ const FIELD_CHECK: Readonly<Record<FieldType, (value: unknown) => boolean>> = {
 /** The fields of the last JSON block in a report that holds every field the schema names, with its type. */
 export function readFields(report: string, schema: OutputSchema): Parsed<Record<string, FieldValue>> {
   const text = reportBody(report);
-  const blocks = [...text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].map((m) => m[1]!).reverse();
+  // Any language tag opens a fence, or a ```ts block's closing fence would pair with the next block's opening one.
+  const blocks = [...text.matchAll(/```[\w-]*[ \t]*\n([\s\S]*?)```/g)].map((m) => m[1]!).reverse();
   for (const block of blocks) {
     let raw: unknown;
     try {
