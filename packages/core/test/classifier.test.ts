@@ -61,6 +61,19 @@ describe('P31 the sandbox network the classifier is told', () => {
   });
 });
 
+describe('P31 the directories the sandbox writes that the classifier is told', () => {
+  it('says commands write only in the project and a temp directory when none are writable, in the bytes it always sent', () => {
+    expect(classifierRequest(input({ writableDirectories: [] }), 'm')).toEqual(classifierRequest(input(), 'm'));
+    expect(systemText(classifierRequest(input(), 'm'))).toContain('It can write only inside the project and a temp directory, and it has no network');
+  });
+
+  it('names the directories the user added as writable', () => {
+    const system = systemText(classifierRequest(input({ writableDirectories: ['/Users/me/shared', '/Users/me/notes'] }), 'm'));
+    expect(system).toContain('It can write only inside the project, a temp directory and the directories the user added as writable: /Users/me/shared, /Users/me/notes, and it has no network');
+    expect(userText(classifierRequest(input({ writableDirectories: ['/Users/me/shared'] }), 'm'))).toEqual(userText(classifierRequest(input(), 'm')));
+  });
+});
+
 describe('the classifier prompt', () => {
   it('forces one answer through the verdict tool, with thinking off so the provider accepts the forced tool', () => {
     const request = classifierRequest(input(), 'qwen3.8-flash');
