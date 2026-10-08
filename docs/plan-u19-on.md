@@ -591,6 +591,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** Domain allow and deny rules for `web_fetch` and the browser. Workspace rules for `mcp__server__tool` names with a wildcard. A trusted-domain list fed to the classifier. An optional sandbox network allowlist behind an explicit setting.
 - **Check.** An allowed domain fetches without a card. A saved MCP rule skips the card in a new session. Eval: a URL carrying repo data to an untrusted host is denied.
 - **Size.** 1 day. **Depends on.** P28.
+- **Status.** Done. A domain rule matches as Claude Code's `domain:` does, `*.example.com` covering subdomains only. An allow covers the tool it names, `WebFetch(domain:x)` or Geno's own `Browser(domain:x)`; a deny or an ask covers both, which is stricter. The trusted domains are the hosts of the workspace's allow domain rules, so there is no second list to keep. The web_fetch and MCP cards offer "Always allow in this workspace", which saves the host or the tool. The sandbox allowlist is the `gcode.sandbox.allowedDomains` user setting, one list for every workspace, since sandbox-runtime keeps one per process. Under a bare `Bash` deny, the check after an edit does not run, and the edit's result says so. The eval on qwen3.8-flash ([results/p30-trusted-domains.md](results/p30-trusted-domains.md)): 27 of 27 with the list, 23 of 27 without it, $0.039 in all. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P31: reads outside the workspace
 
