@@ -4,7 +4,7 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { childReport, type ClassifierInput, type ClassifierRun, type Denial, type NewRule, type SessionId, type SessionMode } from '@g-code/core';
+import { childReport, DONT_ASK, type ClassifierInput, type ClassifierRun, type Denial, type NewRule, type SessionId, type SessionMode } from '@g-code/core';
 import { runAgent } from '../../src/agent.js';
 import { startSession } from '../../src/chat.js';
 import { DISK_FILES } from '../../src/files.js';
@@ -766,10 +766,28 @@ describe.each(WIRES)('B/B-72 a user rejection on the %s wire', (wire) => {
     expect(said[1]).toMatch(/^The user rejected an earlier call of this turn, so this one did not run\. STOP/);
   });
 
-  it('B/B-72 a rule denial with nobody to ask keeps "find another way", and the turn goes on', async () => {
+  it('B/B-72 a rule denial with nobody to ask lets the model go on, and the turn goes on', async () => {
     const push = call('bash', { command: 'git push' });
     const run = await scripted(wire, [{ calls: [push] }, { answer: 'I could not push.' }], { files: { 'a.ts': '' }, mode: 'non-interactive' });
     expect(run.requests()).toHaveLength(2);
-    expect(run.view().get(push.id)).toMatchObject({ error: true, text: expect.stringContaining('find another way') });
+    expect(run.view().get(push.id)).toMatchObject({ error: true, text: expect.stringContaining('You *may* attempt to accomplish this action using other tools') });
+  });
+});
+
+describe.each(WIRES)('T-PERM-03 denials nobody can answer on the %s wire', (wire) => {
+  it("T-PERM-03 a call refused because nobody can answer takes Claude Code's dontAsk wording, with no card, for a command, a read and an ask rule", async () => {
+    const push = call('bash', { command: 'git push' });
+    const secret = call('read', { path: '.env' });
+    const touch = call('bash', { command: 'touch made.txt' });
+    const rules: readonly NewRule[] = [{ effect: 'ask', pattern: ['touch'] }];
+    const run = await scripted(wire, [{ calls: [push, secret, touch] }, { answer: 'I could not.' }], { files: { '.env': `API_KEY=${SECRET}\n` }, mode: 'non-interactive', rules });
+    expect(run.asked).toEqual([]);
+    const said = (id: string) => run.view().get(id)!;
+    expect(said(push.id)).toEqual({ error: true, text: `denied: \`git push\` uses git push, which needs the user's approval, and nobody can answer here. ${DONT_ASK}` });
+    expect(said(secret.id).text).toBe(`denied: \`read .env\` uses a credentials file such as .env, which needs the user's approval, and nobody can answer here. ${DONT_ASK}`);
+    expect(said(touch.id)).toMatchObject({ error: true, text: expect.stringMatching(/^denied: `touch made\.txt` matches .*, and nobody can answer here\. IMPORTANT: You \*may\* attempt/) });
+    for (const id of [push.id, secret.id, touch.id]) expect(said(id).text).not.toMatch(/find another way/i);
+    expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
+    expect(run.sent()).not.toContain(SECRET);
   });
 });
