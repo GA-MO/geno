@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { coerceToSchema, loadedTools, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster, type TurnEvent } from '@g-code/core';
+import { coerceToSchema, loadedTools, offersToolSearch, searchTools, TOOL_SEARCH_TOOL, unloadedCallError, type ToolRoster, type TurnEvent } from '@g-code/core';
 import { ALWAYS, executor, ToolError, type Executor } from './context.js';
 import type { Executors } from './index.js';
 
@@ -29,7 +29,7 @@ function gate(roster: ToolRoster, name: string, inner: Executor): Executor {
  * it. The log is what decides, so a resumed session can call what it loaded before.
  */
 export function rosterExecutors(roster: ToolRoster, executors: Executors): Executors {
-  if (roster.deferred.size === 0) return executors;
+  if (!offersToolSearch(roster)) return executors;
   const gated = Object.fromEntries(
     Object.entries(executors).map(([name, inner]): [string, Executor] => [name, roster.deferred.has(name) ? gate(roster, name, inner) : inner]),
   );
