@@ -39,6 +39,11 @@ export type CommandRule = RuleSource & {
   readonly id: string;
   readonly effect: RuleEffect;
   readonly pattern: CommandPattern;
+  /**
+   * An allow typed as Claude Code's `Bash(npm test)`, with no trailing `*`, matches only those words, as Claude Code
+   * does. A deny or ask stays a prefix, which is stricter.
+   */
+  readonly exact?: true | undefined;
   readonly createdAt: string;
 };
 
@@ -57,7 +62,7 @@ export type PathRule = RuleSource & {
 export type PermissionRule = CommandRule | PathRule;
 
 /** A rule as the user gives it, before the store names and dates it. */
-export type NewRule = Pick<CommandRule, 'effect' | 'pattern'> | Pick<PathRule, 'effect' | 'tool' | 'path'>;
+export type NewRule = Pick<CommandRule, 'effect' | 'pattern' | 'exact'> | Pick<PathRule, 'effect' | 'tool' | 'path'>;
 
 export const isPathRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly tool: PathTool }> => 'tool' in rule;
 const commandRules = (rules: readonly PermissionRule[]): readonly CommandRule[] => rules.filter((rule): rule is CommandRule => !isPathRule(rule));
@@ -189,9 +194,10 @@ const unwrappedFlags = (command: ParsedCommand, scope: CommandScope, mode: Appro
 function covers(rule: CommandRule, command: ParsedCommand, flagged: readonly DenyRuleId[], scope: CommandScope, mode: ApprovalMode): boolean {
   if (isOpenEnded(rule.pattern)) return false;
   const earned = patternFlags(rule.pattern, scope, mode);
-  if (startsWith(command.words, rule.pattern)) return flagged.every((id) => earned.has(id));
+  const fits = (words: readonly string[]) => startsWith(words, rule.pattern) && (rule.exact !== true || words.length === rule.pattern.length);
+  if (fits(command.words)) return flagged.every((id) => earned.has(id));
   const inner = unwrap(command.words);
-  return inner !== command.words && startsWith(inner, rule.pattern) && unwrappedFlags(command, scope, mode).every((id) => earned.has(id));
+  return inner !== command.words && fits(inner) && unwrappedFlags(command, scope, mode).every((id) => earned.has(id));
 }
 
 /** The flagged simple commands of a line, each with the built-in rules that flag it. */
@@ -377,21 +383,29 @@ const OPERATORS = /[;&|<>()$`\n#]/;
 
 const TOOL_LABELS: Readonly<Record<PathTool, string>> = { read: 'Read', edit: 'Edit' };
 
-/** A rule as the user reads and types it: a command's words, or `Read(path)` and `Edit(path)`. */
-export const ruleText = (rule: PermissionRule | NewRule): string => (isPathRule(rule) ? `${TOOL_LABELS[rule.tool]}(${rule.path})` : patternText(rule.pattern));
+/** A rule as the user reads and types it: a command's words, `Bash(words)` for an exact one, or `Read(path)` and `Edit(path)`. */
+export const ruleText = (rule: PermissionRule | NewRule): string => {
+  if (isPathRule(rule)) return `${TOOL_LABELS[rule.tool]}(${rule.path})`;
+  return rule.exact === true ? `Bash(${patternText(rule.pattern)})` : patternText(rule.pattern);
+};
 
 export type ParsedRule = { readonly ok: true; readonly rule: NewRule } | { readonly ok: false; readonly reason: string };
 
 // Claude Code's forms: `Read(path)`, `Edit(path)`, and `Bash(command)`, whose trailing ` *` or `:*` is Geno's prefix match.
 const TOOL_FORM = /^(Read|Edit|Bash)\((.*)\)$/s;
+const PREFIX_STAR = /(?:\s\*|:\*)$/;
 
 /**
  * A rule the user typed. A command is one simple command of plain words, and for an allow nothing that no rule may
- * pre-allow. A path rule asks or denies.
+ * pre-allow. Plain words and `Bash(words *)` match as a prefix; an allow typed as `Bash(words)` matches exactly. A path
+ * rule asks or denies.
  */
 export function parseRule(effect: RuleEffect, text: string, scope: CommandScope): ParsedRule {
   const form = TOOL_FORM.exec(text.trim());
-  if (form?.[1] === 'Bash') return parseCommandRule(effect, form[2]!.trim().replace(/(?:\s\*|:\*)$/, ''), scope);
+  if (form?.[1] === 'Bash') {
+    const command = form[2]!.trim();
+    return parseCommandRule(effect, command.replace(PREFIX_STAR, ''), scope, effect === 'allow' && !PREFIX_STAR.test(command));
+  }
   if (form === null) return parseCommandRule(effect, text, scope);
   const tool = form[1] === 'Read' ? 'read' : 'edit';
   const file = form[2]!.trim();
@@ -400,7 +414,7 @@ export function parseRule(effect: RuleEffect, text: string, scope: CommandScope)
   return { ok: true, rule: { effect, tool, path: file } };
 }
 
-function parseCommandRule(effect: RuleEffect, text: string, scope: CommandScope): ParsedRule {
+function parseCommandRule(effect: RuleEffect, text: string, scope: CommandScope, exact = false): ParsedRule {
   if (text.trim() === '') return { ok: false, reason: 'Type a command, such as pnpm test.' };
   if (text.includes('*')) return { ok: false, reason: 'A command rule matches the words it starts with, so put * only at the end of Bash(...), or leave it out.' };
   if (OPERATORS.test(text.replace(/'[^']*'/g, ''))) return { ok: false, reason: 'A rule is one command, without operators, redirection or variables.' };
@@ -413,7 +427,7 @@ function parseCommandRule(effect: RuleEffect, text: string, scope: CommandScope)
   if (effect === 'allow' && isHardAsk(simpleCommand(words, scope.workspace), scope)) {
     return { ok: false, reason: 'Geno always asks before this command, so it cannot be allowed by rule.' };
   }
-  return { ok: true, rule: { effect, pattern: words as unknown as CommandPattern } };
+  return { ok: true, rule: { effect, pattern: words as unknown as CommandPattern, ...(exact ? { exact: true as const } : {}) } };
 }
 
 /** Extension method, sent by the editor: the rules of the workspace a folder belongs to, its main checkout for a lane. */

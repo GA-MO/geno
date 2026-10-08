@@ -4,15 +4,16 @@ import { claudePermissions } from '../src/claude-permissions.js';
 const scope = { workspace: '/ws', tempDir: '/tmp/t', home: '/home/u' };
 
 describe('claudePermissions', () => {
-  it('B/B-58 takes Bash(x:*) and Bash(x *) as prefix rules, and Read and Edit as path rules', () => {
+  it('B/B-58 takes Bash(x:*) and Bash(x *) as prefix rules, an allow Bash(x) as exact, and Read and Edit as path rules', () => {
     const parsed = claudePermissions(
-      { permissions: { allow: ['Bash(npm run test:*)', 'Bash(git status *)'], ask: ['Bash(git push:*)'], deny: ['Read(./.env)', 'Edit(secrets/**)', 'Bash(curl)'] } },
+      { permissions: { allow: ['Bash(npm run test:*)', 'Bash(git status *)', 'Bash(npm test)'], ask: ['Bash(git push:*)'], deny: ['Read(./.env)', 'Edit(secrets/**)', 'Bash(curl)'] } },
       scope,
     );
     expect(parsed).toEqual({
       rules: [
         { effect: 'allow', pattern: ['npm', 'run', 'test'] },
         { effect: 'allow', pattern: ['git', 'status'] },
+        { effect: 'allow', pattern: ['npm', 'test'], exact: true },
         { effect: 'ask', pattern: ['git', 'push'] },
         { effect: 'deny', tool: 'read', path: './.env' },
         { effect: 'deny', tool: 'edit', path: 'secrets/**' },
@@ -23,11 +24,14 @@ describe('claudePermissions', () => {
     });
   });
 
-  it('B/B-65 maps a bare-tool deny to the Geno tool, Write to edit', () => {
+  it('B/B-65 maps a bare-tool deny to the Geno tool, Write to edit, and Bash to every tool that runs a shell command', () => {
     const parsed = claudePermissions({ permissions: { deny: ['WebFetch', 'Bash', 'Write', 'Task'] } }, scope);
     expect(parsed.deniedTools).toEqual([
       { tool: 'web_fetch', text: 'WebFetch' },
       { tool: 'bash', text: 'Bash' },
+      { tool: 'check', text: 'Bash' },
+      { tool: 'monitor', text: 'Bash' },
+      { tool: 'preview_start', text: 'Bash' },
       { tool: 'edit', text: 'Write' },
       { tool: 'agent', text: 'Task' },
     ]);
