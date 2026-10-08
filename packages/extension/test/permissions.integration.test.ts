@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
+import { call, fakeModel, say, type FakeToolUse } from '../../engine/test/fake-model.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { cachePath, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
@@ -14,23 +14,15 @@ import { COMMAND, FILES } from './suite/permissions-fixture.js';
 const EXTENSION = 'g-code.g-code';
 const MODEL = 'qwen3.8-flash';
 const READY = '.transcript';
-const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 const shots = process.env['GCODE_SCREENSHOTS'];
 
-const asModel = (reply: Reply): Reply => ({
-  ...reply,
-  events: reply.events.map((e) => (e.type === 'message_start' ? { ...e, message: { ...(e['message'] as object), model: MODEL } } : e)),
-});
 let nextId = 0;
 const bash = (command: string): FakeToolUse => ({ id: `tu_bash_${nextId++}`, name: 'bash', input: { command } });
 
-const replies: readonly Reply[] = [
-  toolCall('Listing the folder above.', [bash(COMMAND)], usage),
-  asModel(answer('Listed it.', usage)),
-  toolCall('Listing it again.', [bash(COMMAND)], usage),
-  asModel(answer('Listed it again.', usage)),
-];
-const requests: unknown[] = [];
+const model = fakeModel({
+  script: [call('Listing the folder above.', [bash(COMMAND)]), say('Listed it.'), call('Listing it again.', [bash(COMMAND)]), say('Listed it again.')],
+});
+
 let debugPort = 0;
 let window: Window | undefined;
 
@@ -55,11 +47,6 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
 };
 
 const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
-  'POST /v1/messages': async (req, res) => {
-    const reply = replies[requests.push(JSON.parse(await bodyOf(req))) - 1];
-    if (reply === undefined) res.writeHead(500).end(`no reply for request ${requests.length - 1}`);
-    else res.writeHead(200, { 'content-type': 'text/event-stream' }).end(sseBody(reply));
-  },
   'POST /ui': async (req, res) => {
     const action = JSON.parse(await bodyOf(req)) as { do: string };
     try {
@@ -73,9 +60,12 @@ const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Prom
 };
 
 const fake = createServer((req, res) => {
-  const route = ROUTES[`${req.method} ${req.url?.split('?')[0]}`];
-  if (route === undefined) res.writeHead(404).end();
-  else void route(req, res);
+  void model.handle(req, res).then((handled) => {
+    if (handled) return;
+    const route = ROUTES[`${req.method} ${req.url?.split('?')[0]}`];
+    if (route === undefined) res.writeHead(404).end();
+    else void route(req, res);
+  });
 });
 
 beforeAll(() => new Promise<void>((resolve) => fake.listen(0, '127.0.0.1', resolve)));
@@ -110,7 +100,8 @@ describe('remembered permission rules in the panel', () => {
       },
     });
     expect(code).toBe(0);
-    expect(requests).toHaveLength(replies.length);
+    expect(model.misses).toEqual([]);
+    expect(model.requests).toHaveLength(4);
 
     const dir = path.join(home, 'permissions');
     const [file, ...others] = await readdir(dir);
