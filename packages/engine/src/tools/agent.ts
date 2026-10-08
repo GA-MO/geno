@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -28,6 +28,8 @@ import {
   nextAutoState,
   OUTCOME_VERDICTS,
   outsideReadDenial,
+  filesRun,
+  sessionEdits,
   pathRuleFor,
   restoreHidden,
   STOP_AND_WAIT,
@@ -133,9 +135,9 @@ export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === '
  */
 export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest' | 'permissions'>;
 
-async function withTrustedDomains(input: ClassifierInput, call: CallScope): Promise<ClassifierInput> {
+async function withTrustedDomains(input: ClassifierInput | Promise<ClassifierInput>, call: CallScope): Promise<ClassifierInput> {
   const domains = trustedDomains((await call.permissions?.list()) ?? []);
-  return domains.length === 0 ? input : { ...input, trustedDomains: domains };
+  return domains.length === 0 ? input : { ...(await input), trustedDomains: domains };
 }
 
 /**
@@ -149,7 +151,7 @@ export async function settle(
   approval: Approval,
   mode: ApprovalMode,
   denial: Denial,
-  input: () => ClassifierInput,
+  input: () => ClassifierInput | Promise<ClassifierInput>,
   call: CallScope,
   keep: (answer: KeptAnswer) => void | Promise<void> = () => {},
 ): Promise<ApprovalRecord> {
@@ -377,6 +379,20 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const writable = tools.directories.writable();
     return writable.length === 0 ? input : { ...input, writableDirectories: writable };
   };
+  // A command that runs a file the session wrote is judged with that file's text, as Claude Code's monitor judges it.
+  const commandInputOf = async (ctx: ToolContext, command: string, denial: Denial): Promise<ClassifierInput> => {
+    const input = inputOf(ctx, command, denial);
+    const edits = sessionEdits(ctx.events());
+    if (edits.length === 0) return input;
+    const run: { path: string; text: string }[] = [];
+    for (const file of filesRun(command, scope())) {
+      const real = (await realOrUndefined(file)) ?? file;
+      if (!edits.includes(real)) continue;
+      const text = await readFile(real, 'utf8').catch(() => undefined);
+      if (text !== undefined) run.push({ path: displayPath(ctx, real), text });
+    }
+    return run.length === 0 ? input : { ...input, written: { run, edits: edits.map((file) => displayPath(ctx, file)) } };
+  };
 
   // A credentials file opens only with the user's yes or the classifier's, as `cat .env` does.
   const askSecret: SecretGate = async (ctx, shown) => {
@@ -526,7 +542,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
-      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => inputOf(ctx, command, denial), ctx, keep);
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep);
     if (approval?.verdict === 'deny') throw approval.rule === 'path-outside-workspace' ? outsideRefusal(approval, readableDirs(ctx)) : refusalOf(approval);
     return approval;
   };

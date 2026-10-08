@@ -785,6 +785,33 @@ export function parseCommandLine(command: string, scope: CommandScope): readonly
   return commands.map((words) => ({ words, variants: variants(words, vars).map((variant) => simpleCommand(variant, cwd)) }));
 }
 
+// Programs that run the file named by their first operand; an option such as -c or -e runs code from the line instead.
+const INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'source', '.', 'node', 'deno', 'bun', 'tsx', 'ts-node', 'python', 'python3', 'ruby', 'perl', 'php']);
+const INLINE_CODE = new Set(['-c', '-e', '-m', '-p', '--eval', '--print']);
+
+/** The script one simple command runs: the program itself when named by path, or the file it hands an interpreter. */
+function scriptOf({ program, executable, args }: SimpleCommand): string | undefined {
+  if (executable.includes('/') && !trustedExecutable(executable)) return executable;
+  if (!INTERPRETERS.has(program)) return undefined;
+  const operands = (program === 'deno' || program === 'bun') && args[0] === 'run' ? args.slice(1) : args;
+  const first = operands.findIndex((arg) => !arg.startsWith('-'));
+  if (first === -1 || operands.slice(0, first).some((arg) => INLINE_CODE.has(arg))) return undefined;
+  return operands[first];
+}
+
+/** The files a command line runs as programs or hands to an interpreter, such as `bash x.sh` or `./x.sh`, as absolute paths. */
+export function filesRun(command: string, scope: CommandScope): string[] {
+  const files = parseCommandLine(command, scope).flatMap(({ variants }) =>
+    variants.flatMap((simple) => {
+      const script = scriptOf(simple);
+      if (script === undefined || script === '' || /[$`]/.test(script)) return [];
+      const expanded = script === '~' || script.startsWith('~/') ? path.join(scope.home, script.slice(1)) : script;
+      return [path.resolve(simple.cwd ?? scope.workspace, expanded)];
+    }),
+  );
+  return [...new Set(files)];
+}
+
 /** A rule that flags one simple command of the line, which `at` indexes. */
 export type Flag = Denial & { readonly rule: DenyRuleId; readonly at: number };
 
