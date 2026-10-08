@@ -232,7 +232,7 @@ describe('docs/geno-tools.md', () => {
     const { renderGenoTools } = await import('../src/geno-tools.js');
     const text = renderGenoTools({ subagents: true });
     expect(text).toMatch(/^\| Start a subagent \(`Agent`, `Task`\).*\| `agent` with `\{ "agent":/m);
-    expect(text).toMatch(/^\| Steer a running subagent \(`SendMessage`\) \| `message_agent`/m);
+    expect(text).toMatch(/^\| Steer a running subagent, or continue a finished one \(`SendMessage`\) \| `message_agent`/m);
     expect(text).not.toMatch(/There are no subagents|in one sequential pass/);
   });
 
