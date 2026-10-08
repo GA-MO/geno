@@ -170,6 +170,24 @@ P36 also covers rows that have no Claude Code conformance test:
 | B/B-38 | `web.e2e.test.ts`, against a fake Brave: `allowed_domains` with one and with two domains, normalized from `NextJS.org.`, sends the `site:` query and keeps the site and its subdomain but not a look-alike; `blocked_domains` sends `-site:` and drops the site's hits; both lists, or a URL as a domain, are refused with no search; a hit under a `*.example` deny is dropped with no filter and when `allowed_domains` names its host. |
 | B/B-02 | T-ASM-15 above. |
 
+## Notebook cell edits (P37)
+
+`notebook_edit` is Claude Code's `NotebookEdit` with the same fields: `notebook_path`, `cell_id`, `new_source`, `cell_type` (`code` or `markdown`) and `edit_mode` (`replace`, the default, `insert` or `delete`). It is deferred, as `NotebookEdit` is, so the model loads it with `tool_search` first. `notebook_path` may be relative to the workspace, as `edit`'s `path` may; Claude Code wants it absolute. `read` of a notebook shows each cell's id in the cell's heading, `--- cell 2 of 3, id load-data: code [3] ---`, and a cell that has no id, as in nbformat 4.4 and earlier, as `cell-0`, `cell-1` and so on, counted from 0 as Claude Code counts them. `cell_id` takes either form. `insert` puts the new cell after `cell_id`, or first without one, and needs `cell_type`. A new cell gets an 8-character hex id from nbformat 4.5 on, and none before.
+
+The tool has `edit`'s guard (`notebookEditExecutor` in `engine/src/tools/agent.ts`): the notebook must have been read in the session, with the same `reads` map, and must still hold the text that read saw, or the edit is refused with `edit`'s words. A successful edit updates the map, so a second edit needs no read in between. It goes through `withPathRules` as `edit` does, on `notebook_path`, so an `Edit(...)` or `Read(...)` deny or ask holds, and through `withWriteRoots`, so it writes only in the workspace and the writable directories. A bare `Edit` deny in a Claude Code settings file stops it too, as Claude Code's Edit rules cover every tool that edits files, and a bare `NotebookEdit` deny stops it alone. Plan mode leaves it out. The result carries the file change, so the edit shows in review, and the workspace checkpoint before the model call restores it on rewind. Hooks see it as `NotebookEdit` with an absolute `notebook_path`.
+
+`editNotebook` in `engine/src/tools/notebook.ts` rewrites only the edited cell's bytes. It finds each cell's span in the file's text, writes the new cell with the file's indentation, and takes the separator between cells from the file, so the nbformat version, the metadata, the other cells' outputs, the key order, the number formats and the trailing newline stay as they were. A replaced code cell gets `outputs: []` and `execution_count: null`, as in Claude Code. A cell that changes type gains or loses those two fields so that it stays valid nbformat, where Claude Code only sets `cell_type`. A source is written as a list of lines, as nbformat writes it, unless the file writes sources as strings.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-TOOL-05 | NotebookEdit on a notebook not read yet is an error. | `notebook_edit` before a read is an error, "read n.ipynb before editing it", and the notebook is unchanged. | pass (was no test) | `tools.conformance.test.ts`, both wires |
+
+P37 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-17 | `tools.conformance.test.ts`, both wires: the model loads `notebook_edit` with `tool_search`, is refused before a read, reads the notebook and sees the cell's id, replaces the cell, and the file is byte for byte `v4.5.replace-code.ipynb`; `rewind` to that model call gives the notebook back. An `Edit(locked.ipynb)` deny in `.claude/settings.json` refuses the edit after a read. `notebook-edit.test.ts`: 9 edits (replace a code cell, replace a markdown cell, insert at the start, in the middle and at the end, delete in the middle and the last cell, code to markdown, markdown to code) on an nbformat 4.4 notebook without ids and a 4.5 notebook with them, each byte-compared to the file `test/fixtures/notebooks/generate.mjs` writes by editing the parsed notebook and writing it whole as nbformat does, and each checked against the nbformat 4.4 or 4.5 JSON schema in the fixtures with Ajv. A notebook nbformat did not write, with 2-space indent, unsorted keys, `1.0` and `é`, keeps every byte outside the edited cell. Refusals: no read, a change since the read (and success after another read), an unknown id, which lists the ids, `insert` without `cell_type`, nbformat 3, and a file that is not `.ipynb`. |
+
 ## Reads outside the workspace (P31)
 
 `read`, `grep`, `glob` and `list` reach as far as Claude Code's working directories: the workspace, the directories the user added, and those allowed for the session. A path outside all of them meets the rule `cat` of the same path meets (`path-outside-workspace`, `outsideReadDenial` in `core/src/approval.ts`): Ask asks, Auto sends it to the classifier, and Plan and a run nobody can answer refuse it. A refusal names the readable directories. A Read deny refuses before any question. After a yes, the call reads the path, and the credentials rule (`SECRET_PATH`) is judged on the whole path, so `read ~/.ssh/config` still asks as a credentials file. `withReach` in `engine/src/tools/agent.ts` wraps the four tools; a call that names an absolute path or `..` runs alone, since it may ask.
@@ -745,7 +763,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-TOOL-02 | keep Geno's, adopt | P27 | pass |
 | T-TOOL-03 | keep Geno's, adopt | P27 | pass |
 | T-TOOL-04 | keep Geno's, adopt | P27 | pass |
-| T-TOOL-05 | keep Geno's | none | no test yet |
+| T-TOOL-05 | keep Geno's | P37 | pass |
 | T-TOOL-06a | deliberate | none | no test yet |
 | T-TOOL-06b | adopt | P27 | pass |
 | T-TOOL-07 | keep Geno's | P10, P23 | pass |

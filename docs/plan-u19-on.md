@@ -654,6 +654,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** A deferred `notebook_edit` tool that replaces, inserts or deletes a cell, with the read-before-edit guard.
 - **Check.** Round trips through nbformat for each edit mode.
 - **Size.** 1 day. **Depends on.** P1.
+- **Status.** Done. `notebook_edit` is deferred and takes Claude Code's fields. It has `edit`'s read and staleness guard, path rules and write roots, is left out of Plan, and its change shows in review and is undone by rewind. It rewrites only the edited cell's bytes, and a replaced code cell loses its outputs and execution count. `read` shows each cell's id, or `cell-N` by place for a cell with none. Each edit mode round-trips byte for byte on nbformat 4.4 and 4.5 fixtures and passes the nbformat JSON schema in the fixtures; no Python with nbformat was on the machine. T-TOOL-05 passes. The goldens changed only in the `tool_search` roster line. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P38: MCP sign-in through VS Code
 
