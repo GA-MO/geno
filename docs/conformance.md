@@ -394,6 +394,25 @@ P19 also covers rows that have no Claude Code conformance test:
 | B/B-39, C/C-42 | T-BG-06 above. `wake.test.ts` (core): a `stopped` note drops one wake-up and keeps the others, wakes nothing, and still counts its id. `wakes.test.ts` (engine): a stopped wake-up never fires and the others do. The `monitor` description says to stop it with `task_stop`. |
 | B/B-22, C/C-38 | T-BG-01 above. `background.test.ts` (core) pins the start line and the end notice with and without the file. |
 
+## Children in lanes (P20)
+
+A child runs in a lane of its own when the `agent` call passes `isolation: "worktree"`, as Claude Code's `Agent` does, or when its definition says `isolation: worktree`. A workflow step with `lane` runs in the run's lane of that name, which the run's other steps with the same `lane` share. Each lane is a U24 lane, made by `laneFor` as the Lanes pane makes one: a worktree at `.geno/worktrees/<name>` on branch `geno/<name>` from the main checkout's HEAD, with `.worktreeinclude`, the dependency clone, approved setup and the user's LaneCreated hooks. A child's own lane is named `<agent>-<first 8 of its session id>`, and a step's lane `<lane>-<first 8 of the workflow's session id>`. Lanes open one at a time, so two children never race on `git worktree add`.
+
+The child's session workspace is the lane. Its tools are built for the lane: a sandbox of its own that writes only to the lane, the temp folder and the lane's part of the shared git folder, `laneCommandDenial` before each command, and the check command run in the lane. Its file writes go to disk, never through the editor's buffers of the main checkout. A fresh child's environment is captured in the lane, and its ` - Lane:` line names the lane, its branch and the main checkout and carries Claude Code's stash warning in Geno's words. A fork keeps its parent's environment for the cache and gets the same line in its task.
+
+When the child ends, however it ends, the lane is settled. A lane with no edits, untracked files or commits is removed with its branch. A changed lane is kept, and the report gets a `[Geno]` line with the lane, its branch, its path, the files it changed, and `gcode lane apply <name>`; the user applies it from the Lanes pane as any lane. The child's `session-start` names its lane, so `message_agent` (P18) and a resume after a crash (P18b) open the same lane again, or make it again under the same name when it was removed.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-AGENT-05 | `isolation: "worktree"` gives the agent a worktree at `.claude/worktrees/agent-<id>` on its own branch, removed if unchanged and kept with path and branch otherwise. | Adapted to lanes. A `worker` with `isolation: "worktree"` opens with ` - Workspace:` its lane and the ` - Lane:` line with the stash warning, edits `a.ts` in the lane, and has `cd ../../.. && touch escaped.txt` refused by `laneCommandDenial` with no file made in the main checkout. The main checkout's `a.ts` and `git status` are unchanged, the lane is on `geno/<name>`, and the report names the lane, branch, path and `a.ts`. A second test: a child that changes nothing leaves no lane folder, no `geno/` branch and one worktree, and its report names no lane. With the parent's tools in place of the lane's, the command meets the parent's path check instead of the lane's, and the first test fails. | pass (adapt, was fail: refused) | `agents.conformance.test.ts`, both wires |
+
+P20 also covers these rows:
+
+| ID | Check |
+|---|---|
+| C/C-16 | T-AGENT-05 above. `lane-children.e2e.test.ts`: two `worker` children in one turn edit `a.ts` to 2 and to 3 in two lanes, both keep their edits, the main checkout's `a.ts`, `git status` and log are unchanged, both reports name their lanes, and `gcode lane list` shows both changed. `gcode lane apply` takes the first; the second then conflicts. `message_agent` resumes a lane child in its kept lane, where an edit from 2 to 4 finds its first run's edit. A resumed child whose clean lane was removed gets the lane again under its name. `task_stop` (P19) of a background `scout` with `isolation: worktree` returns its cancelled partial report and removes its clean lane. `workflows.e2e.test.ts`: two steps with `lane: "fix"` run in one lane, the second editing what the first wrote, with the main checkout unchanged. The two writers run one after the other; running writers in lanes at once is P21. |
+| B/B-70, C/C-17 | T-AGENT-05 above for the lane line in a child's opening. `environment.test.ts` (core): the ` - Lane:` line names the lane, the branch and the main checkout, warns that the stash stack is shared, and says to restore with `git stash apply <sha>`; a session outside a lane has no such line. `environment.test.ts` (engine): `captureEnvironment` finds the lane for any session whose workspace is one and none for the main checkout, so a session in a lane from the Lanes pane or `gcode agent` gets the line too. |
+
 ## Prompt tiers (P24)
 
 `AGENT_PROMPTS` in `core/src/agent-prompts.ts` holds one base prompt per prompt tier. `runAgent` picks the tier from the model's capability row, so the prompt stays byte-stable for as long as the session's model does. `principles` is today's prompt, lightly aligned, for strong models. `rules` follows the sections of Claude Code's Haiku prompt in Geno's words, for `qwen3.8-flash`, Haiku 4.5 and every unknown model. The tool descriptions are the same in both tiers and carry each tool's own rules. `--append-system-prompt <text>` on `gcode agent`, or `appendSystemPrompt` in `.gcode.json`, ends the system prompt. The flag replaces the setting. The A/B that kept the rules tier for flash is [results/p24-prompt-tier.md](results/p24-prompt-tier.md).
@@ -550,7 +569,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AGENT-02 | adapt | P4 | pass |
 | T-AGENT-03 | adapt | P17 | pass |
 | T-AGENT-04 | adopt | P18 | pass |
-| T-AGENT-05 | adapt | P20 | no test yet |
+| T-AGENT-05 | adapt | P20 | pass |
 | T-WF-01 | adapt | P34 | no test yet |
 | T-WF-02 | adopt | P33 | no test yet |
 | T-PERSIST-01 | keep Geno's | none | no test yet |
