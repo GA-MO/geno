@@ -15,13 +15,14 @@ export type ClaudePermissions = {
 
 // Every Claude Code rule is a tool name, alone or with its argument in parentheses.
 const CLAUDE_RULE = /^(\w+)(?:\((.*)\))?$/s;
-const GENO_FORMS: ReadonlySet<string> = new Set(['Bash', 'Read', 'Edit']);
+const GENO_FORMS: ReadonlySet<string> = new Set(['Bash', 'Read', 'Edit', 'WebFetch']);
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
- * The rules of a Claude Code settings file Geno can apply: `Bash(...)`, `Read(...)` and `Edit(...)` as Geno parses them
- * in Settings, and a deny on a bare tool name. Parameter rules of other tools, MCP names and a bare allow or ask are skipped.
+ * The rules of a Claude Code settings file Geno can apply: `Bash(...)`, `Read(...)`, `Edit(...)`, `WebFetch(domain:...)`
+ * and MCP names as Geno parses them in Settings, and a deny on a bare tool name. Parameter rules of other tools and a
+ * bare allow or ask are skipped.
  */
 export function claudePermissions(settings: unknown, scope: CommandScope): ClaudePermissions {
   const permissions = isRecord(settings) ? settings['permissions'] : undefined;
@@ -44,17 +45,16 @@ export function claudePermissions(settings: unknown, scope: CommandScope): Claud
       const text = entry.trim();
       const form = CLAUDE_RULE.exec(text);
       const tool = form?.[1];
-      if (form === null || tool === undefined) skipped.push(text);
+      if (text.startsWith('mcp__') || (form?.[2] !== undefined && GENO_FORMS.has(tool!))) {
+        const parsed = parseRule(effect, text, scope);
+        if (parsed.ok) rules.push(parsed.rule);
+        else skipped.push(text);
+      } else if (form === null || tool === undefined) skipped.push(text);
       else if (form[2] === undefined) {
         const genoTools = tool === 'Bash' ? SHELL_TOOLS : CLAUDE_TOOL_NAMES[tool] === undefined ? [] : [CLAUDE_TOOL_NAMES[tool]];
         if (effect === 'deny' && genoTools.length > 0) deniedTools.push(...genoTools.map((genoTool) => ({ tool: genoTool, text })));
         else skipped.push(text);
-      } else if (!GENO_FORMS.has(tool)) skipped.push(text);
-      else {
-        const parsed = parseRule(effect, text, scope);
-        if (parsed.ok) rules.push(parsed.rule);
-        else skipped.push(text);
-      }
+      } else skipped.push(text);
     }
   }
   return { rules, deniedTools, skipped };

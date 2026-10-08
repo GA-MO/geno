@@ -335,11 +335,11 @@ describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
   it('B/B-62 a rule Geno cannot read is skipped with one warning line, and the other rules of the file still apply', async () => {
     const touch = call('bash', { command: 'touch made.txt' });
     const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Refused.' }], {
-      files: { '.claude/settings.json': settings({ allow: ['WebFetch(domain:example.com)'], deny: ['mcp__github__create_issue', 'Bash(touch *)', 7] }) },
+      files: { '.claude/settings.json': settings({ allow: ['WebFetch(https://example.com)'], deny: ['Agent(Explore)', 'Bash(touch *)', 7] }) },
       mode: 'auto',
     });
     expect(run.view().get(touch.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `touch`') });
-    expect(run.warnings).toEqual(['permissions: .claude/settings.json: Geno skips the rules it cannot apply: WebFetch(domain:example.com), mcp__github__create_issue, 7']);
+    expect(run.warnings).toEqual(['permissions: .claude/settings.json: Geno skips the rules it cannot apply: WebFetch(https://example.com), Agent(Explore), 7']);
   });
 
   it('B/B-62 a settings file that is not JSON is reported once, and the run goes on', async () => {
