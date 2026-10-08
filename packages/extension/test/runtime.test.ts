@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, searchSecretName, secretName, settingKey, setupProblem } from '../src/runtime.js';
+import { describeEngineRuntime, describeRuntime, engineEnv, engineEnvOf, readEngineRuntime, readModelRuntime, resumeEnvOf, sandboxEnvOf, searchSecretName, secretName, settingKey, setupProblem } from '../src/runtime.js';
 
 /** Settings as the user set them; `workspace` holds what a workspace's settings.json says, which may differ. */
 const settingsOf = (values: Record<string, unknown>, workspace: Record<string, unknown> = {}) => ({
@@ -165,6 +165,15 @@ describe('every provider’s runtime', () => {
 
   it('refuses a role on a provider it does not know', async () => {
     await expect(readEngineRuntime(settingsOf({ roles: { classifier: { provider: 'nope' } } }), secretsOf({}), {})).rejects.toThrow('gcode.roles.classifier names nope');
+  });
+});
+
+describe('the sandbox network setting', () => {
+  it('B/B-87 passes the user\'s gcode.sandbox.allowedDomains to the engine, says nothing when it is empty, and ignores a workspace value', () => {
+    expect(sandboxEnvOf(settingsOf({}))).toEqual({});
+    expect(sandboxEnvOf(settingsOf({ 'sandbox.allowedDomains': [] }))).toEqual({});
+    expect(sandboxEnvOf(settingsOf({ 'sandbox.allowedDomains': ['registry.npmjs.org', ' *.github.com ', 3, ''] }))).toEqual({ GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org,*.github.com' });
+    expect(sandboxEnvOf(settingsOf({}, { 'sandbox.allowedDomains': ['evil.example'] }))).toEqual({});
   });
 });
 
