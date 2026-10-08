@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { call, say, scripted, type AnthropicWireModel } from './scripted.js';
+import { call, say, scripted, WIRES, type AnthropicWireModel } from './scripted.js';
 
 const OPUS: AnthropicWireModel = { provider: 'anthropic', model: 'claude-opus-5-5' };
 const FLASH: AnthropicWireModel = { provider: 'modelstudio', model: 'qwen3.8-flash' };
@@ -57,5 +57,30 @@ describe('request assembly on the Anthropic wire', () => {
     expect(next!.max_tokens).toBeGreaterThan(0);
     expect(input + next!.max_tokens).toBeLessThanOrEqual(1_000_000 - 1_000);
     expect(next!.max_tokens).toBeGreaterThan(1_000_000 - input - 2_000);
+  });
+});
+
+describe('T-ASM-15 eager input streaming', () => {
+  type Tools = { readonly tools?: readonly { readonly name?: string; readonly eager_input_streaming?: boolean }[] };
+  const sent = async (wire: (typeof WIRES)[number], model?: AnthropicWireModel): Promise<Tools[]> => {
+    const { workspace, cli, bodies } = await scripted(wire, [call('Looking.', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }]), say('Done.')], undefined, model);
+    expect((await cli(['agent', '--workspace', workspace, '--non-interactive', 'Read a.ts.'])).code).toBe(0);
+    return bodies() as Tools[];
+  };
+
+  it('T-ASM-15 every tool on the Anthropic API has eager_input_streaming: true, and a streamed tool call still runs', async () => {
+    const bodies = await sent('anthropic', OPUS);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect(body.tools!.length).toBeGreaterThan(5);
+      for (const tool of body.tools!) expect(tool, tool.name).toMatchObject({ eager_input_streaming: true });
+    }
+  });
+
+  it('T-ASM-15 a Chat Completions request and Model Studio\'s Anthropic endpoint never carry it', async () => {
+    for (const body of [...(await sent('openai')), ...(await sent('anthropic', FLASH))]) {
+      expect(body.tools!.length).toBeGreaterThan(5);
+      expect(JSON.stringify(body)).not.toContain('eager_input_streaming');
+    }
   });
 });
