@@ -600,6 +600,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** `read`, `grep` and `glob` outside the workspace go through the same ask or classify path as bash. Denials list the readable directories. A setting adds extra read directories, optionally writable, to the sandbox policy. The card offers "allow this directory for the session".
 - **Check.** T-PERM-04. A read in an added directory works. A write there works only when it is writable.
 - **Size.** 1 day. **Depends on.** P28.
+- **Status.** Done. `list` follows path rules now too. A read outside meets the rule `cat` of the same path meets, so Plan refuses it, and after a yes the credentials rule is judged on the whole path, as its own question. "Allow this directory for the session" is the card's `allow-session` answer; the engine keeps the directory for the session, and commands honour it too. The setting is `gcode.additionalDirectories`, which the engine reads as `GCODE_ADDITIONAL_DIRECTORIES`. Claude Code's `additionalDirectories` imports read-only: Claude Code asks before an edit there, and Geno edits unasked with no checkpoint outside the workspace. The classifier's system prompt names the sandbox's hosts when `gcode.sandbox.allowedDomains` sets them, and is byte for byte the same when it does not. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P32: classifier and denial wording
 
