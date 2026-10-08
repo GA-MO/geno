@@ -12,6 +12,8 @@ const read = (file: string) => use('read', { path: file });
 const bash = (command: string) => use('bash', { command });
 const agent = (workspace: string, prompt: string) => ['agent', '--workspace', workspace, '--non-interactive', prompt];
 const resume = (id: string, prompt: string) => ['agent', '--session', id, '--non-interactive', prompt];
+// The cache breakpoint moves to the newest message each call; everything else must repeat byte for byte.
+const uncached = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, v: unknown) => (key === 'cache_control' ? undefined : v)));
 
 describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
   it('T-LOOP-01 every tool use gets a result with its id, in the order the model asked', async () => {
@@ -128,6 +130,27 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
         expect.objectContaining({ sessionUpdate: 'tool_call_update', toolCallId: queued.id, status: 'failed' }),
       ]),
     );
+  });
+
+  it('A/B-11 a tight --max-turns tells the model once what is left, without moving the cached prefix, and the run ends with its report', async () => {
+    const steps = [read('a.ts'), use('glob', { pattern: '**/*.ts' }), read('a.ts'), use('grep', { pattern: 'const' })];
+    const closing = 'Checked a.ts: it exports a = 1. Nothing changed; the open item is b.ts, which I did not reach.';
+    const { workspace, cli, seen, bodies, log } = await scripted(wire, [...steps.map((step) => call('Looking.', [step])), say(closing)]);
+
+    const result = await cli([...agent(workspace, 'Audit the exports'), '--max-turns', '5']);
+
+    expect(result.code, 'the model ended the run itself, not the limit').toBe(0);
+    const reminded = seen().map((request) => /near its limits: (\d+) of its 5 model calls/.exec(request.text)?.[1]);
+    expect(reminded, 'once, before the last call, with one call left').toEqual([undefined, undefined, undefined, undefined, '1']);
+    const events = await log(result.stdout);
+    expect(events.filter((e) => e.kind === 'notice' && e.budget !== undefined)).toHaveLength(1);
+    const last = events.findLast((e) => e.kind === 'assistant');
+    expect(last?.kind === 'assistant' && last.stopReason).toBe('end_turn');
+    expect(last?.kind === 'assistant' && last.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')).toBe(closing);
+    const [before, after] = bodies().slice(-2).map(uncached) as { system?: unknown; tools?: unknown; messages: unknown[] }[];
+    expect(after!.system).toEqual(before!.system);
+    expect(after!.tools).toEqual(before!.tools);
+    expect(after!.messages.slice(0, before!.messages.length), 'the reminder only adds to the conversation').toEqual(before!.messages);
   });
 });
 
