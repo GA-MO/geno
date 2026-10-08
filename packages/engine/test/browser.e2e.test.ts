@@ -218,7 +218,7 @@ describe('the built-in browser', () => {
 
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'open http://localhost@evil.example/ (host evil.example)', reason: 'opening a page on another host' });
-    expect(permissions[0]!.options.map((option) => option.optionId), 'no allow-for-session for a host').toEqual(['allow', 'reject']);
+    expect(permissions[0]!.options.map((option) => option.optionId), 'no allow-for-session for a host').toEqual(['allow', 'reject', 'reject-with-comment']);
     expect(transport.requests, 'the rejection ends the turn').toHaveLength(1);
     expect(chromes(marker), 'a refused navigation never starts Chrome').toEqual([]);
   }, 120_000);

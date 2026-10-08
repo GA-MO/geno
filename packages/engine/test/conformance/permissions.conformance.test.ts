@@ -766,6 +766,17 @@ describe.each(WIRES)('B/B-72 a user rejection on the %s wire', (wire) => {
     expect(said[1]).toMatch(/^The user rejected an earlier call of this turn, so this one did not run\. STOP/);
   });
 
+  it('B/B-71 a no with a comment puts the comment in the tool result and lets the turn go on', async () => {
+    const push = call('bash', { command: 'git push' });
+    const after = call('bash', { command: 'touch after.txt' });
+    const run = await scripted(wire, [{ calls: [push, after] }, { answer: 'Committed only.' }], { files: { 'a.ts': '' }, mode: 'ask', answers: [{ comment: 'Do not push; commit only.' }] });
+    expect(run.requests()).toHaveLength(2);
+    expect(run.view().get(push.id)).toEqual({ error: true, text: 'The user rejected `git push`, so it did not run. To tell you how to proceed, the user said:\nDo not push; commit only.' });
+    expect(existsSync(path.join(run.workspace, 'after.txt'))).toBe(true);
+    const result = run.result.events.find((e) => e.kind === 'tool-result' && e.toolUseId === push.id);
+    expect(result).toMatchObject({ status: 'denied', approval: { decidedBy: 'user', verdict: 'deny', comment: 'Do not push; commit only.' } });
+  });
+
   it('B/B-72 a rule denial with nobody to ask lets the model go on, and the turn goes on', async () => {
     const push = call('bash', { command: 'git push' });
     const run = await scripted(wire, [{ calls: [push] }, { answer: 'I could not push.' }], { files: { 'a.ts': '' }, mode: 'non-interactive' });

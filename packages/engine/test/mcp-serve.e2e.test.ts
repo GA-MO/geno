@@ -133,7 +133,7 @@ describe('gcode serve with MCP', () => {
     for (const later of transport.requests.slice(1)) expect(JSON.stringify(later.body.tools), 'the tool list is the same bytes on every call, loads included').toBe(JSON.stringify(transport.requests[0]!.body.tools));
 
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject', 'allow-workspace']);
+    expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject', 'allow-workspace', 'reject-with-comment']);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'an MCP tool its server marks read-only', rule: 'mcp__fake__echo' });
     expect(JSON.stringify(transport.requests[2]!.body.messages)).toContain('echo: one');
     expect(JSON.stringify(transport.requests[3]!.body.messages)).toContain('echo: two');

@@ -4,6 +4,7 @@ import { h, icon, type Child } from './dom.js';
 import { formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
 import type { AskUserRequest, BackendShown } from '@g-code/core';
+import { COMMENT_OPTION } from '@g-code/core/permission-comment';
 import { showsTokens, turnCost } from './backend-model.js';
 import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { answerWords, settledLine } from './question-model.js';
@@ -412,9 +413,13 @@ export function turnChangesRow(changes: TurnChanges, later: boolean, ui: Ui): HT
 /** The engine's option that saves the command's rule for the workspace. */
 const WORKSPACE_OPTION = 'allow-workspace';
 
+/** The comment each open card's "No, and tell the agent…" field holds, kept across a rebuild of the step that holds it. */
+const comments = new Map<string, string>();
+
 /** Option ids, then kinds, as the panel names their buttons; the first allow is the default the card focuses. */
 const CHOICE_LABELS: Readonly<Record<string, string>> = {
   [WORKSPACE_OPTION]: 'Always allow in this workspace',
+  [COMMENT_OPTION]: 'No, and tell the agent…',
   allow_once: 'Allow',
   allow_always: 'Always Allow',
   reject_once: 'Deny',
@@ -423,15 +428,17 @@ const CHOICE_LABELS: Readonly<Record<string, string>> = {
 
 const CHOICE_STYLES: Readonly<Record<string, string>> = {
   [WORKSPACE_OPTION]: 'button secondary',
+  [COMMENT_OPTION]: 'button ghost',
   allow_once: 'button',
   allow_always: 'button ghost',
   reject_once: 'button secondary',
   reject_always: 'button ghost',
 };
 
-/** The buttons of a card that waits: one per option the engine offered. */
-const choiceButtons = (block: PermissionBlock, ui: Ui, labels: Readonly<Record<string, string>>): HTMLElement =>
-  h(
+/** The buttons of a card that waits: one per option the engine offered. "No, and tell the agent…" opens its field. */
+function choiceButtons(block: PermissionBlock, ui: Ui, labels: Readonly<Record<string, string>>): HTMLElement {
+  if (comments.has(block.id)) return commentField(block, ui, labels);
+  const actions = h(
     'div',
     { class: 'permission-actions' },
     ...block.options.map((option) =>
@@ -440,12 +447,61 @@ const choiceButtons = (block: PermissionBlock, ui: Ui, labels: Readonly<Record<s
         {
           class: CHOICE_STYLES[option.optionId] ?? CHOICE_STYLES[option.kind] ?? 'button secondary',
           'data-focus': `choose:${block.id}:${option.optionId}`,
-          onclick: () => ui.post({ type: 'permission', id: block.id, optionId: option.optionId }),
+          onclick: () => {
+            if (option.optionId !== COMMENT_OPTION) return ui.post({ type: 'permission', id: block.id, optionId: option.optionId });
+            comments.set(block.id, '');
+            const field = commentField(block, ui, labels);
+            actions.replaceWith(field);
+            field.querySelector('textarea')?.focus();
+          },
         },
         labels[option.optionId] ?? labels[option.kind] ?? option.name,
       ),
     ),
   );
+  return actions;
+}
+
+/** What the user tells the agent with their no: Enter or Send answers, Esc or Back returns to the choices. */
+function commentField(block: PermissionBlock, ui: Ui, labels: Readonly<Record<string, string>>): HTMLElement {
+  const field = h('textarea', { class: 'permission-comment', rows: 2, placeholder: 'Tell the agent what to do instead', 'aria-label': 'What to tell the agent', 'data-focus': `comment:${block.id}` });
+  field.value = comments.get(block.id) ?? '';
+  const send = (): void => {
+    const comment = field.value.trim();
+    if (comment === '') return;
+    comments.delete(block.id);
+    ui.post({ type: 'permission', id: block.id, optionId: COMMENT_OPTION, comment });
+  };
+  const back = (): void => {
+    comments.delete(block.id);
+    const actions = choiceButtons(block, ui, labels);
+    root.replaceWith(actions);
+    actions.querySelector<HTMLElement>(`[data-focus="${CSS.escape(`choose:${block.id}:${COMMENT_OPTION}`)}"]`)?.focus();
+  };
+  const sendButton = h('button', { class: 'button', 'data-focus': `comment-send:${block.id}`, onclick: send }, 'Send');
+  sendButton.disabled = field.value.trim() === '';
+  field.addEventListener('input', () => {
+    comments.set(block.id, field.value);
+    sendButton.disabled = field.value.trim() === '';
+  });
+  field.addEventListener('keydown', (event) => {
+    if (event.isComposing) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      send();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      back();
+    }
+  });
+  const root = h(
+    'div',
+    { class: 'permission-comment-form' },
+    field,
+    h('div', { class: 'permission-actions' }, sendButton, h('button', { class: 'button secondary', 'data-focus': `comment-back:${block.id}`, onclick: back }, 'Back')),
+  );
+  return root;
+}
 
 const outcomeLine = (allowed: boolean, glyph: string, text: string): HTMLElement =>
   h('div', { class: `permission-outcome ${allowed ? 'allowed' : 'denied'}` }, icon(glyph), text);
@@ -487,15 +543,13 @@ const COMMAND_FACE: CardFace = {
       h('p', { class: 'permission-reason permission-rule' }, 'Always allow saves the rule ', h('code', {}, block.rule), ' for this workspace. Settings lists its rules.'),
   ],
   actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
-  settled: (block) => [
-    block.outcome.kind === 'cancelled'
-      ? outcomeLine(false, 'circle-slash', 'Cancelled')
-      : block.outcome.kind === 'chosen' && block.outcome.optionId === WORKSPACE_OPTION
-        ? outcomeLine(true, 'check', 'Allowed, and saved as a rule for this workspace')
-        : allowedOf(block)
-          ? outcomeLine(true, 'check', 'Allowed')
-          : outcomeLine(false, 'close', 'Denied'),
-  ],
+  settled: (block) => {
+    const { outcome } = block;
+    if (outcome.kind === 'cancelled') return [outcomeLine(false, 'circle-slash', 'Cancelled')];
+    if (outcome.kind === 'chosen' && outcome.optionId === WORKSPACE_OPTION) return [outcomeLine(true, 'check', 'Allowed, and saved as a rule for this workspace')];
+    if (outcome.kind === 'chosen' && outcome.comment !== undefined) return [outcomeLine(false, 'close', 'Denied, and told the agent'), h('blockquote', { class: 'permission-comment-sent' }, outcome.comment)];
+    return [allowedOf(block) ? outcomeLine(true, 'check', 'Allowed') : outcomeLine(false, 'close', 'Denied')];
+  },
 };
 
 const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFace>> = {

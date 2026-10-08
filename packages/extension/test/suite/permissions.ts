@@ -46,7 +46,7 @@ export async function run(): Promise<void> {
   await waitFor('Ask to ask about a path outside the workspace', async () => (await count(CARD)) === 1);
   check((await textOf(ALWAYS)) === 'Always allow in this workspace', 'the card offers Always allow in this workspace', await textOf(ALWAYS));
   const buttons = await panel<string[]>(`[...doc.querySelectorAll('${CARD} .permission-actions button')].map((b) => b.textContent)`);
-  check(JSON.stringify(buttons) === JSON.stringify(['Allow', 'Deny', 'Always allow in this workspace']), 'Allow and Deny, then Always allow', buttons);
+  check(JSON.stringify(buttons) === JSON.stringify(['Allow', 'Deny', 'Always allow in this workspace', 'No, and tell the agent…']), 'Allow and Deny, then Always allow, then a no with a comment', buttons);
   check((await textOf(`${CARD} .permission-rule code`)) === COMMAND, 'the card names the rule it would save', await textOf(`${CARD} .permission-rule`));
   await screenshots('card');
   await narrow('card', CARD);

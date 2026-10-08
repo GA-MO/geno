@@ -183,11 +183,11 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
         { kind: 'permission', id, command, reason, ...(description === undefined ? {} : { description }), options, classifier, ...(ask === undefined ? {} : { ask }), ...(toolId === undefined ? {} : { toolId }), ...(toolKind === undefined ? {} : { toolKind }), ...(rule === undefined ? {} : { rule }), outcome: { kind: 'open' } },
       ],
     })),
-  'permission-done': (transcript, { id, optionId, answer }) =>
+  'permission-done': (transcript, { id, optionId, answer, comment }) =>
     onLast(transcript, (turn) =>
       mapBlocks(turn, isOpen(id), (block) => ({
         ...block,
-        outcome: answer !== undefined ? answered(answer) : optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId },
+        outcome: answer !== undefined ? answered(answer) : optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId, ...(comment === undefined ? {} : { comment }) },
       })),
     ),
   error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),

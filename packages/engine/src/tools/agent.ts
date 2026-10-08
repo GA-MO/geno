@@ -97,9 +97,9 @@ import { todo } from './todo.js';
 /**
  * The user's answer. `allow-session` is offered for an MCP tool, which it allows for the rest of the session, and with
  * a read's `directory`, which it lets the session read. `allow-workspace` is offered only with a command's `offer`,
- * and saves that allow rule for the workspace.
+ * and saves that allow rule for the workspace. A `comment` is a no that tells the agent what to do instead.
  */
-export type PermissionAnswer = 'allow' | 'allow-session' | 'allow-workspace' | 'reject';
+export type PermissionAnswer = 'allow' | 'allow-session' | 'allow-workspace' | 'reject' | { readonly comment: string };
 /** An answer that outlives the one call. */
 export type KeptAnswer = Extract<PermissionAnswer, 'allow-session' | 'allow-workspace'>;
 
@@ -176,13 +176,14 @@ export async function settle(
   if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
   const answer = await approval.approve(denial, classifier);
   if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
-  const allowed = answer !== 'reject';
+  const allowed = typeof answer === 'string' && answer !== 'reject';
   auto.state = nextAutoState(auto.state, allowed ? 'user-allow' : 'user-reject');
-  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
+  const comment = typeof answer === 'string' ? {} : { comment: answer.comment };
+  return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny', ...comment };
 }
 
-export function denialText({ mode, rule, command, reason, classifier, decidedBy, message, interrupt }: ApprovalRecord): string {
-  if (decidedBy === 'user') return `The user rejected \`${command}\`, so it did not run. ${STOP_AND_WAIT}`;
+export function denialText({ mode, rule, command, reason, classifier, decidedBy, message, interrupt, comment }: ApprovalRecord): string {
+  if (decidedBy === 'user') return `The user rejected \`${command}\`, so it did not run. ${comment === undefined ? STOP_AND_WAIT : `To tell you how to proceed, the user said:\n${comment}`}`;
   if (decidedBy === 'hook') {
     const why = message === undefined ? '' : `: ${message.replace(/\.$/, '')}`;
     return `denied: \`${command}\` did not run. A PermissionRequest hook answered for the user and refused it${why}. ${interrupt === true ? STOP_AND_WAIT : 'Do not retry it; find another way, or say in your answer what you need the user to allow.'}`;
@@ -211,10 +212,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
 
 /**
  * The error a refused call throws: a user's no, or a hook's deny with `interrupt`, ends the turn, and a rule's, the
- * classifier's or another hook deny lets the model go on.
+ * classifier's or another hook deny lets the model go on. A no with a comment lets the model go on with what it says.
  */
 export const refusalOf = (record: ApprovalRecord, text = denialText(record)): ToolError =>
-  record.decidedBy === 'user' || record.interrupt === true ? new ToolRejected(text, record) : new ToolDenied(text, record);
+  (record.decidedBy === 'user' && record.comment === undefined) || record.interrupt === true ? new ToolRejected(text, record) : new ToolDenied(text, record);
 
 /**
  * The refusal of a path outside every directory Geno may read, which names them, as Claude Code's does. The user's
