@@ -190,7 +190,7 @@ describe.each(WIRES)('MCP rules on the %s wire', (wire: Wire) => {
   it('B/B-64 "Always allow in this workspace" on an MCP card saves mcp__docs__echo, and a new session runs the tool without a card', async () => {
     const run = await scripted(wire, [...echoTurns(1), ...echoTurns(2)]);
     const cards = await sessions(run, 2, 'allow-workspace');
-    expect(cards).toEqual([{ title: expect.stringContaining('mcp__docs__echo'), options: ['allow', 'allow-session', 'reject', 'allow-workspace'], rule: 'mcp__docs__echo' }]);
+    expect(cards).toEqual([{ title: expect.stringContaining('mcp__docs__echo'), options: ['allow', 'allow-session', 'reject', 'allow-workspace', 'reject-with-comment'], rule: 'mcp__docs__echo' }]);
     expect(run.seen()[2]!.results[0]).toEqual({ id: 'tu_echo_1', error: false, text: 'echo: call 1' });
     expect(run.seen()[5]!.results[0]).toEqual({ id: 'tu_echo_2', error: false, text: 'echo: call 2' });
   }, 60_000);
