@@ -26,6 +26,14 @@ It diffs the branch against its merge base with `main` (`--base <ref>` picks ano
 
 A small panel change runs 2 to 8 files instead of 30. Run the full suite once per batch of merges, before a release or an install, not after every change.
 
+## One run at a time
+
+Every vitest run on the machine takes `~/.g-code/test-run.lock` when its config loads (`scripts/test-lock.ts`). A second run prints `waiting for the test run of pid N` and starts when the first ends; a lock left by a run that died is taken over. A run started inside a held run, such as a test that runs vitest, does not wait. `GCODE_TEST_LOCK=off` skips the lock.
+
+The unit and webview projects use at most `GCODE_TEST_WORKERS` workers (default 4), and a run lowers its own CPU priority, so the editor stays usable while tests run. Four delegates once ran full suites at once with every core each, and the Mac froze.
+
+While working on a change, run only the test files it touches (`pnpm vitest run --project unit <file>`). Run `pnpm test:affected` once at the end, not a full `--project unit` run as well.
+
 ## Files at once
 
 `GCODE_VSCODE_WORKERS` sets how many VS Code files run at once. The default is 3, which runs the full project in about 10 minutes instead of 30 on a 10-core Mac. Each file has its own workspace, user data, extensions dir, `GCODE_HOME`, engine socket and ports, and `vscode-setup.ts` builds the extension once per run, so no file rewrites `dist` while another loads it. `docs/t1-fast-tests.md` has the runs at 1 to 4.

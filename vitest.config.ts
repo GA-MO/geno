@@ -1,15 +1,19 @@
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { useTestLock } from './scripts/test-lock.js';
 import { useTestTmp } from './scripts/test-tmp.js';
 import { vscodeWorkers } from './scripts/vscode-workers.js';
 
 useTestTmp();
+useTestLock();
 
 const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
 const WEBVIEW_TESTS = 'packages/extension/test/**/*.webview.test.ts';
 // A file mostly waits, so three at once take a third of the time; docs/t1-fast-tests.md has the runs at 1 to 4.
 const workers = vscodeWorkers(process.env, 3);
+// Unit and webview files each take a worker; every core at once left no room for the editor or a second checkout.
+const unitWorkers = Number(process.env['GCODE_TEST_WORKERS'] ?? 4);
 
 export default defineConfig({
   test: {
@@ -18,10 +22,10 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'], exclude: [VSCODE_TESTS, WEBVIEW_TESTS], sequence: { groupOrder: 0 } },
+        test: { name: 'unit', maxWorkers: unitWorkers, include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'], exclude: [VSCODE_TESTS, WEBVIEW_TESTS], sequence: { groupOrder: 0 } },
       },
       // The chat webview in headless Chromium against a fake host: no VS Code, so these run in parallel with the unit tests.
-      { extends: true, test: { name: 'webview', include: [WEBVIEW_TESTS], sequence: { groupOrder: 0 } } },
+      { extends: true, test: { name: 'webview', maxWorkers: unitWorkers, include: [WEBVIEW_TESTS], sequence: { groupOrder: 0 } } },
       {
         // Each file launches a whole VS Code, with its own profile, workspace and engine, after the unit tests.
         extends: true,
