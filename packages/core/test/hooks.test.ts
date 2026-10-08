@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
   claudeToolCall,
+  claudeToolResponse,
+  loopStep,
   GENO_NOTE,
   genoToolInput,
   handlersFor,
@@ -14,6 +16,10 @@ import {
   preToolDecision,
   promptDecision,
   replayMessages,
+  stopDecision,
+  stopHookActive,
+  stopMayContinue,
+  toolHookVerdict,
   type HookEntry,
   type HookOrigin,
   type HookOutcome,
@@ -53,12 +59,13 @@ describe('parseHookSettings', () => {
 
   it('keeps events Geno does not fire yet or ever, and notes that they do not run', () => {
     const parsed = parseHookSettings(
-      { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'notify' }] }], Notification: [{ hooks: [{ type: 'command', command: 'notify' }] }] } },
+      { hooks: { SubagentStop: [{ hooks: [{ type: 'command', command: 'notify' }] }], Notification: [{ hooks: [{ type: 'command', command: 'notify' }] }] } },
       user,
     );
-    expect(parsed.entries.map((e) => e.event)).toEqual(['Stop', 'Notification']);
+    expect(parsed.entries.map((e) => e.event)).toEqual(['SubagentStop', 'Notification']);
     expect(parsed.problems).toEqual([]);
-    expect(HOOK_EVENTS.Stop.support).toBe('P15');
+    expect(HOOK_EVENTS.SubagentStop.support).toBe('P16');
+    expect(HOOK_EVENTS.Stop.support).toBe('runs');
     expect(HOOK_EVENTS.Notification.support).toBe('never');
   });
 
@@ -336,5 +343,141 @@ describe("Claude Code's tool calls", () => {
     expect(genoToolInput('edit', { file_path: '/ws/a.ts', old_string: 'a', new_string: 'b' })).toEqual({ path: '/ws/a.ts', old_str: 'a', new_str: 'b' });
     expect(genoToolInput('edit', { file_path: '/ws/a.ts', content: 'all' })).toEqual({ path: '/ws/a.ts', new_str: 'all', create: true });
     expect(genoToolInput('grep', { pattern: 'y' })).toEqual({ pattern: 'y' });
+  });
+
+  it("gives a hook Claude Code's tool_response for Bash, Write and Edit, and the result text for any other tool", () => {
+    expect(claudeToolResponse('bash', { command: 'ls' }, 'a.ts\n[exit code 0]', '/ws')).toEqual({ stdout: 'a.ts\n[exit code 0]', stderr: '', interrupted: false, isImage: false, noOutputExpected: false });
+    expect(claudeToolResponse('edit', { path: 'n.ts', new_str: 'x', create: true }, 'created n.ts', '/ws')).toEqual({ type: 'create', filePath: '/ws/n.ts', content: 'x' });
+    expect(claudeToolResponse('edit', { path: 'a.ts', old_str: '1', new_str: '2' }, 'edited a.ts', '/ws')).toEqual({ filePath: '/ws/a.ts', oldString: '1', newString: '2', replaceAll: false });
+    expect(claudeToolResponse('read', { path: 'a.ts' }, '1\texport const a = 1;', '/ws')).toBe('1\texport const a = 1;');
+  });
+});
+
+describe('toolHookVerdict', () => {
+  type ToolEvent = 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'PostToolBatch';
+  const said = (event: ToolEvent, outcome: HookOutcome): HookResult => ({ entry: entry({ event, command: 'x' }), outcome });
+  const context = (event: ToolEvent, text: string, extra: object = {}) =>
+    hookOutcome(event, { code: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text, ...extra } }), stderr: '', timedOut: false });
+
+  it('T-HOOK-03 PostToolUse: additionalContext, decision block and exit 2 reach the model; plain stdout and a failed hook do not', () => {
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', context('PostToolUse', 'Formatted a.ts.'))])).toEqual({ notes: [{ how: 'additional-context', text: 'Formatted a.ts.' }], stop: undefined });
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', json({ decision: 'block', reason: 'lint failed' }))])).toEqual({ notes: [{ how: 'blocking', text: 'lint failed' }], stop: undefined });
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', { kind: 'block', code: 2, reason: 'eslint: 2 problems' })])).toEqual({ notes: [{ how: 'blocking', text: 'eslint: 2 problems' }], stop: undefined });
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', { kind: 'ok', code: 0, notes: [] })])).toEqual({ notes: [], stop: undefined });
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', { kind: 'error', code: 1, message: 'exit code 1: boom' })])).toEqual({ notes: [], stop: undefined });
+  });
+
+  it('continue false stops the loop, and its stopReason stays in the conversation', () => {
+    expect(toolHookVerdict('PostToolUseFailure', [said('PostToolUseFailure', json({ continue: false, stopReason: 'Build failed, fix errors before continuing' }))])).toEqual({
+      notes: [{ how: 'blocking', text: 'Build failed, fix errors before continuing' }],
+      stop: 'Build failed, fix errors before continuing',
+    });
+    expect(toolHookVerdict('PostToolUse', [said('PostToolUse', json({ continue: false }))]).stop).toBe('a PostToolUse hook stopped the turn');
+  });
+
+  it('PostToolBatch: a block stops the loop before the next model call, with the reason for the model', () => {
+    expect(toolHookVerdict('PostToolBatch', [said('PostToolBatch', { kind: 'block', code: 2, reason: 'tests are red' })])).toEqual({ notes: [{ how: 'blocking', text: 'tests are red' }], stop: 'tests are red' });
+    expect(toolHookVerdict('PostToolBatch', [said('PostToolBatch', json({ decision: 'block', reason: 'stop here' }))]).stop).toBe('stop here');
+    expect(toolHookVerdict('PostToolBatch', [said('PostToolBatch', context('PostToolBatch', 'Run pytest.'))])).toEqual({ notes: [{ how: 'additional-context', text: 'Run pytest.' }], stop: undefined });
+  });
+
+  it('PreToolUse: additionalContext joins the result unless that hook defers, and a block or decision block stays a deny', () => {
+    expect(toolHookVerdict('PreToolUse', [said('PreToolUse', context('PreToolUse', 'Env: production.', { permissionDecision: 'allow' }))]).notes).toEqual([{ how: 'additional-context', text: 'Env: production.' }]);
+    expect(toolHookVerdict('PreToolUse', [said('PreToolUse', context('PreToolUse', 'ignored', { permissionDecision: 'defer' }))]).notes).toEqual([]);
+    expect(toolHookVerdict('PreToolUse', [said('PreToolUse', json({ decision: 'block', reason: 'old deny' }))]).notes).toEqual([]);
+    expect(toolHookVerdict('PreToolUse', [said('PreToolUse', { kind: 'block', code: 2, reason: 'no' })])).toEqual({ notes: [], stop: undefined });
+  });
+});
+
+describe('stopDecision', () => {
+  const stop = (outcome: HookOutcome): HookResult => ({ entry: entry({ event: 'Stop', command: 'x' }), outcome });
+
+  it('T-LOOP-03 exit 2, decision block and additionalContext keep the turn going, with the reason for the model', () => {
+    expect(stopDecision([stop({ kind: 'block', code: 2, reason: 'Run the tests first.' })])).toEqual({ kind: 'continue', notes: [{ how: 'blocking', text: 'Run the tests first.' }] });
+    expect(stopDecision([stop(json({ decision: 'block', reason: 'Tests fail.' }))])).toEqual({ kind: 'continue', notes: [{ how: 'blocking', text: 'Tests fail.' }] });
+    const feedback = hookOutcome('Stop', { code: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'Stop', additionalContext: 'Please run the suite.' } }), stderr: '', timedOut: false });
+    expect(stopDecision([stop(feedback)])).toEqual({
+      kind: 'continue',
+      notes: [{ how: 'additional-context', text: 'Please run the suite.' }],
+    });
+  });
+
+  it('ends the turn when no hook blocks, and when any says continue false, which outranks a block', () => {
+    expect(stopDecision([stop({ kind: 'ok', code: 0, notes: [] }), stop({ kind: 'error', code: 1, message: 'exit code 1' })])).toEqual({ kind: 'end', reason: undefined });
+    expect(stopDecision([stop({ kind: 'block', code: 2, reason: 'more' }), stop(json({ continue: false, stopReason: 'Out of budget.' }))])).toEqual({ kind: 'end', reason: 'Out of budget.' });
+    expect(stopDecision([])).toEqual({ kind: 'end', reason: undefined });
+  });
+});
+
+describe('after-tool and Stop hook text in the loop', () => {
+  const session: Session = { id: asSessionId('s-1'), createdAt: '2026-10-08T03:00:00.000Z', workspace: '/ws', provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' };
+  const at = '2026-10-08T03:00:01.000Z';
+  const usage = { input: 1, cacheRead: 0, cacheWrite: 0, output: 1 };
+  const turn = (seq: number, content: Extract<TurnEvent, { kind: 'assistant' }>['content'], stopReason: 'end_turn' | 'tool_use'): TurnEvent => ({ kind: 'assistant', seq, at, content, stopReason, usage, costUsd: 0, latencyMs: 1, model: 'm' });
+  const said = (seq: number, text: string): TurnEvent => turn(seq, [{ type: 'text', text, citations: null }], 'end_turn');
+  const blocked = (seq: number): TurnEvent => ({ kind: 'hook-context', seq, at, event: 'Stop', notes: [{ how: 'blocking', text: 'Run the tests first.' }] });
+  const run = { firstSeq: 1, maxTurns: 10, maxCostUsd: 1 };
+  const start: TurnEvent[] = [{ kind: 'session-start', session }, { kind: 'user', seq: 1, at, content: 'Fix it' }, said(2, 'Done.')];
+
+  it("T-HOOK-03 appends a call's hook text to its result in the order logged, and the batch's after the results", () => {
+    const events: TurnEvent[] = [
+      { kind: 'session-start', session },
+      { kind: 'user', seq: 1, at, content: 'Edit' },
+      turn(
+        2,
+        [
+          { type: 'tool_use', id: 'tu_a', name: 'edit', input: { path: 'a.ts', old_str: '1', new_str: '2' }, caller: { type: 'direct' } },
+          { type: 'tool_use', id: 'tu_b', name: 'bash', input: { command: 'ls' }, caller: { type: 'direct' } },
+        ],
+        'tool_use',
+      ),
+      { kind: 'tool-result', seq: 3, at, toolUseId: 'tu_a', name: 'edit', status: 'ok', output: 'edited a.ts' },
+      { kind: 'tool-result', seq: 4, at, toolUseId: 'tu_b', name: 'bash', status: 'ok', output: 'a.ts' },
+      { kind: 'hook-context', seq: 5, at, event: 'PreToolUse', matched: 'Edit', toolUseId: 'tu_a', notes: [{ how: 'additional-context', text: 'Env: dev.' }] },
+      { kind: 'hook-context', seq: 6, at, event: 'PostToolUse', matched: 'Edit', toolUseId: 'tu_a', notes: [{ how: 'additional-context', text: 'Formatted a.ts.' }] },
+      { kind: 'hook-context', seq: 7, at, event: 'PostToolBatch', notes: [{ how: 'additional-context', text: 'Run the tests.' }] },
+    ];
+    expect(replayMessages(events).at(-1)!.content).toEqual([
+      {
+        type: 'tool_result',
+        tool_use_id: 'tu_a',
+        content: [
+          { type: 'text', text: 'edited a.ts' },
+          { type: 'text', text: `${GENO_NOTE} PreToolUse:Edit hook additional context: Env: dev.` },
+          { type: 'text', text: `${GENO_NOTE} PostToolUse:Edit hook additional context: Formatted a.ts.` },
+        ],
+      },
+      { type: 'tool_result', tool_use_id: 'tu_b', content: 'a.ts' },
+      { type: 'text', text: `${GENO_NOTE} PostToolBatch hook additional context: Run the tests.` },
+    ]);
+    expect(loopStep(events, run), 'hook text does not hold back the next model call').toEqual({ kind: 'call-model' });
+  });
+
+  it('T-LOOP-03 a Stop block after end_turn calls the model again, with the reason as the next message', () => {
+    const events = [...start, blocked(3)];
+    expect(loopStep(start, run)).toEqual({ kind: 'done', reason: 'end_turn' });
+    expect(loopStep(events, run)).toEqual({ kind: 'call-model' });
+    const last = replayMessages(events).at(-1)!;
+    expect(last.role).toBe('user');
+    expect(last.content).toEqual([{ type: 'text', text: `${GENO_NOTE} Stop hook blocking error: Run the tests first.` }]);
+  });
+
+  it('carries stop_hook_active once a Stop hook kept this run going', () => {
+    expect(stopHookActive(start, run)).toBe(false);
+    expect(stopHookActive([...start, blocked(3), said(4, 'Still done.')], run)).toBe(true);
+    expect(stopHookActive([...start, blocked(3), said(4, 'Still done.')], { ...run, firstSeq: 5 }), 'a later prompt starts afresh').toBe(false);
+  });
+
+  it('lets a Stop hook block once in a row: again only after the model called a tool', () => {
+    expect(stopMayContinue(start, run)).toBe(true);
+    expect(stopMayContinue([...start, blocked(3), said(4, 'Still done.')], run), 'a second block in a row ends the turn').toBe(false);
+    const worked: TurnEvent[] = [
+      ...start,
+      blocked(3),
+      turn(4, [{ type: 'tool_use', id: 'tu_1', name: 'bash', input: { command: 'pnpm test' }, caller: { type: 'direct' } }], 'tool_use'),
+      { kind: 'tool-result', seq: 5, at, toolUseId: 'tu_1', name: 'bash', status: 'error', output: 'Exit code 1\n' },
+      said(6, 'Tests ran.'),
+    ];
+    expect(stopMayContinue(worked, run), 'a tool call since the last block resets the count').toBe(true);
   });
 });
