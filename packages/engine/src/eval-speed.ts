@@ -83,6 +83,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
   const { values } = parseArgs({
     args,
     strict: true,
+    allowNegative: true,
     options: {
       model: { type: 'string', default: 'qwen3.8-flash' },
       'max-cost-per-task': { type: 'string', default: '0.08' },
@@ -92,6 +93,8 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
       from: { type: 'string' },
       'effort-policy': { type: 'string', default: DEFAULT_EFFORT_POLICY },
       'prompt-tier': { type: 'string' },
+      'agent-tool': { type: 'boolean' },
+      task: { type: 'string', multiple: true },
     },
   });
   if (values.from !== undefined) {
@@ -105,13 +108,16 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
   if (tier !== undefined && !isPromptTier(tier)) throw new UsageError(`--prompt-tier must be one of ${PROMPT_TIERS.join(', ')}`);
   if (!isPriced(chooseModel(io, { provider: undefined, model: values.model }).provider, values.model)) throw new UsageError(`no price for ${values.model}, so --max-cost cannot be enforced; add it to PRICES`);
   const tasks: EvalTask[] = [];
-  for (const id of SPEED_TASKS) {
+  const unknown = (values.task ?? []).filter((id) => !(SPEED_TASKS as readonly string[]).includes(id));
+  if (unknown.length > 0) throw new UsageError(`--task must name a speed task: ${SPEED_TASKS.join(', ')}`);
+  for (const id of values.task ?? SPEED_TASKS) {
     const task = await readTask(store, asTaskId(id));
     if (task === undefined) throw new EngineError(`no task ${id} in ${store.tasksDir}; the speed eval needs the E5 tasks`);
     tasks.push(task);
   }
   io.out(`effort policy: ${policy}`);
   io.out(`prompt tier: ${tier ?? "the model's own"}`);
+  io.out(`agent tool: ${values['agent-tool'] === undefined ? "the workspace's" : values['agent-tool'] ? 'on' : 'off'}`);
   const run = await runEval(ctx, {
     tasks,
     agent: 'gcode',
@@ -124,6 +130,7 @@ export const evalSpeedCommand: Command = async (args, ctx) => {
     checkAfterEdit: true,
     effortPolicy: EFFORT_POLICIES[policy],
     promptTier: tier,
+    agentTool: values['agent-tool'],
   });
   await report(io, run.results, path.join(path.dirname(run.file), 'speed.json'));
   return run.stopped ? 3 : 0;
