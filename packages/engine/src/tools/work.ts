@@ -2,10 +2,11 @@ import { z } from 'zod';
 import { childEndWords, childrenOf, jobEndText, jobOutputText, taskRefOf, workListText, type ChildEnd, type EndedJobState, type JobId, type WakeId, type WorkRow } from '@g-code/core';
 import { NO_BACKGROUND, type SessionBackground } from './background.js';
 import { executor, ToolError, type Executor, type ToolContext } from './context.js';
+import type { StartChild } from './skill.js';
 import type { SessionWakes } from './wake.js';
 
-/** The background subagents of the session's current run, which task_stop can stop. */
-export type SessionChildren = { stop(childId: string): Promise<string> | undefined };
+/** The run's subagents: `stop` for task_stop, and `start` for a `context: fork` skill. */
+export type SessionChildren = { stop(childId: string): Promise<string> | undefined; readonly start: StartChild };
 
 export type SessionWork = {
   readonly background: SessionBackground | undefined;

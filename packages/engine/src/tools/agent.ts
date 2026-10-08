@@ -409,7 +409,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     check,
     recall: recallExecutor(tools.recall),
-    skill: skillExecutor(tools.commands),
+    skill: skillExecutor(tools.commands, tools.children?.start),
     todo,
     watch_pr: watchPrExecutor(tools.wakes, tools.pr),
   };

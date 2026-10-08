@@ -322,23 +322,7 @@ describe('.cursor/rules', () => {
 });
 
 describe('skills', () => {
-  it('lists SKILL.md files by frontmatter name and description, .agents before .claude, first name wins', async () => {
-    const root = await tree({
-      '.agents/skills/deploy/SKILL.md': '---\nname: deploy-app\ndescription: Ship the app to staging.\n---\nSteps.\n',
-      '.agents/skills/fold/SKILL.md': '---\ndescription: >\n  Folded over\n  two lines.\n---\n',
-      '.claude/skills/review/SKILL.md': '---\nname: review\ndescription: "Review a diff."\n---\n',
-      '.claude/skills/deploy/SKILL.md': '---\nname: deploy-app\ndescription: The other deploy.\n---\n',
-      '.claude/skills/bare/SKILL.md': '---\nname: bare\n---\nNo description, so not listed.\n',
-      '.claude/skills/loose.md': 'not in a skill directory',
-    });
-    expect((await loadProjectContext(root)).context.skills).toEqual([
-      { name: 'deploy-app', description: 'Ship the app to staging.', path: '.agents/skills/deploy/SKILL.md' },
-      { name: 'fold', description: 'Folded over two lines.', path: '.agents/skills/fold/SKILL.md' },
-      { name: 'review', description: 'Review a diff.', path: '.claude/skills/review/SKILL.md' },
-    ]);
-  });
-
   it('loads nothing from an empty workspace', async () => {
-    expect(await loadProjectContext(await tree({}))).toEqual({ context: { instructions: [], rules: [], skills: [] }, problems: [] });
+    expect(await loadProjectContext(await tree({}))).toEqual({ context: { instructions: [], rules: [] }, problems: [] });
   });
 });

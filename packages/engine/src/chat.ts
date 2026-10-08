@@ -9,6 +9,7 @@ import {
   hookLabel,
   isEmptyContext,
   isEffort,
+  skillListing,
   isProviderName,
   type BackendBinding,
   specOf,
@@ -30,6 +31,7 @@ import {
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { captureEnvironment, scratchpadOf } from './environment.js';
 import { gatewayFor, type Gateway } from './gateway.js';
+import { homesOf, loadCommands, pluginLoader } from './commands.js';
 import { loadProjectContext } from './project-context.js';
 import { memoryStore } from './memory.js';
 import { claudeDirOf } from './plugins.js';
@@ -91,13 +93,23 @@ async function newSession(
   const file = sessionFile(store, session.id);
   // Loaded once and logged, so every later turn and a resumed session send the same text.
   const env = io.env;
-  const [{ context, problems }, memory, environment] = await Promise.all([
+  const [{ context, problems }, skills, memory, environment] = await Promise.all([
     loadProjectContext(workspace, { app: homeOf(store), home: env['HOME'] || undefined, claude: claudeDirOf(env) }, env['GCODE_RG'] || 'rg'),
+    loadCommands(workspace, homesOf(store, env), (await pluginLoader(io)(workspace)).plugins),
     memoryStore(homeOf(store), workspace).list(),
     captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
   ]);
   for (const problem of problems) io.err(`instructions: ${problem}`);
-  const start: TurnEvent = { kind: 'session-start', session, context, ...(memory.length === 0 ? {} : { memory }), environment, ...(workflow === undefined ? {} : { workflow }) };
+  for (const problem of skills.problems) io.err(`commands: ${problem}`);
+  const listed = skills.commands.flatMap((c) => (c.kind === 'skill' && c.modelInvocable ? [{ name: c.name, description: c.description }] : []));
+  const start: TurnEvent = {
+    kind: 'session-start',
+    session,
+    context: listed.length === 0 ? context : { ...context, skillListing: skillListing(listed) },
+    ...(memory.length === 0 ? {} : { memory }),
+    environment,
+    ...(workflow === undefined ? {} : { workflow }),
+  };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }
@@ -261,7 +273,7 @@ const RENDER: { [K in TurnEvent['kind']]: (event: EventOf<K>) => string[] } = {
     ...(context === undefined || isEmptyContext(context)
       ? []
       : [
-          `context: ${[...context.instructions.map((f) => f.path), ...(context.nested ?? []).map((f) => `${f.path} (nested)`), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skills.length} skills`,
+          `context: ${[...context.instructions.map((f) => f.path), ...(context.nested ?? []).map((f) => `${f.path} (nested)`), ...context.rules.map((r) => `${r.path} (${r.trigger.kind})`)].join(', ') || 'no instructions'}; ${context.skillListing?.skills.length ?? context.skills?.length ?? 0} skills`,
         ]),
   ],
   user: ({ seq, content, context, attachments, wake }) => [

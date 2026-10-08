@@ -22,7 +22,7 @@ import {
   type SlashCommand,
 } from '@g-code/core';
 import type { Command, Io } from './command.js';
-import { workspaceDir } from './drive.js';
+import { workspaceDir } from './workspace.js';
 import { claudeDirOf, loadPlugins, type InstalledPlugin, type PluginScan } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, SKILL_ROOTS, sortedEntries } from './project-context.js';
 
