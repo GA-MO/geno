@@ -2279,7 +2279,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       const { rules, scope, answer } = await permissionsOf(params.cwd);
       const parsed = parseRule(params.effect, params.text, scope);
       if (!parsed.ok) throw acp.RequestError.invalidParams({ text: params.text }, parsed.reason);
-      return answer(rules.add(params.effect, parsed.pattern));
+      return answer(rules.add(parsed.rule));
     })
     .onRequest(PERMISSION_REMOVE_METHOD, permissionRemoveRequest, async ({ params }): Promise<PermissionsResponse> => {
       const { rules, answer } = await permissionsOf(params.cwd);

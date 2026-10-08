@@ -3,7 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isMissing } from '../store.js';
 import { isSecretPath } from '@g-code/core';
-import { ALWAYS, displayPath, executor, isSecret, optional, resolveInside, secretRefusal, ToolError, type ToolContext } from './context.js';
+import { ALWAYS, displayPath, executor, isSecret, optional, pathRuleRefusal, resolveInside, searchRule, secretRefusal, ToolError, type ToolContext } from './context.js';
 import { searchWorkspace, type SearchTarget } from './ripgrep.js';
 
 const GLOB_CHARS = /[*?[\]{}]/;
@@ -26,6 +26,8 @@ async function scopeOf(ctx: ToolContext, given: string | undefined): Promise<{ r
   }
   const real = await resolveInside(ctx, given);
   if (isSecret(ctx, path.resolve(ctx.workspace, given)) || isSecret(ctx, real)) throw new ToolError(secretRefusal('grep', given));
+  const named = searchRule(ctx, path.resolve(ctx.workspace, given)) ?? searchRule(ctx, real);
+  if (named !== undefined) throw new ToolError(pathRuleRefusal('grep', given, named));
   return { target: (await stat(real)).isDirectory() ? { dir: real } : { dir: path.dirname(real), file: path.basename(real) } };
 }
 

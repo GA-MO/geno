@@ -411,13 +411,22 @@ export type McpRuleId = (typeof MCP_RULE_IDS)[number];
 export const EXTERNAL_RULE_IDS = ['external-read', 'external-write', 'external-command', 'external-other'] as const;
 export type ExternalRuleId = (typeof EXTERNAL_RULE_IDS)[number];
 /** A deny rule the user set for the workspace, which permission-rules.ts matches. */
-export const WORKSPACE_RULE_IDS = ['workspace-deny'] as const;
+export const WORKSPACE_RULE_IDS = ['workspace-deny', 'workspace-ask'] as const;
 export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
+/** A command line judged whole, before its words (`lineRuleOf`). */
+export const LINE_RULE_IDS = ['long-command', 'unparsable-command'] as const;
+export type LineRuleId = (typeof LINE_RULE_IDS)[number];
+// As the unlisted rule: Ask asks where it would have run the line, and a run nobody can ask still runs it in the sandbox.
+const LINE_VERDICTS: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' };
+export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
+  'long-command': { reason: 'a command over 10,000 characters', verdicts: LINE_VERDICTS },
+  'unparsable-command': { reason: 'a command Geno cannot split into simple commands, such as an open quote or a line that ends in &&', verdicts: LINE_VERDICTS },
+};
 /** A user's PreToolUse hook that asked before a call or denied it (hooks.ts). */
 export const HOOK_RULE_IDS = ['hook-ask', 'hook-deny'] as const;
 export type HookRuleId = (typeof HOOK_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId | HookRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS, ...HOOK_RULE_IDS] as const;
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId | LineRuleId | HookRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS, ...LINE_RULE_IDS, ...HOOK_RULE_IDS] as const;
 
 /** The question a PreToolUse hook's ask puts before a call, named by the hook's source as Claude Code labels it. */
 export function hookAskDenial({ reason, from }: { readonly reason: string | undefined; readonly from: string }, command: string): Denial {
@@ -483,16 +492,35 @@ type Heredoc = { readonly delimiter: string; readonly quoted: boolean; readonly 
  * of an unquoted one.
  */
 export function splitCommand(command: string): string[][] {
-  const commands: string[][] = [];
-  scan(command, 0, undefined, commands);
-  return commands;
+  return split(command).commands;
+}
+
+/** The simple commands, and whether the line leaves a quote, a substitution or an operator open, which a shell refuses to run as written. */
+type Split = { readonly commands: string[][]; broken: boolean };
+
+function split(command: string): Split {
+  const out: Split = { commands: [], broken: false };
+  scan(command, 0, undefined, out);
+  return out;
+}
+
+/** Longer than Claude Code reads a command word by word. */
+export const MAX_RULED_COMMAND = 10_000;
+
+/** Why a line is judged whole rather than word by word, if it is: too long, or not shell Geno can split. */
+export function lineRuleOf(command: string): LineRuleId | undefined {
+  if (command.length > MAX_RULED_COMMAND) return 'long-command';
+  return split(command).broken ? 'unparsable-command' : undefined;
 }
 
 // Appends the commands from `start` up to `closer` (or the end) and returns the closer's index.
-function scan(src: string, start: number, closer: ')' | '`' | undefined, commands: string[][]): number {
+function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Split): number {
+  const { commands } = out;
   let words: string[] = [];
   let word: string | null = null;
   let parens = 0;
+  // After `&&`, `||` or `|` with no command yet: a line that ends here is cut short.
+  let dangling = false;
   const heredocs: Heredoc[] = [];
   const endWord = () => {
     if (word !== null) words.push(word);
@@ -500,7 +528,10 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
   };
   const endCommand = () => {
     endWord();
-    if (words.length > 0) commands.push(words);
+    if (words.length > 0) {
+      commands.push(words);
+      dangling = false;
+    }
     words = [];
   };
   let i = start;
@@ -509,6 +540,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
     if (ch === closer && parens === 0) break;
     if (ch === "'") {
       const close = src.indexOf("'", i + 1);
+      if (close === -1) out.broken = true;
       const end = close === -1 ? src.length : close;
       word = (word ?? '') + src.slice(i + 1, end);
       i = end;
@@ -518,7 +550,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
       let j = i + 1;
       let text = '';
       while (j < src.length && src[j] !== '"') {
-        const substitution = substitutionAt(src, j, commands);
+        const substitution = substitutionAt(src, j, out);
         if (substitution !== undefined) {
           text += src.slice(j, substitution + 1);
           j = substitution + 1;
@@ -528,6 +560,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
         text += src[j];
         j++;
       }
+      if (j >= src.length) out.broken = true;
       word = (word ?? '') + text;
       i = j;
       continue;
@@ -536,7 +569,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
       word = (word ?? '') + src[++i];
       continue;
     }
-    const substitution = substitutionAt(src, i, commands);
+    const substitution = substitutionAt(src, i, out);
     if (substitution !== undefined) {
       word = (word ?? '') + src.slice(i, substitution + 1);
       i = substitution;
@@ -551,7 +584,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
     }
     if (ch === '\n' && heredocs.length > 0) {
       endCommand();
-      i = skipHeredocBodies(src, i + 1, heredocs.splice(0), commands) - 1;
+      i = skipHeredocBodies(src, i + 1, heredocs.splice(0), out) - 1;
       continue;
     }
     const separator = SEPARATORS.find((op) => src.startsWith(op, i));
@@ -559,6 +592,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
       if (separator === '(') parens++;
       if (separator === ')') parens = Math.max(0, parens - 1);
       endCommand();
+      if (separator === '&&' || separator === '||' || separator === '|') dangling = true;
       i += separator.length - 1;
       continue;
     }
@@ -581,14 +615,17 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, command
     word = (word ?? '') + ch;
   }
   endCommand();
+  if (dangling) out.broken = true;
   return i;
 }
 
 // At `$(` or a backtick, appends the substitution's commands and returns the index of its closer.
-function substitutionAt(src: string, i: number, commands: string[][]): number | undefined {
-  if (src.startsWith('$(', i)) return scan(src, i + 2, ')', commands);
-  if (src[i] === '`') return scan(src, i + 1, '`', commands);
-  return undefined;
+function substitutionAt(src: string, i: number, out: Split): number | undefined {
+  const closer = src.startsWith('$(', i) ? ')' : src[i] === '`' ? '`' : undefined;
+  if (closer === undefined) return undefined;
+  const end = scan(src, i + (closer === ')' ? 2 : 1), closer, out);
+  if (end >= src.length) out.broken = true;
+  return end;
 }
 
 function readHeredoc(src: string, start: number): { readonly heredoc: Heredoc; readonly end: number } {
@@ -615,7 +652,7 @@ function readHeredoc(src: string, start: number): { readonly heredoc: Heredoc; r
 }
 
 // Returns the index just past the last body's delimiter line.
-function skipHeredocBodies(src: string, start: number, heredocs: readonly Heredoc[], commands: string[][]): number {
+function skipHeredocBodies(src: string, start: number, heredocs: readonly Heredoc[], out: Split): number {
   let i = start;
   for (const { delimiter, quoted, stripTabs } of heredocs) {
     const bodyStart = i;
@@ -632,15 +669,15 @@ function skipHeredocBodies(src: string, start: number, heredocs: readonly Heredo
       }
       i = next;
     }
-    if (!quoted) substitutionsIn(src.slice(bodyStart, bodyEnd), commands);
+    if (!quoted) substitutionsIn(src.slice(bodyStart, bodyEnd), out);
   }
   return i;
 }
 
-function substitutionsIn(text: string, commands: string[][]): void {
+function substitutionsIn(text: string, out: Split): void {
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '\\') i++;
-    else i = substitutionAt(text, i, commands) ?? i;
+    else i = substitutionAt(text, i, out) ?? i;
   }
 }
 
@@ -769,10 +806,19 @@ export function secretReadDenial(shown: string, mode: ApprovalMode): Denial | un
   return verdict === 'allow' ? undefined : { rule: 'secret-path', reason, command: `read ${shown}`, verdict };
 }
 
-/** The first command in the line a rule denies in this mode, else the merged question or classification. */
+/** What the line rule that judges `command` whole does in this mode; undefined when none does, or it lets the line run. */
+export function lineDenial(command: string, mode: ApprovalMode): Denial | undefined {
+  const rule = lineRuleOf(command);
+  if (rule === undefined) return undefined;
+  const { reason, verdicts } = LINE_RULES[rule];
+  const verdict = verdicts[mode];
+  return verdict === 'allow' ? undefined : { rule, reason, command: command.trim(), verdict };
+}
+
+/** The first command in the line a rule denies in this mode, else the line's own question, else the merged question or classification. */
 export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const flags = flagsOf(parseCommandLine(command, scope), scope, mode);
-  return flags.kind === 'deny' ? flags.denial : mergedDenial(command, flags.flags);
+  return flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags));
 }
 
 /** The rules that flag one simple command on its own in this mode. */

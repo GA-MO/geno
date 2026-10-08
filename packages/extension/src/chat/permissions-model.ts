@@ -1,6 +1,6 @@
-export type RuleEffectView = 'allow' | 'deny';
+export type RuleEffectView = 'allow' | 'ask' | 'deny';
 
-/** A workspace rule as Settings lists it: the pattern as the user would type it. */
+/** A workspace rule as Settings lists it: a command or `Read(path)` and `Edit(path)`, as the user would type it. */
 export type PermissionRuleView = { readonly id: string; readonly effect: RuleEffectView; readonly text: string };
 
 /** `refused` is why the engine would not save the last rule the user typed. */

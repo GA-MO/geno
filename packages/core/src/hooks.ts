@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { BROWSER_RULES, DENY_RULES, isMcpRule, MCP_RULES, WEB_RULES, type ApprovalMode, type ApprovalRuleId, type Denial, type SessionMode, type Verdicts } from './approval.js';
+import { BROWSER_RULES, DENY_RULES, isMcpRule, LINE_RULES, MCP_RULES, WEB_RULES, type ApprovalMode, type ApprovalRuleId, type Denial, type SessionMode, type Verdicts } from './approval.js';
 import { EXTERNAL_RULES } from './backend-permissions.js';
 import { GENO_NOTE, neutralize } from './fence.js';
 import { patternText } from './permission-rules.js';
@@ -430,7 +430,7 @@ export function permissionSuggestions(denial: Denial, toolName: string): Permiss
   return [];
 }
 
-const ruleTables: readonly Readonly<Record<string, { readonly verdicts: Verdicts }>>[] = [DENY_RULES, MCP_RULES, BROWSER_RULES, WEB_RULES];
+const ruleTables: readonly Readonly<Record<string, { readonly verdicts: Verdicts }>>[] = [DENY_RULES, MCP_RULES, BROWSER_RULES, WEB_RULES, LINE_RULES];
 
 /** Whether a rule asks the user in Ask mode; the rules no table holds are a workspace's deny and a hook's. */
 function asksInAsk(rule: ApprovalRuleId): boolean {

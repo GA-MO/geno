@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { isSecretPath } from '@g-code/core';
-import { displayPath, isSecret, resolveInside, secretRefusal, ToolError, type ToolContext } from './context.js';
+import { displayPath, isSecret, pathRuleRefusal, resolveInside, searchRule, secretRefusal, ToolError, type ToolContext } from './context.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -66,6 +66,8 @@ export async function searchRoot(ctx: ToolContext, directory: string | undefined
   if (directory === undefined) return ctx.workspace;
   const real = await resolveInside(ctx, directory);
   if (isSecret(ctx, path.resolve(ctx.workspace, directory)) || isSecret(ctx, real)) throw new ToolError(secretRefusal('glob', directory));
+  const named = searchRule(ctx, path.resolve(ctx.workspace, directory)) ?? searchRule(ctx, real);
+  if (named !== undefined) throw new ToolError(pathRuleRefusal('glob', directory, named));
   if (!(await stat(real)).isDirectory()) throw new ToolError(`${directory} is not a directory`);
   return real;
 }
@@ -104,7 +106,8 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
   const flags = output === 'matches' ? ['--null', '--with-filename', '--stats'] : [];
   const pathOf = (line: string): string => (output === 'matches' ? line.slice(0, line.indexOf('\0')) : line);
   // The callers refuse a credentials directory or file, so a path below `dir` is all that can name a credentials file.
-  const shown = (lines: readonly string[]): string[] => lines.filter((line) => !isSecretPath(pathOf(line))).map((line) => line.replace('\0', ':'));
+  const kept = (line: string): boolean => !isSecretPath(pathOf(line)) && searchRule(ctx, path.resolve(dir, pathOf(line))) === undefined;
+  const shown = (lines: readonly string[]): string[] => lines.filter(kept).map((line) => line.replace('\0', ':'));
   const run = async (cwd: string, extra: readonly string[]): Promise<Search> => {
     const stdout = await ripgrepOutput(ctx, cwd, [...flags, ...args, ...extra], file ?? '.');
     if (output === 'files') {

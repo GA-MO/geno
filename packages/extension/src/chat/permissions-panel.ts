@@ -4,6 +4,7 @@ import type { PermissionRuleView, PermissionsFromView, PermissionsListing, RuleE
 
 const EFFECT_LABELS: Readonly<Record<RuleEffectView, { readonly label: string; readonly tone: string }>> = {
   allow: { label: 'Allow', tone: 'tone-ok' },
+  ask: { label: 'Ask', tone: 'tone-wait' },
   deny: { label: 'Deny', tone: 'tone-failed' },
 };
 
@@ -30,8 +31,8 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
   const list = h('ul', { class: 'perm-list', 'aria-label': 'Permission rules' });
   const note = h('p', { class: 'provider-note perm-note' }, 'Loading…');
   const refused = h('p', { class: 'provider-test perm-refused', 'data-tone': 'failed', role: 'alert', hidden: true });
-  const effect = h('select', { class: 'role-provider perm-choice', 'aria-label': 'Rule effect' }, h('option', { value: 'allow' }, 'Allow'), h('option', { value: 'deny' }, 'Deny'));
-  const text = h('input', { class: 'provider-input perm-text', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'pnpm test', 'aria-label': 'Command' });
+  const effect = h('select', { class: 'role-provider perm-choice', 'aria-label': 'Rule effect' }, h('option', { value: 'allow' }, 'Allow'), h('option', { value: 'ask' }, 'Ask'), h('option', { value: 'deny' }, 'Deny'));
+  const text = h('input', { class: 'provider-input perm-text', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'pnpm test or Read(./secrets/**)', 'aria-label': 'Command or path' });
   const form = h(
     'form',
     {
@@ -39,7 +40,7 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
       onsubmit: (event: Event) => {
         event.preventDefault();
         if (text.value.trim() === '') return;
-        post({ type: 'permissions-add', effect: effect.value === 'deny' ? 'deny' : 'allow', text: text.value });
+        post({ type: 'permissions-add', effect: effect.value === 'deny' || effect.value === 'ask' ? effect.value : 'allow', text: text.value });
       },
     },
     effect,
@@ -53,7 +54,7 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
     h(
       'p',
       { class: 'settings-intro' },
-      'Commands Geno runs in this workspace without asking, and commands it never runs there. A command matches when it starts with the rule’s words, and a deny wins. Geno keeps the rules in its own folder, never in the repository, and still asks before a forced push, deleting outside the workspace, or touching credentials.',
+      'Commands Geno runs in this workspace without asking, commands it always asks about, even in Auto, and commands it never runs there. A command matches when it starts with the rule’s words, a deny wins, then an ask. Read(path) and Edit(path) ask about or deny files in .gitignore syntax, and a Read deny also keeps commands from reading them. Geno keeps the rules in its own folder, never in the repository, and still asks before a forced push, deleting outside the workspace, or touching credentials.',
     ),
     note,
     list,
