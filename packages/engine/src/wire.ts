@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
+import type { MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import type { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import {
@@ -97,14 +98,23 @@ const countingFetch =
     return tapped(response, onBytes);
   };
 
+// Claude Code sets eager_input_streaming on every tool, so a tool's input streams as the model writes it rather than
+// after the API has buffered and checked it; the executors check every input themselves. Only Anthropic's API and
+// Vertex are known to take the field: older Bedrock deployments refuse it, and another provider's Anthropic endpoint may.
+const EAGER_INPUT: ReadonlySet<ProviderName> = new Set(['anthropic', 'vertex']);
+
+const eager = (params: MessageStreamParams): MessageStreamParams =>
+  params.tools === undefined ? params : { ...params, tools: params.tools.map((tool) => ('input_schema' in tool ? { ...tool, eager_input_streaming: true } : tool)) };
+
 function anthropicWire(config: WireConfig): Wire {
   let pending: ReturnType<typeof anthropicClient> | undefined;
   const clientOf = () => (pending ??= anthropicClient({ ...config, fetch: countingFetch(config.fetch) }));
   return {
     async stream(params, { signal, headers, onEvent, onAnswered, onBytes = () => {} }) {
       const client = await clientOf();
+      const request = EAGER_INPUT.has(config.spec.id) ? eager(params) : params;
       return byteCounters.run(onBytes, () => {
-        const stream = client.messages.stream(params, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
+        const stream = client.messages.stream(request, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
         if (onAnswered !== undefined) stream.on('connect', onAnswered);
         stream.on('streamEvent', onEvent);
         return stream.finalMessage();
