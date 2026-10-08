@@ -126,6 +126,48 @@ Each row broke one thing in the panel source, ran both versions of the file, and
 
 The light and high-contrast rows fail only because the harness applies the captured theme classes and variables. Without them the page would be neither light nor high contrast.
 
+### start and working
+
+These two files were the longest in the pool, about 93 s and 86 s in T3's runs, a fifth of the layer's file time. Most of it was the CPU profile, which ran on every run: three rounds of 10 s with Noodle moving and 10 s with Noodle resting, so 60 s or more per file. Each file now has a webview test with every panel check, and a short VS Code file with the checks that need the extension and the engine. Neither file could move whole, so both are Split files now, not Browser files.
+
+| File | VS Code before (T3) | VS Code after | Webview test |
+| --- | --- | --- | --- |
+| start | about 93 s | 2.3 s | 19.0 s |
+| working | about 86 s | 7.5 s | 6.5 s |
+
+The VS Code times are from one `pnpm test:vscode` run of the two slimmed files in one pooled window, on 2026-10-08 at 23:03. The webview times are vitest's per-test times from one run of the two files at once. The webview project runs its files in parallel, so `start` sets its wall time at about 20 s. Most of `start`'s 19 s is the waits that the peek checks need: a pause in typing before Noodle drums, and 3.8 s under reduced motion to show that no move plays.
+
+What moved to `webview/start.webview.test.ts`:
+
+- The start page's layout: the stage holds only Noodle and its shadow, geno, the project and branch from a `header` message, the three newest of four `history` rows newest first, the "ago" text, no frame around a dino, and the 4× pixelated sprite.
+- Noodle's motion: it rests without the window focus, wanders with it, somersaults on a click, stands still in its idle frame under reduced motion and in high contrast.
+- A click on a recent session sends `open-session` for it, and the start page leaves once the session shows.
+- The peek: hidden while the chat is idle, no climb for two characters, one climb with one wave, its eyes on the text, its size and place on the composer's edge, one move after a pause in typing, no move under reduced motion, a duck when the composer empties, no second wave, a duck on send, hidden while the turn runs and after it.
+
+What stays in `start.integration.test.ts`: the project name from the workspace folder, the branch from `git`, the three newest sessions as the engine lists them from its logs, a session the engine replays on a click, and a follow-up that reaches the model once and shows its answer.
+
+What moved to `webview/working.webview.test.ts`:
+
+- Where the working dino stands: the 2× sprite beside the running turn's current step, at the right, with the turn's avatar replaced by a spinner, and no frame around it.
+- The pose for each step and the flex after a passing check, sweat after a failed read, the question mark while a card waits, a hop or a somersault after a turn without a check.
+- Under reduced motion, the pose holds its frame and the turn ends with no move.
+- The finished turn's still avatar, and a second work turn that brings out the laptop again and ends with a flex.
+
+What stays in `working.integration.test.ts`: the same pose sequence, sweat, question mark and clipboard, driven by the real engine. Those poses depend on what the engine reports: the tool names and kinds, a failed read, a command that Ask holds, the Plan mode the engine confirms, and the check's ``check `true` passed`` headline, which is what makes Noodle flex. `affected.ts` runs `working` for every engine change for this reason. The panel's layout checks, reduced motion and the second work turn left the VS Code file.
+
+The CPU profiles now run only with `GCODE_PERF=1`, as `style`'s do. The GIFs, the screenshots, the pose stills and `working`'s recorded turn run only with `GCODE_SCREENSHOTS`. A profile's `timers >= 130` check stays with the profile. It only tells a valid profile from one in which the window lost the focus, so the profile can be taken again.
+
+Each moved check still catches a defect. `scripts/defect-check.sh` made each change below, ran the webview test, and restored the file:
+
+| Defect | Webview test |
+| --- | --- |
+| High contrast no longer holds Noodle still (`motion.ts`, `STILLS` without `highContrast`) | start fails: "Noodle stands still in high contrast: expected 'moving' to be 'still'" |
+| The peek waves on every climb (`peek-model.ts`, `climb` ignores `waved`) | start fails: "the wave plays once a session: expected [ 'away', 'climb', 'wave', 'typing' ] to not include 'wave'" |
+| A turn-end move plays under reduced motion (`working.ts`, `steer` ignores `still` once the turn ends) | working fails: "timed out waiting for the dino to leave" |
+| The avatar stays beside the working dino (`webview.css`, the `.turn[data-working] .avatar` rule no longer matches) | working fails: "the turn's 24 px avatar steps aside for a spinner while the working dino shows" with `"avatar":"flex"` |
+
+One change went unseen. With `frameOf(working, false)` in `working-dino.ts`, the pose under reduced motion still holds its frame, because the view also stops its tick timer when Noodle is still. The two guards cover each other, so no single change shows the check working, in the browser or in VS Code.
+
 ## Which files could move
 
 Each of the 46 files falls in one of three groups:
@@ -170,7 +212,7 @@ Each of the 46 files falls in one of three groups:
 | settings | Stays | Secret storage and provider requests |
 | slash | Split | The picker moves; skill and command expansion in the prompt stays |
 | spinoff | Stays | Starting a suggested task runs it |
-| start | Browser | The start page, recent sessions from a `history` message, and Noodle's moves; its one request check is a `send` the host records |
+| start | Split, done | The start page, Noodle and the peek moved; the project, branch and sessions the extension and engine find, a replayed session and a follow-up stay |
 | steer | Stays | Steering lands in the engine's next tool round |
 | style | Browser | Ported in T1; two checks stay in VS Code |
 | subagents | Stays | Child sessions and their reports |
@@ -181,18 +223,18 @@ Each of the 46 files falls in one of three groups:
 | wake | Stays | Turns Geno starts when background tasks end |
 | widget-security | Stays | The real webview host's sandbox and CSP, proven with red runs |
 | widget | Split | The widget frame and its sandbox attributes move; Copy as Image and the widget tab stay |
-| working | Browser | Noodle's working animation, the 300px layout and the footer |
+| working | Split, done | The dino's place, reduced motion and a second turn moved; the poses the engine's steps and check bring stay |
 
-That is 5 Browser, 13 Split and 28 Stays. The classification comes from each suite's checks and the VS Code APIs it calls. Only the three ported files are proven.
+That is 3 Browser, 15 Split and 28 Stays. The classification comes from each suite's checks and the VS Code APIs it calls. Only the five ported files are proven.
 
 ## Next steps
 
 In order of what each saves:
 
-1. **Port `start` and `working`.** They are the two longest files, 111 s and 99 s at N=1, and the longest file sets the floor for any N. Both are Browser files, and `start` holds the animation check that failed under load.
+1. **Port `start` and `working`.** Done: about 93 s and 86 s in VS Code before, 2.3 s and 7.5 s after (see above). The somersault check that failed under load runs in the browser now.
 2. **Stop the screenshot loops from sleeping when nothing takes a screenshot.** Without `GCODE_SCREENSHOTS`, each loop still switches the theme three times and back, with 1.8 s of sleep per switch: at least 547 s of the 1,760 s of file time, about 180 s of a run at N=3. Returning early from each suite's `screenshots()` when the variable is unset removes them. The cost is that a normal run no longer switches themes in VS Code. The browser tests check the themes instead. Done in T3 (`suite/shooting.ts`), with the window pool in `docs/testing.md`.
 3. **Port the 13 Split files.** Each keeps a short VS Code file for its end-to-end checks and moves its panel checks and screenshot loops to the browser.
-4. **Harden the three timing flakes.** `attention-reload.ts` waits 30 s for a card to show again. Whether that is a slow replay under load, or a card that is sometimes never shown again, needs the engine log of a failing run. `waits.ts` presses Escape once and waits. `start.ts` polls an animation for 1.5 s.
+4. **Harden the three timing flakes.** `attention-reload.ts` waits 30 s for a card to show again. Whether that is a slow replay under load, or a card that is sometimes never shown again, needs the engine log of a failing run. `waits.ts` presses Escape once and waits.
 5. **Fix the stuck-request check in `suite/commands.ts`.** It reads a scroll-state query in the same task as the scroll, so it passes only while the request was stuck before.
 6. **Stop the test engines.** An engine outlives its window by design, and some from test runs stay alive after the run's TMPDIR is gone: three from other worktrees, 5 to 10 hours old, and three from this branch's runs, which ignored SIGTERM. The suite teardown could stop the engine for its `GCODE_HOME`.
 7. **Read the debug port from Chromium.** `freePort()` closes its socket before VS Code binds the port, so two files could in principle get the same port. `--remote-debugging-port=0` with the `DevToolsActivePort` file in the user data dir closes that gap. No run hit it.

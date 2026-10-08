@@ -167,7 +167,7 @@ The host checkout is mounted read-only. Each run copies it into the work volume,
 
 ## Screenshots
 
-A suite's `screenshots()` switches the color theme three times and back, with a pause per switch for the window to repaint, and takes a shot in each. Without `GCODE_SCREENSHOTS` it returns at once (`suite/shooting.ts`), since the webview tests check the themes. `start` still switches to high contrast on the start page without it, for its check on Noodle. The pauses took at least 31% of the file time before.
+A suite's `screenshots()` switches the color theme three times and back, with a pause per switch for the window to repaint, and takes a shot in each. Without `GCODE_SCREENSHOTS` it returns at once (`suite/shooting.ts`), since the webview tests check the themes. The pauses took at least 31% of the file time before. The CPU profiles of `style`, `start` and `working` run only with `GCODE_PERF=1`; `start` and `working` spent more than 60 s each on them.
 
 Set `GCODE_SCREENSHOTS` to a folder, on the host or for the container. The container writes the screenshots there:
 
@@ -216,6 +216,6 @@ The final run passed 52 of 53 files the first time and all 53 after the retry. `
 
 Run D passed all 53 files the first time. In run E, at a load of 18 to 24, four files failed the first time: `attention` (the 30-second wait for the card after the reload), `widget` (the grown widget's height), `composer` (one model request short) and `settings` (a user setting write that did not land in 60 s). The first three passed on the retry; `settings` failed again. `settings` ran first in a newly launched window in the retry, so no earlier suite's state reached it.
 
-For an engine change outside the request shapers, such as `packages/engine/src/checkpoints.ts`, `pnpm test:affected` picks `chat`, `panel` and `working`. Their VS Code part took 136 s in 2 launches, most of it `working`.
+For an engine change outside the request shapers, such as `packages/engine/src/checkpoints.ts`, `pnpm test:affected` picks `chat`, `panel` and `working`. Their VS Code part took 136 s in 2 launches, most of it `working`. `working` now takes about 7.5 s, since its CPU profile runs only with `GCODE_PERF=1` and its panel checks are in `webview/working.webview.test.ts`.
 
-The file times in run D add up to 839 s, so two windows can finish in no less than about 420 s, and the run took 447 s of vitest time. The pool is limited by the suites themselves: `start` (101 s) and `working` (95 s) are a quarter of it, and both could move to the webview project. The other agents on the machine kept the load between 7 and 22 during both runs, so a quiet machine is faster. `modes` now takes about 9 s; its five screenshot loops held about 36 s of pauses, by a count of the sleeps in them.
+The file times in run D add up to 839 s, so two windows can finish in no less than about 420 s, and the run took 447 s of vitest time. The pool is limited by the suites themselves: `start` (101 s) and `working` (95 s) were a quarter of it. They now take about 2.3 s and 7.5 s, with their panel checks in the webview project (`docs/t1-fast-tests.md`). The other agents on the machine kept the load between 7 and 22 during both runs, so a quiet machine is faster. `modes` now takes about 9 s; its five screenshot loops held about 36 s of pauses, by a count of the sleeps in them.
