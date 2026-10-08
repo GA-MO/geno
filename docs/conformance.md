@@ -149,6 +149,29 @@ P30 covers rows that have no Claude Code conformance test:
 | B/B-87 | `sandbox.test.ts`: the allowlist is empty unless `GCODE_SANDBOX_ALLOWED_DOMAINS` names hosts, and keeps only host forms. `runtime.test.ts` (extension): the setting reaches the engine, and a workspace's value does not. |
 | B/B-65 | `permissions.conformance.test.ts`, both wires: with `checkAfterEdit` on and a bare `Bash` deny in `.claude/settings.json`, an edit lands, its result says the check did not run and names the rule, and the check's file is not made. Without the deny, the same edit runs the check. |
 
+## Reads outside the workspace (P31)
+
+`read`, `grep`, `glob` and `list` reach as far as Claude Code's working directories: the workspace, the directories the user added, and those allowed for the session. A path outside all of them meets the rule `cat` of the same path meets (`path-outside-workspace`, `outsideReadDenial` in `core/src/approval.ts`): Ask asks, Auto sends it to the classifier, and Plan and a run nobody can answer refuse it. A refusal names the readable directories. A Read deny refuses before any question. After a yes, the call reads the path, and the credentials rule (`SECRET_PATH`) is judged on the whole path, so `read ~/.ssh/config` still asks as a credentials file. `withReach` in `engine/src/tools/agent.ts` wraps the four tools; a call that names an absolute path or `..` runs alone, since it may ask.
+
+The card offers "Allow this directory for the session": the directory of the file, or the directory the call names. The engine keeps it for the session across its runs (`sessionDirectories` in `serve.ts`), and commands honour it too, so `cat` there needs no question either. A path that names credentials offers no directory.
+
+Two places add directories. The `gcode.additionalDirectories` setting, which the engine reads as `GCODE_ADDITIONAL_DIRECTORIES`, takes a path, read-only, or `{ "path", "writable": true }`; the workspace's value counts only in a trusted workspace. `permissions.additionalDirectories` in Claude Code's settings files adds read-only directories, with P29's trust rule: the repository's two files wait for a trusted workspace, with one warning line, and the user's own file applies everywhere. A relative path starts at the workspace and `~/` at the home; a path that is no directory is left out with a warning line (`engine/src/directories.ts`). An added directory reads as the workspace does, the credentials rule judged below it, so `.env` there still asks and `grep` leaves it out. A writable one is open to `edit` (`writeRoots` in `ToolContext`) and to the sandbox's `allowWrite`; a read-only one is not, so a write there fails.
+
+P31 also tells the classifier what the sandbox reaches: with `gcode.sandbox.allowedDomains` set, its system prompt names those hosts in place of "it has no network". Without it, the request is byte for byte what it was.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-PERM-04 | `ls /outside` is blocked, with "may only list files in the allowed working directories for this session" and a suggestion to allow `Read(//outside/**)`. | `read` and `list` outside the workspace ask in Ask, as `cat` of the same path does, and the card offers the directory for the session. In Auto the classifier judges it. When nobody can answer, `read`, `grep`, `glob` and `cat` are refused with "Geno may read only in these directories in this session" and the directories. The text never reaches the model. Adapted: Geno asks where Claude Code blocks, as its bash path check already did, and offers the session directory in place of a `Read` allow, since a Geno path rule only asks or denies. | pass (was fail: `read` outside failed outright, and the denial named no directory) | `permissions.conformance.test.ts`, both wires; `permission-rules.e2e.test.ts` for the card |
+
+P31 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-67, B/B-73 | `permissions.conformance.test.ts`, both wires: "Allow this directory for the session" lets the next `read`, a `grep` and a `cat` in that directory run with no card, keeps `.env` there asking, and holds for a later run of the session. `permission-rules.e2e.test.ts`, over ACP: the card's options are Allow once, Allow this directory for the session and Reject, and the next prompt reads another file there with no card. `hooks.conformance.test.ts`, T-PERM-12: a PreToolUse hook's allow does not answer a read outside; the user does. `approval.test.ts` (core): a path in an added directory needs no question from a command, and the read rule's verdicts are `cat`'s in every mode. |
+| B/B-68 | `permissions.conformance.test.ts`, both wires: a `read`, `list`, `grep` and `cat` in a directory `GCODE_ADDITIONAL_DIRECTORIES` adds run with no card, in a run nobody can answer too, and `read .env` there is refused as a credentials file. An `edit` and a `touch` there fail when it is read-only and land when it is writable. `additionalDirectories` in `.claude/settings.json` waits for a trusted workspace with one warning line, and in `~/.claude/settings.json` applies without one. `directories.test.ts`: the setting's forms, a value that is not a list, `~` and relative paths, a link, and a path that is no directory. `claude-permissions.test.ts` (core): `additionalDirectories` as written, and an entry that is not a path skipped. |
+| B/B-61 (list) | `permissions.conformance.test.ts`, both wires: `list` leaves out the files a `Read(private/**)` deny covers, and `list private` is refused naming the rule. |
+| B/B-87 (classifier) | `classifier.test.ts` (core): the same request as before with no allowlist, and the hosts in the system prompt with one. `classifier.test.ts` (engine): `GCODE_SANDBOX_ALLOWED_DOMAINS` reaches the classifier's request. |
+
 ## Environment (P5)
 
 `captureEnvironment` in `engine/src/environment.ts` records the session's environment when it starts, and the session-start event keeps it beside the loaded context. `renderEnvironment` in `core/src/environment.ts` writes it into the opening user message.
@@ -635,7 +658,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-PERM-01 | keep Geno's, adopt | P28 | partial: the long and unparsable asks pass (B/B-66) |
 | T-PERM-02 | deliberate | none | no test yet |
 | T-PERM-03 | adapt | P32 | no test yet |
-| T-PERM-04 | adapt | P31 | no test yet |
+| T-PERM-04 | adapt | P31 | pass |
 | T-PERM-05 | adapt; adopt | P3, P28, P14 | pass |
 | T-PERM-09 | at parity | P29 | pass |
 | T-PERM-10 | adapt | P28 | pass |
