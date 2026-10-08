@@ -522,6 +522,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** `general-purpose` aliases `worker`. Read `~/.claude/agents`. Add an `omitClaudeMd` field, set on `explore` and `plan` after measuring explore's cost and success with and without it. Add a `subagentModel` setting and alias slots, such as `haiku` to a small model id. Record depth in the child's `session-start`.
 - **Check.** T-MEM-03. A loader test with a fake `$HOME/.claude/agents`. `model: haiku` runs on the configured id.
 - **Size.** 1 day. **Depends on.** P8.
+- **Status.** Done. `~/.claude/agents` loads after Geno's home and before the workspace, so the user's own agents win, as for skills. `general-purpose`, `Explore` and `Plan` alias `worker`, `explore` and `plan` everywhere an agent is named. The setting and the alias slots are environment variables, as the other model roles are: `GCODE_SUBAGENT_MODEL` and `GCODE_<ALIAS>_MODEL`. `omitClaudeMd` also drops the skill listing for a child without the `skill` tool, and logs an omitted git status as `"omitted"` so the child still knows it is in a repository. The explore A/B on qwen3.8-flash ([results/p22-omit-claude-md.md](results/p22-omit-claude-md.md)): 64% less per run, 16 of 18 answers against 18 of 18, both misses at the 4-turn cap. [conformance.md](conformance.md) has the rest.
 
 ### P23: model capability record
 
