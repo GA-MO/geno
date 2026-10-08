@@ -1120,6 +1120,7 @@ const CHILD_TASK_ENDS: Readonly<Record<ChildEnd['kind'], TaskEnd>> = {
   failed: 'failed',
   cancelled: 'stopped',
   capped: 'done',
+  interrupted: 'stopped',
 };
 
 /** An Arena run's own task ends as the run settles: ranked, with no lane that passed, or stopped. */

@@ -65,7 +65,7 @@ export const workedMs = (turn: Turn, now: number): number =>
 const quiet = (turn: Turn): Turn => (turn.notice === undefined && turn.progress === undefined ? turn : { ...turn, notice: undefined, progress: undefined });
 
 /** How a child's end reads on its own turn. */
-const CHILD_TURN_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TurnStatus, 'streaming'>>> = { done: 'done', cancelled: 'stopped', failed: 'failed', capped: 'failed' };
+const CHILD_TURN_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TurnStatus, 'streaming'>>> = { done: 'done', cancelled: 'stopped', failed: 'failed', capped: 'failed', interrupted: 'stopped' };
 
 /** Replaces the child `id` of the turn with `change(child)`; a turn without it, or an unchanged child, is returned as is. */
 function withChild(turn: Turn, id: string, change: (child: Child) => Child): Turn {

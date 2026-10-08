@@ -7,6 +7,7 @@ import { BANNER_START, GENO_NOTE, GENO_NOTES_PROMPT, indentLines, instructionPat
 import { REPORT_TOOL } from './handback.js';
 import { stripHidden } from './hidden.js';
 import { TOOL_NAMES } from './tools.js';
+import type { Waiter } from './waiting.js';
 
 /**
  * Subagents: a child session that one parent tool call starts, which works on its own task and hands back a short
@@ -311,16 +312,20 @@ export type ChildOf = {
 export const CHILD_CAPS = ['turns', 'cost'] as const;
 export type ChildCap = (typeof CHILD_CAPS)[number];
 
-/** How a child ended. Every end but `done` leaves a partial report. */
+/**
+ * How a child ended. Every end but `done` leaves a partial report. `interrupted`: the engine that ran it stopped
+ * before it ended, and the next engine for the folder logged the end.
+ */
 export type ChildEnd =
   | { readonly kind: 'done' }
   | { readonly kind: 'failed'; readonly reason: string }
   | { readonly kind: 'cancelled' }
-  | { readonly kind: 'capped'; readonly cap: ChildCap };
+  | { readonly kind: 'capped'; readonly cap: ChildCap }
+  | { readonly kind: 'interrupted' };
 
 export type ChildStatus = { readonly kind: 'running' } | ChildEnd;
 
-export const CHILD_STATUS_KINDS = ['running', 'done', 'failed', 'cancelled', 'capped'] as const satisfies readonly ChildStatus['kind'][];
+export const CHILD_STATUS_KINDS = ['running', 'done', 'failed', 'cancelled', 'capped', 'interrupted'] as const satisfies readonly ChildStatus['kind'][];
 
 const END_OF: Readonly<Record<DoneReason, ChildEnd>> = {
   end_turn: { kind: 'done' },
@@ -351,6 +356,8 @@ export type ChildStartEvent = {
   readonly effort: Effort;
   readonly caps: ChildCaps;
   readonly start: ChildStart;
+  /** The engine that runs it, so the next engine for the folder can tell a run cut off from one still running. */
+  readonly by?: Waiter | undefined;
 };
 
 export type ChildEndEvent = {
@@ -427,6 +434,7 @@ const END_WORDS: { readonly [K in ChildEnd['kind']]: (end: Extract<ChildEnd, { k
   failed: ({ reason }) => `failed: ${reason}`,
   cancelled: () => 'cancelled by the user',
   capped: ({ cap }) => `stopped at its ${cap === 'turns' ? 'turn' : 'cost'} cap`,
+  interrupted: () => 'was cut off when Geno stopped',
 };
 
 export const childEndWords = (end: ChildEnd): string => (END_WORDS[end.kind] as (e: ChildEnd) => string)(end);
