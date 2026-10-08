@@ -43,6 +43,8 @@ type Options = {
   readonly rules?: readonly NewRule[];
   /** The user's own Claude Code settings, written to `~/.claude/settings.json` under the run's fake home. */
   readonly userSettings?: unknown;
+  /** Files written under the run's fake home, by their path from it. */
+  readonly homeFiles?: Readonly<Record<string, string>>;
   /** VS Code's workspace trust, as the extension passes it. */
   readonly trusted?: boolean;
   /** The check command, run after each edit when `checkAfterEdit` is set. */
@@ -57,15 +59,20 @@ type Options = {
 };
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
-async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted, check, checkAfterEdit = false, classify, env: more = {}, sessionDirectories }: Options) {
-  const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
-  const { workspace, io: served, env, store, seen } = await scriptedWire(wire, script, files);
+/** `turns` may be built from the run's fake home, for calls that name a path in it. */
+async function scripted(wire: Wire, turns: readonly Turn[] | ((home: string) => readonly Turn[]), { files, mode, answers = [], web, rules = [], userSettings, homeFiles = {}, trusted, check, checkAfterEdit = false, classify, env: more = {}, sessionDirectories }: Options) {
+  const { workspace, io: served, env, store, seen, more: serve } = await scriptedWire(wire, [], files);
+  serve(...(typeof turns === 'function' ? turns(env['HOME']!) : turns).map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls))));
   const warnings: string[] = [];
   const io = { ...served, env: { ...served.env, ...more }, err: (line: string) => warnings.push(line) };
   for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
   if (userSettings !== undefined) {
     await mkdir(path.join(env['HOME']!, '.claude'), { recursive: true });
     await writeFile(path.join(env['HOME']!, '.claude', 'settings.json'), JSON.stringify(userSettings));
+  }
+  for (const [file, text] of Object.entries(homeFiles)) {
+    await mkdir(path.dirname(path.join(env['HOME']!, file)), { recursive: true });
+    await writeFile(path.join(env['HOME']!, file), text);
   }
   const asked: Denial[] = [];
   const pending = [...answers];
@@ -96,7 +103,7 @@ async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answe
   });
   /** Every tool result the model was sent, by tool use id, as the model reads it on this wire. */
   const view = (): Map<string, ToolView> => new Map(seen().flatMap((request) => request.results.map((r) => [r.id, { text: r.text, error: r.error }] as const)));
-  return { workspace, store, asked, result, warnings, requests: seen, sent: () => JSON.stringify(seen()), view };
+  return { workspace, home: env['HOME']!, store, asked, result, warnings, requests: seen, sent: () => JSON.stringify(seen()), view };
 }
 
 describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
@@ -380,6 +387,43 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const user = await scripted(wire, [{ calls: [own] }, { answer: 'Read it.' }], { files, mode: 'ask', userSettings: { permissions: { additionalDirectories: [dir] } } });
     expect(user.asked).toEqual([]);
     expect(user.view().get(own.id)).toEqual({ error: false, text: `1\t${NOTE}` });
+  });
+
+  it("B/B-68 an added ~ keeps the home's credential places: read of ~/.config/gh/hosts.yml asks in Ask, is refused when nobody can answer, and grep leaves it out", async () => {
+    const homeFiles = { '.config/gh/hosts.yml': `github.com:\n  oauth_token: ${SECRET}\n`, 'notes/plan.md': `${NOTE}\n` };
+    const env = added(['~']);
+    const hosts = (home: string) => path.join(home, '.config', 'gh', 'hosts.yml');
+
+    const asking = (home: string) => [{ calls: [call('read', { path: hosts(home) })] }, { answer: 'Stopped.' }];
+    const ask = await scripted(wire, asking, { files, mode: 'ask', answers: ['reject'], homeFiles, env });
+    expect(ask.asked).toEqual([{ rule: 'secret-path', reason: 'a credentials file such as .env', command: `read ${hosts(ask.home)}`, verdict: 'ask' }]);
+
+    const ids: Record<string, string> = {};
+    const named = (key: string, name: string, input: unknown): FakeToolUse => {
+      const use = call(name, input);
+      ids[key] = use.id;
+      return use;
+    };
+    const refusing = (home: string) => [
+      {
+        calls: [
+          named('read', 'read', { path: hosts(home) }),
+          // Patterns that do not match their own text, since the fake home also holds the session's log.
+          named('grep', 'grep', { pattern: 'oauth_[t]oken|desig[n] notes', path: home }),
+          named('scoped', 'grep', { pattern: 'oauth_[t]oken', path: path.join(home, '.config', 'gh') }),
+          named('notes', 'read', { path: path.join(home, 'notes', 'plan.md') }),
+        ],
+      },
+      { answer: 'I cannot.' },
+    ];
+    const alone = await scripted(wire, refusing, { files, mode: 'non-interactive', homeFiles, env });
+    expect(alone.view().get(ids['read']!)).toMatchObject({ error: true, text: expect.stringContaining('denied: `read') });
+    expect(alone.view().get(ids['read']!)!.text).toContain('a credentials file such as .env');
+    expect(alone.view().get(ids['scoped']!)).toMatchObject({ error: true, text: expect.stringContaining('credentials') });
+    expect(alone.view().get(ids['grep']!)).toEqual({ error: false, text: expect.stringContaining(`${path.join(alone.home, 'notes', 'plan.md')}:1:${NOTE}`) });
+    expect(alone.view().get(ids['grep']!)!.text).not.toContain('hosts.yml');
+    expect(alone.view().get(ids['notes']!)).toEqual({ error: false, text: `1\t${NOTE}` });
+    expect(ask.sent() + alone.sent()).not.toContain(SECRET);
   });
 
   it('T-PERM-05 list follows a Read deny: it leaves the files out, and a directory the rule names is refused', async () => {
@@ -676,7 +720,7 @@ describe('N-02 hidden Unicode from outside the workspace', () => {
   });
 
   it('N-02 an MCP result and a subagent report reach the model without hidden characters, the rest byte for byte', async () => {
-    const ctx = { workspace: tmpdir(), spillDir: tmpdir(), readRoots: [], attachmentsDir: tmpdir(), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 } satisfies ToolContext;
+    const ctx = { workspace: tmpdir(), spillDir: tmpdir(), readRoots: [], credentialPlaces: [], attachmentsDir: tmpdir(), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 } satisfies ToolContext;
     const returning = (text: string) => ({ input: {} as never, describe: () => '', run: async () => text });
     const report = childReport('explore', 'c1' as SessionId, { kind: 'done' }, `found ${HIDDEN_LINE}`, { turns: 1, costUsd: 0.001, durationMs: 1000 });
     const executors = { mcp__docs__get: returning(`docs ${HIDDEN_LINE} end`), agent: returning(report) };

@@ -1,6 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
+import { credentialPlaces } from '@g-code/core';
 import { ENGINE_ENV_FILE } from './child-env.js';
 import { EngineError } from './errors.js';
 import { runShell, spawnShell, type ShellOptions, type ShellResult, type SpawnedShell, type SpawnOptions } from './process.js';
@@ -55,9 +56,6 @@ export type PolicyInput = {
   readonly writable?: readonly string[];
 };
 
-/** Where the user's CLIs keep keys and tokens, under the home folder. Auto lets the classifier judge reads outside the workspace, so these stay unreadable whatever it says. */
-export const CREDENTIAL_PATHS = ['.ssh', '.aws', '.azure', '.config/gcloud', '.config/gh', '.docker', '.gnupg', '.kube', '.netrc'] as const;
-
 /** The variable that turns on the sandbox's network for some hosts, which the editor's `gcode.sandbox.allowedDomains` sets. */
 export const SANDBOX_DOMAINS_ENV = 'GCODE_SANDBOX_ALLOWED_DOMAINS';
 const SANDBOX_DOMAIN = /^(?:\*\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/;
@@ -77,7 +75,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
     writable: await withRealPaths([input.workspace, input.tempDir, ...(input.writable ?? [])]),
     denyRead: await withRealPaths([
       input.store.evalsDir,
-      ...CREDENTIAL_PATHS.map((p) => path.join(input.home, p)),
+      ...credentialPlaces(input.home),
       ENGINE_ENV_FILE,
       ...repos,
       ...(input.denyRead ?? []),

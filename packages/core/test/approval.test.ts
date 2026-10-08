@@ -5,6 +5,8 @@ import {
   DENY_RULE_IDS,
   DENY_RULES,
   outsideReadDenial,
+  credentialPlaces,
+  inCredentialPlace,
   splitCommand,
   type ApprovalMode,
   type CommandScope,
@@ -466,16 +468,24 @@ describe('P31 directories beyond the workspace', () => {
   });
 
   it('T-PERM-04 a read outside meets the rule cat of the same path meets in each mode, and offers its directory', () => {
-    expect(APPROVAL_MODES.map((mode) => outsideReadDenial('read /x/a.md', '/x/a.md', '/x', mode)?.verdict)).toEqual(APPROVAL_MODES.map((mode) => DENY_RULES['path-outside-workspace'].verdicts[mode]));
-    expect(outsideReadDenial('read /x/a.md', '/x/a.md', '/x', 'ask')).toEqual({ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: 'read /x/a.md', verdict: 'ask', directory: '/x' });
+    expect(APPROVAL_MODES.map((mode) => outsideReadDenial('read /x/a.md', '/x/a.md', '/x', mode, [])?.verdict)).toEqual(APPROVAL_MODES.map((mode) => DENY_RULES['path-outside-workspace'].verdicts[mode]));
+    expect(outsideReadDenial('read /x/a.md', '/x/a.md', '/x', 'ask', [])).toEqual({ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: 'read /x/a.md', verdict: 'ask', directory: '/x' });
   });
 
   it('T-PERM-04 a read outside that names credentials offers no directory for the session', () => {
-    expect(outsideReadDenial('read /Users/me/.ssh/config', '/Users/me/.ssh/config', '/Users/me/.ssh', 'auto')).toEqual({
+    expect(outsideReadDenial('read /Users/me/.ssh/config', '/Users/me/.ssh/config', '/Users/me/.ssh', 'auto', [])).toEqual({
       rule: 'path-outside-workspace',
       reason: 'a path outside the workspace',
       command: 'read /Users/me/.ssh/config',
       verdict: 'classify',
     });
+  });
+
+  it("a read outside in one of the home's credential places offers no directory for the session, whatever its case", () => {
+    const places = credentialPlaces('/Users/me');
+    expect(outsideReadDenial('read /Users/me/.config/gh/hosts.yml', '/Users/me/.config/gh/hosts.yml', '/Users/me/.config/gh', 'ask', places)?.directory).toBeUndefined();
+    expect(outsideReadDenial('read /Users/me/.Azure/token', '/Users/me/.Azure/token', '/Users/me/.Azure', 'ask', places)?.directory).toBeUndefined();
+    expect(outsideReadDenial('read /Users/me/.config/other/a', '/Users/me/.config/other/a', '/Users/me/.config/other', 'ask', places)?.directory).toBe('/Users/me/.config/other');
+    expect(inCredentialPlace(places, '/Users/me/.config/ghost')).toBe(false);
   });
 });

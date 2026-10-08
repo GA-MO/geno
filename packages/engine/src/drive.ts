@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { budgetReminder, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
@@ -12,7 +13,7 @@ import { arrivalEvents, type Arrival } from './inbox.js';
 import { appendEvent } from './sessions.js';
 import { snapshotKeeper } from './snapshots.js';
 import type { Store } from './store.js';
-import { displayPath } from './tools/context.js';
+import { credentialPlacesOf, displayPath } from './tools/context.js';
 import { workspaceDir } from './workspace.js';
 import type { PreToolStep, RanCall, StopHook, ToolHookSaid, ToolHooks } from './hooks.js';
 import { describeCall, PermissionRerun, runTool, type Executor, type Executors, type ToolContext, type ToolRun } from './tools/index.js';
@@ -247,6 +248,7 @@ export async function drive(
     spillDir: path.join(store.spillDir, session.id),
     spillChars: capabilitiesOf(session.provider, session.model).spillChars,
     readRoots: mode.readRoots ?? [],
+    credentialPlaces: await credentialPlacesOf(io.env['HOME'] || homedir()),
     attachmentsDir: attachmentsDir(store, session.id),
     rg: io.env['GCODE_RG'] || 'rg',
     signal,

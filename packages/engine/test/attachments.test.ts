@@ -91,7 +91,7 @@ describe('read of an image', () => {
     await writeFile(path.join(ws, 'a.ts'), 'export const a = 1;\n');
     const ctx: ToolContext = {
       workspace: ws,
-      spillDir: path.join(root, 'spill'), readRoots: [],
+      spillDir: path.join(root, 'spill'), readRoots: [], credentialPlaces: [],
       spillChars: 24_000,
       attachmentsDir: path.join(root, 'attachments'),
       rg: rgCommand(),

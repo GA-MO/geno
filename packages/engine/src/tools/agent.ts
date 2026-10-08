@@ -461,7 +461,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   /** The question `cat` of the same path meets, which offers the directory for the session; a refusal throws, naming the readable directories. */
   const askOutside = async (name: ReachTool, { target, directory }: Outside, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
-    const denial = outsideReadDenial(`${name} ${target}`, target, directory, mode);
+    const denial = outsideReadDenial(`${name} ${target}`, target, directory, mode, ctx.credentialPlaces);
     if (denial === undefined) return undefined;
     const keep = (answer: KeptAnswer) => {
       if (answer === 'allow-session' && denial.directory !== undefined) tools.directories.allow(denial.directory);
