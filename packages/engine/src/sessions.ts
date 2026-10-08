@@ -180,8 +180,10 @@ const approvalSchema = z.strictObject({
   classifier: z
     .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable() })
     .optional(),
-  decidedBy: z.enum(['rule', 'classifier', 'user']),
+  decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: verdict.exclude(['ask']),
+  message: z.string().optional(),
+  interrupt: z.literal(true).optional(),
 });
 
 const hookNotesSchema = z.array(z.strictObject({ how: z.enum(['success', 'additional-context', 'blocking']), text: z.string() })).min(1);
@@ -388,7 +390,7 @@ const turnEventSchema = z.union([
       ...(['PreToolUse', 'PostToolUse', 'PostToolUseFailure'] as const).map((event) =>
         z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal(event), matched: z.string().min(1), toolUseId: z.string().min(1), notes: hookNotesSchema }),
       ),
-      ...(['PostToolBatch', 'Stop'] as const).map((event) => z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal(event), notes: hookNotesSchema })),
+      ...(['PostToolBatch', 'Stop', 'SubagentStart', 'SubagentStop'] as const).map((event) => z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal(event), notes: hookNotesSchema })),
     ]),
     z.strictObject({ kind: z.literal('report-nudge'), ...seqFields }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),

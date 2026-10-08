@@ -39,8 +39,12 @@ export type ApprovalRecord = {
   /** The flagged part of the line, or the whole line when several parts were flagged. */
   readonly command: string;
   readonly classifier?: ClassifierRun | undefined;
-  readonly decidedBy: 'rule' | 'classifier' | 'user';
+  /** `hook` is a PermissionRequest hook that answered the card in the user's place. */
+  readonly decidedBy: 'rule' | 'classifier' | 'user' | 'hook';
   readonly verdict: Exclude<Verdict, 'ask'>;
+  /** A PermissionRequest hook's deny: what it told the model, and whether it ends the turn, as the user's no does. */
+  readonly message?: string | undefined;
+  readonly interrupt?: true | undefined;
 };
 
 /** The question the user answers before a flagged command runs, with the classifier's reason when it asked. */

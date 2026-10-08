@@ -1,5 +1,5 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { REPORT_TOOL } from './handback.js';
+import { REPORT_TOOL, reportMessageOf } from './handback.js';
 import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
@@ -74,10 +74,10 @@ const AFTER_STOP: Record<StopReason, LoopStep> = {
   model_context_window_exceeded: done('error'),
 };
 
-/** A Stop hook's block: the one hook output that keeps the conversation going, after the model ended its turn. */
-type StopFeedback = Extract<TurnEvent, { kind: 'hook-context'; event: 'Stop' }>;
+/** A Stop or SubagentStop hook's block: the one hook output that keeps the conversation going, after the model ended its turn. */
+type StopFeedback = Extract<TurnEvent, { kind: 'hook-context'; event: 'Stop' | 'SubagentStop' }>;
 
-const isStopFeedback = (event: TurnEvent): event is StopFeedback => event.kind === 'hook-context' && event.event === 'Stop';
+const isStopFeedback = (event: TurnEvent): event is StopFeedback => event.kind === 'hook-context' && (event.event === 'Stop' || event.event === 'SubagentStop');
 
 type ConversationEvent =
   | Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' | 'mode' | 'notice' | 'effort' | 'title' | 'child-start' | 'child-end' | 'lane-apply' | 'background-end' | 'wait' | 'wake' | 'backend-start' | 'backend-model' | 'spinoff' | 'chapter' | 'cut' | 'compact' | 'file-changed' | 'hook-context' }>
@@ -197,17 +197,31 @@ export const stopHookActive = (events: readonly TurnEvent[], run: Run): boolean 
 
 /**
  * Whether a Stop hook's block may keep the turn going: once in a row. After a block, the model must call a tool before
- * another block counts, so a hook that always blocks cannot loop the model; the run's limits bound the rest.
+ * another block counts, so a hook that always blocks cannot loop the model; the run's limits bound the rest. A
+ * subagent's report call does not count, or a SubagentStop hook that always blocks would loop the subagent.
  */
 export function stopMayContinue(events: readonly TurnEvent[], run: Run): boolean {
   const ran = thisRun(events, run);
   const last = ran.findLastIndex(isStopFeedback);
-  return last === -1 || ran.slice(last + 1).some((e) => e.kind === 'tool-result');
+  return last === -1 || ran.slice(last + 1).some((e) => e.kind === 'tool-result' && e.name !== REPORT_TOOL);
 }
 
 /** Whether the model ended the turn itself, which fires Stop, rather than the user's no or a subagent's report. */
 export const modelEndedTurn = (events: readonly TurnEvent[], run: Run): boolean => lastLiveEvent(events, run).kind === 'assistant';
 
+/** Whether a subagent finished responding, which fires SubagentStop: its model ended the turn, or its report went through. */
+export function finishedResponding(events: readonly TurnEvent[], run: Run): boolean {
+  if (modelEndedTurn(events, run)) return true;
+  const newest = newestTurn(events);
+  return run.handback === true && lastLiveEvent(events, run).kind === 'tool-result' && newest !== undefined && reported(newest.after);
+}
+
 /** Claude Code's `last_assistant_message`: the text of the newest model turn. */
 export const lastAssistantText = (events: readonly TurnEvent[]): string =>
   newestTurn(events)?.turn.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n') ?? '';
+
+/** A subagent's `last_assistant_message`: its newest turn's report, when that turn reported, else the turn's text. */
+export function lastResponseText(events: readonly TurnEvent[]): string {
+  const report = newestTurn(events)?.turn.content.flatMap((block) => (block.type === 'tool_use' ? (reportMessageOf(block) ?? []) : [])).at(-1);
+  return report ?? lastAssistantText(events);
+}

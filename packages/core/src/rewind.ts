@@ -96,7 +96,7 @@ export function cutView(events: readonly TurnEvent[]): TurnEvent[] {
       const dropped = at === -1 ? [] : view.splice(at);
       for (const e of dropped) if (e.kind === 'assistant') for (const use of toolUsesOf(e.content)) cutUses.add(use.id);
       // Every other hook's output belongs to the prompt or the turns the cut drops.
-      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind] && !(e.kind === 'hook-context' && e.event !== 'SessionStart')), event);
+      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind] && !(e.kind === 'hook-context' && e.event !== 'SessionStart' && e.event !== 'SubagentStart')), event);
       continue;
     }
     const use = toolUseOf(event);
