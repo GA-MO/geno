@@ -31,6 +31,7 @@ import {
   pathRuleFor,
   restoreHidden,
   STOP_AND_WAIT,
+  DONT_ASK,
   ruledDenial,
   secretReadDenial,
   sleepRefusal,
@@ -185,17 +186,18 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
     return `denied: \`${command}\` did not run. A PermissionRequest hook answered for the user and refused it${why}. ${interrupt === true ? STOP_AND_WAIT : 'Do not retry it; find another way, or say in your answer what you need the user to allow.'}`;
   }
   if (rule === 'hook-ask') {
-    return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
+    return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. ${DONT_ASK}`;
   }
   if (rule === 'workspace-deny') {
     return `denied: \`${command}\` matches ${reason}. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
   if (rule === 'workspace-ask') {
-    return `denied: \`${command}\` matches ${reason}, and nobody can answer here. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
+    return `denied: \`${command}\` matches ${reason}, and nobody can answer here. ${DONT_ASK}`;
   }
   if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
     return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
   }
+  if (mode === 'non-interactive' && decidedBy === 'rule') return `denied: \`${command}\` uses ${reason}, which needs the user's approval, and nobody can answer here. ${DONT_ASK}`;
   return `denied: \`${command}\` ${
     decidedBy === 'classifier'
       ? `was refused by the safety classifier: ${classifier?.reason}`

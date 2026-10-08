@@ -20,6 +20,10 @@ export type LoopStep =
 /** What a call the user turned down tells the model, as Claude Code's rejection does. */
 export const STOP_AND_WAIT = 'STOP what you are doing and wait for the user to tell you how to proceed.';
 
+/** Claude Code's don't-ask denial, for a call refused because nobody can answer its question. */
+export const DONT_ASK =
+  "IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.";
+
 /** Worded after Claude Code's interrupt, output-limit and rejection results, so the model knows why a call has no output. */
 export const UNRUN_TEXTS = {
   stopped: '[Request interrupted by user for tool use] The user stopped this call while it ran, so it may have partly run.',
