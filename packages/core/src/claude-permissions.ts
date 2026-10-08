@@ -1,6 +1,7 @@
 import { SHELL_TOOLS } from './agent.js';
 import type { CommandScope } from './approval.js';
 import { CLAUDE_TOOL_NAMES } from './hooks.js';
+import { NOTEBOOK_EDIT_TOOL } from './notebook.js';
 import { parseRule, RULE_EFFECTS, type NewRule } from './permission-rules.js';
 
 /** A Claude Code deny on a whole tool, such as `WebFetch`, and a Geno tool it stops; `Bash` stops every shell tool. */
@@ -18,6 +19,9 @@ export type ClaudePermissions = {
 // Every Claude Code rule is a tool name, alone or with its argument in parentheses.
 const CLAUDE_RULE = /^(\w+)(?:\((.*)\))?$/s;
 const GENO_FORMS: ReadonlySet<string> = new Set(['Bash', 'Read', 'Edit', 'WebFetch']);
+
+// Claude Code's Edit rules cover every tool that edits files, NotebookEdit among them.
+const BARE_DENIES: Readonly<Record<string, readonly string[]>> = { Bash: SHELL_TOOLS, Edit: ['edit', NOTEBOOK_EDIT_TOOL] };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -61,7 +65,7 @@ export function claudePermissions(settings: unknown, scope: CommandScope): Claud
         else skipped.push(text);
       } else if (form === null || tool === undefined) skipped.push(text);
       else if (form[2] === undefined) {
-        const genoTools = tool === 'Bash' ? SHELL_TOOLS : CLAUDE_TOOL_NAMES[tool] === undefined ? [] : [CLAUDE_TOOL_NAMES[tool]];
+        const genoTools = BARE_DENIES[tool] ?? (CLAUDE_TOOL_NAMES[tool] === undefined ? [] : [CLAUDE_TOOL_NAMES[tool]]);
         if (effect === 'deny' && genoTools.length > 0) deniedTools.push(...genoTools.map((genoTool) => ({ tool: genoTool, text })));
         else skipped.push(text);
       } else skipped.push(text);

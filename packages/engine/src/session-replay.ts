@@ -83,6 +83,7 @@ export const TOOL_KINDS: Readonly<Record<string, acp.ToolKind>> = {
   glob: 'search',
   list: 'search',
   edit: 'edit',
+  notebook_edit: 'edit',
   bash: 'execute',
   check: 'execute',
   web_fetch: 'fetch',

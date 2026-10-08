@@ -1,0 +1,95 @@
+{
+  "newId": "a1b2c3d4",
+  "inputs": {
+    "v4.4.replace-code": {
+      "cell_id": "cell-1",
+      "new_source": "rows = load(limit=5)\nrows"
+    },
+    "v4.4.replace-markdown": {
+      "cell_id": "cell-0",
+      "new_source": "# Sales by région\n"
+    },
+    "v4.4.insert-start": {
+      "edit_mode": "insert",
+      "cell_type": "markdown",
+      "new_source": "Run the cells in order."
+    },
+    "v4.4.insert-middle": {
+      "edit_mode": "insert",
+      "cell_id": "cell-0",
+      "cell_type": "code",
+      "new_source": "import pandas as pd\n"
+    },
+    "v4.4.insert-end": {
+      "edit_mode": "insert",
+      "cell_id": "cell-2",
+      "cell_type": "code",
+      "new_source": ""
+    },
+    "v4.4.delete-middle": {
+      "edit_mode": "delete",
+      "cell_id": "cell-1",
+      "new_source": ""
+    },
+    "v4.4.delete-last": {
+      "edit_mode": "delete",
+      "cell_id": "cell-2",
+      "new_source": ""
+    },
+    "v4.4.code-to-markdown": {
+      "cell_id": "cell-1",
+      "cell_type": "markdown",
+      "new_source": "Loading is done in `load`."
+    },
+    "v4.4.markdown-to-code": {
+      "cell_id": "cell-0",
+      "cell_type": "code",
+      "new_source": "TITLE = \"Sales\""
+    },
+    "v4.5.replace-code": {
+      "cell_id": "load-data",
+      "new_source": "rows = load(limit=5)\nrows"
+    },
+    "v4.5.replace-markdown": {
+      "cell_id": "intro",
+      "new_source": "# Sales by région\n"
+    },
+    "v4.5.insert-start": {
+      "edit_mode": "insert",
+      "cell_type": "markdown",
+      "new_source": "Run the cells in order."
+    },
+    "v4.5.insert-middle": {
+      "edit_mode": "insert",
+      "cell_id": "intro",
+      "cell_type": "code",
+      "new_source": "import pandas as pd\n"
+    },
+    "v4.5.insert-end": {
+      "edit_mode": "insert",
+      "cell_id": "plot",
+      "cell_type": "code",
+      "new_source": ""
+    },
+    "v4.5.delete-middle": {
+      "edit_mode": "delete",
+      "cell_id": "load-data",
+      "new_source": ""
+    },
+    "v4.5.delete-last": {
+      "edit_mode": "delete",
+      "cell_id": "plot",
+      "new_source": ""
+    },
+    "v4.5.code-to-markdown": {
+      "cell_id": "load-data",
+      "cell_type": "markdown",
+      "new_source": "Loading is done in `load`."
+    },
+    "v4.5.markdown-to-code": {
+      "cell_id": "intro",
+      "cell_type": "code",
+      "new_source": "TITLE = \"Sales\""
+    }
+  }
+}

@@ -95,7 +95,7 @@ describe('parseAgentDefinition', () => {
 
   it('gives every tool when tools is absent, then takes disallowedTools away', () => {
     const { agent } = parsed({ description: 'Most things.', disallowedTools: 'Bash, Edit' });
-    expect(agent.tools).toEqual(['check', 'glob', 'grep', 'list', 'read', 'skill']);
+    expect(agent.tools, 'Claude Code keeps NotebookEdit when Edit is disallowed').toEqual(['check', 'glob', 'grep', 'list', 'notebook_edit', 'read', 'skill']);
   });
 
   it("takes Claude Code's MCP forms: none with a tools list that names none, every server's without a tools field, less disallowedTools", () => {
