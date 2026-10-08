@@ -5,7 +5,7 @@ import { asSessionId, type TurnEvent } from '@g-code/core';
 import type { Io } from '../../src/command.js';
 import { readSessionLog, sessionFile } from '../../src/sessions.js';
 import { openStore, type Store } from '../../src/store.js';
-import { fakeModel, type Turn } from '../fake-model.js';
+import { fakeModel, type Responder, type ScriptEntry } from '../fake-model.js';
 import { makeRepo } from '../git-fixture.js';
 import { rgCommand, runCli, type CliOptions } from '../helpers.js';
 
@@ -52,6 +52,15 @@ const openingOpenAi = (body: { readonly messages: readonly ChatMessage[] }): Ope
   first: textOf(body.messages.find((m) => m.role === 'user')!.content),
 });
 
+/**
+ * The answer for the next request of the conversation whose first user message holds `marker`, such as a parent's
+ * prompt or a child's task, for children whose requests interleave with their parent's.
+ */
+export const to = (marker: string, answer: Responder): ScriptEntry => ({
+  when: (request) => (request.wire === 'anthropic' ? openingAnthropic(request.body) : openingOpenAi(request.body)).first.includes(marker),
+  answer,
+});
+
 const CHAT_ERROR = '[error] ';
 
 function seenOpenAi(body: { readonly messages: readonly ChatMessage[] }): Seen {
@@ -87,7 +96,7 @@ const providerEnv = ({ provider, model }: AnthropicWireModel): Record<string, st
  */
 export async function scripted(
   wire: Wire,
-  script: readonly Turn[],
+  script: readonly ScriptEntry[],
   files: Readonly<Record<string, string>> = { 'a.ts': 'export const a = 1;\n' },
   anthropicModel: AnthropicWireModel = MODEL_STUDIO,
 ) {
@@ -101,7 +110,7 @@ export async function scripted(
       ? { ...base, ...providerEnv(anthropicModel) }
       : { ...base, GCODE_PROVIDER: 'openai', GCODE_MODEL: 'gpt-fake', OPENAI_API_KEY: 'sk-fake', GCODE_OPENAI_BASE_URL: 'http://fake-model.test/v1' };
   const { bodies, fetch } = model;
-  const more = (...turns: readonly Turn[]) => model.more(...turns);
+  const more = (...entries: readonly ScriptEntry[]) => model.more(...entries);
   const seen = (): Seen[] => bodies().map(wire === 'anthropic' ? seenAnthropic : seenOpenAi);
   const store: Store = openStore(env);
   const cli = (argv: readonly string[], options: CliOptions = {}) => runCli([...argv], env, { fetch, ...options });
