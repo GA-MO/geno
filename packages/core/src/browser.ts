@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BROWSER_RULES, mcpDenialFor, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
+import { BROWSER_RULES, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
 import { MAX_LONG_SIDE } from './attachments.js';
+import { domainRuleFor, mcpCallDenial, toolRuleOutcome, type PermissionRule } from './permission-rules.js';
 
 /** The built-in browser server's name, so its tools are `mcp__browser__*`. No configured server may take it. */
 export const BROWSER_SERVER = 'browser';
@@ -137,6 +138,8 @@ export type BrowserContext = {
   /** The user allowed this tool for the session; it skips the tool's question, never a URL's. */
   readonly allowedForSession: boolean;
   readonly page: BrowserPage | undefined;
+  /** The workspace's rules: `Browser(domain:...)` and the denies and asks of `WebFetch(domain:...)` on a URL, MCP rules on the tool. */
+  readonly rules?: readonly PermissionRule[] | undefined;
 };
 
 const effectivelyReadOnly = (call: BrowserCall): boolean =>
@@ -160,7 +163,10 @@ export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: Bro
     const script = typeof call.args['initScript'] === 'string' && call.args['initScript'] !== '';
     const command = `open ${url.url}${url.kind === 'remote' ? ` (host ${url.host})` : ''}${script ? ' with a script that runs on every page it loads' : ''}`;
     const reason = url.kind === 'refused' ? `${BROWSER_RULES[URL_RULES.refused].reason}: ${url.why}` : undefined;
-    return ruleDenial(URL_RULES[url.kind], mode, command, reason) ?? (script ? ruleDenial('browser-risky-tool', mode, command) : undefined);
+    const risky = () => (script ? ruleDenial('browser-risky-tool', mode, command) : undefined);
+    const ruled = url.kind === 'refused' ? undefined : toolRuleOutcome(domainRuleFor('browser', new URL(url.url).hostname, ctx.rules ?? []), mode, command);
+    if (ruled !== undefined) return ruled.kind === 'allowed' ? risky() : ruled.denial;
+    return ruleDenial(URL_RULES[url.kind], mode, command, reason) ?? risky();
   }
   const readOnly = effectivelyReadOnly(call);
   const page = ctx.page;
@@ -169,7 +175,7 @@ export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: Bro
     if (denial !== undefined) return denial;
   }
   if (BROWSER_TOOL_KINDS[call.tool] === 'risky') return ruleDenial('browser-risky-tool', mode, call.name);
-  return mcpDenialFor({ name: call.name, readOnly }, mode, ctx.allowedForSession);
+  return mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly }, mode, ctx.allowedForSession, ctx.rules ?? []);
 }
 
 const DEV_SCRIPTS = ['dev', 'start', 'serve', 'preview'] as const;

@@ -10,6 +10,7 @@ import {
   type BrowserUrl,
 } from '../src/browser.js';
 import { APPROVAL_MODES, type ApprovalMode, type RuleVerdict } from '../src/approval.js';
+import type { NewRule, PermissionRule } from '../src/permission-rules.js';
 
 const WORKSPACE = '/Users/me/ws';
 
@@ -75,6 +76,33 @@ const verdicts = (c: BrowserCall, context: BrowserContext = ctx()): Record<Appro
   Object.fromEntries(APPROVAL_MODES.map((mode) => [mode, browserDenialFor(c, mode, context)?.verdict ?? 'allow'])) as Record<ApprovalMode, RuleVerdict>;
 
 const remotePage = { url: browserUrlOf('https://evil.example/', WORKSPACE), approved: false };
+
+const ruleOf = (rule: NewRule, i: number): PermissionRule => ({ ...rule, id: `r${i}`, createdAt: '' }) as PermissionRule;
+const rulesOf = (...rules: readonly NewRule[]): readonly PermissionRule[] => rules.map(ruleOf);
+
+describe('B/B-63 domain and MCP rules in the browser', () => {
+  const open = call('new_page', { url: 'https://docs.example.com/guide' });
+
+  it('opens an allowed host without asking, and still asks about an init script', () => {
+    const rules = rulesOf({ effect: 'allow', tool: 'browser', domain: '*.example.com' });
+    expect(verdicts(open, ctx({ rules }))).toEqual({ plan: 'deny', ask: 'allow', auto: 'allow', 'non-interactive': 'deny' });
+    expect(browserDenialFor(call('new_page', { url: 'https://docs.example.com/', initScript: 'x()' }), 'ask', ctx({ rules }))?.rule).toBe('browser-risky-tool');
+  });
+
+  it('takes no allow from WebFetch(domain:...), but its deny and ask hold for the browser too', () => {
+    expect(verdicts(open, ctx({ rules: rulesOf({ effect: 'allow', tool: 'web_fetch', domain: 'docs.example.com' }) })).ask).toBe('ask');
+    expect(verdicts(open, ctx({ rules: rulesOf({ effect: 'deny', tool: 'web_fetch', domain: 'docs.example.com' }) }))).toEqual({ plan: 'deny', ask: 'deny', auto: 'deny', 'non-interactive': 'deny' });
+    expect(browserDenialFor(open, 'auto', ctx({ rules: rulesOf({ effect: 'ask', tool: 'web_fetch', domain: '*.example.com' }) }))).toMatchObject({ rule: 'workspace-ask', verdict: 'ask' });
+  });
+
+  it('lets an MCP allow on the browser server skip a tool question, never a URL rule or Plan', () => {
+    const click = call('click', { uid: '1' });
+    const rules = rulesOf({ effect: 'allow', mcp: 'mcp__browser' });
+    expect(verdicts(click, ctx({ rules }))).toEqual({ plan: 'deny', ask: 'allow', auto: 'allow', 'non-interactive': 'allow' });
+    expect(verdicts(open, ctx({ rules })).ask).toBe('ask');
+    expect(browserDenialFor(click, 'ask', ctx())?.keeps).toBe('mcp__browser__click');
+  });
+});
 
 describe('the browser approval table', () => {
   it('opens a local page without asking in Ask and Auto, for new_page and navigate_page alike', () => {

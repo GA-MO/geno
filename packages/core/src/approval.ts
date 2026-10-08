@@ -85,6 +85,8 @@ export type Denial = {
   readonly verdict: Exclude<RuleVerdict, 'allow'>;
   /** The workspace allow rule the question offers to save: a program and its fixed arguments. */
   readonly offer?: readonly string[];
+  /** Any other allow rule the question offers to save for the workspace, as the user would type it: a domain or an MCP tool. */
+  readonly keeps?: string;
 };
 
 // What cannot be undone: Auto still asks.

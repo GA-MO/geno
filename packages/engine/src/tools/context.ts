@@ -3,6 +3,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
+import type { PermissionStore } from '../permissions.js';
 import { isMissing } from '../store.js';
 
 export type ToolContext = {
@@ -40,6 +41,8 @@ export type ToolContext = {
   readonly permissionRequest?: PermissionAsk | undefined;
   /** The workspace's path rule that governs a tool on an absolute path; absent when the workspace has none. */
   readonly pathRule?: ((tool: PathTool, file: string) => PathRule | undefined) | undefined;
+  /** The workspace's rules, read at each call, and where an answer "for this workspace" saves one; absent outside a session. */
+  readonly permissions?: Pick<PermissionStore, 'list' | 'add'> | undefined;
 };
 
 /** Asks a call's PermissionRequest hooks about the card `denial` would show. */

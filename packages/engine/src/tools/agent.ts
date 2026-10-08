@@ -32,6 +32,7 @@ import {
   ruledDenial,
   secretReadDenial,
   sleepRefusal,
+  trustedDomains,
   ruleDenial,
   userRuleDenial,
   type AgentToolName,
@@ -118,8 +119,16 @@ export const freshAuto = (): { state: AutoState } => ({ state: AUTO_START });
 
 export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
-/** The call a question is about: its signal, and its PermissionRequest hooks, which answer a card before the user. */
-export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest'>;
+/**
+ * The call a question is about: its signal, its PermissionRequest hooks, which answer a card before the user, and the
+ * workspace's rules, whose allowed hosts the classifier is told.
+ */
+export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest' | 'permissions'>;
+
+async function withTrustedDomains(input: ClassifierInput, call: CallScope): Promise<ClassifierInput> {
+  const domains = trustedDomains((await call.permissions?.list()) ?? []);
+  return domains.length === 0 ? input : { ...input, trustedDomains: domains };
+}
 
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
@@ -147,7 +156,7 @@ export async function settle(
   };
   if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
   const { auto } = approval;
-  const classifier = denial.verdict === 'classify' ? await approval.classify(input(), call.signal) : undefined;
+  const classifier = denial.verdict === 'classify' ? await approval.classify(await withTrustedDomains(input(), call), call.signal) : undefined;
   const outcome = classifier === undefined ? 'ask-user' : CLASSIFIER_OUTCOMES[auto.state.phase][classifier.verdict];
   if (outcome !== 'ask-user') {
     auto.state = nextAutoState(auto.state, outcome);
@@ -214,24 +223,29 @@ function inMode(name: AgentToolName, tool: Executor, approval: Approval): Execut
 }
 
 /**
- * Every tool, refused in every mode while a Claude Code settings file denies it by name. It stays offered, as a mode's
- * tools do, so the cached prefix holds when the file changes.
+ * Every tool under the workspace's rules: refused in every mode while a Claude Code settings file denies it by name,
+ * and run with the rules in its context, for the domain and MCP rules and the classifier. A denied tool stays offered,
+ * as a mode's tools do, so the cached prefix holds when the file changes.
  */
-export function withDeniedTools<T extends Executors>(executors: T, permissions: Pick<SessionPermissions, 'deniedTool'>, approval: Approval): T {
+export function withPermissions<T extends Executors>(executors: T, permissions: ToolPermissions, approval: Approval): T {
+  const { deniedTool } = permissions;
   return Object.fromEntries(
     Object.entries(executors).map(([name, tool]) => [
       name,
       {
         ...tool,
         async run(raw, ctx) {
-          const denied = await permissions.deniedTool(name);
+          const denied = await deniedTool?.(name);
           if (denied !== undefined) throw refusalOf({ mode: modeOf(approval), ...ruleDenial('deny', denied.text, denied.source, name), decidedBy: 'rule', verdict: 'deny' });
-          return tool.run(raw, ctx);
+          return tool.run(raw, { ...ctx, permissions });
         },
       } satisfies Executor,
     ]),
   ) as T;
 }
+
+/** The rules a session's tools follow: the store, and Claude Code's bare-tool denies when its settings are read. */
+export type ToolPermissions = PermissionStore & Partial<Pick<SessionPermissions, 'deniedTool'>>;
 
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
@@ -253,7 +267,7 @@ export type AgentToolEnv = {
   /** Where the session's background commands run; undefined for a subagent, which starts none. */
   readonly background?: SessionBackground | undefined;
   /** The workspace's remembered rules; undefined runs with none. */
-  readonly permissions?: (PermissionStore & Partial<Pick<SessionPermissions, 'deniedTool'>>) | undefined;
+  readonly permissions?: ToolPermissions | undefined;
   /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
   readonly wakes?: SessionWakes | undefined;
   /** The background subagents of the session's run, for task_stop; undefined for a subagent, which starts none. */
@@ -354,7 +368,12 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     },
   };
 
-  const edit = editExecutor(reads, async (ctx) => (tools.checkAfterEdit ? (await runCheck(tools, ctx))?.text : undefined));
+  const edit = editExecutor(reads, async (ctx) => {
+    if (!tools.checkAfterEdit) return undefined;
+    const denied = await tools.permissions?.deniedTool?.('check');
+    if (denied !== undefined) return `The check did not run after the edit: the rule that denies \`${denied.text}\` in ${denied.source} stops every tool that runs a shell command.`;
+    return (await runCheck(tools, ctx))?.text;
+  });
 
   // A path rule's question or refusal before a read or an edit. Plan never asks, so there an ask rule refuses.
   const askPathRule = async (tool: PathTool, given: string, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
@@ -505,6 +524,5 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     watch_pr: watchPrExecutor(tools.wakes, tools.pr),
   };
   const offered = Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
-  const deniedTool = tools.permissions?.deniedTool;
-  return deniedTool === undefined ? offered : withDeniedTools(offered, { deniedTool }, tools.approval);
+  return tools.permissions === undefined ? offered : withPermissions(offered, tools.permissions, tools.approval);
 }

