@@ -25,7 +25,11 @@ const asModel = (reply: Reply): Reply => ({
 const rounds = (prefix: string, calls: readonly { readonly say: string; readonly name: string; readonly input: Readonly<Record<string, unknown>> }[]): Reply[] =>
   calls.map((call, i) => asModel(toolCall(call.say, [{ id: `${prefix}${i}`, name: call.name, input: call.input }], usage)));
 
-/** The last turn does the work again, undoing the first turn's edits, while the suite records it. */
+/** GCODE_SCREENSHOTS names a folder for the screenshots, the GIF and the CPU profile's numbers; GCODE_PERF=1 takes the profile. */
+const shots = process.env['GCODE_SCREENSHOTS'];
+const perf = process.env['GCODE_PERF'] === '1';
+
+/** With screenshots, a last turn does the work again, undoing the first turn's edits, while the suite records it. */
 const AGAIN = WORK.map((call) =>
   call.name === 'edit' ? { ...call, input: { ...call.input, old_str: call.input['new_str'], new_str: call.input['old_str'] } } : call,
 );
@@ -37,12 +41,9 @@ const replies: readonly Reply[] = [
   ...rounds('tu_trouble_', TROUBLE),
   ...rounds('tu_plan_', PLAN),
   asModel(answer(ANSWERS.plan, usage)),
-  ...rounds('tu_again_', AGAIN),
-  asModel(answer(ANSWERS.work, usage)),
+  ...(shots === undefined ? [] : [...rounds('tu_again_', AGAIN), asModel(answer(ANSWERS.work, usage))]),
 ];
 
-/** GCODE_SCREENSHOTS names a folder for the screenshots, the GIF and the CPU profile's numbers. */
-const shots = process.env['GCODE_SCREENSHOTS'];
 const PROFILE_MS = 10_000;
 const GIF_FRAMES = 170;
 const GIF_MS = 70;
@@ -100,8 +101,6 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   click: async ({ selector, text }, w) => click(await webview(w, EXTENSION, READY), selector, text),
   type: async ({ text }, w) => typeText(await webview(w, EXTENSION, READY), text),
   press: async ({ key }, w) => press(await webview(w, EXTENSION, READY), key),
-  motion: async ({ value }, w) =>
-    (await webview(w, EXTENSION, READY)).send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] }),
   pointerAway: async (_action, w) => w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 300 }),
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
@@ -170,7 +169,7 @@ afterAll(() => {
 });
 
 describe('the working dino in VS Code', () => {
-  it('switches poses with the running turn’s steps, flexes when its check passed, and becomes the still avatar', async () => {
+  it('switches poses with the engine’s steps, sweats at a failed read, asks at a held command, plans in Plan mode, and flexes when the check passed', async () => {
     const { workspace, work, home, suite } = await setUp('working', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const vscodeWindow = await leaseWindow();
@@ -185,6 +184,7 @@ describe('the working dino in VS Code', () => {
       DASHSCOPE_BASE_URL: url,
       GCODE_FAKE_MODEL: url,
       GCODE_CLASSIFIER_MODEL: 'off',
+      ...(perf ? { GCODE_PERF: '1' } : {}),
     });
     if (shots !== undefined && costs.length > 0) await writeFile(path.resolve(shots, 'perf.json'), `${JSON.stringify(costs, null, 2)}\n`);
     expect(requests).toHaveLength(replies.length);
