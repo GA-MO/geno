@@ -27,19 +27,23 @@ import {
   childSummary,
   childSystemPrompt,
   type Effort,
+  DEFERRED_TOOLS_NOTE,
   EXTERNAL_BACKENDS,
   forkOpening,
   forkTask,
   GENO_NOTE,
+  grantsMcp,
   handedBack,
   isPartial,
   isReadOnly,
   laneSentence,
+  type McpGrant,
   mergeAgents,
   MESSAGE_AGENT_TOOL,
   STOP_AND_WAIT,
   messageAgentResult,
   nextSeq,
+  noticeFor,
   type ParentMoment,
   type SubagentModels,
   parseAgentDefinition,
@@ -54,6 +58,8 @@ import {
   type Session,
   sessionEffortOf,
   type SessionId,
+  toldOf,
+  toolRoster,
   type TurnEvent,
   type Waiter,
   withoutInstructions,
@@ -74,7 +80,9 @@ import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog
 import type { Store } from './store.js';
 import type { SteerInbox, Steers } from './steer.js';
 import type { Wakes } from './wakes.js';
+import type { McpToolset } from './mcp/hub.js';
 import type { Approval } from './tools/agent.js';
+import { rosterExecutors } from './tools/tool-search.js';
 import { executor, ToolError, ToolRejected, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
@@ -202,6 +210,8 @@ export type SubagentEnv = {
   readonly host: SubagentHost;
   /** Every tool a child could call, under the approval the child runs with. */
   readonly executors: (approval: Approval) => Executors;
+  /** The MCP tools a child's grant takes, under the rules and the approval it runs with; undefined gives no child MCP. */
+  readonly mcp?: ((approval: Approval, grant: McpGrant) => Promise<McpToolset | undefined>) | undefined;
   /** The parent's tools and system prompt, which a fork reuses so that it shares the parent's cached prefix. */
   readonly parentMode: () => Pick<Mode, 'tools' | 'system'>;
   readonly readRoots: readonly string[];
@@ -350,6 +360,21 @@ function semaphore(size: number) {
 
 const pick = (executors: Executors, names: readonly string[]): Executors =>
   Object.fromEntries(names.flatMap((name) => (Object.hasOwn(executors, name) ? [[name, executors[name]!]] : [])));
+
+/**
+ * What a fresh child is offered: its own tools, and with MCP the tools of its grant behind tool_search, told at the
+ * safe point as the parent's are. Only the MCP tools are deferred, so the report tool is always offered in full.
+ */
+function freshOffer(agent: AgentDefinition, tools: readonly Tool[], executors: Executors, mcp: McpToolset | undefined): Pick<Mode, 'tools' | 'system' | 'executors' | 'notice'> {
+  if (mcp === undefined) return { tools, system: childSystemPrompt(agent), executors };
+  const roster = toolRoster(tools, mcp.tools, Number.POSITIVE_INFINITY);
+  return {
+    tools: roster.offered,
+    system: `${childSystemPrompt(agent)}\n\n${DEFERRED_TOOLS_NOTE}`,
+    executors: rosterExecutors(roster, { ...executors, ...mcp.executors }),
+    notice: async (events) => noticeFor(events, { mode: undefined, memory: toldOf(events).memory, mcp: mcp.briefing }),
+  };
+}
 
 /** The abort reason of a child that task_stop stopped, so its end reads as the model's stop and not the user's. */
 const MODEL_STOP = Symbol('task_stop');
@@ -549,15 +574,14 @@ export function subagents(env: SubagentEnv): Subagents {
     // A child starts no background command, so what arrives for it is the steers its parent or the user sends.
     const arrivals = () => env.steers.inbox.take(session.id);
     const stop = lifecycle?.stop;
+    const mcp = start === 'fork' || session.backend !== undefined || !grantsMcp(agent.mcp) ? undefined : await env.mcp?.(childApproval, agent.mcp);
     const mode: Mode =
       start === 'fork'
         ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals, toolHooks, stop }
         : {
             toolHooks,
             stop,
-            tools: [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION],
-            system: childSystemPrompt(agent),
-            executors: { ...executors, [REPORT_TOOL]: reportExecutor },
+            ...freshOffer(agent, [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION], { ...executors, [REPORT_TOOL]: reportExecutor }, mcp),
             readRoots: env.readRoots,
             arrivals,
             handback: true,

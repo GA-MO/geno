@@ -2,6 +2,7 @@ import { EXTERNAL_BACKEND_IDS, EXTERNAL_BACKENDS, isExternalBackendId, type Exte
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { CHILD_TOOL_NAMES, type AgentToolName } from './agent.js';
 import { pendingToolUses, type DoneReason } from './loop.js';
+import { isMcpName, mcpNameCovers, mcpNameReaches } from './permission-rules.js';
 import { EMPTY_CONTEXT, type LoadedContext } from './context.js';
 import { EFFORTS, IN_CONVERSATION, nextSeq, type Effort, type SessionId, type TurnEvent } from './session.js';
 import { BANNER_START, GENO_NOTE, GENO_NOTES_PROMPT, indentLines, instructionPatternsIn, neutralize, REPORT_TAG } from './fence.js';
@@ -30,6 +31,8 @@ export type AgentDefinition = {
   readonly description: string;
   /** The Geno tools the child may call, sorted. */
   readonly tools: readonly AgentToolName[];
+  /** The MCP tools of the session's trusted servers the child may call. */
+  readonly mcp: McpGrant;
   /** Undefined runs the child on the parent's model. Aliases and the fallback are resolved when the definition loads. */
   readonly model: string | undefined;
   /** Undefined takes the parent's effort. */
@@ -49,10 +52,30 @@ export type AgentDefinition = {
   readonly backend: ExternalBackendId | undefined;
 };
 
+/**
+ * Which MCP tools a child may call, in the forms of Claude Code's tools field: `mcp__server`, `mcp__server__*` and
+ * `mcp__server__tool`. `all` is every tool, as a definition with no tools field has in Claude Code. A denied name, from
+ * disallowedTools, wins over an allowed one.
+ */
+export type McpGrant = { readonly allow: 'all' | readonly string[]; readonly deny: readonly string[] };
+
+export const NO_MCP: McpGrant = { allow: [], deny: [] };
+const ALL_MCP: McpGrant = { allow: 'all', deny: [] };
+
+export const grantsMcp = (grant: McpGrant): boolean => grant.allow === 'all' || grant.allow.length > 0;
+
+export const mcpGranted = (grant: McpGrant, server: string, tool: string): boolean =>
+  (grant.allow === 'all' || grant.allow.some((name) => mcpNameCovers(name, server, tool))) && !grant.deny.some((name) => mcpNameCovers(name, server, tool));
+
+/** Whether the grant may take some tool of `server`, for what a child is told of a server whose tools are not known yet. */
+export const mcpServerGranted = (grant: McpGrant, server: string): boolean =>
+  (grant.allow === 'all' || grant.allow.some((name) => mcpNameReaches(name, server))) && !grant.deny.some((name) => mcpNameCovers(name, server));
+
 /** The tools a child may call without changing anything or asking anyone. */
 export const READ_ONLY_TOOLS: readonly AgentToolName[] = TOOL_NAMES;
 
-export const isReadOnly = (definition: AgentDefinition): boolean => definition.tools.every((tool) => READ_ONLY_TOOLS.includes(tool));
+/** An MCP tool may change anything, whatever its server says, so a child that has one is not read-only. */
+export const isReadOnly = (definition: AgentDefinition): boolean => definition.tools.every((tool) => READ_ONLY_TOOLS.includes(tool)) && !grantsMcp(definition.mcp);
 
 /** Claude Code's tool names as Geno's. A Claude Code tool without a Geno equivalent is reported and dropped. */
 const CLAUDE_TOOLS: Readonly<Record<string, AgentToolName>> = {
@@ -139,10 +162,12 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
     return tool;
   };
   const named = list(fields['tools']);
-  const granted = named.length === 0 ? [...CHILD_TOOL_NAMES] : named.flatMap((raw) => toGeno(raw) ?? []);
-  const denied = new Set(list(fields['disallowedTools']).flatMap((raw) => toGeno(raw) ?? []));
+  const disallowed = list(fields['disallowedTools']);
+  const granted = named.length === 0 ? [...CHILD_TOOL_NAMES] : named.flatMap((raw) => (isMcpName(raw) ? [] : (toGeno(raw) ?? [])));
+  const denied = new Set(disallowed.flatMap((raw) => (isMcpName(raw) ? [] : (toGeno(raw) ?? []))));
   const tools = [...new Set(granted)].filter((tool) => !denied.has(tool)).toSorted();
-  if (tools.length === 0) return { kind: 'skipped', reason: 'it leaves no tool Geno has' };
+  const mcp: McpGrant = { allow: named.length === 0 ? ALL_MCP.allow : named.filter(isMcpName), deny: disallowed.filter(isMcpName) };
+  if (tools.length === 0 && !grantsMcp(mcp)) return { kind: 'skipped', reason: 'it leaves no tool Geno has' };
 
   const model = definitionModel(text(fields['model']), models, notes);
 
@@ -172,6 +197,7 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
       name: origin.namespace + (text(fields['name']) || origin.fallbackName),
       description,
       tools,
+      mcp,
       model,
       effort,
       maxTurns,
@@ -195,10 +221,15 @@ export function mergeAgents(groups: readonly (readonly AgentDefinition[])[]): Ag
 }
 
 const builtin = (
-  agent: Omit<AgentDefinition, 'source' | 'path' | 'model' | 'isolation' | 'backend' | 'omitClaudeMd'> & { readonly backend?: ExternalBackendId; readonly omitClaudeMd?: boolean },
+  agent: Omit<AgentDefinition, 'source' | 'path' | 'model' | 'isolation' | 'backend' | 'omitClaudeMd' | 'mcp'> & {
+    readonly backend?: ExternalBackendId;
+    readonly omitClaudeMd?: boolean;
+    readonly mcp?: McpGrant;
+  },
 ): AgentDefinition => ({
   backend: undefined,
   omitClaudeMd: false,
+  mcp: NO_MCP,
   ...agent,
   model: undefined,
   isolation: 'none',
@@ -266,6 +297,7 @@ Report findings, most severe first. Each finding is one line: the severity (high
     name: 'worker',
     description: 'May edit files and run commands. In the main tree it runs alone; with isolation worktree it runs in a lane, beside others and in the background if asked.',
     tools: CHILD_TOOL_NAMES.toSorted(),
+    mcp: ALL_MCP,
     effort: undefined,
     maxTurns: 30,
     maxCostUsd: 0.2,

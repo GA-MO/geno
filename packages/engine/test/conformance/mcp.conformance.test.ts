@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAX_MCP_INSTRUCTIONS_CHARS, MCP_SERVERS_METHOD, NOT_USER_LINE, type McpServersResponse } from '@g-code/core';
 import { mcpSessions, type McpSessions } from '../../src/mcp/sessions.js';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
+import { call, report, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
 
 const FIXTURE = fileURLToPath(new URL('../fake-mcp-server.ts', import.meta.url));
 const TSX = import.meta.resolve('tsx');
@@ -202,6 +202,69 @@ describe.each(WIRES)('MCP rules on the %s wire', (wire: Wire) => {
     expect(cards).toEqual([]);
     expect(run.seen()[2]!.results[0]).toMatchObject({
       id: 'tu_echo_1',
+      error: true,
+      text: expect.stringContaining('matches the workspace rule that denies `mcp__docs__*`, which the user set in .claude/settings.json'),
+    });
+  }, 60_000);
+});
+
+const toolNames = (body: { readonly tools?: readonly { readonly name?: string; readonly function?: { readonly name: string } }[] }): string[] =>
+  (body.tools ?? []).map((tool) => tool.name ?? tool.function!.name);
+
+describe.each(WIRES)('MCP for subagents on the %s wire', (wire: Wire) => {
+  const childFiles = (extra: Readonly<Record<string, string>> = {}) => ({
+    'a.ts': 'export const a = 1;\n',
+    '.gcode.json': JSON.stringify({ agentTool: ['non-interactive'] }),
+    '.mcp.json': JSON.stringify({ mcpServers: { local: fake() } }),
+    ...extra,
+  });
+  const start = (agent: string) => call('', [{ id: 'tu_agent', name: 'agent', input: { agent, task: 'Echo hello through the docs server.' } }]);
+  const load = call('Loading.', [{ id: 'tu_load', name: 'tool_search', input: { select: ['mcp__docs__echo'] } }]);
+  const echo = call('Echoing.', [{ id: 'tu_echo', name: 'mcp__docs__echo', input: { text: 'from worker' } }]);
+  const delegate = (run: Run) => run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--mcp', '--allow-worker', 'Have a subagent echo it.']);
+
+  it("C/C-62 a worker loads and calls a trusted server's tool, and the result reaches its report; an untrusted server gives it nothing", async () => {
+    const run = await scripted(wire, [start('worker'), load, echo], childFiles());
+    // The report quotes what the child's request carried, so it holds only what the tool returned.
+    run.more({ answer: () => report(`worker got: ${run.seen().at(-1)!.results[0]!.text}`) }, say('Done.'));
+    await globalServers(run, { docs: fake() });
+    expect((await delegate(run)).code).toBe(0);
+
+    const seen = run.seen();
+    expect(seen).toHaveLength(5);
+    const child = run.bodies()[1]!;
+    expect(toolNames(child), 'the MCP tools wait behind tool_search').toContain('tool_search');
+    expect(toolNames(child).filter((name) => name.startsWith('mcp__'))).toEqual([]);
+    const opening = run.openings()[1]!.first;
+    expect(opening).toContain('- mcp__docs__echo: Echo the text back.');
+    expect(opening, 'an untrusted server never starts, so it has no tool to give').not.toContain('mcp__local__');
+    expect(opening).toContain('- local: not approved for this workspace yet.');
+    expect(seen[2]!.results[0]).toMatchObject({ id: 'tu_load', error: false, text: expect.stringContaining('"name":"mcp__docs__echo"') });
+    expect(seen[3]!.results[0]).toEqual({ id: 'tu_echo', error: false, text: 'echo: from worker' });
+    expect(seen[4]!.results[0]).toMatchObject({ id: 'tu_agent', error: false, text: expect.stringContaining('worker got: echo: from worker') });
+  }, 60_000);
+
+  it('C/C-62 explore, a read-only built-in, is offered no MCP tool and told of no server', async () => {
+    const run = await scripted(wire, [start('explore'), report('Nothing to search with.'), say('Done.')], childFiles());
+    await globalServers(run, { docs: fake() });
+    expect((await delegate(run)).code).toBe(0);
+
+    expect(run.bodies()).toHaveLength(3);
+    expect(toolNames(run.bodies()[0]!), 'the parent has MCP').toContain('tool_search');
+    const child = run.bodies()[1]!;
+    expect(toolNames(child)).not.toContain('tool_search');
+    expect(toolNames(child).filter((name) => name.startsWith('mcp__'))).toEqual([]);
+    expect(textsOf(child).join('\n')).not.toMatch(/mcp__|MCP/);
+  }, 60_000);
+
+  it("B/B-64 C/C-62 an mcp__docs__* deny in .claude/settings.json refuses the worker's call, naming the rule", async () => {
+    const settings = { '.claude/settings.json': JSON.stringify({ permissions: { deny: ['mcp__docs__*'] } }) };
+    const run = await scripted(wire, [start('worker'), load, echo, report('refused'), say('Done.')], childFiles(settings));
+    await globalServers(run, { docs: fake() });
+    expect((await delegate(run)).code).toBe(0);
+
+    expect(run.seen()[3]!.results[0]).toMatchObject({
+      id: 'tu_echo',
       error: true,
       text: expect.stringContaining('matches the workspace rule that denies `mcp__docs__*`, which the user set in .claude/settings.json'),
     });

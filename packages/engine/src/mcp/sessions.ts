@@ -1,5 +1,5 @@
 import type * as acp from '@agentclientprotocol/sdk';
-import type { BrowserSettings, McpServersResponse } from '@g-code/core';
+import type { BrowserSettings, McpGrant, McpServersResponse } from '@g-code/core';
 import type { Env } from '../child-env.js';
 import type { Store } from '../store.js';
 import type { Approval } from '../tools/agent.js';
@@ -17,7 +17,7 @@ export type McpSessions = {
    * waits for its first call.
    */
   register(sessionId: string, workspace: string, servers: readonly acp.McpServer[], browser: BrowserSettings | undefined): void;
-  toolset(sessionId: string, approval: Approval): Promise<McpToolset | undefined>;
+  toolset(sessionId: string, approval: Approval, grant?: McpGrant): Promise<McpToolset | undefined>;
   servers(sessionId: string): Promise<McpServersResponse>;
   trust(sessionId: string, name: string, hash: string): Promise<McpServersResponse>;
   setEnabled(sessionId: string, name: string, enabled: boolean): Promise<McpServersResponse>;
@@ -50,8 +50,8 @@ export function mcpSessions(store: Store, env: Env, log: (line: string) => void 
       if (!pending.has(sessionId)) pending.set(sessionId, { workspace, servers, browser });
       startInBackground(sessionId);
     },
-    async toolset(sessionId, approval) {
-      const toolset = (await hubOf(sessionId)).toolset(approval);
+    async toolset(sessionId, approval, grant) {
+      const toolset = (await hubOf(sessionId)).toolset(approval, grant);
       // A server trusted elsewhere since, such as by `gcode mcp trust`, starts now and joins a later turn.
       startInBackground(sessionId);
       return toolset;

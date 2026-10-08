@@ -15,6 +15,8 @@ import {
   mcpBriefing,
   mcpCatalog,
   mcpCallDenial,
+  mcpGranted,
+  mcpServerGranted,
   mcpDenialFor,
   mcpResultText,
   mcpToolDefinitions,
@@ -22,6 +24,7 @@ import {
   type ImageAttachment,
   type McpBriefing,
   type McpContent,
+  type McpGrant,
   type McpPromptInfo,
   type McpResourceInfo,
   type McpServerView,
@@ -44,6 +47,9 @@ import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js'
  */
 export type McpToolset = { readonly tools: readonly Tool[]; readonly executors: Readonly<Record<string, Executor>>; readonly briefing: McpBriefing };
 
+/** A session's MCP tools under an approval, as McpHub's `toolset` gives them: a run's own, or with a grant a subagent's. */
+export type McpTools = (approval: Approval, grant?: McpGrant) => Promise<McpToolset | undefined>;
+
 /**
  * A session's MCP servers. `start` starts them; `toolset` offers the tools of the servers ready at that moment and
  * never waits for one still starting, so a cold server joins a later turn instead of holding up this one.
@@ -60,8 +66,11 @@ export type McpHub = {
   trust(name: string, hash?: string): Promise<void>;
   /** Turns a server off for this workspace, stopping it, or back on; the next start starts it. */
   setEnabled(name: string, enabled: boolean): Promise<void>;
-  /** Undefined for a run that gets no MCP: a non-interactive one that did not turn it on. */
-  toolset(approval: Approval): Promise<McpToolset | undefined>;
+  /**
+   * Undefined for a run that gets no MCP: a non-interactive one that did not turn it on. With `grant`, a subagent's,
+   * only the tools it grants, and only the servers it may reach in the briefing.
+   */
+  toolset: McpTools;
   prompts(): Promise<McpPromptInfo[]>;
   resources(): Promise<McpResourceInfo[]>;
   stop(): Promise<void>;
@@ -230,13 +239,16 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       if (enabled) handle.enable();
       else await handle.disable();
     },
-    async toolset(approval) {
+    async toolset(approval, grant) {
       if (approval.kind === 'non-interactive' && approval.mcp !== true) return undefined;
-      const catalog = mcpCatalog([...handles.values()].flatMap(offered));
+      // Named across every server first, so a subagent's tool has the name its parent's has.
+      const catalog = new Map([...mcpCatalog([...handles.values()].flatMap(offered))].filter(([, info]) => grant === undefined || mcpGranted(grant, info.server, info.tool)));
       const executors: Record<string, Executor> = {};
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
       const tools = mcpToolDefinitions(catalog);
-      const servers = [...handles.values()].map((handle) => ({ name: handle.config.name, state: handle.state, instructions: handle.connection?.instructions }));
+      const servers = [...handles.values()]
+        .filter((handle) => grant === undefined || mcpServerGranted(grant, handle.config.name))
+        .map((handle) => ({ name: handle.config.name, state: handle.state, instructions: handle.connection?.instructions }));
       return { tools, executors, briefing: mcpBriefing(tools, servers) };
     },
     prompts: async () => (await Promise.all(ready().map((handle) => handle.connection?.prompts() ?? []))).flat(),
