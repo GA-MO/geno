@@ -62,7 +62,9 @@ export type CompactRequest = {
 function diskText(workspace: string, file: string): string | undefined {
   const full = path.resolve(workspace, file);
   try {
-    if (!statSync(full).isFile() || statSync(full).size > ATTACHED_FILE_TOKENS * CHARS_PER_TOKEN * 4) return undefined;
+    // Bytes, not characters, so the bound is loose; attachedFiles applies the exact cap.
+    const stat = statSync(full);
+    if (!stat.isFile() || stat.size > ATTACHED_FILE_TOKENS * CHARS_PER_TOKEN * 4) return undefined;
     return readFileSync(full, 'utf8');
   } catch {
     return undefined;

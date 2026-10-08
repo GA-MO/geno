@@ -350,8 +350,9 @@ export const plannedTokens = (plan: CompactPlan, tokensBefore: number): number =
 /**
  * The compaction to make before the next model call, if any: the context would reach `compactAt` tokens
  * (the user's setting, else the model's `compactAt`), a model call has run since the last compaction, and the plan,
- * with room for the files it may attach, would bring the context back under `compactAt`. One that cannot, because the prompt, the tools or the newest round hold most of it, would run again
- * before every call and pay for a summary each time.
+ * with room for the files it may attach, would bring the context back under `compactAt`. One that cannot, because
+ * the prompt, the tools or the newest round hold most of it, would run again before every call and pay for a summary
+ * each time.
  */
 export function autoCompaction(events: readonly TurnEvent[], compactAt: number | undefined): CompactPlan | undefined {
   if (compactAt === undefined) return undefined;
