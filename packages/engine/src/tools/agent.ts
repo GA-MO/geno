@@ -337,7 +337,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const ruled = ruledDenial(command, tools.scope, mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
     const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, tools.scope, 'ask', rules)?.offer;
-    const denial = offer === undefined ? ruled : { ...ruled!, offer };
+    const denial = ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
     };
