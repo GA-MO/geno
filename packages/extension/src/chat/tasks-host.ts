@@ -45,6 +45,8 @@ export type TaskChat = {
   /** Opens the Arena pane on a run. */
   readonly openArena: (id: string) => void;
   readonly applyLane: (name: string) => Promise<unknown>;
+  /** Opens the session and resumes its subagent `child` with `text`, as a turn of that chat. */
+  readonly resumeAgent: (sessionId: string, workspace: string, child: string, text: string) => Promise<unknown>;
   /** A task of the shown session ended in the background, such as one the panel adopted after a reload. */
   readonly ended: (task: TaskRecord) => void;
   readonly defaultMode: () => string;
@@ -255,6 +257,10 @@ export class TaskHost implements vscode.Disposable {
         const { agent, cwd } = await this.connection();
         this.scheduled(await agent.request<SchedulesResponse, ScheduleActRequest>(SCHEDULE_ACT_METHOD, { cwd, id, action }));
       })().catch(warn),
+    'task-resume': ({ sessionId, child, text }) => {
+      const task = this.tasks.get(sessionId);
+      if (task !== undefined) void this.chat.resumeAgent(sessionId, task.workspace, child, text).catch(warn);
+    },
     'task-wake-cancel': ({ sessionId }) =>
       void this.connection()
         .then(({ agent }) => agent.request<unknown, WakeCancelRequest>(WAKE_CANCEL_METHOD, { sessionId }))

@@ -43,10 +43,15 @@ export type LanesFromView =
   | { readonly type: 'task-job-stop'; readonly sessionId: string; readonly id: string }
   /** The session stops waiting to be woken. */
   | { readonly type: 'task-wake-cancel'; readonly sessionId: string }
+  /** Resumes a subagent of the session that a stop of Geno cut off, with the user's message. */
+  | { readonly type: 'task-resume'; readonly sessionId: string; readonly child: string; readonly text: string }
   /** Opens the session a fork came from, from the fork's row; or a scheduled task's run, from its row. */
   | { readonly type: 'task-origin'; readonly sessionId: string; readonly workspace: string }
   /** A scheduled task's Run now, Pause, Resume or Delete. */
   | { readonly type: 'schedule-act'; readonly id: string; readonly action: SchedulePanelAction };
+
+/** The message Resume offers for a subagent cut off, which the user can change before it goes. */
+export const RESUME_TEXT = 'Continue where you stopped.';
 
 export type Tone = 'ok' | 'wait' | 'busy' | 'failed' | 'quiet';
 export type Badge = { readonly label: string; readonly tone: Tone };
@@ -140,6 +145,8 @@ export type TaskRow = {
   readonly wakes: string | undefined;
   /** How far the session's workflow got and what it spent, in words; undefined for any other session. */
   readonly workflow: string | undefined;
+  /** Its subagents that a stop of Geno cut off, each with Resume while no turn of the session runs. */
+  readonly interrupted: readonly { readonly child: string; readonly label: string; readonly resume: boolean }[];
 };
 
 /** A row in Needs you says what the user is to do, which may be a child's question on a running parent. */
@@ -147,6 +154,7 @@ const NEEDS_YOU_BADGES: { readonly [R in Exclude<NeedsYouReason, 'limited'>]: Ba
   permission: { label: 'Needs permission', tone: 'wait' },
   question: { label: 'Needs your answer', tone: 'wait' },
   failed: { label: 'Failed', tone: 'failed' },
+  interrupted: { label: 'Cut off', tone: 'wait' },
   paused: { label: 'Wake-ups paused', tone: 'wait' },
 };
 
@@ -191,6 +199,7 @@ export function taskRowOf(placed: PlacedTask, shown: string | undefined, now: nu
     forkedFrom: task.forkedFrom === undefined ? undefined : { id: task.forkedFrom.sessionId, title: task.forkedFrom.title, workspace: task.workspace },
     wakes: wakesOf(task, clock),
     workflow: task.workflow === undefined ? undefined : progressLine(task.workflow),
+    interrupted: (task.interrupted ?? []).map(({ child, role, summary }) => ({ child, label: summary === '' ? `${role} was cut off before it said anything` : `${role}: ${summary}`, resume: !isLiveStatus(task.status) })),
   };
 }
 

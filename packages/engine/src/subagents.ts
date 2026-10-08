@@ -21,6 +21,7 @@ import {
   type ChildOf,
   childReport,
   type ChildStart,
+  childrenOf,
   childSummary,
   childSystemPrompt,
   type Effort,
@@ -36,6 +37,7 @@ import {
   STOP_AND_WAIT,
   messageAgentResult,
   nextSeq,
+  type ParentMoment,
   parseAgentDefinition,
   REPORT_DELIVERED,
   reportMessageOf,
@@ -46,6 +48,7 @@ import {
   sessionEffortOf,
   type SessionId,
   type TurnEvent,
+  type Waiter,
   ZERO_USAGE,
 } from '@g-code/core';
 import { formatCost, totalOf, type OpenSession } from './chat.js';
@@ -172,6 +175,8 @@ export type SubagentEnv = {
   readonly waits?: Wakes | undefined;
   /** The calls come from a workflow, not a model, and may set each step's model and caps. */
   readonly steps?: boolean | undefined;
+  /** The engine process the children run in, named in each child's start so the next engine can tell one it cut off. */
+  readonly waiter?: Waiter | undefined;
   /** The PreToolUse hooks a child's calls meet, under the approval that asks for that child; undefined runs none. */
   readonly preToolUse?: ((approval: Approval, agent: HookAgent) => PreToolHooks | undefined) | undefined;
 };
@@ -189,11 +194,11 @@ type ChildOutcome = { readonly text: string; readonly ended: ChildEndNote; reado
 
 /**
  * What a child's run starts from: a new session for its task, or the child's own log, which its parent's message
- * resumes after the report the child handed back.
+ * resumes after the report the child handed back, or after where a run that Geno's stop cut off ends.
  */
 type ChildRun =
   | { readonly kind: 'spawn'; readonly task: string; readonly start: ChildStart; readonly step: StepOptions; readonly background: boolean }
-  | { readonly kind: 'resume'; readonly message: string; readonly log: SessionLog; readonly of: ChildOf };
+  | { readonly kind: 'resume'; readonly message: string; readonly log: SessionLog; readonly of: ChildOf; readonly moment: Exclude<ParentMoment, 'working'> };
 
 /** A child's log as its run begins: what the run's first prompt is, when the run began, and the task the user sees it on. */
 type OpenedChild = { readonly log: SessionLog; readonly start: ChildStart; readonly task: string; readonly prompt: string; readonly at: string };
@@ -305,10 +310,10 @@ export function subagents(env: SubagentEnv): Subagents {
   };
 
   // The run goes on from the child's report, with the message as its parent's steer and nothing left to prompt.
-  const openResume = async ({ log, message, of }: Extract<ChildRun, { kind: 'resume' }>): Promise<OpenedChild> => {
+  const openResume = async ({ log, message, of, moment }: Extract<ChildRun, { kind: 'resume' }>): Promise<OpenedChild> => {
     await dropTornTail(log);
     const at = new Date().toISOString();
-    const resumed = resumeEvent(message, nextSeq(log.events), at);
+    const resumed = resumeEvent(message, nextSeq(log.events), at, moment);
     await appendEvent(log.file, resumed);
     return { log: { ...log, events: [...log.events, resumed] }, start: of.start, task: message, prompt: '', at };
   };
@@ -324,7 +329,7 @@ export function subagents(env: SubagentEnv): Subagents {
     const { session, file } = log;
     const firstSeq = nextSeq(log.events);
     const view: ChildView = { id: session.id, parentId: parent.log.session.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };
-    await ctx.logNote!({ kind: 'child-start', at, child: session.id, toolUseId: use.id, role: agent.name, model: session.model, effort: session.effort, caps, start });
+    await ctx.logNote!({ kind: 'child-start', at, child: session.id, toolUseId: use.id, role: agent.name, model: session.model, effort: session.effort, caps, start, ...(env.waiter === undefined ? {} : { by: env.waiter }) });
 
     const controller = new AbortController();
     const cancel = () => controller.abort();
@@ -505,19 +510,32 @@ export function subagents(env: SubagentEnv): Subagents {
     },
   });
 
+  /**
+   * The log that holds a child's runs: this session's, or, for a step of a workflow this session started, the
+   * workflow's own, whose engine may have stopped with it. Undefined for a child of any other session.
+   */
+  const holderOf = async (of: ChildOf, events: readonly TurnEvent[]): Promise<readonly TurnEvent[] | undefined> => {
+    if (of.parentId === parent.log.session.id) return events;
+    const workflow = await readSessionLog(sessionFile(store, of.parentId)).catch(() => undefined);
+    const head = workflow?.events[0];
+    return head?.kind === 'session-start' && head.workflow?.parentId === parent.log.session.id ? workflow!.events : undefined;
+  };
+
   /** A finished child of this session, read from its own log, which names its parent and how it was started. */
-  const resumable = async (id: string, message: string): Promise<{ readonly agent: AgentDefinition; readonly run: Extract<ChildRun, { kind: 'resume' }> }> => {
+  const resumable = async (id: string, message: string, events: readonly TurnEvent[]): Promise<{ readonly agent: AgentDefinition; readonly run: Extract<ChildRun, { kind: 'resume' }> }> => {
     const notOurs = new ToolError(`no subagent ${id} of this session`);
     if (/[\\/]/.test(id)) throw notOurs;
     const log = await readSessionLog(sessionFile(store, asSessionId(id))).catch(() => undefined);
     const header = log?.events[0];
     const of = header?.kind === 'session-start' ? header.child : undefined;
-    if (log === undefined || of === undefined || of.parentId !== parent.log.session.id) throw notOurs;
+    const holder = of === undefined ? undefined : await holderOf(of, events);
+    if (log === undefined || of === undefined || holder === undefined) throw notOurs;
     const backend = log.session.backend;
     if (backend !== undefined) throw new ToolError(`${of.role} ran on ${EXTERNAL_BACKENDS[backend.id].label}, whose session Geno cannot resume; start a new subagent with everything it needs`);
     const agent = byName(of.role);
     if (agent === undefined) throw new ToolError(`${id} was a ${of.role} subagent, and this session has no ${of.role} now; start one of ${agents.map((a) => a.name).join(', ')}`);
-    return { agent, run: { kind: 'resume', message, log, of } };
+    const cut = childrenOf(holder).find((child) => child.child === id)?.status.kind === 'interrupted';
+    return { agent, run: { kind: 'resume', message, log, of, moment: cut ? 'interrupted' : 'resumed' } };
   };
 
   // One message to a child at a time, so that two messages to a finished child cannot both resume it onto its one log.
@@ -533,7 +551,7 @@ export function subagents(env: SubagentEnv): Subagents {
           const delivery = await inbox.push({ text, from: 'parent' });
           if (delivery !== undefined && delivery.kind !== 'next-turn') return messageAgentResult(delivery);
         }
-        const { agent, run } = await resumable(agent_session, text);
+        const { agent, run } = await resumable(agent_session, text, ctx.events());
         return launch(agent, run, ctx, run.of.background === true);
       };
       const sent = (messaging.get(agent_session) ?? Promise.resolve()).then(send);
@@ -575,5 +593,11 @@ export async function mentionedCall(prompt: string, agents: readonly AgentDefini
   }
   if (task === '') task = `The user mentioned @${mention.agent.name} without a task. Say in one line what you can do.`;
   const use: ToolUseBlock = { type: 'tool_use', id: `toolu_gcode_${randomUUID().replaceAll('-', '')}`, name: AGENT_TOOL, input: { agent: mention.agent.name, task }, caller: { type: 'direct' } };
+  return { content: [use], stopReason: 'tool_use', usage: ZERO_USAGE, costUsd: 0, latencyMs: 0, model: session.model };
+}
+
+/** Resume in Tasks: the user's own `message_agent` call to a subagent of the session, with the prompt as its message. */
+export function resumeCall(agentSession: string, text: string, session: Session): AssistantTurn {
+  const use: ToolUseBlock = { type: 'tool_use', id: `toolu_gcode_${randomUUID().replaceAll('-', '')}`, name: MESSAGE_AGENT_TOOL, input: { agent_session: agentSession, text }, caller: { type: 'direct' } };
   return { content: [use], stopReason: 'tool_use', usage: ZERO_USAGE, costUsd: 0, latencyMs: 0, model: session.model };
 }

@@ -77,9 +77,24 @@ describe('the task rows', () => {
       stop: true,
       current: true,
       jobs: [],
+      interrupted: [],
     });
     const ended = rowOf(task({ lane: null, status: 'failed', endedAt: 4000, usage: { model: 'm', inputTokens: 1, outputTokens: 1, costUsd: 0.5 } }), 'other', 99_000);
     expect(ended).toMatchObject({ where: 'Main checkout', time: '3.0s', cost: '$0.50', live: false, current: false, state: { tone: 'failed' } });
+  });
+
+  it('list the subagents a stop of Geno cut off, in Needs you, each with Resume once no turn runs', () => {
+    const interrupted = [
+      { child: 'c1', role: 'explore', summary: 'alpha is in a.ts' },
+      { child: 'c2', role: 'plan', summary: '' },
+    ];
+    const cut = rowOf(task({ status: 'stopped', endedAt: 3000, interrupted }), undefined, 9000);
+    expect(cut.state).toEqual({ label: 'Cut off', tone: 'wait' });
+    expect(cut.interrupted).toEqual([
+      { child: 'c1', label: 'explore: alpha is in a.ts', resume: true },
+      { child: 'c2', label: 'plan was cut off before it said anything', resume: true },
+    ]);
+    expect(rowOf(task({ status: 'running', interrupted }), undefined, 9000).interrupted.map((c) => c.resume), 'not while a turn of the session runs').toEqual([false, false]);
   });
 
   it('list the background commands a session runs, in its own words where it gave them', () => {

@@ -2,7 +2,7 @@
 import type { Section, TaskRecord } from '@g-code/core';
 import { SECTIONS } from '@g-code/core/attention';
 import { h, icon, reconcile } from './dom.js';
-import { DONE_SHOWN, laneRowOf, SECTION_HEADINGS, taskSections, type Badge, type LaneRow, type LanesFromView, type LanesListing, type SeenMarkers, type TaskRow } from './lanes-model.js';
+import { DONE_SHOWN, laneRowOf, RESUME_TEXT, SECTION_HEADINGS, taskSections, type Badge, type LaneRow, type LanesFromView, type LanesListing, type SeenMarkers, type TaskRow } from './lanes-model.js';
 import type { FromView } from './messages.js';
 import type { SteerTarget, SteerResult } from './steer-model.js';
 import { taskSteers } from './steer-view.js';
@@ -148,6 +148,27 @@ export function lanesPanel(post: (message: LanesFromView) => void, onToggle: (op
   };
 }
 
+/**
+ * A subagent a stop of Geno cut off, with what it last said, and Resume: the message, which the user can change, goes
+ * to it as a message_agent call of the session's chat, and it goes on from its own transcript.
+ */
+function interruptedItem(sessionId: string, cut: TaskRow['interrupted'][number], post: (message: LanesFromView) => void): HTMLElement {
+  const input = h('input', { type: 'text', class: 'steer-input', value: RESUME_TEXT, 'aria-label': 'Message that resumes it', 'data-focus': `resume:${cut.child}` });
+  const form = h(
+    'form',
+    { class: 'steer-row task-resume', 'data-child': cut.child, hidden: !cut.resume },
+    input,
+    h('button', { type: 'submit', class: 'button small secondary', 'data-action': 'resume', title: 'Resume it from where its transcript ends: this runs it again and spends money' }, 'Resume'),
+  );
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (text !== '') post({ type: 'task-resume', sessionId, child: cut.child, text });
+  });
+  input.addEventListener('keydown', (event) => event.key === 'Escape' && event.stopPropagation());
+  return h('li', { class: 'task-job task-cut', 'data-child': cut.child, title: cut.label }, icon('debug-disconnect', 'job-icon'), h('span', { class: 'task-job-label' }, cut.label), form);
+}
+
 function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: () => void, message: () => void): HTMLElement {
   const open = () => (done(), post({ type: 'task-open', sessionId: row.id }));
   return h(
@@ -202,6 +223,8 @@ function taskItem(row: TaskRow, post: (message: LanesFromView) => void, done: ()
         ),
       ),
     row.workflow !== undefined && h('p', { class: 'task-wakes task-workflow', title: row.workflow }, icon('run-all', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.workflow)),
+    row.interrupted.length > 0 &&
+      h('ul', { class: 'task-jobs task-interrupted', 'aria-label': 'Subagents cut off when Geno stopped' }, ...row.interrupted.map((cut) => interruptedItem(row.id, cut, post))),
     row.wakes !== undefined && h('p', { class: 'task-wakes', title: row.wakes }, icon('bell', 'wake-icon'), h('span', { class: 'task-wakes-text' }, row.wakes)),
     h(
       'div',

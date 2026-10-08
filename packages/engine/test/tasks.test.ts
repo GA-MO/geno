@@ -4,6 +4,26 @@ import { Tasks } from '../src/tasks.js';
 
 const base = { workspace: '/repo', lane: null, startedAt: 1 } as const;
 
+describe('Tasks, subagents cut off when Geno stopped', () => {
+  const cut = [
+    { child: 'c1', role: 'explore', summary: 'alpha is in a.ts' },
+    { child: 'c2', role: 'plan', summary: '' },
+  ];
+
+  it('lists them on a session the engine has not run yet, through its next turns, until each resumes', () => {
+    const tasks = new Tasks();
+    tasks.interrupted({ sessionId: 'p', title: 'find alpha', workspace: '/repo', children: cut });
+    expect(tasks.get('p')).toMatchObject({ status: 'stopped', title: 'find alpha', lane: null, parent: null, interrupted: cut });
+    tasks.start({ ...base, sessionId: 'p', title: 'find alpha' });
+    tasks.start({ ...base, sessionId: 'c1', title: 'explore: where', parent: 'p', kind: 'subagent' });
+    expect(tasks.get('p')!.interrupted).toEqual([cut[1]]);
+    tasks.end('p', 'done', undefined);
+    expect(tasks.get('p')).toMatchObject({ status: 'done', interrupted: [cut[1]] });
+    tasks.start({ ...base, sessionId: 'c2', title: 'plan: steps', parent: 'p', kind: 'subagent' });
+    expect(tasks.get('p')!.interrupted).toBeUndefined();
+  });
+});
+
 describe('Tasks, the attention fields', () => {
   it('keeps the background commands a session runs across its next turn', () => {
     const tasks = new Tasks();

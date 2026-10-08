@@ -33,6 +33,8 @@ describe('placeTask, one task alone', () => {
     ['a finish opened before it finished', { status: 'done', endedAt: 200, returnedAt: 200 }, 199, { kind: 'ready' }],
     ['a finish opened since', { status: 'done', endedAt: 200, returnedAt: 200 }, 200, { kind: 'done' }],
     ['a stop, which the user made', { status: 'stopped', endedAt: 200, returnedAt: 200 }, undefined, { kind: 'done' }],
+    ['subagents a stop of Geno cut off', { status: 'stopped', endedAt: 200, returnedAt: 200, interrupted: [{ child: 'c1', role: 'explore', summary: 'half' }] }, 250, { kind: 'needs-you', reason: 'interrupted', at: 's1' }],
+    ['a new turn beside subagents cut off', { status: 'running', interrupted: [{ child: 'c1', role: 'explore', summary: 'half' }] }, undefined, { kind: 'working' }],
   ];
   it.each(rows)('%s', (_, patch, seenAt, attention) => {
     expect(placeTask({ task: task(patch), children: [], seenAt }).attention).toEqual(attention);

@@ -23,6 +23,7 @@ import {
   type TokenUsage,
   type TurnErrorKind,
   type TurnEvent,
+  type WorkflowOrigin,
   type Waiting,
   waitLabel,
 } from '@g-code/core';
@@ -76,6 +77,7 @@ async function newSession(
   model: string,
   effort: Effort,
   backend?: BackendBinding,
+  workflow?: WorkflowOrigin,
 ): Promise<SessionLog> {
   const session: Session = {
     id: asSessionId(randomUUID()),
@@ -95,7 +97,7 @@ async function newSession(
     captureEnvironment({ workspace, scratchpad: await scratchpadOf(session.id), env }),
   ]);
   for (const problem of problems) io.err(`instructions: ${problem}`);
-  const start: TurnEvent = { kind: 'session-start', session, context, ...(memory.length === 0 ? {} : { memory }), environment };
+  const start: TurnEvent = { kind: 'session-start', session, context, ...(memory.length === 0 ? {} : { memory }), environment, ...(workflow === undefined ? {} : { workflow }) };
   await appendEvent(file, start);
   return { file, session, events: [start], tornLine: undefined, goodBytes: 0 };
 }
@@ -107,6 +109,8 @@ export type SessionChoice = {
   readonly provider: string | undefined;
   readonly model: string | undefined;
   readonly effort: string | undefined;
+  /** The session runs a workflow that this call started. */
+  readonly workflow?: WorkflowOrigin | undefined;
 };
 
 /** The provider and model from flags, then GCODE_PROVIDER and GCODE_MODEL, then the defaults. */
@@ -127,7 +131,7 @@ export async function startSession(store: Store, io: Io, choice: SessionChoice):
   if (!isEffort(effort)) throw new UsageError(`unknown effort: ${effort}`);
   const { provider, model } = chooseModel(io, choice);
   const gateway = gatewayFor(provider, io.env, io.fetch);
-  return { log: await newSession(store, io, choice.workspace, provider, model, effort), gateway };
+  return { log: await newSession(store, io, choice.workspace, provider, model, effort, undefined, choice.workflow), gateway };
 }
 
 /** A session on an external agent, which needs no Geno model or key: the agent brings its own. */
