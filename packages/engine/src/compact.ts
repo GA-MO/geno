@@ -1,8 +1,15 @@
+import { readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import {
+  attachBudget,
+  ATTACHED_FILE_TOKENS,
+  attachedFiles,
   capabilitiesOf,
+  changedNewestFirst,
   CHARS_PER_TOKEN,
   compactionEvent,
   contextTokens,
+  contextView,
   keepTailTokens,
   nextSeq,
   planCompaction,
@@ -51,9 +58,21 @@ export type CompactRequest = {
   readonly onRetry?: (retry: ModelRetry) => void | Promise<void>;
 };
 
+/** A file's text as it is on disk now, or undefined when it is gone, not a file, or too large to attach. */
+function diskText(workspace: string, file: string): string | undefined {
+  const full = path.resolve(workspace, file);
+  try {
+    if (!statSync(full).isFile() || statSync(full).size > ATTACHED_FILE_TOKENS * CHARS_PER_TOKEN * 4) return undefined;
+    return readFileSync(full, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Summarizes the older part of the session's context with the session's own model and effort, and returns the
- * compaction to log, numbered 0 for the log to number. Nothing is logged here, and a failed call changes nothing.
+ * compaction to log, numbered 0 for the log to number, with the newest changed files attached as they are on disk.
+ * Nothing is logged here, and a failed call changes nothing.
  */
 export async function compactContext(gateway: Gateway, session: Session, events: readonly TurnEvent[], request: CompactRequest): Promise<CompactOutcome> {
   const plan = request.plan ?? planCompaction(events, keepTailTokens(request.compactAt));
@@ -77,9 +96,11 @@ export async function compactContext(gateway: Gateway, session: Session, events:
     .trim();
   if (text === '') return { kind: 'failed', message: `the model wrote no summary (stop reason ${result.turn.stopReason ?? 'none'})` };
   const { usage, costUsd, model } = result.turn;
+  // Read once the summary is written, so the files are as they are when the compaction is logged.
+  const attached = attachedFiles(changedNewestFirst(contextView(events)), (file) => diskText(session.workspace, file), attachBudget(request.compactAt));
   return {
     kind: 'compacted',
-    event: compactionEvent(plan, { trigger: request.trigger, focus: request.focus, summary: { text, spend: { usage, costUsd, model } }, tokensBefore: contextTokens(events), at }),
+    event: compactionEvent({ ...plan, kept: { ...plan.kept, attached } }, { trigger: request.trigger, focus: request.focus, summary: { text, spend: { usage, costUsd, model } }, tokensBefore: contextTokens(events), at }),
   };
 }
 

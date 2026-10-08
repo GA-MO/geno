@@ -208,6 +208,8 @@ const keptSchema = z.strictObject({
   tools: z.array(z.string()),
   files: z.strictObject({ read: z.array(z.string()), changed: z.array(z.string()) }),
   chapters: z.array(z.string()).optional(),
+  skills: z.array(z.strictObject({ name: z.string().min(1), text: z.string().nullable() })).optional(),
+  attached: z.array(z.strictObject({ path: z.string().min(1), text: z.string() })).optional(),
 });
 const chapterMarkSchema = z.strictObject({ title: z.string().min(1).max(CHAPTER_LIMITS.title), summary: z.string().min(1).max(CHAPTER_LIMITS.summary).optional() });
 

@@ -46,6 +46,8 @@ const HARNESS_TAGS = [
   'available_skills',
   'compacted_context',
   'user_messages',
+  'loaded_skill',
+  'changed_file',
   'recalled_sessions',
   'terminal_output',
   'ci_log',
