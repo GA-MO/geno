@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { useTestLock } from './test-lock.js';
+import { useTestLock, waitForHeadroom } from './test-lock.js';
 import { flakesOf, failedFiles, type Report } from './flakes.js';
 
 const args = process.argv.slice(2);
@@ -37,6 +37,8 @@ const failed = failedFiles(first);
 if (failed.length === 0) process.exit(0);
 
 console.log(`\ntest:vscode: retrying ${failed.length} failed file(s) once: ${failed.map((f) => path.basename(f)).join(', ')}`);
+// The retry runs inside this held run, so it would skip the memory and load check that every run makes first.
+waitForHeadroom(process.env);
 const retry = attempt('retry', failed);
 if (retry === undefined) process.exit(1);
 const flakes = flakesOf(first, retry);
