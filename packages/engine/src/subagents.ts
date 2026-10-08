@@ -77,9 +77,13 @@ import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
 import type { HookAgent, SubagentHooks, ToolHooks } from './hooks.js';
 
-/** In precedence order, as for commands: Geno's home, then the workspace's folders, then plugins, then the built-ins. */
-const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string }[] = [
+/**
+ * In precedence order, as for commands: Geno's home, then Claude Code's, then the workspace's folders, then plugins,
+ * then the built-ins. An undefined folder is left out.
+ */
+const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string | undefined }[] = [
   { source: 'global', dir: (_, homes) => path.join(homes.app, 'agents') },
+  { source: 'global', dir: (_, homes) => (homes.claude === undefined ? undefined : path.join(homes.claude, 'agents')) },
   { source: 'workspace', dir: (workspace) => path.join(workspace, '.agents', 'agents') },
   { source: 'workspace', dir: (workspace) => path.join(workspace, '.claude', 'agents') },
 ];
@@ -111,7 +115,10 @@ export async function loadAgents(workspace: string, homes: Homes, plugins: reado
   const show = (file: string) => shownPath(workspace, file);
   const problems: string[] = [];
   const groups = [];
-  for (const folder of AGENT_FOLDERS) groups.push(await loadAgentDir(folder.dir(workspace, homes), folder.source, '', show, problems));
+  for (const folder of AGENT_FOLDERS) {
+    const dir = folder.dir(workspace, homes);
+    if (dir !== undefined) groups.push(await loadAgentDir(dir, folder.source, '', show, problems));
+  }
   for (const plugin of plugins) groups.push(await loadAgentDir(path.join(plugin.root, 'agents'), 'plugin', `${plugin.name}:`, show, problems));
   const agents = mergeAgents([...groups, BUILTIN_AGENTS]);
   for (const agent of groups.flat()) {

@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { homesOf } from '../src/commands.js';
+import { openStore } from '../src/store.js';
 import { loadAgents } from '../src/subagents.js';
 
 const agentFile = (description: string, extra = '') => `---\ndescription: ${description}\n${extra}---\nBody of ${description}.\n`;
@@ -47,6 +49,25 @@ describe('loadAgents', () => {
       `.agents/agents/scout.md: not loaded, because your own agent scout (${path.join(app, 'agents', 'scout.md')}) has its name`,
       `.claude/agents/scout.md: not loaded, because your own agent scout (${path.join(app, 'agents', 'scout.md')}) has its name`,
     ]);
+  });
+
+  it("reads the user's Claude Code agents from $HOME/.claude/agents, after Geno's home and before the workspace", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-agents-')));
+    const workspace = path.join(root, 'ws');
+    const home = path.join(root, 'home');
+    const env = { HOME: home, GCODE_HOME: path.join(home, '.g-code') };
+    const claude = path.join(home, '.claude', 'agents');
+    await write(path.join(claude, 'reviewer.md'), agentFile('claude reviewer', 'tools: Read, Grep\nmodel: inherit\n'));
+    await write(path.join(claude, 'tidy.md'), agentFile('claude tidy'));
+    await write(path.join(home, '.g-code', 'agents', 'tidy.md'), agentFile('geno tidy'));
+    await write(path.join(workspace, '.claude', 'agents', 'reviewer.md'), agentFile('workspace reviewer'));
+
+    const { agents, problems } = await loadAgents(workspace, homesOf(openStore(env), env), []);
+
+    const of = (name: string) => agents.find((a) => a.name === name);
+    expect(of('reviewer')).toMatchObject({ source: 'global', description: 'claude reviewer', tools: ['grep', 'read'], path: path.join(claude, 'reviewer.md') });
+    expect(of('tidy')?.description, "Geno's own home wins over Claude Code's").toBe('geno tidy');
+    expect(problems).toEqual([`.claude/agents/reviewer.md: not loaded, because your own agent reviewer (${path.join(claude, 'reviewer.md')}) has its name`]);
   });
 
   it('gives the built-ins alone when no folder exists', async () => {
