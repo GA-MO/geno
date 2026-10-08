@@ -17,7 +17,7 @@ import type { Waiter } from './waiting.js';
 
 export const AGENT_TOOL = 'agent';
 
-/** Where a definition came from. A workspace one shadows a global one, which shadows a built-in. */
+/** Where a definition came from. The user's global one shadows a workspace one, which shadows a plugin's, then a built-in. */
 export type AgentSource = 'workspace' | 'global' | 'plugin' | 'builtin';
 
 /** `worktree` runs each child of the definition in a lane of its own. */
