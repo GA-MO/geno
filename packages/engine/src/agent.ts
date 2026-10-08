@@ -65,6 +65,7 @@ import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from '.
 import { workspaceDir } from './workspace.js';
 import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
+import { addedDirectories, settingDirectories, workingDirectories } from './directories.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
 import { writeGenoTools } from './geno-tools.js';
@@ -200,6 +201,11 @@ export type AgentOptions = {
   readonly hooks?: HookSessions | undefined;
   /** Whether the editor trusts the workspace, which lets its own hooks run. */
   readonly trustedWorkspace?: boolean | undefined;
+  /**
+   * The directories the user allowed the session to read from a card, kept by the engine across the session's runs;
+   * undefined keeps them to this run.
+   */
+  readonly sessionDirectories?: Set<string> | undefined;
   /** A subagent of the session to resume with the prompt as its message, as the user's own `message_agent` call. */
   readonly resumeAgent?: string | undefined;
 };
@@ -250,7 +256,14 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     io.err,
   );
   const ruledPaths = (root: string) => async () => sandboxDenials(await permissions.list(), { workspace: root, tempDir, home });
-  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }), ruledPaths(workspace));
+  const setting = settingDirectories(io.env);
+  if (setting.problem !== undefined) io.err(`directories: ${setting.problem}`);
+  const directories = workingDirectories(
+    await addedDirectories([...setting.entries, ...(await permissions.directories())], lane?.repo.main ?? workspace, home, io.err),
+    options.sessionDirectories ?? new Set(),
+  );
+  const writable = (more: readonly string[]) => [...more, ...directories.writable()];
+  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, writable: writable(lane?.gitWritable ?? []) }), ruledPaths(workspace));
   let children: Subagents | undefined;
   const { jobs, steers, wakes } = options.engine ?? runEngine();
   const inbox = steers.open(session.id, undefined);
@@ -292,6 +305,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         lane: place.lane,
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
+        directories,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
         // Read at each call: the run's subagents start after its tools are built.
         children: own
@@ -311,7 +325,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       if (bound === undefined) throw new EngineError(`lane ${name} at ${record.path} is not a lane checkout`);
       await bindSession(bound, child);
       const laneCheck = await checkCommand(options.check ?? config.check, record.path, homeOf(store));
-      const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: bound.gitWritable }), ruledPaths(record.path));
+      const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: writable(bound.gitWritable) }), ruledPaths(record.path));
       const place: Place = { sandbox: laneSandbox, workspace: record.path, lane: bound.bounds, check: laneCheck, diagnostics: undefined };
       return { lane: bound, executors: (approval) => executorsFor(approval, false, place), close: () => laneSandbox.close() };
     };

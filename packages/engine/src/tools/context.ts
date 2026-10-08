@@ -15,6 +15,8 @@ export type ToolContext = {
   readonly spillChars: number;
   /** Real paths of other roots the read tools may see but nothing may change, such as installed plugins. */
   readonly readRoots: readonly string[];
+  /** Real paths beyond the workspace an edit may write: the directories the user added as writable. Absent is none. */
+  readonly writeRoots?: readonly string[] | undefined;
   /** This session's attachments folder, where an image a tool returns is stored by its hash. */
   readonly attachmentsDir: string;
   readonly rg: string;
@@ -145,10 +147,10 @@ export function executor<I>(def: ToolDef<I>): Executor {
   };
 }
 
-const within = (root: string, target: string): boolean =>
+export const within = (root: string, target: string): boolean =>
   target === root || target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 
-async function realOrUndefined(target: string): Promise<string | undefined> {
+export async function realOrUndefined(target: string): Promise<string | undefined> {
   try {
     return await realpath(target);
   } catch (error) {
@@ -179,16 +181,17 @@ export async function resolveInside(ctx: ToolContext, raw: string): Promise<stri
   throw outside;
 }
 
-/** The real path to write for `raw`, which may not exist yet; rejected unless it lands inside the workspace. */
+/** The real path to write for `raw`, which may not exist yet; rejected unless it lands inside the workspace or a writable root. */
 export async function resolveWritable(ctx: ToolContext, raw: string): Promise<string> {
   const target = path.resolve(ctx.workspace, raw);
   const outside = new ToolError(`${raw} is outside the workspace`);
-  if (!within(ctx.workspace, target)) throw outside;
+  const roots = [ctx.workspace, ...(ctx.writeRoots ?? [])];
+  if (!roots.some((root) => within(root, target))) throw outside;
   let existing = target;
   let real: string | undefined;
   while ((real = await realOrUndefined(existing)) === undefined) existing = path.dirname(existing);
   const resolved = path.join(real, path.relative(existing, target));
-  if (!within(ctx.workspace, resolved)) throw outside;
+  if (!roots.some((root) => within(root, resolved))) throw outside;
   return resolved;
 }
 

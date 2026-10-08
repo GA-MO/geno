@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -24,6 +24,7 @@ import { rgCommand } from './helpers.js';
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 let nextId = 0;
 const bash = (command: string): FakeToolUse => ({ id: `tu_rule_${nextId++}`, name: 'bash', input: { command } });
+const read = (file: string): FakeToolUse => ({ id: `tu_rule_${nextId++}`, name: 'read', input: { path: file } });
 
 async function setup(replies: readonly Reply[]) {
   const workspace = await realpath(makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const a = 1;\n' } }]));
@@ -180,5 +181,33 @@ describe('remembered permission rules', () => {
     expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
     expect(results().get(forced.id), 'the rejection ends the turn, so no request carries its result').toBeUndefined();
     expect(transport.requests).toHaveLength(1);
+  });
+
+  it('T-PERM-04 the card for a read outside the workspace offers "Allow this directory for the session", and the next prompt reads there without one', async () => {
+    const outside = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-sibling-')));
+    await writeFile(path.join(outside, 'a.md'), 'first note\n');
+    await writeFile(path.join(outside, 'b.md'), 'second note\n');
+    const first = read(path.join(outside, 'a.md'));
+    const second = read(path.join(outside, 'b.md'));
+    const { permissions, session, prompt, results, answerWith } = await setup([
+      toolCall('Reading.', [first], usage),
+      answer('Read.', usage),
+      toolCall('Reading the other.', [second], usage),
+      answer('Read it too.', usage),
+    ]);
+    answerWith('allow-session');
+    await session(async (ctx, sessionId) => {
+      await prompt(ctx, sessionId, 'Read the notes next door.');
+      await prompt(ctx, sessionId, 'And the other one.');
+    });
+    expect(permissions).toHaveLength(1);
+    expect(permissions[0]!.toolCall.title).toBe(`Allow \`read ${path.join(outside, 'a.md')}\`? It uses a path outside the workspace.`);
+    expect(permissions[0]!.options.map((o) => [o.optionId, o.name])).toEqual([
+      ['allow', 'Allow once'],
+      ['allow-session', 'Allow this directory for the session'],
+      ['reject', 'Reject'],
+    ]);
+    expect(results().get(first.id)).toBe('1\tfirst note');
+    expect(results().get(second.id)).toBe('1\tsecond note');
   });
 });

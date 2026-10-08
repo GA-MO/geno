@@ -4,6 +4,11 @@ export type CommandScope = {
   readonly workspace: string;
   readonly tempDir: string;
   readonly home: string;
+  /**
+   * Real paths beyond the workspace a command may name without a question, as Claude Code's working directories: the
+   * directories the user added, and those allowed for the session. Absent is none.
+   */
+  readonly directories?: readonly string[] | undefined;
 };
 
 export const DENY_RULE_IDS = [
@@ -87,6 +92,8 @@ export type Denial = {
   readonly offer?: readonly string[];
   /** Any other allow rule the question offers to save for the workspace, as the user would type it: a domain or an MCP tool. */
   readonly keeps?: string;
+  /** The directory "Allow this directory for the session" lets the session read, for a read outside every one it may. */
+  readonly directory?: string;
 };
 
 // What cannot be undone: Auto still asks.
@@ -152,7 +159,7 @@ function pathOf(word: string, scope: CommandScope): string | undefined {
 }
 
 function isOutside(target: string, scope: CommandScope): boolean {
-  const allowed = [scope.workspace, scope.tempDir, ...SYSTEM_PREFIXES];
+  const allowed = [scope.workspace, scope.tempDir, ...SYSTEM_PREFIXES, ...(scope.directories ?? [])];
   return !allowed.some((root) => within(root, target));
 }
 
@@ -806,6 +813,18 @@ export function secretReadDenial(shown: string, mode: ApprovalMode): Denial | un
   const { reason, verdicts } = DENY_RULES['secret-path'];
   const verdict = verdicts[mode];
   return verdict === 'allow' ? undefined : { rule: 'secret-path', reason, command: `read ${shown}`, verdict };
+}
+
+/**
+ * What a read tool meets on `target`, an absolute path outside every directory it may read: the rule that makes `cat`
+ * of the path ask. The question offers `directory` for the session, unless the path names credentials, which the
+ * read then asks about on its own.
+ */
+export function outsideReadDenial(command: string, target: string, directory: string, mode: ApprovalMode): Denial | undefined {
+  const { reason, verdicts } = DENY_RULES['path-outside-workspace'];
+  const verdict = verdicts[mode];
+  if (verdict === 'allow') return undefined;
+  return { rule: 'path-outside-workspace', reason, command, verdict, ...(isSecretPath(target) ? {} : { directory }) };
 }
 
 /** What the line rule that judges `command` whole does in this mode; undefined when none does, or it lets the line run. */

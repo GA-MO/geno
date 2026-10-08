@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -26,6 +27,7 @@ import {
   neutralizeNoticeLines,
   nextAutoState,
   OUTCOME_VERDICTS,
+  outsideReadDenial,
   pathRuleFor,
   restoreHidden,
   STOP_AND_WAIT,
@@ -54,6 +56,7 @@ import {
 import type { JobStart } from '../background.js';
 import type { CheckCommand } from '../check-command.js';
 import type { Classify } from '../classifier.js';
+import type { WorkingDirectories } from '../directories.js';
 import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
@@ -63,8 +66,10 @@ import {
   displayPath,
   executor,
   optional,
+  realOrUndefined,
   resolveInside,
   resolveWritable,
+  within,
   ToolDenied,
   ToolError,
   PermissionRerun,
@@ -75,6 +80,7 @@ import {
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
+import { GLOB_CHARS } from './grep.js';
 import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
@@ -86,8 +92,9 @@ import { watchPrExecutor, type PrTools } from './pr.js';
 import { todo } from './todo.js';
 
 /**
- * The user's answer. `allow-session` is offered only for an MCP tool, and allows it for the rest of the session.
- * `allow-workspace` is offered only with a command's `offer`, and saves that allow rule for the workspace.
+ * The user's answer. `allow-session` is offered for an MCP tool, which it allows for the rest of the session, and with
+ * a read's `directory`, which it lets the session read. `allow-workspace` is offered only with a command's `offer`,
+ * and saves that allow rule for the workspace.
  */
 export type PermissionAnswer = 'allow' | 'allow-session' | 'allow-workspace' | 'reject';
 /** An answer that outlives the one call. */
@@ -206,6 +213,18 @@ export const refusalOf = (record: ApprovalRecord, text = denialText(record)): To
   record.decidedBy === 'user' || record.interrupt === true ? new ToolRejected(text, record) : new ToolDenied(text, record);
 
 /**
+ * The refusal of a path outside every directory Geno may read, which names them, as Claude Code's does. The user's
+ * no names none, since it says to stop.
+ */
+export const outsideRefusal = (record: ApprovalRecord, readable: readonly string[]): ToolError =>
+  refusalOf(
+    record,
+    record.decidedBy === 'user'
+      ? denialText(record)
+      : `${denialText(record)} Geno may read only in these directories in this session: ${readable.map((dir) => `'${dir}'`).join(', ')}. If the task needs another one, say so in your answer: the user can add it in gcode.additionalDirectories or allow it for the session.`,
+  );
+
+/**
  * The tool, refused while the session's mode leaves it out. Every mode is offered every tool, so the cached prefix
  * holds across a switch; this is what keeps Plan read-only.
  */
@@ -247,6 +266,18 @@ export function withPermissions<T extends Executors>(executors: T, permissions: 
 /** The rules a session's tools follow: the store, and Claude Code's bare-tool denies when its settings are read. */
 export type ToolPermissions = PermissionStore & Partial<Pick<SessionPermissions, 'deniedTool'>>;
 
+/** The read tools that may reach beyond the workspace, and the field that names where. */
+type ReachTool = 'read' | 'grep' | 'glob' | 'list';
+const REACH_FIELDS: Readonly<Record<ReachTool, 'path' | 'directory'>> = { read: 'path', grep: 'path', glob: 'directory', list: 'directory' };
+
+const namedPath = (name: ReachTool, raw: unknown): string | undefined => {
+  const value = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>)[REACH_FIELDS[name]] : undefined;
+  return typeof value === 'string' && value !== '' ? value : undefined;
+};
+
+/** Whether a path, as written, may lead out of the workspace; a link inside it that leads out is caught when the call runs. */
+const mayLeave = (given: string | undefined): boolean => given !== undefined && (path.isAbsolute(given) || given.split('/').includes('..'));
+
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
 
@@ -268,6 +299,8 @@ export type AgentToolEnv = {
   readonly background?: SessionBackground | undefined;
   /** The workspace's remembered rules; undefined runs with none. */
   readonly permissions?: ToolPermissions | undefined;
+  /** The directories beyond the workspace the tools and commands may reach, which a yes for the session adds to. */
+  readonly directories: WorkingDirectories;
   /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
   readonly wakes?: SessionWakes | undefined;
   /** The background subagents of the session's run, for task_stop; undefined for a subagent, which starts none. */
@@ -333,6 +366,9 @@ export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: Tool
 export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolName, Executor>> {
   // What the model last saw of each file: the base an edit must still match.
   const reads = new Map<string, BaseRead>();
+  // Read at each call, so a directory allowed for the session holds from the next call on.
+  const scope = (): CommandScope => ({ ...tools.scope, directories: tools.directories.readable() });
+  const readableDirs = (ctx: ToolContext): readonly string[] => [ctx.workspace, ...tools.directories.readable()];
 
   // A credentials file opens only with the user's yes or the classifier's, as `cat .env` does.
   const askSecret: SecretGate = async (ctx, shown) => {
@@ -397,13 +433,73 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     async run(raw, ctx) {
       const rules = (await tools.permissions?.list()) ?? [];
       if (!rules.some(isPathRule)) return inner.run(raw, ctx);
-      const ruled: ToolContext = { ...ctx, pathRule: (on, file) => pathRuleFor(on, file, rules, { ...tools.scope, workspace: ctx.workspace }) };
+      const ruled: ToolContext = { ...ctx, pathRule: (on, file) => pathRuleFor(on, file, rules, { ...scope(), workspace: ctx.workspace }) };
       const given = (raw as { path?: unknown }).path;
       const approval = tool === undefined || typeof given !== 'string' ? undefined : await askPathRule(tool, given, ruled);
       const reply: ToolReply = await inner.run(raw, ruled);
       if (approval === undefined) return reply;
       return typeof reply === 'string' ? { text: reply, approval } : { approval, ...reply };
     },
+  });
+
+  /** Where a read outside every directory it may read lands, and the directory a yes for the session lets it read. */
+  type Outside = { readonly target: string; readonly directory: string };
+
+  /** The path `given` reaches when it is outside the workspace and every directory the read tools may read. */
+  const outsideOf = async (ctx: ToolContext, name: ReachTool, given: string): Promise<Outside | undefined> => {
+    const lexical = path.resolve(ctx.workspace, given);
+    const real = await realOrUndefined(lexical);
+    // grep takes a glob that names nothing on disk as a filter of the workspace, not as a path.
+    if (real === undefined && name === 'grep' && GLOB_CHARS.test(given)) return undefined;
+    const target = real ?? lexical;
+    const spill = await realOrUndefined(ctx.spillDir);
+    if ([ctx.workspace, ctx.spillDir, ...(spill === undefined ? [] : [spill]), ...ctx.readRoots].some((root) => within(root, target))) return undefined;
+    const isDirectory = real !== undefined && (await stat(real)).isDirectory();
+    return { target, directory: isDirectory ? target : path.dirname(target) };
+  };
+
+  /** The question `cat` of the same path meets, which offers the directory for the session; a refusal throws, naming the readable directories. */
+  const askOutside = async (name: ReachTool, { target, directory }: Outside, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
+    const mode = modeOf(tools.approval);
+    const denial = outsideReadDenial(`${name} ${target}`, target, directory, mode);
+    if (denial === undefined) return undefined;
+    const keep = (answer: KeptAnswer) => {
+      if (answer === 'allow-session' && denial.directory !== undefined) tools.directories.allow(denial.directory);
+    };
+    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx, keep);
+    if (approval.verdict === 'deny') throw outsideRefusal(approval, readableDirs(ctx));
+    return approval;
+  };
+
+  /**
+   * A read tool that reaches beyond the workspace as Claude Code's working directories do. The added directories and
+   * those allowed for the session read as the workspace does, the credentials rule judged below each. A path outside
+   * all of them meets the question `cat` of it meets, unless a Read deny refuses it first; after a yes the call reads
+   * it, the credentials rule judged on the whole path.
+   */
+  const withReach = (name: ReachTool, inner: Executor): Executor => ({
+    ...inner,
+    // A call that may ask runs alone, as a command that may ask does.
+    concurrent: (raw) => inner.concurrent?.(raw) === true && !mayLeave(namedPath(name, raw)),
+    async run(raw, ctx) {
+      const reach: ToolContext = { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()] };
+      const given = namedPath(name, raw);
+      const outside = given === undefined ? undefined : await outsideOf(reach, name, given);
+      if (outside === undefined) return inner.run(raw, reach);
+      const granted: ToolContext = { ...reach, readRoots: [...reach.readRoots, path.parse(outside.target).root] };
+      const denied = pathRuleFor('read', outside.target, (await tools.permissions?.list()) ?? [], { ...scope(), workspace: ctx.workspace });
+      if (denied?.effect === 'deny') return inner.run(raw, granted);
+      const approval = await askOutside(name, outside, reach);
+      const reply = await inner.run(raw, granted);
+      if (approval === undefined) return reply;
+      return typeof reply === 'string' ? { text: reply, approval } : { approval, ...reply };
+    },
+  });
+
+  /** An edit may also write in the directories the user added as writable. */
+  const withWriteRoots = (inner: Executor): Executor => ({
+    ...inner,
+    run: (raw, ctx) => inner.run(raw, { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()], writeRoots: tools.directories.writable() }),
   });
 
   /** The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal throws. */
@@ -414,16 +510,16 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
     const rules = (await permissions?.list()) ?? [];
-    const ruled = ruledDenial(command, tools.scope, mode, rules, ctx.hookAllowed === true);
+    const ruled = ruledDenial(command, scope(), mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
-    const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, tools.scope, 'ask', rules)?.offer;
+    const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, scope(), 'ask', rules)?.offer;
     const denial = ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
       denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx, keep);
-    if (approval?.verdict === 'deny') throw refusalOf(approval);
+    if (approval?.verdict === 'deny') throw approval.rule === 'path-outside-workspace' ? outsideRefusal(approval, readableDirs(ctx)) : refusalOf(approval);
     return approval;
   };
 
@@ -497,10 +593,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
 
   const all: Readonly<Record<AgentToolName, Executor>> = {
     ...EXECUTORS,
-    glob: withPathRules(undefined, EXECUTORS.glob),
-    grep: withPathRules(undefined, EXECUTORS.grep),
-    read: withRuleAttachments(withPathRules('read', read), tools.rules),
-    edit: withPathRules('edit', edit),
+    glob: withReach('glob', withPathRules(undefined, EXECUTORS.glob)),
+    grep: withReach('grep', withPathRules(undefined, EXECUTORS.grep)),
+    list: withReach('list', withPathRules(undefined, EXECUTORS.list)),
+    read: withReach('read', withRuleAttachments(withPathRules('read', read), tools.rules)),
+    edit: withWriteRoots(withPathRules('edit', edit)),
     bash,
     ...backgroundExecutors(tools.background),
     ...workExecutors({ background: tools.background, wakes: tools.wakes, children: tools.children }),

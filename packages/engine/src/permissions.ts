@@ -18,6 +18,7 @@ import {
   type PermissionRule,
   type PermissionsFile,
 } from '@g-code/core';
+import type { AddedDirectory } from './directories.js';
 import { claudeSettingsFiles } from './hook-config.js';
 import { laneAt } from './lanes.js';
 import { readJson } from './plugins.js';
@@ -128,14 +129,21 @@ export type ClaudeSettingsSources = { readonly claudeDir: string | undefined; re
 
 export type SourcedDeniedTool = DeniedTool & { readonly source: string };
 
-/** A workspace's rules with Claude Code's beneath them, and the tools a Claude Code file denies by name. */
-export type SessionPermissions = PermissionStore & { deniedTool(tool: string): Promise<SourcedDeniedTool | undefined> };
+/**
+ * A workspace's rules with Claude Code's beneath them, the tools a Claude Code file denies by name, and the
+ * `additionalDirectories` its files add, as written and read-only.
+ */
+export type SessionPermissions = PermissionStore & {
+  deniedTool(tool: string): Promise<SourcedDeniedTool | undefined>;
+  directories(): Promise<readonly AddedDirectory[]>;
+};
 
 /**
  * Geno's own store over Claude Code's settings files, read at each call as the store is. Deny and ask rules from every
  * file apply; an allow from the repository's files only in a trusted workspace, since anyone who can commit wrote it.
  * The local file comes before the shared one and the shared one before the user's. That orders only which rule a
  * refusal names, as a deny anywhere beats an allow anywhere. A rule Geno cannot apply is reported once through `warn`.
+ * The repository's `additionalDirectories` also wait for trust, since reading a directory unasked is an allow.
  */
 export function layeredPermissions(store: PermissionStore, { claudeDir, trusted }: ClaudeSettingsSources, scope: CommandScope, warn: (line: string) => void): SessionPermissions {
   const warned = new Set<string>();
@@ -149,9 +157,10 @@ export function layeredPermissions(store: PermissionStore, { claudeDir, trusted 
     return file.startsWith(`${scope.home}${path.sep}`) ? `~/${path.relative(scope.home, file)}` : file;
   };
 
-  async function imported(): Promise<{ readonly rules: readonly PermissionRule[]; readonly deniedTools: readonly SourcedDeniedTool[] }> {
+  async function imported(): Promise<{ readonly rules: readonly PermissionRule[]; readonly deniedTools: readonly SourcedDeniedTool[]; readonly directories: readonly AddedDirectory[] }> {
     const rules: PermissionRule[] = [];
     const deniedTools: SourcedDeniedTool[] = [];
+    const directories: AddedDirectory[] = [];
     for (const { file, scope: from } of claudeSettingsFiles(claudeDir, store.workspace).toReversed()) {
       const source = shown(file);
       const raw = await readJson(file);
@@ -165,8 +174,11 @@ export function layeredPermissions(store: PermissionStore, { claudeDir, trusted 
         if (rule.effect !== 'allow' || from === 'user' || trusted) rules.push({ ...rule, id: `${source}#${i}`, createdAt: '', source } as PermissionRule);
       });
       deniedTools.push(...parsed.deniedTools.map((denied) => ({ ...denied, source })));
+      if (!trusted && from === 'project' && parsed.directories.length > 0) once(`permissions: ${source}: additionalDirectories ${parsed.directories.length === 1 ? 'waits' : 'wait'} for a trusted workspace`);
+      // Read-only: Claude Code asks before an edit there, and Geno, which edits unasked, keeps no checkpoint outside the workspace.
+      else directories.push(...parsed.directories.map((given) => ({ path: given, writable: false, source })));
     }
-    return { rules, deniedTools };
+    return { rules, deniedTools, directories };
   }
 
   return {
@@ -176,6 +188,9 @@ export function layeredPermissions(store: PermissionStore, { claudeDir, trusted 
     },
     async deniedTool(tool) {
       return (await imported()).deniedTools.find((denied) => denied.tool === tool);
+    },
+    async directories() {
+      return (await imported()).directories;
     },
   };
 }

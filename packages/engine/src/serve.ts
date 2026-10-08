@@ -336,9 +336,16 @@ const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
 const WORKSPACE_PERMISSION_OPTION: acp.PermissionOption = { optionId: 'allow-workspace', name: 'Always allow in this workspace', kind: 'allow_always' };
 const RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [...PERMISSION_OPTIONS, WORKSPACE_PERMISSION_OPTION];
 const MCP_RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [...MCP_PERMISSION_OPTIONS, WORKSPACE_PERMISSION_OPTION];
+// A read outside every directory Geno may read can also let the session read that directory, as Claude Code's card does.
+const DIRECTORY_PERMISSION_OPTIONS: acp.PermissionOption[] = [
+  PERMISSION_OPTIONS[0]!,
+  { optionId: 'allow-session', name: 'Allow this directory for the session', kind: 'allow_always' },
+  PERMISSION_OPTIONS[1]!,
+];
 const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session', 'allow-workspace': 'allow-workspace' };
 
 const optionsFor = (denial: Denial): acp.PermissionOption[] => {
+  if (denial.directory !== undefined) return DIRECTORY_PERMISSION_OPTIONS;
   const keeps = denial.offer !== undefined || denial.keeps !== undefined;
   if (isMcpRule(denial.rule)) return keeps ? MCP_RULE_PERMISSION_OPTIONS : MCP_PERMISSION_OPTIONS;
   return keeps ? RULE_PERMISSION_OPTIONS : PERMISSION_OPTIONS;
@@ -1094,6 +1101,8 @@ export function engineShared(io: Io, options: EngineOptions = {}) {
     }),
     // Sessions whose user allowed every schedule change for the chat.
     scheduleAllowed: new Set<string>(),
+    // The directories each session's user allowed it to read from a card, by session.
+    sessionDirectories: new Map<string, Set<string>>(),
     // A scheduled run's budget, which the turns it wakes share.
     runLimits: new Map<string, Limits>(),
     // The hooks of each session a turn ran in this process; SessionEnd fires for them when the process ends.
@@ -1171,8 +1180,9 @@ type Turned = { readonly end: TurnEnd; readonly response: acp.PromptResponse };
  * after it closes and shows in the next editor that loads its session.
  */
 export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSessions = mcpSessions(store, io.env), shared: EngineShared = engineShared(io)): acp.AgentApp {
-  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, runLimits, hooks } = shared;
+  const { turns, childCancels, autos, modes, serially, viewers, tasks, live, arenaWatchers, retries, leftWaits, externals, jobs, inbox, steers, turnEnds, nextTurns, wakes, schedules, scheduleAllowed, sessionDirectories, runLimits, hooks } = shared;
   const wakeOf = (sessionId: string) => retries.get(sessionId) ?? retries.set(sessionId, new Wake()).get(sessionId)!;
+  const directoriesOf = (sessionId: string) => sessionDirectories.get(sessionId) ?? sessionDirectories.set(sessionId, new Set()).get(sessionId)!;
   let peer: Peer = NO_PEER;
   let viewer: Viewer<Peer> | undefined;
   // This connection itself, as the editor that shows the sessions it opens; known once it connected.
@@ -1620,6 +1630,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 keyOf: keyOf(sessionId),
                 hooks,
                 trustedWorkspace: from.peer.trusted,
+                sessionDirectories: directoriesOf(sessionId),
                 resumeAgent,
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
                 childHost: acpChildHost({

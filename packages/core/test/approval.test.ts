@@ -4,6 +4,7 @@ import {
   denialFor,
   DENY_RULE_IDS,
   DENY_RULES,
+  outsideReadDenial,
   splitCommand,
   type ApprovalMode,
   type CommandScope,
@@ -452,5 +453,29 @@ describe('splitCommand', () => {
       ['ls', '..'],
       ['echo', '`ls ..`', 'done'],
     ]);
+  });
+});
+
+describe('P31 directories beyond the workspace', () => {
+  it('T-PERM-04 B/B-68 a path in an added directory needs no question, and one outside every directory still asks', () => {
+    const added: CommandScope = { ...scope, directories: ['/Users/me/shared'] };
+    expect(denialFor('cat ../shared/a.md', added, 'ask')).toBeUndefined();
+    expect(denialFor('ls /Users/me/shared', added, 'auto')).toBeUndefined();
+    expect(denialFor('cat ../other/a.md', added, 'ask')).toMatchObject({ rule: 'path-outside-workspace', verdict: 'ask' });
+    expect(denialFor('cat ../shared/a.md', scope, 'ask')).toMatchObject({ rule: 'path-outside-workspace', verdict: 'ask' });
+  });
+
+  it('T-PERM-04 a read outside meets the rule cat of the same path meets in each mode, and offers its directory', () => {
+    expect(APPROVAL_MODES.map((mode) => outsideReadDenial('read /x/a.md', '/x/a.md', '/x', mode)?.verdict)).toEqual(APPROVAL_MODES.map((mode) => DENY_RULES['path-outside-workspace'].verdicts[mode]));
+    expect(outsideReadDenial('read /x/a.md', '/x/a.md', '/x', 'ask')).toEqual({ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: 'read /x/a.md', verdict: 'ask', directory: '/x' });
+  });
+
+  it('T-PERM-04 a read outside that names credentials offers no directory for the session', () => {
+    expect(outsideReadDenial('read /Users/me/.ssh/config', '/Users/me/.ssh/config', '/Users/me/.ssh', 'auto')).toEqual({
+      rule: 'path-outside-workspace',
+      reason: 'a path outside the workspace',
+      command: 'read /Users/me/.ssh/config',
+      verdict: 'classify',
+    });
   });
 });

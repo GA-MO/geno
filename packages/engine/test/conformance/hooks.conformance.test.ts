@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -483,9 +483,12 @@ describe.each(WIRES)('a PreToolUse hook and the permission checks on the %s wire
     const readOut = { id: 'tu_read_out', name: 'read', input: { path: '/etc/hosts' } };
     const escape = { id: 'tu_escape', name: 'bash', input: { command: `node -e "require('fs').writeFileSync(require('os').homedir() + '/escaped.txt', 'x')"` } };
     // The user's no to the outside path ends the turn, so it goes last.
-    const { run, asked, logged } = await interactive(wire, [call('', [readOut, escape, outside]), say('Done.')], always('allow'), { mode: 'ask' });
-    expect(asked.map((card) => [card.rule, card.command]), 'the outside path still asks').toEqual([['path-outside-workspace', 'cat ../outside.txt']]);
-    expect(logged('tu_read_out')).toMatchObject({ status: 'error', output: expect.stringContaining('outside the workspace') });
+    const { run, asked, logged } = await interactive(wire, [call('', [escape, readOut, outside]), say('Done.')], always('allow'), { mode: 'ask', answers: ['allow'] });
+    expect(asked.map((card) => [card.rule, card.command]), 'the outside paths still ask').toEqual([
+      ['path-outside-workspace', `read ${realpathSync('/etc/hosts')}`],
+      ['path-outside-workspace', 'cat ../outside.txt'],
+    ]);
+    expect(logged('tu_read_out')).toMatchObject({ status: 'ok', approval: expect.objectContaining({ decidedBy: 'user' }) });
     expect(existsSync(path.join(run.env['HOME']!, 'escaped.txt')), 'the sandbox still holds the write').toBe(false);
   });
 

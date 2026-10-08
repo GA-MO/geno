@@ -20,6 +20,7 @@ describe('claudePermissions', () => {
         { effect: 'deny', pattern: ['curl'] },
       ],
       deniedTools: [],
+      directories: [],
       skipped: [],
     });
   });
@@ -45,6 +46,7 @@ describe('claudePermissions', () => {
         { effect: 'deny', mcp: 'mcp__my-server' },
       ],
       deniedTools: [],
+      directories: [],
       skipped: [],
     });
   });
@@ -93,12 +95,20 @@ describe('claudePermissions', () => {
     ]);
   });
 
+  it('B/B-68 takes additionalDirectories as written, and skips an entry that is not a path', () => {
+    const parsed = claudePermissions({ permissions: { additionalDirectories: ['../shared', ' ~/notes ', 7, ''] } }, scope);
+    expect(parsed.directories).toEqual(['../shared', '~/notes']);
+    expect(parsed.skipped).toEqual(['additionalDirectories 7', 'additionalDirectories ""']);
+    expect(claudePermissions({ permissions: { additionalDirectories: '../shared' } }, scope)).toMatchObject({ directories: [], skipped: ['additionalDirectories (not a list)'] });
+  });
+
   it('reads nothing from a file without permissions, and names a list that is not one', () => {
-    expect(claudePermissions({ hooks: {} }, scope)).toEqual({ rules: [], deniedTools: [], skipped: [] });
-    expect(claudePermissions('x', scope)).toEqual({ rules: [], deniedTools: [], skipped: [] });
+    expect(claudePermissions({ hooks: {} }, scope)).toEqual({ rules: [], deniedTools: [], directories: [], skipped: [] });
+    expect(claudePermissions('x', scope)).toEqual({ rules: [], deniedTools: [], directories: [], skipped: [] });
     expect(claudePermissions({ permissions: { deny: 'Bash', allow: ['Bash(ls *)'] } }, scope)).toEqual({
       rules: [{ effect: 'allow', pattern: ['ls'] }],
       deniedTools: [],
+      directories: [],
       skipped: ['deny (not a list)'],
     });
   });
