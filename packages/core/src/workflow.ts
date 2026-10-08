@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { ApprovalMode } from './approval.js';
 import { reportBody } from './fence.js';
@@ -462,6 +463,8 @@ export type WorkflowPreview = {
   readonly stopsBefore: string | undefined;
   /** Models with no known price, whose cost caps cannot hold. */
   readonly unpriced: readonly string[];
+  /** The earlier run this one resumes, and the units its journal replays before the first that runs. */
+  readonly resume?: { readonly run: string; readonly replays: readonly string[] } | undefined;
 };
 
 const round6 = (usd: number): number => Math.round(usd * 1e6) / 1e6;
@@ -525,13 +528,17 @@ export function previewQuestion(preview: WorkflowPreview): string {
   const steps = preview.rows.filter((row) => row.kind !== 'gate');
   const about = preview.estimateUsd === null ? 'cost unknown' : `about ${usd(preview.estimateUsd)}`;
   const worst = Math.min(preview.worstUsd, preview.capUsd);
-  return `Run workflow ${preview.name}: ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}, ${about}, at most ${usd(worst)} (cap ${usd(preview.capUsd)})?`;
+  const { resume } = preview;
+  const verb = resume === undefined ? 'Run' : 'Resume';
+  const from = resume === undefined ? '' : ` from run ${resume.run}`;
+  const replays = resume === undefined ? '' : `, ${resume.replays.length} replayed with no model call`;
+  return `${verb} workflow ${preview.name}${from}: ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}${replays}, ${about}, at most ${usd(worst)} (cap ${usd(preview.capUsd)})?`;
 }
 
 export const WORKFLOW_REASON = 'A workflow starts subagents in the background, and each one spends up to its cap.';
 
 
-export type UnitStatus = 'running' | 'done' | 'failed' | 'capped' | 'cancelled' | 'passed';
+export type UnitStatus = 'running' | 'done' | 'replayed' | 'failed' | 'capped' | 'cancelled' | 'passed';
 
 /** One agent call or check the run issued, in issue order. */
 export type WorkflowUnit = {
@@ -550,6 +557,12 @@ export type WorkflowUnit = {
   readonly sessionId: string | undefined;
   /** Why it failed or stopped, in words. */
   readonly note: string | undefined;
+  /** What a resumed run's journal finds the unit's result by; undefined for a check or a step in a lane, which never replay. */
+  readonly key: string | undefined;
+  /** Its report once it ended done or replayed, which the run's journal keeps. */
+  readonly report: string | undefined;
+  /** It ended done with nothing in its report. */
+  readonly empty: boolean;
 };
 
 export type WorkflowStop =
@@ -575,11 +588,14 @@ export type WorkflowRun = {
   readonly items: readonly PipelineItem[] | undefined;
   readonly outputs: Readonly<Record<string, StepOutput>>;
   readonly units: readonly WorkflowUnit[];
+  /** The earlier run whose journal this one replays. */
+  readonly resumes: string | undefined;
 };
 
-export const startWorkflow = (spec: WorkflowSpec, input: string): WorkflowRun => ({
+export const startWorkflow = (spec: WorkflowSpec, input: string, resumes?: string): WorkflowRun => ({
   spec,
   input,
+  resumes,
   status: 'running',
   stop: undefined,
   at: { node: 0, stage: 0 },
@@ -595,6 +611,16 @@ export const unitToolId = (index: number): string => `toolu_gcode_wf_${index}`;
 export type UnitCall =
   | { readonly kind: 'agent'; readonly index: number; readonly role: string; readonly task: string; readonly model: string | undefined; readonly lane: string | undefined; readonly caps: ChildCaps }
   | { readonly kind: 'check'; readonly index: number };
+
+/**
+ * What a journal finds an agent call's result by: its task, caps, role and model, so an edit to any of them runs the
+ * step again. A step in a lane has none, since its edits live in the earlier run's lane, which a resumed run does not work in.
+ */
+export function unitKey(step: { readonly task: string; readonly caps: ChildCaps; readonly role: string; readonly model: string | undefined; readonly lane: string | undefined }): string | undefined {
+  if (step.lane !== undefined) return undefined;
+  const material = JSON.stringify([step.task, step.caps.maxTurns, step.caps.maxCostUsd, step.role, step.model ?? null]);
+  return `sha256:${createHash('sha256').update(material).digest('hex')}`;
+}
 
 const fieldText = (value: FieldValue): string => (typeof value === 'string' ? value : JSON.stringify(value));
 
@@ -705,7 +731,8 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
       const role = findAgent(agents, step.role);
       const caps = stepCaps(step, role);
       const task = [render(step.prompt, current, item).trim(), ...(step.schema === undefined ? [] : ['', schemaNote(step.schema)])].join('\n');
-      const unit = { node: current.at.node, kind: 'agent' as const, step: step.id, label, role: step.role, caps, status: 'running' as const, costUsd: null, turns: 0, sessionId: undefined, note: undefined };
+      const key = unitKey({ task, caps, role: step.role, model: step.model, lane: step.lane });
+      const unit = { node: current.at.node, kind: 'agent' as const, step: step.id, label, role: step.role, caps, status: 'running' as const, costUsd: null, turns: 0, sessionId: undefined, note: undefined, key, report: undefined, empty: false };
       return { unit, call: (index) => ({ kind: 'agent', index, role: step.role, task, model: step.model, lane: step.lane, caps }) };
     };
     const planned: Planned[] =
@@ -715,7 +742,7 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
           ? node.branches.map((branch) => planAgent(branch, branch.id, undefined))
           : node.kind === 'pipeline'
             ? items!.map((item, i) => planAgent(node.stages[current.at.stage]!, `${node.stages[current.at.stage]!.id} #${i + 1}`, item))
-            : [{ unit: { node: current.at.node, kind: 'check', step: node.id, label: node.id, role: undefined, caps: undefined, status: 'running', costUsd: null, turns: 0, sessionId: undefined, note: undefined }, call: (index) => ({ kind: 'check', index }) }];
+            : [{ unit: { node: current.at.node, kind: 'check', step: node.id, label: node.id, role: undefined, caps: undefined, status: 'running', costUsd: null, turns: 0, sessionId: undefined, note: undefined, key: undefined, report: undefined, empty: false }, call: (index) => ({ kind: 'check', index }) }];
     const needUsd = round6(planned.reduce((sum, { unit }) => sum + (unit.caps?.maxCostUsd ?? 0), 0));
     const leftUsd = round6(current.spec.maxCostUsd - workflowSpent(current));
     if (needUsd > leftUsd + 1e-9) return { run: stopped(current, { kind: 'total-cap', before: planned[0]!.unit.label, needUsd, leftUsd }), calls: [] };
@@ -727,6 +754,8 @@ export function nextRound(run: WorkflowRun, agents: readonly AgentDefinition[]):
 
 export type UnitOutcome =
   | { readonly kind: 'agent'; readonly end: ChildEnd; readonly report: string; readonly costUsd: number | null; readonly turns: number; readonly sessionId: string | undefined }
+  /** A resumed run's unit, settled from the earlier run's journal with no model call. */
+  | { readonly kind: 'replayed'; readonly report: string; readonly sessionId: string | undefined }
   /** `passed` is undefined when the workspace has no check command. */
   | { readonly kind: 'check'; readonly passed: boolean | undefined; readonly text: string };
 
@@ -747,8 +776,9 @@ export function settleUnit(run: WorkflowRun, index: number, outcome: UnitOutcome
     settled = { ...unit, status: why === undefined ? 'passed' : 'failed', note: why };
     if (why !== undefined) stop = { kind: 'gate', unit: unit.label, why };
   } else {
-    const { end } = outcome;
-    const spent = { costUsd: outcome.costUsd, turns: outcome.turns, sessionId: outcome.sessionId };
+    const replayed = outcome.kind === 'replayed';
+    const end: ChildEnd = replayed ? { kind: 'done' } : outcome.end;
+    const spent = replayed ? { costUsd: 0, turns: 0, sessionId: outcome.sessionId } : { costUsd: outcome.costUsd, turns: outcome.turns, sessionId: outcome.sessionId };
     if (end.kind === 'done') {
       const step = run.spec.steps.flatMap(agentSteps).find((s) => s.id === unit.step);
       const fields = step?.schema === undefined ? undefined : readFields(outcome.report, step.schema);
@@ -756,7 +786,7 @@ export function settleUnit(run: WorkflowRun, index: number, outcome: UnitOutcome
         settled = { ...unit, ...spent, status: 'failed', note: fields.problem };
         stop = { kind: 'step-failed', unit: unit.label, reason: fields.problem };
       } else {
-        settled = { ...unit, ...spent, status: 'done' };
+        settled = { ...unit, ...spent, status: replayed ? 'replayed' : 'done', report: outcome.report, empty: reportBody(outcome.report).trim() === '' };
         output = { report: outcome.report, fields: fields?.ok === true ? fields.value : undefined };
       }
     } else {
@@ -824,6 +854,62 @@ export function absorbOutcomes(run: WorkflowRun, events: readonly TurnEvent[]): 
   return next;
 }
 
+/** A finished agent call as its run's journal keeps it: what finds it, the child that ran it, and its report. */
+export type JournalEntry = { readonly key: string; readonly step: string; readonly child: string | undefined; readonly result: string };
+
+/** The run's journal: every agent unit that ended done or replayed, in issue order, so a resumed run can replay it. */
+export const journalOf = (run: WorkflowRun): JournalEntry[] =>
+  run.units.flatMap((unit) =>
+    (unit.status === 'done' || unit.status === 'replayed') && unit.key !== undefined && unit.report !== undefined ? [{ key: unit.key, step: unit.label, child: unit.sessionId, result: unit.report }] : [],
+  );
+
+/** What a resumed run replays from: the earlier run's journal, until a round runs an agent call live. */
+export type Replay = { readonly run: string; readonly entries: readonly JournalEntry[]; readonly open: boolean };
+
+export const startReplay = (run: string, entries: readonly JournalEntry[]): Replay => ({ run, entries, open: true });
+
+/**
+ * The round with each agent call the journal holds settled from it, with no model call, and the calls left to run.
+ * Once a round runs an agent call live, nothing after it replays, since a later step may lean on what that one changed.
+ * A check always runs, and does not end the replay: it reads the workspace as it is now.
+ */
+export function replayRound(round: Round, replay: Replay): { readonly round: Round; readonly replay: Replay } {
+  if (!replay.open || round.calls.length === 0) return { round, replay };
+  let { run } = round;
+  let { entries } = replay;
+  const live: UnitCall[] = [];
+  for (const call of round.calls) {
+    const key = call.kind === 'agent' ? run.units.find((unit) => unit.index === call.index)?.key : undefined;
+    const at = key === undefined ? -1 : entries.findIndex((entry) => entry.key === key);
+    if (at < 0) {
+      live.push(call);
+      continue;
+    }
+    const entry = entries[at]!;
+    entries = entries.toSpliced(at, 1);
+    run = settleUnit(run, call.index, { kind: 'replayed', report: entry.result, sessionId: entry.child });
+  }
+  return { round: { run, calls: live }, replay: { ...replay, entries, open: live.every((call) => call.kind === 'check') } };
+}
+
+/** `nextRound` past every round the journal replays whole: the calls are the first that run, or none once the run ended. */
+export function nextLiveRound(run: WorkflowRun, agents: readonly AgentDefinition[], replay: Replay | undefined): { readonly round: Round; readonly replay: Replay | undefined } {
+  for (let current = run; ; ) {
+    const round = nextRound(current, agents);
+    if (replay === undefined) return { round, replay };
+    const replayed = replayRound(round, replay);
+    replay = replayed.replay;
+    if (replayed.round.calls.length > 0 || round.calls.length === 0) return { round: replayed.round, replay };
+    current = replayed.round.run;
+  }
+}
+
+/** The units a resumed run replays before its first call that runs, for the preview; a check's outcome can let more replay after it. */
+export function replayedBeforeLive(spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], replay: Replay): string[] {
+  const { round } = nextLiveRound(startWorkflow(spec, input, replay.run), agents, replay);
+  return round.run.units.filter((unit) => unit.status === 'replayed').map((unit) => unit.label);
+}
+
 /** A round as the calls the workflow issues as the user's own, in place of a model turn. */
 export function workflowTurn(calls: readonly UnitCall[], model: string): AssistantTurn {
   const content: ToolUseBlock[] = calls.map((call) => ({
@@ -859,30 +945,42 @@ const STOP_WORDS: { readonly [K in WorkflowStop['kind']]: (stop: Extract<Workflo
 
 const stopWords = (stop: WorkflowStop): string => (STOP_WORDS[stop.kind] as (s: WorkflowStop) => string)(stop);
 
-const UNIT_WORDS: Readonly<Record<UnitStatus, string>> = { running: 'running', done: 'done', failed: 'failed', capped: 'capped', cancelled: 'cancelled', passed: 'passed' };
+const UNIT_WORDS: Readonly<Record<UnitStatus, string>> = { running: 'running', done: 'done', replayed: 'replayed', failed: 'failed', capped: 'capped', cancelled: 'cancelled', passed: 'passed' };
 
-/** What ran, what each step spent, and why the run ended, then the last step's report. */
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * What ran, what each step spent, and why the run ended; how many steps came back empty, and whose session to read
+ * before diagnosing a failed or empty one; then the last step's report.
+ */
 export function workflowReport(run: WorkflowRun): string {
   const spent = workflowSpent(run);
-  const head =
-    run.status === 'done'
-      ? `Workflow ${run.spec.name} finished: ${run.units.length} ${run.units.length === 1 ? 'step' : 'steps'} ran, ${usd(spent)} of its ${usd(run.spec.maxCostUsd)} cap.`
-      : `Workflow ${run.spec.name} ${run.stop === undefined ? 'ended' : stopWords(run.stop)}. ${run.units.length} ${run.units.length === 1 ? 'step' : 'steps'} ran, ${usd(spent)} of its ${usd(run.spec.maxCostUsd)} cap.`;
+  const ran = `${plural(run.units.length, 'step', 'steps')} ran, ${usd(spent)} of its ${usd(run.spec.maxCostUsd)} cap.`;
+  const replayed = run.units.filter((unit) => unit.status === 'replayed').length;
+  const resumed = run.resumes === undefined ? '' : ` Resumed from run ${run.resumes}: ${replayed} replayed with no model call.`;
+  const head = (run.status === 'done' ? `Workflow ${run.spec.name} finished: ${ran}` : `Workflow ${run.spec.name} ${run.stop === undefined ? 'ended' : stopWords(run.stop)}. ${ran}`) + resumed;
   const lines = run.units.map((unit) => {
     const what = unit.role === undefined ? unit.label : `${unit.label} (${unit.role})`;
-    const cost = unit.kind === 'agent' ? `, ${unit.turns} model ${unit.turns === 1 ? 'call' : 'calls'}, ${unit.costUsd === null ? 'cost unknown' : usd(unit.costUsd)}` : '';
+    const cost =
+      unit.kind !== 'agent' ? '' : unit.status === 'replayed' ? ', no model call' : `, ${plural(unit.turns, 'model call', 'model calls')}, ${unit.costUsd === null ? 'cost unknown' : usd(unit.costUsd)}`;
     const session = unit.sessionId === undefined ? '' : `, session ${unit.sessionId}`;
-    return `- ${what}: ${UNIT_WORDS[unit.status]}${unit.note === undefined || unit.status === 'done' ? '' : ` (${unit.note})`}${cost}${session}`;
+    const note = unit.empty ? ' (empty report)' : unit.note === undefined || unit.status === 'done' ? '' : ` (${unit.note})`;
+    return `- ${what}: ${UNIT_WORDS[unit.status]}${note}${cost}${session}`;
   });
+  const empty = run.units.filter((unit) => unit.empty).map((unit) => unit.label);
+  const emptyLine = `Empty results: ${empty.length}${empty.length === 0 ? '' : ` (${empty.join(', ')})`}.`;
+  const diagnose = run.units.flatMap((unit) =>
+    unit.kind === 'agent' && unit.sessionId !== undefined && (unit.empty || unit.status === 'failed' || unit.status === 'capped') ? [`Read step session ${unit.sessionId} before diagnosing ${unit.label}.`] : [],
+  );
   const reached = new Set(run.units.map((unit) => unit.step));
   const skipped = run.spec.steps
     .slice(run.at.node)
     .flatMap((node, i) => (node.kind === 'gate' ? (i === 0 ? [] : [node.id]) : agentSteps(node).map((s) => s.id)))
     .filter((id) => !reached.has(id));
   const notRun = run.status === 'done' || skipped.length === 0 ? [] : [`Did not run: ${skipped.join(', ')}.`];
-  const last = run.units.findLast((unit) => unit.kind === 'agent' && unit.status === 'done');
+  const last = run.units.findLast((unit) => unit.kind === 'agent' && (unit.status === 'done' || unit.status === 'replayed'));
   const lastReport = last === undefined ? undefined : reportBody(lastReportOf(run, last) ?? '').trim();
-  return [head, '', ...lines, ...notRun, ...(lastReport === undefined || lastReport === '' ? [] : ['', `The last report, from ${last!.label}:`, lastReport])].join('\n');
+  return [head, '', ...lines, ...notRun, emptyLine, ...diagnose, ...(lastReport === undefined || lastReport === '' ? [] : ['', `The last report, from ${last!.label}:`, lastReport])].join('\n');
 }
 
 function lastReportOf(run: WorkflowRun, unit: WorkflowUnit): string | undefined {
@@ -922,6 +1020,7 @@ export const WORKFLOW_TOOL_SPEC: Tool = {
     properties: {
       name: { type: 'string', description: 'The workflow to run, such as review-fix-verify. Omit it to list them.' },
       input: { type: 'string', description: 'The text the workflow takes, such as what to review.' },
+      resume: { type: 'string', description: "An earlier run's session id. Its finished steps replay with no model call, and the rest run. Omit input to keep that run's." },
     },
     additionalProperties: false,
   },
@@ -932,25 +1031,31 @@ export const WORKFLOW_MODES: Readonly<Record<ApprovalMode, boolean>> = { plan: t
 
 export const workflowToolDefinitions = (mode: ApprovalMode, attached: boolean): readonly Tool[] => (attached && WORKFLOW_MODES[mode] ? [WORKFLOW_TOOL_SPEC] : []);
 
-export type WorkflowToolInput = { readonly name: string | undefined; readonly input: string };
+/** `resume` names an earlier run; with it, an empty input keeps that run's. */
+export type WorkflowToolInput = { readonly name: string | undefined; readonly input: string; readonly resume?: string | undefined };
+
+const RUN_ID = /^[A-Za-z0-9-]{1,64}$/;
 
 export function parseWorkflowInput(raw: unknown): Parsed<WorkflowToolInput> {
-  if (!isRecord(raw)) return fail(`${WORKFLOW_TOOL} takes {"name", "input"}`);
-  const extra = Object.keys(raw).find((key) => key !== 'name' && key !== 'input');
+  if (!isRecord(raw)) return fail(`${WORKFLOW_TOOL} takes {"name", "input", "resume"}`);
+  const extra = Object.keys(raw).find((key) => key !== 'name' && key !== 'input' && key !== 'resume');
   if (extra !== undefined) return fail(`${WORKFLOW_TOOL} has an unknown field "${extra}"`);
-  const { name, input } = raw;
+  const { name, input, resume } = raw;
   if (name !== undefined && (typeof name !== 'string' || !NAME.test(name.trim()))) return fail('name must be a workflow name, from the list');
   if (input !== undefined && typeof input !== 'string') return fail('input must be text');
-  return { ok: true, value: { name: typeof name === 'string' ? name.trim() : undefined, input: (input ?? '').trim() } };
+  if (resume !== undefined && (typeof resume !== 'string' || !RUN_ID.test(resume.trim()))) return fail("resume must be an earlier run's session id");
+  if (resume !== undefined && name === undefined) return fail('resume needs the name of the workflow it resumes');
+  return { ok: true, value: { name: typeof name === 'string' ? name.trim() : undefined, input: (input ?? '').trim(), ...(typeof resume === 'string' ? { resume: resume.trim() } : {}) } };
 }
 
-/** `/workflow <name> [input]`: the name, and the rest as the input. */
+/** `/workflow <name> [--resume <run>] [input]`: the name, the run it resumes, and the rest as the input. */
 export function parseWorkflowCommand(args: string): WorkflowToolInput {
-  const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(args.trim());
-  return match === null ? { name: undefined, input: '' } : { name: match[1]!, input: (match[2] ?? '').trim() };
+  const match = /^(\S+)(?:\s+--resume\s+(\S+))?(?:\s+([\s\S]*))?$/.exec(args.trim());
+  if (match === null) return { name: undefined, input: '' };
+  return { name: match[1]!, input: (match[3] ?? '').trim(), ...(match[2] === undefined ? {} : { resume: match[2] }) };
 }
 
-export const WORKFLOW_USAGE = 'Usage: /workflow <name> [input]. Workflows are JSON files in .g-code/workflows/ or ~/.g-code/workflows/.';
+export const WORKFLOW_USAGE = 'Usage: /workflow <name> [--resume <run>] [input]. Workflows are JSON files in .g-code/workflows/ or ~/.g-code/workflows/.';
 
 export function workflowList(specs: readonly WorkflowSpec[], problems: readonly string[]): string {
   const lines = specs.length === 0 ? ['No workflows yet. Add a JSON file to .g-code/workflows/ (docs/u64.md has examples).'] : ['The workflows:', ...specs.map((spec) => `- ${spec.name}: ${spec.description}${spec.input === undefined ? '' : ` Input: ${spec.input}`}`)];

@@ -61,7 +61,15 @@ export type Session = {
 };
 
 /** A workflow's own session: the workflow, and the session whose call started it, which its report goes to. */
-export type WorkflowOrigin = { readonly parentId: SessionId; readonly toolUseId: string; readonly name: string };
+export type WorkflowOrigin = {
+  readonly parentId: SessionId;
+  readonly toolUseId: string;
+  readonly name: string;
+  /** The run's input, which a resumed run keeps unless given another; absent in logs from before P33. */
+  readonly input?: string | undefined;
+  /** The earlier run whose journal this one replays. */
+  readonly resumes?: SessionId | undefined;
+};
 
 export type TokenUsage = {
   readonly input: number;
