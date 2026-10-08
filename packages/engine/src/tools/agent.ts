@@ -71,6 +71,7 @@ import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
 import { skillExecutor } from './skill.js';
 import { wakeExecutors, type SessionWakes } from './wake.js';
+import { workExecutors, type SessionChildren } from './work.js';
 import { watchPrExecutor, type PrTools } from './pr.js';
 import { todo } from './todo.js';
 
@@ -201,6 +202,8 @@ export type AgentToolEnv = {
   readonly permissions?: PermissionStore | undefined;
   /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
   readonly wakes?: SessionWakes | undefined;
+  /** The background subagents of the session's run, for task_stop; undefined for a subagent, which starts none. */
+  readonly children?: SessionChildren | undefined;
   /** Searches the workspace's earlier sessions; undefined for a subagent, which is not offered recall. */
   readonly recall?: Recall | undefined;
   /** The user's gh, for watch_pr; undefined for a subagent, which is not offered it. */
@@ -390,6 +393,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     edit,
     bash,
     ...backgroundExecutors(tools.background),
+    ...workExecutors({ background: tools.background, wakes: tools.wakes, children: tools.children }),
     ...wakeExecutors(tools.wakes, tools.background, async (command, description, ctx) => {
       const approval = await approveCommand(command, ctx, true);
       const { job, text } = await startInBackground(tools.background!, command, description, ctx);

@@ -7,11 +7,13 @@ import {
   forkEvents,
   isUsersOwn,
   loopStep,
+  MONITOR_TOOL_DEFINITION,
   nextWakeId,
   NOT_USER_LINE,
   openSchedulesOf,
   placeTask,
   replayMessages,
+  SCHEDULE_WAKEUP_TOOL_DEFINITION,
   type SessionId,
   startsTurn,
   type TaskRecord,
@@ -25,6 +27,7 @@ import {
   wakeLabel,
   type WakeNote,
   wakeNotice,
+  wakeNoteText,
   wakePauseOf,
   type WakeVerdict,
 } from '../src/index.js';
@@ -228,6 +231,14 @@ describe('scheduled wake-ups in the log', () => {
     expect(nextWakeId(events)).toBe('wake-3');
   });
 
+  it('T-BG-06 drops the one wake-up task_stop cancelled, keeps the others, and counts its id as used', () => {
+    const events = [start, prompt(1, NOW - 9000), scheduled(2, 'wake-1'), scheduled(3, 'wake-2'), note(4, NOW, { kind: 'stopped', id: 'wake-1' })];
+    expect(openSchedulesOf(events).map((s) => s.id)).toEqual(['wake-2']);
+    expect(nextWakeId(events)).toBe('wake-3');
+    expect(unwokenOf(events).triggers, 'a cancel wakes nothing').toEqual([]);
+    expect(wakeNoteText({ kind: 'stopped', id: 'wake-1' }), 'the tool result tells the model; the note adds nothing').toBeUndefined();
+  });
+
   it('goes with a cut of its turn and is never copied into a fork', () => {
     const events: TurnEvent[] = [start, prompt(1, NOW - 9000), answered(2, NOW - 8000), prompt(3, NOW - 7000), scheduled(4, 'wake-1'), answered(5, NOW - 6000)];
     expect(openSchedulesOf(cutView([...events, { kind: 'cut', seq: 6, at: at(NOW), turnSeq: 3 }]))).toEqual([]);
@@ -236,6 +247,12 @@ describe('scheduled wake-ups in the log', () => {
 });
 
 describe('the tools', () => {
+  it("T-BG-06 tells the model not to poll with a short wake-up, and how to cancel one", () => {
+    expect(SCHEDULE_WAKEUP_TOOL_DEFINITION.description).toMatch(/Do not schedule a short wake-up to poll for background work you started: Geno wakes you/);
+    expect(SCHEDULE_WAKEUP_TOOL_DEFINITION.description).toMatch(/Cancel one with task_stop/);
+    expect(MONITOR_TOOL_DEFINITION.description).toMatch(/Stop it with task_stop/);
+  });
+
   it('runs monitor and schedule_wakeup where the background tools run, never in Plan, and never offers them to a subagent', () => {
     for (const mode of ['ask', 'auto', 'non-interactive'] as const) expect(AGENT_MODE_TOOLS[mode]).toEqual(expect.arrayContaining(['bash_output', 'monitor', 'schedule_wakeup']));
     expect(AGENT_MODE_TOOLS.plan).not.toContain('monitor');

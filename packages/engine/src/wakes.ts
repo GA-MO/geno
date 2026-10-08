@@ -16,11 +16,15 @@ import {
   type WakeNote,
   type WakeSource,
   type WakeTrigger,
+  type WorkRow,
 } from '@g-code/core';
 import type { BackgroundJobs } from './background.js';
 
-/** A background child that still owes its parent's session a report. `silence` cancels it with no report. */
-type ChildWait = { readonly agent: string; readonly toolUseId: string; readonly silence: () => void };
+/**
+ * A background child that still owes its parent's session a report. `silence` cancels it with no report; `stop` is
+ * task_stop's, which cancels it and settles with its partial report, so no other report of it arrives.
+ */
+type ChildWait = { readonly agent: string; readonly toolUseId: string; readonly silence: () => void; readonly stop: () => Promise<string> };
 
 type MonitorWait = {
   readonly job: JobId;
@@ -28,12 +32,17 @@ type MonitorWait = {
   readonly toolUseId: string;
   /** The monitor started the command itself, so cancelling the monitor stops the command too. */
   readonly ownsJob: boolean;
+  /** When it started watching, in ms since the epoch, as list_agents shows its age. */
+  readonly since: number;
   end(): void;
 };
 
-type PrWait = { readonly pr: number; readonly toolUseId: string; end(): void };
+type PrWait = { readonly pr: number; readonly toolUseId: string; readonly since: number; end(): void };
 
-type ScheduleWait = { readonly dueAt: number; readonly reason: string; readonly toolUseId: string; readonly timer: ReturnType<typeof setTimeout> };
+type ScheduleWait = { readonly dueAt: number; readonly reason: string; readonly toolUseId: string; readonly since: number; readonly timer: ReturnType<typeof setTimeout> };
+
+/** What task_stop stopped of a wake id: a monitor, with the command it started if it started one, a wake-up or a PR watch. */
+export type StoppedWake = { readonly kind: 'monitor'; readonly job: JobId; readonly ownsJob: boolean } | { readonly kind: 'schedule' } | { readonly kind: 'pr'; readonly pr: number };
 
 type SessionWaits = {
   readonly children: Map<string, ChildWait>;
@@ -149,7 +158,7 @@ export class Wakes {
     void watching.ended.then(() => {
       if (end()) this.hooks.changed(sessionId);
     });
-    waits.monitors.set(start.id, { job: start.job, pattern: start.pattern.source, toolUseId: start.toolUseId, ownsJob: start.ownsJob, end });
+    waits.monitors.set(start.id, { job: start.job, pattern: start.pattern.source, toolUseId: start.toolUseId, ownsJob: start.ownsJob, since: Date.now(), end });
     this.hooks.changed(sessionId);
     return { kind: 'watching' };
   }
@@ -193,7 +202,7 @@ export class Wakes {
       this.hooks.arrive(sessionId, { kind: 'wake', at: new Date().toISOString(), note });
       this.hooks.changed(sessionId);
     };
-    waits.prs.set(start.id, { pr: watch.pr.number, toolUseId: start.toolUseId, end });
+    waits.prs.set(start.id, { pr: watch.pr.number, toolUseId: start.toolUseId, since: startedAt, end });
     arm();
     this.hooks.changed(sessionId);
   }
@@ -211,7 +220,7 @@ export class Wakes {
       },
       Math.max(0, note.dueAt - Date.now()),
     );
-    waits.schedules.set(note.id, { dueAt: note.dueAt, reason: note.reason, toolUseId: note.toolUseId, timer });
+    waits.schedules.set(note.id, { dueAt: note.dueAt, reason: note.reason, toolUseId: note.toolUseId, since: Date.now(), timer });
     this.hooks.changed(sessionId);
   }
 
@@ -232,6 +241,51 @@ export class Wakes {
       ...[...(waits?.schedules ?? [])].map(([id, wait]): WakeSource => ({ kind: 'schedule', id, dueAt: wait.dueAt })),
       ...[...(waits?.prs ?? [])].map(([id, wait]): WakeSource => ({ kind: 'pr', id, pr: wait.pr })),
     ];
+  }
+
+  /** The session's pending monitors, wake-ups and PR watches, as list_agents shows them. */
+  pending(sessionId: string): WorkRow[] {
+    const waits = this.sessions.get(sessionId);
+    if (waits === undefined) return [];
+    return [
+      ...[...waits.monitors].map(([id, wait]): WorkRow => ({ kind: 'monitor', id, job: wait.job, pattern: wait.pattern, startedAt: wait.since })),
+      ...[...waits.schedules].map(([id, wait]): WorkRow => ({ kind: 'schedule', id, dueAt: wait.dueAt, reason: wait.reason, startedAt: wait.since })),
+      ...[...waits.prs].map(([id, wait]): WorkRow => ({ kind: 'pr', id, pr: wait.pr, startedAt: wait.since })),
+    ];
+  }
+
+  /**
+   * task_stop of one wake id: a monitor ends with no note and stops the command it started, a wake-up never fires,
+   * and a PR watch ends with no report. Undefined when nothing of that id is pending.
+   */
+  stop(sessionId: string, id: WakeId): StoppedWake | undefined {
+    const stopped = this.end(sessionId, id);
+    if (stopped !== undefined) this.hooks.changed(sessionId);
+    return stopped;
+  }
+
+  private end(sessionId: string, id: WakeId): StoppedWake | undefined {
+    const waits = this.sessions.get(sessionId);
+    const monitor = waits?.monitors.get(id);
+    if (monitor !== undefined) {
+      monitor.end();
+      if (monitor.ownsJob) void this.jobs.stop(sessionId, monitor.job, 'model').catch(() => {});
+      return { kind: 'monitor', job: monitor.job, ownsJob: monitor.ownsJob };
+    }
+    const schedule = waits?.schedules.get(id);
+    if (schedule !== undefined) {
+      clearTimeout(schedule.timer);
+      waits!.schedules.delete(id);
+      return { kind: 'schedule' };
+    }
+    const watch = waits?.prs.get(id);
+    watch?.end();
+    return watch === undefined ? undefined : { kind: 'pr', pr: watch.pr };
+  }
+
+  /** task_stop of a background child the session waits on: its partial report, or undefined when none is waited on. */
+  stopChild(sessionId: string, childId: string): Promise<string> | undefined {
+    return this.sessions.get(sessionId)?.children.get(childId)?.stop();
   }
 
   /** Whether an arrival may still wake the session: a silenced command's end may not. */

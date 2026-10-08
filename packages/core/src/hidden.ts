@@ -25,12 +25,12 @@ export const restoreHidden = (text: string): string =>
 const HIDDEN_IN: Readonly<Record<AgentToolName, 'show' | 'strip'>> = {
   bash: 'show',
   bash_output: 'show',
-  bash_stop: 'show',
   check: 'show',
   edit: 'show',
   glob: 'show',
   grep: 'show',
   list: 'show',
+  list_agents: 'show',
   monitor: 'show',
   preview_list: 'show',
   preview_logs: 'show',
@@ -40,6 +40,7 @@ const HIDDEN_IN: Readonly<Record<AgentToolName, 'show' | 'strip'>> = {
   recall: 'strip',
   schedule_wakeup: 'strip',
   skill: 'strip',
+  task_stop: 'show',
   todo: 'strip',
   watch_pr: 'strip',
 };

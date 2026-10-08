@@ -1348,18 +1348,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const workflow: WorkflowOrigin = { parentId: asSessionId(parentId), toolUseId, name: spec.name };
     const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director }, workflow });
     let silent = false;
+    let stoppedByModel = false;
     const paid = steers.of(parentId)?.owe() ?? (() => {});
-    const reported = wakes.autoWake
-      ? wakes.registry.child(parentId, id, {
-          agent: `workflow ${spec.name}`,
-          toolUseId,
-          silence: () => {
-            silent = true;
-            turns.get(id)?.abort();
-          },
-        })
-      : undefined;
-    void turn
+    const report = turn
       .then(
         ({ end }) => end === 'cancelled',
         () => false,
@@ -1368,7 +1359,29 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         const log = await existing(id);
         const run = driver.finish(log.events, cancelled);
         const usage = childrenUsage(log.events, Date.now() - Date.parse(log.session.createdAt));
-        if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: childReport(`workflow ${spec.name}`, asSessionId(id), workflowEnd(run), workflowReport(run), usage) });
+        const end = workflowEnd(run);
+        return childReport(`workflow ${spec.name}`, asSessionId(id), stoppedByModel && end.kind === 'cancelled' ? { kind: 'cancelled', by: 'model' } : end, workflowReport(run), usage);
+      });
+    const reported = wakes.autoWake
+      ? wakes.registry.child(parentId, id, {
+          agent: `workflow ${spec.name}`,
+          toolUseId,
+          silence: () => {
+            silent = true;
+            turns.get(id)?.abort();
+          },
+          // task_stop's: the report is its result, so no message repeats it.
+          stop: () => {
+            silent = true;
+            stoppedByModel = true;
+            turns.get(id)?.abort();
+            return report;
+          },
+        })
+      : undefined;
+    void report
+      .then((text) => {
+        if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: text });
       })
       .catch((error: unknown) => io.err(`workflow ${spec.name} (${id}): could not report: ${error instanceof Error ? error.message : String(error)}`))
       .finally(() => {

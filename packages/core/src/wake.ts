@@ -43,6 +43,7 @@ export type WakeSource =
  * A wake's own log line. `scheduled` is the pending wake-up record: logged by schedule_wakeup, and logged again with
  * a new `by` by an engine that takes it up after a restart, the latest one winning. `due`, `monitor` and `pr` are
  * arrivals, which the next request carries as text; a `pr` note holds its whole report, failing logs included. `cancelled` is the user's Cancel, for every wake pending at that point.
+ * `stopped` is the model's task_stop of one wake-up, which the tool's result already told it of.
  */
 export type WakeNote =
   | { readonly kind: 'scheduled'; readonly id: WakeId; readonly toolUseId: string; readonly dueAt: number; readonly reason: string; readonly by?: Waiter | undefined }
@@ -58,6 +59,7 @@ export type WakeNote =
     }
   | { readonly kind: 'pr'; readonly id: WakeId; readonly toolUseId: string; readonly pr: number; readonly outcome: PrWatchOutcome; readonly text: string }
   | { readonly kind: 'cancelled' }
+  | { readonly kind: 'stopped'; readonly id: WakeId }
   /**
    * The runs of subagents an engine that stopped cut off, each named by its child and the call that began it, and the
    * text that lists them. The next engine for the folder logs it once; it joins the next turn and wakes nothing.
@@ -95,6 +97,7 @@ const NOTE_TRIGGERS: { readonly [K in WakeNote['kind']]: (note: Extract<WakeNote
   monitor: ({ id, outcome }) => ({ kind: 'monitor', id, outcome }),
   pr: ({ id, outcome }) => ({ kind: 'pr', id, outcome }),
   cancelled: () => undefined,
+  stopped: () => undefined,
   interrupted: () => undefined,
 };
 
@@ -255,14 +258,14 @@ export function wakeNoteText(note: WakeNote): string | undefined {
   return arrivalText(`Monitor ${note.id} on ${note.job} for /${note.pattern}/ ${OUTCOME_TEXT[note.outcome]}.${line}`);
 }
 
-/** The wake-ups still pending in a log: the latest record of each that is neither due nor cancelled. */
+/** The wake-ups still pending in a log: the latest record of each that is neither due, stopped nor cancelled. */
 export function openSchedulesOf(events: readonly TurnEvent[]): Extract<WakeNote, { kind: 'scheduled' }>[] {
   const open = new Map<WakeId, Extract<WakeNote, { kind: 'scheduled' }>>();
   for (const event of events) {
     if (event.kind !== 'wake') continue;
     const { note } = event;
     if (note.kind === 'scheduled') open.set(note.id, note);
-    else if (note.kind === 'due') open.delete(note.id);
+    else if (note.kind === 'due' || note.kind === 'stopped') open.delete(note.id);
     else if (note.kind === 'cancelled') open.clear();
   }
   return [...open.values()];
@@ -325,7 +328,7 @@ export const SCHEDULE_WAKEUP_TOOL = 'schedule_wakeup';
 
 export const MONITOR_TOOL_DEFINITION: Tool = {
   name: MONITOR_TOOL,
-  description: `Watch a command's output and wake this session when a line matches pattern, when the command ends (you are told of its end as of any background command), or after timeout_s seconds (default ${MONITOR_DEFAULT_S}, at most ${MONITOR_MAX_S}). Give either command, which starts in the background as bash with run_in_background does, under the same approval and sandbox, or background_job_id to watch a command bash already started. It returns at once. End your turn while you wait: Geno starts your next turn with the matching line.`,
+  description: `Watch a command's output and wake this session when a line matches pattern, when the command ends (you are told of its end as of any background command), or after timeout_s seconds (default ${MONITOR_DEFAULT_S}, at most ${MONITOR_MAX_S}). Give either command, which starts in the background as bash with run_in_background does, under the same approval and sandbox, or background_job_id to watch a command bash already started. It returns at once. End your turn while you wait: Geno starts your next turn with the matching line. Stop it with task_stop and the id it returns.`,
   input_schema: {
     type: 'object',
     properties: {
@@ -342,7 +345,7 @@ export const MONITOR_TOOL_DEFINITION: Tool = {
 
 export const SCHEDULE_WAKEUP_TOOL_DEFINITION: Tool = {
   name: SCHEDULE_WAKEUP_TOOL,
-  description: `Wake this session after delay_s seconds (${SCHEDULE_MIN_S} to ${SCHEDULE_MAX_S}), such as to check CI again in 8 minutes. It returns at once and survives an engine restart. End your turn while you wait: Geno starts your next turn with reason.`,
+  description: `Wake this session after delay_s seconds (${SCHEDULE_MIN_S} to ${SCHEDULE_MAX_S}), such as to check CI again in 8 minutes. It returns at once and survives an engine restart. End your turn while you wait: Geno starts your next turn with reason. Do not schedule a short wake-up to poll for background work you started: Geno wakes you when a background command ends, a subagent reports or a monitor matches, so polling is wasted. Use it for work Geno cannot see, such as a deploy or a remote queue, with a delay matched to how fast that changes. Cancel one with task_stop and its id.`,
   input_schema: {
     type: 'object',
     properties: {

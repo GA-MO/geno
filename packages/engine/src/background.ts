@@ -110,7 +110,7 @@ export class BackgroundJobs {
     const running = [...jobs.values()].filter((entry) => entry.job.state.status === 'running');
     if (running.length >= MAX_BACKGROUND_JOBS) {
       throw new ToolError(
-        `${MAX_BACKGROUND_JOBS} background commands already run in this session (${running.map((entry) => entry.job.id).join(', ')}). Stop one with bash_stop before you start another.`,
+        `${MAX_BACKGROUND_JOBS} background commands already run in this session (${running.map((entry) => entry.job.id).join(', ')}). Stop one with task_stop before you start another.`,
       );
     }
     const used = [...jobs.keys(), ...jobIdsIn(start.events)].map(numberOf);
@@ -153,14 +153,15 @@ export class BackgroundJobs {
       await output.flushed();
       await release();
       this.hooks.changed(entry!.job, viewOf(entry!));
-      this.hooks.ended({ kind: 'background-end', at: new Date().toISOString(), job: { id, toolUseId: job.toolUseId, command: job.command, ...(job.preview === undefined ? {} : { preview: job.preview }), state: ended.state as EndedJobState }, tail: tailOf(output) }, ended);
+      const shown = { id, toolUseId: job.toolUseId, command: job.command, ...(job.preview === undefined ? {} : { preview: job.preview }), state: ended.state as EndedJobState, outputFile: output.file };
+      this.hooks.ended({ kind: 'background-end', at: new Date().toISOString(), job: shown, tail: tailOf(output) }, ended);
       this.forgetOld(jobs);
       return ended;
     });
     entry = { job, cwd: start.cwd, output, shell, done, timer: undefined, watchers: new Set() };
     jobs.set(id, entry);
     this.hooks.changed(entry.job, viewOf(entry));
-    return { job, text: backgroundStartText(id) };
+    return { job, text: backgroundStartText(id, output.file) };
   }
 
   /** The session's jobs that run now, oldest first. */
@@ -178,6 +179,16 @@ export class BackgroundJobs {
   /** Every job of the session the engine still knows, newest first. */
   jobs(sessionId: string): BackgroundJob[] {
     return [...(this.sessions.get(sessionId)?.values() ?? [])].map((entry) => entry.job).toReversed();
+  }
+
+  /** One job of the session as it is now; an id the session never gave, or one it forgot, is an error. */
+  job(sessionId: string, id: string): BackgroundJob {
+    return this.entry(sessionId, id).job;
+  }
+
+  /** The end of a job's output, as an end notice carries it. */
+  tail(sessionId: string, id: string): string {
+    return tailOf(this.entry(sessionId, id).output);
   }
 
   /** All the output the job still keeps, and a promise that settles as it ends. */
@@ -215,7 +226,7 @@ export class BackgroundJobs {
     return { job: entry.job, kept: entry.output.tail(Number.MAX_SAFE_INTEGER), ended: entry.done, stop: () => entry.watchers.delete(chunk) };
   }
 
-  /** bash_stop and the step's Stop button: SIGTERM, then SIGKILL after the grace period. Settles once it ended. */
+  /** task_stop and the step's Stop button: SIGTERM, then SIGKILL after the grace period. Settles once it ended. */
   async stop(sessionId: string, id: string, by: StopBy): Promise<BackgroundJob> {
     const entry = this.entry(sessionId, id);
     this.end(entry, { kind: 'stop', by });

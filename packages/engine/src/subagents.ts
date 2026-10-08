@@ -208,6 +208,11 @@ export type Subagents = {
   readonly executor: Executor;
   /** `message_agent`, offered with `agent` and only with it. */
   readonly message: Executor;
+  /**
+   * task_stop of a background child this run started: cancels it and settles with its partial report, which no other
+   * message repeats. Undefined when no such child runs.
+   */
+  stop(childId: string): Promise<string> | undefined;
   /** Cancels the background children still running, once the parent's run ended with nobody left to take their reports. */
   stopBackground(): void;
   /** The parent's run ended and lets its background children run on: their ends go to the session with their reports. */
@@ -256,6 +261,9 @@ function semaphore(size: number) {
 const pick = (executors: Executors, names: readonly string[]): Executors =>
   Object.fromEntries(names.flatMap((name) => (Object.hasOwn(executors, name) ? [[name, executors[name]!]] : [])));
 
+/** The abort reason of a child that task_stop stopped, so its end reads as the model's stop and not the user's. */
+const MODEL_STOP = Symbol('task_stop');
+
 const asker = (approval: Approval, name: string, sessionId: SessionId): Approval =>
   approval.kind === 'interactive' ? { ...approval, approve: (denial, classifier) => approval.approve(denial, classifier, { name, sessionId }) } : approval;
 
@@ -272,6 +280,8 @@ export function subagents(env: SubagentEnv): Subagents {
   let committed = 0;
   const byName = (name: string) => agents.find((agent) => agent.name === name);
   const inBackground = new Set<AbortController>();
+  // The background children that run now, each by its session id, for task_stop.
+  const stoppers = new Map<string, () => Promise<string>>();
   // Set once the parent's run ended with nobody left to take a report.
   let unheard = false;
   // Set once the parent's run ended and its children run on to wake the session.
@@ -332,7 +342,7 @@ export function subagents(env: SubagentEnv): Subagents {
     await ctx.logNote!({ kind: 'child-start', at, child: session.id, toolUseId: use.id, role: agent.name, model: session.model, effort: session.effort, caps, start, ...(env.waiter === undefined ? {} : { by: env.waiter }) });
 
     const controller = new AbortController();
-    const cancel = () => controller.abort();
+    const cancel = () => controller.abort(ctx.signal.reason);
     if (ctx.signal.aborted) cancel();
     else ctx.signal.addEventListener('abort', cancel, { once: true });
     const shown = await env.host.started(view, cancel);
@@ -371,6 +381,7 @@ export function subagents(env: SubagentEnv): Subagents {
     const opened: OpenSession = { log, gateway: parent.gateway };
 
     let end: ChildEnd;
+    const cancelledBy = () => (!controller.signal.aborted ? undefined : controller.signal.reason === MODEL_STOP ? 'model' : 'user');
     let events: readonly TurnEvent[] = log.events;
     const external = session.backend === undefined ? undefined : (env.externals ?? new ExternalAgents(childIo));
     try {
@@ -390,9 +401,9 @@ export function subagents(env: SubagentEnv): Subagents {
           : await drive(childIo, store, opened, prompt, caps, mode, { files: env.files, watcher, steers: inbox });
       events = result.events;
       const error = result.events.findLast((e) => e.kind === 'error');
-      end = childEndOf(result.reason, controller.signal.aborted, error?.kind === 'error' ? error.message : undefined);
+      end = childEndOf(result.reason, cancelledBy(), error?.kind === 'error' ? error.message : undefined);
     } catch (error) {
-      end = controller.signal.aborted ? { kind: 'cancelled' } : { kind: 'failed', reason: error instanceof Error ? error.message : String(error) };
+      end = controller.signal.aborted ? childEndOf('end_turn', cancelledBy(), undefined) : { kind: 'failed', reason: error instanceof Error ? error.message : String(error) };
     } finally {
       ctx.signal.removeEventListener('abort', cancel);
       external?.close(session.id);
@@ -440,6 +451,7 @@ export function subagents(env: SubagentEnv): Subagents {
     void child
       .finally(() => {
         inBackground.delete(stop);
+        stoppers.delete(id);
         env.steers.release(id, inbox);
       })
       .catch(() => {});
@@ -459,6 +471,13 @@ export function subagents(env: SubagentEnv): Subagents {
     // The report goes to the session, not to this run: it may arrive after the run ended, for a woken turn to take.
     let silent = false;
     const paid = parentInbox!.owe();
+    // task_stop's: the report is its result, so the message that would carry it is silenced.
+    const stopNow = async () => {
+      silent = true;
+      stop.abort(MODEL_STOP);
+      return (await child).text;
+    };
+    stoppers.set(id, stopNow);
     const reported = env.waits?.child(parentId, id, {
       agent: name,
       toolUseId: use.id,
@@ -466,6 +485,7 @@ export function subagents(env: SubagentEnv): Subagents {
         silent = true;
         stop.abort();
       },
+      stop: stopNow,
     });
     const report = async (text: string, ended: ChildEndNote | undefined) => {
       // While the parent's run goes on, its own writes log the end; once it let go of the session, the end goes with
@@ -565,6 +585,7 @@ export function subagents(env: SubagentEnv): Subagents {
     tool,
     executor: run,
     message,
+    stop: (childId) => stoppers.get(childId)?.(),
     stopBackground: () => {
       unheard = true;
       for (const stop of inBackground) stop.abort();

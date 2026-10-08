@@ -84,7 +84,9 @@ export const isHookEventName = (name: string): name is HookEventName => Object.h
 export const CLAUDE_TOOL_NAMES: Readonly<Record<string, string>> = {
   Bash: 'bash',
   BashOutput: 'bash_output',
-  KillShell: 'bash_stop',
+  KillShell: 'task_stop',
+  TaskStop: 'task_stop',
+  ListAgents: 'list_agents',
   Read: 'read',
   Edit: 'edit',
   Write: 'edit',

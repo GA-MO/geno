@@ -269,6 +269,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
+        // Read at each call: the run's subagents start after its tools are built.
+        children: own ? { stop: (childId: string) => children?.stop(childId) } : undefined,
         recall: own ? recall : undefined,
         pr: own ? prTools : undefined,
       });

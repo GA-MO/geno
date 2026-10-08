@@ -7,6 +7,7 @@ import { RECALL_SPEC } from './session-search.js';
 import { TODO_SPEC } from './todo.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
 import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
+import { LIST_AGENTS_TOOL_DEFINITION, TASK_STOP_TOOL_DEFINITION } from './work.js';
 import { WATCH_PR_TOOL_DEFINITION } from './pr.js';
 import type { EditFormat } from './types.js';
 
@@ -16,22 +17,22 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'bash_stop', 'check', 'edit', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
 /**
- * What a subagent cannot use: it ends with its call, so it has no background command or dev server to run, read or
- * stop and is never woken; its own todo list would show nowhere; and its task comes from its parent, which can recall
- * for it.
+ * What a subagent cannot use: it ends with its call, so it has no background command, dev server or subagent to run,
+ * read, list or stop and is never woken; its own todo list would show nowhere; and its task comes from its parent,
+ * which can recall for it.
  */
-const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'bash_stop', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'todo', 'watch_pr']);
+const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'task_stop', 'todo', 'watch_pr']);
 
 export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !CHILD_LEAVES_OUT.has(name));
 
 const AGENT_ONLY_SPECS: Readonly<Record<Exclude<AgentToolName, keyof typeof TOOL_SPECS>, Tool>> = {
   bash: {
     name: 'bash',
-    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it has no network beyond localhost, so installing packages or fetching URLs fails. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise. With run_in_background: true the command starts the same way, then returns at once with a job id such as bg-1 and runs on with no timeout, for a dev server, a watcher or a long build; at most ${MAX_BACKGROUND_JOBS} run at once per session. Go on with other work while it runs, read its output with bash_output, and stop it with bash_stop when you no longer need it. You are told when one ends, with the end of its output.
+    description: `Run a shell command with the workspace root as the working directory, and return its combined stdout and stderr and its exit code. The command runs in a sandbox: it can write only inside the workspace and a temp dir, and it has no network beyond localhost, so installing packages or fetching URLs fails. Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. Each command times out after ${DEFAULT_BASH_TIMEOUT_SECONDS} seconds unless timeout_seconds says otherwise. With run_in_background: true the command starts the same way, then returns at once with a job id such as bg-1 and runs on with no timeout, for a dev server, a watcher or a long build; at most ${MAX_BACKGROUND_JOBS} run at once per session. Go on with other work while it runs, read its output with bash_output or from the output file the start line names, and stop it with task_stop when you no longer need it. You are told when one ends, with the end of its output, so do not poll it.
 
 Use bash for builds, tests, git and other programs, not to read, search, list or change files: read, grep, glob, list and edit do those. Dependencies are already installed; do not install packages. If a command is denied, do not run it again as it was; find another way or say what you could not do.
 
@@ -77,16 +78,6 @@ Git:
       additionalProperties: false,
     },
   },
-  bash_stop: {
-    name: 'bash_stop',
-    description: 'Stop a background command and everything it started: SIGTERM, then SIGKILL if it is still running a few seconds later. Returns how it ended and the end of its output.',
-    input_schema: {
-      type: 'object',
-      properties: { id: { type: 'string', description: 'The job id bash returned, such as bg-1.' } },
-      required: ['id'],
-      additionalProperties: false,
-    },
-  },
   check: {
     name: 'check',
     description:
@@ -94,10 +85,12 @@ Git:
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   edit: EDIT_FORMAT_SPECS[AGENT_EDIT_FORMAT].tool,
+  list_agents: LIST_AGENTS_TOOL_DEFINITION,
   monitor: MONITOR_TOOL_DEFINITION,
   ...PREVIEW_TOOL_SPECS,
   recall: RECALL_SPEC,
   schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
+  task_stop: TASK_STOP_TOOL_DEFINITION,
   todo: TODO_SPEC,
   watch_pr: WATCH_PR_TOOL_DEFINITION,
   skill: {
@@ -119,8 +112,8 @@ const AGENT_SPECS: Readonly<Record<AgentToolName, Tool>> = { ...TOOL_SPECS, ...A
 export const AGENT_TOOL_DEFINITIONS: readonly Tool[] = Object.freeze(AGENT_TOOL_NAMES.toSorted().map((name) => AGENT_SPECS[name]));
 
 // Plan starts nothing that outlives a call, so it has no background commands to read or stop, and nothing wakes it.
-// It may still list and read the dev servers a session started before it switched to Plan.
-const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'bash_stop', 'monitor', 'preview_start', 'preview_stop', 'schedule_wakeup', 'watch_pr']);
+// It may still list the work and the dev servers a session started before it switched to Plan, and read the servers.
+const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'monitor', 'preview_start', 'preview_stop', 'schedule_wakeup', 'task_stop', 'watch_pr']);
 
 /**
  * What a mode lets the agent call: everything, or in Plan nothing that changes files, with bash held to the safe list

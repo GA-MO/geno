@@ -153,15 +153,15 @@ describe('child status', () => {
   });
 
   it("reads a child's end from its run, with a cancel winning over the reason the run gives", () => {
-    expect(DONE_REASONS.map((reason) => childEndOf(reason, false, undefined))).toEqual([
+    expect(DONE_REASONS.map((reason) => childEndOf(reason, undefined, undefined))).toEqual([
       { kind: 'done' },
       { kind: 'capped', cap: 'turns' },
       { kind: 'capped', cap: 'cost' },
       { kind: 'failed', reason: 'the model refused' },
       { kind: 'failed', reason: 'the model call failed' },
     ]);
-    expect(childEndOf('error', false, 'transport: 503')).toEqual({ kind: 'failed', reason: 'transport: 503' });
-    for (const reason of DONE_REASONS) expect(childEndOf(reason, true, 'abort')).toEqual({ kind: 'cancelled' });
+    expect(childEndOf('error', undefined, 'transport: 503')).toEqual({ kind: 'failed', reason: 'transport: 503' });
+    for (const reason of DONE_REASONS) expect(childEndOf(reason, 'user', 'abort')).toEqual({ kind: 'cancelled' });
   });
 
   it("follows a parent's children through its log", () => {
