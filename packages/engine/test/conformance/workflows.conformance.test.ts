@@ -3,10 +3,23 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
-import { TASK_UPDATE_METHOD, TASKS_CAPABILITY, WORKFLOW_META, WORKFLOWS_CAPABILITY, type TaskUpdate, type WorkflowPreview } from '@g-code/core';
+import {
+  REPORT_DELIVERED,
+  structuredOutputTool,
+  TASK_UPDATE_METHOD,
+  TASKS_CAPABILITY,
+  WORKFLOW_META,
+  WORKFLOWS_CAPABILITY,
+  type OutputSchema,
+  type TaskUpdate,
+  type TurnEvent,
+  type WorkflowPreview,
+} from '@g-code/core';
 import { engineShared, gcodeAgent } from '../../src/serve.js';
 import { appendJournal, journalFile, readJournal } from '../../src/workflows.js';
-import { report, say, scripted, to, WIRES, type Wire } from './scripted.js';
+import { call, report, say, scripted, to, WIRES, type Wire } from './scripted.js';
+import { httpError } from '../fake-transport.js';
+import { chatFailure } from '../fake-openai.js';
 import type { ScriptEntry } from '../fake-model.js';
 
 const THREE = {
@@ -30,10 +43,14 @@ async function until(done: () => boolean | Promise<boolean>, what: string, ms = 
   }
 }
 
-/** An editor window that shows Tasks and workflows and runs every card; each `/workflow three` waits for its run's end and the woken turn. */
-async function workflowWindow(wire: Wire, script: readonly ScriptEntry[]) {
-  const run = await scripted(wire, script, { 'a.ts': 'export const alpha = 1;\n', [FILE]: `${JSON.stringify(THREE, null, 2)}\n` });
+/**
+ * An editor window that shows Tasks and workflows and runs every card; each `/workflow three` waits for its run's end
+ * and the woken turn. `structured` is GCODE_STRUCTURED_OUTPUT: when a schema step ends with a forced structured_output call.
+ */
+async function workflowWindow(wire: Wire, script: readonly ScriptEntry[], structured: 'on' | 'always' | 'off', workflow: object = THREE) {
+  const run = await scripted(wire, script, { 'a.ts': 'export const alpha = 1;\n', [FILE]: `${JSON.stringify(workflow, null, 2)}\n` });
   run.env['GCODE_WAKE_POLICY'] = JSON.stringify({ batchMs: 50, secondMs: 20 });
+  run.env['GCODE_STRUCTURED_OUTPUT'] = structured;
   const asked = (marker: string) => run.openings().filter((opening) => opening.first.includes(marker)).length;
   const cards: acp.RequestPermissionRequest[] = [];
   const tasks: TaskUpdate[] = [];
@@ -48,7 +65,12 @@ async function workflowWindow(wire: Wire, script: readonly ScriptEntry[]) {
     .onNotification(acp.methods.client.session.update, () => {})
     .onNotification(TASK_UPDATE_METHOD, (raw) => raw as TaskUpdate, ({ params }) => void tasks.push(params));
 
-  type Window = { readonly start: (args: string) => Promise<string>; readonly running: () => string | undefined };
+  type Window = {
+    readonly start: (args: string) => Promise<string>;
+    readonly running: () => string | undefined;
+    /** One prompt, and the window session's log once its turn ended. */
+    readonly send: (text: string) => Promise<readonly TurnEvent[]>;
+  };
   const session = async <T,>(scenario: (window: Window) => Promise<T>): Promise<T> => {
     const engine = engineShared(run.io);
     try {
@@ -68,7 +90,11 @@ async function workflowWindow(wire: Wire, script: readonly ScriptEntry[]) {
           await until(async () => runs().some((id) => !before.has(id) && ended(id)) && asked(PARENT) > woken && (await idle()), `/workflow three ${args} to end and its woken turn to finish`);
           return runs().find((id) => !before.has(id))!;
         };
-        return scenario({ start, running: () => runs().find((id) => !ended(id)) });
+        const send = async (text: string) => {
+          await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
+          return run.events(sessionId);
+        };
+        return scenario({ start, running: () => runs().find((id) => !ended(id)), send });
       });
     } finally {
       await engine.jobs.kill('engine-exit', 'all');
@@ -98,7 +124,7 @@ describe.each(WIRES)('workflow resume on the %s wire', (wire: Wire) => {
       to('[three]', report(PASS)),
       to(PARENT, say('Resumed the first run again.')),
       to(PARENT, say('Nothing ran.')),
-    ]);
+    ], 'off');
 
     const result = await w.session(async ({ start, running }) => {
       const firstRun = start('a.ts');
@@ -145,7 +171,7 @@ describe.each(WIRES)('workflow resume on the %s wire', (wire: Wire) => {
       to('[two]', report('Still nothing.')),
       to('[three]', report(PASS)),
       to(PARENT, say('Done again.')),
-    ]);
+    ], 'off');
     const result = await w.session(async ({ start }) => {
       const first = await start('a.ts');
       const changed = { ...THREE, steps: THREE.steps.map((step) => (step.id === 'two' ? { ...step, prompt: '[two] Look again, closer.' } : step)) };
@@ -157,6 +183,131 @@ describe.each(WIRES)('workflow resume on the %s wire', (wire: Wire) => {
     expect(w.question(1)).toContain(`from run ${result.first}: 3 steps, 1 replayed with no model call`);
     expect(result.report).toContain(`Resumed from run ${result.first}: 1 replayed with no model call.`);
     expect(await w.journal(result.second)).toEqual(['one', 'two', 'three']);
+  });
+});
+
+const JUDGED_SCHEMA: OutputSchema = { pass: 'boolean', files: 'string[]' };
+const JUDGED = {
+  description: 'Judge, then act on the verdict.',
+  input: 'What to judge',
+  steps: [
+    { id: 'judge', role: 'review', prompt: '[judge] Judge {{input}}.', schema: JUDGED_SCHEMA },
+    { id: 'act', role: 'explore', prompt: '[act] pass={{judge.pass}} files={{judge.files}}' },
+  ],
+};
+const fields = (input: unknown) => call('', [{ id: 'tu_fields', name: 'structured_output', input }]);
+const BLOCK = 'It fails.\n\n```json\n{"pass": false, "files": []}\n```';
+type Body = { readonly tool_choice?: unknown; readonly thinking?: unknown; readonly tools?: readonly unknown[] };
+const forcedBodies = (w: { run: { bodies: () => readonly Body[] } }) => w.run.bodies().filter((body) => body.tool_choice !== undefined);
+const actTask = (w: { run: { openings: () => readonly { first: string }[] } }) => w.run.openings().find((opening) => opening.first.includes('[act]'))!.first;
+const childLogs = async (w: { run: { events: (id: string) => Promise<readonly TurnEvent[]> } }, runId: string) =>
+  Promise.all((await w.run.events(runId)).flatMap((e) => (e.kind === 'child-start' ? [w.run.events(e.child)] : [])));
+
+describe.each(WIRES)('workflow structured output on the %s wire', (wire: Wire) => {
+  const FORCED_CHOICE = wire === 'anthropic' ? { type: 'tool', name: 'structured_output' } : { type: 'function', function: { name: 'structured_output' } };
+  const FORCED_TOOL = wire === 'anthropic' ? structuredOutputTool(JUDGED_SCHEMA) : { type: 'function', function: { name: 'structured_output', description: structuredOutputTool(JUDGED_SCHEMA).description, parameters: structuredOutputTool(JUDGED_SCHEMA).input_schema } };
+
+  it('T-WF-01 a schema step whose report has no fitting block ends with one forced structured_output call, whose fields feed the next step and replay on resume', async () => {
+    const w = await workflowWindow(
+      wire,
+      [
+        to('[judge]', report('Looked at a.ts; it holds.')),
+        to('[judge]', fields({ pass: true, files: ['a.ts'] })),
+        to('[act]', report('Acted.')),
+        to(PARENT, say('Done.')),
+        to(PARENT, say('Resumed; nothing ran.')),
+      ],
+      'on',
+      JUDGED,
+    );
+    const result = await w.session(async ({ start }) => {
+      const first = await start('a.ts');
+      const report = w.lastReport();
+      const second = await start(`--resume ${first}`);
+      return { first, second, report, resumed: w.lastReport() };
+    });
+    const forced = forcedBodies(w);
+    expect(forced, 'one request forces the call, after the report').toHaveLength(1);
+    expect(forced[0]!.tool_choice).toEqual(FORCED_CHOICE);
+    expect(forced[0]!.tools!.at(-1), "the tool's input is the step's schema as JSON Schema").toEqual(FORCED_TOOL);
+    if (wire === 'anthropic') expect(forced[0]!.thinking, 'a forced tool needs thinking off').toEqual({ type: 'disabled' });
+    const forcedSeen = w.run.seen()[w.run.bodies().indexOf(forced[0]!)]!;
+    expect(forcedSeen.results.map((r) => r.text)).toEqual([REPORT_DELIVERED]);
+    expect(actTask(w), "the forced call's fields, not the report's prose, fill the next step").toContain('[act] pass=true files=["a.ts"]');
+    expect(result.report).toContain('Workflow three finished: 2 steps ran,');
+    const judge = (await childLogs(w, result.first))[0]!;
+    expect(judge.filter((e) => e.kind === 'assistant'), 'the forced call is a turn of the step, so its cost counts').toHaveLength(2);
+    expect(judge.findLast((e) => e.kind === 'tool-result')).toMatchObject({ name: 'structured_output', status: 'ok' });
+    expect(judge.filter((e) => e.kind === 'error'), 'the call ends the step, short of any limit').toEqual([]);
+
+    expect(w.asked('[judge]'), 'the schema step replays on resume, its forced call too').toBe(2);
+    expect(w.asked('[act]')).toBe(1);
+    expect(result.resumed).toContain(`Resumed from run ${result.first}: 2 replayed with no model call.`);
+    expect(await w.journal(result.second)).toEqual(['judge', 'act']);
+  });
+
+  it('T-WF-01 a report whose block fits the schema needs no forced call', async () => {
+    const w = await workflowWindow(wire, [to('[judge]', report(BLOCK)), to('[act]', report('Acted.')), to(PARENT, say('Done.'))], 'on', JUDGED);
+    const result = await w.session(async ({ start }) => ({ first: await start('a.ts'), report: w.lastReport() }));
+    expect(forcedBodies(w)).toHaveLength(0);
+    expect(w.asked('[judge]')).toBe(1);
+    expect(actTask(w)).toContain('[act] pass=false files=[]');
+    expect(result.report).toContain('Workflow three finished: 2 steps ran,');
+  });
+
+  it('T-WF-01 a forced call whose input does not fit the schema, after a report with no block, stops the step as a missing block does', async () => {
+    const w = await workflowWindow(wire, [to('[judge]', report('It fails.')), to('[judge]', fields({ pass: 'yes', files: ['a.ts'] })), to(PARENT, say('Stopped.'))], 'on', JUDGED);
+    const result = await w.session(async ({ start }) => ({ first: await start('a.ts'), report: w.lastReport() }));
+    expect(forcedBodies(w)).toHaveLength(1);
+    const judge = (await childLogs(w, result.first))[0]!;
+    expect(judge.findLast((e) => e.kind === 'tool-result')).toMatchObject({ name: 'structured_output', status: 'error' });
+    expect(w.asked('[act]')).toBe(0);
+    expect(result.report).toContain('Workflow three stopped at judge: its report has no JSON block with pass (boolean), files (string[]).');
+  });
+
+  it('T-WF-01 with always, the forced call follows a fitting block too and its fields win; a call that does not fit leaves the block to stand', async () => {
+    const w = await workflowWindow(
+      wire,
+      [to('[judge]', report(BLOCK)), to('[judge]', fields({ pass: true, files: ['a.ts'] })), to('[act]', report('Acted.')), to(PARENT, say('Done.')), to('[judge]', report(BLOCK)), to('[judge]', fields({ pass: 'yes', files: [] })), to('[act]', report('Acted.')), to(PARENT, say('Done.'))],
+      'always',
+      JUDGED,
+    );
+    await w.session(async ({ start }) => {
+      await start('a.ts');
+      await start('b.ts');
+    });
+    expect(forcedBodies(w)).toHaveLength(2);
+    const acts = w.run.openings().filter((opening) => opening.first.includes('[act]')).map((opening) => opening.first);
+    expect(acts[0]).toContain('[act] pass=true files=["a.ts"]');
+    expect(acts[1]).toContain('[act] pass=false files=[]');
+  });
+
+  it('T-WF-01 a provider that refuses a forced tool leaves the report as it was', async () => {
+    const refused = wire === 'anthropic' ? { anthropic: httpError(400, { type: 'error', error: { type: 'invalid_request_error', message: 'tool_choice is not supported' } }) } : { openai: chatFailure(400, { error: { message: 'tool_choice is not supported', type: 'invalid_request_error' } }) };
+    const w = await workflowWindow(wire, [to('[judge]', report(BLOCK)), to('[judge]', refused), to('[act]', report('Acted.')), to(PARENT, say('Done.'))], 'always', JUDGED);
+    const result = await w.session(async ({ start }) => ({ first: await start('a.ts'), report: w.lastReport() }));
+    expect(forcedBodies(w)).toHaveLength(1);
+    expect(w.asked('[judge]'), 'a refusal is not retried').toBe(2);
+    expect(actTask(w)).toContain('[act] pass=false files=[]');
+    expect(result.report).toContain('Workflow three finished: 2 steps ran,');
+  });
+
+  it('T-WF-01 with GCODE_STRUCTURED_OUTPUT=off, the report\'s JSON block alone gives the fields, and no request forces a tool', async () => {
+    const w = await workflowWindow(wire, [to('[judge]', report(BLOCK)), to('[act]', report('Acted.')), to(PARENT, say('Done.'))], 'off', JUDGED);
+    const result = await w.session(async ({ start }) => ({ first: await start('a.ts'), report: w.lastReport() }));
+    expect(forcedBodies(w)).toHaveLength(0);
+    expect(w.asked('[judge]')).toBe(1);
+    expect(actTask(w)).toContain('[act] pass=false files=[]');
+    expect(result.report).toContain('Workflow three finished: 2 steps ran,');
+  });
+
+  it('refuses /workflow three --resume with no run, rather than running it with the input "--resume"', async () => {
+    const w = await workflowWindow(wire, [], 'off');
+    const events = await w.session(({ send }) => send('/workflow three --resume'));
+    const refused = events.findLast((e) => e.kind === 'tool-result' && e.name === 'workflow');
+    expect(refused).toMatchObject({ status: 'error' });
+    expect(refused?.kind === 'tool-result' && 'output' in refused ? refused.output : '').toContain("resume needs the session id of the run to resume, which that run's report and its Tasks row name: /workflow <name> --resume <run>");
+    expect(w.run.bodies(), 'no step and no model call ran').toHaveLength(0);
   });
 });
 

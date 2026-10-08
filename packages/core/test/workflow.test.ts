@@ -21,6 +21,9 @@ import {
   previewQuestion,
   progressLine,
   readFields,
+  structuredFields,
+  structuredOutputTool,
+  withFields,
   replayedBeforeLive,
   settleUnit,
   startReplay,
@@ -394,14 +397,16 @@ describe('a run', () => {
 describe('the log', () => {
   const call = (round: UnitCall[]) => workflowTurn(round, 'qwen3.8-flash');
 
-  it('issues agent calls with their caps and model, and checks as the check tool', () => {
+  it('issues agent calls with their caps, model and schema, and checks as the check tool', () => {
     const turn = call([
-      { kind: 'agent', index: 1, role: 'review', task: 'look', model: 'qwen3.7-plus', lane: undefined, caps: { maxTurns: 8, maxCostUsd: 0.05 } },
+      { kind: 'agent', index: 1, role: 'review', task: 'look', model: 'qwen3.7-plus', lane: undefined, caps: { maxTurns: 8, maxCostUsd: 0.05 }, schema: undefined },
       { kind: 'check', index: 2 },
+      { kind: 'agent', index: 3, role: 'review', task: 'judge', model: undefined, lane: undefined, caps: { maxTurns: 8, maxCostUsd: 0.05 }, schema: { pass: 'boolean' } },
     ]);
     expect(turn.content).toEqual([
       { type: 'tool_use', id: 'toolu_gcode_wf_1', name: 'agent', input: { agent: 'review', task: 'look', max_turns: 8, max_cost_usd: 0.05, model: 'qwen3.7-plus' }, caller: { type: 'direct' } },
       { type: 'tool_use', id: 'toolu_gcode_wf_2', name: 'check', input: {}, caller: { type: 'direct' } },
+      { type: 'tool_use', id: 'toolu_gcode_wf_3', name: 'agent', input: { agent: 'review', task: 'judge', max_turns: 8, max_cost_usd: 0.05, schema: { pass: 'boolean' } }, caller: { type: 'direct' } },
     ]);
     expect(turn.costUsd).toBe(0);
   });
@@ -620,6 +625,35 @@ describe('the tool and the command', () => {
 
   it('pairs the fences of a block with a language tag, so the JSON block after it is still read', () => {
     expect(readFields('Line 3:\n```ts\nfor (let i = 0; i <= n; i++) {}\n```\n\n```json\n{"pass": false}\n```', { pass: 'boolean' })).toEqual({ ok: true, value: { pass: false } });
+  });
+
+  const SCHEMA = { pass: 'boolean', score: 'number', why: 'string', files: 'string[]' } as const;
+
+  it('derives the structured_output tool from the flat schema, every field required and no other', () => {
+    expect(structuredOutputTool(SCHEMA)).toEqual({
+      name: 'structured_output',
+      description: expect.any(String),
+      input_schema: {
+        type: 'object',
+        properties: { pass: { type: 'boolean' }, score: { type: 'number' }, why: { type: 'string' }, files: { type: 'array', items: { type: 'string' } } },
+        required: ['pass', 'score', 'why', 'files'],
+        additionalProperties: false,
+      },
+    });
+  });
+
+  it("reads a structured_output call's fields, refuses a missing or mistyped field, and keeps only the schema's fields", () => {
+    expect(structuredFields({ pass: true, score: 3, why: 'ok', files: ['a.ts'], extra: 1 }, SCHEMA)).toEqual({ ok: true, value: { pass: true, score: 3, why: 'ok', files: ['a.ts'] } });
+    const refused = { ok: false, problem: 'structured_output takes pass (boolean), score (number), why (string), files (string[])' };
+    expect(structuredFields({ pass: 'true', score: 3, why: 'ok', files: [] }, SCHEMA)).toEqual(refused);
+    expect(structuredFields({ pass: true, score: 3, why: 'ok' }, SCHEMA)).toEqual(refused);
+    expect(structuredFields('{"pass": true}', SCHEMA)).toEqual(refused);
+  });
+
+  it("puts the forced call's fields last in the report, where readFields reads them over the report's own block", () => {
+    const report = withFields('Fails.\n\n```json\n{"pass": false}\n```', { pass: true });
+    expect(readFields(report, { pass: 'boolean' })).toEqual({ ok: true, value: { pass: true } });
+    expect(readFields(withFields('No block.', { pass: false }), { pass: 'boolean' })).toEqual({ ok: true, value: { pass: false } });
   });
 });
 

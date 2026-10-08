@@ -28,6 +28,9 @@ import {
   childSystemPrompt,
   type Effort,
   DEFERRED_TOOLS_NOTE,
+  FIELD_TYPES,
+  type FieldValue,
+  type OutputSchema,
   EXTERNAL_BACKENDS,
   forkOpening,
   forkTask,
@@ -49,11 +52,16 @@ import {
   parseAgentDefinition,
   parseLaneName,
   type LaneName,
+  readFields,
   REPORT_DELIVERED,
   reportMessageOf,
   resumeEvent,
   REPORT_TOOL,
   REPORT_TOOL_DEFINITION,
+  STRUCTURED_OUTPUT_TOOL,
+  structuredFields,
+  structuredOutputTool,
+  withFields,
   type HookContextEvent,
   type Session,
   sessionEffortOf,
@@ -234,8 +242,14 @@ export type SubagentEnv = {
   readonly lanes?: OpenChildLane | undefined;
 };
 
-/** What a workflow step sets on its child: the model, and caps in place of the definition's. */
-type StepOptions = { readonly model?: string | undefined; readonly max_turns?: number | undefined; readonly max_cost_usd?: number | undefined; readonly lane?: string | undefined };
+/** What a workflow step sets on its child: the model, caps in place of the definition's, and the fields its report ends with. */
+type StepOptions = {
+  readonly model?: string | undefined;
+  readonly max_turns?: number | undefined;
+  readonly max_cost_usd?: number | undefined;
+  readonly lane?: string | undefined;
+  readonly schema?: OutputSchema | undefined;
+};
 
 type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
 
@@ -315,8 +329,9 @@ const inputSchema = z.strictObject({
   max_cost_usd: z.number().positive().optional(),
   lane: z.string().min(1).optional(),
   isolation: z.literal('worktree').optional(),
+  schema: z.record(z.string(), z.enum(FIELD_TYPES)).optional(),
 });
-const STEP_FIELDS = ['model', 'max_turns', 'max_cost_usd', 'lane'] as const;
+const STEP_FIELDS = ['model', 'max_turns', 'max_cost_usd', 'lane', 'schema'] as const;
 const messageSchema = z.strictObject({ agent_session: z.string().min(1), text: z.string().trim().min(1) });
 
 /** A child's report call: it only says it went through, and the loop ends the child's run after it. */
@@ -326,6 +341,31 @@ const reportExecutor = executor({
   describe: () => REPORT_TOOL,
   run: async () => REPORT_DELIVERED,
 });
+
+/** A schema step's structured_output call: it says the fields went through, or why they did not. */
+const structuredExecutor = (schema: OutputSchema): Executor =>
+  executor({
+    input: z.record(z.string(), z.unknown()),
+    concurrent: () => true,
+    describe: () => STRUCTURED_OUTPUT_TOOL,
+    run: async (input) => {
+      const fields = structuredFields(input, schema);
+      if (!fields.ok) throw new ToolError(fields.problem);
+      return 'Fields delivered to the workflow.';
+    },
+  });
+
+/**
+ * When a schema step's child ends with a forced structured_output call, from `GCODE_STRUCTURED_OUTPUT`: by default
+ * (`on`) only when its report has no JSON block that fits the schema, `always` after every report, whose block the
+ * call's fields then replace, and `off` never. The forced call's fields contradicted a fitting block in the P34 eval
+ * (docs/results/p34-structured-output.md), so the block comes first by default.
+ */
+export type StructuredOutput = 'on' | 'always' | 'off';
+export const structuredOutputOf = (env: Readonly<Record<string, string | undefined>>): StructuredOutput => {
+  const raw = env['GCODE_STRUCTURED_OUTPUT'];
+  return raw === 'always' || raw === 'off' ? raw : 'on';
+};
 
 /** Runs work under one key after the work already queued under it; work with no key runs at once. */
 function exclusive() {
@@ -525,6 +565,37 @@ export function subagents(env: SubagentEnv): Subagents {
     }
   };
 
+  /**
+   * A schema step's fields, from one more call after its report, forced to structured_output with the schema as its
+   * input's JSON Schema. Undefined, which leaves the report's JSON block to stand, when the step's caps are spent, the
+   * provider or the model cannot force the call, or the call's input does not fit the schema.
+   */
+  const forceFields = async (
+    schema: OutputSchema,
+    childIo: Io,
+    opened: OpenSession,
+    mode: Mode,
+    ran: readonly TurnEvent[],
+    caps: ChildCaps,
+    surface: Parameters<typeof drive>[6],
+  ): Promise<{ readonly events: readonly TurnEvent[]; readonly fields: Readonly<Record<string, FieldValue>> | undefined } | undefined> => {
+    const spent = totalOf(ran);
+    const left = caps.maxCostUsd - (spent.costUsd ?? 0);
+    if (spent.turns >= caps.maxTurns || left <= 0) return undefined;
+    const forcedMode: Mode = {
+      tools: [...mode.tools, structuredOutputTool(schema)],
+      executors: { [STRUCTURED_OUTPUT_TOOL]: structuredExecutor(schema) },
+      forced: STRUCTURED_OUTPUT_TOOL,
+      readRoots: env.readRoots,
+    };
+    const result = await drive(childIo, store, opened, '', { maxTurns: 1, maxCostUsd: left }, forcedMode, surface).catch(() => undefined);
+    if (result === undefined) return undefined;
+    const delivered = result.events.findLast((e) => e.kind === 'tool-result' && e.name === STRUCTURED_OUTPUT_TOOL && e.status === 'ok');
+    const use = delivered?.kind !== 'tool-result' ? undefined : result.events.flatMap((e) => (e.kind === 'assistant' ? e.content : [])).find((block) => block.type === 'tool_use' && block.id === delivered.toolUseId);
+    const parsed = use?.type === 'tool_use' ? structuredFields(use.input, schema) : undefined;
+    return { events: result.events, fields: parsed?.ok === true ? parsed.value : undefined };
+  };
+
   const runPlaced = async (
     agent: AgentDefinition,
     run: ChildRun,
@@ -617,11 +688,24 @@ export function subagents(env: SubagentEnv): Subagents {
       external?.close(session.id);
     }
     // This run's events alone: a resumed child's earlier report is not its new one.
-    const ran = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= firstSeq);
+    const thisRun = (all: readonly TurnEvent[]) => all.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= firstSeq);
+    const schema = run.kind === 'spawn' ? run.step.schema : undefined;
+    let fields: Readonly<Record<string, FieldValue>> | undefined;
+    const forcing = structuredOutputOf(io.env);
+    const fits = (fitting: OutputSchema) => readFields(handedBack(thisRun(events), false), fitting).ok;
+    if (schema !== undefined && start === 'fresh' && external === undefined && end.kind === 'done' && !controller.signal.aborted && (forcing === 'always' || (forcing === 'on' && !fits(schema)))) {
+      const forced = await forceFields(schema, childIo, { log: { ...log, events }, gateway: parent.gateway }, mode, thisRun(events), caps, { files, watcher, steers: inbox });
+      if (forced !== undefined) {
+        events = forced.events;
+        fields = forced.fields;
+      }
+    }
+    const ran = thisRun(events);
     const total = totalOf(ran);
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
-    const report = handedBack(ran, isPartial(end));
+    const handed = handedBack(ran, isPartial(end));
+    const report = fields === undefined ? handed : withFields(handed, fields);
     const settled =
       place === undefined
         ? undefined
