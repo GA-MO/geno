@@ -18,6 +18,7 @@ import type { Io } from './command.js';
 import type { Watcher } from './drive.js';
 import { EngineError } from './errors.js';
 import type { Files } from './files.js';
+import { laneCreated } from './hooks.js';
 import {
   applyLane,
   cloneDeps,
@@ -63,7 +64,7 @@ export async function laneInfos(repo: LaneRepo, store: Store, io: Io, tasks: Tas
 /**
  * A new lane for `prompt`, from the main checkout's HEAD, with the ignored files `.worktreeinclude` lists and a
  * copy-on-write clone of the dependencies. Setup commands run only when the user already approved them through
- * `gcode lane new`; the panel cannot ask that question outside the sandbox.
+ * `gcode lane new`; the panel cannot ask that question outside the sandbox. The user's LaneCreated hooks run last.
  */
 export async function laneFor(repo: LaneRepo, prompt: string, store: Store, io: Io, name?: LaneName): Promise<LaneRecord> {
   const lane = await createLane(repo, name ?? laneNameFor(prompt, await takenLaneNames(repo)), 'head');
@@ -79,6 +80,7 @@ export async function laneFor(repo: LaneRepo, prompt: string, store: Store, io: 
       io.err(`lane ${lane.name}: setup from ${setup.file} not run; approve it once with gcode lane new --approve-setup`);
     }
   }
+  await laneCreated(io, store, repo, lane);
   return lane;
 }
 

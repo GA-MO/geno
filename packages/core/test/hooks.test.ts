@@ -81,6 +81,11 @@ describe('parseHookSettings', () => {
       status: 'never',
       why: HOOK_EVENTS.WorktreeCreate.why,
     });
+    const lane = (origin: HookOrigin): HookEntry => ({ event: 'LaneCreated', matcher: undefined, command: 'pnpm install', timeoutSec: undefined, origin });
+    expect(hookRows([lane(user), lane(project)], true).map((row) => [row.status, row.why])).toEqual([
+      ['runs', undefined],
+      ['never', expect.stringContaining('laneSetup')],
+    ]);
   });
 
   it('skips a handler of another type with a note, and keeps the command handlers beside it', () => {
