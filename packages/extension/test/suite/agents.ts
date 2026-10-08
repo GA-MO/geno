@@ -78,6 +78,9 @@ export async function run(): Promise<void> {
   await writeFile(fake, fakeAgentScript(state));
   await chmod(fake, 0o755);
   // Another window takes the OS focus and gives it back, as switching to a terminal to install the CLI does.
+  // A window that has sat behind another app has no focus to give away, so it takes the focus first.
+  await vscode.commands.executeCommand('workbench.action.focusWindow');
+  await waitFor('this window to have the focus', async () => vscode.window.state.focused, 10_000);
   const changes: boolean[] = [];
   const watch = vscode.window.onDidChangeWindowState((w) => changes.push(w.focused));
   await vscode.commands.executeCommand('workbench.action.newWindow');
