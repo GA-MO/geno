@@ -1,4 +1,4 @@
-import { appendFile, readdir, stat } from 'node:fs/promises';
+import { appendFile, readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   answerEvent,
@@ -34,6 +34,7 @@ export type RecoveryDeps = {
 
 // A crash worth telling a parent about is recent; a log untouched for a day is left as it is.
 const HORIZON_MS = 24 * 60 * 60 * 1000;
+// A log that never started a subagent is skipped without being parsed.
 const CHILD_LINE = '"kind":"child-start"';
 
 type Parent = { readonly log: SessionLog; readonly runs: readonly ChildStartEvent[] };
@@ -54,10 +55,10 @@ async function parentLogs(store: Store): Promise<SessionLog[]> {
         const file = path.join(store.sessionsDir, name);
         try {
           if ((await stat(file)).mtimeMs < Date.now() - HORIZON_MS) return [];
+          if (!(await readFile(file, 'utf8')).includes(CHILD_LINE)) return [];
           const log = await readSessionLog(file);
           const head = log.events[0];
-          if (head?.kind !== 'session-start' || head.child !== undefined || !log.events.some((e) => e.kind === 'child-start')) return [];
-          return [log];
+          return head?.kind === 'session-start' && head.child === undefined ? [log] : [];
         } catch {
           return [];
         }

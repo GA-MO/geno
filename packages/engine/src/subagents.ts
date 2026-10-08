@@ -309,7 +309,7 @@ export function subagents(env: SubagentEnv): Subagents {
     return { log, start, task, prompt: start === 'fork' ? forkTask(agent, task) : task, at: session.createdAt };
   };
 
-  // The run goes on from the child's report, with the message as its parent's steer and nothing left to prompt.
+  // The run goes on from where the child's log ends, with the message as its parent's steer and nothing left to prompt.
   const openResume = async ({ log, message, of, moment }: Extract<ChildRun, { kind: 'resume' }>): Promise<OpenedChild> => {
     await dropTornTail(log);
     const at = new Date().toISOString();
@@ -534,7 +534,9 @@ export function subagents(env: SubagentEnv): Subagents {
     if (backend !== undefined) throw new ToolError(`${of.role} ran on ${EXTERNAL_BACKENDS[backend.id].label}, whose session Geno cannot resume; start a new subagent with everything it needs`);
     const agent = byName(of.role);
     if (agent === undefined) throw new ToolError(`${id} was a ${of.role} subagent, and this session has no ${of.role} now; start one of ${agents.map((a) => a.name).join(', ')}`);
-    const cut = childrenOf(holder).find((child) => child.child === id)?.status.kind === 'interrupted';
+    // A step this session resumed before has its newest run here, not in the workflow's log.
+    const newest = childrenOf(events).find((child) => child.child === id) ?? childrenOf(holder).find((child) => child.child === id);
+    const cut = newest?.status.kind === 'interrupted';
     return { agent, run: { kind: 'resume', message, log, of, moment: cut ? 'interrupted' : 'resumed' } };
   };
 
