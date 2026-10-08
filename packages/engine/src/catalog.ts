@@ -246,7 +246,7 @@ export function catalogService(
 
   /** What Geno loads now, outside plugins, by real path, and how many plugin skills there are besides. */
   async function loaded(workspace: string) {
-    const commands = await loadCommands(workspace, homes, await plugins(workspace));
+    const { commands } = await loadCommands(workspace, homes, await plugins(workspace));
     const agents = (await loadAgents(workspace, homes, [])).agents;
     const absolute = (shown: string) => (path.isAbsolute(shown) ? shown : path.join(workspace, shown));
     const items: { kind: InstalledItem['kind']; name: string; description: string; where: InstalledItem['where']; file: string; target: string }[] = [];

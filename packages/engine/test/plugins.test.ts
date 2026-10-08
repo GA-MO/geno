@@ -59,14 +59,14 @@ describe('installed Claude Code plugins', () => {
     const scan = await loadPlugins(claude, workspace);
     expect(scan).toEqual({ plugins: [{ name: 'pstack', root: pluginRoot, key: 'pstack@pstack-claude' }], problems: [] });
 
-    const commands = await loadCommands(workspace, { app: home, user: undefined }, scan.plugins);
+    const { commands } = await loadCommands(workspace, { app: home, user: undefined }, scan.plugins);
     expect(skillNames(commands)).toEqual(['local workspace', 'pstack:how plugin', 'pstack:principle-x plugin']);
     expect(commands.find((c) => c.name === 'pstack:how')).toMatchObject({ description: 'Explain how a subsystem works', path: path.join(pluginRoot, 'skills', 'how', 'SKILL.md'), text: HOW });
   });
 
   it('keeps a skill marked user-invocable: false out of the published list, though it stays loadable', async () => {
     const { claude, workspace, home } = await withPstack();
-    const commands = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
+    const { commands } = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
     const published = availableCommands(commands).map((c) => c.name);
     expect(published).toContain('pstack:how');
     expect(published).not.toContain('pstack:principle-x');
@@ -75,13 +75,13 @@ describe('installed Claude Code plugins', () => {
 
   it('reads a double-quoted description with its escaped quotes, as pstack writes them', async () => {
     const { claude, workspace, home } = await withPstack({ 'cache/pstack/skills/why/SKILL.md': '---\nname: why\ndescription: "Use for \\"why is X\\" questions, a \\\\ path"\n---\n' });
-    const commands = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
+    const { commands } = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
     expect(commands.find((c) => c.name === 'pstack:why')?.description).toBe('Use for "why is X" questions, a \\ path');
   });
 
   it('lets a workspace skill of the same name win', async () => {
     const { claude, workspace, home } = await withPstack({ 'ws/.agents/skills/mine/SKILL.md': '---\nname: pstack:how\ndescription: The workspace one\n---\nmine\n' });
-    const commands = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
+    const { commands } = await loadCommands(workspace, { app: home, user: undefined }, (await loadPlugins(claude, workspace)).plugins);
     expect(commands.filter((c) => c.name === 'pstack:how')).toEqual([expect.objectContaining({ scope: 'workspace', description: 'The workspace one' })]);
   });
 
@@ -190,7 +190,7 @@ describe('a plugin root as a read-only root', () => {
 describe('the skill tool', () => {
   const setup = async () => {
     const fixture = await withPstack({ 'ws/.claude/skills/local/SKILL.md': '---\nname: local\ndescription: Local\n---\nLocal steps.\n' });
-    const commands = await loadCommands(fixture.workspace, { app: fixture.home, user: undefined }, (await loadPlugins(fixture.claude, fixture.workspace)).plugins);
+    const { commands } = await loadCommands(fixture.workspace, { app: fixture.home, user: undefined }, (await loadPlugins(fixture.claude, fixture.workspace)).plugins);
     const ctx = { workspace: fixture.workspace } as ToolContext;
     return { ...fixture, ctx, tool: skillExecutor(async () => commands) };
   };

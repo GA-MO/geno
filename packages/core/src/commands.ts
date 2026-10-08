@@ -58,7 +58,7 @@ export type EngineBuiltin = {
   [K in BuiltinName]: (typeof BUILTIN_COMMANDS)[K] extends { readonly runs: 'engine'; readonly turn: unknown } ? never : (typeof BUILTIN_COMMANDS)[K]['runs'] extends 'engine' ? K : never;
 }[BuiltinName];
 
-/** Where a file command or skill came from; a workspace one shadows a global one of the same name. */
+/** Where a file command or skill came from; the user's own global one shadows a workspace one of the same name. */
 export type CommandSource = 'workspace' | 'global';
 
 /** Skills also come from installed Claude Code plugins, read in place and named `<plugin>:<skill>`. */
@@ -72,9 +72,19 @@ export type SlashCommand =
   | (Listed & { readonly kind: 'prompt'; readonly scope: CommandSource; readonly path: string; readonly template: string })
   /**
    * `text` is the whole SKILL.md, frontmatter included. `userInvocable` is false for a skill whose frontmatter says
-   * `user-invocable: false`: the model may load it, but the slash list does not offer it.
+   * `user-invocable: false`: the model may load it, but the slash list does not offer it. `modelInvocable` is false for
+   * `disable-model-invocation: true`: only the user runs it, as a slash command. `fork` is set for `context: fork`, a
+   * skill that runs as a subagent, with the agent its frontmatter names.
    */
-  | (Listed & { readonly kind: 'skill'; readonly scope: SkillSource; readonly path: string; readonly text: string; readonly userInvocable: boolean });
+  | (Listed & {
+      readonly kind: 'skill';
+      readonly scope: SkillSource;
+      readonly path: string;
+      readonly text: string;
+      readonly userInvocable: boolean;
+      readonly modelInvocable: boolean;
+      readonly fork: { readonly agent: string | undefined } | undefined;
+    });
 
 /** Key in an ACP available command's `_meta`: `{ kind, runs? }`, so the editor knows which built-ins it runs itself. */
 export const COMMAND_META = 'gcode/command';

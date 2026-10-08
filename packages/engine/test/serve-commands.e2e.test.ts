@@ -88,7 +88,7 @@ describe('gcode serve slash commands', () => {
     expect(listings(updates)).toEqual([
       [...builtins, 'review', 'add-i18n'],
       [...builtins, 'ship', 'review', 'add-i18n'],
-      [...builtins, 'ship', 'review', 'add-i18n', 'standup'],
+      [...builtins, 'standup', 'ship', 'review', 'add-i18n'],
     ]);
     const first = updates.find((u): u is Listed => u.sessionUpdate === 'available_commands_update')!;
     expect(first.availableCommands.find((c) => c.name === 'add-i18n')).toEqual({

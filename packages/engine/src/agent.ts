@@ -242,7 +242,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   try {
     const { plugins } = await pluginLoader(io)(workspace);
     const homes = homesOf(store, io.env);
-    const commands = () => loadCommands(workspace, homes, plugins);
+    const commands = async () => (await loadCommands(workspace, homes, plugins)).commands;
     const skillRoots = await globalSkillRoots(homes, claudeDirOf(io.env));
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
     const config = await workspaceConfig(workspace);

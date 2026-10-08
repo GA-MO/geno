@@ -29,6 +29,8 @@ const i18n: SlashCommand = {
   path: '.claude/skills/add-i18n/SKILL.md',
   text: '---\nname: add-i18n\ndescription: Add a locale\n---\nSteps for a new locale.',
   userInvocable: true,
+  modelInvocable: true,
+  fork: undefined,
 };
 const catalog = mergeCommands([builtinCommands(), [review, i18n]]);
 
