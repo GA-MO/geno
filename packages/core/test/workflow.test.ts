@@ -10,6 +10,8 @@ import {
   closingTurn,
   ESTIMATE_CALL,
   ESTIMATE_CALLS,
+  journalOf,
+  nextLiveRound,
   nextRound,
   parseTemplate,
   parseWorkflow,
@@ -19,8 +21,11 @@ import {
   previewQuestion,
   progressLine,
   readFields,
+  replayedBeforeLive,
   settleUnit,
+  startReplay,
   startWorkflow,
+  unitKey,
   unitToolId,
   WORKFLOW_LIMITS,
   workflowEnd,
@@ -31,6 +36,7 @@ import {
   workflowToolDefinitions,
   workflowTurn,
   type ChildEnd,
+  type JournalEntry,
   type TurnEvent,
   type UnitCall,
   type UnitOutcome,
@@ -434,8 +440,139 @@ describe('the log', () => {
     expect(turn.stopReason).toBe('end_turn');
     expect(turn.content).toEqual([{ type: 'text', text: workflowReport(run), citations: null }]);
     expect(workflowReport(run)).toBe(
-      ['Workflow review-fix-verify finished: 1 step ran, $0.01 of its $0.50 cap.', '', '- review (review): done, 2 model calls, $0.01, session child-1', '', 'The last report, from review:', 'Looks fine.'].join('\n'),
+      ['Workflow review-fix-verify finished: 1 step ran, $0.01 of its $0.50 cap.', '', '- review (review): done, 2 model calls, $0.01, session child-1', 'Empty results: 0.', '', 'The last report, from review:', 'Looks fine.'].join('\n'),
     );
+  });
+});
+
+describe('resume', () => {
+  const THREE = {
+    description: 'Three looks.',
+    steps: [
+      { id: 'one', role: 'explore', prompt: 'look one at {{input}}' },
+      { id: 'two', role: 'explore', prompt: 'look two' },
+      { id: 'three', role: 'review', prompt: 'judge', schema: { pass: 'boolean' } },
+    ],
+  };
+  const changed = (step: number, prompt: string) => ({ ...THREE, steps: THREE.steps.map((s, i) => (i === step ? { ...s, prompt } : s)) });
+
+  /** Runs every round live or from the journal; returns the run and the calls that ran live. */
+  function resumeDrive(run: WorkflowRun, journal: readonly JournalEntry[] | undefined, answer: (call: UnitCall) => UnitOutcome) {
+    const live: UnitCall[] = [];
+    let replay = journal === undefined ? undefined : startReplay('run-1', journal);
+    for (let current = run; ; ) {
+      const next = nextLiveRound(current, BUILTIN_AGENTS, replay);
+      current = next.round.run;
+      replay = next.replay;
+      if (next.round.calls.length === 0) return { run: current, live };
+      live.push(...next.round.calls);
+      for (const call of next.round.calls) current = settleUnit(current, call.index, answer(call));
+    }
+  }
+  const passing = (call: UnitCall) => done(call.kind === 'agent' && call.task.startsWith('judge') ? json({ pass: true }) : `saw ${call.kind === 'agent' ? call.task : ''}`, 0.01, 2, `child-${call.index}`);
+  const failingThree = (call: UnitCall) => (call.kind === 'agent' && call.task.startsWith('judge') ? done('no block') : passing(call));
+  const tasksOf = (calls: readonly UnitCall[]) => calls.map((call) => (call.kind === 'agent' ? call.task.split('\n')[0] : 'check'));
+
+  it('keys a call on its task, caps, role and model, and gives a step in a lane none', () => {
+    const base = { task: 'look', caps: { maxTurns: 8, maxCostUsd: 0.05 }, role: 'explore', model: undefined, lane: undefined };
+    const key = unitKey(base)!;
+    expect(key).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(unitKey({ ...base })).toBe(key);
+    for (const other of [{ task: 'look!' }, { caps: { maxTurns: 9, maxCostUsd: 0.05 } }, { caps: { maxTurns: 8, maxCostUsd: 0.06 } }, { role: 'review' }, { model: 'qwen3.7-plus' }]) {
+      expect(unitKey({ ...base, ...other }), JSON.stringify(other)).not.toBe(key);
+    }
+    expect(unitKey({ ...base, lane: 'fix' })).toBeUndefined();
+  });
+
+  it('journals each agent call that ended done, with its child and its report, and no failed one', () => {
+    const { run } = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
+    expect(run.stop).toMatchObject({ kind: 'step-failed', unit: 'three' });
+    const journal = journalOf(run);
+    expect(journal.map((entry) => [entry.step, entry.child, entry.result])).toEqual([
+      ['one', 'child-1', 'saw look one at a.ts'],
+      ['two', 'child-2', 'saw look two'],
+    ]);
+    expect(journal.map((entry) => entry.key)).toEqual(run.units.slice(0, 2).map((unit) => unit.key));
+  });
+
+  it('replays steps 1 and 2 with no call once step 3 failed, and runs step 3', () => {
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
+    const { run, live } = resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    expect(tasksOf(live)).toEqual(['judge']);
+    expect(run.status).toBe('done');
+    expect(run.units.map((unit) => [unit.label, unit.status, unit.costUsd, unit.turns, unit.sessionId])).toEqual([
+      ['one', 'replayed', 0, 0, 'child-1'],
+      ['two', 'replayed', 0, 0, 'child-2'],
+      ['three', 'done', 0.01, 2, 'child-3'],
+    ]);
+    expect(run.outputs['two']?.report, 'a replayed report feeds the steps after it').toBe('saw look two');
+    const report = workflowReport(run);
+    expect(report).toContain('Workflow review-fix-verify finished: 3 steps ran, $0.01 of its $0.50 cap. Resumed from run run-1: 2 replayed with no model call.');
+    expect(report).toContain('- one (explore): replayed, no model call, session child-1');
+  });
+
+  it('runs a step whose prompt changed, and every step after it, though their keys match', () => {
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, passing);
+    expect(first.run.status).toBe('done');
+    const { live } = resumeDrive(startWorkflow(spec(changed(1, 'look two again')), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    expect(tasksOf(live)).toEqual(['look two again', 'judge']);
+    const input = resumeDrive(startWorkflow(spec(THREE), 'b.ts', 'run-1'), journalOf(first.run), passing);
+    expect(tasksOf(input.live), 'another input changes the first prompt').toEqual(['look one at b.ts', 'look two', 'judge']);
+  });
+
+  it('converges: resuming twice, or resuming the resumed run, replays the same, and a run that finished replays whole', () => {
+    const first = resumeDrive(startWorkflow(spec(THREE), 'a.ts'), undefined, failingThree);
+    const again = () => resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    const [a, b] = [again(), again()];
+    expect(b.live).toEqual(a.live);
+    expect(b.run).toEqual(a.run);
+    const resumedJournal = journalOf(a.run);
+    expect(resumedJournal.map((entry) => entry.step), 'the resumed run journals its replays too').toEqual(['one', 'two', 'three']);
+    const whole = resumeDrive(startWorkflow(spec(THREE), 'a.ts', 'run-1'), resumedJournal, () => {
+      throw new Error('no call runs');
+    });
+    expect(whole.live).toEqual([]);
+    expect(whole.run.status).toBe('done');
+  });
+
+  it('runs a check while it replays, and replays the steps after a check that passes', () => {
+    const answer = (call: UnitCall): UnitOutcome => (call.kind === 'check' ? { kind: 'check', passed: true, text: '' } : done(call.task.startsWith('Check') ? json({ pass: true }) : json({ findings: ['x'] })));
+    const first = drive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth'), answer);
+    const { run, live } = resumeDrive(startWorkflow(spec(REVIEW_FIX_VERIFY), 'auth', 'run-1'), journalOf(first.run), answer);
+    expect(tasksOf(live)).toEqual(['check']);
+    expect(run.units.map((unit) => unit.status)).toEqual(['replayed', 'replayed', 'passed', 'replayed']);
+    expect(replayedBeforeLive(spec(REVIEW_FIX_VERIFY), 'auth', BUILTIN_AGENTS, startReplay('run-1', journalOf(first.run))), 'the preview counts up to the first call that runs').toEqual(['review', 'fix']);
+  });
+
+  it('never replays a step in a lane', () => {
+    const laned = { ...THREE, steps: THREE.steps.map((s, i) => (i === 0 ? { ...s, role: 'worker', lane: 'fix' } : s)) };
+    const first = resumeDrive(startWorkflow(spec(laned), 'a.ts'), undefined, passing);
+    expect(journalOf(first.run).map((entry) => entry.step)).toEqual(['two', 'three']);
+    const { live } = resumeDrive(startWorkflow(spec(laned), 'a.ts', 'run-1'), journalOf(first.run), passing);
+    expect(tasksOf(live)).toEqual(['look one at a.ts', 'look two', 'judge']);
+  });
+
+  it('counts empty results and points at the session to read for a failed or empty step', () => {
+    const raw = { description: 'x', steps: [{ parallel: [{ id: 'a', role: 'explore', prompt: 'a' }, { id: 'b', role: 'explore', prompt: 'b' }, { id: 'c', role: 'explore', prompt: 'c' }] }] };
+    let run = nextRound(startWorkflow(spec(raw), ''), BUILTIN_AGENTS).run;
+    run = settleUnit(run, 1, done('  ', 0.01, 2, 'child-a'));
+    run = settleUnit(run, 2, { kind: 'agent', end: { kind: 'failed', reason: 'model error' }, report: '', costUsd: 0.01, turns: 1, sessionId: 'child-b' });
+    run = settleUnit(run, 3, done('found it', 0.01, 2, 'child-c'));
+    const report = workflowReport(run);
+    expect(report).toContain('- a (explore): done (empty report), 2 model calls, $0.01, session child-a');
+    expect(report).toContain('Empty results: 1 (a).');
+    expect(report).toContain('Read step session child-a before diagnosing a.\nRead step session child-b before diagnosing b.');
+    expect(report).not.toContain('before diagnosing c');
+  });
+
+  it('reads --resume from the command and resume from the tool, and says so in the preview', () => {
+    expect(parseWorkflowCommand('three --resume 0a1b-2c the alpha')).toEqual({ name: 'three', input: 'the alpha', resume: '0a1b-2c' });
+    expect(parseWorkflowCommand('three --resume 0a1b')).toEqual({ name: 'three', input: '', resume: '0a1b' });
+    expect(parseWorkflowInput({ name: 'three', resume: ' 0a1b ' })).toEqual({ ok: true, value: { name: 'three', input: '', resume: '0a1b' } });
+    expect(parseWorkflowInput({ name: 'three', resume: '../x' }).ok).toBe(false);
+    expect(parseWorkflowInput({ resume: '0a1b' })).toEqual({ ok: false, problem: 'resume needs the name of the workflow it resumes' });
+    const preview = workflowPreview(spec(THREE), 'a.ts', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] });
+    expect(previewQuestion({ ...preview, resume: { run: 'run-1', replays: ['one', 'two'] } })).toMatch(/^Resume workflow review-fix-verify from run run-1: 3 steps, 2 replayed with no model call, about \$0\.\d+, at most \$0\.09 \(cap \$0\.50\)\?$/);
   });
 });
 
