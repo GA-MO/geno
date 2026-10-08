@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod';
 import {
   AGENT_EDIT_FORMAT,
@@ -14,6 +15,7 @@ import {
   DEFAULT_BASH_TIMEOUT_SECONDS,
   formatDiagnostics,
   hookMayAnswer,
+  isPathRule,
   laneCommandDenial,
   laneDenialText,
   leadingSleep,
@@ -24,11 +26,13 @@ import {
   neutralizeNoticeLines,
   nextAutoState,
   OUTCOME_VERDICTS,
+  pathRuleFor,
   restoreHidden,
   STOP_AND_WAIT,
   ruledDenial,
   secretReadDenial,
   sleepRefusal,
+  userRuleDenial,
   type AgentToolName,
   type ApprovalMode,
   type ApprovalRecord,
@@ -41,6 +45,7 @@ import {
   type Denial,
   type EditorDiagnostic,
   type LaneBounds,
+  type PathTool,
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
@@ -64,6 +69,7 @@ import {
   ToolRejected,
   type Executor,
   type ToolContext,
+  type ToolReply,
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
@@ -166,6 +172,9 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   }
   if (rule === 'workspace-deny') {
     return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.`;
+  }
+  if (rule === 'workspace-ask') {
+    return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions, and nobody can answer here. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
   }
   if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
     return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
@@ -326,6 +335,37 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
 
   const edit = editExecutor(reads, async (ctx) => (tools.checkAfterEdit ? (await runCheck(tools, ctx))?.text : undefined));
 
+  // A path rule's question or refusal before a read or an edit. Plan never asks, so there an ask rule refuses.
+  const askPathRule = async (tool: PathTool, given: string, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
+    const real = await (tool === 'read' ? resolveInside : resolveWritable)(ctx, given);
+    const rule = ctx.pathRule?.(tool, path.resolve(ctx.workspace, given)) ?? ctx.pathRule?.(tool, real);
+    if (rule === undefined) return undefined;
+    const mode = modeOf(tools.approval);
+    const ruled = userRuleDenial(rule, `${tool} ${displayPath(ctx, real)}`);
+    const denial = mode === 'plan' ? { ...ruled, verdict: 'deny' as const } : ruled;
+    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx);
+    if (approval.verdict === 'deny') throw refusalOf(approval);
+    return approval;
+  };
+
+  /**
+   * A file tool under the workspace's path rules, read at each call so a rule added in Settings holds for the next one:
+   * `read` and `edit` ask or refuse on their path, and every file tool leaves out what a `read` rule covers.
+   */
+  const withPathRules = (tool: PathTool | undefined, inner: Executor): Executor => ({
+    ...inner,
+    async run(raw, ctx) {
+      const rules = (await tools.permissions?.list()) ?? [];
+      if (!rules.some(isPathRule)) return inner.run(raw, ctx);
+      const ruled: ToolContext = { ...ctx, pathRule: (on, file) => pathRuleFor(on, file, rules, { ...tools.scope, workspace: ctx.workspace }) };
+      const given = (raw as { path?: unknown }).path;
+      const approval = tool === undefined || typeof given !== 'string' ? undefined : await askPathRule(tool, given, ruled);
+      const reply: ToolReply = await inner.run(raw, ruled);
+      if (approval === undefined) return reply;
+      return typeof reply === 'string' ? { text: reply, approval } : { approval, ...reply };
+    },
+  });
+
   /** The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal throws. */
   const approveCommand = async (command: string, ctx: ToolContext, background: boolean): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
@@ -339,7 +379,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, tools.scope, 'ask', rules)?.offer;
     const denial = ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
-      if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
+      if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
       denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx, keep);
@@ -417,8 +457,10 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
 
   const all: Readonly<Record<AgentToolName, Executor>> = {
     ...EXECUTORS,
-    read: withRuleAttachments(read, tools.rules),
-    edit,
+    glob: withPathRules(undefined, EXECUTORS.glob),
+    grep: withPathRules(undefined, EXECUTORS.grep),
+    read: withRuleAttachments(withPathRules('read', read), tools.rules),
+    edit: withPathRules('edit', edit),
     bash,
     ...backgroundExecutors(tools.background),
     ...workExecutors({ background: tools.background, wakes: tools.wakes, children: tools.children }),

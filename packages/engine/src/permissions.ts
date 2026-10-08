@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { RULE_EFFECTS, type CommandPattern, type PermissionRule, type PermissionsFile, type RuleEffect } from '@g-code/core';
+import { isPathRule, PATH_EFFECTS, PATH_TOOLS, RULE_EFFECTS, type NewRule, type PermissionRule, type PermissionsFile } from '@g-code/core';
 import { laneAt } from './lanes.js';
 import { writeAtomically } from './memory.js';
 import { isMissing, StoreError } from './store.js';
@@ -14,20 +14,31 @@ import { isMissing, StoreError } from './store.js';
 export type PermissionStore = {
   readonly workspace: string;
   list(): Promise<readonly PermissionRule[]>;
-  /** Saves a rule; one for the same pattern is replaced, so saving twice keeps one. */
-  add(effect: RuleEffect, pattern: CommandPattern): Promise<readonly PermissionRule[]>;
+  /** Saves a rule; one for the same pattern, or the same tool and path, is replaced, so saving twice keeps one. */
+  add(rule: NewRule): Promise<readonly PermissionRule[]>;
   remove(id: string): Promise<readonly PermissionRule[]>;
 };
 
-const ruleSchema = z.strictObject({
-  id: z.string().min(1),
-  effect: z.enum(RULE_EFFECTS),
-  pattern: z.tuple([z.string().min(1)], z.string()),
-  createdAt: z.string(),
-});
+const ruleSchema = z.union([
+  z.strictObject({
+    id: z.string().min(1),
+    effect: z.enum(RULE_EFFECTS),
+    pattern: z.tuple([z.string().min(1)], z.string()),
+    createdAt: z.string(),
+  }),
+  z.strictObject({
+    id: z.string().min(1),
+    effect: z.enum(PATH_EFFECTS),
+    tool: z.enum(PATH_TOOLS),
+    path: z.string().min(1),
+    createdAt: z.string(),
+  }),
+]);
 const fileSchema = z.strictObject({ version: z.literal(1), workspace: z.string(), rules: z.array(ruleSchema) });
 
 const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((word, i) => word === b[i]);
+const sameTarget = (a: PermissionRule, b: NewRule): boolean =>
+  isPathRule(a) || isPathRule(b) ? isPathRule(a) && isPathRule(b) && a.tool === b.tool && a.path === b.path : sameWords(a.pattern, b.pattern);
 
 /** The workspace whose rules a session follows: its main checkout when it runs in a lane. */
 export async function rulesWorkspace(workspace: string, home: string | undefined): Promise<string> {
@@ -66,9 +77,9 @@ export function permissionStore(appHome: string, workspace: string, now: () => D
   return {
     workspace,
     list: read,
-    async add(effect, pattern) {
-      const kept = (await read()).filter((rule) => !sameWords(rule.pattern, pattern));
-      return write([...kept, { id: randomUUID(), effect, pattern, createdAt: now().toISOString() }]);
+    async add(rule) {
+      const kept = (await read()).filter((old) => !sameTarget(old, rule));
+      return write([...kept, { ...rule, id: randomUUID(), createdAt: now().toISOString() }]);
     },
     async remove(id) {
       return write((await read()).filter((rule) => rule.id !== id));

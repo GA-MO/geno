@@ -2,7 +2,7 @@ import {
   PERMISSION_ADD_METHOD,
   PERMISSION_REMOVE_METHOD,
   PERMISSIONS_METHOD,
-  patternText,
+  ruleText,
   type PermissionAddRequest,
   type PermissionRemoveRequest,
   type PermissionsRequest,
@@ -19,7 +19,7 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 const listingOf = ({ workspace, rules }: PermissionsResponse, refused?: string): PermissionsListing => ({
   kind: 'loaded',
   workspace,
-  rules: rules.map(({ id, effect, pattern }) => ({ id, effect, text: patternText(pattern) })),
+  rules: rules.map((rule) => ({ id: rule.id, effect: rule.effect, text: ruleText(rule) })),
   ...(refused === undefined ? {} : { refused }),
 });
 

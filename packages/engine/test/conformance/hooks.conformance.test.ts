@@ -434,7 +434,7 @@ type Asked = { readonly mode: SessionMode; readonly answers?: readonly Permissio
 async function interactive(wire: Wire, script: readonly Turn[], hooks: (run: Run) => Promise<object>, { mode, answers = [], files, deny: denied }: Asked) {
   const run = await scripted(wire, script, files);
   await userHooks(run, await hooks(run));
-  if (denied !== undefined) await permissionStore(homeOf(run.store), run.workspace).add('deny', denied.split(' ') as unknown as CommandPattern);
+  if (denied !== undefined) await permissionStore(homeOf(run.store), run.workspace).add({ effect: 'deny', pattern: denied.split(' ') as unknown as CommandPattern });
   const asked: Denial[] = [];
   const pending = [...answers];
   const approval: Approval = {
@@ -762,7 +762,7 @@ describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
     const publish = { id: 'tu_publish', name: 'bash', input: { command: 'pnpm publish' } };
     const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
     const run = await scripted(wire, [call('', [kubectl, publish, ls]), say('Done.')]);
-    await permissionStore(homeOf(run.store), run.workspace).add('deny', ['pnpm', 'publish'] as unknown as CommandPattern);
+    await permissionStore(homeOf(run.store), run.workspace).add({ effect: 'deny', pattern: ['pnpm', 'publish'] as unknown as CommandPattern });
     const hook = await hookScript(run, 'refuse', { stdout: answerCard({ behavior: 'deny', message: 'No cluster access from here.' }) });
     await userHooks(run, { PermissionRequest: group(hook.command) });
 

@@ -81,7 +81,7 @@ async function setup(replies: readonly Reply[]) {
 }
 
 const list = (ctx: acp.ClientContext, cwd: string) => ctx.request<PermissionsResponse, PermissionsRequest>(PERMISSIONS_METHOD, { cwd });
-const add = (ctx: acp.ClientContext, cwd: string, effect: 'allow' | 'deny', text: string) =>
+const add = (ctx: acp.ClientContext, cwd: string, effect: 'allow' | 'ask' | 'deny', text: string) =>
   ctx.request<PermissionsResponse, PermissionAddRequest>(PERMISSION_ADD_METHOD, { cwd, effect, text });
 
 describe('remembered permission rules', () => {
@@ -142,6 +142,26 @@ describe('remembered permission rules', () => {
       'denied: `node -e console.log(1)` matches the workspace rule that denies `node`, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.',
     );
     expect(after.rules).toEqual([]);
+  });
+
+  it('saves an ask rule and a Read rule typed in Settings, and the ask rule puts a card up in Auto with no rule to keep', async () => {
+    const listing = bash('ls');
+    const { workspace, permissions, transport, session, prompt } = await setup([toolCall('Listing.', [listing], usage), answer('Not listed.', usage)]);
+    await session(async (ctx, sessionId) => {
+      const { rules } = await add(ctx, workspace, 'ask', 'Bash(ls *)');
+      expect((await add(ctx, workspace, 'deny', 'Read(./private/**)')).rules).toEqual([
+        expect.objectContaining({ effect: 'ask', pattern: ['ls'] }),
+        expect.objectContaining({ effect: 'deny', tool: 'read', path: './private/**' }),
+      ]);
+      expect(rules).toHaveLength(1);
+      await expect(add(ctx, workspace, 'allow', 'Read(src/**)')).rejects.toThrow(/only ask or deny/);
+      await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+      await prompt(ctx, sessionId, 'List it');
+    });
+    expect(permissions).toHaveLength(1);
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls', reason: 'the workspace rule that asks before `ls`' });
+    expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
+    expect(transport.requests.filter((r) => r.body.tool_choice !== undefined), 'the classifier is not called').toEqual([]);
   });
 
   it('still asks before a hard ask that an allow rule names, offers no rule for it, and refuses to save an allow rule for one', async () => {

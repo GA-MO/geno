@@ -3,10 +3,12 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { childReport, type Denial, type SessionId, type SessionMode } from '@g-code/core';
+import { childReport, type Denial, type NewRule, type SessionId, type SessionMode } from '@g-code/core';
 import { runAgent } from '../../src/agent.js';
 import { startSession } from '../../src/chat.js';
 import { DISK_FILES } from '../../src/files.js';
+import { permissionStore } from '../../src/permissions.js';
+import { homeOf } from '../../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
 import { runTool, type ToolContext } from '../../src/tools/index.js';
 import type { Resolve } from '../../src/tools/web.js';
@@ -36,12 +38,15 @@ type Options = {
   readonly mode: SessionMode | 'non-interactive';
   readonly answers?: readonly PermissionAnswer[];
   readonly web?: { readonly resolve: Resolve };
+  /** The workspace's rules, as Settings under Permissions saves them. */
+  readonly rules?: readonly NewRule[];
 };
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
-async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web }: Options) {
+async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [] }: Options) {
   const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
   const { workspace, io, store, seen } = await scriptedWire(wire, script, files);
+  for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
   const asked: Denial[] = [];
   const pending = [...answers];
   const approval: Approval =
@@ -106,6 +111,99 @@ describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
     const alone = await scripted(wire, [{ calls: [refused] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive' });
     expect(alone.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining('credentials') });
     expect(ask.sent() + alone.sent()).not.toContain(SECRET);
+  });
+});
+
+describe.each(WIRES)('T-PERM-10 safe wrappers on the %s wire', (wire) => {
+  it('T-PERM-10 an allow rule for npm test covers timeout 30 npm test, and nice and env wrappers, in Auto without asking or classifying', async () => {
+    const wrapped = call('bash', { command: 'timeout 30 npm test' });
+    const nice = call('bash', { command: 'NODE_ENV=test nice -n 5 node check.js' });
+    const run = await scripted(wire, [{ calls: [wrapped, nice] }, { answer: 'Both ran.' }], {
+      files: { 'check.js': "console.log('checked');\n" },
+      mode: 'auto',
+      rules: [{ effect: 'allow', pattern: ['npm', 'test'] }, { effect: 'allow', pattern: ['node', 'check.js'] }],
+    });
+    // The classifier throws in these tests, so a run that ends at all was never classified.
+    expect(run.asked).toEqual([]);
+    const statuses = run.result.events.flatMap((e) => (e.kind === 'tool-result' ? [e.status] : []));
+    expect(statuses).not.toContain('denied');
+    expect(run.view().get(wrapped.id)!.text).not.toMatch(/classifier|denied/);
+    expect(run.view().get(nice.id)).toMatchObject({ error: false, text: expect.stringContaining('checked') });
+  });
+
+  it('T-PERM-10 without the rule the same wrapped command goes to the classifier in Auto', async () => {
+    const wrapped = call('bash', { command: 'NODE_ENV=test nice -n 5 node check.js' });
+    const run = scripted(wire, [{ calls: [wrapped] }, { answer: 'It did not run.' }], { files: { 'check.js': "console.log('checked');\n" }, mode: 'auto' });
+    await expect(run).rejects.toThrow('no classifier in these tests');
+  });
+});
+
+describe.each(WIRES)('B/B-56 ask rules on the %s wire', (wire) => {
+  it('B/B-56 an ask rule asks in Auto before a command the safe list would run, and a no keeps it from running', async () => {
+    const touch = call('bash', { command: 'touch made.txt' });
+    const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Stopped.' }], { files: { 'a.ts': '' }, mode: 'auto', answers: ['reject'], rules: [{ effect: 'ask', pattern: ['touch'] }] });
+    expect(run.asked).toEqual([expect.objectContaining({ rule: 'workspace-ask', command: 'touch made.txt', verdict: 'ask', reason: 'the workspace rule that asks before `touch`' })]);
+    expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
+
+    const again = call('bash', { command: 'touch made.txt' });
+    const yes = await scripted(wire, [{ calls: [again] }, { answer: 'Made it.' }], { files: { 'a.ts': '' }, mode: 'auto', answers: ['allow'], rules: [{ effect: 'ask', pattern: ['touch'] }] });
+    expect(yes.asked).toHaveLength(1);
+    expect(existsSync(path.join(yes.workspace, 'made.txt'))).toBe(true);
+  });
+
+  it('B/B-56 an ask rule on a path asks before read in Auto, and refuses with the rule named when nobody can be asked', async () => {
+    const files = { 'notes/plan.md': 'the plan\n' };
+    const rules: readonly NewRule[] = [{ effect: 'ask', tool: 'read', path: 'notes/**' }];
+    const asking = call('read', { path: 'notes/plan.md' });
+    const ask = await scripted(wire, [{ calls: [asking] }, { answer: 'Stopped.' }], { files, mode: 'auto', answers: ['reject'], rules });
+    expect(ask.asked).toEqual([expect.objectContaining({ rule: 'workspace-ask', command: 'read notes/plan.md', verdict: 'ask' })]);
+
+    const refused = call('read', { path: 'notes/plan.md' });
+    const alone = await scripted(wire, [{ calls: [refused] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive', rules });
+    expect(alone.view().get(refused.id)).toMatchObject({ error: true, text: expect.stringContaining('`Read(notes/**)`') });
+    expect(ask.sent() + alone.sent()).not.toContain('the plan');
+  });
+});
+
+describe.each(WIRES)('T-PERM-05 user path rules on the %s wire', (wire) => {
+  const PRIVATE = 'launch date is 2026-11-30';
+  const files = { 'private/plan.md': `${PRIVATE}\n`, 'src/a.ts': 'export const plan = "see private";\n' };
+  const rules: readonly NewRule[] = [{ effect: 'deny', tool: 'read', path: 'private/**' }];
+
+  it('T-PERM-05 a Read deny rule refuses read and cat of the file in every mode, naming the rule, and the text never reaches the model', async () => {
+    const read = call('read', { path: 'private/plan.md' });
+    const cat = call('bash', { command: 'cat private/plan.md' });
+    const asking = await scripted(wire, [{ calls: [read] }, { calls: [cat] }, { answer: 'Both refused.' }], { files, mode: 'auto', rules });
+    expect(asking.asked).toEqual([]);
+    expect(asking.view().get(read.id)).toMatchObject({ error: true, text: expect.stringContaining('the workspace rule that denies `Read(private/**)`') });
+    expect(asking.view().get(cat.id)).toMatchObject({ error: true, text: expect.stringContaining('the workspace rule that denies `Read(private/**)`') });
+
+    const plan = call('read', { path: 'private/plan.md' });
+    const inPlan = await scripted(wire, [{ calls: [plan] }, { answer: 'Refused.' }], { files, mode: 'plan', rules });
+    expect(inPlan.view().get(plan.id)!.error).toBe(true);
+    expect(asking.sent() + inPlan.sent()).not.toContain(PRIVATE);
+  });
+
+  it('T-PERM-05 grep and glob leave the file out, a path that names it is refused, and edit is refused too', async () => {
+    const grep = call('grep', { pattern: 'launch|plan' });
+    const all = call('glob', { pattern: '**/*.md' });
+    const named = call('grep', { pattern: 'launch', path: 'private' });
+    const edit = call('edit', { path: 'private/plan.md', old_str: 'launch', new_str: 'landing' });
+    const run = await scripted(wire, [{ calls: [grep, all, named] }, { calls: [edit] }, { answer: 'Nothing there.' }], { files, mode: 'ask', rules });
+    const seen = run.view();
+    expect(seen.get(grep.id)).toEqual({ text: 'src/a.ts:1:export const plan = "see private";', error: false });
+    expect(seen.get(all.id)).toEqual({ text: 'no files match', error: false });
+    expect(seen.get(named.id)).toMatchObject({ error: true, text: expect.stringContaining('`Read(private/**)`') });
+    expect(seen.get(edit.id)).toMatchObject({ error: true, text: expect.stringContaining('`Read(private/**)`') });
+    expect(readFileSync(path.join(run.workspace, 'private/plan.md'), 'utf8')).toBe(`${PRIVATE}\n`);
+    expect(run.sent()).not.toContain(PRIVATE);
+  });
+
+  it('T-PERM-05 the sandbox denies the read when the command hides the path from the rules', async () => {
+    const hidden = call('bash', { command: 'sh -c "cat private/$(echo plan).md"' });
+    const run = await scripted(wire, [{ calls: [hidden] }, { answer: 'It failed.' }], { files, mode: 'non-interactive', rules });
+    expect(run.view().get(hidden.id)!.text).toMatch(/Operation not permitted|Permission denied/);
+    expect(run.sent()).not.toContain(PRIVATE);
   });
 });
 

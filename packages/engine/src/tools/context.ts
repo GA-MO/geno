@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isSecretPath, type ApprovalRecord, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { isSecretPath, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -38,6 +38,8 @@ export type ToolContext = {
   readonly hookAllowed?: true | undefined;
   /** The user's PermissionRequest hooks for this call, asked where a card would show; absent when none would run. */
   readonly permissionRequest?: PermissionAsk | undefined;
+  /** The workspace's path rule that governs a tool on an absolute path; absent when the workspace has none. */
+  readonly pathRule?: ((tool: PathTool, file: string) => PathRule | undefined) | undefined;
 };
 
 /** Asks a call's PermissionRequest hooks about the card `denial` would show. */
@@ -195,6 +197,14 @@ export function isSecret(ctx: ToolContext, target: string): boolean {
   const root = [ctx.workspace, ctx.spillDir, ...ctx.readRoots].find((r) => within(r, target));
   return root !== undefined && isSecretPath(path.relative(root, target).split(path.sep).join('/'));
 }
+
+/** The `read` rule a search meets at `target`. An ask counts as a refusal there, as a search cannot stop to ask. */
+export const searchRule = (ctx: ToolContext, target: string): PathRule | undefined => ctx.pathRule?.('read', target);
+
+export const pathRuleRefusal = (tool: string, shown: string, rule: PathRule): string =>
+  `${shown} is off limits to ${tool}: the user's workspace rule \`${ruleText(rule)}\` in Settings under Permissions ${
+    rule.effect === 'deny' ? 'denies reading it. Do not try to get its contents another way; if the task needs it, say so in your answer' : 'asks before it is read, and a search cannot ask. Call read on the file instead, which asks the user'
+  }.`;
 
 export const secretRefusal = (tool: string, shown: string): string =>
   `${shown} is off limits to ${tool}: it matches Geno's built-in rule for credentials files (.env files, keys, .ssh and the like), whose contents would reach the model provider. Do not try to get its contents another way. If the task needs a value from it, ask the user.`;

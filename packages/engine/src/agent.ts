@@ -49,6 +49,7 @@ import {
   type TurnEvent,
   TELLS_MODEL,
   type Waiter,
+  sandboxDenials,
   SCHEDULE_TASK_TOOL,
   SCHEDULED_RUN_NOTE,
   scheduleToolDefinitions,
@@ -239,7 +240,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const home = io.env['HOME'] || homedir();
   const lane = await laneAt(workspace, home);
   if (lane !== undefined) await bindSession(lane, session.id);
-  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }));
+  const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
+  const ruledPaths = (root: string) => async () => sandboxDenials(await permissions.list(), { workspace: root, tempDir, home });
+  const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }), ruledPaths(workspace));
   let children: Subagents | undefined;
   const { jobs, steers, wakes } = options.engine ?? runEngine();
   const inbox = steers.open(session.id, undefined);
@@ -252,7 +255,6 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
     const config = await workspaceConfig(workspace);
     const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
-    const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
     const project: SessionScope = { kind: 'project', workspace: lane?.repo.main ?? session.workspace };
     const forkSource = head?.kind === 'session-start' ? head.fork?.sessionId : undefined;
     // The session, its forks and the session it was forked from all hold turns the model already has in context.
@@ -301,7 +303,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       if (bound === undefined) throw new EngineError(`lane ${name} at ${record.path} is not a lane checkout`);
       await bindSession(bound, child);
       const laneCheck = await checkCommand(options.check ?? config.check, record.path, homeOf(store));
-      const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: bound.gitWritable }));
+      const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: bound.gitWritable }), ruledPaths(record.path));
       const place: Place = { sandbox: laneSandbox, workspace: record.path, lane: bound.bounds, check: laneCheck, diagnostics: undefined };
       return { lane: bound, executors: (approval) => executorsFor(approval, false, place), close: () => laneSandbox.close() };
     };

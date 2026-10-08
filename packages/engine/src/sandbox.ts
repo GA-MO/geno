@@ -135,12 +135,20 @@ async function leave(runtime: SharedRuntime): Promise<void> {
   }
 }
 
-export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
+/** More places closed to every command, read before each one, such as what the workspace's deny path rules name. */
+export type PathDenials = () => Promise<{ readonly denyRead: readonly string[]; readonly denyWrite: readonly string[] }>;
+
+export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials): Promise<Sandbox> {
   if (!SandboxManager.isSupportedPlatform()) {
     throw new EngineError(`sandbox-runtime does not support ${process.platform}, so commands cannot run`);
   }
   const runtime = await join(policy);
-  const filesystem = { denyRead: [...policy.denyRead], allowRead: [...policy.readable], allowWrite: [...policy.writable], denyWrite: [] };
+  const base = { denyRead: [...policy.denyRead], allowRead: [...policy.readable], allowWrite: [...policy.writable], denyWrite: [] as string[] };
+  const rules = async () => {
+    if (denials === undefined) return base;
+    const { denyRead, denyWrite } = await denials();
+    return { ...base, denyRead: [...base.denyRead, ...denyRead], denyWrite: [...denyWrite] };
+  };
   // The opener's hold and one per retained command; the runtime is left once all have let go.
   let holds = 1;
   const release = async () => {
@@ -149,11 +157,12 @@ export async function openSandbox(policy: SandboxPolicy): Promise<Sandbox> {
   let open = true;
   return {
     run: async (command, options) => {
+      const filesystem = await rules();
       const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
       return runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
     },
-    spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem }), options),
-    wrap: (command) => SandboxManager.wrapWithSandbox(command, undefined, { filesystem }),
+    spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }), options),
+    wrap: async (command) => SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }),
     retain() {
       holds++;
       let released = false;
