@@ -436,6 +436,22 @@ P12 also covers rows that have no Claude Code conformance test:
 | C/C-54 | `commands.test.ts` (engine): a global command and skill beat the workspace's of the same name, with one problem line each, and `~/.claude/skills` loads after `~/.g-code/skills` and before `~/.agents/skills`. `subagents.test.ts`: a global agent beats the workspace's, with a problem line. |
 | A/B-12, B/B-30, C/C-51 | T-SKILL-03 above. `docs/geno-tools.md` maps `Skill`'s `skill` and `args`. |
 
+## Compaction gaps (P26)
+
+A compaction now keeps what Claude Code injects again after one, in Geno's frozen form. `kept.skills` holds the body of each skill loaded before the cut, capped at Claude Code's 5,000 tokens a skill and 25,000 in all, newest first, with an older one past the total named only. `kept.attached` holds up to 3 of the newest changed files, each within 5,000 tokens and all within 10,000 (or half the kept tail on a small window), read from disk when the compaction runs. Both are part of the logged event, so a resume sends the same bytes. The summary call asks for three more sections in Geno's words: the user's rules word for word, errors and fixes, and the current work with quotes of the user's latest request and the agent's last words. The compacted text tells the model to call `recall` for an exact detail, and `recall` now searches the compacted part of the session first, tool output included. The details are in [u47.md](u47.md).
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-CTX-05 | After a compaction, `<analysis>` is dropped, the last assistant turn is kept, up to 5 recently edited files come back as Read call and result pairs, and the boundary records the kept segment. | Adapted: the summary call has no analysis block, and about 20,000 tokens of the newest turns stay as they were (A/E-05). Up to 3 changed files come back inside the compacted text as `<changed_file>`, numbered as `read` shows them, with the skills loaded as `<loaded_skill>`. `keptFrom` is the kept segment. The test also asks `recall` for the exact error of a read before the compaction, and resumes on a new engine. | pass (adopt, adapt; was no test) | `context.conformance.test.ts`, both wires, over ACP |
+
+P26 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| A/E-03 | `compaction-gaps.test.ts` (core) checks the seven sections of the summary request. The live compact-smoke checks that a "Never touch legacy.md." rule from before `/compact` holds after it, and that the model quotes an earlier fixed build error word for word. |
+| A/E-04 | T-CTX-05 above, and `compaction-gaps.test.ts`: the compacted text points at `recall`, which finds an exact error in a compacted tool output, never in the kept tail, never in its own earlier calls. The compact-smoke asks for the exact earlier error live. |
+| A/E-06 | T-CTX-05 above, and `compaction-gaps.test.ts`: the skill caps, the skills carried into a second compaction, the newest-change order, the file count and token caps, and an auto compaction skipped when the attached files would not fit. The compact-smoke loads a skill before the compaction, and every answer after it follows the skill. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -526,7 +542,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-CTX-02 | keep Geno's | none | no test yet |
 | T-CTX-03 | at parity | none | no test yet |
 | T-CTX-04 | skip | none | no test yet |
-| T-CTX-05 | adopt, adapt | P26 | no test yet |
+| T-CTX-05 | adopt, adapt | P26 | pass |
 | T-CTX-08 | keep Geno's, adapt | P23 | no test yet |
 | T-CTX-06 | skip | none | no test yet |
 | T-CTX-07 | keep Geno's | none | no test yet |

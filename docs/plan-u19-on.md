@@ -306,7 +306,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 | 5. Prompt tiers and compaction | P23 | A capability record per model: window, output cap, thinking, prompt tier, cache TTL, thresholds. |
 | | P24 | A cheap-model prompt tier, proved by an eval A/B. |
 | | P25 | Budget reminders, and the eval that decides whether `agent` is on by default. |
-| | P26 | Compaction keeps skill bodies, recent files, errors and a pointer to the full history. |
+| | P26 | Compaction keeps skill bodies, recent files, errors and a pointer to the full history. Done. |
 | | P27 | Tool gaps that cost cheap models turns: `replace_all`, overwrite, `sleep`, cwd reset, paths, `+term`. |
 | 6. Permission rules | P28 | Rule grammar: `ask` rules, wrapper stripping, long commands, user path rules. |
 | | P29 | Permissions read from `.claude/settings.json` and `~/.claude/settings.json`. |
