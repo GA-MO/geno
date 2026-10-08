@@ -109,6 +109,9 @@ export function toolRoster(tools: readonly Tool[], mcp?: readonly Tool[], minSav
   return { offered: [...offered, toolSearchDefinition(listed, mcp !== undefined)], deferred };
 }
 
+/** True when the run offers tool_search: it defers some of its own tools, or it has MCP. */
+export const offersToolSearch = (roster: ToolRoster): boolean => roster.offered.at(-1)?.name === TOOL_SEARCH_TOOL;
+
 /** The tools tool_search loaded so far, from the log, so a resumed or replayed session can call the same ones. */
 export const loadedTools = (events: readonly TurnEvent[]): ReadonlySet<string> =>
   new Set(events.flatMap((event) => (event.kind === 'tool-result' && event.status === 'ok' ? (event.loaded ?? []) : [])));

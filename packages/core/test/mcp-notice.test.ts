@@ -9,6 +9,7 @@ import {
   noticeFor,
   noticeTexts,
   NOT_USER_LINE,
+  offersToolSearch,
   replayMessages,
   searchTools,
   spillNotice,
@@ -160,6 +161,8 @@ describe('the roster of a run with MCP', () => {
     const few = AGENT_TOOL_DEFINITIONS.filter((tool) => tool.name === 'read');
     expect(toolRoster(few).offered.map((tool) => tool.name)).toEqual(['read']);
     expect(toolRoster(few, []).offered.map((tool) => tool.name)).toEqual(['read', TOOL_SEARCH_TOOL]);
+    expect(offersToolSearch(toolRoster(few, [])), 'so its executor and the system note come with it').toBe(true);
+    expect(offersToolSearch(toolRoster(few))).toBe(false);
   });
 
   it('leaves a run without MCP as it was', () => {

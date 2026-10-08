@@ -27,6 +27,7 @@ import {
   MESSAGE_AGENT_TOOL,
   MESSAGE_AGENT_TOOL_DEFINITION,
   noticeFor,
+  offersToolSearch,
   HOOK_PERMISSION_MODES,
   pstackNote,
   READ_TERMINAL_TOOL,
@@ -337,7 +338,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const appended = options.appendSystemPrompt ?? config.appendSystemPrompt;
     const system = [
       AGENT_PROMPTS[options.promptTier ?? capabilitiesOf(session.provider, session.model).promptTier],
-      ...(roster.deferred.size === 0 ? [] : [DEFERRED_TOOLS_NOTE]),
+      ...(offersToolSearch(roster) ? [DEFERRED_TOOLS_NOTE] : []),
       ...(spinoffs && SPINOFF_MODES[startMode] ? [SPINOFF_NOTE] : []),
       ...(options.scheduled === true ? [SCHEDULED_RUN_NOTE] : []),
       ...(chapters && CHAPTER_MODES[startMode] ? [CHAPTER_NOTE] : []),
