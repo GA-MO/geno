@@ -428,7 +428,7 @@ describe('gcode serve: steering a running turn', () => {
     expect(end?.kind === 'child-end' && end.end.kind, 'the child no longer runs or spends').toBe('cancelled');
   });
 
-  it('message_agent to a child that finished says so', async () => {
+  it('message_agent to a background child that finished resumes it in the background, and its new report reaches the parent', async () => {
     const childDone = gate();
     let childId = '';
     const model = models({
@@ -441,9 +441,9 @@ describe('gcode serve: steering a running turn', () => {
         }
         return { reply: answer('Done.', usage) };
       },
-      '[child]': () => ({ reply: answer('a.ts:1 defines alpha.', usage) }),
+      '[child]': (n) => ({ reply: handBack(n === 0 ? 'a.ts:1 defines alpha.' : 'b.ts:1 defines beta.', usage, `tu_report_${n}`) }),
     });
-    const { log, result } = await serve(
+    const { log, childLog, result } = await serve(
       model.fetch,
       async () => {},
       async (editor, updates) => {
@@ -458,14 +458,22 @@ describe('gcode serve: steering a running turn', () => {
           (error: unknown) => (error instanceof Error ? error.message : String(error)),
         );
         childDone.open();
-        await within(turn, "the parent's turn to end");
-        return { refused };
+        await within(turn, "the parent's turn to end with the resumed child's report");
+        const states = updates.flatMap(({ update }) => (update.sessionUpdate === 'subagent_update' && update.sessionId === child ? [update.state?.state] : []));
+        return { refused, states };
       },
     );
 
-    const messaged = log.events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_m');
-    expect(messaged?.kind === 'tool-result' && 'output' in messaged ? messaged.output : '').toMatch(/^child already finished/);
     expect(result.refused, "the user's steer to the finished child is refused").toMatch(/the subagent already finished/);
-    expect(log.events.some((e) => e.kind === 'user' && e.from === 'child'), "the child's report still reached the parent").toBe(true);
+    const messaged = log.events.find((e) => e.kind === 'tool-result' && e.toolUseId === 'tu_m');
+    expect(messaged?.kind === 'tool-result' && 'output' in messaged ? messaged.output : '').toMatch(new RegExp(`^Resumed explore in the background as subagent session ${childId}, with your message\\.`));
+    expect(result.states, 'the same child shows running again, then ends again').toEqual(['running', 'idle', 'running', 'idle']);
+    const [first, resumed] = model.requests('[child]');
+    expect(resumed!.messages.slice(0, first!.messages.length).map((m) => m.role)).toEqual(first!.messages.map((m) => m.role));
+    expect(JSON.stringify(lastContent(resumed!))).toContain('<parent_message>\\nand beta?\\n</parent_message>');
+    const reports = log.events.filter((e) => e.kind === 'user' && e.from === 'child');
+    expect(reports.map((e) => (e.kind === 'user' && e.content.includes('b.ts:1 defines beta.')) || false)).toEqual([false, true]);
+    expect(kinds((await childLog(childId)).events)).toEqual(['user', 'assistant', 'tool-result', 'steer', 'assistant', 'tool-result']);
+    expect(model.requests('[parent]'), "the resumed child's report reopens the parent's turn").toHaveLength(4);
   });
 });

@@ -237,6 +237,7 @@ const childOfSchema = z.strictObject({
   role: z.string().min(1),
   caps: childCapsSchema,
   start: childStartSchema,
+  background: z.literal(true).optional(),
 });
 
 const childEndSchema = z.discriminatedUnion('kind', [
