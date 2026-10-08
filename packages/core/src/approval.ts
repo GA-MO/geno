@@ -413,8 +413,17 @@ export type ExternalRuleId = (typeof EXTERNAL_RULE_IDS)[number];
 /** A deny rule the user set for the workspace, which permission-rules.ts matches. */
 export const WORKSPACE_RULE_IDS = ['workspace-deny'] as const;
 export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
-export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId;
-export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS] as const;
+/** A user's PreToolUse hook that asked before a call or denied it (hooks.ts). */
+export const HOOK_RULE_IDS = ['hook-ask', 'hook-deny'] as const;
+export type HookRuleId = (typeof HOOK_RULE_IDS)[number];
+export type ApprovalRuleId = DenyRuleId | McpRuleId | BrowserRuleId | WebRuleId | ExternalRuleId | WorkspaceRuleId | HookRuleId;
+export const APPROVAL_RULE_IDS = [...DENY_RULE_IDS, ...MCP_RULE_IDS, ...BROWSER_RULE_IDS, ...WEB_RULE_IDS, ...EXTERNAL_RULE_IDS, ...WORKSPACE_RULE_IDS, ...HOOK_RULE_IDS] as const;
+
+/** The question a PreToolUse hook's ask puts before a call, named by the hook's source as Claude Code labels it. */
+export function hookAskDenial({ reason, from }: { readonly reason: string | undefined; readonly from: string }, command: string): Denial {
+  return { rule: 'hook-ask', reason: `A PreToolUse hook [${from}] asks first${reason === undefined ? '' : `: ${reason.replace(/\.$/, '')}`}.`, command, verdict: 'ask' };
+}
+
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {

@@ -210,3 +210,24 @@ describe('parseRule', () => {
     }
   });
 });
+
+describe('ruledDenial under a PreToolUse hook allow', () => {
+  // A hook allow answers the question and skips the classifier; it never beats a refusal or what Geno always asks.
+  const HOOK_ALLOWS: readonly Row[] = [
+    ['ask', 'git push', [], 'runs'],
+    ['auto', 'curl https://example.com', [], 'runs'],
+    ['auto', 'kubectl get pods && pnpm vitest run', [], 'runs'],
+    ['ask', 'pnpm publish', [deny('pnpm publish')], 'rule-denies'],
+    ['ask', 'cat .env', [], 'asks'],
+    ['auto', 'cat .env', [], 'classifies'],
+    ['ask', 'cat /etc/hosts', [], 'asks'],
+    ['ask', 'git push && cat ../outside.txt', [], 'asks'],
+    ['ask', 'git push --force', [], 'asks'],
+    ['auto', 'rm -rf ~', [], 'asks'],
+    ['plan', 'git push', [], 'denied'],
+    ['non-interactive', 'git push', [], 'denied'],
+  ];
+  it.each(HOOK_ALLOWS)('%s: %s with %j %s', (mode, command, rules, outcome) => {
+    expect(outcomeOf(ruledDenial(command, scope, mode, rules, true))).toBe(outcome);
+  });
+});

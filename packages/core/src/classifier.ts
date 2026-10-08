@@ -45,7 +45,7 @@ export type ApprovalRecord = {
 
 /** The question the user answers before a flagged command runs, with the classifier's reason when it asked. */
 export const approvalQuestion = (denial: Denial, classifier: ClassifierVerdict | undefined): string =>
-  `Allow \`${denial.command}\`? It uses ${denial.reason}.${classifier === undefined ? '' : ` The classifier says: ${classifier.reason.replace(/\.$/, '')}.`}`;
+  `Allow \`${denial.command}\`? ${denial.rule === 'hook-ask' ? denial.reason : `It uses ${denial.reason}.`}${classifier === undefined ? '' : ` The classifier says: ${classifier.reason.replace(/\.$/, '')}.`}`;
 
 export const CLASSIFIER_TOOL: Tool = {
   name: 'verdict',
