@@ -150,6 +150,43 @@ describe('gcode lane', () => {
     expect((await lane('new', 'a', '--approve-setup')).stdout).toContain('setup: ran 1 command from .cursor/worktrees.json');
     expect(existsSync(path.join(lanePath(repo, 'a'), 'cursor.out'))).toBe(true);
   });
+
+  it("B/B-122 runs the user's LaneCreated hook in the new lane after its setup, and never a workspace's own", async () => {
+    const { repo, home, lane } = await setup({
+      'a.ts': 'a\n',
+      '.claude/settings.json': JSON.stringify({ hooks: { LaneCreated: [{ hooks: [{ type: 'command', command: 'touch from-the-repo.out' }] }] } }),
+    });
+    const payloads = path.join(home, 'lane-created.jsonl');
+    // As a pnpm install would: it runs in the lane, and finds the files the setup put there.
+    const install = `cat >> '${payloads}' && echo >> '${payloads}' && ls -a > installed.out && echo 'installed' >&2`;
+    write(path.join(home, '.claude', 'settings.json'), JSON.stringify({ hooks: { LaneCreated: [{ hooks: [{ type: 'command', command: install }] }] } }));
+
+    const created = await lane('new', 'feature');
+    expect(created.code).toBe(0);
+    const at = lanePath(repo, 'feature');
+    const [payload] = readFileSync(payloads, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(payload).toEqual({
+      cwd: await realpath(at),
+      hook_event_name: 'LaneCreated',
+      name: 'feature',
+      worktree_path: await realpath(at),
+      branch: 'geno/feature',
+      base_commit: git(repo, 'rev-parse', 'HEAD').trim(),
+      main_checkout: repo,
+    });
+    expect(readFileSync(path.join(at, 'installed.out'), 'utf8')).toContain('a.ts');
+    expect(existsSync(path.join(at, 'from-the-repo.out')), "the repository's own hook does not run").toBe(false);
+    expect((await listed(lane))[0]!.status, 'a file the hook leaves that git does not ignore counts as a change').toBe('changed');
+  });
+
+  it('reports a LaneCreated hook that fails, and keeps the lane', async () => {
+    const { repo, home, lane } = await setup({ 'a.ts': 'a\n' });
+    write(path.join(home, '.claude', 'settings.json'), JSON.stringify({ hooks: { LaneCreated: [{ hooks: [{ type: 'command', command: 'echo "no network" >&2; exit 1' }] }] } }));
+    const created = await lane('new', 'feature');
+    expect(created.code).toBe(0);
+    expect(created.stderr).toMatch(/LaneCreated hook error: .*exit code 1: no network/);
+    expect(existsSync(lanePath(repo, 'feature'))).toBe(true);
+  });
 });
 
 let nextId = 0;

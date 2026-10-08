@@ -743,20 +743,28 @@ export type HookRow = {
 
 export type HooksResponse = { readonly workspace: string; readonly trusted: boolean; readonly hooks: readonly HookRow[]; readonly problems: readonly HookProblem[] };
 
+/** A workspace's own LaneCreated hook never runs: a repository's setup for its lanes is `laneSetup`, which the user approves once. */
+const WORKSPACE_LANE_WHY = "A workspace's LaneCreated hook never runs. Put the repository's lane setup in laneSetup in .gcode.json, which you approve once, or the hook in your own settings.";
+
+const whyNever = (entry: HookEntry): string | undefined =>
+  entry.event === 'LaneCreated' && entry.origin.scope === 'project' ? WORKSPACE_LANE_WHY : HOOK_EVENTS[entry.event].why;
+
 export function hookStatus(entry: HookEntry, trusted: boolean): HookStatus {
-  const support = HOOK_EVENTS[entry.event].support;
-  if (support !== 'runs') return support;
+  if (whyNever(entry) !== undefined) return 'never';
   return entry.origin.scope === 'project' && !trusted ? 'untrusted' : 'runs';
 }
 
 export const hookRows = (entries: readonly HookEntry[], trusted: boolean): HookRow[] =>
-  entries.map((entry) => ({
-    event: entry.event,
-    matcher: entry.matcher,
-    command: entry.command,
-    file: entry.origin.file,
-    scope: entry.origin.scope,
-    plugin: entry.origin.plugin?.name,
-    status: hookStatus(entry, trusted),
-    ...(HOOK_EVENTS[entry.event].why === undefined ? {} : { why: HOOK_EVENTS[entry.event].why }),
-  }));
+  entries.map((entry) => {
+    const why = whyNever(entry);
+    return {
+      event: entry.event,
+      matcher: entry.matcher,
+      command: entry.command,
+      file: entry.origin.file,
+      scope: entry.origin.scope,
+      plugin: entry.origin.plugin?.name,
+      status: hookStatus(entry, trusted),
+      ...(why === undefined ? {} : { why }),
+    };
+  });

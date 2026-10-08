@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -72,7 +72,7 @@ async function setup() {
     while (!tasks.some((u) => u.task.sessionId === sessionId && u.task.status !== 'running')) await new Promise((resolve) => setTimeout(resolve, 20));
     return tasks.findLast((u) => u.task.sessionId === sessionId)!;
   };
-  return { repo, open, writes, updates, tasks, ended };
+  return { repo, home, open, writes, updates, tasks, ended };
 }
 
 describe('lanes over ACP', () => {
@@ -134,5 +134,18 @@ describe('lanes over ACP', () => {
     await agent.request(LANE_DISCARD_METHOD, { cwd: repo, name: 'make-two-loud-2', discardChanges: true });
     await agent.request(LANE_DISCARD_METHOD, { cwd: repo, name: 'make-two-loud', discardChanges: true });
     expect((await agent.request<LanesResponse>(LANES_METHOD, { cwd: repo })).lanes).toEqual([]);
+  });
+
+  it("B/B-122 runs the user's LaneCreated hook in a lane the panel starts, before the lane's session runs", async () => {
+    const { repo, home, open, ended } = await setup();
+    // The hook sees a.ts as the setup left it: the session's edit comes after.
+    mkdirSync(path.join(home, '.claude'), { recursive: true });
+    writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({ hooks: { LaneCreated: [{ hooks: [{ type: 'command', command: 'cp a.ts before-session.out' }] }] } }));
+    const agent = await open();
+    const started = await agent.request<LaneNewResponse>(LANE_NEW_METHOD, { cwd: repo, prompt: 'Make two loud' });
+    await ended(started.sessionId);
+    const { lanes } = await agent.request<LanesResponse>(LANES_METHOD, { cwd: repo });
+    expect(readFileSync(path.join(lanes[0]!.path, 'before-session.out'), 'utf8')).toBe(FILE);
+    expect(readFileSync(path.join(lanes[0]!.path, 'a.ts'), 'utf8')).toBe('one\nTWO\nthree\n');
   });
 });

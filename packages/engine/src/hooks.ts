@@ -28,6 +28,7 @@ import {
   type HookEventInputs,
   type HookEventName,
   type HookResult,
+  type LaneRecord,
   type PromptDecision,
   type RunningHookEvent,
   type SessionStartSource,
@@ -119,6 +120,30 @@ export function reportHooks(io: Io, label: string, results: readonly HookResult[
     if (outcome.kind === 'error') io.err(`${label} hook error: ${entry.command}: ${outcome.message}`);
     if (outcome.kind === 'ok' && outcome.systemMessage !== undefined) io.err(`${label} hook: ${outcome.systemMessage}`);
   }
+}
+
+/**
+ * LaneCreated, Geno's own event, once a new lane is set up and before a session runs in it, so that a hook can, for
+ * example, install the lane's dependencies. Only the user's own hooks run, as the user, in the lane: a repository's
+ * setup for its lanes is `laneSetup`, which the user approves once. A failed hook is reported, and the lane stays.
+ */
+export async function laneCreated(io: Io, store: Store, repo: { readonly main: string }, lane: LaneRecord): Promise<void> {
+  const claudeDir = claudeDirOf(io.env);
+  const config = await loadHookConfig({ claudeDir, appHome: homeOf(store), workspace: repo.main, plugins: (await loadPlugins(claudeDir, repo.main)).plugins });
+  const entries = runnableEntries(config.entries, false).filter((entry) => entry.event === 'LaneCreated');
+  if (entries.length === 0) return;
+  const runner = hookRunner({
+    entries,
+    session: undefined,
+    workspace: lane.path,
+    env: io.env,
+    sandbox: async () => {
+      throw new Error('a lane runs no workspace hook');
+    },
+    signal: io.interrupts(),
+  });
+  const input = { name: lane.name, worktree_path: lane.path, branch: lane.branch, base_commit: lane.base.commit, main_checkout: repo.main };
+  reportHooks(io, 'LaneCreated', await runner.run('LaneCreated', input));
 }
 
 /** What SessionStart's hooks told the model, to log; undefined when they said nothing to it. */

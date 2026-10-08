@@ -2,6 +2,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { isLaneBase, LANE_CONFLICT_REASONS, type LaneChange, type LaneRecord } from '@g-code/core';
 import { singleId, UsageError, type Command, type Io } from './command.js';
+import { laneCreated } from './hooks.js';
 import { tail } from './process.js';
 import { homeOf, type Store } from './store.js';
 import {
@@ -69,6 +70,7 @@ const laneNew: Command = async (args, { io, store }) => {
   io.out(`copied: ${copied.length === 0 ? 'nothing' : copied.join(', ')} from .worktreeinclude`);
   io.out(depsLine(await cloneDeps(repo, lane)));
   await setUp(io, store, repo, lane, values['approve-setup']);
+  await laneCreated(io, store, repo, lane);
   return 0;
 };
 
