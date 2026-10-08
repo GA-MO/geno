@@ -1,4 +1,4 @@
-import type { EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
+import type { CallProgress, EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -51,6 +51,8 @@ export type Turn = {
   readonly notice?: string | undefined;
   /** The model call the turn waits on, offline or for a rate limit; undefined once it went out. */
   readonly waiting?: Waiting | undefined;
+  /** The model call as it streams, for the working row; the next output clears it, as it does a notice. */
+  readonly progress?: CallProgress | undefined;
   /** Time the turn spent in waits that ended, which its clock leaves out. */
   readonly waitedMs?: number | undefined;
   /** Images and files the user sent with the prompt. */
@@ -252,6 +254,7 @@ export type Action =
     }
   | { readonly type: 'text'; readonly text: string }
   | { readonly type: 'notice'; readonly text: string }
+  | { readonly type: 'progress'; readonly progress: CallProgress }
   /** The turn's model call waits, or its wait moved on; null once the call goes out. */
   | { readonly type: 'waiting'; readonly at: number; readonly waiting: Waiting | null }
   /** Starts a tool call or updates one; an absent field keeps its value. */

@@ -29,6 +29,7 @@ import { openSpinoffs, spinoffCardOf, type SpinoffPending } from './spinoff-mode
 import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
 import { compactStep } from './compact-view.js';
 import type { TodoList } from '@g-code/core/todo';
+import { progressLabel } from '@g-code/core/call-progress';
 import { laneOffer } from './backend-model.js';
 import { applyLaneButton, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
@@ -329,8 +330,10 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
       return { deps: [quiet, step.tool, ...step.children, '|', ...state.open], build: () => agentStep(step.key, step.tool, step.children, ui, quiet, Date.now()) };
     case 'notice':
       return { deps: [step.text], build: () => turnNotice(step.text) };
-    case 'thinking':
-      return { deps: [], build: thinkingRow };
+    case 'thinking': {
+      const label = step.progress === undefined ? 'Thinking' : progressLabel(step.progress, Date.now());
+      return { deps: [label], build: () => thinkingRow(label) };
+    }
     case 'changes':
       return { deps: [...step.edits, '|', ...state.unfolded, reviewMode()], build: () => changesCard(step.edits, ui) };
     case 'fold':

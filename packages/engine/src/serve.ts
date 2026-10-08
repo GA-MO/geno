@@ -228,6 +228,8 @@ import {
   type TasksResponse,
   RETRY_NOW_METHOD,
   type RetryNowResponse,
+  PROGRESS_META,
+  progressLabel,
   type Waiting,
   BACKEND_ENV_CAPABILITY,
   BACKEND_ENV_METHOD,
@@ -471,6 +473,7 @@ type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 const RETRY_REASONS: readonly (readonly [RegExp, string])[] = [
   [/overload|capacity|high demand|\b529\b/i, 'model overloaded'],
   [/rate.?limit|too many requests|\b429\b/i, 'rate limited'],
+  [/sent no response|stopped responding/i, 'the model went quiet'],
   [/timed? ?out|timeout/i, 'timed out'],
   [/connect|network|socket|fetch failed|ECONNRESET|EAI_AGAIN|closed|terminated|ended/i, 'connection dropped'],
 ];
@@ -673,6 +676,9 @@ function editorTurn(
         text(delta) {
           live.text += delta;
           sent.send(textUpdate(delta));
+        },
+        progress(progress) {
+          if (peer.notices) sent.send({ sessionUpdate: 'notice', severity: 'info', title: progressLabel(progress, Date.now()), _meta: { [PROGRESS_META]: progress } });
         },
         toolStart(use, title) {
           running = use.id;

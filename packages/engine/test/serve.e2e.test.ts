@@ -14,6 +14,8 @@ import {
   webToolDefinitions,
   APPROVAL_META,
   ATTACHMENT_META,
+  PROGRESS_META,
+  type CallProgress,
   asSessionId,
   RENAME_SESSION_METHOD,
   REPLAYED_AT_META,
@@ -85,7 +87,13 @@ type Editor = {
   rejectWrites?: boolean;
 };
 
-async function setup(replies: readonly Reply[]) {
+type Update = acp.SessionUpdate;
+const progressOf = (updates: readonly Update[]): CallProgress[] =>
+  updates.flatMap((u) => (u.sessionUpdate === 'notice' && u._meta != null && PROGRESS_META in u._meta ? [u._meta[PROGRESS_META] as CallProgress] : []));
+/** The notices a turn passes through, such as a retry, without each try's progress. */
+const passingNotices = (updates: readonly Update[]): Update[] => updates.filter((u) => u.sessionUpdate === 'notice' && !(u._meta != null && PROGRESS_META in u._meta));
+
+async function setup(replies: readonly Reply[], moreEnv: Record<string, string> = {}) {
   const workspace = await realpath(makeRepo('ws', [{ message: 'start', files: { 'a.ts': DISK } }]));
   const home = await mkdtemp(path.join(tmpdir(), 'gcode-home-'));
   const env = {
@@ -95,6 +103,7 @@ async function setup(replies: readonly Reply[]) {
     DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
     GCODE_RG: rgCommand(),
     PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    ...moreEnv,
   };
   const transport = fakeTransport(replies);
   const stderr: string[] = [];
@@ -285,8 +294,21 @@ describe('gcode serve', () => {
     expect(await prompt('Hello')).toBe('end_turn');
 
     expect(transport.requests).toHaveLength(2);
-    const notices = editor.updates.filter((u) => u.sessionUpdate === 'notice');
-    expect(notices).toEqual([expect.objectContaining({ sessionUpdate: 'notice', severity: 'warning', title: 'Retrying in 1s (model overloaded)' })]);
+    expect(passingNotices(editor.updates)).toEqual([expect.objectContaining({ sessionUpdate: 'notice', severity: 'warning', title: 'Retrying in 1s (model overloaded)' })]);
+    expect(editor.updates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Back.' } });
+  });
+
+  it('streams each try’s progress as a notice, and retries a try that went quiet', async () => {
+    const { editor, transport, prompt } = await setup([{ ...answer('Never.', usage), stallAfter: 3 }, answer('Back.', usage)], { GCODE_STREAM_IDLE_TIMEOUT_MS: '400' });
+
+    expect(await prompt('Hello')).toBe('end_turn');
+
+    expect(transport.requests).toHaveLength(2);
+    const progress = progressOf(editor.updates);
+    expect(progress.filter((p) => p.lastByteAt === null), 'each try reports as it goes out').toHaveLength(2);
+    expect(progress[0]).toMatchObject({ lastByteAt: null, limitMs: 180_000, writing: null, tokens: 0 });
+    expect(progress, 'the quiet try had started to think').toContainEqual(expect.objectContaining({ lastByteAt: expect.any(Number), limitMs: 400, writing: { kind: 'thinking' } }));
+    expect(passingNotices(editor.updates)).toEqual([expect.objectContaining({ severity: 'warning', title: 'Retrying in 1s (the model went quiet)', description: 'the model stopped responding for 0.4s' })]);
     expect(editor.updates).toContainEqual({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Back.' } });
   });
 

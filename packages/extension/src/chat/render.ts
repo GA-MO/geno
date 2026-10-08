@@ -598,7 +598,7 @@ export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
 }
 
 /** The model is working out its next move: a running turn with nothing else under way. */
-export const thinkingRow = (): HTMLElement => h('div', { class: 'thinking', role: 'status' }, icon('lightbulb'), h('span', { class: 'shimmer' }, 'Thinking'));
+export const thinkingRow = (label = 'Thinking'): HTMLElement => h('div', { class: 'thinking', role: 'status' }, icon('lightbulb'), h('span', { class: 'shimmer' }, label));
 
 /** A turn's model, tokens and cost, as one line. */
 function usageLine(usage: NonNullable<Turn['usage']>, backend: BackendShown | undefined): string {

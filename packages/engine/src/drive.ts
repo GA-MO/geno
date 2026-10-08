@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision } from '@g-code/core';
+import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -87,6 +87,8 @@ export type Watcher = {
   toolInput?(draft: ToolInputDraft): void;
   /** A model call waits offline or for a rate limit, or its next try moved; null once it goes out. */
   waiting?(wait: Waiting | null): void;
+  /** A try of a model call as it streams, a few times a second; live status that the log never keeps. */
+  progress?(progress: CallProgress): void;
   /** The context is being summarized before the next model call; the compaction is logged when it is done. */
   compacting?(): void;
 };
@@ -395,6 +397,7 @@ export async function drive(
       signal,
       onText: (delta) => watcher.text(delta),
       onToolInput: (draft) => watcher.toolInput?.(draft),
+      onProgress: (progress) => watcher.progress?.(progress),
       onMarks: (streamed) => {
         marks = streamed;
       },

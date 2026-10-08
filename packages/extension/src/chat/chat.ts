@@ -62,6 +62,7 @@ import {
   type TaskRecord,
   WAIT_KINDS,
   WAITING_META,
+  PROGRESS_META,
   BACKGROUND_META,
   BACKGROUND_STOP_METHOD,
   isJobId,
@@ -227,6 +228,12 @@ const replayedChange = z.object({
 });
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable(), forkedFrom: z.object({ sessionId: z.string(), title: z.string() }).optional() });
 const waitingSchema = z.object({ kind: z.enum(WAIT_KINDS), since: z.number(), retryAt: z.number().nullable(), resetAt: z.number().nullable(), message: z.string() });
+const writingSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('thinking') }),
+  z.object({ kind: z.literal('text') }),
+  z.object({ kind: z.literal('tool'), name: z.string(), target: z.string().optional() }),
+]);
+const progressSchema = z.object({ requestAt: z.number(), lastByteAt: z.number().nullable(), limitMs: z.number().nullable(), writing: writingSchema.nullable(), tokens: z.number() });
 const killCause = z.enum(['session-deleted', 'lane-discarded', 'engine-exit']);
 const stopBy = z.enum(['model', 'user']);
 const jobState = z.discriminatedUnion('status', [
@@ -360,6 +367,10 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
   user_message_chunk: (update) => steerActionOf(update),
   agent_message_chunk: (update) => agentChunkAction(update),
   notice: ({ title, _meta }, at) => {
+    if (_meta != null && PROGRESS_META in _meta) {
+      const progress = progressSchema.safeParse(_meta[PROGRESS_META]);
+      return progress.success ? { type: 'progress', progress: progress.data } : undefined;
+    }
     if (_meta == null || !(WAITING_META in _meta)) return { type: 'notice', text: title };
     const waiting = waitingSchema.nullable().safeParse(_meta[WAITING_META]);
     return waiting.success ? { type: 'waiting', at, waiting: waiting.data } : undefined;

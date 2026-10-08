@@ -13,6 +13,7 @@
     "./share-page": "./src/share-page.ts",
     "./arena": "./src/arena.ts",
     "./waiting": "./src/waiting.ts",
+    "./call-progress": "./src/call-progress.ts",
     "./spend-view": "./src/spend-view.ts",
     "./attention": "./src/attention.ts",
     "./backends": "./src/backends.ts",
