@@ -13,6 +13,7 @@ import {
   cwdResetLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   formatDiagnostics,
+  hookMayAnswer,
   laneCommandDenial,
   laneDenialText,
   leadingSleep,
@@ -59,6 +60,7 @@ import {
   resolveWritable,
   ToolDenied,
   ToolError,
+  PermissionRerun,
   ToolRejected,
   type Executor,
   type ToolContext,
@@ -109,28 +111,43 @@ export const freshAuto = (): { state: AutoState } => ({ state: AUTO_START });
 
 export const modeOf = (approval: Approval): ApprovalMode => (approval.kind === 'interactive' ? approval.mode() : 'non-interactive');
 
+/** The call a question is about: its signal, and its PermissionRequest hooks, which answer a card before the user. */
+export type CallScope = Pick<ToolContext, 'signal' | 'permissionRequest'>;
+
 /**
  * Settles a flagged command: the rule's verdict, then the classifier's for a gray one, then the user's for a question.
  * In Auto a classifier `ask` blocks the command without asking anyone, until the blocks pause Auto. `keep` runs, and
- * is awaited, when the user's yes outlives the call.
+ * is awaited, when the user's yes outlives the call. Where the card would show, or where a run nobody can answer would
+ * refuse only for that, the call's PermissionRequest hooks answer first; a refusal that holds whoever answers never
+ * reaches them.
  */
 export async function settle(
   approval: Approval,
   mode: ApprovalMode,
   denial: Denial,
   input: () => ClassifierInput,
-  signal: AbortSignal,
+  call: CallScope,
   keep: (answer: KeptAnswer) => void | Promise<void> = () => {},
 ): Promise<ApprovalRecord> {
   const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
-  if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return { ...record, decidedBy: 'rule', verdict: 'deny' };
+  const refused: ApprovalRecord = { ...record, decidedBy: 'rule', verdict: 'deny' };
+  const hooked = async (): Promise<ApprovalRecord | undefined> => {
+    const answer = call.permissionRequest === undefined || !hookMayAnswer(denial, mode) ? undefined : await call.permissionRequest(denial);
+    if (answer === undefined || answer.kind === 'none') return undefined;
+    if (answer.kind === 'deny') return { ...record, decidedBy: 'hook', verdict: 'deny', ...(answer.message === undefined ? {} : { message: answer.message }), ...(answer.interrupt ? { interrupt: true } : {}) };
+    if (answer.input !== undefined) throw new PermissionRerun(answer.input);
+    return { ...record, decidedBy: 'hook', verdict: 'allow' };
+  };
+  if (approval.kind === 'non-interactive' || denial.verdict === 'deny') return (await hooked()) ?? refused;
   const { auto } = approval;
-  const classifier = denial.verdict === 'classify' ? await approval.classify(input(), signal) : undefined;
+  const classifier = denial.verdict === 'classify' ? await approval.classify(input(), call.signal) : undefined;
   const outcome = classifier === undefined ? 'ask-user' : CLASSIFIER_OUTCOMES[auto.state.phase][classifier.verdict];
   if (outcome !== 'ask-user') {
     auto.state = nextAutoState(auto.state, outcome);
     return { ...record, classifier, decidedBy: 'classifier', verdict: OUTCOME_VERDICTS[outcome] };
   }
+  const byHook = await hooked();
+  if (byHook !== undefined) return { ...byHook, ...(classifier === undefined ? {} : { classifier }) };
   const answer = await approval.approve(denial, classifier);
   if (answer === 'allow-session' || answer === 'allow-workspace') await keep(answer);
   const allowed = answer !== 'reject';
@@ -138,8 +155,12 @@ export async function settle(
   return { ...record, ...(classifier === undefined ? {} : { classifier }), decidedBy: 'user', verdict: allowed ? 'allow' : 'deny' };
 }
 
-export function denialText({ mode, rule, command, reason, classifier, decidedBy }: ApprovalRecord): string {
+export function denialText({ mode, rule, command, reason, classifier, decidedBy, message, interrupt }: ApprovalRecord): string {
   if (decidedBy === 'user') return `The user rejected \`${command}\`, so it did not run. ${STOP_AND_WAIT}`;
+  if (decidedBy === 'hook') {
+    const why = message === undefined ? '' : `: ${message.replace(/\.$/, '')}`;
+    return `denied: \`${command}\` did not run. A PermissionRequest hook answered for the user and refused it${why}. ${interrupt === true ? STOP_AND_WAIT : 'Do not retry it; find another way, or say in your answer what you need the user to allow.'}`;
+  }
   if (rule === 'hook-ask') {
     return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
   }
@@ -158,9 +179,12 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy 
   }. Do not retry it; find another way.`;
 }
 
-/** The error a refused call throws: a user's no ends the turn, and a rule's or the classifier's lets the model go on. */
+/**
+ * The error a refused call throws: a user's no, or a hook's deny with `interrupt`, ends the turn, and a rule's, the
+ * classifier's or another hook deny lets the model go on.
+ */
 export const refusalOf = (record: ApprovalRecord, text = denialText(record)): ToolError =>
-  record.decidedBy === 'user' ? new ToolRejected(text, record) : new ToolDenied(text, record);
+  record.decidedBy === 'user' || record.interrupt === true ? new ToolRejected(text, record) : new ToolDenied(text, record);
 
 /**
  * The tool, refused while the session's mode leaves it out. Every mode is offered every tool, so the cached prefix
@@ -271,7 +295,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const mode = modeOf(tools.approval);
     const denial = secretReadDenial(shown, mode);
     if (denial === undefined) return undefined;
-    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx.signal);
+    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx);
     if (approval.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
@@ -309,12 +333,16 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
-    const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? [], ctx.hookAllowed === true);
+    const rules = (await permissions?.list()) ?? [];
+    const ruled = ruledDenial(command, tools.scope, mode, rules, ctx.hookAllowed === true);
+    // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
+    const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, tools.scope, 'ask', rules)?.offer;
+    const denial = offer === undefined ? ruled : { ...ruled!, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
     };
     const approval =
-      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx.signal, keep);
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx, keep);
     if (approval?.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };

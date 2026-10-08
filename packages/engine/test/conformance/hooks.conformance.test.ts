@@ -654,7 +654,7 @@ describe.each(WIRES)('after-tool hooks on the %s wire', (wire: Wire) => {
     const [payload] = await post.payloads();
     expect(payload).toMatchObject({ session_id: sessionIdOf(result.stdout), tool_name: 'Grep', tool_use_id: 'tu_grep', agent_type: 'explore', agent_id: expect.any(String) });
     expect(payload!['agent_id']).not.toBe(sessionIdOf(result.stdout));
-    expect((await stop.payloads()).map((p) => p['last_assistant_message']), "Stop runs for the session's model only; SubagentStop is P16").toEqual(['alpha is in a.ts.']);
+    expect((await stop.payloads()).map((p) => p['last_assistant_message']), "Stop runs for the session's model only; a subagent's end fires SubagentStop").toEqual(['alpha is in a.ts.']);
   });
 });
 
@@ -732,5 +732,153 @@ describe.each(WIRES)('Stop on the %s wire', (wire: Wire) => {
 
     expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
     expect((await hook.payloads()).map((p) => p['hook_event_name'])).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolBatch', 'Stop', 'SessionEnd']);
+  });
+});
+
+const answerCard = (decision: object) => JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } });
+const kubectl = { id: 'tu_kube', name: 'bash', input: { command: 'kubectl get pods' } };
+
+describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
+  it("T-HOOK-05 answers a card in a run nobody can answer, with Geno's offered rule as permission_suggestions", async () => {
+    const run = await scripted(wire, [call('', [kubectl]), say('Done.')]);
+    const hook = await hookScript(run, 'answer', { stdout: answerCard({ behavior: 'allow' }) });
+    await userHooks(run, { PermissionRequest: group(hook.command, { matcher: 'Bash' }) });
+
+    const result = await run.cli(agent(run.workspace, 'List the pods'));
+    expect(result.code).toBe(0);
+    expect(await hook.payloads()).toEqual([
+      {
+        ...common(result.stdout, 'PermissionRequest'),
+        cwd: run.workspace,
+        tool_name: 'Bash',
+        tool_input: { command: 'kubectl get pods' },
+        permission_suggestions: [{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: expect.stringMatching(/^kubectl get/) }], behavior: 'allow', destination: 'localSettings' }],
+      },
+    ]);
+    expect(resultOf(run, 'tu_kube')!.text, 'the command ran, though no kubectl is installed').not.toMatch(/denied/);
+  });
+
+  it("refuses with the hook's message, and never asks the hook about a deny rule's refusal or a call that needs no card", async () => {
+    const publish = { id: 'tu_publish', name: 'bash', input: { command: 'pnpm publish' } };
+    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
+    const run = await scripted(wire, [call('', [kubectl, publish, ls]), say('Done.')]);
+    await permissionStore(homeOf(run.store), run.workspace).add('deny', ['pnpm', 'publish'] as unknown as CommandPattern);
+    const hook = await hookScript(run, 'refuse', { stdout: answerCard({ behavior: 'deny', message: 'No cluster access from here.' }) });
+    await userHooks(run, { PermissionRequest: group(hook.command) });
+
+    expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
+    expect((await hook.payloads()).map((p) => (p['tool_input'] as { command: string }).command)).toEqual(['kubectl get pods']);
+    expect(resultOf(run, 'tu_kube')).toMatchObject({ error: true, text: expect.stringContaining('A PermissionRequest hook answered for the user and refused it: No cluster access from here.') });
+    expect(resultOf(run, 'tu_publish')).toMatchObject({ error: true, text: expect.stringContaining('matches the workspace rule that denies `pnpm publish`') });
+    expect(resultOf(run, 'tu_ls')!.text).toContain('a.ts');
+  });
+
+  it("runs an allow's updatedInput in place of the call, and the model reads what ran", async () => {
+    const run = await scripted(wire, [call('', [kubectl]), say('Done.')]);
+    const hook = await hookScript(run, 'rewrite', { stdout: answerCard({ behavior: 'allow', updatedInput: { command: 'echo rewritten' } }) });
+    await userHooks(run, { PermissionRequest: group(hook.command) });
+
+    expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
+    expect(resultOf(run, 'tu_kube')!.text).toContain('rewritten');
+    expect(await hook.payloads(), 'the new input asks no second card').toHaveLength(1);
+  });
+
+  it("answers a PreToolUse hook's ask in a run nobody can answer, after PreToolUse, as Claude Code orders them", async () => {
+    const ls = { id: 'tu_ls', name: 'bash', input: { command: 'ls' } };
+    const run = await scripted(wire, [call('', [ls]), say('Done.')]);
+    const order = path.join(run.env['HOME']!, 'order.txt');
+    const pre = await hookScript(run, 'pre', { stdout: decide('ask', { permissionDecisionReason: 'Listing needs a look.' }), before: `echo pre >> '${order}'` });
+    const card = await hookScript(run, 'card', { stdout: answerCard({ behavior: 'allow' }), before: `echo card >> '${order}'` });
+    await userHooks(run, { PreToolUse: group(pre.command), PermissionRequest: group(card.command) });
+
+    expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
+    expect(resultOf(run, 'tu_ls')!.text).toContain('a.ts');
+    expect((await readFile(order, 'utf8')).split('\n').filter(Boolean)).toEqual(['pre', 'card']);
+  });
+
+  it('answers the card in an editor before the user sees it, and a deny with interrupt ends the turn as a no does', async () => {
+    const allowed = await interactive(wire, [call('', [kubectl]), say('Done.')], async (run) => ({ PermissionRequest: group((await hookScript(run, 'yes', { stdout: answerCard({ behavior: 'allow' }) })).command) }), { mode: 'ask' });
+    expect(allowed.asked, 'the user saw no card').toEqual([]);
+    expect(allowed.logged('tu_kube')).toMatchObject({ approval: { decidedBy: 'hook', verdict: 'allow' } });
+
+    const stopped = await interactive(wire, [call('', [kubectl]), say('Stopped.')], async (run) => ({ PermissionRequest: group((await hookScript(run, 'stop', { stdout: answerCard({ behavior: 'deny', interrupt: true }) })).command) }), { mode: 'ask' });
+    expect(stopped.asked).toEqual([]);
+    expect(stopped.logged('tu_kube')).toMatchObject({ status: 'rejected', approval: { decidedBy: 'hook', verdict: 'deny', interrupt: true } });
+  });
+
+  it('leaves a card without a decision to the user, and a Plan refusal to Plan', async () => {
+    const asked = await interactive(wire, [call('', [kubectl]), say('Done.')], async (run) => ({ PermissionRequest: group((await hookScript(run, 'quiet', { code: 2, stderr: 'not a decision' })).command) }), { mode: 'ask', answers: ['allow'] });
+    expect(asked.asked.map((card) => card.command), 'exit 2 decides nothing').toEqual(['kubectl get pods']);
+
+    let hook: Awaited<ReturnType<typeof hookScript>> | undefined;
+    const plan = await interactive(wire, [call('', [kubectl]), say('Done.')], async (run) => ({ PermissionRequest: group((hook = await hookScript(run, 'plan', { stdout: answerCard({ behavior: 'allow' }) })).command) }), { mode: 'plan' });
+    expect(plan.logged('tu_kube')).toMatchObject({ status: 'denied' });
+    expect(await hook!.payloads()).toEqual([]);
+  });
+});
+
+const subagentFiles = { 'a.ts': 'export const alpha = 1;\n', '.gcode.json': `${JSON.stringify({ agentTool: ['non-interactive'] })}\n` };
+const explore = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'explore', task: 'Where is alpha defined?' } }]);
+
+describe.each(WIRES)('SubagentStart and SubagentStop on the %s wire', (wire: Wire) => {
+  it("B/B-112 SubagentStart names the child, and its context opens the child's first request before the task", async () => {
+    const run = await scripted(wire, [explore, report('In a.ts.'), say('alpha is in a.ts.')], subagentFiles);
+    const start = await hookScript(run, 'start', { stdout: context('SubagentStart', 'Search only under src.') });
+    const other = await hookScript(run, 'other');
+    await userHooks(run, { SubagentStart: [...group(start.command, { matcher: 'explore' }), ...group(other.command, { matcher: 'worker' })] });
+
+    const result = await run.cli(agent(run.workspace, 'Where is alpha defined?'));
+    expect(result.code).toBe(0);
+    const [payload] = await start.payloads();
+    expect(payload).toEqual({ ...common(result.stdout, 'SubagentStart'), cwd: run.workspace, agent_id: expect.any(String), agent_type: 'explore' });
+    expect(payload!['agent_id'], "the child's own session").not.toBe(sessionIdOf(result.stdout));
+    expect(await other.payloads(), 'the matcher reads agent_type').toEqual([]);
+    const first = run.openings()[1]!.first;
+    const note = `${GENO_NOTE} SubagentStart hook additional context: Search only under src.`;
+    expect(first).toContain(note);
+    expect(first.indexOf(note)).toBeLessThan(first.lastIndexOf('Where is alpha defined?'));
+    expect(run.openings()[0]!.first, 'the parent never reads it').not.toContain('Search only under src.');
+  });
+
+  it("B/B-112 SubagentStop gets the child's report and transcript, and a block keeps the child going once", async () => {
+    const run = await scripted(wire, [explore, report('In a.ts.', 'tu_r1'), report('In a.ts, line 1.', 'tu_r2'), say('alpha is in a.ts.')], subagentFiles);
+    const stop = await hookScript(run, 'stop', { stderr: 'Name the line.', code: 2 });
+    const parent = await hookScript(run, 'parent');
+    await userHooks(run, { SubagentStop: group(stop.command, { matcher: 'explore' }), Stop: group(parent.command) });
+
+    const result = await run.cli(agent(run.workspace, 'Where is alpha defined?'));
+    expect(result.code).toBe(0);
+    const payloads = await stop.payloads();
+    expect(payloads[0]).toEqual({
+      ...common(result.stdout, 'SubagentStop'),
+      cwd: run.workspace,
+      stop_hook_active: false,
+      agent_id: expect.any(String),
+      agent_type: 'explore',
+      agent_transcript_path: expect.stringMatching(new RegExp(`${payloads[0]!['agent_id'] as string}\\.jsonl$`)),
+      last_assistant_message: 'In a.ts.',
+    });
+    expect(existsSync(payloads[0]!['agent_transcript_path'] as string)).toBe(true);
+    expect(payloads.map((p) => [p['stop_hook_active'], p['last_assistant_message']])).toEqual([
+      [false, 'In a.ts.'],
+      [true, 'In a.ts, line 1.'],
+    ]);
+    expect(run.seen()[2]!.text, "the child's next request").toContain(`${GENO_NOTE} SubagentStop hook blocking error: Name the line.`);
+    expect(run.seen(), 'a second block in a row does not count').toHaveLength(4);
+    expect(resultOf(run, 'tu_agent')!.text).toContain('In a.ts, line 1.');
+    expect((await parent.payloads()).map((p) => p['last_assistant_message']), 'Stop runs for the parent only').toEqual(['alpha is in a.ts.']);
+  });
+
+  it("a subagent's card asks PermissionRequest with agent_id and agent_type", async () => {
+    const kube = call('', [{ ...kubectl, id: 'tu_child_kube' }]);
+    const worker = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'worker', task: 'List the pods.' } }]);
+    const run = await scripted(wire, [worker, kube, report('Listed.'), say('Done.')], subagentFiles);
+    const hook = await hookScript(run, 'card', { stdout: answerCard({ behavior: 'deny', message: 'Children ask nothing.' }) });
+    await userHooks(run, { PermissionRequest: group(hook.command) });
+
+    const result = await run.cli([...agent(run.workspace, 'Go'), '--allow-worker']);
+    expect(result.code).toBe(0);
+    expect(await hook.payloads()).toEqual([expect.objectContaining({ tool_name: 'Bash', agent_type: 'worker', agent_id: expect.any(String) })]);
+    expect(resultOf(run, 'tu_child_kube')!.text).toContain('Children ask nothing.');
   });
 });

@@ -14,6 +14,8 @@ import {
   hookOutcome,
   MATCHED_FIELD,
   nextSeq,
+  permissionRequestDecision,
+  permissionSuggestions,
   preToolDecision,
   promptDecision,
   stopDecision,
@@ -30,6 +32,8 @@ import {
   type RunningHookEvent,
   type SessionStartSource,
   type StopDecision,
+  type StopEvent,
+  type StopInput,
   type ToolHookEvent,
   type ToolHookVerdict,
   type ToolStatus,
@@ -44,7 +48,7 @@ import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { appendEvent } from './sessions.js';
 import { homeOf, type Store } from './store.js';
 import { modeOf, refusalOf, settle, type Approval } from './tools/agent.js';
-import type { ToolContext } from './tools/context.js';
+import type { PermissionAsk, ToolContext } from './tools/context.js';
 
 /** What a project hook runs under: the sandbox a model's command gets, opened for the run and closed after it. */
 export type HookSandbox = Pick<Sandbox, 'wrap' | 'close'>;
@@ -52,9 +56,9 @@ export type HookSandbox = Pick<Sandbox, 'wrap' | 'close'>;
 export type RunnerContext = {
   /** The hooks this session may run, the user's own first. */
   readonly entries: readonly HookEntry[];
-  readonly sessionId: string;
-  /** The session log, which Geno gives as Claude Code's `transcript_path`. */
-  readonly transcriptPath: string;
+  /** The session and its log, which Geno gives as Claude Code's `transcript_path`; a new lane has none yet. */
+  readonly session: { readonly id: string; readonly transcriptPath: string } | undefined;
+  /** Where the hooks run, which they get as `cwd` and CLAUDE_PROJECT_DIR. */
   readonly workspace: string;
   /** The engine's environment; a hook sees only `childEnv` of it, never an API key. */
   readonly env: Env;
@@ -63,8 +67,11 @@ export type RunnerContext = {
 };
 
 export type HookRunner = {
-  /** Runs every handler that matches, at once, each with the payload on stdin, and waits for all of them. */
-  run<E extends RunningHookEvent>(event: E, input: HookEventInputs[E], permissionMode: string): Promise<readonly HookResult[]>;
+  /**
+   * Runs every handler that matches, at once, each with the payload on stdin, and waits for all of them. The payload
+   * has the session's fields and `permissionMode` only where there is a session.
+   */
+  run<E extends RunningHookEvent>(event: E, input: HookEventInputs[E], permissionMode?: string): Promise<readonly HookResult[]>;
 };
 
 /** Claude Code's variables: the project dir for every hook, the plugin's folder for a plugin's, and the config dir it was read from. */
@@ -83,7 +90,8 @@ export function hookRunner(ctx: RunnerContext): HookRunner {
       const matched = (MATCHED_FIELD[event] as (input: HookEventInputs[typeof event]) => string | undefined)(input);
       const handlers = handlersFor(ctx.entries, event, matched);
       if (handlers.length === 0) return [];
-      const payload = JSON.stringify({ session_id: ctx.sessionId, transcript_path: ctx.transcriptPath, cwd: ctx.workspace, permission_mode: permissionMode, hook_event_name: event, ...input });
+      const session = ctx.session === undefined ? {} : { session_id: ctx.session.id, transcript_path: ctx.session.transcriptPath };
+      const payload = JSON.stringify({ ...session, cwd: ctx.workspace, ...(permissionMode === undefined ? {} : { permission_mode: permissionMode }), hook_event_name: event, ...input });
       const sandbox = handlers.some((entry) => entry.origin.scope === 'project') ? await ctx.sandbox() : undefined;
       try {
         return await Promise.all(
@@ -173,13 +181,24 @@ export type ToolHooks = {
   /** PostToolUse for a call that ran, PostToolUseFailure for one that failed; nothing for one refused or turned down. */
   after(call: RanCall): Promise<ToolHookSaid>;
   batch(calls: readonly RanCall[]): Promise<ToolHookSaid>;
+  /** PermissionRequest for the call as it runs, asked where a card would show; undefined when no such hook runs. */
+  permissionAsk(use: ToolUseBlock): PermissionAsk | undefined;
 };
 
 /** The subagent whose calls the tool events see, as Claude Code names it in `agent_id` and `agent_type`. */
 export type HookAgent = { readonly id: string; readonly type: string };
 
 /** The tool events: a session that runs none of them gives its calls no hooks at all. */
-const TOOL_HOOK_EVENTS: readonly HookEventName[] = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch'];
+const TOOL_HOOK_EVENTS: readonly HookEventName[] = ['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch'];
+
+/** The hooks that fire as a model ends its turn: Stop for the session's own, SubagentStop for a subagent's. */
+export type StopHook = { readonly event: StopEvent; decide(input: StopInput): Promise<StopDecision> };
+
+/** A subagent's own events: SubagentStart's context, to log before its task, and SubagentStop as it ends. */
+export type SubagentHooks = {
+  start(): Promise<HookContextEvent | undefined>;
+  readonly stop: StopHook | undefined;
+};
 
 const NOTHING_SAID: ToolHookSaid = { context: undefined, stop: undefined };
 
@@ -222,8 +241,7 @@ export class HookSessions {
     const entries = runnableEntries(config.entries, opening.trusted);
     const runner = hookRunner({
       entries,
-      sessionId,
-      transcriptPath: opened.log.file,
+      session: { id: sessionId, transcriptPath: opened.log.file },
       workspace: opening.workspace,
       env: io.env,
       sandbox: async () =>
@@ -282,7 +300,7 @@ export class HookSessions {
     return {
       decide: (uses, describe) => Promise.all(uses.map((use) => step(use, describe))),
       async confirm(question, ctx) {
-        const record = await settle(approval, modeOf(approval), question, () => classifierInputOf(ctx.events(), question.command, question), ctx.signal);
+        const record = await settle(approval, modeOf(approval), question, () => classifierInputOf(ctx.events(), question.command, question), ctx);
         if (record.verdict === 'deny') throw refusalOf(record);
         return record;
       },
@@ -307,17 +325,62 @@ export class HookSessions {
         reportHooks(active.io, 'PostToolBatch', results);
         return saidOf(toolHookVerdict('PostToolBatch', results), { event: 'PostToolBatch' });
       },
+      permissionAsk(use) {
+        if (!active.events.has('PermissionRequest')) return undefined;
+        return async (denial) => {
+          const { tool_name, tool_input } = claudeToolCall(use.name, use.input, active.workspace);
+          const suggestions = permissionSuggestions(denial, tool_name);
+          const input = { tool_name, tool_input, ...(suggestions.length === 0 ? {} : { permission_suggestions: suggestions }), ...agentFields };
+          const results = await active.runner.run('PermissionRequest', input, permissionMode());
+          reportHooks(active.io, hookLabel('PermissionRequest', tool_name), results);
+          const answer = permissionRequestDecision(results);
+          return answer.kind === 'allow' && answer.input !== undefined ? { ...answer, input: genoToolInput(use.name, answer.input) } : answer;
+        };
+      },
     };
   }
 
   /** Stop for the session's own model as it ends its turn; undefined when the session runs no Stop hook. */
-  stopHook(sessionId: string): ((input: HookEventInputs['Stop']) => Promise<StopDecision>) | undefined {
+  stopHook(sessionId: string): StopHook | undefined {
     const active = this.active.get(sessionId);
     if (active === undefined || !active.events.has('Stop')) return undefined;
-    return async (input) => {
-      const results = await active.runner.run('Stop', input, active.permissionMode);
-      reportHooks(active.io, 'Stop', results);
-      return stopDecision(results);
+    return {
+      event: 'Stop',
+      async decide(input) {
+        const results = await active.runner.run('Stop', input, active.permissionMode);
+        reportHooks(active.io, 'Stop', results);
+        return stopDecision(results);
+      },
+    };
+  }
+
+  /**
+   * SubagentStart and SubagentStop for a subagent of `sessionId`, whose log is `transcript`, under the approval that
+   * asks for it. The payload's `session_id` and `transcript_path` stay the parent's, as in Claude Code.
+   */
+  subagentHooks(sessionId: string, agent: HookAgent, transcript: string, approval: Approval): SubagentHooks | undefined {
+    const active = this.active.get(sessionId);
+    if (active === undefined || !(active.events.has('SubagentStart') || active.events.has('SubagentStop'))) return undefined;
+    const fields = { agent_id: agent.id, agent_type: agent.type };
+    const permissionMode = () => HOOK_PERMISSION_MODES[modeOf(approval)];
+    return {
+      async start() {
+        if (!active.events.has('SubagentStart')) return undefined;
+        const results = await active.runner.run('SubagentStart', fields, permissionMode());
+        reportHooks(active.io, hookLabel('SubagentStart', agent.type), results);
+        const notes = results.flatMap(({ outcome }) => (outcome.kind === 'block' ? [] : (outcome.notes ?? [])));
+        return notes.length === 0 ? undefined : { kind: 'hook-context', seq: 0, at: new Date().toISOString(), event: 'SubagentStart', notes };
+      },
+      stop: !active.events.has('SubagentStop')
+        ? undefined
+        : {
+            event: 'SubagentStop',
+            async decide(input) {
+              const results = await active.runner.run('SubagentStop', { ...fields, ...input, agent_transcript_path: transcript }, permissionMode());
+              reportHooks(active.io, hookLabel('SubagentStop', agent.type), results);
+              return stopDecision(results);
+            },
+          },
     };
   }
 

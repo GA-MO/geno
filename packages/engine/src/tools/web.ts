@@ -287,7 +287,7 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       mode,
       denial,
       () => ({ ...classifierInputOf(ctx.events(), denial.command, denial), mcp: { server: 'geno', tool, arguments: JSON.stringify(args) } }),
-      ctx.signal,
+      ctx,
     );
     if (record.verdict === 'deny') {
       throw refusalOf(record, denial.rule === 'web-refused-url' ? `denied: web_fetch may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record));
