@@ -11,6 +11,7 @@ import {
   retryDelayMs,
   specOf,
   TURN_ERROR_OF,
+  type CallProgress,
   type ModelFailure,
   type ModelRetry,
   type ProviderName,
@@ -27,6 +28,7 @@ import {
   type TurnResult,
 } from '@g-code/core';
 import { sharedSlots, type ModelSlots } from './model-slots.js';
+import { StreamStalled, streamLimitsOf, watchStream, type StreamLimits } from './stream-watch.js';
 import { nap, resumeAfterLimitOf, waitPolicyOf, type Wake } from './waits.js';
 import { wireFor } from './wire.js';
 
@@ -50,6 +52,8 @@ export type TurnInput = {
   readonly waiting?: Waiting | undefined;
   /** Retry now: cuts a wait short. */
   readonly wake?: Wake | undefined;
+  /** Each try's progress as it streams: once as it goes out, then a few times a second while bytes arrive. */
+  onProgress?(progress: CallProgress): void;
   /** When the attempt that produced the result reached each point of its stream; called once, before the result returns. */
   onMarks?(marks: StreamMarks): void;
   /** Keeps the request's snapshot before it goes out, and names it, for the turn to record. */
@@ -137,6 +141,9 @@ export type WaitOptions = { readonly policy: WaitPolicy; readonly resume: Resume
 
 export const waitOptionsOf = (env: Env): WaitOptions => ({ policy: waitPolicyOf(env), resume: resumeAfterLimitOf(env), random: Math.random });
 
+// Claude Code retries a call that got no response once, not out of its whole budget (its StreamNoResponseError).
+const STALL_RETRIES = 1;
+
 type Held = { readonly kind: 'go' } | { readonly kind: 'aborted' } | { readonly kind: 'give-up'; readonly message: string };
 
 export function gatewayFor(
@@ -146,11 +153,13 @@ export function gatewayFor(
   retry: RetryPolicy = RETRY_POLICY,
   slots: ModelSlots = sharedSlots(providerName, env),
   waits: WaitOptions = waitOptionsOf(env),
+  limits: StreamLimits = streamLimitsOf(env),
 ): Gateway {
   const wire = wireFor(providerName, env, fetch);
   const { sessionHeader, adapter } = specOf(providerName);
 
-  async function call({ session, events, tools, system, stored, signal, onText, onToolInput, snapshot }: TurnInput, clock: StreamClock): Promise<TurnResult> {
+  // A try whose response goes silent past its limit is aborted and thrown as StreamStalled.
+  async function call({ session, events, tools, system, stored, signal, onText, onToolInput, onProgress, snapshot }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
     const drafts = new Map<number, ToolInputDraft>();
     const draft = (index: number, next: ToolInputDraft) => {
@@ -159,11 +168,14 @@ export function gatewayFor(
     };
     const request = buildRequest(session, events, tools, system, stored);
     const kept = await snapshot?.(request);
+    const watch = watchStream(limits, onProgress ?? (() => {}));
     const message = await wire.stream(request, {
-      signal,
+      signal: AbortSignal.any([signal, watch.signal]),
       headers: sessionHeader === undefined ? {} : { [sessionHeader]: session.id },
       onAnswered: () => clock.answered(),
+      onBytes: watch.bytes,
       onEvent: (event) => {
+        watch.event(event);
         clock.observe(event);
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
         if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') draft(event.index, { id: event.content_block.id, name: event.content_block.name, json: '' });
@@ -172,7 +184,11 @@ export function gatewayFor(
           if (was !== undefined) draft(event.index, { ...was, json: was.json + event.delta.partial_json });
         }
       },
-    });
+    })
+      .catch((error: unknown) => {
+        throw watch.stalled() ?? error;
+      })
+      .finally(watch.stop);
     if (message.stop_reason === 'refusal') {
       return { kind: 'error', error: 'refusal', message: refusalMessage(message) };
     }
@@ -202,6 +218,7 @@ export function gatewayFor(
       let waiting: Waiting | undefined;
       // Failed tries within the current wait, which its schedule backs off by.
       let tries = 0;
+      let stalls = 0;
       let waitedMs = 0;
       let clock = streamClock();
       const settled = (result: TurnResult): TurnResult => {
@@ -239,6 +256,16 @@ export function gatewayFor(
           waiting = { ...wait, retryAt: next.kind === 'at' ? next.at : null };
         }
       };
+      // False when the user stopped the turn during the wait.
+      const backOff = async (delayMs: number): Promise<boolean> => {
+        try {
+          await sleep(delayMs, undefined, { signal });
+          return true;
+        } catch (sleepError) {
+          if (signal.aborted) return false;
+          throw sleepError;
+        }
+      };
       // Undefined when the call should go out; otherwise how the turn ends.
       const waitOut = async (): Promise<TurnResult | undefined> => {
         const outcome = await holdOn();
@@ -268,6 +295,15 @@ export function gatewayFor(
             await endWait();
             return settled(ABORTED);
           }
+          if (error instanceof StreamStalled) {
+            await endWait();
+            const delayMs = ++stalls > STALL_RETRIES ? undefined : retryDelayMs(retry, attempt, undefined);
+            if (delayMs === undefined) return settled({ kind: 'error', error: 'transport', message: error.giveUp });
+            await input.onRetry({ attempt, delayMs, message: error.message });
+            attempt++;
+            if (!(await backOff(delayMs))) return settled(ABORTED);
+            continue;
+          }
           if (!(error instanceof AnthropicError)) throw error;
           const failure = failureOf(error, wire.redact, clock.streamed());
           const failed = classifyFailure(failure, Date.now());
@@ -294,12 +330,7 @@ export function gatewayFor(
           if (delayMs === undefined) return settled({ kind: 'error', error: TURN_ERROR_OF[failed.kind], message: failure.message });
           await input.onRetry({ attempt, delayMs, message: failure.message });
           attempt++;
-          try {
-            await sleep(delayMs, undefined, { signal });
-          } catch (sleepError) {
-            if (signal.aborted) return settled(ABORTED);
-            throw sleepError;
-          }
+          if (!(await backOff(delayMs))) return settled(ABORTED);
         }
       }
     },

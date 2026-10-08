@@ -36,11 +36,12 @@ async function send(config: WireConfig, path: string, init: RequestInit & { sign
 }
 
 /** The `data:` payloads of a server-sent-events body, one per event, up to `[DONE]`. */
-async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+async function* sseData(body: ReadableStream<Uint8Array>, onBytes: () => void): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let buffer = '';
   let data: string[] = [];
   for await (const bytes of body) {
+    onBytes();
     buffer += decoder.decode(bytes, { stream: true });
     let newline: number;
     while ((newline = buffer.indexOf('\n')) >= 0) {
@@ -59,18 +60,19 @@ async function* sseData(body: ReadableStream<Uint8Array>): AsyncGenerator<string
 
 export function openaiWire(config: WireConfig): Wire {
   return {
-    async stream(params, { signal, headers, onEvent, onAnswered }) {
+    async stream(params, { signal, headers, onEvent, onAnswered, onBytes = () => {} }) {
       const response = await send(config, 'chat/completions', {
         method: 'POST',
         signal,
         headers: { 'content-type': 'application/json', accept: 'text/event-stream', ...headers },
         body: JSON.stringify(toChatRequest(params)),
       });
+      onBytes();
       onAnswered?.();
       const translator = chatStream();
       let finished = false;
       try {
-        for await (const data of sseData(response.body!)) {
+        for await (const data of sseData(response.body!, onBytes)) {
           if (data === '[DONE]') {
             finished = true;
             break;

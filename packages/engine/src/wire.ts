@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import type { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import type { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
@@ -66,16 +67,48 @@ async function anthropicClient({ spec, values, baseUrl, fetch }: WireConfig): Pr
   }
 }
 
+/** The response with `onBytes` called for each piece of its body as it is read. */
+function tapped(response: Response, onBytes: () => void): Response {
+  if (response.body === null) return response;
+  const body = response.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        onBytes();
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
+/**
+ * The SDK reads the body and drops what it does not pass on, such as the provider's pings, so the bytes are counted in
+ * its fetch. The SDK makes the fetch inside the call that started the stream, which is how the fetch finds that call's counter.
+ */
+const byteCounters = new AsyncLocalStorage<() => void>();
+
+const countingFetch =
+  (fetch: typeof globalThis.fetch | undefined): typeof globalThis.fetch =>
+  async (input, init) => {
+    const response = await (fetch ?? globalThis.fetch)(input, init);
+    const onBytes = byteCounters.getStore();
+    if (onBytes === undefined) return response;
+    onBytes();
+    return tapped(response, onBytes);
+  };
+
 function anthropicWire(config: WireConfig): Wire {
   let pending: ReturnType<typeof anthropicClient> | undefined;
-  const clientOf = () => (pending ??= anthropicClient(config));
+  const clientOf = () => (pending ??= anthropicClient({ ...config, fetch: countingFetch(config.fetch) }));
   return {
-    async stream(params, { signal, headers, onEvent, onAnswered }) {
+    async stream(params, { signal, headers, onEvent, onAnswered, onBytes = () => {} }) {
       const client = await clientOf();
-      const stream = client.messages.stream(params, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
-      if (onAnswered !== undefined) stream.on('connect', onAnswered);
-      stream.on('streamEvent', onEvent);
-      return stream.finalMessage();
+      return byteCounters.run(onBytes, () => {
+        const stream = client.messages.stream(params, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
+        if (onAnswered !== undefined) stream.on('connect', onAnswered);
+        stream.on('streamEvent', onEvent);
+        return stream.finalMessage();
+      });
     },
     async listModels(signal) {
       const client = await clientOf();
