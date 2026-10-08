@@ -370,6 +370,22 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     expect(existsSync(path.join(writable, 'touched.md'))).toBe(true);
   });
 
+  it('B/B-68 in Auto the classifier is told the directories the user added as writable, and nothing when none are', async () => {
+    const writable = await sibling();
+    const readOnly = await sibling();
+    const told = async (entries: unknown) => {
+      const seen: ClassifierInput[] = [];
+      const classify = async (input: ClassifierInput): Promise<ClassifierRun> => {
+        seen.push(input);
+        return { verdict: 'allow', reason: 'A build step.', model: 'fake', latencyMs: 1, costUsd: 0 };
+      };
+      await scripted(wire, [{ calls: [call('bash', { command: 'make build' })] }, { answer: 'Built.' }], { files, mode: 'auto', classify, env: added(entries) });
+      return seen;
+    };
+    expect(await told([{ path: writable, writable: true }, readOnly])).toEqual([expect.objectContaining({ command: 'make build', writableDirectories: [writable] })]);
+    expect((await told([readOnly]))[0]).not.toHaveProperty('writableDirectories');
+  });
+
   it("B/B-68 additionalDirectories in .claude/settings.json waits for a trusted workspace, and the user's own file applies without one", async () => {
     const dir = await sibling();
     const project = { ...files, '.claude/settings.json': JSON.stringify({ permissions: { additionalDirectories: [dir] } }) };

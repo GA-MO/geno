@@ -369,13 +369,19 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   // Read at each call, so a directory allowed for the session holds from the next call on.
   const scope = (): CommandScope => ({ ...tools.scope, directories: tools.directories.readable() });
   const readableDirs = (ctx: ToolContext): readonly string[] => [ctx.workspace, ...tools.directories.readable()];
+  // The classifier is told where the sandbox lets commands write, the directories the user added as writable included.
+  const inputOf = (ctx: ToolContext, command: string, denial: Denial): ClassifierInput => {
+    const input = classifierInputOf(ctx.events(), command, denial);
+    const writable = tools.directories.writable();
+    return writable.length === 0 ? input : { ...input, writableDirectories: writable };
+  };
 
   // A credentials file opens only with the user's yes or the classifier's, as `cat .env` does.
   const askSecret: SecretGate = async (ctx, shown) => {
     const mode = modeOf(tools.approval);
     const denial = secretReadDenial(shown, mode);
     if (denial === undefined) return undefined;
-    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx);
+    const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx);
     if (approval.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
@@ -419,7 +425,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const mode = modeOf(tools.approval);
     const ruled = userRuleDenial(rule, `${tool} ${displayPath(ctx, real)}`);
     const denial = mode === 'plan' ? { ...ruled, verdict: 'deny' as const } : ruled;
-    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx);
+    const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx);
     if (approval.verdict === 'deny') throw refusalOf(approval);
     return approval;
   };
@@ -466,7 +472,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const keep = (answer: KeptAnswer) => {
       if (answer === 'allow-session' && denial.directory !== undefined) tools.directories.allow(denial.directory);
     };
-    const approval = await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), denial.command, denial), ctx, keep);
+    const approval = await settle(tools.approval, mode, denial, () => inputOf(ctx, denial.command, denial), ctx, keep);
     if (approval.verdict === 'deny') throw outsideRefusal(approval, readableDirs(ctx));
     return approval;
   };
@@ -518,7 +524,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
-      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => classifierInputOf(ctx.events(), command, denial), ctx, keep);
+      denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => inputOf(ctx, command, denial), ctx, keep);
     if (approval?.verdict === 'deny') throw approval.rule === 'path-outside-workspace' ? outsideRefusal(approval, readableDirs(ctx)) : refusalOf(approval);
     return approval;
   };
