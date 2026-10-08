@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { downloadAndUnzipVSCode } from '@vscode/test-electron';
@@ -51,15 +51,16 @@ async function buildHost(dir: string): Promise<string> {
 }
 
 /**
- * Geno as the pooled windows load it: the checkout's files through links, with a manifest that depends on the host.
+ * Geno as the pooled windows load it: the built files the .vsix ships, with a manifest that depends on the host.
  * VS Code then activates the host, which sets the suite's env, before Geno, whatever activates Geno; after a
- * reload that is its restored view, sooner than any `*` extension.
+ * reload that is its restored view, sooner than any `*` extension. Copies, not links: VS Code binds a module's
+ * `require('vscode')` to the extension whose folder holds the module's real path.
  */
 async function stageGeno(dir: string): Promise<string> {
   await mkdir(dir, { recursive: true });
-  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')) as { extensionDependencies?: string[] };
+  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')) as { files: string[]; extensionDependencies?: string[] };
   await writeFile(path.join(dir, 'package.json'), JSON.stringify({ ...manifest, extensionDependencies: [...(manifest.extensionDependencies ?? []), HOST_ID] }));
-  for (const entry of await readdir(root)) if (entry !== 'package.json') await symlink(path.join(root, entry), path.join(dir, entry));
+  for (const entry of manifest.files) await cp(path.join(root, entry), path.join(dir, entry), { recursive: true });
   return dir;
 }
 
