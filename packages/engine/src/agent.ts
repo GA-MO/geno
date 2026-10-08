@@ -61,7 +61,7 @@ import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
-import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type Director, type DriveResult, type Limits, type Surface } from './drive.js';
+import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
@@ -325,6 +325,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       steers,
       waits: wakes?.registry,
       steps: options.director !== undefined,
+      // A subagent's calls meet the user's PreToolUse hooks too, as in Claude Code, named by agent_id and agent_type.
+      preToolUse: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.preToolHooks(session.id, approval, agent),
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools);
@@ -369,7 +371,15 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       hooks === undefined
         ? opened
         : await hooks.open({ io, store, opened, trusted: options.trustedWorkspace === true, permissionMode: HOOK_PERMISSION_MODES[startMode], workspace, scratchpad });
-    const hooked = hooks === undefined ? mode : { ...mode, afterCompact: () => hooks.sessionStart(session.id, 'compact') };
+    const hooked: Mode =
+      hooks === undefined
+        ? mode
+        : {
+            ...mode,
+            afterCompact: () => hooks.sessionStart(session.id, 'compact'),
+            promptSubmitted: (prompt) => hooks.userPromptSubmit(session.id, prompt),
+            preToolUse: hooks.preToolHooks(session.id, options.approval),
+          };
     result = await drive(io, store, started, prompt, options.limits, hooked, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
     return result;
   } finally {

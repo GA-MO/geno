@@ -95,6 +95,7 @@ export const TOOL_STATUS: Readonly<Record<ToolStatus, acp.ToolCallStatus>> = { o
 const ERROR_STATUS: Readonly<Record<TurnErrorKind, ReplayedTurn['status']>> = {
   abort: 'stopped',
   refusal: 'failed',
+  blocked: 'failed',
   'max-turns': 'failed',
   budget: 'failed',
   transport: 'done',

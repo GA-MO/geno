@@ -61,6 +61,7 @@ import type { Approval } from './tools/agent.js';
 import { executor, ToolError, ToolRejected, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
+import type { HookAgent, PreToolHooks } from './hooks.js';
 
 /** In precedence order, as for commands: the workspace's folders, then Geno's home, then plugins, then the built-ins. */
 const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string }[] = [
@@ -168,6 +169,8 @@ export type SubagentEnv = {
   readonly waits?: Wakes | undefined;
   /** The calls come from a workflow, not a model, and may set each step's model and caps. */
   readonly steps?: boolean | undefined;
+  /** The PreToolUse hooks a child's calls meet, under the approval that asks for that child; undefined runs none. */
+  readonly preToolUse?: ((approval: Approval, agent: HookAgent) => PreToolHooks | undefined) | undefined;
 };
 
 /** What a workflow step sets on its child: the model, and caps in place of the definition's. */
@@ -319,15 +322,18 @@ export function subagents(env: SubagentEnv): Subagents {
       },
     };
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
-    const executors = pick(env.executors(asker(env.approval, agent.name, session.id)), agent.tools);
+    const childApproval = asker(env.approval, agent.name, session.id);
+    const executors = pick(env.executors(childApproval), agent.tools);
+    const preToolUse = env.preToolUse?.(childApproval, { id: session.id, type: agent.name });
     const own = new Set<string>(agent.tools);
     // A fork keeps the parent's tools for the cache, so it has no report tool and its last text is its report.
     // A child starts no background command, so what arrives for it is the steers its parent or the user sends.
     const arrivals = () => env.steers.inbox.take(session.id);
     const mode: Mode =
       start === 'fork'
-        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals }
+        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals, preToolUse }
         : {
+            preToolUse,
             tools: [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION],
             system: childSystemPrompt(agent),
             executors: { ...executors, [REPORT_TOOL]: reportExecutor },
@@ -348,7 +354,7 @@ export function subagents(env: SubagentEnv): Subagents {
               store,
               log: opened.log,
               prompt: task,
-              approval: asker(env.approval, agent.name, session.id),
+              approval: childApproval,
               surface: { files: env.files, watcher },
               signal: controller.signal,
               agents: externals,

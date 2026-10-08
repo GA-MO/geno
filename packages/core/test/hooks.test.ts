@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   asSessionId,
+  claudeToolCall,
   GENO_NOTE,
+  genoToolInput,
   handlersFor,
   HOOK_EVENTS,
   HOOK_NOTE_LIMIT,
@@ -9,9 +11,13 @@ import {
   hookOutcome,
   matcherMatches,
   parseHookSettings,
+  preToolDecision,
+  promptDecision,
   replayMessages,
   type HookEntry,
   type HookOrigin,
+  type HookOutcome,
+  type HookResult,
   type Session,
   type TurnEvent,
 } from '../src/index.js';
@@ -226,5 +232,109 @@ describe('hook context in the conversation', () => {
     const events: TurnEvent[] = [{ kind: 'session-start', session }, { kind: 'user', seq: 1, at, content: 'Hi' }, reply(2), hook(3, 'resume', 'AGAIN'), { kind: 'user', seq: 4, at, content: 'More' }];
     expect(texts(events, 0)).toEqual(['Hi']);
     expect(texts(events, 2)).toEqual([`${GENO_NOTE} SessionStart:resume hook success: AGAIN`, 'More']);
+  });
+
+  it('T-HOOK-02 puts UserPromptSubmit output after its prompt, and drops it with a prompt the provider refused', () => {
+    const ups: TurnEvent = { kind: 'hook-context', seq: 2, at, event: 'UserPromptSubmit', notes: [{ how: 'additional-context', text: 'Branch: main.' }] };
+    const events: TurnEvent[] = [{ kind: 'session-start', session }, { kind: 'user', seq: 1, at, content: 'Hi' }, ups];
+    expect(texts(events, 0)).toEqual(['Hi', `${GENO_NOTE} UserPromptSubmit hook additional context: Branch: main.`]);
+    const refused: TurnEvent[] = [...events, { kind: 'error', seq: 3, at, error: 'refusal', message: 'no' }, { kind: 'user', seq: 4, at, content: 'Again' }];
+    expect(texts(refused, 0)).toEqual(['Again']);
+  });
+
+  it('T-HOOK-02 leaves out a prompt a UserPromptSubmit hook blocked', () => {
+    const events: TurnEvent[] = [
+      { kind: 'session-start', session },
+      { kind: 'user', seq: 1, at, content: 'Delete prod' },
+      { kind: 'error', seq: 2, at, error: 'blocked', message: 'UserPromptSubmit hook blocked this prompt: no prod talk' },
+      { kind: 'user', seq: 3, at, content: 'Hi' },
+    ];
+    expect(texts(events, 0)).toEqual(['Hi']);
+  });
+});
+
+const origin = (plugin?: string): HookOrigin => (plugin === undefined ? user : { ...user, plugin: { name: plugin, root: `/p/${plugin}` } });
+const result = (outcome: HookOutcome, plugin?: string): HookResult => ({ entry: entry({ event: 'PreToolUse', command: 'x', origin: origin(plugin) }), outcome });
+const json = (output: object, code = 0): HookOutcome =>
+  code === 0 ? { kind: 'ok', code: 0, notes: [], output } : { kind: 'error', code, message: `exit code ${code}`, notes: [], output };
+const decide = (permissionDecision: string, extra: object = {}) => json({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, ...extra } });
+
+describe('preToolDecision', () => {
+  it('T-PERM-06 exit 2 and permissionDecision deny block the call, with the reason for the model', () => {
+    expect(preToolDecision([result({ kind: 'block', code: 2, reason: 'migrations are frozen' })])).toEqual({ kind: 'deny', reason: 'migrations are frozen' });
+    expect(preToolDecision([result(decide('deny', { permissionDecisionReason: 'generated file' }))])).toEqual({ kind: 'deny', reason: 'generated file' });
+    expect(preToolDecision([result(decide('deny'))])).toEqual({ kind: 'deny', reason: 'a PreToolUse hook denied this call' });
+  });
+
+  it("takes the strictest decision of all the hooks, as Claude Code does: deny, then defer, then ask, then allow", () => {
+    const allow = result(decide('allow'));
+    const ask = result(decide('ask', { permissionDecisionReason: 'look first' }), 'guard');
+    const deny = result(decide('deny', { permissionDecisionReason: 'no' }));
+    const defer = result(decide('defer'));
+    expect(preToolDecision([allow, ask, deny])).toEqual({ kind: 'deny', reason: 'no' });
+    expect(preToolDecision([allow, ask])).toEqual({ kind: 'ask', reason: 'look first', from: 'plugin:guard' });
+    expect(preToolDecision([allow, defer, ask]), 'defer outranks ask and allow, and leaves the call to the usual checks').toEqual({ kind: 'none' });
+    expect(preToolDecision([allow])).toEqual({ kind: 'allow' });
+    expect(preToolDecision([])).toEqual({ kind: 'none' });
+  });
+
+  it('honours valid JSON on an exit other than 0 and 2, as Claude Code does, and nothing else from a failed hook', () => {
+    expect(preToolDecision([result(json({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } }, 1))])).toEqual({ kind: 'allow' });
+    expect(preToolDecision([result({ kind: 'error', code: 1, message: 'exit code 1: boom' })])).toEqual({ kind: 'none' });
+    expect(preToolDecision([result({ kind: 'error', code: null, message: 'timed out after 1 s and was killed' })]), 'a timed-out hook decides nothing').toEqual({ kind: 'none' });
+  });
+
+  it("reads the older top-level decision, approve or block, as allow or deny", () => {
+    expect(preToolDecision([result(json({ decision: 'block', reason: 'old style' }))])).toEqual({ kind: 'deny', reason: 'old style' });
+    expect(preToolDecision([result(json({ decision: 'approve' }))])).toEqual({ kind: 'allow' });
+  });
+
+  it('carries updatedInput with an allow or an ask, from the hook that decided', () => {
+    const updatedInput = { command: 'npm run deploy -- --dry-run' };
+    expect(preToolDecision([result(decide('allow', { updatedInput }))])).toEqual({ kind: 'allow', input: updatedInput });
+    expect(preToolDecision([result(decide('ask', { updatedInput }))])).toEqual({ kind: 'ask', reason: undefined, from: 'settings', input: updatedInput });
+    expect(preToolDecision([result(decide('deny', { updatedInput }))])).toEqual({ kind: 'deny', reason: 'a PreToolUse hook denied this call' });
+  });
+});
+
+describe('promptDecision', () => {
+  const ups = (outcome: HookOutcome): HookResult => ({ entry: entry({ event: 'UserPromptSubmit', command: 'x' }), outcome });
+
+  it('T-HOOK-02 blocks the prompt on exit 2, decision block or continue false, with the reason for the user', () => {
+    expect(promptDecision([ups({ kind: 'block', code: 2, reason: 'no prod talk' })])).toEqual({ kind: 'block', reason: 'no prod talk' });
+    expect(promptDecision([ups(json({ decision: 'block', reason: 'needs a ticket' }))])).toEqual({ kind: 'block', reason: 'needs a ticket' });
+    expect(promptDecision([ups(json({ continue: false, stopReason: 'paused' }))])).toEqual({ kind: 'block', reason: 'paused' });
+  });
+
+  it('T-HOOK-02 passes plain stdout and additionalContext on to the model', () => {
+    const notes = [{ how: 'success', text: 'Branch: main.' }] as const;
+    expect(promptDecision([ups({ kind: 'ok', code: 0, notes })])).toEqual({ kind: 'go', notes });
+    expect(promptDecision([ups({ kind: 'error', code: 1, message: 'exit code 1' })])).toEqual({ kind: 'go', notes: [] });
+  });
+});
+
+describe("Claude Code's tool calls", () => {
+  it("gives a hook Claude Code's name and input for Geno's bash, read and edit", () => {
+    expect(claudeToolCall('bash', { command: 'ls', description: 'List', timeout_seconds: 5, run_in_background: true }, '/ws')).toEqual({
+      tool_name: 'Bash',
+      tool_input: { command: 'ls', description: 'List', timeout: 5000, run_in_background: true },
+    });
+    expect(claudeToolCall('read', { path: 'src/a.ts', start_line: 3, end_line: 7 }, '/ws')).toEqual({ tool_name: 'Read', tool_input: { file_path: '/ws/src/a.ts', offset: 3, limit: 5 } });
+    expect(claudeToolCall('edit', { path: 'src/payload-types.ts', old_str: 'a', new_str: 'b', replace_all: true }, '/ws')).toEqual({
+      tool_name: 'Edit',
+      tool_input: { file_path: '/ws/src/payload-types.ts', old_string: 'a', new_string: 'b', replace_all: true },
+    });
+    expect(claudeToolCall('edit', { path: 'new.ts', new_str: 'x', create: true }, '/ws')).toEqual({ tool_name: 'Write', tool_input: { file_path: '/ws/new.ts', content: 'x' } });
+    expect(claudeToolCall('grep', { pattern: 'x' }, '/ws')).toEqual({ tool_name: 'Grep', tool_input: { pattern: 'x' } });
+    expect(claudeToolCall('mcp__files__write', { a: 1 }, '/ws')).toEqual({ tool_name: 'mcp__files__write', tool_input: { a: 1 } });
+  });
+
+  it("reads a hook's updatedInput back into Geno's input", () => {
+    expect(genoToolInput('bash', { command: 'ls -la', timeout: 2500 })).toEqual({ command: 'ls -la', timeout_seconds: 3 });
+    expect(genoToolInput('read', { file_path: '/ws/a.ts', offset: 3, limit: 5 })).toEqual({ path: '/ws/a.ts', start_line: 3, end_line: 7 });
+    expect(genoToolInput('read', { file_path: '/ws/a.ts', limit: 5 })).toEqual({ path: '/ws/a.ts', start_line: 1, end_line: 5 });
+    expect(genoToolInput('edit', { file_path: '/ws/a.ts', old_string: 'a', new_string: 'b' })).toEqual({ path: '/ws/a.ts', old_str: 'a', new_str: 'b' });
+    expect(genoToolInput('edit', { file_path: '/ws/a.ts', content: 'all' })).toEqual({ path: '/ws/a.ts', new_str: 'all', create: true });
+    expect(genoToolInput('grep', { pattern: 'y' })).toEqual({ pattern: 'y' });
   });
 });

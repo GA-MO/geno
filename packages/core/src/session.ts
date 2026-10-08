@@ -78,8 +78,11 @@ export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   output: a.output + b.output,
 });
 
-/** `overflow` is a request too long for the model's context window; `transport` is any other failed call. */
-export const TURN_ERROR_KINDS = ['refusal', 'transport', 'overflow', 'abort', 'max-turns', 'budget'] as const;
+/**
+ * `overflow` is a request too long for the model's context window; `transport` is any other failed call. `blocked` is a
+ * prompt a UserPromptSubmit hook stopped before the model saw it.
+ */
+export const TURN_ERROR_KINDS = ['refusal', 'transport', 'overflow', 'abort', 'max-turns', 'budget', 'blocked'] as const;
 export type TurnErrorKind = (typeof TURN_ERROR_KINDS)[number];
 
 export type AssistantTurn = {
@@ -310,9 +313,10 @@ export const nextSeq = (events: readonly TurnEvent[]): number => {
   return 1;
 };
 
-// A refused prompt is dropped so later turns do not resend it; an interrupted or stopped one is answered on the next run.
+// A refused or blocked prompt is dropped so later turns do not resend it; an interrupted or stopped one is answered on the next run.
 export const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
   refusal: false,
+  blocked: false,
   transport: true,
   overflow: true,
   abort: true,
@@ -413,7 +417,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
       const environment = event.environment === undefined ? undefined : renderEnvironment(event.environment, event.session);
       opening = [loaded, memory, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
     }
-    if (event.kind === 'hook-context') (event.matched === 'startup' ? opening : notices).push(...hookContextTexts(event).map((text) => ({ type: 'text' as const, text })));
+    // UserPromptSubmit's output goes with its prompt, and is dropped with it.
+    if (event.kind === 'hook-context') (event.event === 'UserPromptSubmit' ? prompts : event.matched === 'startup' ? opening : notices).push(...hookContextTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
