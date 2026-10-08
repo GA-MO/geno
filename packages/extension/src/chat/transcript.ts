@@ -204,7 +204,8 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     }),
   'child-start': (transcript, { id, toolId, role, task, model, at }) =>
     onLast(transcript, (turn) => {
-      if (turn.children?.[id] !== undefined) return turn;
+      // A child that ended and starts again was resumed by its parent's message: it runs anew in its place.
+      if (turn.children?.[id]?.status.kind === 'running') return turn;
       const own: Turn = { id, prompt: task, blocks: [], status: 'streaming', startedAt: at, endedAt: undefined, usage: undefined };
       const child: Child = { id, toolId, role, model, status: { kind: 'running' }, startedAt: at, endedAt: undefined, turns: 0, costUsd: undefined, turn: own };
       return { ...turn, children: { ...turn.children, [id]: child } };

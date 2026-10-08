@@ -75,6 +75,25 @@ describe('children in the transcript', () => {
     expect(childOf(t, 'c_a')!.endedByParent).toBeUndefined();
   });
 
+  it('shows a resumed child running again, under the call that resumed it, with the message as its turn', () => {
+    const ended = run([...parent, startChild('c_a', 'tu_a'), { type: 'child-end', id: 'c_a', at: T0 + 500, end: { kind: 'done' }, turns: 1, costUsd: 0 }]);
+    const resumed = run(
+      [
+        { type: 'tool', id: 'tu_m', at: T0 + 600, name: 'message_agent', target: 'c_a: and beta?', toolKind: 'other', status: 'running' },
+        { type: 'child-start', id: 'c_a', toolId: 'tu_m', role: 'explore', task: 'and beta?', model: 'qwen3.8-flash', at: T0 + 610 },
+        { type: 'child', id: 'c_a', action: { type: 'text', text: 'b.ts:1' } },
+      ],
+      ended,
+    );
+    const a = childOf(resumed, 'c_a')!;
+    expect(a).toMatchObject({ toolId: 'tu_m', status: { kind: 'running' }, startedAt: T0 + 610, endedAt: undefined });
+    expect(a.turn.prompt).toBe('and beta?');
+    expect(a.turn.blocks.map((b) => b.kind)).toEqual(['text']);
+    expect(runningChildren(resumed).map((c) => c.id)).toEqual(['c_a']);
+    const twice = run([startChild('c_a', 'tu_a', T0 + 620)], resumed);
+    expect(twice, 'a start for a child that runs changes nothing').toBe(resumed);
+  });
+
   it('drops what a child streams after it ended', () => {
     const ended = run([...parent, startChild('c_a', 'tu_a'), { type: 'child-end', id: 'c_a', at: T0 + 500, end: { kind: 'done' }, turns: 1, costUsd: 0 }]);
     expect(run([{ type: 'child', id: 'c_a', action: { type: 'text', text: 'late' } }], ended)).toBe(ended);

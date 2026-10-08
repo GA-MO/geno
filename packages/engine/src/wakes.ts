@@ -94,12 +94,18 @@ export class Wakes {
     return waits;
   }
 
-  /** A background child started; the returned function marks its report made. */
+  /**
+   * A background child started; the returned function marks its report made. A resumed child waits again under its
+   * id, so a report of its earlier run that comes late leaves the newer wait in place.
+   */
   child(sessionId: string, childId: string, wait: ChildWait): () => void {
     this.of(sessionId).children.set(childId, wait);
     this.hooks.changed(sessionId);
     return () => {
-      if (this.sessions.get(sessionId)?.children.delete(childId) === true) this.hooks.changed(sessionId);
+      const children = this.sessions.get(sessionId)?.children;
+      if (children?.get(childId) !== wait) return;
+      children.delete(childId);
+      this.hooks.changed(sessionId);
     };
   }
 
