@@ -238,12 +238,12 @@ P9 also covers these rows:
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. UserPromptSubmit runs before the model sees the prompt, and PreToolUse for every call of a turn before the first runs (P14). The events after a call come with P15 and P16. | partial: SessionStart, UserPromptSubmit, PreToolUse and SessionEnd pass | `hooks.conformance.test.ts` |
+| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. UserPromptSubmit runs before the model sees the prompt, and PreToolUse for every call of a turn before the first runs (P14). One hook on every event logs SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolBatch, Stop and SessionEnd in that order (P15). PermissionRequest comes with P16. | partial: all but PermissionRequest pass | `hooks.conformance.test.ts`, both wires |
 | T-HOOK-06 | A SessionStart matcher of `compact` runs after a compaction. | `startup` on a new session, `resume` on a resumed one, `compact` after a compaction, each with the common payload. A matcher that names another source does not run. The output opens the first request before the prompt, under `[Geno]`; a resume keeps the opening's bytes and its own output joins the next request; the compact output follows the compacted context. `clear` never fires: Geno has no `/clear`. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires; compaction on the Anthropic wire only |
 | T-HOOK-07 | A misspelled event name warns the user (Claude Code ignores it). | The hook never runs. The command line prints `hooks: <file>: SesionStart is not a hook event…`, and Settings lists it as a warning above the hooks. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires and over ACP |
 | T-HOOK-08 | Exit 2 blocks and a JSON allow cannot override it; exit 1 does not block; JSON that does not parse is a non-blocking error. | SessionStart with exit 2, exit 1 or broken JSON puts nothing before the model, the session goes on, and each is reported on stderr. A PreToolUse exit 2 blocks its call with stderr as the reason, and a UserPromptSubmit exit 2 blocks the prompt (P14). A PreToolUse exit 1 without JSON is reported and the call runs. `hookOutcome` returns a block for exit 2 whatever stdout says. | pass (was partial before P14) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the JSON allow on exit 2 |
 | T-HOOK-09 | Matching hooks run in parallel, and an identical handler in two files runs once. | Two hooks that each wait for the other's mark both see it, and the same command in `~/.claude/settings.json` and `~/.g-code/settings.json` runs once. | pass (was fail) | `hooks.conformance.test.ts`, both wires |
-| T-HOOK-10 | The model sees `SessionStart:<source> hook success: <stdout>`, `UserPromptSubmit hook additional context: …` and `PostToolUse:<Tool> hook additional context: …`. | SessionStart's and UserPromptSubmit's plain stdout and JSON `additionalContext` reach the model in Claude Code's words under `[Geno]`, and `systemMessage` reaches only the user. PostToolUse comes with P15. | partial: the SessionStart and UserPromptSubmit texts pass | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-10 | The model sees `SessionStart:<source> hook success: <stdout>`, `UserPromptSubmit hook additional context: …` and `PostToolUse:<Tool> hook additional context: …`. | SessionStart's and UserPromptSubmit's plain stdout and JSON `additionalContext` reach the model in Claude Code's words under `[Geno]`, and `systemMessage` reaches only the user. PostToolUse's `additionalContext` ends the call's result as `[Geno] PostToolUse:Write hook additional context: …` (P15). | pass (was partial) | `hooks.conformance.test.ts`, both wires |
 | T-HOOK-11 | 600 s by default, 30 s for UserPromptSubmit, then kill. | A hook with `timeout: 1` that sleeps is killed with its process group, reported, and the session goes on. The defaults are in `HOOK_EVENTS`. | pass (was fail) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the defaults |
 
 P13 also covers rows that have no Claude Code conformance test:
@@ -262,7 +262,7 @@ P13 also covers rows that have no Claude Code conformance test:
 
 ## Hooks before a prompt and before each call (P14)
 
-UserPromptSubmit and PreToolUse run in `drive.ts`, through two fields of its `Mode` that `runAgent` sets only when the run has hooks. `promptSubmitted` runs UserPromptSubmit on the prompt the run answers. A block is logged as an `error` event of kind `blocked`, which drops the prompt from what the model is sent, as a refusal does. Context is a `hook-context` event after the prompt, so a resumed session sends the same bytes and a cut drops it with its prompt. `preToolUse` settles every call of a turn before the first batch runs: `preToolDecision` (core) takes the strictest decision, the deny is logged as a `denied` result under the `hook-deny` rule, and an ask becomes a `hook-ask` card before the call. The user's yes to that card, and a hook's allow, reach the call as `ToolContext.hookAllowed`, which `ruledDenial` takes after the deny rules and only for a command that is not firm (a credentials file, a path outside the workspace, a hard ask). Each payload names Claude Code's tool, with Claude Code's input for `bash`, `read` and `edit` (`claudeToolCall`), and `updatedInput` reads back through `genoToolInput`. A subagent's run gets the same hooks from its parent, with `agent_id` and `agent_type`.
+UserPromptSubmit and PreToolUse run in `drive.ts`, through two fields of its `Mode` that `runAgent` sets only when the run has hooks. `promptSubmitted` runs UserPromptSubmit on the prompt the run answers. A block is logged as an `error` event of kind `blocked`, which drops the prompt from what the model is sent, as a refusal does. Context is a `hook-context` event after the prompt, so a resumed session sends the same bytes and a cut drops it with its prompt. `toolHooks.decide` (`preToolUse` before P15) settles every call of a turn before the first batch runs: `preToolDecision` (core) takes the strictest decision, the deny is logged as a `denied` result under the `hook-deny` rule, and an ask becomes a `hook-ask` card before the call. The user's yes to that card, and a hook's allow, reach the call as `ToolContext.hookAllowed`, which `ruledDenial` takes after the deny rules and only for a command that is not firm (a credentials file, a path outside the workspace, a hard ask). Each payload names Claude Code's tool, with Claude Code's input for `bash`, `read` and `edit` (`claudeToolCall`), and `updatedInput` reads back through `genoToolInput`. A subagent's run gets the same hooks from its parent, with `agent_id` and `agent_type`.
 
 The order of one call: PreToolUse (deny ends it, `updatedInput` replaces the input), then a hook's ask as a card, then the mode's refusal in Plan, the lane check, the workspace deny rules, the firm questions, and only then a hook's allow over the remaining question and the classifier. The read-before-edit and stale-file checks, `resolveInside` and the sandbox come after all of them, whatever a hook said.
 
@@ -280,6 +280,27 @@ P14 also covers these rows:
 |---|---|
 | B/B-98, B/B-104 | `preToolDecision` in `hooks.test.ts` (core): deny over defer over ask over allow, the older `approve` and `block`, `updatedInput` with the decision that won, nothing from a timed-out hook. `hooks.conformance.test.ts`: an ask is a card in Auto, which a no turns down; a yes counts as the command's own answer, so one card shows; a non-interactive run refuses the call with the reason; an allow never skips read-before-edit; `updatedInput` runs in place of the model's command; a subagent's grep meets the hook with `agent_id` and `agent_type`. `pre-tool-hooks.e2e.test.ts`: over ACP in a trusted workspace, a repository's hook refuses an edit of `src/payload-types.ts`, the model reads the reason, the file is unchanged, the editor shows the call as failed, and another edit goes through. |
 | B/B-102 | T-HOOK-02 above. `hooks.test.ts` (core): a blocked prompt and a refused one leave the conversation, and UserPromptSubmit's text follows its prompt. |
+
+## After-tool and Stop hooks (P15)
+
+The tool events share one field of `drive.ts`'s `Mode`, `toolHooks`, which `HookSessions.toolHooks` builds for the session's model and, with `agent_id` and `agent_type`, for each subagent. After each call that has a result, `after` runs PostToolUse for status `ok` and PostToolUseFailure for status `error`; a `denied` or `rejected` call fires neither. It runs inside the call's batch slot, so an edit's hooks run after Geno's check, which the result already holds, and before the next call starts. `batch` runs PostToolBatch once all the turn's calls have results. `toolHookVerdict` (core) reads each event's output: `additionalContext` and, after a call, a block's reason are notes for the model; `continue: false`, and a PostToolBatch block, stop the run. Each note is a `hook-context` event logged after the turn's results: a call's names its `toolUseId`, and `replayMessages` appends its text to that result, so a resumed session sends the same bytes. A stop is logged as an `error` event of kind `blocked`, so the run ends before the next model call and the notes stay in the conversation.
+
+Stop runs through `Mode.stop`, which only the session's own run sets, when `loopStep` ends a turn the model ended. `stopDecision` (core) reads the hooks: `continue: false` ends the turn, and a block or `additionalContext` keeps it going. The reason is a `hook-context` event of event `Stop`, which `loopStep` takes as a conversation event that calls the model, and which the request sends as the next user message. `stopHookActive` is true once a Stop note was logged in the run. `stopMayContinue` honours a block once in a row: after a Stop note, the model must call a tool before another block counts, so a hook that always blocks costs one more model call, where Claude Code allows eight. A PreToolUse hook's `additionalContext` and `continue: false`, which P14 left unread, take the same paths.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-HOOK-03 | PostToolUse's `additionalContext` is appended to the tool result. | Kept Geno's check, which runs first. A Write's hook gets `tool_name: Write`, `tool_input` and `tool_response` in Claude Code's shape, `tool_use_id` and `duration_ms`. Its text ends the result after the check line, a Bash matcher does not fire on the edit, and a resume sends the text again without running the hook. | pass (was no test) | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-04 | Bash exit 1 fires PostToolUseFailure, not PostToolUse. | `cat` of a missing file fires PostToolUseFailure with `error` starting `Exit code 1`, `is_interrupt: false` and `duration_ms`; the command beside it fires PostToolUse with `tool_response.stdout`. The failure hook's text ends the error result. A call a PreToolUse hook refused fires neither. | pass (was no test) | `hooks.conformance.test.ts`, both wires |
+| T-LOOP-03 | `end_turn` ends the turn and runs the Stop hook. | Stop gets `stop_hook_active: false` and `last_assistant_message`. A Stop exit 2 keeps the turn going once: the model's next message is `[Geno] Stop hook blocking error: <reason>`, Stop runs again with `stop_hook_active: true`, and its second block in a row ends the turn with a note on stderr. A tool call in between lets the next block count; a hook that reads `stop_hook_active` stops at once. A subagent's end does not fire Stop. | pass (was no test) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) |
+
+P15 also covers these rows:
+
+| ID | Check |
+|---|---|
+| B/B-107 | T-HOOK-03 above. `post-tool-hooks.e2e.test.ts`: over ACP in a trusted workspace, a repository's formatter hook rewrites the file the model wrote inside the sandbox, and the model reads its context after the result. `hooks.test.ts` (core): `decision: "block"` and exit 2 become a blocking note, plain stdout is ignored, and a call's notes append to its result in log order. |
+| B/B-108 | T-HOOK-04 above. |
+| B/B-109 | `hooks.conformance.test.ts`, both wires: PostToolBatch runs once per batch with every call's `tool_name`, `tool_input`, `tool_use_id` and `tool_response`, and its text follows the results. Its exit 2 stops the run with code 1 before the next model call, and the next prompt carries the reason after the results. |
+| B/B-114, A/A-04 | T-LOOP-03 above, the block-once test. `hooks.test.ts` (core): `stopDecision`, `stopHookActive` and `stopMayContinue`. `hooks.conformance.test.ts` runs the phone notice example of `hooks.md` as written, with a stand-in `curl`. |
 
 ## Handback and report contents (P17)
 
@@ -363,7 +384,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 |---|---|---|---|
 | T-LOOP-01 | adopt; at parity | P14 | pass |
 | T-LOOP-02 | adopt | P1 | pass |
-| T-LOOP-03 | adopt | P15 | no test yet |
+| T-LOOP-03 | adopt | P15 | pass |
 | T-LOOP-04 | adopt | P1 | pass |
 | T-LOOP-05 | keep Geno's | none | no test yet |
 | T-TOOL-01 | keep Geno's, adopt | P27 | pass |
@@ -418,16 +439,16 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AUTO-02 | keep Geno's | none | no test yet |
 | T-AUTO-04 | adapt, skip | P4 | pass |
 | T-AUTO-03 | skip | none | no test yet |
-| T-HOOK-01 | adapt | P13 | partial |
+| T-HOOK-01 | adapt | P13, P15 | partial: all but PermissionRequest (P16) pass |
 | T-HOOK-02 | adopt | P14 | pass |
-| T-HOOK-03 | adopt, keep Geno's | P15 | no test yet |
-| T-HOOK-04 | adopt | P15 | no test yet |
+| T-HOOK-03 | adopt, keep Geno's | P15 | pass |
+| T-HOOK-04 | adopt | P15 | pass |
 | T-HOOK-05 | adapt | P32 | no test yet |
 | T-HOOK-06 | adopt | P13 | pass |
 | T-HOOK-07 | adapt | P13 | pass |
 | T-HOOK-08 | adopt | P13, P14 | pass |
 | T-HOOK-09 | adopt | P13 | pass |
-| T-HOOK-10 | adapt | P13 | partial |
+| T-HOOK-10 | adapt | P13, P15 | pass |
 | T-HOOK-11 | adopt | P13 | pass |
 | T-BG-01 | keep Geno's, adopt | P19 | no test yet |
 | T-BG-02 | keep Geno's | none | no test yet |
