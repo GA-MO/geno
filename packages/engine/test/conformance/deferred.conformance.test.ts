@@ -20,13 +20,13 @@ const loadedNames = (result: SeenResult): string[] => [...result.text.matchAll(/
 
 describe.each(WIRES)('tool_search on the %s wire', (wire) => {
   it('T-DEFER-03 a select:A,B query loads the named tools, and an unknown name among them is skipped with a note, not an error', async () => {
-    const both = search({ query: 'select:bash_output,bash_stop' });
+    const both = search({ query: 'select:bash_output,task_stop' });
     const mixed = search({ query: 'select:bash_output,no_such_tool' });
     const unknown = search({ query: 'select:no_such_tool' });
     const result = await searched(wire, [both, mixed, unknown]);
 
     expect(result(both).error).toBe(false);
-    expect(loadedNames(result(both))).toEqual(['bash_output', 'bash_stop']);
+    expect(loadedNames(result(both))).toEqual(['bash_output', 'task_stop']);
     expect(result(mixed).error).toBe(false);
     expect(loadedNames(result(mixed))).toEqual(['bash_output']);
     expect(result(mixed).text).toMatch(/Not deferred tools: no_such_tool\./);
@@ -34,12 +34,12 @@ describe.each(WIRES)('tool_search on the %s wire', (wire) => {
   });
 
   it('T-DEFER-04 a +word query loads only tools whose name has the word, best match to the rest first', async () => {
-    const required = search({ query: '+bash stop' });
+    const required = search({ query: '+stop task' });
     const result = await searched(wire, [required]);
     expect(result(required).error).toBe(false);
     const names = loadedNames(result(required));
-    expect(names[0]).toBe('bash_stop');
+    expect(names[0]).toBe('task_stop');
     expect(names.length).toBeGreaterThan(0);
-    expect(names.every((name) => name.includes('bash')), names.join(', ')).toBe(true);
+    expect(names.every((name) => name.includes('stop')), names.join(', ')).toBe(true);
   });
 });

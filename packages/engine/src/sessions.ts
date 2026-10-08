@@ -243,7 +243,7 @@ const childOfSchema = z.strictObject({
 const childEndSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('done') }),
   z.strictObject({ kind: z.literal('failed'), reason: z.string() }),
-  z.strictObject({ kind: z.literal('cancelled') }),
+  z.strictObject({ kind: z.literal('cancelled'), by: z.literal('model').optional() }),
   z.strictObject({ kind: z.literal('capped'), cap: z.enum(CHILD_CAPS) }),
   z.strictObject({ kind: z.literal('interrupted') }),
 ]);
@@ -264,6 +264,7 @@ const wakeNoteSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('monitor'), id: wakeId, toolUseId: z.string().min(1), job: jobId, pattern: z.string(), outcome: z.enum(MONITOR_OUTCOMES), line: z.string().optional() }),
   z.strictObject({ kind: z.literal('pr'), id: wakeId, toolUseId: z.string().min(1), pr: z.number().int().positive(), outcome: z.enum(PR_WATCH_OUTCOMES), text: z.string() }),
   z.strictObject({ kind: z.literal('cancelled') }),
+  z.strictObject({ kind: z.literal('stopped'), id: wakeId }),
   z.strictObject({ kind: z.literal('interrupted'), runs: z.array(z.strictObject({ child: z.string().min(1), toolUseId: z.string().min(1) })), text: z.string() }),
 ]);
 
@@ -420,6 +421,7 @@ const turnEventSchema = z.union([
         command: z.string().min(1),
         preview: z.strictObject({ name: z.string(), url: z.string() }).optional(),
         state: endedJobStateSchema,
+        outputFile: z.string().min(1).optional(),
       }),
       tail: z.string(),
     }),

@@ -313,13 +313,14 @@ export const CHILD_CAPS = ['turns', 'cost'] as const;
 export type ChildCap = (typeof CHILD_CAPS)[number];
 
 /**
- * How a child ended. Every end but `done` leaves a partial report. `interrupted`: the engine that ran it stopped
- * before it ended, and the next engine for the folder logged the end.
+ * How a child ended. Every end but `done` leaves a partial report. `cancelled` by `model` is its parent's task_stop;
+ * without `by`, the user cancelled it or its parent's run ended. `interrupted`: the engine that ran it stopped before
+ * it ended, and the next engine for the folder logged the end.
  */
 export type ChildEnd =
   | { readonly kind: 'done' }
   | { readonly kind: 'failed'; readonly reason: string }
-  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'cancelled'; readonly by?: 'model' | undefined }
   | { readonly kind: 'capped'; readonly cap: ChildCap }
   | { readonly kind: 'interrupted' };
 
@@ -336,8 +337,8 @@ const END_OF: Readonly<Record<DoneReason, ChildEnd>> = {
 };
 
 /** How a child's run ended. A cancel wins over the reason the run gives, since the cancel is what stopped it. */
-export function childEndOf(reason: DoneReason, cancelled: boolean, error: string | undefined): ChildEnd {
-  if (cancelled) return { kind: 'cancelled' };
+export function childEndOf(reason: DoneReason, cancelledBy: 'user' | 'model' | undefined, error: string | undefined): ChildEnd {
+  if (cancelledBy !== undefined) return cancelledBy === 'model' ? { kind: 'cancelled', by: 'model' } : { kind: 'cancelled' };
   const end = END_OF[reason];
   return end.kind === 'failed' && error !== undefined ? { kind: 'failed', reason: error } : end;
 }
@@ -432,7 +433,7 @@ export const childSummary = (report: string): string => {
 const END_WORDS: { readonly [K in ChildEnd['kind']]: (end: Extract<ChildEnd, { kind: K }>) => string } = {
   done: () => 'done',
   failed: ({ reason }) => `failed: ${reason}`,
-  cancelled: () => 'cancelled by the user',
+  cancelled: ({ by }) => (by === 'model' ? 'was stopped with task_stop' : 'cancelled by the user'),
   capped: ({ cap }) => `stopped at its ${cap === 'turns' ? 'turn' : 'cost'} cap`,
   interrupted: () => 'was cut off when Geno stopped',
 };
