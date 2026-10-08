@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APPROVAL_MODES, type ApprovalMode, type RuleVerdict } from '../src/approval.js';
+import type { NewRule, PermissionRule } from '../src/permission-rules.js';
 import { searchConfigOf, SECRET_ENV_NAMES } from '../src/providers.js';
 import {
   changesHost,
@@ -52,6 +53,9 @@ const URLS: readonly (readonly [string, WebTarget['kind']])[] = [
   ['http://[::ffff:169.254.169.254]/', 'refused'],
   ['http://[::]/', 'refused'],
 ];
+
+const ruleOf = (rule: NewRule, i: number): PermissionRule => ({ ...rule, id: `r${i}`, createdAt: '' }) as PermissionRule;
+const rulesOf = (...rules: readonly NewRule[]): readonly PermissionRule[] => rules.map(ruleOf);
 
 describe('webTargetOf', () => {
   it.each(URLS)('%s is %s', (url, kind) => {
@@ -140,6 +144,24 @@ describe('webDenialFor', () => {
   it('puts the host on the card, and the URL it was redirected from', () => {
     const denial = webDenialFor({ kind: 'fetch', target: webTargetOf('https://nextjs.org/docs'), redirectedFrom: 'http://localhost:3000/go' }, 'ask');
     expect(denial).toMatchObject({ rule: 'web-remote-url', command: 'fetch https://nextjs.org/docs (host nextjs.org), redirected from http://localhost:3000/go' });
+  });
+
+  it('B/B-63 follows a domain rule on the host first: an allow fetches unasked, a deny refuses in every mode, and an ask asks in Auto', () => {
+    const docs = { kind: 'fetch', target: webTargetOf('https://docs.nextjs.org:8443/app') } as const;
+    const ruled = (...rules: readonly NewRule[]) =>
+      Object.fromEntries(APPROVAL_MODES.map((mode) => [mode, webDenialFor(docs, mode, rulesOf(...rules))?.verdict ?? 'allow'])) as Record<ApprovalMode, RuleVerdict>;
+    expect(ruled({ effect: 'allow', tool: 'web_fetch', domain: '*.nextjs.org' })).toEqual({ plan: 'allow', ask: 'allow', auto: 'allow', 'non-interactive': 'deny' });
+    expect(ruled({ effect: 'allow', tool: 'browser', domain: '*.nextjs.org' })).toEqual({ plan: 'allow', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' });
+    expect(ruled({ effect: 'deny', tool: 'browser', domain: 'docs.nextjs.org' })).toEqual({ plan: 'deny', ask: 'deny', auto: 'deny', 'non-interactive': 'deny' });
+    expect(ruled({ effect: 'ask', tool: 'web_fetch', domain: 'docs.nextjs.org' })).toEqual({ plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'ask' });
+    expect(webDenialFor(docs, 'auto', rulesOf({ effect: 'deny', tool: 'web_fetch', domain: 'docs.nextjs.org' }))?.reason).toBe(
+      'the workspace rule that denies `WebFetch(domain:docs.nextjs.org)`, which the user set in Settings under Permissions',
+    );
+  });
+
+  it('B/B-63 a URL web_fetch may not fetch stays refused whatever the rules allow, and the card for another host offers its rule', () => {
+    expect(webDenialFor({ kind: 'fetch', target: webTargetOf('http://10.0.0.1/') }, 'ask', rulesOf({ effect: 'allow', tool: 'web_fetch', domain: '*' }))?.verdict).toBe('deny');
+    expect(webDenialFor({ kind: 'fetch', target: webTargetOf('https://nextjs.org/docs') }, 'ask')?.keeps).toBe('WebFetch(domain:nextjs.org)');
   });
 
   it('judges a search like a remote fetch', () => {

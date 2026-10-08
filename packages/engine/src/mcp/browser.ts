@@ -15,16 +15,18 @@ import {
   classifierInputOf,
   devServerHint,
   isMcpRule,
+  mcpToolRuleName,
   navigationTarget,
   NOTHING_LISTENS,
   type ApprovalRecord,
   type BrowserPage,
   type BrowserSettings,
   type ImageAttachment,
+  type McpCall,
   type McpServerConfig,
   type McpToolInfo,
 } from '@g-code/core';
-import { denialText, modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
+import { denialText, modeOf, refusalOf, settle, type Approval, type KeptAnswer } from '../tools/agent.js';
 import { executor, resolveInside, resolveWritable, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import type { McpServerHandle } from './server.js';
 
@@ -145,6 +147,12 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
   });
 }
 
+/** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
+export async function keepMcpAnswer(answer: KeptAnswer, call: McpCall, allowed: Set<string>, ctx: ToolContext): Promise<void> {
+  allowed.add(call.name);
+  if (answer === 'allow-workspace') await ctx.permissions?.add({ effect: 'allow', mcp: mcpToolRuleName(call.server, call.tool) });
+}
+
 export type BrowserToolDeps = {
   readonly handle: McpServerHandle;
   readonly approval: Approval;
@@ -172,10 +180,11 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
       if (target === undefined) await refreshPages(handle, state, ctx.signal);
       const pageUrl = pageOf(state, args);
       const mode = modeOf(approval);
+      const rules = (await ctx.permissions?.list()) ?? [];
       const denial = browserDenialFor(
         { name, tool: info.tool, args: judged, readOnly: info.readOnly },
         mode,
-        { workspace: ctx.workspace, allowedForSession: allowed.has(name), page: browserPage(state, pageUrl, ctx.workspace) },
+        { workspace: ctx.workspace, allowedForSession: allowed.has(name), page: browserPage(state, pageUrl, ctx.workspace), rules },
       );
       let record: ApprovalRecord | undefined;
       if (denial !== undefined) {
@@ -188,19 +197,18 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
             mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args), ...(pageUrl === undefined ? {} : { page: pageUrl }) },
           }),
           ctx,
-          () => {
-            if (isMcpRule(denial.rule)) allowed.add(name);
+          async (answer) => {
+            if (isMcpRule(denial.rule)) await keepMcpAnswer(answer, { name, server: info.server, tool: info.tool, readOnly: info.readOnly }, allowed, ctx);
           },
         );
         if (record.verdict === 'deny') {
           const text = denial.rule === 'browser-refused-url' ? `denied: the browser may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record);
           throw refusalOf(record, text);
         }
-        if (denial.rule === 'browser-remote-url' && target !== undefined) {
-          const url = browserUrlOf(target, ctx.workspace);
-          if (url.kind === 'remote') state.approvedHosts.add(url.host);
-        }
       }
+      // A navigation that goes ahead had its host allowed: by the user, the classifier or a domain rule.
+      const opened = target === undefined ? undefined : browserUrlOf(target, ctx.workspace);
+      if (opened?.kind === 'remote') state.approvedHosts.add(opened.host);
 
       const before = new Map([...state.pages].map(([id, page]) => [id, page.url]));
       let reply: Awaited<ReturnType<BrowserToolDeps['call']>>;

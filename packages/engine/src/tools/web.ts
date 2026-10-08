@@ -22,6 +22,7 @@ import {
   SEARCH_PROVIDER_SPECS,
   specOf,
   stripHidden,
+  hostnameOf,
   webDenialFor,
   webTargetOf,
   WEB_LIMITS,
@@ -280,7 +281,7 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
 
   const judge = async (action: WebAction, args: Record<string, unknown>, ctx: ToolContext, tool: WebTool): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(deps.approval);
-    const denial = webDenialFor(action, mode);
+    const denial = webDenialFor(action, mode, (await ctx.permissions?.list()) ?? []);
     if (denial === undefined) return undefined;
     const record = await settle(
       deps.approval,
@@ -288,6 +289,11 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       denial,
       () => ({ ...classifierInputOf(ctx.events(), denial.command, denial), mcp: { server: 'geno', tool, arguments: JSON.stringify(args) } }),
       ctx,
+      async (answer) => {
+        if (answer === 'allow-workspace' && action.kind === 'fetch' && action.target.kind === 'remote') {
+          await ctx.permissions?.add({ effect: 'allow', tool: 'web_fetch', domain: hostnameOf(action.target.url) });
+        }
+      },
     );
     if (record.verdict === 'deny') {
       throw refusalOf(record, denial.rule === 'web-refused-url' ? `denied: web_fetch may not ${denial.command}: ${denial.reason}. Do not retry it.` : denialText(record));

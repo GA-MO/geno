@@ -2,6 +2,7 @@ import type { MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/mess
 import { WEB_RULES, type ApprovalMode, type Denial, type WebRuleId } from './approval.js';
 import { isLocalHost } from './browser.js';
 import { neutralizeNoticeLines } from './fence.js';
+import { domainRuleFor, ruleText, toolRuleOutcome, type PermissionRule } from './permission-rules.js';
 
 /**
  * web_fetch reads one URL and answers a question about it through a helper model; web_search asks the search
@@ -162,14 +163,28 @@ export const webActionCommand = (action: WebAction): string => {
   return `fetch ${target.url}${target.kind === 'remote' ? ` (host ${target.host})` : ''}${via}`;
 };
 
-/** What settles one fetch hop or search before it runs, or undefined when it runs. */
-export function webDenialFor(action: WebAction, mode: ApprovalMode): Denial | undefined {
+/** The host name a domain rule is matched against: the URL's, without its port. */
+export const hostnameOf = (url: string): string => new URL(url).hostname;
+
+/**
+ * What settles one fetch hop or search before it runs, or undefined when it runs. A domain rule on the hop's host
+ * comes first (`domainRuleFor`): a deny refuses it, an ask asks in Auto too, and an allow fetches it without asking.
+ * A URL web_fetch may not fetch stays refused whatever the rules say. The question for another host offers to allow
+ * that host for the workspace.
+ */
+export function webDenialFor(action: WebAction, mode: ApprovalMode, rules: readonly PermissionRule[] = []): Denial | undefined {
+  const command = webActionCommand(action);
+  if (action.kind === 'fetch' && action.target.kind !== 'refused') {
+    const ruled = toolRuleOutcome(domainRuleFor('web_fetch', hostnameOf(action.target.url), rules), mode, command);
+    if (ruled !== undefined) return ruled.kind === 'allowed' ? undefined : ruled.denial;
+  }
   const rule: WebRuleId = action.kind === 'search' ? 'web-search' : TARGET_RULES[action.target.kind];
   const { reason, verdicts } = WEB_RULES[rule];
   const verdict = verdicts[mode];
   if (verdict === 'allow') return undefined;
   const why = action.kind === 'fetch' && action.target.kind === 'refused' ? `${reason}: ${action.target.why}` : reason;
-  return { rule, reason: why, command: webActionCommand(action), verdict };
+  const keeps = rule === 'web-remote-url' && action.kind === 'fetch' ? ruleText({ effect: 'allow', tool: 'web_fetch', domain: hostnameOf(action.target.url) }) : undefined;
+  return { rule, reason: why, command, verdict, ...(keeps === undefined ? {} : { keeps }) };
 }
 
 type FenceTag = 'web_page' | 'question' | 'web_fetch_answer' | 'web_search_results';

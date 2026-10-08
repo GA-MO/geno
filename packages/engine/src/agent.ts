@@ -81,7 +81,7 @@ import { sessionIndex } from './session-index.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import type { ToolContext } from './tools/context.js';
-import { agentExecutors, freshAuto, modeOf, withDeniedTools, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, freshAuto, modeOf, withPermissions, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
@@ -398,7 +398,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const mode = {
       tools: roster.offered,
       executors: rosterExecutors(roster, {
-        ...withDeniedTools({
+        ...withPermissions({
           ...mcp?.executors,
           ...user,
           ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),

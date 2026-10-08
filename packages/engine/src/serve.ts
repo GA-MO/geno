@@ -331,16 +331,18 @@ const MCP_PERMISSION_OPTIONS: acp.PermissionOption[] = [
   { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' },
   PERMISSION_OPTIONS[1]!,
 ];
-// A command with an offered rule can also be allowed for the workspace, from now on. It comes last, after the
-// once-only answers, so the card's first row stays Allow and Deny.
-const RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [
-  ...PERMISSION_OPTIONS,
-  { optionId: 'allow-workspace', name: 'Always allow in this workspace', kind: 'allow_always' },
-];
+// A command with an offered rule can also be allowed for the workspace, from now on, as can a web_fetch host or an
+// MCP tool. It comes last, after the once-only answers, so the card's first row stays Allow and Deny.
+const WORKSPACE_PERMISSION_OPTION: acp.PermissionOption = { optionId: 'allow-workspace', name: 'Always allow in this workspace', kind: 'allow_always' };
+const RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [...PERMISSION_OPTIONS, WORKSPACE_PERMISSION_OPTION];
+const MCP_RULE_PERMISSION_OPTIONS: acp.PermissionOption[] = [...MCP_PERMISSION_OPTIONS, WORKSPACE_PERMISSION_OPTION];
 const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session', 'allow-workspace': 'allow-workspace' };
 
-const optionsFor = (denial: Denial): acp.PermissionOption[] =>
-  isMcpRule(denial.rule) ? MCP_PERMISSION_OPTIONS : denial.offer === undefined ? PERMISSION_OPTIONS : RULE_PERMISSION_OPTIONS;
+const optionsFor = (denial: Denial): acp.PermissionOption[] => {
+  const keeps = denial.offer !== undefined || denial.keeps !== undefined;
+  if (isMcpRule(denial.rule)) return keeps ? MCP_RULE_PERMISSION_OPTIONS : MCP_PERMISSION_OPTIONS;
+  return keeps ? RULE_PERMISSION_OPTIONS : PERMISSION_OPTIONS;
+};
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
@@ -742,7 +744,7 @@ function editorTurn(
         command: denial.command,
         reason: denial.reason,
         ...(description === undefined ? {} : { description }),
-        ...(denial.offer === undefined ? {} : { rule: patternText(denial.offer) }),
+        ...(denial.offer === undefined ? (denial.keeps === undefined ? {} : { rule: denial.keeps }) : { rule: patternText(denial.offer) }),
       };
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const toolCallId = running;

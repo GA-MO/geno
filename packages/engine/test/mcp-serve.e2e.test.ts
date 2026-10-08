@@ -116,7 +116,7 @@ async function until(check: () => boolean): Promise<void> {
 const editorServer = (): acp.McpServer => ({ name: 'fake', command: process.execPath, args: ['--import', TSX, FIXTURE], env: [] });
 
 describe('gcode serve with MCP', () => {
-  it('offers an editor-provided server tool to the model, asks once with an allow-for-session option, and logs the approval', async () => {
+  it('offers an editor-provided server tool to the model, asks once with allow-for-session and allow-for-workspace options, and logs the approval', async () => {
     const first = { id: 'tu_mcp_1', name: 'mcp__fake__echo', input: { text: 'one' } };
     const second = { id: 'tu_mcp_2', name: 'mcp__fake__echo', input: { text: 'two' } };
     const { transport, permissions, updates, connect } = await setup([toolCall('', [loadTools('mcp__fake__echo')], usage), toolCall('Echoing.', [first], usage), toolCall('Again.', [second], usage), answer('Done.', usage)]);
@@ -133,8 +133,8 @@ describe('gcode serve with MCP', () => {
     for (const later of transport.requests.slice(1)) expect(JSON.stringify(later.body.tools), 'the tool list is the same bytes on every call, loads included').toBe(JSON.stringify(transport.requests[0]!.body.tools));
 
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject']);
-    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'an MCP tool its server marks read-only' });
+    expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject', 'allow-workspace']);
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'an MCP tool its server marks read-only', rule: 'mcp__fake__echo' });
     expect(JSON.stringify(transport.requests[2]!.body.messages)).toContain('echo: one');
     expect(JSON.stringify(transport.requests[3]!.body.messages)).toContain('echo: two');
     expect(updates).toContainEqual(

@@ -4,6 +4,7 @@ import {
   flagsOf,
   isHardAsk,
   lineDenial,
+  mcpDenialFor,
   mergedDenial,
   parseCommandLine,
   simpleCommand,
@@ -473,6 +474,22 @@ export function toolRuleOutcome(rule: DomainRule | McpToolRule | undefined, mode
   if (rule.effect === 'allow') return RULES_IN_MODE[mode].allow ? { kind: 'allowed' } : undefined;
   const denial = userRuleDenial(rule, command);
   return { kind: 'ruled', denial: mode === 'plan' ? { ...denial, verdict: 'deny' } : denial };
+}
+
+/** One MCP call as the rules see it: its model-facing name, the server's names for server and tool, and its read-only hint. */
+export type McpCall = { readonly name: string; readonly server: string; readonly tool: string; readonly readOnly: boolean };
+
+/**
+ * What settles one MCP call before it runs, or undefined when it runs. The workspace's MCP rules come first: a deny
+ * refuses, an ask asks in Auto too, and an allow skips the question and the classifier as "allow this tool for the
+ * session" does, but not a mode's denial, so Plan still refuses a tool that is not read-only. The question offers to
+ * allow that one tool for the workspace.
+ */
+export function mcpCallDenial(call: McpCall, mode: ApprovalMode, allowedForSession: boolean, rules: readonly PermissionRule[]): Denial | undefined {
+  const ruled = toolRuleOutcome(mcpRuleFor(call, rules), mode, call.name);
+  if (ruled?.kind === 'ruled') return ruled.denial;
+  const denial = mcpDenialFor(call, mode, allowedForSession || ruled?.kind === 'allowed');
+  return denial === undefined || denial.verdict === 'deny' ? denial : { ...denial, keeps: mcpToolRuleName(call.server, call.tool) };
 }
 
 const PLAIN_WORD = /^[\w@%+=:,./-]+$/;

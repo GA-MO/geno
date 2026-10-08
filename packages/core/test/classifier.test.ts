@@ -33,6 +33,21 @@ function fenced(text: string, tag: string): string {
   return text.slice(open, close);
 }
 
+describe('B/B-78 trusted domains', () => {
+  it('fences the hosts the user allowed after the flag, and says every other host is untrusted', () => {
+    const text = userText(classifierRequest(input({ trustedDomains: ['docs.example.com', '*.github.io'] }), 'm'));
+    const block = fenced(text, 'trusted_domains');
+    expect(block).toContain('- docs.example.com\n- *.github.io');
+    expect(block).toContain('Every other host is untrusted');
+    expect(text.indexOf('<trusted_domains>')).toBeGreaterThan(text.indexOf('</flagged_by>'));
+  });
+
+  it('sends the same request as before when there are none', () => {
+    expect(classifierRequest(input({ trustedDomains: [] }), 'm')).toEqual(classifierRequest(input(), 'm'));
+    expect(userText(classifierRequest(input(), 'm'))).not.toContain('trusted_domains');
+  });
+});
+
 describe('the classifier prompt', () => {
   it('forces one answer through the verdict tool, with thinking off so the provider accepts the forced tool', () => {
     const request = classifierRequest(input(), 'qwen3.8-flash');

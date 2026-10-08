@@ -155,3 +155,54 @@ describe.each(WIRES)('an MCP server that connects mid-session on the %s wire', (
     expect(occurrences(textsOf(bodies[3]!), 'These MCP tools are listed by name only'), 'told once').toBe(1);
   }, 60_000);
 });
+
+describe.each(WIRES)('MCP rules on the %s wire', (wire: Wire) => {
+  const docs: acp.McpServer = { name: 'docs', command: process.execPath, args: ['--import', TSX, FIXTURE], env: [] };
+  const echoTurns = (n: number) => [
+    call('Loading.', [{ id: `tu_load_${n}`, name: 'tool_search', input: { select: ['mcp__docs__echo'] } }]),
+    call('Echoing.', [{ id: `tu_echo_${n}`, name: 'mcp__docs__echo', input: { text: `call ${n}` } }]),
+    say('It answered.'),
+  ];
+
+  /** One session per prompt, each with its own MCP servers, as a new chat starts; the editor answers every card with `answer`. */
+  async function sessions(run: Awaited<ReturnType<typeof scripted>>, prompts: number, answer: string) {
+    const mcp = mcpSessions(run.store, run.env);
+    hubs.push(mcp);
+    const cards: { readonly title: string; readonly options: readonly string[]; readonly rule: unknown }[] = [];
+    const editor = acp
+      .client({ name: 'conformance' })
+      .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+        cards.push({ title: params.toolCall.title ?? '', options: params.options.map((option) => option.optionId), rule: (params.toolCall.rawInput as { rule?: unknown }).rule });
+        return { outcome: { outcome: 'selected', optionId: answer } };
+      })
+      .onNotification(acp.methods.client.session.update, () => {});
+    await editor.connectWith(gcodeAgent(run.io, run.store, { maxTurns: 10, maxCostUsd: 1 }, mcp), async (ctx) => {
+      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
+      for (let i = 0; i < prompts; i++) {
+        const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: run.workspace, mcpServers: [docs] });
+        await serversReady(ctx, sessionId);
+        expect((await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: 'Echo it.' }] })).stopReason).toBe('end_turn');
+      }
+    });
+    return cards;
+  }
+
+  it('B/B-64 "Always allow in this workspace" on an MCP card saves mcp__docs__echo, and a new session runs the tool without a card', async () => {
+    const run = await scripted(wire, [...echoTurns(1), ...echoTurns(2)]);
+    const cards = await sessions(run, 2, 'allow-workspace');
+    expect(cards).toEqual([{ title: expect.stringContaining('mcp__docs__echo'), options: ['allow', 'allow-session', 'reject', 'allow-workspace'], rule: 'mcp__docs__echo' }]);
+    expect(run.seen()[2]!.results[0]).toEqual({ id: 'tu_echo_1', error: false, text: 'echo: call 1' });
+    expect(run.seen()[5]!.results[0]).toEqual({ id: 'tu_echo_2', error: false, text: 'echo: call 2' });
+  }, 60_000);
+
+  it('B/B-64 an mcp__docs__* deny in .claude/settings.json refuses the tool without a card, naming the rule and the file', async () => {
+    const run = await scripted(wire, echoTurns(1), { 'a.ts': '', '.claude/settings.json': JSON.stringify({ permissions: { deny: ['mcp__docs__*'] } }) });
+    const cards = await sessions(run, 1, 'allow');
+    expect(cards).toEqual([]);
+    expect(run.seen()[2]!.results[0]).toMatchObject({
+      id: 'tu_echo_1',
+      error: true,
+      text: expect.stringContaining('matches the workspace rule that denies `mcp__docs__*`, which the user set in .claude/settings.json'),
+    });
+  }, 60_000);
+});

@@ -14,6 +14,7 @@ import {
   MCP_SOURCE_LABELS,
   mcpBriefing,
   mcpCatalog,
+  mcpCallDenial,
   mcpDenialFor,
   mcpResultText,
   mcpToolDefinitions,
@@ -32,7 +33,7 @@ import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
 import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
-import { browserExecutor, browserServerConfig, newBrowserState, type BrowserOptions } from './browser.js';
+import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
 import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js';
@@ -174,7 +175,8 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
         const mode = modeOf(approval);
-        const denial = mcpDenialFor({ name, readOnly: info.readOnly }, mode, allowed.has(name));
+        const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly };
+        const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);
         const record =
           denial === undefined
             ? undefined
@@ -184,9 +186,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
                 denial,
                 () => ({ ...classifierInputOf(ctx.events(), name, denial), mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args) } }),
                 ctx,
-                () => {
-                  allowed.add(name);
-                },
+                (answer) => keepMcpAnswer(answer, call, allowed, ctx),
               );
         if (record?.verdict === 'deny') throw refusalOf(record);
         const { text, images } = await callTool(handle, name, info, args, ctx);
