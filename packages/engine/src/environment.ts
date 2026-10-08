@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { GIT_COMMITS, GIT_STATUS_LINES, KEY_PACKAGES, KEY_SCRIPTS, type Environment, type GitSnapshot, type ProjectFacts } from '@g-code/core';
+import { GIT_COMMITS, GIT_STATUS_LINES, KEY_PACKAGES, KEY_SCRIPTS, LANE_ROOT, type Environment, type GitSnapshot, type LanePlace, type ProjectFacts } from '@g-code/core';
+import { laneAt } from './lanes.js';
 
 const exec = promisify(execFile);
 
@@ -99,6 +100,13 @@ async function projectFacts(workspace: string): Promise<ProjectFacts | undefined
   };
 }
 
+/** The lane the workspace is, asked of git only for a path that could be one. */
+async function lanePlace(workspace: string): Promise<LanePlace | undefined> {
+  if (!workspace.includes(`${path.sep}${LANE_ROOT}${path.sep}`)) return undefined;
+  const lane = await laneAt(workspace, undefined).catch(() => undefined);
+  return lane === undefined ? undefined : { name: lane.record.name, branch: lane.record.branch, main: lane.repo.main };
+}
+
 const localDate = (now: Date): string =>
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -111,7 +119,7 @@ export type EnvironmentInput = {
 
 /** The session's environment as it is now, for its session-start event. Nothing here can stop a session from starting. */
 export async function captureEnvironment({ workspace, scratchpad, env, now = new Date() }: EnvironmentInput): Promise<Environment> {
-  const [git, project] = await Promise.all([gitSnapshot(workspace), projectFacts(workspace)]);
+  const [git, project, lane] = await Promise.all([gitSnapshot(workspace), projectFacts(workspace), lanePlace(workspace)]);
   const shell = env['SHELL'];
   return {
     date: localDate(now),
@@ -121,5 +129,6 @@ export async function captureEnvironment({ workspace, scratchpad, env, now = new
     scratchpad,
     ...(git === undefined ? {} : { git }),
     ...(project === undefined ? {} : { project }),
+    ...(lane === undefined ? {} : { lane }),
   };
 }

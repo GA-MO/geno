@@ -139,6 +139,7 @@ const environmentSchema = z.strictObject({
       versions: z.array(z.tuple([z.string(), z.string()])),
     })
     .optional(),
+  lane: z.strictObject({ name: z.string().min(1), branch: z.string().min(1), main: z.string().min(1) }).optional(),
 });
 
 const contextItemSchema = z.discriminatedUnion('kind', [
@@ -245,6 +246,7 @@ const childOfSchema = z.strictObject({
   caps: childCapsSchema,
   start: childStartSchema,
   background: z.literal(true).optional(),
+  lane: z.string().min(1).optional(),
 });
 
 const childEndSchema = z.discriminatedUnion('kind', [

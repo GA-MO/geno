@@ -34,6 +34,17 @@ export const LANE_ROOT = path.join('.geno', 'worktrees');
 /** The line the repository's `.git/info/exclude` gets, so lanes never show as untracked files. */
 export const LANE_EXCLUDE = '/.geno/';
 export const laneBranch = (name: LaneName): string => `geno/${name}`;
+/** Where a lane session works, as its environment names it. */
+export type LanePlace = { readonly name: string; readonly branch: string; readonly main: string };
+
+/** Claude Code's warning on entering a worktree, in Geno's words: one stash stack serves every worktree of a repository. */
+export const LANE_STASH_WARNING =
+  "Git's stash stack is shared by the main checkout and every lane, and other sessions may push or pop it while you work. Never run a bare git stash or git stash pop; set work aside with a temporary commit instead. If you must stash, run git stash push -u -m <a tag of your own>, note your entry's sha from git stash list, restore it with git stash apply <sha>, and drop only that entry.";
+
+/** What a lane session is told about its lane. */
+export const laneSentence = (lane: LanePlace): string =>
+  `${lane.name}, a git worktree on branch ${lane.branch}; the main checkout is ${lane.main}. Edits here stay in the lane until the user applies them. ${LANE_STASH_WARNING}`;
+
 /** Cursor's default worktree cap. */
 export const LANE_CAP = 25;
 

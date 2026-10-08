@@ -69,6 +69,17 @@ describe('renderEnvironment', () => {
     expect(long).toContain('?? notes.md\n(40 more lines; run git status to see them)');
   });
 
+  it("says a lane session's lane and warns that the stash stack is shared, and says nothing of lanes outside one", () => {
+    const lane = { name: 'fix-login', branch: 'geno/fix-login', main: '/Users/dev/shop' };
+    const lines = renderEnvironment({ ...mac, lane }, { ...session, workspace: '/Users/dev/shop/.geno/worktrees/fix-login' }).split('\n');
+    const line = lines.find((l) => l.startsWith(' - Lane:'));
+    expect(line).toMatch(/^ - Lane: fix-login, a git worktree on branch geno\/fix-login; the main checkout is \/Users\/dev\/shop\./);
+    expect(line).toMatch(/stash stack is shared by the main checkout and every lane/);
+    expect(line).toMatch(/Never run a bare git stash or git stash pop/);
+    expect(line).toMatch(/git stash apply <sha>/);
+    expect(renderEnvironment(mac, session)).not.toMatch(/Lane:|stash/);
+  });
+
   it('leaves out what a workspace lacks: no git section outside a repository, no project section without package.json, no BSD note off macOS', () => {
     const bare = renderEnvironment({ ...mac, platform: 'linux', osVersion: 'Linux 6.8.0', loginShell: undefined, git: undefined, project: undefined }, session);
     expect(bare).toContain(' - Is a git repository: false');
