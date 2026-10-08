@@ -16,6 +16,7 @@ import {
   htmlToMarkdown,
   isProviderName,
   isPublicAddress,
+  pageWindowOf,
   readerRequest,
   redirectTargetOf,
   searchResultText,
@@ -204,11 +205,11 @@ export function pageOf(url: string, response: Response): FetchedPage {
   const html = type === 'text/html' || type === 'application/xhtml+xml' || (type === '' && /^\s*</.test(text));
   if (html) {
     const { title, markdown } = htmlToMarkdown(text, url);
-    return { url, title, markdown, truncated: response.truncated || markdown.length > WEB_LIMITS.maxPageChars };
+    return { url, title, markdown, truncated: response.truncated };
   }
   if ((type !== '' && !TEXT_TYPES.test(type)) || text.includes('\u0000')) throw new ToolError(`web_fetch reads text pages, and ${url} is ${type || 'binary'}`);
   const title = type === 'text/markdown' ? markdownTitle(text) : undefined;
-  return { url, title, markdown: text, truncated: response.truncated || text.length > WEB_LIMITS.maxPageChars };
+  return { url, title, markdown: text, truncated: response.truncated };
 }
 
 type Choice = { readonly provider: ProviderName; readonly model: string; readonly role: 'explore' | 'classifier' | 'session' };
@@ -262,7 +263,7 @@ function reader(deps: WebDeps): Read {
   };
 }
 
-const fetchInput = z.strictObject({ url: z.string().min(1), question: z.string().trim().min(1) });
+const fetchInput = z.strictObject({ url: z.string().min(1), question: z.string().trim().min(1), offset: z.int().min(0).optional() });
 const searchInput = z.strictObject({ query: z.string().trim().min(1) });
 
 /** The fetch's own deadline, apart from the turn's signal, so a slow page fails as the model's error, not a stop. */
@@ -303,12 +304,12 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
 
   const web_fetch = executor({
     input: fetchInput,
-    describe: ({ url }) => `web_fetch ${url}`,
-    async run({ url, question }, ctx) {
+    describe: ({ url, offset }) => `web_fetch ${url}${offset === undefined || offset === 0 ? '' : ` from character ${offset}`}`,
+    async run({ url, question, offset }, ctx) {
       const records: ApprovalRecord[] = [];
       const keep = (record: ApprovalRecord | undefined) => record !== undefined && records.push(record);
       let target: WebTarget = webTargetOf(url);
-      keep(await judge({ kind: 'fetch', target }, { url, question }, ctx, 'web_fetch'));
+      keep(await judge({ kind: 'fetch', target }, { url, question, ...(offset === undefined ? {} : { offset }) }, ctx, 'web_fetch'));
       const redirects: string[] = [];
       const limit = deadline(ctx.signal);
       let response: Response;
@@ -334,8 +335,10 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
       const final = target as Reachable;
       if (response.status >= 400) throw new ToolError(`${final.url} answered HTTP ${response.status}`);
       const page = pageOf(final.url, response);
-      const answer = await read((model) => readerRequest(page, question, model), ctx.signal);
-      const text = fetchAnswerText({ page, answer, redirects });
+      const window = pageWindowOf(page.markdown, offset);
+      if (window === undefined) throw new ToolError(`${final.url} has ${page.markdown.length} characters of text, so offset ${offset} is past its end`);
+      const answer = await read((model) => readerRequest(page, window, question, model), ctx.signal);
+      const text = fetchAnswerText({ page, window, answer, redirects });
       const approval = records.at(-1);
       return approval === undefined ? text : { text, approval };
     },
