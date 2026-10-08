@@ -37,7 +37,7 @@ const usd = (value: number): string => `$${value.toFixed(value < 0.1 ? 4 : 2)}`;
 
 // A model reads a dollar figure badly, so the cost left is also counted in calls. A call starts while the spend is
 // within the limit, so the last one may pass it.
-export const callsLeft = ({ calls, costUsd, perCallUsd }: BudgetLeft): number =>
+const callsLeft = ({ calls, costUsd, perCallUsd }: BudgetLeft): number =>
   perCallUsd === undefined || perCallUsd <= 0 ? calls : Math.max(1, Math.min(calls, Math.ceil(costUsd / perCallUsd)));
 
 export function renderBudgetLeft(left: BudgetLeft): string {
