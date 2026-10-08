@@ -2,7 +2,8 @@
  * The extension that runs suites in a pooled window. It asks the pool what to do, and either runs a suite in this
  * extension host or leaves for the next suite's folder.
  */
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
 import { format } from 'node:util';
 import * as vscode from 'vscode';
 import { post, type Done, type Job, type Order } from './protocol.js';
@@ -23,11 +24,20 @@ export async function activate(): Promise<void> {
   void runSuite(order.job);
 }
 
+/**
+ * Runs the suite from a copy inside Geno's folder: VS Code gives a module's `require('vscode')` the API of the
+ * extension whose folder holds it, which for a test runner is the extension under test, and outside any extension
+ * an API that belongs to none.
+ */
 async function runSuite(job: Job): Promise<void> {
   const restore = capture(job.log);
   let error: Done['error'];
   try {
-    await (require(job.suite) as { run(): Promise<void> }).run();
+    const dir = path.join(vscode.extensions.getExtension(GENO)!.extensionPath, '.pool-suites');
+    mkdirSync(dir, { recursive: true });
+    const copy = path.join(dir, `${window}-${Date.now()}-${path.basename(job.suite)}`);
+    copyFileSync(job.suite, copy);
+    await (require(copy) as { run(): Promise<void> }).run();
   } catch (thrown) {
     error = thrown instanceof Error ? { message: thrown.message, ...(thrown.stack === undefined ? {} : { stack: thrown.stack }) } : { message: String(thrown) };
   } finally {

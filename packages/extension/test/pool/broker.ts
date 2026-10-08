@@ -31,6 +31,11 @@ type PooledWindow = {
   readonly id: number;
   readonly debugPort: number;
   readonly userData: string;
+  /**
+   * An empty folder a released window opens, so the last suite's extension host, and its connections to the test's
+   * servers, end with the test rather than when the next suite starts.
+   */
+  readonly park: string;
   leased: boolean;
   phase: Phase;
   proc: Proc | undefined;
@@ -153,6 +158,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
       w.phase = { kind: 'running', pending };
       return reply({ do: 'run', job: pending.job });
     }
+    if (!w.leased && w.folder !== real(w.park)) return reply({ do: 'open', folder: w.park });
     w.waiting?.({ do: 'ignore' });
     w.waiting = reply;
     res.on('close', () => {
@@ -164,7 +170,9 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
     const id = ++seq;
     const userData = path.join(options.dir, String(id), 'ud');
     mkdirSync(path.join(userData, 'User'), { recursive: true });
-    const w: PooledWindow = { id, debugPort: await options.freePort(), userData, leased: true, phase: { kind: 'idle' }, proc: undefined, folder: undefined, waiting: undefined, userFiles: new Set() };
+    const park = path.join(options.dir, String(id), 'park');
+    mkdirSync(park);
+    const w: PooledWindow = { id, debugPort: await options.freePort(), userData, park, leased: true, phase: { kind: 'idle' }, proc: undefined, folder: undefined, waiting: undefined, userFiles: new Set() };
     windows.set(id, w);
     return w;
   };
@@ -237,6 +245,11 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
       if (w !== undefined) {
         w.leased = false;
         if (w.phase.kind !== 'idle') retire(w);
+        else if (w.waiting !== undefined && w.folder !== real(w.park)) {
+          const reply = w.waiting;
+          w.waiting = undefined;
+          reply({ do: 'open', folder: w.park });
+        }
       }
       send({});
       pump();

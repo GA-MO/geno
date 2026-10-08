@@ -152,6 +152,21 @@ describe('the VS Code window pool', () => {
     expect(fake.launches).toHaveLength(1);
   });
 
+  it('parks a released window in an empty folder, so the last suite’s extension host ends with its test', async () => {
+    const fake = fakeVscode();
+    const url = await start(1, fake);
+    const lease = await post<Lease>(`${url}/lease`, {});
+    const a = job('a.js');
+    await run(url, lease, a);
+    await post(`${url}/release`, { id: lease.id });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fake.hosts.map((h) => path.basename(h.folder))).toEqual(['workspace', 'park']);
+    const next = await post<Lease>(`${url}/lease`, {});
+    await run(url, next, job('b.js'));
+    expect(fake.ran.map((r) => r.suite)).toEqual(['a.js', 'b.js']);
+    expect(fake.launches).toHaveLength(1);
+  });
+
   it('closes an idle window to make room for a file that launches VS Code itself', async () => {
     const fake = fakeVscode();
     const url = await start(1, fake);
