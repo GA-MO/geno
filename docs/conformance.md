@@ -357,6 +357,25 @@ The whole pass holds a lock on the sessions folder, so two engines that start to
 |---|---|
 | P18b | `interrupted.e2e.test.ts`: an engine is killed with SIGKILL while a blocking `explore` child waits on its model. The next engine logs the `interrupted` end, answers the parent's `agent` call, and sends the parent one note. The test checks the note's text word for word, the Tasks row and the engine's log line. No model call runs by itself. A third engine writes nothing new and lists the child again. The parent's next turn reads the note under the not-user line. Its `message_agent` resumes the child from its own log with the cut-off message, and the run ends `done`. The second test does the same for a workflow step. The note reaches the session that started the workflow, the end goes to the workflow's log, and Resume's user-issued `message_agent` call resumes the step. `interrupted.test.ts` (engine): pending calls answered, idempotence across two starts and two engines at once, a crash in the middle of the pass, and runs of live engines, other folders and older logs left alone. `interrupted.test.ts` (core): open runs, the end, a run's own report, files and spend, and a snapshot of the text. `tasks.test.ts`, `attention.test.ts` and `lanes.test.ts`: the Tasks row, its Needs you reason and its Resume field. `steer.test.ts`: the cut-off message. |
 
+## Stop, list and wake controls (P19)
+
+`task_stop {id}` stops a background command (`bg-N`), a monitor, wake-up or PR watch (`wake-N`), or a background subagent (its session id), and replaces `bash_stop`. `list_agents {}` lists the session's subagents with status, model, spend and age, its background commands with status and output file, and its pending wakes, newest first. Both are deferred tools. Claude Code's `TaskStop`, `KillShell` and `ListAgents` hook matchers map to them.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-BG-01 | A background Bash call returns an id and an output path at once. Its end notice carries no output. | Kept Geno's tail, adopted the path. `bash` returns `bg-N` and the output file at once. The end notice names the file and keeps up to 20 lines of tail, which saves a read. An end logged before P19 reads as it did. | pass (was no test) | `background.conformance.test.ts`, both wires |
+| T-BG-03 | `TaskStop` returns "Successfully stopped task…" with its `task_type`. | `task_stop bg-1` returns "Stopped background command bg-1 (`…`)" with the output file and the tail, and no end notice follows. A second stop, an unknown `bg-N` or `wake-N`, and an id of no known form are errors that say why and point to `list_agents`. `list_agents` then shows the command as `cancelled`. | pass (adopt, was no test) | `background.conformance.test.ts`, both wires |
+| T-BG-06 | A one-shot `CronCreate` lives only in the session, and `CronDelete` removes it. | Adapted to `schedule_wakeup`, which is Geno's in-session one-shot. Its description says not to poll background work with a short wake-up. `list_agents` shows the wake-up as pending. `task_stop wake-1` cancels it and logs a `stopped` note, so `openSchedulesOf` arms nothing after a restart. It never fires, and no woken turn starts. | pass (adapt, was no test) | `background.conformance.test.ts`, both wires, over ACP |
+
+P19 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| C/C-32, B/B-24 | `task-stop.e2e.test.ts`: the model starts a background `explore`, lists it as `running`, and stops it while it waits on its second model call. The `task_stop` result is the `<subagent_report … status="cancelled" partial="true">` with the text the child had, and "was stopped with task_stop". The parent gets no second report, and the log ends the child `{ kind: 'cancelled', by: 'model' }`. `wakes.test.ts`: a child is stopped through the stop it registered, so a child from an earlier turn stops too. A workflow stopped this way returns its report the same way. |
+| C/C-33, B/B-27 | `work.test.ts` (core): each row kind, the status words, model, spend, age, output file, newest-first order, and the stop line only while something runs. Cross-session listing is skipped. |
+| B/B-39, C/C-42 | T-BG-06 above. `wake.test.ts` (core): a `stopped` note drops one wake-up and keeps the others, wakes nothing, and still counts its id. `wakes.test.ts` (engine): a stopped wake-up never fires and the others do. The `monitor` description says to stop it with `task_stop`. |
+| B/B-22, C/C-38 | T-BG-01 above. `background.test.ts` (core) pins the start line and the end notice with and without the file. |
+
 ## Prompt tiers (P24)
 
 `AGENT_PROMPTS` in `core/src/agent-prompts.ts` holds one base prompt per prompt tier. `runAgent` picks the tier from the model's capability row, so the prompt stays byte-stable for as long as the session's model does. `principles` is today's prompt, lightly aligned, for strong models. `rules` follows the sections of Claude Code's Haiku prompt in Geno's words, for `qwen3.8-flash`, Haiku 4.5 and every unknown model. The tool descriptions are the same in both tiers and carry each tool's own rules. `--append-system-prompt <text>` on `gcode agent`, or `appendSystemPrompt` in `.gcode.json`, ends the system prompt. The flag replaces the setting. The A/B that kept the rules tier for flash is [results/p24-prompt-tier.md](results/p24-prompt-tier.md).
@@ -450,12 +469,12 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-HOOK-09 | adopt | P13 | pass |
 | T-HOOK-10 | adapt | P13, P15 | pass |
 | T-HOOK-11 | adopt | P13 | pass |
-| T-BG-01 | keep Geno's, adopt | P19 | no test yet |
+| T-BG-01 | keep Geno's, adopt | P19 | pass |
 | T-BG-02 | keep Geno's | none | no test yet |
-| T-BG-03 | adopt | P19 | no test yet |
+| T-BG-03 | adopt | P19 | pass |
 | T-BG-04 | adapt | P6 | pass |
 | T-BG-05 | adapt | P6 | pass |
-| T-BG-06 | adopt | P19 | no test yet |
+| T-BG-06 | adopt | P19 | pass |
 | T-SKILL-01 | keep Geno's | none | no test yet |
 | T-SKILL-02 | at parity | none | no test yet |
 | T-SKILL-03 | at parity | none | no test yet |

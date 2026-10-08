@@ -299,7 +299,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 | 4. Agent communication | P17 | A `report` handback tool, usage in the report, and Claude Code's launch rules. |
 | | P18 | `message_agent` resumes a finished child. |
 | | P18b | The next engine tells the parent which agents a crash cut off, and `message_agent` or Resume in Tasks resumes them. Done. |
-| | P19 | `task_stop`, `list_agents`, wake-up cancel and the background output path. |
+| | P19 | `task_stop`, `list_agents`, wake-up cancel and the background output path. Done. |
 | | P20 | A child with `isolation: worktree` runs in a lane. |
 | | P21 | Background and parallel writers in their own lanes. |
 | | P22 | Agent definitions: `general-purpose`, `~/.claude/agents`, `omitClaudeMd`, model slots, child depth. |
