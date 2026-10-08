@@ -200,6 +200,40 @@ describe('gcode serve: waking a session when its background work reports', () =>
     expect(lastTask(heard.tasks, sessionId)?.wake, 'nothing is left to wake for').toBeUndefined();
   });
 
+  it("resumes a finished background child on message_agent, keeps its Tasks row, and the child's new report wakes the session", async () => {
+    let childId = '';
+    const model = models({
+      '[parent]': (n, body) => {
+        if (n === 0) return toolCall('Starting an explorer.', [{ id: 'tu_a', name: 'agent', input: { agent: 'explore', task: '[c1] where is alpha', background: true } }, loadTools('message_agent')], usage);
+        if (n === 1) {
+          childId = /session ([0-9a-f-]{36})/.exec(JSON.stringify(body.messages.at(-1)!.content))![1]!;
+          return answer('The explorer is running.', usage);
+        }
+        if (n === 2) return toolCall('Asking it about beta too.', [{ id: 'tu_m', name: 'message_agent', input: { agent_session: childId, text: 'and beta?' } }], usage);
+        return answer(n === 3 ? 'It is looking for beta.' : 'alpha is in a.ts, and beta is nowhere.', usage);
+      },
+      '[c1]': (n) => toolCall('', [{ id: `tu_report_${n}`, name: 'report', input: { message: n === 0 ? 'a.ts:1 defines alpha.' : 'No file defines beta.' } }], usage),
+    });
+    const { result, events, heard } = await serve(model.fetch, async (window, heard) => {
+      const ended = await within(window.prompt('[parent] find alpha, in the background'), 'the first turn to end while its child runs');
+      await until(() => model.requests('[parent]').length === 5, 'the resumed child to wake the session a second time');
+      await until(() => lastTask(heard.tasks, window.sessionId)?.status === 'done', 'the second woken turn to end');
+      return { ended };
+    });
+
+    expect(result.ended.stopReason).toBe('end_turn');
+    const parent = model.requests('[parent]');
+    const messaged = (parent[3]!.messages.at(-1)!.content as { type: string; content?: unknown }[]).find((b) => b.type === 'tool_result');
+    expect(JSON.stringify(messaged?.content)).toMatch(/Resumed explore in the background as subagent session/);
+    const [first, resumed] = model.requests('[c1]');
+    expect(resumed!.messages.length, "the resumed child's request holds its first run").toBeGreaterThan(first!.messages.length);
+    expect(texts(resumed!).join('\n')).toContain('<parent_message>\nand beta?\n</parent_message>');
+    expect(texts(parent[4]!).join('\n')).toContain('No file defines beta.');
+    expect(wakePrompts(events), 'one wake for each report').toHaveLength(2);
+    const rows = heard.tasks.filter((u) => u.task.sessionId === childId).map((u) => u.task.status);
+    expect(rows.filter((status, i) => status !== rows[i - 1]), 'one row for the child: running, done, running again, done').toEqual(['running', 'done', 'running', 'done']);
+  });
+
   it('holds a wake while the user types, and wakes once the draft clears', async () => {
     const model = models({
       '[parent]': (n) => {

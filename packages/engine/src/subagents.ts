@@ -18,6 +18,7 @@ import {
   childEndOf,
   childEndWords,
   type ChildNote,
+  type ChildOf,
   childReport,
   type ChildStart,
   childSummary,
@@ -34,9 +35,11 @@ import {
   MESSAGE_AGENT_TOOL,
   STOP_AND_WAIT,
   messageAgentResult,
+  nextSeq,
   parseAgentDefinition,
   REPORT_DELIVERED,
   reportMessageOf,
+  resumeEvent,
   REPORT_TOOL,
   REPORT_TOOL_DEFINITION,
   type Session,
@@ -53,7 +56,7 @@ import { workingDiff } from './git.js';
 import type { InstalledPlugin } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, sortedEntries } from './project-context.js';
 import { ExternalAgents, runExternalTurn, type KeyOf } from './external.js';
-import { appendEvent, sessionFile } from './sessions.js';
+import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import type { Store } from './store.js';
 import type { SteerInbox, Steers } from './steer.js';
 import type { Wakes } from './wakes.js';
@@ -184,6 +187,17 @@ type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
  */
 type ChildOutcome = { readonly text: string; readonly ended: ChildEndNote; readonly failed: boolean; readonly rejected: boolean };
 
+/**
+ * What a child's run starts from: a new session for its task, or the child's own log, which its parent's message
+ * resumes after the report the child handed back.
+ */
+type ChildRun =
+  | { readonly kind: 'spawn'; readonly task: string; readonly start: ChildStart; readonly step: StepOptions; readonly background: boolean }
+  | { readonly kind: 'resume'; readonly message: string; readonly log: SessionLog; readonly of: ChildOf };
+
+/** A child's log as its run begins: what the run's first prompt is, when the run began, and the task the user sees it on. */
+type OpenedChild = { readonly log: SessionLog; readonly start: ChildStart; readonly task: string; readonly prompt: string; readonly at: string };
+
 export type Subagents = {
   readonly tool: Tool;
   readonly executor: Executor;
@@ -252,30 +266,15 @@ export function subagents(env: SubagentEnv): Subagents {
   };
   let committed = 0;
   const byName = (name: string) => agents.find((agent) => agent.name === name);
-  // Every child this run started, running or not, so message_agent can tell a finished one from a wrong id.
-  const started = new Set<string>();
   const inBackground = new Set<AbortController>();
   // Set once the parent's run ended with nobody left to take a report.
   let unheard = false;
   // Set once the parent's run ended and its children run on to wake the session.
   let detached = false;
 
-  const runChild = async (
-    agent: AgentDefinition,
-    task: string,
-    start: ChildStart,
-    use: { readonly id: string },
-    ctx: Parameters<Executor['run']>[1],
-    id: SessionId,
-    inbox: SteerInbox,
-    step: StepOptions,
-  ): Promise<ChildOutcome> => {
-    const caps = childCaps(agent, env.limits.maxCostUsd - committed, { maxTurns: step.max_turns, maxCostUsd: step.max_cost_usd });
-    if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
-    const startedAt = Date.now();
-    committed += caps.maxCostUsd;
-    const parentEvents = ctx.events();
+  const openSpawn = async (agent: AgentDefinition, run: Extract<ChildRun, { kind: 'spawn' }>, use: { readonly id: string }, id: SessionId, caps: ChildCaps, parentEvents: readonly TurnEvent[]): Promise<OpenedChild> => {
     const parentSession = parent.log.session;
+    const { start, task, step } = run;
     const session: Session = {
       id,
       createdAt: new Date().toISOString(),
@@ -296,13 +295,36 @@ export function subagents(env: SubagentEnv): Subagents {
         memory: header?.kind === 'session-start' ? header.memory : undefined,
         // The parent's, so a child knows where it runs; it shares the parent's scratchpad.
         environment: header?.kind === 'session-start' ? header.environment : undefined,
-        child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start },
+        child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start, ...(run.background ? { background: true } : {}) },
       },
       ...(start === 'fork' ? forkOpening(parentEvents, use.id, session.createdAt) : []),
     ];
     for (const event of opening) await appendEvent(file, event);
-    const view: ChildView = { id: session.id, parentId: parentSession.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };
-    await ctx.logNote!({ kind: 'child-start', at: session.createdAt, child: session.id, toolUseId: use.id, role: agent.name, model: session.model, effort: session.effort, caps, start });
+    const log: SessionLog = { file, session, events: opening, tornLine: undefined, goodBytes: 0 };
+    return { log, start, task, prompt: start === 'fork' ? forkTask(agent, task) : task, at: session.createdAt };
+  };
+
+  // The run goes on from the child's report, with the message as its parent's steer and nothing left to prompt.
+  const openResume = async ({ log, message, of }: Extract<ChildRun, { kind: 'resume' }>): Promise<OpenedChild> => {
+    await dropTornTail(log);
+    const at = new Date().toISOString();
+    const resumed = resumeEvent(message, nextSeq(log.events), at);
+    await appendEvent(log.file, resumed);
+    return { log: { ...log, events: [...log.events, resumed] }, start: of.start, task: message, prompt: '', at };
+  };
+
+  const runChild = async (agent: AgentDefinition, run: ChildRun, use: { readonly id: string }, ctx: Parameters<Executor['run']>[1], id: SessionId, inbox: SteerInbox): Promise<ChildOutcome> => {
+    // A resumed child gets its spawn's caps afresh, held like any child's to what this run has left for children.
+    const asked = run.kind === 'spawn' ? { maxTurns: run.step.max_turns, maxCostUsd: run.step.max_cost_usd } : run.of.caps;
+    const caps = childCaps(agent, env.limits.maxCostUsd - committed, asked);
+    if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
+    const startedAt = Date.now();
+    committed += caps.maxCostUsd;
+    const { log, start, task, prompt, at } = run.kind === 'spawn' ? await openSpawn(agent, run, use, id, caps, ctx.events()) : await openResume(run);
+    const { session, file } = log;
+    const firstSeq = nextSeq(log.events);
+    const view: ChildView = { id: session.id, parentId: parent.log.session.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };
+    await ctx.logNote!({ kind: 'child-start', at, child: session.id, toolUseId: use.id, role: agent.name, model: session.model, effort: session.effort, caps, start });
 
     const controller = new AbortController();
     const cancel = () => controller.abort();
@@ -341,26 +363,26 @@ export function subagents(env: SubagentEnv): Subagents {
             arrivals,
             handback: true,
           };
-    const opened: OpenSession = { log: { file, session, events: opening, tornLine: undefined, goodBytes: 0 }, gateway: parent.gateway };
+    const opened: OpenSession = { log, gateway: parent.gateway };
 
     let end: ChildEnd;
-    let events: readonly TurnEvent[] = opening;
-    const externals = agent.backend === undefined ? undefined : (env.externals ?? new ExternalAgents(childIo));
+    let events: readonly TurnEvent[] = log.events;
+    const external = session.backend === undefined ? undefined : (env.externals ?? new ExternalAgents(childIo));
     try {
       const result =
-        externals !== undefined
+        external !== undefined
           ? await runExternalTurn({
               io: childIo,
               store,
-              log: opened.log,
-              prompt: task,
+              log,
+              prompt,
               approval: childApproval,
               surface: { files: env.files, watcher },
               signal: controller.signal,
-              agents: externals,
+              agents: external,
               keyOf: env.keyOf ?? (async () => undefined),
             })
-          : await drive(childIo, store, opened, start === 'fork' ? forkTask(agent, task) : task, caps, mode, { files: env.files, watcher, steers: inbox });
+          : await drive(childIo, store, opened, prompt, caps, mode, { files: env.files, watcher, steers: inbox });
       events = result.events;
       const error = result.events.findLast((e) => e.kind === 'error');
       end = childEndOf(result.reason, controller.signal.aborted, error?.kind === 'error' ? error.message : undefined);
@@ -368,9 +390,10 @@ export function subagents(env: SubagentEnv): Subagents {
       end = controller.signal.aborted ? { kind: 'cancelled' } : { kind: 'failed', reason: error instanceof Error ? error.message : String(error) };
     } finally {
       ctx.signal.removeEventListener('abort', cancel);
-      externals?.close(session.id);
+      external?.close(session.id);
     }
-    const ran = events.filter((e) => e.kind !== 'session-start' && !opening.includes(e));
+    // This run's events alone: a resumed child's earlier report is not its new one.
+    const ran = events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= firstSeq);
     const total = totalOf(ran);
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
@@ -382,6 +405,85 @@ export function subagents(env: SubagentEnv): Subagents {
     const rejected = ran.some((e) => e.kind === 'tool-result' && e.status === 'rejected');
     const usage = { turns: total.turns, costUsd: total.costUsd, durationMs: Date.now() - startedAt };
     return { text: childReport(agent.name, session.id, end, report, usage, notes), ended, failed: end.kind === 'failed' && report === '' && notes.length === 0, rejected };
+  };
+
+  /**
+   * Runs a child, a new one or a resumed one, under the same rules: blocking, with its report as this call's result,
+   * or in the background, with its report as a message to the parent's session.
+   */
+  const launch = async (agent: AgentDefinition, run: ChildRun, ctx: Parameters<Executor['run']>[1], background: boolean): Promise<string> => {
+    const { name } = agent;
+    if (ctx.logNote === undefined) throw new ToolError('subagents start only inside an agent run');
+    const readOnly = isReadOnly(agent);
+    if (!readOnly && env.approval.kind === 'non-interactive' && !env.allowWriters) {
+      throw new ToolError(`${name} may change files, and a non-interactive run starts only read-only subagents`);
+    }
+    const parentId = parent.log.session.id;
+    const parentInbox = env.steers.of(parentId);
+    if (background && !readOnly) throw new ToolError(`${name} may change files, so it cannot run in the background beside this conversation's own edits`);
+    if (background && parentInbox === undefined) throw new ToolError('a background subagent needs a running turn to report to');
+    const use = { id: ctx.toolUseId ?? `toolu_gcode_${randomUUID()}` };
+    const id = run.kind === 'spawn' ? asSessionId(randomUUID()) : run.log.session.id;
+    // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
+    // An external agent's turn is one prompt with no safe point between tool rounds, so a message would wait for its end.
+    const refusal = agent.backend === undefined ? undefined : `${name} runs on ${EXTERNAL_BACKENDS[agent.backend].label}, which cannot take a message mid-turn`;
+    const inbox = env.steers.open(id, parentId, refusal);
+    const stop = new AbortController();
+    if (background) inBackground.add(stop);
+    const childCtx = background ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
+    const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, run, use, childCtx, id, inbox));
+    void child
+      .finally(() => {
+        inBackground.delete(stop);
+        env.steers.release(id, inbox);
+      })
+      .catch(() => {});
+    if (!background) {
+      // Tracked until its end is logged, which can come after a stopped run answered this call.
+      const { text, failed, rejected } = await track(
+        child.then(async (outcome) => {
+          await ctx.logNote!({ ...outcome.ended });
+          return outcome;
+        }),
+      );
+      if (failed) throw new ToolError(text);
+      // The user's no to the child's call is a no to this one too, so the parent stops as well.
+      if (rejected) throw new ToolRejected(`${text}\n${name} stopped because the user rejected one of its calls. ${STOP_AND_WAIT}`);
+      return text;
+    }
+    // The report goes to the session, not to this run: it may arrive after the run ended, for a woken turn to take.
+    let silent = false;
+    const paid = parentInbox!.owe();
+    const reported = env.waits?.child(parentId, id, {
+      agent: name,
+      toolUseId: use.id,
+      silence: () => {
+        silent = true;
+        stop.abort();
+      },
+    });
+    const report = async (text: string, ended: ChildEndNote | undefined) => {
+      // While the parent's run goes on, its own writes log the end; once it let go of the session, the end goes with
+      // the report. A silenced child's end is still logged, with no report for the model to hear.
+      const heard = !silent && !unheard;
+      if (ended !== undefined && !detached) await ctx.logNote!({ ...ended }).catch(() => {});
+      const end = ended !== undefined && detached ? { end: ended } : {};
+      if (heard || 'end' in end) env.steers.inbox.put(parentId, { kind: 'child-report', ...end, ...(heard ? { report: text } : {}) });
+      paid();
+      reported?.();
+    };
+    void track(
+      child.then(
+        ({ text, ended }) => report(text, ended),
+        (error: unknown) => report(error instanceof Error ? error.message : String(error), undefined),
+      ),
+    );
+    const how = run.kind === 'spawn' ? `Started ${name} in the background as subagent session ${id}. Its report arrives` : `Resumed ${name} in the background as subagent session ${id}, with your message. Its new report arrives`;
+    return [
+      `${how} as a message from Geno when it finishes; until then message_agent with agent_session "${id}" can steer it.`,
+      'You know nothing about its results until that message arrives: do not report, assume or predict them. Go on with other work or answer the user meanwhile; if the user asks how it is going, say it is still running.',
+      'Do not duplicate its work: stay off the files and questions it is working on.',
+    ].join('\n');
   };
 
   const tool = agentToolDefinition(agents);
@@ -399,91 +501,44 @@ export function subagents(env: SubagentEnv): Subagents {
       const agent = byName(name);
       if (agent === undefined) throw new ToolError(`no subagent ${name}; the subagents are ${agents.map((a) => a.name).join(', ')}`);
       if (agent.isolation === 'worktree') throw new ToolError(`${name} asks for isolation: worktree, which Geno does not support yet; it cannot run`);
-      if (ctx.logNote === undefined) throw new ToolError('subagents start only inside an agent run');
-      const readOnly = isReadOnly(agent);
-      if (!readOnly && env.approval.kind === 'non-interactive' && !env.allowWriters) {
-        throw new ToolError(`${name} may change files, and a non-interactive run starts only read-only subagents`);
-      }
-      const parentInbox = env.steers.of(parent.log.session.id);
-      if (background === true && !readOnly) throw new ToolError(`${name} may change files, so it cannot run in the background beside this conversation's own edits`);
-      if (background === true && parentInbox === undefined) throw new ToolError('a background subagent needs a running turn to report to');
-      const use = { id: ctx.toolUseId ?? `toolu_gcode_${randomUUID()}` };
-      const id = asSessionId(randomUUID());
-      started.add(id);
-      // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
-      // An external agent's turn is one prompt with no safe point between tool rounds, so a message would wait for its end.
-      const refusal = agent.backend === undefined ? undefined : `${name} runs on ${EXTERNAL_BACKENDS[agent.backend].label}, which cannot take a message mid-turn`;
-      const inbox = env.steers.open(id, parent.log.session.id, refusal);
-      const stop = new AbortController();
-      if (background === true) inBackground.add(stop);
-      const childCtx = background === true ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
-      const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, task, fork === true ? 'fork' : 'fresh', use, childCtx, id, inbox, step));
-      void child
-        .finally(() => {
-          inBackground.delete(stop);
-          env.steers.release(id, inbox);
-        })
-        .catch(() => {});
-      if (background !== true) {
-        // Tracked until its end is logged, which can come after a stopped run answered this call.
-        const { text, failed, rejected } = await track(
-          child.then(async (outcome) => {
-            await ctx.logNote!({ ...outcome.ended });
-            return outcome;
-          }),
-        );
-        if (failed) throw new ToolError(text);
-        // The user's no to the child's call is a no to this one too, so the parent stops as well.
-        if (rejected) throw new ToolRejected(`${text}\n${name} stopped because the user rejected one of its calls. ${STOP_AND_WAIT}`);
-        return text;
-      }
-      const parentId = parent.log.session.id;
-      // The report goes to the session, not to this run: it may arrive after the run ended, for a woken turn to take.
-      let silent = false;
-      const paid = parentInbox!.owe();
-      const reported = env.waits?.child(parentId, id, {
-        agent: name,
-        toolUseId: use.id,
-        silence: () => {
-          silent = true;
-          stop.abort();
-        },
-      });
-      const report = async (text: string, ended: ChildEndNote | undefined) => {
-        // While the parent's run goes on, its own writes log the end; once it let go of the session, the end goes with
-        // the report. A silenced child's end is still logged, with no report for the model to hear.
-        const heard = !silent && !unheard;
-        if (ended !== undefined && !detached) await ctx.logNote!({ ...ended }).catch(() => {});
-        const end = ended !== undefined && detached ? { end: ended } : {};
-        if (heard || 'end' in end) env.steers.inbox.put(parentId, { kind: 'child-report', ...end, ...(heard ? { report: text } : {}) });
-        paid();
-        reported?.();
-      };
-      void track(
-        child.then(
-          ({ text, ended }) => report(text, ended),
-          (error: unknown) => report(error instanceof Error ? error.message : String(error), undefined),
-        ),
-      );
-      return [
-        `Started ${name} in the background as subagent session ${id}. Its report arrives as a message from Geno when it finishes; until then message_agent with agent_session "${id}" can steer it.`,
-        'You know nothing about its results until that message arrives: do not report, assume or predict them. Go on with other work or answer the user meanwhile; if the user asks how it is going, say it is still running.',
-        'Do not duplicate its work: stay off the files and questions it is working on.',
-      ].join('\n');
+      return launch(agent, { kind: 'spawn', task, start: fork === true ? 'fork' : 'fresh', step, background: background === true }, ctx, background === true);
     },
   });
+
+  /** A finished child of this session, read from its own log, which names its parent and how it was started. */
+  const resumable = async (id: string, message: string): Promise<{ readonly agent: AgentDefinition; readonly run: Extract<ChildRun, { kind: 'resume' }> }> => {
+    const notOurs = new ToolError(`no subagent ${id} of this session`);
+    if (/[\\/]/.test(id)) throw notOurs;
+    const log = await readSessionLog(sessionFile(store, asSessionId(id))).catch(() => undefined);
+    const header = log?.events[0];
+    const of = header?.kind === 'session-start' ? header.child : undefined;
+    if (log === undefined || of === undefined || of.parentId !== parent.log.session.id) throw notOurs;
+    const backend = log.session.backend;
+    if (backend !== undefined) throw new ToolError(`${of.role} ran on ${EXTERNAL_BACKENDS[backend.id].label}, whose session Geno cannot resume; start a new subagent with everything it needs`);
+    const agent = byName(of.role);
+    if (agent === undefined) throw new ToolError(`${id} was a ${of.role} subagent, and this session has no ${of.role} now; start one of ${agents.map((a) => a.name).join(', ')}`);
+    return { agent, run: { kind: 'resume', message, log, of } };
+  };
+
+  // One message to a child at a time, so that two messages to a finished child cannot both resume it onto its one log.
+  const messaging = new Map<string, Promise<unknown>>();
   const message = executor({
     input: messageSchema,
     concurrent: () => true,
     describe: ({ agent_session, text }) => `${MESSAGE_AGENT_TOOL} ${agent_session}: ${text.split('\n')[0]}`,
-    async run({ agent_session, text }) {
-      const inbox = env.steers.of(agent_session);
-      if (inbox === undefined || inbox.parentId !== parent.log.session.id) {
-        if (started.has(agent_session)) return messageAgentResult({ kind: 'next-turn' });
-        throw new ToolError(`no subagent ${agent_session} of this session`);
-      }
-      const delivery = inbox.push({ text, from: 'parent' });
-      return messageAgentResult(delivery === undefined ? { kind: 'next-turn' } : await delivery);
+    run({ agent_session, text }, ctx) {
+      const send = async (): Promise<string> => {
+        const inbox = env.steers.of(agent_session);
+        if (inbox?.parentId === parent.log.session.id) {
+          const delivery = await inbox.push({ text, from: 'parent' });
+          if (delivery !== undefined && delivery.kind !== 'next-turn') return messageAgentResult(delivery);
+        }
+        const { agent, run } = await resumable(agent_session, text);
+        return launch(agent, run, ctx, run.of.background === true);
+      };
+      const sent = (messaging.get(agent_session) ?? Promise.resolve()).then(send);
+      messaging.set(agent_session, sent.catch(() => {}));
+      return sent;
     },
   });
   return {

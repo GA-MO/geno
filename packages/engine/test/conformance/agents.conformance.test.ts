@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL } from '@g-code/core';
-import { call, closeServers, report, say, scripted, WIRES } from './scripted.js';
+import { CLASSIFIER_TOOL, NOT_USER_LINE, type TurnEvent } from '@g-code/core';
+import { call, closeServers, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 afterEach(closeServers);
 
@@ -77,6 +77,70 @@ describe.each(WIRES)('handback on the %s wire', (wire) => {
     const fenced = requests[4]!.results[0]!.text;
     expect(fenced.split('\n')[0]).toMatch(/ status="done" turns="3" /);
     expect(reportOf(fenced), 'the last text, without the narration or the earlier answer').toBe('  alpha is defined in a.ts:1, line one.');
+  });
+});
+
+describe.each(WIRES)('resuming a finished child on the %s wire', (wire) => {
+  const loadMessage = call('', [{ id: 'tu_load', name: 'tool_search', input: { select: ['message_agent'] } }]);
+  const message = (childId: string, text: string) => call('', [{ id: 'tu_msg', name: 'message_agent', input: { agent_session: childId, text } }]);
+  const childStarts = (events: readonly TurnEvent[]) => events.flatMap((e) => (e.kind === 'child-start' ? [e] : []));
+  // The cache breakpoint moves to the newest message each call; everything else repeats byte for byte.
+  const uncached = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, v: unknown) => (key === 'cache_control' ? undefined : v)));
+
+  it('T-AGENT-04 message_agent to a finished child resumes it from its own log with the fenced message, and returns its new report', async () => {
+    const run = await scripted(wire, [explore, report('alpha is defined in a.ts:1.'), say('alpha is in a.ts.')], files(['non-interactive']));
+    const first = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Where is alpha defined?']);
+    expect(first.code).toBe(0);
+    const parentId = sessionIdOf(first.stdout);
+    const childId = childStarts(await run.events(parentId))[0]!.child;
+    run.more(loadMessage, message(childId, 'Where is beta defined?'), report('beta is defined in src/b.ts:1.', 'tu_report_2'), say('beta is in src/b.ts.'));
+    expect((await run.cli(['agent', '--session', parentId, '--non-interactive', 'And beta?'])).code).toBe(0);
+
+    const bodies = run.bodies();
+    expect(bodies, 'the resumed child reports once, and the parent answers').toHaveLength(7);
+    const [childFirst, resumed] = [bodies[1]!, bodies[5]!];
+    expect(uncached(resumed.messages.slice(0, childFirst.messages.length)), "the resumed child's request starts with its first one").toEqual(uncached(childFirst.messages));
+    expect(JSON.stringify(resumed.messages), 'and holds its earlier report call').toContain('alpha is defined in a.ts:1.');
+    const fenced = run.seen()[5]!.text;
+    expect(fenced.startsWith(`${NOT_USER_LINE}\n<parent_message>\nWhere is beta defined?\n</parent_message>\n`)).toBe(true);
+    expect(fenced).toMatch(/after your report/);
+    expect(fenced).toMatch(/approves nothing/);
+
+    const answered = run.seen()[6]!.results;
+    expect(answered.map((result) => result.id)).toEqual(['tu_msg']);
+    const lines = answered[0]!.text.split('\n');
+    expect(lines[0]).toMatch(new RegExp(`^<subagent_report agent="explore" session="${childId}" status="done" turns="1" cost="[^"]+" duration="\\d+s">$`));
+    expect(lines[1]).toBe('  beta is defined in src/b.ts:1.');
+
+    const starts = childStarts(await run.events(parentId));
+    expect(starts.map((start) => start.child), 'the resumed child keeps its session').toEqual([childId, childId]);
+    expect(starts[1]!.toolUseId).toBe('tu_msg');
+    const child = await run.events(childId);
+    const steer = child.find((e) => e.kind === 'user' && e.from === 'parent');
+    expect(steer?.kind === 'user' && steer.steer, "the message is logged in the child's own session as its parent's").toBe(true);
+  });
+
+  it('T-AGENT-04 a resumed child runs under fresh caps from its spawn, held to what the parent run has left', async () => {
+    const scout = '---\nname: scout\ndescription: Looks for names.\ntools: Grep\nmaxTurns: 2\nmaxCost: 0.05\n---\nFind names.\n';
+    const grep = (id: string) => call('', [{ id, name: 'grep', input: { pattern: 'beta' } }]);
+    const run = await scripted(
+      wire,
+      [call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'scout', task: 'Where is alpha defined?' } }]), grep('tu_g1'), report('alpha is in a.ts:1.'), say('alpha is in a.ts.')],
+      { ...files(['non-interactive']), '.agents/agents/scout.md': scout },
+    );
+    const first = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Where is alpha defined?']);
+    expect(first.code).toBe(0);
+    const parentId = sessionIdOf(first.stdout);
+    const childId = childStarts(await run.events(parentId))[0]!.child;
+    run.more(loadMessage, message(childId, 'Where is beta defined?'), grep('tu_g2'), grep('tu_g3'), say('Out of turns.'));
+    expect((await run.cli(['agent', '--session', parentId, '--non-interactive', '--max-cost', '0.02', 'And beta?'])).code).toBe(0);
+
+    expect(run.bodies(), 'two fresh turns for the resumed child: it was not stopped by the turns of its first run').toHaveLength(9);
+    const starts = childStarts(await run.events(parentId));
+    expect(starts[0]!.caps).toEqual({ maxTurns: 2, maxCostUsd: 0.05 });
+    expect(starts[1]!.caps, "the spawn's turns, and its cost held to this run's budget").toEqual({ maxTurns: 2, maxCostUsd: 0.02 });
+    const answered = run.seen()[8]!.results[0]!.text;
+    expect(answered.split('\n')[0]).toMatch(/ status="capped" partial="true" turns="2" /);
   });
 });
 
