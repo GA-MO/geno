@@ -79,7 +79,7 @@ P23 also covers rows that have no Claude Code conformance test. Their checks are
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-PERM-05 | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. | Built in, for the paths `SECRET_PATH` names (`.env` files, keys, `.ssh` and the like): `read .env` asks in Ask mode, and is refused with a message that names the rule when nobody can be asked. `grep` and `glob` leave those files out, and a `path` or `glob` that names one is refused. `cat .env` asks in Ask mode and is refused when nobody can be asked. The secret never reaches the model. | partial: the built-in half passes (was fail: `read .env` and a `grep` hit in `.env` reached the model, and `cat .env` ran unasked in Ask mode). User path rules come in P28 | `permissions.conformance.test.ts`, both wires |
+| T-PERM-05 | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. | Built in, for the paths `SECRET_PATH` names (`.env` files, keys, `.ssh` and the like): `read .env` asks in Ask mode, and is refused with a message that names the rule when nobody can be asked. `grep` and `glob` leave those files out, and a `path` or `glob` that names one is refused. `cat .env` asks in Ask mode and is refused when nobody can be asked. The secret never reaches the model. | pass (was fail: `read .env` and a `grep` hit in `.env` reached the model, and `cat .env` ran unasked in Ask mode). User path rules are in P28 below | `permissions.conformance.test.ts`, both wires |
 
 P3 also covers rows that have no Claude Code conformance test:
 
@@ -87,6 +87,23 @@ P3 also covers rows that have no Claude Code conformance test:
 |---|---|---|
 | N-02 | `permissions.conformance.test.ts`: `read` and `bash` show hidden Unicode as visible escapes such as `[U+200B]`, and an edit written from those escapes lands on the real characters, on both wires. A `web_fetch` page with tag characters reaches the helper and the agent without them. An MCP result and a subagent report lose hidden characters and keep every other byte. | pass (was fail) |
 | B/B-72 | `permissions.conformance.test.ts`, both wires: a user rejection in Ask ends the turn, with no further model call, no later call of the same turn, and a result that says to stop and wait for the user. A rule denial keeps "find another way" and the turn goes on. `workflows.e2e.test.ts` checks the same for "Don't run" on a workflow card, and `subagents.e2e.test.ts` checks that a no to a subagent's call ends the subagent's turn and the parent's. | pass (was fail) |
+
+## Rule grammar (P28)
+
+A workspace rule now has three effects, `allow`, `ask` and `deny`, and can name files as well as commands. Settings takes Claude Code's forms: a command, `Bash(npm test *)`, `Read(path)` and `Edit(path)`. A command rule still matches the words a command starts with. A path rule uses .gitignore syntax: `//abs/path`, `~/path`, `/path` from the workspace root, and `path` or `./path` from the workspace, where a pattern without a slash matches at any depth. A path rule asks or denies, since Geno already reads and edits the workspace without asking. The decision order is in `RULES_IN_MODE` in `core/src/permission-rules.ts`: deny rules, then ask rules, then the whole-line check, then the built-in rules and allow rules.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-PERM-10 | `timeout 30 npm test` is allowed by `Bash(npm test *)`: the safe wrappers are stripped before matching. | Claude Code's wrappers come off before an allow rule is matched: `timeout`, `time`, `nice`, `nohup`, `stdbuf`, `command`, `builtin` and `noglob` with their options, Claude Code's safe variables such as `NODE_ENV=test`, and `env` with only those. The rule must still earn every built-in rule that flags the unwrapped command, so `timeout 30 pnpm vitest run ../../x` is not covered. Deny and ask rules look through the same wrappers, so `timeout 30 pnpm publish` meets a `pnpm publish` deny. Kept from Geno: `xargs` stays open-ended, because the arguments it reads from input are words no rule sees. | pass (was fail: `timeout 30 npm test` went to the classifier in Auto, and a deny rule missed `timeout 30 pnpm publish`) | `permissions.conformance.test.ts`, both wires; `permission-rules.test.ts` (core), 18 wrapper rows |
+| T-PERM-05 (user rules) | A Read deny rule blocks `Read`, a `Grep` hit and `cat` of the same file. A Read deny also blocks Edit. | A `Read(private/**)` deny refuses `read`, `edit` and `cat private/plan.md` in every mode, Plan included, with a result that names the rule. `grep` and `glob` leave the file out, and a `path` or `directory` that names it is refused. The sandbox gets each deny as a `denyRead` glob, and as a `denyWrite` glob for a Read or Edit deny, read before every command, so `sh -c "cat private/$(echo plan).md"` fails with `Operation not permitted`. The text never reaches the model. | pass (was fail: no user path rules) | `permissions.conformance.test.ts`, both wires |
+
+P28 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-56 | `permissions.conformance.test.ts`, both wires: an `ask` rule on `touch` asks in Auto, where the safe list would run it unasked, and a no leaves no file. A `Read(notes/**)` ask rule asks before `read` in Auto and is refused, naming the rule, when nobody can be asked. `permission-rules.e2e.test.ts`: an ask rule typed as `Bash(ls *)` in Settings puts up a card in Auto with no rule to keep and no classifier call. A deny rule beats an ask rule, and an ask rule beats an allow rule and a hook's allow. |
+| B/B-66 | `permission-rules.test.ts` (core), 12 whole-line rows: a command over 10,000 characters, an open quote, an open `$(` and a line that ends in `&&` or `\|` ask in Ask mode and go to the classifier in Auto, and no allow rule covers them. A run nobody can ask still runs them in the sandbox, as it does an unlisted command. A heredoc with a lone quote in its body still parses. |
+| B/B-61 | T-PERM-05 above, and `permission-rules.test.ts` (core): 23 rows of .gitignore matching, a Read deny that stops `edit`, and the sandbox globs. |
 
 ## Environment (P5)
 
@@ -518,13 +535,13 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-MCP-01 | adopt | P10 | pass |
 | T-MCP-02 | adapt | P38 | no test yet |
 | T-MCP-03 | adapt | P10 | pass |
-| T-PERM-01 | keep Geno's, adopt | P28 | no test yet |
+| T-PERM-01 | keep Geno's, adopt | P28 | partial: the long and unparsable asks pass (B/B-66) |
 | T-PERM-02 | deliberate | none | no test yet |
 | T-PERM-03 | adapt | P32 | no test yet |
 | T-PERM-04 | adapt | P31 | no test yet |
-| T-PERM-05 | adapt; adopt | P3, P28, P14 | partial: the built-in and hook halves pass |
+| T-PERM-05 | adapt; adopt | P3, P28, P14 | pass |
 | T-PERM-09 | at parity | none | no test yet |
-| T-PERM-10 | adapt | P28 | no test yet |
+| T-PERM-10 | adapt | P28 | pass |
 | T-PERM-11 | keep Geno's | none | no test yet |
 | T-PERM-12 | deliberate; adopt | P14 | pass |
 | T-PERM-06 | adopt | P14 | pass |
