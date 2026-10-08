@@ -723,15 +723,17 @@ describe.each(WIRES)('Stop on the %s wire', (wire: Wire) => {
     expect(run.seen()).toHaveLength(1);
   });
 
-  it('T-HOOK-01 the events of a turn fire in order: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolBatch, Stop, SessionEnd', async () => {
-    const use = { id: 'tu_echo', name: 'bash', input: { command: 'echo hi' } };
-    const run = await scripted(wire, [call('', [use]), say('Done.')]);
+  it('T-HOOK-01 the events of a turn fire in order: SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd', async () => {
+    const echo = { id: 'tu_echo', name: 'bash', input: { command: 'echo hi' } };
+    const kube = { id: 'tu_kube', name: 'bash', input: { command: 'kubectl get pods' } };
+    const run = await scripted(wire, [call('', [echo, kube]), say('Done.')]);
     const hook = await hookScript(run, 'all');
-    const events = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'Stop', 'SessionEnd'];
+    const events = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'Stop', 'SessionEnd'];
     await userHooks(run, Object.fromEntries(events.map((event) => [event, group(hook.command)])));
 
     expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
-    expect((await hook.payloads()).map((p) => p['hook_event_name'])).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolBatch', 'Stop', 'SessionEnd']);
+    // As in Claude Code's E34: every PreToolUse first, then each call's card or result in call order.
+    expect((await hook.payloads()).map((p) => p['hook_event_name'])).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PreToolUse', 'PostToolUse', 'PermissionRequest', 'PostToolBatch', 'Stop', 'SessionEnd']);
   });
 });
 
