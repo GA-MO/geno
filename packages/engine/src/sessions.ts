@@ -289,7 +289,7 @@ const turnEventSchema = z.union([
       environment: environmentSchema.optional(),
       child: childOfSchema.optional(),
       fork: z.strictObject({ sessionId: childId, turnSeq: seqFields.seq, title: z.string() }).optional(),
-      workflow: z.strictObject({ parentId: childId, toolUseId: z.string().min(1), name: z.string().min(1) }).optional(),
+      workflow: z.strictObject({ parentId: childId, toolUseId: z.string().min(1), name: z.string().min(1), input: z.string().optional(), resumes: childId.optional() }).optional(),
     }),
     z.strictObject({
       kind: z.literal('user'),

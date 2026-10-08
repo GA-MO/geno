@@ -53,7 +53,7 @@ export type Mode = {
   readonly stop?: StopHook | undefined;
 };
 
-export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
+export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined | Promise<AssistantTurn | undefined>;
 
 /** One turn the user issued, such as `@explore <question>`: the run ends once its tools ran. */
 export function issuedOnce(turn: AssistantTurn): Director {
@@ -511,7 +511,7 @@ export async function drive(
       return end(step.reason);
     }
     if (step.kind === 'call-model' && mode.director !== undefined) {
-      const issued = mode.director(events);
+      const issued = await mode.director(events);
       if (issued === undefined) return end('end_turn');
       // Text the user's side issues, such as a workflow's closing report, reaches a live viewer as a model's would.
       for (const block of issued.content) if (block.type === 'text') watcher.text(block.text);

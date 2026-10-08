@@ -39,6 +39,7 @@ import {
   workflowReport,
   type AgentDefinition,
   type WorkflowOrigin,
+  type Replay,
   type WorkflowPreview,
   type WorkflowSpec,
   SCHEDULES_METHOD,
@@ -310,7 +311,7 @@ import { Wake } from './waits.js';
 import type { UserChannel } from './tools/user.js';
 import type { ScheduleTools } from './tools/schedule.js';
 import type { WorkflowTools } from './tools/workflow.js';
-import { WORKFLOW_TURNS, workflowDriver, workflowTools } from './workflows.js';
+import { appendJournal, journalFile, readJournal, WORKFLOW_TURNS, workflowDriver, workflowTools } from './workflows.js';
 import { loadAgents } from './subagents.js';
 import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner } from './schedules.js';
 import { pidAlive } from './wait-hooks.js';
@@ -1363,7 +1364,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
       agents: async () => (await loadAgents(session.workspace, homes, (await pluginsOf(session.workspace)).plugins, subagentModelsOf(io.env))).agents,
       approve: (preview, signal) => turn.approveWorkflow(preview, signal),
-      run: (spec, input, agents, toolUseId) => runWorkflow(sessionId, session, spec, input, agents, toolUseId),
+      run: (spec, input, agents, toolUseId, replay) => runWorkflow(sessionId, session, spec, input, agents, toolUseId, replay),
+      earlier: async (run) => {
+        const log = await openSessionLog(store, run, io).catch(() => undefined);
+        if (log === undefined) return undefined;
+        const origin = log.events[0]?.kind === 'session-start' ? log.events[0].workflow : undefined;
+        return { name: origin?.name, input: origin?.input, entries: await readJournal(journalFile(store, log.session.id)) };
+      },
     });
   };
 
@@ -1372,11 +1379,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
    * children. Its report goes to the starting session as a background child's does: it wakes it, or, with auto-wake
    * off, joins its running turn or its next one.
    */
-  const runWorkflow = async (parentId: string, parent: Session, spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], toolUseId: string) => {
-    const driver = workflowDriver(spec, input, agents, parent.model, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)));
-    const prompt = `Run the workflow ${spec.name}${input === '' ? '.' : ` on: ${input}`}`;
+  const runWorkflow = async (parentId: string, parent: Session, spec: WorkflowSpec, input: string, agents: readonly AgentDefinition[], toolUseId: string, replay: Replay | undefined) => {
+    const driver = workflowDriver(spec, input, agents, parent.model, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)), {
+      replay,
+      write: (sessionId, entries) => appendJournal(journalFile(store, sessionId), entries),
+    });
+    const prompt = `Run the workflow ${spec.name}${input === '' ? '.' : ` on: ${input}`}${replay === undefined ? '' : `\nIt resumes run ${replay.run}.`}`;
     const limits: Limits = { maxTurns: WORKFLOW_TURNS, maxCostUsd: spec.maxCostUsd };
-    const workflow: WorkflowOrigin = { parentId: asSessionId(parentId), toolUseId, name: spec.name };
+    const workflow: WorkflowOrigin = { parentId: asSessionId(parentId), toolUseId, name: spec.name, input, ...(replay === undefined ? {} : { resumes: asSessionId(replay.run) }) };
     const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director }, workflow });
     let silent = false;
     let stoppedByModel = false;
@@ -1388,7 +1398,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       )
       .then(async (cancelled) => {
         const log = await existing(id);
-        const run = driver.finish(log.events, cancelled);
+        const run = await driver.finish(log.events, cancelled);
         const usage = childrenUsage(log.events, Date.now() - Date.parse(log.session.createdAt));
         const end = workflowEnd(run);
         return childReport(`workflow ${spec.name}`, asSessionId(id), stoppedByModel && end.kind === 'cancelled' ? { kind: 'cancelled', by: 'model' } : end, workflowReport(run), usage);
