@@ -634,6 +634,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** Load plugin `.mcp.json` servers through the trust card. `worker` and custom agents that list `mcp__*` get trusted MCP tools. Built-in read-only roles stay without them.
 - **Check.** A plugin server is untrusted until approved. A worker calls a fake MCP tool.
 - **Size.** 1 day. **Depends on.** P10.
+- **Status.** Done. A plugin's servers come from its `.mcp.json` and its manifest's `mcpServers`, and are named `plugin_<plugin>_<server>`, so their tools have Claude Code's names and its rules apply. A definition with no tools field gets every MCP tool, as in Claude Code, not only one that lists `mcp__*`. An agent with an MCP tool is not read-only, so it runs alone and needs `--allow-worker` in a non-interactive run. A fork and a child on an external agent get no MCP tools. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P36: web and wire options
 
