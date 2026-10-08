@@ -272,6 +272,28 @@ P33 also covers rows that have no Claude Code conformance test:
 | C/C-46 | T-WF-02 above. `workflows.conformance.test.ts`, both wires: while step 3 waits on its model, the journal already holds steps 1 and 2; the card asks "Resume workflow three from run <id>: 3 steps, 2 replayed with no model call"; the resumed run keeps the input; resuming the first run again replays the same, and resuming the resumed run makes no model call at all; a torn last line is skipped. `workflow.test.ts` (core): the key changes with the task, each cap, the role and the model, and a lane step has none; the journal holds done calls only; a replayed report feeds the steps after it; the prefix rule; a check runs mid-replay and the steps after it replay; a lane step never replays; determinism of two resumes; `--resume` and `resume` parsed. Without the prefix rule, two core tests fail; with replay off, every T-WF-02 test fails. |
 | C/C-47 | `workflow.test.ts` (core): a fan-out with an empty, a failed and a good step says "Empty results: 1 (a)." and names the sessions of the empty and the failed step, and not the good one. `workflows.conformance.test.ts`: a failed step 3 says "Read step session <id> before diagnosing three." and "Empty results: 0.". The closing-report test checks the whole text. |
 
+## Workflow structured output (P34)
+
+A step with a `schema` still asks for one JSON block at the end of its report, and `readFields` in `core/src/workflow.ts` still reads its fields from the last block that fits. When the report has no such block, the step's child makes one more model call, forced to the `structured_output` tool (`forceFields` in `engine/src/subagents.ts`). The tool's input is the step's flat schema as JSON Schema (`structuredOutputTool`): each field typed, every field required, no other field. The request sets `tool_choice` to that tool, `{"type": "tool", "name": "structured_output"}` on the Anthropic wire and `{"type": "function", "function": {"name": "structured_output"}}` on the Chat Completions wire, and turns thinking off on the Anthropic wire, since a forced tool needs it off; the Chat Completions wire sends no thinking field. Model Studio takes the Anthropic form, as the classifier's forced `verdict` call already does. The conversation is the child's own, so the call follows the report, and it counts toward the step's turns and cost: a step at its turn cap or with nothing left of its cost cap makes no forced call.
+
+A call whose input fits the schema puts the fields last in the report as a JSON block (`withFields`), so the step's fields, `{{step.field}}` and a resume's journal all read them as they read a block, and a resumed run replays the step with no model call. A call whose input does not fit, a provider that refuses a forced tool, a model that answers with text, or a failed call leaves the report as it was, and the step fails as a missing block does. The call's tool result ends the child's run, as `report` does.
+
+Claude Code forces its `StructuredOutput` call on every schema step. Geno asks for the block first because the eval ([results/p34-structured-output.md](results/p34-structured-output.md)) found that a forced call after every report replaced a fitting, correct block with a paraphrase in 2 of 5 runs of the quoting case, and gave a paraphrase in a third. `GCODE_STRUCTURED_OUTPUT` chooses: `on` (the default) forces the call only when the block does not fit, `always` forces it after every report and its fields win, and `off` never forces it.
+
+The eval also found a parse defect: a report with a ```` ```ts ```` block before its JSON block paired the wrong fences, so a fitting block was missed. A fence with any language tag now opens a block.
+
+P34 also refuses `/workflow <name> --resume` with no run id, which P33 read as the input `--resume`. The `workflow` tool refuses an empty `resume` with "resume needs the session id of the run to resume, which that run's report and its Tasks row name: /workflow <name> --resume <run>", and nothing runs.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-WF-01 | `agent(prompt, {schema})` returns an object validated against the schema, through a forced `StructuredOutput` call. | A schema step's fields come from its report's JSON block, or, when the report has none that fits, from one forced `structured_output` call whose input is validated against the schema. The fields fill the next step's `{{step.field}}`, and the step replays on resume. | pass (adapt, was no test) | `workflows.conformance.test.ts`, both wires |
+
+P34 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| C/C-45, B/B-46 | T-WF-01 above. `workflows.conformance.test.ts`, both wires: a report with no block gets one request with the wire's `tool_choice`, the derived tool last in `tools` and, on the Anthropic wire, thinking off; that request's last message is the report's result; the call's fields fill `[act] pass=true files=["a.ts"]`; the child's log has two model turns and no limit error; a resume replays both steps with no model call. A fitting block makes no forced request. A forced input that does not fit, after a report with no block, stops the step with the missing-block reason. With `always`, the fields of a fitting call win over the block, and a call that does not fit leaves the block. A 400 to the forced request is not retried and leaves the block. With `off`, no request forces a tool. Without the loop's rule that the call ends the run, the first test fails on a `max-turns` error; with `on` acting as `always`, the fitting-block test fails. `workflow.test.ts` (core): the derived JSON Schema, a call's input fitted, refused and trimmed to the schema, the fields' block read over the report's own, a ```` ```ts ```` block before the JSON block, the agent call that carries the schema, and a bare `--resume`. |
+
 ## Environment (P5)
 
 `captureEnvironment` in `engine/src/environment.ts` records the session's environment when it starts, and the session-start event keeps it beside the loaded context. `renderEnvironment` in `core/src/environment.ts` writes it into the opening user message.
@@ -807,7 +829,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AGENT-03 | adapt | P17 | pass |
 | T-AGENT-04 | adopt | P18 | pass |
 | T-AGENT-05 | adapt | P20 | pass |
-| T-WF-01 | adapt | P34 | no test yet |
+| T-WF-01 | adapt | P34 | pass |
 | T-WF-02 | adopt | P33 | pass |
 | T-PERSIST-01 | keep Geno's | none | no test yet |
 | T-PERSIST-02 | adopt | P11 | pass |
