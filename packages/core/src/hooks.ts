@@ -96,6 +96,7 @@ export const CLAUDE_TOOL_NAMES: Readonly<Record<string, string>> = {
   Edit: 'edit',
   Write: 'edit',
   MultiEdit: 'edit',
+  NotebookEdit: 'notebook_edit',
   Grep: 'grep',
   Glob: 'glob',
   LS: 'list',
@@ -570,6 +571,11 @@ const CLAUDE_SHAPES: Readonly<Record<string, ClaudeShape>> = {
     },
     geno: ({ file_path, old_string, new_string, replace_all, content }) =>
       content !== undefined ? { path: file_path, new_str: content, create: true } : defined({ path: file_path, old_str: old_string, new_str: new_string, replace_all }),
+  },
+  // Claude Code's own fields, but its notebook_path is always absolute.
+  notebook_edit: {
+    claude: (input, workspace) => ({ name: 'NotebookEdit', input: { ...input, notebook_path: typeof input['notebook_path'] === 'string' ? path.resolve(workspace, input['notebook_path']) : input['notebook_path'] } }),
+    geno: (input) => input,
   },
 };
 

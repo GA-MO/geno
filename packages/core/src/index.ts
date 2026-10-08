@@ -78,6 +78,7 @@ export * from './compaction.js';
 export * from './wake.js';
 export * from './work.js';
 export * from './pr.js';
+export * from './notebook.js';
 export * from './parts.js';
 export * from './breakdown.js';
 export * from './spend.js';

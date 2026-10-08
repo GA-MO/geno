@@ -5,6 +5,9 @@ import {
   AGENT_EDIT_FORMAT,
   AUTO_START,
   baseOf,
+  CELL_EDIT_MODES,
+  CELL_TYPES,
+  changeOf,
   changesDirectory,
   CLASSIFIER_OUTCOMES,
   checkHeadline,
@@ -15,6 +18,7 @@ import {
   cwdResetLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
   formatDiagnostics,
+  hashText,
   hookMayAnswer,
   isPathRule,
   laneCommandDenial,
@@ -37,6 +41,7 @@ import {
   ruledDenial,
   secretReadDenial,
   sleepRefusal,
+  staleBaseDetail,
   trustedDomains,
   ruleDenial,
   userRuleDenial,
@@ -68,6 +73,7 @@ import type { Sandbox } from '../sandbox.js';
 import {
   displayPath,
   executor,
+  missingPath,
   optional,
   realOrUndefined,
   resolveInside,
@@ -84,6 +90,7 @@ import {
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
 import { GLOB_CHARS } from './grep.js';
+import { editNotebook, NotebookError, type CellEdit, type CellEdited } from './notebook.js';
 import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
@@ -368,6 +375,75 @@ export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: Tool
   });
 }
 
+const notebookInput = z.strictObject({
+  notebook_path: z.string().min(1),
+  cell_id: optional(z.string().min(1)),
+  new_source: optional(z.string()),
+  cell_type: optional(z.enum(CELL_TYPES)),
+  edit_mode: optional(z.enum(CELL_EDIT_MODES)),
+});
+type NotebookInput = z.infer<typeof notebookInput>;
+
+function cellEditOf({ cell_id, new_source, cell_type, edit_mode = 'replace' }: NotebookInput): CellEdit {
+  if (edit_mode === 'delete') {
+    if (cell_id === undefined) throw new ToolError('cell_id is required to delete a cell');
+    return { mode: 'delete', cellId: cell_id };
+  }
+  if (new_source === undefined) throw new ToolError(`new_source is required to ${edit_mode === 'insert' ? 'insert' : 'replace'} a cell`);
+  if (edit_mode === 'insert') {
+    if (cell_type === undefined) throw new ToolError('cell_type is required with edit_mode insert: code or markdown');
+    return { mode: 'insert', after: cell_id, source: restoreHidden(new_source), cellType: cell_type };
+  }
+  if (cell_id === undefined) throw new ToolError('cell_id is required to replace a cell');
+  return { mode: 'replace', cellId: cell_id, source: restoreHidden(new_source), cellType: cell_type };
+}
+
+function notebookEditedText(shown: string, edit: CellEdit, done: CellEdited): string {
+  const place = `cell ${done.index + 1} of ${done.cells}`;
+  const firstMoved = edit.mode === 'insert' ? done.index + 1 : done.index;
+  const moved = done.byPlace && edit.mode !== 'replace' && firstMoved < done.cells ? ' Its cells have no ids, so the cells after it now show ids counted from their new places.' : '';
+  const said =
+    edit.mode === 'replace' ? `Replaced cell ${done.id} of ${shown}, now ${place}: ${done.cellType}${done.cellType === 'code' ? ', with its outputs cleared' : ''}.`
+    : edit.mode === 'insert' ? `Inserted a ${done.cellType} cell with id ${done.id} in ${shown}, ${place}.`
+    : `Deleted cell ${done.id} from ${shown}, which has ${done.cells} cell${done.cells === 1 ? '' : 's'} now.`;
+  return `${said}${moved} The file state is current in your context; no need to read it back.`;
+}
+
+/**
+ * The notebook_edit tool, under the guard edit has: the notebook must have been read, as `reads` holds it, and still
+ * hold the text that read saw.
+ */
+export function notebookEditExecutor(reads: Map<string, BaseRead>, newId?: (taken: ReadonlySet<string>) => string): Executor {
+  return executor({
+    input: notebookInput,
+    describe: ({ notebook_path, cell_id, edit_mode = 'replace' }) => `notebook_edit ${notebook_path} ${edit_mode}${cell_id === undefined ? '' : ` ${cell_id}`}`,
+    async run(input, ctx) {
+      const shown = input.notebook_path;
+      if (path.extname(shown).toLowerCase() !== '.ipynb') throw new ToolError(`notebook_edit edits Jupyter notebooks (.ipynb); ${shown} is not one, so use edit`);
+      const edit = cellEditOf(input);
+      const file = await resolveWritable(ctx, shown);
+      const current = await ctx.files.read(file);
+      if (current === null) throw missingPath(ctx, shown);
+      const base = reads.get(file);
+      if (base === undefined) throw new ToolError(`read ${shown} before editing it`);
+      if (hashText(current) !== base.hash) throw new ToolError(staleBaseDetail(shown));
+      let done: CellEdited;
+      try {
+        done = editNotebook(current, edit, newId);
+      } catch (error) {
+        if (error instanceof NotebookError) throw new ToolError(`${shown} ${error.message}`);
+        throw error;
+      }
+      if ((await ctx.files.write(file, done.text, hashText(current))) === 'stale-base') throw new ToolError(staleBaseDetail(shown));
+      // The stat goes first, so a change on disk after it is seen as one.
+      const disk = await diskStat(file);
+      const written = await ctx.files.read(file);
+      reads.set(file, baseOf(written, null));
+      return { text: notebookEditedText(shown, edit, done), change: changeOf(file, current, done.text), file: stampOf(file, written, disk) };
+    },
+  });
+}
+
 export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolName, Executor>> {
   // What the model last saw of each file: the base an edit must still match.
   const reads = new Map<string, BaseRead>();
@@ -452,13 +528,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
    * A file tool under the workspace's path rules, read at each call so a rule added in Settings holds for the next one:
    * `read` and `edit` ask or refuse on their path, and every file tool leaves out what a `read` rule covers.
    */
-  const withPathRules = (tool: PathTool | undefined, inner: Executor): Executor => ({
+  const withPathRules = (tool: PathTool | undefined, inner: Executor, field: 'path' | 'notebook_path' = 'path'): Executor => ({
     ...inner,
     async run(raw, ctx) {
       const rules = (await tools.permissions?.list()) ?? [];
       if (!rules.some(isPathRule)) return inner.run(raw, ctx);
       const ruled: ToolContext = { ...ctx, pathRule: (on, file) => pathRuleFor(on, file, rules, { ...scope(), workspace: ctx.workspace }) };
-      const given = (raw as { path?: unknown }).path;
+      const given = (raw as Readonly<Record<string, unknown>>)[field];
       const approval = tool === undefined || typeof given !== 'string' ? undefined : await askPathRule(tool, given, ruled);
       const reply: ToolReply = await inner.run(raw, ruled);
       if (approval === undefined) return reply;
@@ -622,6 +698,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     list: withReach('list', withPathRules(undefined, EXECUTORS.list)),
     read: withReach('read', withRuleAttachments(withPathRules('read', read), tools.rules)),
     edit: withWriteRoots(withPathRules('edit', edit)),
+    notebook_edit: withWriteRoots(withPathRules('edit', notebookEditExecutor(reads), 'notebook_path')),
     bash,
     ...backgroundExecutors(tools.background),
     ...workExecutors({ background: tools.background, wakes: tools.wakes, children: tools.children }),

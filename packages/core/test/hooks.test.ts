@@ -351,6 +351,10 @@ describe("Claude Code's tool calls", () => {
       tool_input: { file_path: '/ws/src/payload-types.ts', old_string: 'a', new_string: 'b', replace_all: true },
     });
     expect(claudeToolCall('edit', { path: 'new.ts', new_str: 'x', create: true }, '/ws')).toEqual({ tool_name: 'Write', tool_input: { file_path: '/ws/new.ts', content: 'x' } });
+    expect(claudeToolCall('notebook_edit', { notebook_path: 'n.ipynb', cell_id: 'c1', new_source: 'x' }, '/ws')).toEqual({
+      tool_name: 'NotebookEdit',
+      tool_input: { notebook_path: '/ws/n.ipynb', cell_id: 'c1', new_source: 'x' },
+    });
     expect(claudeToolCall('grep', { pattern: 'x' }, '/ws')).toEqual({ tool_name: 'Grep', tool_input: { pattern: 'x' } });
     expect(claudeToolCall('mcp__files__write', { a: 1 }, '/ws')).toEqual({ tool_name: 'mcp__files__write', tool_input: { a: 1 } });
   });

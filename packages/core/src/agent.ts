@@ -6,6 +6,7 @@ import { PREVIEW_TOOL_NAMES, PREVIEW_TOOL_SPECS } from './preview.js';
 import { RECALL_SPEC } from './session-search.js';
 import { TODO_SPEC } from './todo.js';
 import { TOOL_NAMES, TOOL_SPECS } from './tools.js';
+import { NOTEBOOK_EDIT_TOOL_DEFINITION } from './notebook.js';
 import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
 import { LIST_AGENTS_TOOL_DEFINITION, TASK_STOP_TOOL_DEFINITION } from './work.js';
 import { WATCH_PR_TOOL_DEFINITION } from './pr.js';
@@ -17,7 +18,7 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', 'notebook_edit', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
 /** The tools that run a shell command: the model's own, the check command, a monitored command and a dev server. */
@@ -90,6 +91,7 @@ Git:
   edit: EDIT_FORMAT_SPECS[AGENT_EDIT_FORMAT].tool,
   list_agents: LIST_AGENTS_TOOL_DEFINITION,
   monitor: MONITOR_TOOL_DEFINITION,
+  notebook_edit: NOTEBOOK_EDIT_TOOL_DEFINITION,
   ...PREVIEW_TOOL_SPECS,
   recall: RECALL_SPEC,
   schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
@@ -119,7 +121,7 @@ export const AGENT_TOOL_DEFINITIONS: readonly Tool[] = Object.freeze(AGENT_TOOL_
 
 // Plan starts nothing that outlives a call, so it has no background commands to read or stop, and nothing wakes it.
 // It may still list the work and the dev servers a session started before it switched to Plan, and read the servers.
-const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'bash_output', 'monitor', 'preview_start', 'preview_stop', 'schedule_wakeup', 'task_stop', 'watch_pr']);
+const PLAN_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['edit', 'notebook_edit', 'bash_output', 'monitor', 'preview_start', 'preview_stop', 'schedule_wakeup', 'task_stop', 'watch_pr']);
 
 /**
  * What a mode lets the agent call: everything, or in Plan nothing that changes files, with bash held to the safe list

@@ -1,14 +1,15 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { capabilitiesOf, READER_SYSTEM, WEB_LIMITS } from '@g-code/core';
+import { capabilitiesOf, READER_SYSTEM, WEB_LIMITS, type TurnEvent } from '@g-code/core';
 import { twoColorPng } from '../../../core/test/png.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
-import { call, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
+import { call, say, scripted, sessionIdOf, WIRES, type SeenResult, type Wire } from './scripted.js';
 
 const A_TS = { 'a.ts': 'export const a = 1;\n' };
+const NOTEBOOKS = path.join(import.meta.dirname, '..', 'fixtures', 'notebooks');
 
 const COMMANDS = { failing: 'cat missing.txt', passing: 'cat a.ts' } as const;
 
@@ -238,5 +239,39 @@ describe.each(WIRES)('web_fetch on the %s wire', (wire) => {
     expect(result(next).text).not.toContain('To read on');
     expect(result(past)).toEqual({ id: past.id, error: true, text: `${page.url} has ${markdown.length} characters of text, so offset ${markdown.length} is past its end` });
     expect(page.hits()).toBe(3);
+  });
+
+  it('T-TOOL-05 B/B-17 notebook_edit loads through tool_search, refuses a notebook not yet read, and replaces a cell by the id read shows', async () => {
+    const notebook = readFileSync(path.join(NOTEBOOKS, 'v4.5.ipynb'), 'utf8');
+    const load = loadTools('notebook_edit');
+    const unread = use('notebook_edit', { notebook_path: 'n.ipynb', cell_id: 'load-data', new_source: 'rows = load(limit=5)\nrows' });
+    const cells = use('read', { path: 'n.ipynb' });
+    const edit = use('notebook_edit', { notebook_path: 'n.ipynb', cell_id: 'load-data', new_source: 'rows = load(limit=5)\nrows' });
+    const run = await scripted(wire, [call('', [load]), call('', [unread]), call('', [cells]), call('', [edit]), say('Done.')], { 'n.ipynb': notebook });
+    const turn = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Go.']);
+    expect(turn.code).toBe(0);
+    const result = (u: FakeToolUse): SeenResult => run.seen().flatMap((request) => request.results).find((r) => r.id === u.id)!;
+    expect(result(load).text).toContain('{"name":"notebook_edit"');
+    expect(result(unread)).toEqual({ id: unread.id, error: true, text: 'read n.ipynb before editing it' });
+    expect(result(cells).text).toContain('--- cell 2 of 3, id load-data: code [3] ---');
+    expect(result(edit)).toMatchObject({ error: false, text: expect.stringMatching(/^Replaced cell load-data of n\.ipynb, now cell 2 of 3: code, with its outputs cleared\./) });
+    const file = path.join(run.workspace, 'n.ipynb');
+    expect(await readFile(file, 'utf8')).toBe(readFileSync(path.join(NOTEBOOKS, 'v4.5.replace-code.ipynb'), 'utf8'));
+
+    const asked = (await run.log(turn.stdout)).find((e): e is Extract<TurnEvent, { kind: 'assistant' }> => e.kind === 'assistant' && e.content.some((block) => block.type === 'tool_use' && block.id === edit.id))!;
+    const rewound = await run.cli(['rewind', '--session', sessionIdOf(turn.stdout), '--to', String(asked.seq)]);
+    expect(rewound.code, rewound.stderr).toBe(0);
+    expect(await readFile(file, 'utf8'), 'the checkpoint before the edit restores the notebook').toBe(notebook);
+  });
+
+  it('B/B-17 an Edit deny in .claude/settings.json refuses notebook_edit on that notebook, after a read', async () => {
+    const notebook = readFileSync(path.join(NOTEBOOKS, 'v4.5.ipynb'), 'utf8');
+    const settings = JSON.stringify({ permissions: { deny: ['Edit(locked.ipynb)'] } });
+    const cells = use('read', { path: 'locked.ipynb' });
+    const edit = use('notebook_edit', { notebook_path: 'locked.ipynb', cell_id: 'plot', new_source: 'x' });
+    const { result, file } = await session(wire, { 'locked.ipynb': notebook, '.claude/settings.json': settings }, () => [[loadTools('notebook_edit')], [cells], [edit]]);
+    expect(result(cells).error).toBe(false);
+    expect(result(edit)).toMatchObject({ error: true, text: expect.stringContaining('Edit(locked.ipynb)') });
+    expect(await file('locked.ipynb')).toBe(notebook);
   });
 });

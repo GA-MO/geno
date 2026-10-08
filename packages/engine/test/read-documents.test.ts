@@ -156,10 +156,10 @@ describe('read on a notebook', () => {
     expect(result.text).toBe(
       [
         'analysis.ipynb is a python notebook with 5 cells.',
-        '--- cell 1 of 5: markdown ---',
+        '--- cell 1 of 5, id a1: markdown ---',
         '# Sales analysis',
         'Totals by *region*.',
-        '--- cell 2 of 5: code [3] ---',
+        '--- cell 2 of 5, id a2: code [3] ---',
         'total = sum([1, 2, 3])',
         'print("total is", total)',
         'total * 2',
@@ -168,12 +168,12 @@ describe('read on a notebook', () => {
         '',
         '[output 2: text/plain]',
         '12',
-        '--- cell 3 of 5: code [4] ---',
+        '--- cell 3 of 5, id a3: code [4] ---',
         'plot(regions)',
         '[output 1: image/png: 100x50 PNG image (2 KB), attached below as image 1]',
-        '--- cell 4 of 5: code [5] ---',
+        '--- cell 4 of 5, id a4: code [5] ---',
         'slider',
-        '--- cell 5 of 5: code [6] ---',
+        '--- cell 5 of 5, id a5: code [6] ---',
         '1 / 0',
         '[output 1: error]',
         'ZeroDivisionError: division by zero',
@@ -185,7 +185,7 @@ describe('read on a notebook', () => {
 
   it('returns the cells asked for, cuts a long output, and reads raw JSON by line', async () => {
     expect(await textOf({ path: 'analysis.ipynb', cells: '5' })).toBe(
-      'analysis.ipynb is a python notebook with 5 cells.\n--- cell 5 of 5: code [6] ---\n1 / 0\n[output 1: error]\nZeroDivisionError: division by zero',
+      'analysis.ipynb is a python notebook with 5 cells.\n--- cell 5 of 5, id a5: code [6] ---\n1 / 0\n[output 1: error]\nZeroDivisionError: division by zero',
     );
     const noisy = { nbformat: 4, metadata: {}, cells: [{ cell_type: 'code', source: 'spam()', execution_count: 1, outputs: [{ output_type: 'stream', name: 'stdout', text: 'y'.repeat(10_000) }] }] };
     await writeFile(path.join(ws, 'noisy.ipynb'), JSON.stringify(noisy));

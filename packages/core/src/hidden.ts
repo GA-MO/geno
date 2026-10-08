@@ -32,6 +32,7 @@ const HIDDEN_IN: Readonly<Record<AgentToolName, 'show' | 'strip'>> = {
   list: 'show',
   list_agents: 'show',
   monitor: 'show',
+  notebook_edit: 'show',
   preview_list: 'show',
   preview_logs: 'show',
   preview_start: 'show',

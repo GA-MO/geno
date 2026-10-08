@@ -87,7 +87,7 @@ const CLAUDE_TOOLS: Readonly<Record<string, AgentToolName>> = {
   Edit: 'edit',
   MultiEdit: 'edit',
   Write: 'edit',
-  NotebookEdit: 'edit',
+  NotebookEdit: 'notebook_edit',
   Skill: 'skill',
 };
 

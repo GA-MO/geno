@@ -65,6 +65,14 @@ describe('claudePermissions', () => {
     expect(parsed.skipped).toEqual([]);
   });
 
+  it('B/B-17 a bare Edit deny stops notebook_edit as well as edit, and a bare NotebookEdit deny stops notebook_edit alone', () => {
+    expect(claudePermissions({ permissions: { deny: ['Edit', 'NotebookEdit'] } }, scope).deniedTools).toEqual([
+      { tool: 'edit', text: 'Edit' },
+      { tool: 'notebook_edit', text: 'Edit' },
+      { tool: 'notebook_edit', text: 'NotebookEdit' },
+    ]);
+  });
+
   it('skips each rule Geno cannot apply and keeps the rest', () => {
     const parsed = claudePermissions(
       {
