@@ -3,14 +3,14 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chatAnswer, chatSse, type ChatReply } from '../../engine/test/fake-openai.js';
 import { offeredTools } from '../../engine/test/fake-transport.js';
 import { leaksOf } from '../../engine/test/no-leak.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, ENV, MODEL, OPENAI_KEY, SEARCH_KEY } from './suite/settings-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -89,35 +89,27 @@ const named = (dir: string, part: string): string[] =>
 
 describe('the Geno settings page', () => {
   it('stores a key write-only in SecretStorage, takes base URLs from user settings only, tests, lists models and maps roles', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp(
+    const { work, workspace, home, suite } = await setUp(
       'settings',
       { 'a.ts': 'export const a = 1;\n' },
       // A repository that tries to send the user's OpenAI key to its own server.
       { 'gcode.providers': { openai: { baseUrl: `${urlOf(attacker)}/v1` } } },
     );
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = urlOf(fake);
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      // Secrets stay in memory, so any copy of the key on disk is a leak.
-      launchArgs: [...launchArgs, '--use-inmemory-secretstorage', `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        [ENV.openaiUrl]: `${url}/v1`,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      [ENV.openaiUrl]: `${url}/v1`,
     });
-    expect(code).toBe(0);
     expect(evil, 'the workspace’s base URL is never contacted').toEqual([]);
     const openai = seen.filter((r) => r.path.startsWith('/v1/'));
     expect(openai.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /v1/models', 'POST /v1/chat/completions', 'POST /v1/chat/completions']);
@@ -127,7 +119,7 @@ describe('the Geno settings page', () => {
     expect(offeredTools({ tools: openai[2]!.body.tools.map((tool: { function: { name: string; description?: string } }) => tool.function) }), 'the stored search key turns web_search on').toEqual(expect.arrayContaining(['web_fetch', 'web_search']));
 
     // The user data folder holds VS Code's logs, the output channels among them, and the webview's storage.
-    const userData = path.join(work, 'ud');
+    const { userData } = vscodeWindow;
     expect(named(userData, 'Geno engine').length, 'the output channel is on disk, so the scan covers it').toBeGreaterThan(0);
     expect(leaksOf([OPENAI_KEY, SEARCH_KEY], { dirs: [userData, workspace, home] })).toEqual([]);
   }, 600_000);

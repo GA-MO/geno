@@ -2,13 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NOT_USER_LINE } from '@g-code/core';
 import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, NOTE, QUESTION } from './suite/context-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -85,33 +85,26 @@ afterAll(() => {
 
 describe('rules, memory and questions in the chat panel', () => {
   it('lists the rules, asks before remembering the exact note, asks a question with options, and edits and deletes memory', async () => {
-    const { home, suite, launchArgs } = await setUp(
+    const { workspace, work, home, suite } = await setUp(
       'context',
       { 'AGENTS.md': 'Use pnpm.\n', '.cursor/rules/react.mdc': '---\nglobs: *.tsx\n---\nFunction components.\n', 'a.ts': 'export const a = 1;\n' },
       { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full' },
     );
     await mkdir(home, { recursive: true });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     const names = (i: number) => offeredTools(requests[i]!);
     expect(names(0), 'the panel shows both cards, so Ask offers both tools').toEqual(expect.arrayContaining(['ask_user', 'remember']));

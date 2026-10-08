@@ -40,8 +40,9 @@ export async function makeWorkspace(files: Readonly<Record<string, string>>, set
 }
 
 /**
- * A workspace as makeWorkspace makes it, with the named suite built. The extension is built once per run, in
- * vscode-setup.ts, so no file rewrites dist while another file's VS Code loads it.
+ * A workspace as makeWorkspace makes it, with the named suite built, for a pooled window's `run` (pool/client.ts).
+ * `launchArgs` are for a test that launches a VS Code of its own. The extension is built once per run, in
+ * vscode-setup.ts, so no file rewrites dist while a window loads it.
  */
 export async function setUp(suiteName: string, files: Readonly<Record<string, string>>, settings: Record<string, unknown>, user: Record<string, unknown> = {}) {
   const { work, workspace, home } = await makeWorkspace(files, settings, user);

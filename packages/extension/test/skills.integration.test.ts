@@ -4,14 +4,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { writeCatalog } from '../../engine/test/fake-catalog.js';
 import { answer, loadTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { AGENT, FILES, SKILL, STEPS } from './suite/skills-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -94,28 +94,21 @@ describe('skills from a catalog in Settings', () => {
       { kind: 'skill', name: 'deploy-notes', description: 'Write release notes for a deploy', files: { 'SKILL.md': SKILL, 'references/steps.md': STEPS, 'install.sh': `#!/bin/sh\ntouch "${marker}"\n` } },
       { kind: 'agent', name: 'reviewer', description: 'Reviews a diff for bugs', files: { 'reviewer.md': AGENT } },
     ]);
-    const { workspace, home, suite, launchArgs } = await setUp('skills', FILES, {}, { 'gcode.skills.catalogs': [catalog] });
+    const { work, workspace, home, suite } = await setUp('skills', FILES, {}, { 'gcode.skills.catalogs': [catalog] });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
 
     const results = requests.flatMap((r) => (r.messages.at(-1)!.content as { type: string; tool_use_id?: string; content?: string }[]).filter((b) => b.type === 'tool_result'));

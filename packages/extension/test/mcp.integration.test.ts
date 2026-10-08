@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { root, setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ENV, USER_SERVER, WORKSPACE_SERVER } from './suite/mcp-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -94,7 +94,7 @@ describe('MCP servers in the chat panel', () => {
     const markers = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-mcp-markers-')));
     const workspaceMarker = path.join(markers, 'workspace-server-ran');
     const workspaceServer = fakeServer(workspaceMarker);
-    const { work, home, suite, launchArgs } = await setUp(
+    const { workspace, work, home, suite } = await setUp(
       'mcp',
       { '.vscode/mcp.json': JSON.stringify({ servers: { [WORKSPACE_SERVER]: workspaceServer } }), 'a.ts': 'export const a = 1;\n' },
       // VS Code's own MCP support stays off, so only Geno could start these servers.
@@ -105,28 +105,21 @@ describe('MCP servers in the chat panel', () => {
     await mkdir(path.join(work, 'ud', 'User'), { recursive: true });
     await writeFile(path.join(work, 'ud', 'User', 'mcp.json'), `// mine\n${JSON.stringify({ servers: { [USER_SERVER]: fakeServer(path.join(markers, 'user-server-ran')) } }, null, 2)}\n`);
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        [ENV.workspaceMarker]: workspaceMarker,
-        [ENV.workspaceCommand]: [process.execPath, '--import', TSX, FIXTURE].join(' '),
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      [ENV.workspaceMarker]: workspaceMarker,
+      [ENV.workspaceCommand]: [process.execPath, '--import', TSX, FIXTURE].join(' '),
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     expect(toolNames(0)).toContain(`mcp__${USER_SERVER}__echo`);
     expect(toolNames(0).filter((name) => name.startsWith(`mcp__${WORKSPACE_SERVER}__`)), 'the model never saw the workspace server before Allow').toEqual([]);

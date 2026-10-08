@@ -2,14 +2,14 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asSessionId, type Session, type TurnEvent } from '@g-code/core';
 import { appendEvent } from '../../engine/src/sessions.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { FILES, SESSIONS, type FixtureTurn } from './suite/history-search-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -96,29 +96,22 @@ async function logSession(home: string, id: string, workspace: string, turns: re
 
 describe('History search in VS Code', () => {
   it('finds sessions by their text, in English and Thai, marks the match, and opens a hit scrolled to its turn', async () => {
-    const { home, workspace, suite, launchArgs } = await setUp('history-search', FILES, { 'chat.mcp.enabled': false });
+    const { work, home, workspace, suite } = await setUp('history-search', FILES, { 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const real = await realpath(workspace);
     for (const [i, session] of SESSIONS.entries()) await logSession(home, session.id, real, session.turns, i + 1);
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests, 'searching and opening a session call no model').toEqual([]);
   }, 600_000);
 });

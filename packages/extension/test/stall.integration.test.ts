@@ -2,13 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { IDLE_LIMIT_MS, FIRST_BYTE_LIMIT_MS } from './suite/stall-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -107,31 +107,24 @@ afterAll(() => {
 
 describe('a model call that goes quiet, in VS Code', () => {
   it('counts the thinking on the working row, retries the quiet try, and says when the retry has had no response', async () => {
-    const { home, suite, launchArgs } = await setUp('stall', { 'a.ts': 'export const a = 1;\n' }, { 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('stall', { 'a.ts': 'export const a = 1;\n' }, { 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS: String(FIRST_BYTE_LIMIT_MS),
-        GCODE_STREAM_IDLE_TIMEOUT_MS: String(IDLE_LIMIT_MS),
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS: String(FIRST_BYTE_LIMIT_MS),
+      GCODE_STREAM_IDLE_TIMEOUT_MS: String(IDLE_LIMIT_MS),
     });
     expect(failure).toBeUndefined();
-    expect(code).toBe(0);
     expect(calls, 'the quiet try, then its one retry').toHaveLength(2);
   }, 600_000);
 });

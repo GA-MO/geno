@@ -8,6 +8,7 @@ import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { BARE_PATH, buildSuite, cachePath, installClean, makeWorkspace } from './launch.js';
+import { reserveLaunch } from './pool/client.js';
 
 const KEY = `sk-install-test-${randomUUID()}`;
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -63,6 +64,8 @@ async function filesContaining(dir: string, needle: string): Promise<string[]> {
 
 describe('g-code installed from its .vsix', () => {
   it('runs a chat turn and a Tab completion in a clean VS Code with no node on PATH, and never writes the key down', async () => {
+    // The packed extension, not the source, in a VS Code of its own.
+    await reserveLaunch();
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     const { work, workspace, home } = await makeWorkspace(
       { 'add.ts': 'export function add(a: number, b: number): number {\n  return \n}\n' },

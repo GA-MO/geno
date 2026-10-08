@@ -3,13 +3,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runTests } from '@vscode/test-electron';
 import { chromium, type Browser } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { leaseWindow } from './pool/client.js';
+
 import { ANSWER, FILES, PAGES, PROMPT, WIDGET, WIDGET_TITLE } from './suite/share-page-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -140,26 +140,19 @@ describe('Save as page', () => {
       toolCall('Here is where the time goes.', [{ id: 'tu_bars', name: 'show_widget', input: { title: WIDGET_TITLE, html: WIDGET } }], usage),
       answer(ANSWER, usage),
     ];
-    const { home, workspace, suite, launchArgs } = await setUp('share-page', FILES, {});
-    debugPort = await freePort();
+    const { work, home, workspace, suite } = await setUp('share-page', FILES, {});
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_TEST_WORKSPACE: workspace,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_TEST_WORKSPACE: workspace,
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
 
     expect(await control(), 'the interception sees a page that does reach the network').toEqual(['https://beacon.example/control.png']);

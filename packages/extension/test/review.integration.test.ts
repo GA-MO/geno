@@ -2,11 +2,11 @@ import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
-import { buildSuite, cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { buildSuite, setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { EDITS, FILES, INSTRUCTION } from './suite/review-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -63,27 +63,22 @@ const userText = (index: number): string =>
 
 describe('review in VS Code', () => {
   it('keeps and undoes hunks that follow the text, undoes the session, lands Cmd-K as hunks, and restores review after a reload', async () => {
-    const { work, home, suite, launchArgs } = await setUp('review', FILES, { 'gcode.ui.showChanges': true, 'gcode.review.mode': 'review' });
+    const { workspace, work, home, suite } = await setUp('review', FILES, { 'gcode.ui.showChanges': true, 'gcode.review.mode': 'review' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
     const launch = (extensionTestsPath: string) =>
-      runTests({
-        extensionDevelopmentPath: root,
-        extensionTestsPath,
-        cachePath,
-        launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-        extensionTestsEnv: {
-          GCODE_HOME: home,
-          GCODE_PROVIDER: 'modelstudio',
-          GCODE_MODEL: 'qwen3.8-flash',
-          DASHSCOPE_API_KEY: 'sk-fake',
-          DASHSCOPE_BASE_URL: url,
-          GCODE_FAKE_MODEL: url,
-        },
+      vscodeWindow.run(extensionTestsPath, { workspace, work }, {
+        GCODE_HOME: home,
+        GCODE_PROVIDER: 'modelstudio',
+        GCODE_MODEL: 'qwen3.8-flash',
+        DASHSCOPE_API_KEY: 'sk-fake',
+        DASHSCOPE_BASE_URL: url,
+        GCODE_FAKE_MODEL: url,
       });
 
-    expect(await launch(suite)).toBe(0);
+    await launch(suite);
 
     expect(requests).toHaveLength(replies.length);
     expect(requests[3].tools.map((tool: { name: string }) => tool.name)).toEqual(['edit']);
@@ -98,7 +93,7 @@ describe('review in VS Code', () => {
     expect(events.filter((e) => e.kind === 'restored')).toHaveLength(1);
 
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
-    expect(await launch(await buildSuite(work, 'review-reload'))).toBe(0);
+    await launch(await buildSuite(work, 'review-reload'));
     expect(requests).toHaveLength(replies.length);
   }, 600_000);
 });

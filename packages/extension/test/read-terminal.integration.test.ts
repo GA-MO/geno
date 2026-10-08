@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, offeredTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { connectWindow, evaluate, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { leaseWindow } from './pool/client.js';
+
 import { ANSWER, COMMAND, EXIT_CODE, FAILURE, FAKE_SECRET, TERMINAL_NAME } from './suite/read-terminal-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -82,26 +82,19 @@ function toolResultText(id: string): string {
 
 describe('read_terminal in VS Code', () => {
   it('reads a failing command the user typed in a shell-integrated terminal, with its exit code and output, and the secret redacted', async () => {
-    const { home, suite, launchArgs } = await setUp('read-terminal', { 'README.md': '# app\n' }, { 'chat.mcp.enabled': false });
-    debugPort = await freePort();
+    const { workspace, work, home, suite } = await setUp('read-terminal', { 'README.md': '# app\n' }, { 'chat.mcp.enabled': false });
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     expect(offeredTools(requests[0]!), 'the panel advertises the capability').toContain('read_terminal');
 

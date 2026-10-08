@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
+import { leaseWindow } from './pool/client.js';
 import { ORIGINAL } from './suite/chat-fixture.js';
 
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -64,24 +64,18 @@ const toolResult = (index: number): { content: string; is_error?: boolean } =>
 
 describe('chat in VS Code', () => {
   it('edits the unsaved buffer, not the disk, and refuses an edit whose buffer changed after the read', async () => {
-    const { home, suite, launchArgs } = await setUp('chat', { 'math.ts': ORIGINAL }, {});
+    const { workspace, work, home, suite } = await setUp('chat', { 'math.ts': ORIGINAL }, {});
+    const vscodeWindow = await leaseWindow();
     const url = `http://127.0.0.1:${(model.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      launchArgs,
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
     });
-    expect(code).toBe(0);
 
     expect(requests).toHaveLength(replies.length);
     expect(toolResult(1).content).toContain('export const unsaved = 1;');
