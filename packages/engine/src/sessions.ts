@@ -245,6 +245,7 @@ const childOfSchema = z.strictObject({
   role: z.string().min(1),
   caps: childCapsSchema,
   start: childStartSchema,
+  depth: z.number().int().positive().optional(),
   background: z.literal(true).optional(),
   lane: z.string().min(1).optional(),
 });

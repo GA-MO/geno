@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
+import { call, report, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
 
 const KEY = 'sk-wirelogtest0123456789abcdef';
 
@@ -28,5 +28,22 @@ describe.each(WIRES)('request snapshots and the wire log on the %s wire', (wire:
     expect(lines.join('\n')).not.toContain(KEY);
     const requests = lines.map((line) => JSON.parse(line) as { request?: unknown }).flatMap((entry) => (entry.request === undefined ? [] : [entry.request]));
     expect(requests).toEqual(JSON.parse(JSON.stringify(sent).replaceAll(KEY, '[redacted]')));
+  });
+});
+
+describe.each(WIRES)('a child transcript on the %s wire', (wire: Wire) => {
+  it("T-PERSIST-03 a child has its own log, whose session-start names its parent, the call that started it, its role and its depth", async () => {
+    const explore = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'explore', task: 'Where is a defined?' } }]);
+    const run = await scripted(wire, [explore, report('a.ts:1.'), say('a is in a.ts.')], { 'a.ts': 'export const a = 1;\n', '.gcode.json': '{"agentTool":["non-interactive"]}\n' });
+    const parent = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Where is a defined?']);
+    expect(parent.code, parent.stderr).toBe(0);
+
+    const parentId = sessionIdOf(parent.stdout);
+    const [started] = (await run.log(parent.stdout)).flatMap((e) => (e.kind === 'child-start' ? [e] : []));
+    expect(started?.role).toBe('explore');
+    const child = await run.events(started!.child);
+    const head = child[0]!;
+    expect(head.kind === 'session-start' && head.child).toEqual({ parentId, toolUseId: 'tu_agent', role: 'explore', caps: { maxTurns: 4, maxCostUsd: 0.02 }, start: 'fresh', depth: 1 });
+    expect(child.some((e) => e.kind === 'user' && e.content === 'Where is a defined?'), "the task is in the child's own log").toBe(true);
   });
 });
