@@ -627,6 +627,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** Deliver a step's flat schema as a forced `structured_output` tool with the derived JSON Schema, falling back to the JSON-block parse. Keep it only if the eval shows a gain.
 - **Check.** T-WF-01. An eval of schema-step success, block parse against forced tool, on qwen3.8-flash. At most $0.30.
 - **Size.** 1 day. **Depends on.** P33.
+- **Status.** Done. The forced call is kept and on by default, but it comes after the block: a step's child makes it only when its report has no JSON block that fits. On qwen3.8-flash ([results/p34-structured-output.md](results/p34-structured-output.md)), the block alone gave valid fields in 26 of 30 runs, the block with a forced call when it failed in 30 of 30 with 29 correct, and a forced call after every report in 30 of 30 with only 27 correct, since its fields replaced correct blocks with paraphrases; $0.22 in all. `GCODE_STRUCTURED_OUTPUT=always` forces it after every report and `off` never. A provider that refuses a forced tool, or a call that does not fit, leaves the report as it was. The eval found a parse defect, a ```` ```ts ```` block before the JSON block, which is fixed. `/workflow <name> --resume` with no run id is refused. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P35: MCP from plugins and for workers
 
