@@ -41,17 +41,21 @@ export const gcodeAdapter: AgentAdapter = {
       checkAfterEdit: input.checkAfterEdit,
       effortPolicy: input.effortPolicy,
       promptTier: input.promptTier,
+      agentTool: input.agentTool,
       approval: NON_INTERACTIVE,
     });
     await writeFile(path.join(input.runDir, `${input.task.id}.gcode.log`), [...lines, partial].join('\n'));
     const thisRun = result.events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= result.run.firstSeq);
     const total = totalOf(thisRun);
+    // A subagent's calls and spend are logged in its own session; the parent's log has them on the child's end.
+    const children = thisRun.flatMap((e) => (e.kind === 'child-end' ? [e] : []));
+    const costUsd = total.costUsd === null || children.some((c) => c.costUsd === null) ? null : children.reduce((n, c) => n + (c.costUsd ?? 0), total.costUsd);
     return {
       stop: result.reason,
-      turns: total.turns,
+      turns: children.reduce((n, c) => n + c.turns, total.turns),
       usage: total.usage,
-      costUsd: total.costUsd,
-      reportedCostUsd: total.costUsd,
+      costUsd,
+      reportedCostUsd: costUsd,
       denials: thisRun.filter((e) => e.kind === 'tool-result' && e.status === 'denied').length,
       finalMessage: finalText(thisRun),
       transcript: opened.log.file,

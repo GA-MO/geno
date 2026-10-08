@@ -167,6 +167,8 @@ export type AgentOptions = {
   readonly effortPolicy?: EffortPolicy | undefined;
   /** Replaces the model's prompt tier; for the eval that compares them. */
   readonly promptTier?: PromptTier | undefined;
+  /** Replaces `.gcode.json`'s `agentTool` for this run; for the eval that compares a run with and without it. */
+  readonly agentTool?: boolean | undefined;
   /** From --append-system-prompt; undefined falls back to `.gcode.json`. It ends the system prompt. */
   readonly appendSystemPrompt?: string | undefined;
   /** Where subagents show; undefined prints them on the terminal. */
@@ -343,7 +345,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
-    const agentTool = config.agentTool?.includes(startMode) === true;
+    const agentTool = options.agentTool ?? config.agentTool?.includes(startMode) === true;
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const scan = await loadAgents(workspace, homes, plugins, subagentModelsOf(io.env));

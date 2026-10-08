@@ -34,6 +34,8 @@ export type AgentRunInput = {
   readonly effortPolicy?: EffortPolicy | undefined;
   /** Undefined runs the model's own tier; an adapter for another agent ignores it. */
   readonly promptTier?: PromptTier | undefined;
+  /** Undefined follows the workspace; an adapter for another agent ignores it. */
+  readonly agentTool?: boolean | undefined;
 };
 
 export type AgentRunResult = {
@@ -100,6 +102,7 @@ export type EvalRunOptions = {
   readonly checkAfterEdit: boolean;
   readonly effortPolicy?: EffortPolicy | undefined;
   readonly promptTier?: PromptTier | undefined;
+  readonly agentTool?: boolean | undefined;
 };
 
 export type EvalRun = { readonly file: string; readonly results: readonly TaskResult[]; readonly stopped: boolean };
@@ -136,7 +139,7 @@ async function runTask(task: EvalTask, options: EvalRunOptions, runId: string, r
 
     const agentStarted = performance.now();
     const agentRun = await options.adapter.run(
-      { task, workspace, tempDir, runDir, model: options.model, maxCostUsd: budget, check: options.check, checkAfterEdit: options.checkAfterEdit, effortPolicy: options.effortPolicy, promptTier: options.promptTier },
+      { task, workspace, tempDir, runDir, model: options.model, maxCostUsd: budget, check: options.check, checkAfterEdit: options.checkAfterEdit, effortPolicy: options.effortPolicy, promptTier: options.promptTier, agentTool: options.agentTool },
       ctx,
     );
     const agentMs = performance.now() - agentStarted;
