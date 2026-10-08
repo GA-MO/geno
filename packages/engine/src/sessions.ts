@@ -181,6 +181,8 @@ const approvalSchema = z.strictObject({
   verdict: verdict.exclude(['ask']),
 });
 
+const hookNotesSchema = z.array(z.strictObject({ how: z.enum(['success', 'additional-context']), text: z.string() })).min(1);
+
 const todoSchema = z.array(z.strictObject({ id: z.string(), text: z.string(), status: z.enum(TODO_STATUSES) }));
 
 const spinoffId = z.string().regex(/^task_[0-9a-f]{8}$/).transform((raw) => raw as SpinoffId);
@@ -357,13 +359,10 @@ const turnEventSchema = z.union([
       mode: z.enum(SESSION_MODES).optional(),
       memory: z.strictObject({ added: z.array(memoryEntrySchema), removed: z.array(memoryEntrySchema) }).optional(),
     }),
-    z.strictObject({
-      kind: z.literal('hook-context'),
-      ...seqFields,
-      event: z.literal('SessionStart'),
-      matched: z.enum(['startup', 'resume', 'compact']),
-      notes: z.array(z.strictObject({ how: z.enum(['success', 'additional-context']), text: z.string() })).min(1),
-    }),
+    z.discriminatedUnion('event', [
+      z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal('SessionStart'), matched: z.enum(['startup', 'resume', 'compact']), notes: hookNotesSchema }),
+      z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal('UserPromptSubmit'), notes: hookNotesSchema }),
+    ]),
     z.strictObject({ kind: z.literal('report-nudge'), ...seqFields }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),

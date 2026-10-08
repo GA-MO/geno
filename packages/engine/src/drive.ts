@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList } from '@g-code/core';
+import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -15,7 +15,8 @@ import { appendEvent } from './sessions.js';
 import { snapshotKeeper } from './snapshots.js';
 import { isMissing, type Store } from './store.js';
 import { displayPath } from './tools/context.js';
-import { describeCall, runTool, type Executors, type ToolContext } from './tools/index.js';
+import type { PreToolHooks, PreToolStep } from './hooks.js';
+import { describeCall, runTool, type Executor, type Executors, type ToolContext, type ToolRun } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
 import type { SteerInbox } from './steer.js';
 import type { Wake } from './waits.js';
@@ -44,6 +45,10 @@ export type Mode = {
   readonly afterCompact?: () => Promise<TurnEvent | undefined>;
   /** A subagent's run, which hands its report back through the report tool (`handback.ts`). */
   readonly handback?: true | undefined;
+  /** The user's PreToolUse hooks: every call's verdict, settled before the first call of a turn runs. */
+  readonly preToolUse?: PreToolHooks | undefined;
+  /** The user's UserPromptSubmit hooks, on the prompt this run answers: they may block it or add to it. */
+  readonly promptSubmitted?: ((prompt: string) => Promise<PromptDecision>) | undefined;
 };
 
 export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
@@ -232,6 +237,10 @@ export async function drive(
   const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events), maxTurns: limits.maxTurns, maxCostUsd: limits.maxCostUsd, handback: mode.handback };
   if (prompt !== '') {
     await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });
+    await submitted(events, mode, record, io);
+  } else if (isTyped(events.at(-1))) {
+    // The editor logged the prompt with its attachments before the run.
+    await submitted(events, mode, record, io);
   } else {
     // A woken turn may start at its limits already; the loop then ends it with the limit's message.
     const step = loopStep(events, run);
@@ -258,19 +267,44 @@ export async function drive(
 
   const concurrent = (use: ToolUseBlock): boolean => Object.hasOwn(mode.executors, use.name) && mode.executors[use.name]!.concurrent?.(use.input) === true;
 
+  // A hook's question goes to the user before the call's own checks, which then take the yes as a hook's allow.
+  const asking = (step: Extract<PreToolStep, { kind: 'ask' }>): Executors => {
+    const own = mode.executors[step.use.name];
+    if (own === undefined) return mode.executors;
+    const run: Executor['run'] = async (raw, toolCtx) => {
+      const approval = await mode.preToolUse!.confirm(step.question, toolCtx);
+      const reply = await own.run(raw, { ...toolCtx, hookAllowed: true });
+      return typeof reply === 'string' ? { text: reply, approval } : { ...reply, approval: reply.approval ?? approval };
+    };
+    return { ...mode.executors, [step.use.name]: { ...own, run } };
+  };
+  const callOf = async (step: PreToolStep | undefined, use: ToolUseBlock, toolCtx: ToolContext): Promise<ToolRun> => {
+    if (step?.kind === 'refuse') return { status: 'denied', text: toolText(use.name, step.text), approval: step.approval };
+    if (step?.kind === 'ask') return runTool(use, toolCtx, asking(step));
+    return runTool(use, step?.allowed === true ? { ...toolCtx, hookAllowed: true } : toolCtx, mode.executors);
+  };
+
   // Batch by batch (see ToolBatch): an edit or command runs alone, after every call before it and before every call after.
   // Returns the calls the user interrupted while they ran, timed up to the interruption, or undefined when all ran.
   const runTools = async (toolUses: readonly ToolUseBlock[]): Promise<InterruptedTool[] | undefined> => {
     const firstSeq = nextSeq(events);
     const running = new Map<number, Omit<InterruptedTool, 'endAt'>>();
     const results: ToolResultEvent[] = [];
+    let steps: readonly PreToolStep[] | undefined;
+    // The call as it runs: a hook's updatedInput replaces the model's input, which the log keeps as the model sent it.
+    const useAt = (i: number): ToolUseBlock => {
+      const step = steps?.[i];
+      return step === undefined || step.kind === 'refuse' ? toolUses[i]! : step.use;
+    };
+    // A call a hook asks about waits for the user, and a refused one runs nothing, so neither runs beside others.
+    const concurrentAt = (i: number): boolean => (steps?.[i] === undefined || steps[i]!.kind === 'run') && concurrent(useAt(i));
     const runOne = async (i: number, toolCtx: ToolContext) => {
-      const use = toolUses[i]!;
+      const use = useAt(i);
       const seq = firstSeq + i;
       const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
-      const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, file } = await runTool(use, toolCtx, mode.executors);
+      const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, file } = await callOf(steps?.[i], use, toolCtx);
       watcher.toolEnd(use, status, todo);
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name), ctx.spillChars);
       const timing = { startAt: started.startAt, endAt: Date.now() };
@@ -278,8 +312,10 @@ export async function drive(
       results[i] = { kind: 'tool-result', seq, at: new Date().toISOString(), toolUseId: use.id, name: use.name, status, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, file, ...output, timing };
     };
     const work = (async () => {
+      // PreToolUse fires for every call of the turn before the first one runs, as Claude Code's does (T-LOOP-01).
+      steps = await mode.preToolUse?.decide(toolUses, (use) => describeCall(use, mode.executors));
       for (let start = 0; start < toolUses.length; ) {
-        const batch = nextToolBatch(toolUses.length, start, (i) => concurrent(toolUses[i]!));
+        const batch = nextToolBatch(toolUses.length, start, concurrentAt);
         const calls: Promise<void>[] = [];
         let earlier: Promise<void> = Promise.resolve();
         for (let i = batch.start; i < batch.end; i++) {
@@ -452,6 +488,27 @@ export async function drive(
         await record(answerEvent(answer, 0, at));
       }
     }
+  }
+}
+
+/** A prompt the user typed, as opposed to a steer, a wake or anything else the engine logs as a user message. */
+const isTyped = (event: TurnEvent | undefined): event is Extract<TurnEvent, { kind: 'user' }> => event?.kind === 'user' && event.from === undefined && event.steer !== true;
+
+/**
+ * UserPromptSubmit on the prompt the log ends with. A block is logged as the turn's error, so the prompt never reaches
+ * the model and the user reads why; the hooks' notes follow the prompt, so a resumed session sends the same bytes.
+ */
+async function submitted(events: readonly TurnEvent[], mode: Mode, record: (event: TurnEvent) => Promise<unknown>, io: Io): Promise<void> {
+  const prompt = events.at(-1);
+  if (mode.promptSubmitted === undefined || !isTyped(prompt)) return;
+  const decision = await mode.promptSubmitted(prompt.content);
+  const at = new Date().toISOString();
+  if (decision.kind === 'block') {
+    const message = `A UserPromptSubmit hook blocked this prompt, so the model did not see it: ${decision.reason}`;
+    await record({ kind: 'error', seq: nextSeq(events), at, error: 'blocked', message });
+    io.err(`blocked: ${message}`);
+  } else if (decision.notes.length > 0) {
+    await record({ kind: 'hook-context', seq: nextSeq(events), at, event: 'UserPromptSubmit', notes: decision.notes });
   }
 }
 

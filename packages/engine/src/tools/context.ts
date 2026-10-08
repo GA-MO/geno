@@ -31,6 +31,11 @@ export type ToolContext = {
   readonly toolUseId?: string | undefined;
   /** Logs a subagent starting or ending, or a wake-up being scheduled, in this session's log; absent outside a run. */
   readonly logNote?: ((note: ChildNote | WakeArrival) => Promise<void>) | undefined;
+  /**
+   * A PreToolUse hook allowed the call, or the user said yes to a hook's question about it: a command's own question and
+   * the classifier are answered, but not its refusals or what Geno always asks (`ruledDenial`).
+   */
+  readonly hookAllowed?: true | undefined;
 };
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */

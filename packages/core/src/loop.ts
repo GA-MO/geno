@@ -55,6 +55,7 @@ const done = (reason: DoneReason): LoopStep => ({ kind: 'done', reason });
 
 const ERROR_REASON: Record<TurnErrorKind, DoneReason> = {
   refusal: 'refusal',
+  blocked: 'error',
   transport: 'error',
   overflow: 'error',
   abort: 'error',

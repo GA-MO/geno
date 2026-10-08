@@ -39,7 +39,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   review: true,
   spinoff: true,
   chapter: true,
-  // SessionStart's output is the session's context, like its start.
+  // SessionStart's output is the session's context, like its start; `cutView` drops UserPromptSubmit's with its prompt.
   'hook-context': true,
   user: false,
   assistant: false,
@@ -94,7 +94,8 @@ export function cutView(events: readonly TurnEvent[]): TurnEvent[] {
       const at = promptIndex(view, event.turnSeq);
       const dropped = at === -1 ? [] : view.splice(at);
       for (const e of dropped) if (e.kind === 'assistant') for (const use of toolUsesOf(e.content)) cutUses.add(use.id);
-      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind]), event);
+      // UserPromptSubmit's output belongs to the prompt the cut drops.
+      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind] && !(e.kind === 'hook-context' && e.event === 'UserPromptSubmit')), event);
       continue;
     }
     const use = toolUseOf(event);

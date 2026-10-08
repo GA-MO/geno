@@ -139,6 +139,9 @@ export async function settle(
 
 export function denialText({ mode, rule, command, reason, classifier, decidedBy }: ApprovalRecord): string {
   if (decidedBy === 'user') return `The user rejected \`${command}\`, so it did not run. ${STOP_AND_WAIT}`;
+  if (rule === 'hook-ask') {
+    return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
+  }
   if (rule === 'workspace-deny') {
     return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
@@ -303,7 +306,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const outOfLane = tools.lane === undefined ? undefined : laneCommandDenial(command, ctx.workspace, tools.lane);
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
-    const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? []);
+    const denial = ruledDenial(command, tools.scope, mode, (await permissions?.list()) ?? [], ctx.hookAllowed === true);
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add('allow', denial.offer as CommandPattern);
     };

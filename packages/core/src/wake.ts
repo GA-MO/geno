@@ -140,6 +140,7 @@ const PAUSED_BY: Readonly<Record<TurnErrorKind, WakePause>> = {
   budget: 'limit',
   'max-turns': 'limit',
   refusal: 'failed',
+  blocked: 'failed',
   transport: 'failed',
   overflow: 'failed',
 };
