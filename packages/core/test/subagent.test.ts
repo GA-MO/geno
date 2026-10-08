@@ -17,10 +17,8 @@ import {
   mergeAgents,
   parseAgentDefinition,
   reportBody,
-  settleChild,
   type AgentDefinition,
   type ChildEnd,
-  type ChildStatus,
   type TurnEvent,
 } from '../src/index.js';
 
@@ -150,13 +148,7 @@ describe('childCaps', () => {
 describe('child status', () => {
   const ends: readonly ChildEnd[] = [{ kind: 'done' }, { kind: 'failed', reason: 'x' }, { kind: 'cancelled' }, { kind: 'capped', cap: 'cost' }];
 
-  it('moves a running child to whichever end comes first, and no further', () => {
-    const running: ChildStatus = { kind: 'running' };
-    for (const end of ends) {
-      const settled = settleChild(running, end);
-      expect(settled).toEqual(end);
-      for (const later of ends) expect(settleChild(settled, later), `${end.kind} then ${later.kind}`).toEqual(end);
-    }
+  it('names every status a child can have: running, then one of its ends', () => {
     expect(CHILD_STATUS_KINDS).toEqual(['running', ...ends.map((e) => e.kind)]);
   });
 
@@ -183,6 +175,31 @@ describe('child status', () => {
     ];
     expect(childrenOf(events.slice(0, 1))[0]!.status).toEqual({ kind: 'running' });
     expect(childrenOf(events)[0]!.status).toEqual({ kind: 'capped', cap: 'turns' });
+  });
+
+  it('runs a resumed child again in its place, and adds what each run spent', () => {
+    const child = asSessionId('c1');
+    const caps = { maxTurns: 4, maxCostUsd: 0.02 };
+    const at = '2026-10-06T00:00:00.000Z';
+    const other = asSessionId('c2');
+    const events: TurnEvent[] = [
+      { kind: 'child-start', seq: 3, at, child, toolUseId: 'tu', role: 'explore', model: 'm', effort: 'low', caps, start: 'fresh' },
+      { kind: 'child-start', seq: 4, at, child: other, toolUseId: 'tu2', role: 'explore', model: 'm', effort: 'low', caps, start: 'fresh' },
+      { kind: 'child-end', seq: 5, at, child, toolUseId: 'tu', end: { kind: 'done' }, turns: 2, costUsd: 0.01, summary: 's' },
+      { kind: 'child-start', seq: 6, at, child, toolUseId: 'tu_m', role: 'explore', model: 'm', effort: 'low', caps: { ...caps, maxCostUsd: 0.01 }, start: 'fresh' },
+    ];
+    const resumed = childrenOf(events);
+    expect(resumed.map((c) => c.child), 'in the order they first started').toEqual([child, other]);
+    expect(resumed[0]).toMatchObject({ status: { kind: 'running' }, toolUseId: 'tu_m', turns: 2, costUsd: 0.01 });
+    const ended = childrenOf([...events, { kind: 'child-end', seq: 7, at, child, toolUseId: 'tu_m', end: { kind: 'capped', cap: 'turns' }, turns: 4, costUsd: 0.02, summary: 's' }]);
+    expect(ended[0]).toMatchObject({ status: { kind: 'capped', cap: 'turns' }, turns: 6, costUsd: 0.03 });
+    const unpriced = childrenOf([...events, { kind: 'child-end', seq: 7, at, child, toolUseId: 'tu_m', end: { kind: 'done' }, turns: 1, costUsd: null, summary: 's' }]);
+    expect(unpriced[0]!.costUsd).toBeNull();
+    const late = childrenOf([
+      ...events.filter((e) => e.kind !== 'child-end'),
+      { kind: 'child-end', seq: 7, at, child, toolUseId: 'tu', end: { kind: 'done' }, turns: 2, costUsd: 0.01, summary: 's' },
+    ]);
+    expect(late[0], "an earlier run's end logged after the resume adds its spend and leaves the resumed run running").toMatchObject({ status: { kind: 'running' }, turns: 2, costUsd: 0.01 });
   });
 });
 

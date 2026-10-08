@@ -304,6 +304,8 @@ export type ChildOf = {
   readonly role: string;
   readonly caps: ChildCaps;
   readonly start: ChildStart;
+  /** It ran beside its parent's turn and reported as a message; a message that resumes it runs it the same way. */
+  readonly background?: true | undefined;
 };
 
 export const CHILD_CAPS = ['turns', 'cost'] as const;
@@ -319,9 +321,6 @@ export type ChildEnd =
 export type ChildStatus = { readonly kind: 'running' } | ChildEnd;
 
 export const CHILD_STATUS_KINDS = ['running', 'done', 'failed', 'cancelled', 'capped'] as const satisfies readonly ChildStatus['kind'][];
-
-/** A child is running until it ends, once; an end after the first changes nothing. */
-export const settleChild = (status: ChildStatus, end: ChildEnd): ChildStatus => (status.kind === 'running' ? end : status);
 
 const END_OF: Readonly<Record<DoneReason, ChildEnd>> = {
   end_turn: { kind: 'done' },
@@ -380,15 +379,29 @@ export type ChildSession = Omit<ChildStartEvent, 'kind' | 'seq'> & {
   readonly costUsd: number | null;
 };
 
+/** One run of a child: its first, or one that a message resumed. Each run's start and end name the call that began it. */
+export const childRunKey = (event: ChildEvent): string => `${event.child} ${event.toolUseId}`;
+
+/**
+ * A parent's children as its log records them, each once, in the order they first started. A child that a message
+ * resumed starts again under the same id. Each run's first end adds what that run spent, and the newest run's end
+ * is the child's status, so the end of an earlier run that is logged late leaves the newer run running.
+ */
 export function childrenOf(events: readonly TurnEvent[]): ChildSession[] {
   const children = new Map<string, ChildSession>();
+  const open = new Set<string>();
   for (const event of events) {
     if (event.kind === 'child-start') {
       const { kind: _, seq: __, ...start } = event;
-      children.set(event.child, { ...start, status: { kind: 'running' }, turns: 0, costUsd: 0 });
+      const before = children.get(event.child);
+      children.set(event.child, { ...start, status: { kind: 'running' }, turns: before?.turns ?? 0, costUsd: before === undefined ? 0 : before.costUsd });
+      open.add(childRunKey(event));
     } else if (event.kind === 'child-end') {
       const child = children.get(event.child);
-      if (child !== undefined) children.set(event.child, { ...child, status: settleChild(child.status, event.end), turns: event.turns, costUsd: event.costUsd });
+      if (child === undefined || !open.delete(childRunKey(event))) continue;
+      const costUsd = child.costUsd === null || event.costUsd === null ? null : child.costUsd + event.costUsd;
+      const status = event.toolUseId === child.toolUseId ? event.end : child.status;
+      children.set(event.child, { ...child, status, turns: child.turns + event.turns, costUsd });
     }
   }
   return [...children.values()];

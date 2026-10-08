@@ -224,6 +224,22 @@ describe('sessionSpend', () => {
     expect(shares).toBeCloseTo(1, 9);
   });
 
+  it('counts each run of a resumed child in the turn that started it, and the whole child in the session', () => {
+    const c1 = asSessionId('c1');
+    const resumed = sessionSpend([
+      ...SPEND_LOG,
+      { kind: 'child-start', seq: 18, at, child: c1, toolUseId: 'tu_m', role: 'explore', model: 'm', effort: 'low', caps: { maxTurns: 4, maxCostUsd: 0.02 }, start: 'fresh' },
+      { kind: 'child-end', seq: 19, at, child: c1, toolUseId: 'tu_m', end: { kind: 'done' }, turns: 2, costUsd: 0.002, summary: 's' },
+    ]);
+    const childrenOfTurn = (seq: number) => {
+      const turn = resumed.turns.find((t) => t.seq === seq)!;
+      return turn.kind === 'model' ? turn.children : [];
+    };
+    expect(childrenOfTurn(3)).toEqual([{ child: 'c1', role: 'explore', turns: 3, costUsd: 0.001 }]);
+    expect(childrenOfTurn(16)).toEqual([{ child: 'c1', role: 'explore', turns: 2, costUsd: 0.002 }]);
+    expect(resumed.children).toEqual([{ child: 'c1', role: 'explore', turns: 5, costUsd: 0.003 }]);
+  });
+
   it('says an external agent turn has no token data', () => {
     const cursor: TurnEvent[] = [
       { kind: 'session-start', session: { ...session, backend: { id: 'cursor' } } },

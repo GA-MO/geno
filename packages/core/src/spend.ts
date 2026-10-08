@@ -6,7 +6,7 @@ import type { ProviderName } from './providers.js';
 import type { CompactEvent } from './compact.js';
 import type { TurnEvent } from './session.js';
 import { startsTurn } from './steer.js';
-import { childrenOf } from './subagent.js';
+import { childRunKey, childrenOf } from './subagent.js';
 
 /** A subagent a turn started, and what it spent in its own session. */
 export type ChildSpend = { readonly child: string; readonly role: string; readonly turns: number; readonly costUsd: number | null };
@@ -50,6 +50,24 @@ const sumCost = (costs: readonly (number | null)[]): number | null => costs.redu
 /** A turn's tokens, for ranking when nothing is priced. */
 const weightOf = (turn: TurnSpend): number => (turn.kind === 'model' ? tokensOf(turn.breakdown.total.usage) : 0);
 
+/**
+ * Each run of each child, with the seq of the start that began it, so a run counts in the turn that started it. A
+ * child that a message resumed runs more than once; a run still going has reported nothing yet.
+ */
+function childRuns(events: readonly TurnEvent[]): (ChildSpend & { readonly seq: number })[] {
+  const runs: (ChildSpend & { readonly seq: number })[] = [];
+  const open = new Map<string, number>();
+  for (const event of events) {
+    if (event.kind === 'child-start') open.set(childRunKey(event), runs.push({ seq: event.seq, child: event.child, role: event.role, turns: 0, costUsd: 0 }) - 1);
+    if (event.kind !== 'child-end') continue;
+    const at = open.get(childRunKey(event));
+    if (at === undefined) continue;
+    open.delete(childRunKey(event));
+    runs[at] = { ...runs[at]!, turns: event.turns, costUsd: event.costUsd };
+  }
+  return runs;
+}
+
 /** A turn as the panel draws it: a prompt, or a /compact between turns, whose summary call is its only request. */
 const turnStartOf = (event: TurnEvent): { readonly seq: number; readonly prompt: string }[] => {
   if (startsTurn(event)) return [{ seq: event.seq, prompt: event.content }];
@@ -64,7 +82,7 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
   const { session } = start;
   const rates = ratesOf(session.provider, session.model);
   const children = childrenOf(events);
-  const childSeq = new Map(events.flatMap((e) => (e.kind === 'child-start' ? [[e.child, e.seq] as const] : [])));
+  const runs = childRuns(events);
   const starts = events.flatMap(turnStartOf);
   const turns = starts.map((start, i): TurnSpend => {
     const end = starts[i + 1]?.seq ?? Infinity;
@@ -76,7 +94,7 @@ export function sessionSpend(events: readonly TurnEvent[]): SessionSpend {
       return { kind: 'external', seq: start.seq, prompt: start.prompt, plan: EXTERNAL_BACKENDS[session.backend.id].plan, costUsd: reported.length === 0 ? null : reported.reduce((a, b) => a + b, 0) };
     }
     const breakdown = [...calls.map((c) => requestBreakdown(c.promptParts, c.usage, rates)), ...compactions.map((c) => requestBreakdown([['compaction', inputOf(c.usage)]], c.usage, rates))].reduce(addBreakdowns, EMPTY_BREAKDOWN);
-    const own = children.filter((c) => within(childSeq.get(c.child))).map((c): ChildSpend => ({ child: c.child, role: c.role, turns: c.turns, costUsd: c.costUsd }));
+    const own = runs.filter((run) => within(run.seq)).map(({ seq: _, ...spend }): ChildSpend => spend);
     return { kind: 'model', seq: start.seq, prompt: start.prompt, breakdown, children: own, costUsd: addCost(breakdown.total.costUsd, sumCost(own.map((c) => c.costUsd))) };
   });
   const breakdown = turns.reduce((sum, t) => (t.kind === 'model' ? addBreakdowns(sum, t.breakdown) : sum), EMPTY_BREAKDOWN);
