@@ -92,6 +92,9 @@ describe('the VS Code window pool', () => {
     expect(fake.ran.map((r) => r.suite)).toEqual(['a.js', 'b.js', 'c.js']);
     expect(new Set(fake.ran.map((r) => r.host)).size, 'no host ran two suites').toBe(3);
     expect(fake.ran.map((r) => r.env['GCODE_HOME'])).toEqual([a.env['GCODE_HOME'], b.env['GCODE_HOME'], c.env['GCODE_HOME']]);
+    const closing = pool!;
+    pool = undefined;
+    expect(await closing.close()).toEqual({ launches: 1, suites: 3, ownLaunches: 0 });
   });
 
   it('reloads the window to run a second suite in the same folder, as the reload suites need', async () => {
