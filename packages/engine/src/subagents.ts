@@ -32,6 +32,7 @@ import {
   handedBack,
   isPartial,
   isReadOnly,
+  laneSentence,
   mergeAgents,
   MESSAGE_AGENT_TOOL,
   STOP_AND_WAIT,
@@ -39,6 +40,8 @@ import {
   nextSeq,
   type ParentMoment,
   parseAgentDefinition,
+  parseLaneName,
+  type LaneName,
   REPORT_DELIVERED,
   reportMessageOf,
   resumeEvent,
@@ -55,8 +58,11 @@ import {
 import { formatCost, totalOf, type OpenSession } from './chat.js';
 import type { Io } from './command.js';
 import { drive, type Limits, type Mode, type Watcher } from './drive.js';
-import type { Files } from './files.js';
+import { captureEnvironment } from './environment.js';
+import { EngineError } from './errors.js';
+import { DISK_FILES, type Files } from './files.js';
 import { workingDiff } from './git.js';
+import { settleChildLane, type LaneSession, type SettledLane } from './lanes.js';
 import type { InstalledPlugin } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, sortedEntries } from './project-context.js';
 import { ExternalAgents, runExternalTurn, type KeyOf } from './external.js';
@@ -152,6 +158,17 @@ export function terminalChildHost(io: Io): SubagentHost {
   };
 }
 
+/** A lane a child works in: the lane, and its tools under an approval, whose commands a sandbox of the lane's own holds to it. */
+export type ChildLane = {
+  readonly lane: LaneSession;
+  readonly executors: (approval: Approval) => Executors;
+  /** Closes the lane's sandbox. The lane stays for the child's end to keep or remove. */
+  close(): Promise<void>;
+};
+
+/** Opens the lane `name` for the child `child`: the lane of that name when there is one, else a new one. */
+export type OpenChildLane = (name: LaneName, child: SessionId) => Promise<ChildLane>;
+
 /** At most this many read-only children of one parent run at once. */
 export const MAX_PARALLEL_CHILDREN = 4;
 
@@ -187,12 +204,31 @@ export type SubagentEnv = {
   readonly toolHooks?: ((approval: Approval, agent: HookAgent) => ToolHooks | undefined) | undefined;
   /** SubagentStart and SubagentStop for a child whose log is `transcript`; undefined runs neither. */
   readonly subagentHooks?: ((agent: HookAgent, transcript: string, approval: Approval) => SubagentHooks | undefined) | undefined;
+  /** Where an isolated child, or a workflow step with a lane, works; undefined refuses them. */
+  readonly lanes?: OpenChildLane | undefined;
 };
 
 /** What a workflow step sets on its child: the model, and caps in place of the definition's. */
 type StepOptions = { readonly model?: string | undefined; readonly max_turns?: number | undefined; readonly max_cost_usd?: number | undefined; readonly lane?: string | undefined };
 
 type ChildEndNote = Extract<ChildNote, { kind: 'child-end' }>;
+
+/** Where a new child works: a lane of its own, named after it, or the workflow run's lane that its step names. */
+type LaneWant = { readonly kind: 'own' } | { readonly kind: 'named'; readonly name: string };
+
+const ownLaneName = (agent: AgentDefinition, id: SessionId): string => {
+  const slug = agent.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 32);
+  return `${slug === '' ? 'agent' : slug}-${id.slice(0, 8)}`;
+};
+
+const keptLaneNote = (agent: AgentDefinition, { record, files }: Extract<SettledLane, { kind: 'kept' }>): string => {
+  const shown = files.length > 20 ? `${files.slice(0, 20).join(', ')} and ${files.length - 20} more` : files.join(', ');
+  return [
+    `${GENO_NOTE} ${agent.name}'s edits are in lane ${record.name}, on branch ${record.branch} at ${record.path}, not in your checkout.`,
+    ...(files.length === 0 ? [] : [`Files changed: ${shown}.`]),
+    `Read them there to review them; the user applies them from the Lanes pane or with gcode lane apply ${record.name}.`,
+  ].join(' ');
+};
 
 /**
  * A child's report as its parent's tool result, its end for the parent's log, whether the child failed with nothing to
@@ -205,7 +241,7 @@ type ChildOutcome = { readonly text: string; readonly ended: ChildEndNote; reado
  * resumes after the report the child handed back, or after where a run that Geno's stop cut off ends.
  */
 type ChildRun =
-  | { readonly kind: 'spawn'; readonly task: string; readonly start: ChildStart; readonly step: StepOptions; readonly background: boolean }
+  | { readonly kind: 'spawn'; readonly task: string; readonly start: ChildStart; readonly step: StepOptions; readonly background: boolean; readonly lane: LaneWant | undefined }
   | { readonly kind: 'resume'; readonly message: string; readonly log: SessionLog; readonly of: ChildOf; readonly moment: Exclude<ParentMoment, 'working'> };
 
 /** A child's log as its run begins: what the run's first prompt is, when the run began, and the task the user sees it on. */
@@ -238,6 +274,7 @@ const inputSchema = z.strictObject({
   max_turns: z.int().positive().optional(),
   max_cost_usd: z.number().positive().optional(),
   lane: z.string().min(1).optional(),
+  isolation: z.literal('worktree').optional(),
 });
 const STEP_FIELDS = ['model', 'max_turns', 'max_cost_usd', 'lane'] as const;
 const messageSchema = z.strictObject({ agent_session: z.string().min(1), text: z.string().trim().min(1) });
@@ -303,20 +340,26 @@ export function subagents(env: SubagentEnv): Subagents {
     caps: ChildCaps,
     parentEvents: readonly TurnEvent[],
     started: HookContextEvent | undefined,
+    place: ChildLane | undefined,
   ): Promise<OpenedChild> => {
     const parentSession = parent.log.session;
     const { start, task, step } = run;
+    const header = parentEvents[0];
+    const inherited = header?.kind === 'session-start' ? header.environment : undefined;
+    const workspace = place?.lane.record.path ?? parentSession.workspace;
+    // A fresh child in a lane is told of its lane by its own environment; a fork keeps its parent's, for the cache.
+    const environment =
+      place === undefined || inherited === undefined || start === 'fork' ? inherited : await captureEnvironment({ workspace, scratchpad: inherited.scratchpad, env: io.env });
     const session: Session = {
       id,
       createdAt: new Date().toISOString(),
-      workspace: parentSession.workspace,
+      workspace,
       provider: parentSession.provider,
       // A fork shares the parent's cached prefix only on the parent's model.
       model: agent.backend !== undefined ? agent.backend : start === 'fork' ? parentSession.model : (step.model ?? agent.model ?? parentSession.model),
       effort: agent.effort ?? sessionEffortOf(parentSession, parentEvents),
       ...(agent.backend === undefined ? {} : { backend: { id: agent.backend } }),
     };
-    const header = parentEvents[0];
     const file = sessionFile(store, session.id);
     const opening: TurnEvent[] = [
       {
@@ -325,8 +368,16 @@ export function subagents(env: SubagentEnv): Subagents {
         context: header?.kind === 'session-start' ? header.context : undefined,
         memory: header?.kind === 'session-start' ? header.memory : undefined,
         // The parent's, so a child knows where it runs; it shares the parent's scratchpad.
-        environment: header?.kind === 'session-start' ? header.environment : undefined,
-        child: { parentId: parentSession.id, toolUseId: use.id, role: agent.name, caps, start, ...(run.background ? { background: true } : {}) },
+        environment,
+        child: {
+          parentId: parentSession.id,
+          toolUseId: use.id,
+          role: agent.name,
+          caps,
+          start,
+          ...(run.background ? { background: true } : {}),
+          ...(place === undefined ? {} : { lane: place.lane.record.name }),
+        },
       },
       ...(start === 'fork' ? forkOpening(parentEvents, use.id, session.createdAt) : []),
     ];
@@ -334,7 +385,30 @@ export function subagents(env: SubagentEnv): Subagents {
     if (started !== undefined) opening.push({ ...started, seq: nextSeq(opening) });
     for (const event of opening) await appendEvent(file, event);
     const log: SessionLog = { file, session, events: opening, tornLine: undefined, goodBytes: 0 };
-    return { log, start, task, prompt: start === 'fork' ? forkTask(agent, task) : task, at: session.createdAt };
+    const lanePlace = place === undefined ? undefined : { name: place.lane.record.name, branch: place.lane.record.branch, main: place.lane.repo.main };
+    const forkLane =
+      lanePlace === undefined
+        ? ''
+        : `\n\n${GENO_NOTE} You work in lane ${laneSentence(lanePlace)} Your workspace is ${workspace}: paths in the conversation above are the main checkout's, and the same relative paths name the lane's copies.`;
+    return { log, start, task, prompt: start === 'fork' ? `${forkTask(agent, task)}${forkLane}` : task, at: session.createdAt };
+  };
+
+  // One lane at a time, so that two children's `git worktree add` never race on the repository's shared git folder.
+  let opening: Promise<unknown> = Promise.resolve();
+  const openLane = (agent: AgentDefinition, run: ChildRun, id: SessionId): Promise<ChildLane | undefined> => {
+    const raw = run.kind === 'resume' ? run.of.lane : run.lane === undefined ? undefined : run.lane.kind === 'own' ? ownLaneName(agent, id) : run.lane.name;
+    if (raw === undefined) return Promise.resolve(undefined);
+    const name = parseLaneName(raw);
+    const open = env.lanes;
+    if (name === undefined) return Promise.reject(new ToolError(`${raw} cannot name a lane: use letters, digits, dot, dash and underscore`));
+    if (open === undefined) return Promise.reject(new ToolError(`${agent.name} runs in a lane, and this session cannot start one`));
+    const opened = opening.then(() =>
+      open(name, id).catch((error: unknown) => {
+        throw error instanceof EngineError ? new ToolError(`${agent.name} runs in a lane, and ${error.message}`) : error;
+      }),
+    );
+    opening = opened.catch(() => {});
+    return opened;
   };
 
   // The run goes on from where the child's log ends, with the message as its parent's steer and nothing left to prompt.
@@ -359,13 +433,31 @@ export function subagents(env: SubagentEnv): Subagents {
     const asked = run.kind === 'spawn' ? { maxTurns: run.step.max_turns, maxCostUsd: run.step.max_cost_usd } : run.of.caps;
     const caps = childCaps(agent, env.limits.maxCostUsd - committed, asked);
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
+    const place = await openLane(agent, run, id);
+    try {
+      return await runPlaced(agent, run, use, ctx, id, inbox, caps, place);
+    } finally {
+      await place?.close();
+    }
+  };
+
+  const runPlaced = async (
+    agent: AgentDefinition,
+    run: ChildRun,
+    use: { readonly id: string },
+    ctx: Parameters<Executor['run']>[1],
+    id: SessionId,
+    inbox: SteerInbox,
+    caps: ChildCaps,
+    place: ChildLane | undefined,
+  ): Promise<ChildOutcome> => {
     const startedAt = Date.now();
     committed += caps.maxCostUsd;
     const childApproval = asker(env.approval, agent.name, id);
     // A child on an external agent runs its turn inside that agent, where Geno has no point to add context or keep it going.
     const lifecycle = agent.backend === undefined ? env.subagentHooks?.({ id, type: agent.name }, run.kind === 'spawn' ? sessionFile(store, id) : run.log.file, childApproval) : undefined;
     const started = await lifecycle?.start();
-    const { log, start, task, prompt, at } = run.kind === 'spawn' ? await openSpawn(agent, run, use, id, caps, ctx.events(), started) : await openResume(run, started);
+    const { log, start, task, prompt, at } = run.kind === 'spawn' ? await openSpawn(agent, run, use, id, caps, ctx.events(), started, place) : await openResume(run, started);
     const { session, file } = log;
     const firstSeq = nextSeq(log.events);
     const view: ChildView = { id: session.id, parentId: parent.log.session.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };
@@ -389,7 +481,9 @@ export function subagents(env: SubagentEnv): Subagents {
       },
     };
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
-    const executors = pick(env.executors(childApproval), agent.tools);
+    const executors = pick(place?.executors(childApproval) ?? env.executors(childApproval), agent.tools);
+    // A lane's review is its apply, so its files go to disk and never through the editor's buffers of the main checkout.
+    const files = place === undefined ? env.files : DISK_FILES;
     const toolHooks = env.toolHooks?.(childApproval, { id: session.id, type: agent.name });
     const own = new Set<string>(agent.tools);
     // A fork keeps the parent's tools for the cache, so it has no report tool and its last text is its report.
@@ -424,12 +518,12 @@ export function subagents(env: SubagentEnv): Subagents {
               log,
               prompt,
               approval: childApproval,
-              surface: { files: env.files, watcher },
+              surface: { files, watcher },
               signal: controller.signal,
               agents: external,
               keyOf: env.keyOf ?? (async () => undefined),
             })
-          : await drive(childIo, store, opened, prompt, caps, mode, { files: env.files, watcher, steers: inbox });
+          : await drive(childIo, store, opened, prompt, caps, mode, { files, watcher, steers: inbox });
       events = result.events;
       const error = result.events.findLast((e) => e.kind === 'error');
       end = childEndOf(result.reason, cancelledBy(), error?.kind === 'error' ? error.message : undefined);
@@ -445,7 +539,17 @@ export function subagents(env: SubagentEnv): Subagents {
     committed += (total.costUsd ?? 0) - caps.maxCostUsd;
     const lane = ran.findLast((e) => e.kind === 'backend-start')?.lane;
     const report = handedBack(ran, isPartial(end));
-    const notes = lane == null ? [] : [`${GENO_NOTE} ${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.`];
+    const settled =
+      place === undefined
+        ? undefined
+        : await settleChildLane(place.lane.repo, place.lane.record).catch((error: unknown) => {
+            io.err(`${agent.name}: could not settle lane ${place.lane.record.name}: ${error instanceof Error ? error.message : String(error)}`);
+            return undefined;
+          });
+    const notes = [
+      ...(lane == null ? [] : [`${GENO_NOTE} ${agent.name}'s edits are in lane ${lane}. The user applies them from the Lanes pane; they are not in the main checkout yet.`]),
+      ...(settled?.kind === 'kept' ? [keptLaneNote(agent, settled)] : []),
+    ];
     const summary = childSummary([report, ...notes].filter((part) => part !== '').join('\n\n'));
     const ended: ChildEndNote = { kind: 'child-end', at: new Date().toISOString(), child: session.id, toolUseId: use.id, end, turns: total.turns, costUsd: total.costUsd, summary };
     await env.host.ended(view, end, { turns: total.turns, costUsd: total.costUsd });
@@ -550,14 +654,21 @@ export function subagents(env: SubagentEnv): Subagents {
       return definition !== undefined && isReadOnly(definition);
     },
     describe: ({ agent, task }) => `${AGENT_TOOL} ${agent}: ${task.split('\n')[0]}`,
-    async run({ agent: name, task, fork, background, ...step }, ctx) {
+    async run({ agent: name, task, fork, background, isolation, ...step }, ctx) {
       const set = STEP_FIELDS.filter((field) => step[field] !== undefined);
       if (set.length > 0 && env.steps !== true) throw new ToolError(`${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} for workflow steps; leave ${set.length === 1 ? 'it' : 'them'} out`);
-      if (step.lane !== undefined) throw new ToolError('a workflow step in a lane is not supported yet');
       const agent = byName(name);
       if (agent === undefined) throw new ToolError(`no subagent ${name}; the subagents are ${agents.map((a) => a.name).join(', ')}`);
-      if (agent.isolation === 'worktree') throw new ToolError(`${name} asks for isolation: worktree, which Geno does not support yet; it cannot run`);
-      return launch(agent, { kind: 'spawn', task, start: fork === true ? 'fork' : 'fresh', step, background: background === true }, ctx, background === true);
+      // An external agent already works in a lane of its own. A step's lane is the run's, so the run's steps share it.
+      const lane: LaneWant | undefined =
+        agent.backend !== undefined
+          ? undefined
+          : step.lane !== undefined
+            ? { kind: 'named', name: `${step.lane}-${parent.log.session.id.slice(0, 8)}` }
+            : isolation === 'worktree' || agent.isolation === 'worktree'
+              ? { kind: 'own' }
+              : undefined;
+      return launch(agent, { kind: 'spawn', task, start: fork === true ? 'fork' : 'fresh', step, background: background === true, lane }, ctx, background === true);
     },
   });
 

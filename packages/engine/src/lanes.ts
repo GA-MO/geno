@@ -116,6 +116,8 @@ async function writeRecord(repo: LaneRepo, record: LaneRecord): Promise<void> {
   await rename(`${file}.tmp`, file);
 }
 
+export const findLane = (repo: LaneRepo, name: LaneName): Promise<LaneRecord | undefined> => readRecord(repo, name);
+
 export async function requireLane(repo: LaneRepo, raw: string): Promise<LaneRecord> {
   const name = parseLaneName(raw);
   const record = name === undefined ? undefined : await readRecord(repo, name);
@@ -349,6 +351,17 @@ export async function discardLane(repo: LaneRepo, record: LaneRecord, discardCha
     throw new LaneHasChanges(`lane ${record.name} has changes; apply them first, or pass --discard-changes to lose them`);
   }
   await removeLane(repo, record);
+}
+
+/** A subagent's lane once the subagent ends: removed when it has nothing to lose, else kept with the files it changed. */
+export type SettledLane = { readonly kind: 'removed' } | { readonly kind: 'kept'; readonly record: LaneRecord; readonly files: readonly string[] };
+
+export async function settleChildLane(repo: LaneRepo, record: LaneRecord): Promise<SettledLane> {
+  if (isDisposable(await laneStatus(record))) {
+    await removeLane(repo, record);
+    return { kind: 'removed' };
+  }
+  return { kind: 'kept', record, files: (await laneChanges(record)).map((change) => change.path) };
 }
 
 /** Removes every lane with nothing to lose, and never one with changes. */

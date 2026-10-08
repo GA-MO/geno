@@ -424,8 +424,6 @@ export function workflowRefusal(spec: WorkflowSpec, agents: readonly AgentDefini
       const role = byName.get(step.role);
       if (role === undefined) return `step ${step.id} names the role "${step.role}", and the subagents are ${agents.map((a) => a.name).join(', ')}`;
       if (role.backend !== undefined) return `step ${step.id}'s role ${step.role} runs on an external agent, which a workflow cannot cap`;
-      if (role.isolation === 'worktree') return `step ${step.id}'s role ${step.role} asks for isolation: worktree, which a workflow step cannot run in yet`;
-      if (step.lane !== undefined) return `step ${step.id} asks for lane ${step.lane}, and a workflow step cannot run in a lane yet; remove "lane" to run it in the main checkout`;
       if (!isReadOnly(role) && mode === 'plan') return `step ${step.id} uses ${step.role}, which changes files, and Plan mode changes nothing; switch to Ask or Auto`;
     }
   }

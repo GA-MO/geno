@@ -87,10 +87,10 @@ describe('parseAgentDefinition', () => {
     expect(agent.tools).toEqual(['check', 'glob', 'grep', 'list', 'read', 'skill']);
   });
 
-  it('keeps worktree isolation but reports it as unsupported', () => {
+  it('keeps worktree isolation, which runs each of its children in a lane, with nothing to report', () => {
     const { agent, notes } = parsed({ description: 'Isolated.', isolation: 'worktree' });
     expect(agent.isolation).toBe('worktree');
-    expect(notes).toEqual(['isolation: worktree is not supported yet, so the agent cannot run']);
+    expect(notes).toEqual([]);
   });
 
   it('skips a file with no description, or with no tool Geno has', () => {
