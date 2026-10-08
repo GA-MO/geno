@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -40,13 +41,23 @@ type Options = {
   readonly web?: { readonly resolve: Resolve };
   /** The workspace's rules, as Settings under Permissions saves them. */
   readonly rules?: readonly NewRule[];
+  /** The user's own Claude Code settings, written to `~/.claude/settings.json` under the run's fake home. */
+  readonly userSettings?: unknown;
+  /** VS Code's workspace trust, as the extension passes it. */
+  readonly trusted?: boolean;
 };
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
-async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [] }: Options) {
+async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web, rules = [], userSettings, trusted }: Options) {
   const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
-  const { workspace, io, store, seen } = await scriptedWire(wire, script, files);
+  const { workspace, io: served, env, store, seen } = await scriptedWire(wire, script, files);
+  const warnings: string[] = [];
+  const io = { ...served, err: (line: string) => warnings.push(line) };
   for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
+  if (userSettings !== undefined) {
+    await mkdir(path.join(env['HOME']!, '.claude'), { recursive: true });
+    await writeFile(path.join(env['HOME']!, '.claude', 'settings.json'), JSON.stringify(userSettings));
+  }
   const asked: Denial[] = [];
   const pending = [...answers];
   const approval: Approval =
@@ -65,10 +76,17 @@ async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answe
           auto: freshAuto(),
         };
   const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
-  const result = await runAgent(io, store, opened, 'Go.', { limits: { maxTurns: 6, maxCostUsd: 1 }, check: undefined, checkAfterEdit: false, approval, ...(web === undefined ? {} : { web }) });
+  const result = await runAgent(io, store, opened, 'Go.', {
+    limits: { maxTurns: 6, maxCostUsd: 1 },
+    check: undefined,
+    checkAfterEdit: false,
+    approval,
+    trustedWorkspace: trusted,
+    ...(web === undefined ? {} : { web }),
+  });
   /** Every tool result the model was sent, by tool use id, as the model reads it on this wire. */
   const view = (): Map<string, ToolView> => new Map(seen().flatMap((request) => request.results.map((r) => [r.id, { text: r.text, error: r.error }] as const)));
-  return { workspace, asked, result, requests: seen, sent: () => JSON.stringify(seen()), view };
+  return { workspace, asked, result, warnings, requests: seen, sent: () => JSON.stringify(seen()), view };
 }
 
 describe.each(WIRES)('T-PERM-05 secret paths on the %s wire', (wire) => {
@@ -142,7 +160,7 @@ describe.each(WIRES)('B/B-56 ask rules on the %s wire', (wire) => {
   it('B/B-56 an ask rule asks in Auto before a command the safe list would run, and a no keeps it from running', async () => {
     const touch = call('bash', { command: 'touch made.txt' });
     const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Stopped.' }], { files: { 'a.ts': '' }, mode: 'auto', answers: ['reject'], rules: [{ effect: 'ask', pattern: ['touch'] }] });
-    expect(run.asked).toEqual([expect.objectContaining({ rule: 'workspace-ask', command: 'touch made.txt', verdict: 'ask', reason: 'the workspace rule that asks before `touch`' })]);
+    expect(run.asked).toEqual([expect.objectContaining({ rule: 'workspace-ask', command: 'touch made.txt', verdict: 'ask', reason: 'the workspace rule that asks before `touch`, which the user set in Settings under Permissions' })]);
     expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
 
     const again = call('bash', { command: 'touch made.txt' });
@@ -204,6 +222,115 @@ describe.each(WIRES)('T-PERM-05 user path rules on the %s wire', (wire) => {
     const run = await scripted(wire, [{ calls: [hidden] }, { answer: 'It failed.' }], { files, mode: 'non-interactive', rules });
     expect(run.view().get(hidden.id)!.text).toMatch(/Operation not permitted|Permission denied/);
     expect(run.sent()).not.toContain(PRIVATE);
+  });
+});
+
+describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
+  const settings = (permissions: unknown): string => JSON.stringify({ permissions });
+
+  it('B/B-62 a deny in .claude/settings.json refuses the command in an untrusted workspace, naming the rule and the file', async () => {
+    const touch = call('bash', { command: 'touch made.txt' });
+    const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Refused.' }], {
+      files: { '.claude/settings.json': settings({ deny: ['Bash(touch:*)'] }) },
+      mode: 'auto',
+      trusted: false,
+    });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(touch.id)).toMatchObject({
+      error: true,
+      text: expect.stringContaining('matches the workspace rule that denies `touch`, which the user set in .claude/settings.json'),
+    });
+    expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
+    expect(run.warnings).toEqual([]);
+  });
+
+  it('B/B-65 a bare deny refuses the tool: WebFetch in .claude/settings.local.json stops web_fetch, Bash stops bash', async () => {
+    const load = call('tool_search', { select: ['web_fetch'] });
+    const fetch = call('web_fetch', { url: 'https://example.com', prompt: 'Summarize it.' });
+    const bash = call('bash', { command: 'ls' });
+    const run = await scripted(wire, [{ calls: [load] }, { calls: [fetch, bash] }, { answer: 'Both refused.' }], {
+      files: { 'a.ts': '', '.claude/settings.local.json': settings({ deny: ['WebFetch', 'Bash'] }) },
+      mode: 'ask',
+      trusted: false,
+    });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(fetch.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `WebFetch`, which the user set in .claude/settings.local.json') });
+    expect(run.view().get(bash.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `Bash`, which the user set in .claude/settings.local.json') });
+  });
+
+  it('B/B-62 a Read deny in ~/.claude/settings.json refuses read, and the text never reaches the model', async () => {
+    const read = call('read', { path: 'notes/plan.md' });
+    const run = await scripted(wire, [{ calls: [read] }, { answer: 'Refused.' }], {
+      files: { 'notes/plan.md': 'the plan\n' },
+      userSettings: { permissions: { deny: ['Read(notes/**)'] } },
+      mode: 'ask',
+    });
+    expect(run.view().get(read.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `Read(notes/**)`, which the user set in ~/.claude/settings.json') });
+    expect(run.sent()).not.toContain('the plan');
+  });
+
+  // Ask mode asks before the network, and a .invalid name never resolves, so a run that is let through fails fast.
+  const FETCH_A = 'curl -s https://a.invalid/x';
+  const FETCH_B = 'curl -s https://b.invalid/x';
+  const ALLOW_A = `Bash(${FETCH_A}:*)`;
+  const ran = (view: ToolView | undefined) => expect(view?.text).not.toMatch(/denied|rejected/);
+
+  it('B/B-62 a project allow is ignored when the workspace is untrusted, with one warning line, and applies when it is trusted', async () => {
+    const files = { '.claude/settings.json': settings({ allow: [ALLOW_A] }) };
+    const untrusted = call('bash', { command: FETCH_A });
+    const held = await scripted(wire, [{ calls: [untrusted] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'], trusted: false });
+    expect(held.asked).toEqual([expect.objectContaining({ command: FETCH_A, verdict: 'ask' })]);
+    expect(held.warnings).toEqual(['permissions: .claude/settings.json: 1 allow rule waits for a trusted workspace']);
+
+    const trusted = call('bash', { command: FETCH_A });
+    const run = await scripted(wire, [{ calls: [trusted] }, { answer: 'Ran.' }], { files, mode: 'ask', trusted: true });
+    expect(run.asked).toEqual([]);
+    ran(run.view().get(trusted.id));
+    expect(run.warnings).toEqual([]);
+  });
+
+  it('B/B-62 an allow in ~/.claude/settings.json applies without trust, and a deny anywhere beats it', async () => {
+    const fetchA = call('bash', { command: FETCH_A });
+    const run = await scripted(wire, [{ calls: [fetchA] }, { answer: 'Ran.' }], { files: { 'a.ts': '' }, userSettings: { permissions: { allow: [ALLOW_A] } }, mode: 'ask' });
+    expect(run.asked).toEqual([]);
+    ran(run.view().get(fetchA.id));
+
+    const denied = call('bash', { command: FETCH_A });
+    const refused = await scripted(wire, [{ calls: [denied] }, { answer: 'Refused.' }], {
+      files: { '.claude/settings.json': settings({ deny: ['Bash(curl:*)'] }) },
+      userSettings: { permissions: { allow: [ALLOW_A] } },
+      mode: 'ask',
+      trusted: true,
+    });
+    expect(refused.asked).toEqual([]);
+    expect(refused.view().get(denied.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `curl`') });
+  });
+
+  it('T-PERM-09 an imported allow covers its own command only: every flagged command of a line must be covered', async () => {
+    const files = { '.claude/settings.json': settings({ allow: [ALLOW_A] }) };
+    const alone = call('bash', { command: FETCH_A });
+    const joined = call('bash', { command: `${FETCH_A} && ${FETCH_B}` });
+    const run = await scripted(wire, [{ calls: [alone] }, { calls: [joined] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'], trusted: true });
+    ran(run.view().get(alone.id));
+    expect(run.asked).toEqual([expect.objectContaining({ rule: 'network-download', command: `${FETCH_A} && ${FETCH_B}`, verdict: 'ask' })]);
+  });
+
+  it('B/B-62 a rule Geno cannot read is skipped with one warning line, and the other rules of the file still apply', async () => {
+    const touch = call('bash', { command: 'touch made.txt' });
+    const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Refused.' }], {
+      files: { '.claude/settings.json': settings({ allow: ['WebFetch(domain:example.com)'], deny: ['mcp__github__create_issue', 'Bash(touch *)', 7] }) },
+      mode: 'auto',
+    });
+    expect(run.view().get(touch.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `touch`') });
+    expect(run.warnings).toEqual(['permissions: .claude/settings.json: Geno skips the rules it cannot apply: WebFetch(domain:example.com), mcp__github__create_issue, 7']);
+  });
+
+  it('B/B-62 a settings file that is not JSON is reported once, and the run goes on', async () => {
+    const first = call('bash', { command: 'ls' });
+    const run = await scripted(wire, [{ calls: [first] }, { calls: [call('bash', { command: 'ls' })] }, { answer: 'Listed.' }], { files: { '.claude/settings.json': '{ "permissions": ' }, mode: 'auto' });
+    expect(run.view().get(first.id)!.error).toBe(false);
+    expect(run.warnings).toHaveLength(1);
+    expect(run.warnings[0]).toMatch(/^permissions: \.claude\/settings\.json is not valid JSON, so its rules do not apply: /);
   });
 });
 

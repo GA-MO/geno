@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isSecretPath, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -202,7 +202,7 @@ export function isSecret(ctx: ToolContext, target: string): boolean {
 export const searchRule = (ctx: ToolContext, target: string): PathRule | undefined => ctx.pathRule?.('read', target);
 
 export const pathRuleRefusal = (tool: string, shown: string, rule: PathRule): string =>
-  `${shown} is off limits to ${tool}: the user's workspace rule \`${ruleText(rule)}\` in Settings under Permissions ${
+  `${shown} is off limits to ${tool}: the user's workspace rule \`${ruleText(rule)}\` in ${ruleHome(rule)} ${
     rule.effect === 'deny' ? 'denies reading it. Do not try to get its contents another way; if the task needs it, say so in your answer' : 'asks before it is read, and a search cannot ask. Call read on the file instead, which asks the user'
   }.`;
 

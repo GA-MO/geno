@@ -75,13 +75,13 @@ import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
-import { permissionStore } from './permissions.js';
+import { layeredPermissions, permissionStore } from './permissions.js';
 import { logMode } from './sessions.js';
 import { sessionIndex } from './session-index.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import type { ToolContext } from './tools/context.js';
-import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
+import { agentExecutors, freshAuto, modeOf, withDeniedTools, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
 import { readTerminalExecutor, type TerminalReader } from './tools/terminal.js';
@@ -241,7 +241,12 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   const home = io.env['HOME'] || homedir();
   const lane = await laneAt(workspace, home);
   if (lane !== undefined) await bindSession(lane, session.id);
-  const permissions = permissionStore(homeOf(store), lane?.repo.main ?? workspace);
+  const permissions = layeredPermissions(
+    permissionStore(homeOf(store), lane?.repo.main ?? workspace),
+    { claudeDir: claudeDirOf(io.env), trusted: options.trustedWorkspace === true },
+    { workspace, tempDir, home },
+    io.err,
+  );
   const ruledPaths = (root: string) => async () => sandboxDenials(await permissions.list(), { workspace: root, tempDir, home });
   const sandbox = await openSandbox(await sandboxPolicy({ store, home, workspace, tempDir, ...(lane === undefined ? {} : { writable: lane.gitWritable }) }), ruledPaths(workspace));
   let children: Subagents | undefined;
@@ -391,18 +396,20 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const mode = {
       tools: roster.offered,
       executors: rosterExecutors(roster, {
-        ...mcp?.executors,
-        ...user,
-        ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
-        ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
-        ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
-        ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
-        ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
-        ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
-        ...web,
-        ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
-        ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
-        ...(agentTool || options.resumeAgent !== undefined ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
+        ...withDeniedTools({
+          ...mcp?.executors,
+          ...user,
+          ...(widgets ? { [WIDGET_TOOL]: showWidget } : {}),
+          ...(editor === undefined ? {} : editorActionExecutors(editor, repo)),
+          ...(terminal === undefined ? {} : { [READ_TERMINAL_TOOL]: readTerminalExecutor(terminal) }),
+          ...(spinoffs ? spinoffExecutors(async () => spinoffsOf((await openSessionLog(store, session.id, io)).events)) : {}),
+          ...(schedules === undefined ? {} : { [SCHEDULE_TASK_TOOL]: scheduleExecutor(schedules) }),
+          ...(chapters ? { [MARK_CHAPTER_TOOL]: chapterExecutor(async () => chaptersOf((await openSessionLog(store, session.id, io)).events)) } : {}),
+          ...web,
+          ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
+          ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
+          ...(agentTool || options.resumeAgent !== undefined ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
+        }, permissions, options.approval),
         ...executors,
       }),
       system,

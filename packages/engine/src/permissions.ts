@@ -2,8 +2,21 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isPathRule, PATH_EFFECTS, PATH_TOOLS, RULE_EFFECTS, type NewRule, type PermissionRule, type PermissionsFile } from '@g-code/core';
+import {
+  claudePermissions,
+  isPathRule,
+  PATH_EFFECTS,
+  PATH_TOOLS,
+  RULE_EFFECTS,
+  type CommandScope,
+  type DeniedTool,
+  type NewRule,
+  type PermissionRule,
+  type PermissionsFile,
+} from '@g-code/core';
+import { claudeSettingsFiles } from './hook-config.js';
 import { laneAt } from './lanes.js';
+import { readJson } from './plugins.js';
 import { writeAtomically } from './memory.js';
 import { isMissing, StoreError } from './store.js';
 
@@ -83,6 +96,63 @@ export function permissionStore(appHome: string, workspace: string, now: () => D
     },
     async remove(id) {
       return write((await read()).filter((rule) => rule.id !== id));
+    },
+  };
+}
+
+/** Where a session finds Claude Code's settings, and whether VS Code trusts the workspace. */
+export type ClaudeSettingsSources = { readonly claudeDir: string | undefined; readonly trusted: boolean };
+
+export type SourcedDeniedTool = DeniedTool & { readonly source: string };
+
+/** A workspace's rules with Claude Code's beneath them, and the tools a Claude Code file denies by name. */
+export type SessionPermissions = PermissionStore & { deniedTool(tool: string): Promise<SourcedDeniedTool | undefined> };
+
+/**
+ * Geno's own store over Claude Code's settings files, read at each call as the store is. Deny and ask rules from every
+ * file apply; an allow from the repository's files only in a trusted workspace, since anyone who can commit wrote it.
+ * The local file comes before the shared one and the shared one before the user's. That orders only which rule a
+ * refusal names, as a deny anywhere beats an allow anywhere. A rule Geno cannot apply is reported once through `warn`.
+ */
+export function layeredPermissions(store: PermissionStore, { claudeDir, trusted }: ClaudeSettingsSources, scope: CommandScope, warn: (line: string) => void): SessionPermissions {
+  const warned = new Set<string>();
+  const once = (line: string) => {
+    if (warned.has(line)) return;
+    warned.add(line);
+    warn(line);
+  };
+  const shown = (file: string): string => {
+    if (file.startsWith(`${store.workspace}${path.sep}`)) return path.relative(store.workspace, file);
+    return file.startsWith(`${scope.home}${path.sep}`) ? `~/${path.relative(scope.home, file)}` : file;
+  };
+
+  async function imported(): Promise<{ readonly rules: readonly PermissionRule[]; readonly deniedTools: readonly SourcedDeniedTool[] }> {
+    const rules: PermissionRule[] = [];
+    const deniedTools: SourcedDeniedTool[] = [];
+    for (const { file, scope: from } of claudeSettingsFiles(claudeDir, store.workspace).toReversed()) {
+      const source = shown(file);
+      const raw = await readJson(file);
+      if (raw.kind === 'broken') once(`permissions: ${source} is not valid JSON, so its rules do not apply: ${raw.reason}`);
+      if (raw.kind !== 'read') continue;
+      const parsed = claudePermissions(raw.value, { ...scope, workspace: store.workspace });
+      if (parsed.skipped.length > 0) once(`permissions: ${source}: Geno skips the rules it cannot apply: ${parsed.skipped.join(', ')}`);
+      const held = !trusted && from === 'project' ? parsed.rules.filter((rule) => rule.effect === 'allow').length : 0;
+      if (held > 0) once(`permissions: ${source}: ${held} allow ${held === 1 ? 'rule waits' : 'rules wait'} for a trusted workspace`);
+      parsed.rules.forEach((rule, i) => {
+        if (rule.effect !== 'allow' || from === 'user' || trusted) rules.push({ ...rule, id: `${source}#${i}`, createdAt: '', source } as PermissionRule);
+      });
+      deniedTools.push(...parsed.deniedTools.map((denied) => ({ ...denied, source })));
+    }
+    return { rules, deniedTools };
+  }
+
+  return {
+    ...store,
+    async list() {
+      return [...(await store.list()), ...(await imported()).rules];
+    },
+    async deniedTool(tool) {
+      return (await imported()).deniedTools.find((denied) => denied.tool === tool);
     },
   };
 }

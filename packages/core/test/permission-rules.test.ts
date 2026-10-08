@@ -221,13 +221,13 @@ describe('ruledDenial', () => {
   it('names the deny rule and the command it caught', () => {
     expect(ruledDenial('pnpm test && pnpm publish --tag x', scope, 'auto', [deny('pnpm publish')])).toEqual({
       rule: 'workspace-deny',
-      reason: 'the workspace rule that denies `pnpm publish`',
+      reason: 'the workspace rule that denies `pnpm publish`, which the user set in Settings under Permissions',
       command: 'pnpm publish --tag x',
       verdict: 'deny',
     });
     expect(ruledDenial('timeout 9 pnpm publish', scope, 'auto', [ask('pnpm publish')])).toEqual({
       rule: 'workspace-ask',
-      reason: 'the workspace rule that asks before `pnpm publish`',
+      reason: 'the workspace rule that asks before `pnpm publish`, which the user set in Settings under Permissions',
       command: 'timeout 9 pnpm publish',
       verdict: 'ask',
     });

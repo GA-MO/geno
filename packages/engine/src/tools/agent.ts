@@ -32,6 +32,7 @@ import {
   ruledDenial,
   secretReadDenial,
   sleepRefusal,
+  ruleDenial,
   userRuleDenial,
   type AgentToolName,
   type ApprovalMode,
@@ -55,7 +56,7 @@ import type { Classify } from '../classifier.js';
 import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { tail } from '../process.js';
-import type { PermissionStore } from '../permissions.js';
+import type { PermissionStore, SessionPermissions } from '../permissions.js';
 import type { Sandbox } from '../sandbox.js';
 import {
   displayPath,
@@ -73,7 +74,7 @@ import {
 } from './context.js';
 import { backgroundExecutors, NO_BACKGROUND, type SessionBackground } from './background.js';
 import { previewExecutors } from './preview.js';
-import { EXECUTORS } from './index.js';
+import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
@@ -171,10 +172,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
     return `denied: \`${command}\` did not run. ${reason} Nobody can answer here, so Geno refused it. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
   }
   if (rule === 'workspace-deny') {
-    return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions. Do not retry it; find another way, or say in your answer that the rule stops you.`;
+    return `denied: \`${command}\` matches ${reason}. Do not retry it; find another way, or say in your answer that the rule stops you.`;
   }
   if (rule === 'workspace-ask') {
-    return `denied: \`${command}\` matches ${reason}, which the user set in Settings under Permissions, and nobody can answer here. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
+    return `denied: \`${command}\` matches ${reason}, and nobody can answer here. Do not retry it; find another way, or say in your answer what you need the user to allow.`;
   }
   if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
     return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
@@ -212,6 +213,26 @@ function inMode(name: AgentToolName, tool: Executor, approval: Approval): Execut
   };
 }
 
+/**
+ * Every tool, refused in every mode while a Claude Code settings file denies it by name. It stays offered, as a mode's
+ * tools do, so the cached prefix holds when the file changes.
+ */
+export function withDeniedTools<T extends Executors>(executors: T, permissions: Pick<SessionPermissions, 'deniedTool'>, approval: Approval): T {
+  return Object.fromEntries(
+    Object.entries(executors).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        async run(raw, ctx) {
+          const denied = await permissions.deniedTool(name);
+          if (denied !== undefined) throw refusalOf({ mode: modeOf(approval), ...ruleDenial('deny', denied.text, denied.source, name), decidedBy: 'rule', verdict: 'deny' });
+          return tool.run(raw, ctx);
+        },
+      } satisfies Executor,
+    ]),
+  ) as T;
+}
+
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
 
@@ -232,7 +253,7 @@ export type AgentToolEnv = {
   /** Where the session's background commands run; undefined for a subagent, which starts none. */
   readonly background?: SessionBackground | undefined;
   /** The workspace's remembered rules; undefined runs with none. */
-  readonly permissions?: PermissionStore | undefined;
+  readonly permissions?: (PermissionStore & Partial<Pick<SessionPermissions, 'deniedTool'>>) | undefined;
   /** What wakes the session later; undefined where nothing would, as in a command-line run or with auto-wake off. */
   readonly wakes?: SessionWakes | undefined;
   /** The background subagents of the session's run, for task_stop; undefined for a subagent, which starts none. */
@@ -483,5 +504,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     todo,
     watch_pr: watchPrExecutor(tools.wakes, tools.pr),
   };
-  return Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
+  const offered = Object.fromEntries(AGENT_TOOL_NAMES.map((name) => [name, inMode(name, all[name], tools.approval)])) as Record<AgentToolName, Executor>;
+  const deniedTool = tools.permissions?.deniedTool;
+  return deniedTool === undefined ? offered : withDeniedTools(offered, { deniedTool }, tools.approval);
 }

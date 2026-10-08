@@ -87,3 +87,4 @@ export * from './catalog.js';
 export * from './workflow.js';
 export * from './workflow-progress.js';
 export * from './hooks.js';
+export * from './claude-permissions.js';

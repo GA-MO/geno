@@ -31,8 +31,11 @@ export type PathEffect = (typeof PATH_EFFECTS)[number];
 /** A program and its fixed leading arguments, quotes removed: `pnpm vitest run` is `['pnpm', 'vitest', 'run']`. */
 export type CommandPattern = readonly [string, ...string[]];
 
+/** Where an imported rule lives, such as `.claude/settings.json`; a rule without one is from Settings under Permissions. */
+type RuleSource = { readonly source?: string | undefined };
+
 /** A rule the user keeps for one workspace. A command matches it when its words start with the pattern. */
-export type CommandRule = {
+export type CommandRule = RuleSource & {
   readonly id: string;
   readonly effect: RuleEffect;
   readonly pattern: CommandPattern;
@@ -43,7 +46,7 @@ export type CommandRule = {
  * A rule on files, in Claude Code's gitignore syntax: `//abs/path`, `~/path`, `/path` from the workspace root, and
  * `path` or `./path` from the workspace, where a pattern without a slash matches at any depth.
  */
-export type PathRule = {
+export type PathRule = RuleSource & {
   readonly id: string;
   readonly effect: PathEffect;
   readonly tool: PathTool;
@@ -231,17 +234,18 @@ const isVerb = (word: string | undefined): boolean => word !== undefined && !wor
 /** What a PreToolUse hook's allow never answers: a credentials file, a path outside the workspace, or a hard ask. */
 const FIRM_RULES: ReadonlySet<DenyRuleId> = new Set(['secret-path', 'path-outside-workspace']);
 
-/**
- * The verdict for a line under the workspace's rules; see RULES_IN_MODE for the order. `hookAllows` is a PreToolUse
- * hook's allow, which answers the question and skips the classifier after the deny rules, unless a flagged command is
- * firm (FIRM_RULES, `isHardAsk`).
- */
-/** The question or refusal a user rule puts on a call, which names the rule as the user typed it. */
+/** Where the user keeps a rule, as a refusal names it. */
+export const ruleHome = (rule: RuleSource): string => rule.source ?? 'Settings under Permissions';
+
+/** The question or refusal a user rule puts on a call, which names the rule as the user typed it and where it lives. */
 export function userRuleDenial(rule: PermissionRule, command: string): Denial {
-  const text = ruleText(rule);
-  return rule.effect === 'deny'
-    ? { rule: 'workspace-deny', reason: `the workspace rule that denies \`${text}\``, command, verdict: 'deny' }
-    : { rule: 'workspace-ask', reason: `the workspace rule that asks before \`${text}\``, command, verdict: 'ask' };
+  return ruleDenial(rule.effect === 'allow' ? 'ask' : rule.effect, ruleText(rule), ruleHome(rule), command);
+}
+
+export function ruleDenial(effect: Exclude<RuleEffect, 'allow'>, text: string, home: string, command: string): Denial {
+  return effect === 'deny'
+    ? { rule: 'workspace-deny', reason: `the workspace rule that denies \`${text}\`, which the user set in ${home}`, command, verdict: 'deny' }
+    : { rule: 'workspace-ask', reason: `the workspace rule that asks before \`${text}\`, which the user set in ${home}`, command, verdict: 'ask' };
 }
 
 // A word's value as a path from the workspace, an option's `=value` included; the sandbox holds where a cd moved to.
@@ -264,6 +268,11 @@ function caughtBy(effect: RuleEffect, parsed: readonly ParsedCommand[], rules: r
   return undefined;
 }
 
+/**
+ * The verdict for a line under the workspace's rules; see RULES_IN_MODE for the order. `hookAllows` is a PreToolUse
+ * hook's allow, which answers the question and skips the classifier after the deny rules, unless a flagged command is
+ * firm (FIRM_RULES, `isHardAsk`).
+ */
 export function ruledDenial(command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[], hookAllows = false): Denial | undefined {
   const parsed = parseCommandLine(command, scope);
   const honours = RULES_IN_MODE[mode];
