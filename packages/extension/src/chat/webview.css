@@ -1359,6 +1359,41 @@ body.diagram-tab {
   gap: 6px;
 }
 
+.permission-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.permission-comment {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid var(--vscode-input-border, var(--border));
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font: inherit;
+  resize: vertical;
+}
+
+.permission-comment:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.permission-comment::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.permission-comment-sent {
+  margin: 4px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
+}
+
 .permission-chosen .permission-reason,
 .permission-cancelled .permission-reason {
   margin-bottom: 6px;

@@ -182,7 +182,8 @@ export type PermissionChoice = { readonly optionId: string; readonly name: strin
 
 export type PermissionOutcome =
   | { readonly kind: 'open' }
-  | { readonly kind: 'chosen'; readonly optionId: string }
+  /** `comment` is what the user told the agent with "No, and tell the agent…". */
+  | { readonly kind: 'chosen'; readonly optionId: string; readonly comment?: string | undefined }
   /** A question card's answers, keyed by question id. */
   | { readonly kind: 'answered'; readonly answers: AskUserAnswers }
   /** The user declined a question card, with Skip or Esc. */
@@ -300,7 +301,7 @@ export type Action =
       readonly rule?: string | undefined;
     }
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
-  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined }
+  | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined; readonly comment?: string | undefined }
   | { readonly type: 'error'; readonly message: string }
   /** A steer the engine logged in the running turn at `seq`. */
   | { readonly type: 'steer'; readonly seq: number; readonly shown: SteerShown }
@@ -475,7 +476,7 @@ export type FromView =
   | { readonly type: 'stop-background'; readonly id: string }
   /** The composer gained or lost a draft, which holds back a turn Geno would start by itself. */
   | { readonly type: 'drafting'; readonly typing: boolean }
-  | { readonly type: 'permission'; readonly id: string; readonly optionId: string }
+  | { readonly type: 'permission'; readonly id: string; readonly optionId: string; readonly comment?: string | undefined }
   /** The user's answers to a question card, or their refusal. */
   | { readonly type: 'answer'; readonly id: string; readonly answer: AskUserAnswer }
   /** Keep or undo hunks, one from a hunk's buttons or every pending one of a turn from its changes card. */

@@ -49,6 +49,7 @@ import {
   LANE_ROOT,
   laneApplyPrompt,
   NOT_SHOWN_ERROR,
+  PERMISSION_COMMENT_META,
   RUNNING_META,
   TASK_ENDS,
   TASK_STATUSES,
@@ -500,6 +501,8 @@ const warn = (error: unknown): void => void vscode.window.showWarningMessage(mes
 
 /** An open question of a session the panel left; the engine asks the next window that shows the session. */
 const NOT_SHOWN = Symbol('not shown');
+/** A card's answer: the option, and the comment "No, and tell the agent…" carries. */
+type Choice = { readonly optionId: string; readonly comment?: string };
 const notShown = (sessionId: string) => new acp.RequestError(NOT_SHOWN_ERROR.code, `the panel no longer shows ${sessionId}`, { reason: NOT_SHOWN_ERROR.reason });
 
 /** The engine session that chat turns, inline edits and review share. */
@@ -554,7 +557,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private nextTurn = 0;
   private readonly sessions = new WeakMap<Connection, Promise<string>>();
   private turn: SessionLink | undefined;
-  private readonly permissions = new Map<string, (optionId: string | undefined | typeof NOT_SHOWN) => void>();
+  private readonly permissions = new Map<string, (choice: Choice | undefined | typeof NOT_SHOWN) => void>();
   /** Open question cards, each settled with the user's answers or refusal, or undefined when cancelled. */
   private readonly questions = new Map<string, (answer: AskUserAnswer | undefined | typeof NOT_SHOWN) => void>();
   private nextPermission = 0;
@@ -1364,7 +1367,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   private async askPermission({ sessionId, toolCall, options }: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     if (!this.isOurs(sessionId)) throw notShown(sessionId);
     const id = String(this.nextPermission++);
-    const optionId = await new Promise<string | undefined | typeof NOT_SHOWN>((resolve) => {
+    const choice = await new Promise<Choice | undefined | typeof NOT_SHOWN>((resolve) => {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
       const { command, reason, description, rule } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined };
@@ -1386,9 +1389,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.permissions.delete(id);
-    if (optionId === NOT_SHOWN) throw notShown(sessionId);
-    this.dispatch({ type: 'permission-done', id, optionId });
-    return { outcome: optionId === undefined ? { outcome: 'cancelled' } : { outcome: 'selected', optionId } };
+    if (choice === NOT_SHOWN) throw notShown(sessionId);
+    const comment = choice?.comment === undefined ? {} : { comment: choice.comment };
+    this.dispatch({ type: 'permission-done', id, optionId: choice?.optionId, ...comment });
+    if (choice === undefined) return { outcome: { outcome: 'cancelled' } };
+    return { outcome: { outcome: 'selected', optionId: choice.optionId, ...(choice.comment === undefined ? {} : { _meta: { [PERMISSION_COMMENT_META]: choice.comment } }) } };
   }
 
   /**
@@ -1482,7 +1487,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'spinoff-open': ({ id }) => void this.openSpinoff(id).catch(warn),
       'mark-chapter': ({ turn, title }) => void this.markChapter(turn, title),
       drafting: ({ typing }) => this.drafting(typing),
-      permission: ({ id, optionId }) => this.permissions.get(id)?.(optionId),
+      permission: ({ id, optionId, comment }) => this.permissions.get(id)?.({ optionId, ...(comment === undefined ? {} : { comment }) }),
       answer: ({ id, answer }) => this.questions.get(id)?.(answer),
       keep: ({ hunks }) => void vscode.commands.executeCommand(KEEP_COMMAND, hunks),
       undo: ({ hunks }) => void vscode.commands.executeCommand(UNDO_COMMAND, hunks),

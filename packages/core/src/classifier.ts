@@ -54,6 +54,8 @@ export type ApprovalRecord = {
   /** `hook` is a PermissionRequest hook that answered the card in the user's place. */
   readonly decidedBy: 'rule' | 'classifier' | 'user' | 'hook';
   readonly verdict: Exclude<Verdict, 'ask'>;
+  /** What the user told the agent with their no, from "No, and tell the agent…". */
+  readonly comment?: string | undefined;
   /** A PermissionRequest hook's deny: what it told the model, and whether it ends the turn, as the user's no does. */
   readonly message?: string | undefined;
   readonly interrupt?: true | undefined;

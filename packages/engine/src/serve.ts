@@ -110,6 +110,8 @@ import {
   approvalQuestion,
   DEFAULT_SESSION_MODE,
   isMcpRule,
+  COMMENT_OPTION,
+  PERMISSION_COMMENT_META,
   isSessionMode,
   MCP_ENABLE_METHOD,
   MCP_SERVERS_METHOD,
@@ -344,12 +346,24 @@ const DIRECTORY_PERMISSION_OPTIONS: acp.PermissionOption[] = [
 ];
 const PERMISSION_ANSWERS: Readonly<Record<string, PermissionAnswer>> = { allow: 'allow', 'allow-session': 'allow-session', 'allow-workspace': 'allow-workspace' };
 
-const optionsFor = (denial: Denial): acp.PermissionOption[] => {
+/** The user's answer to a permission card; a comment left empty is a plain no. */
+function permissionAnswerOf(outcome: acp.RequestPermissionOutcome): PermissionAnswer {
+  if (outcome.outcome !== 'selected') return 'reject';
+  if (outcome.optionId !== COMMENT_OPTION) return PERMISSION_ANSWERS[outcome.optionId] ?? 'reject';
+  const comment = outcome._meta?.[PERMISSION_COMMENT_META];
+  return typeof comment === 'string' && comment.trim() !== '' ? { comment: comment.trim() } : 'reject';
+}
+
+// Last on every card, as on Claude Code's. Its answer carries the comment in _meta, under PERMISSION_COMMENT_META.
+const COMMENT_PERMISSION_OPTION: acp.PermissionOption = { optionId: COMMENT_OPTION, name: 'No, and tell the agent…', kind: 'reject_once' };
+
+const choicesFor = (denial: Denial): acp.PermissionOption[] => {
   if (denial.directory !== undefined) return DIRECTORY_PERMISSION_OPTIONS;
   const keeps = denial.offer !== undefined || denial.keeps !== undefined;
   if (isMcpRule(denial.rule)) return keeps ? MCP_RULE_PERMISSION_OPTIONS : MCP_PERMISSION_OPTIONS;
   return keeps ? RULE_PERMISSION_OPTIONS : PERMISSION_OPTIONS;
 };
+const optionsFor = (denial: Denial): acp.PermissionOption[] => [...choicesFor(denial), COMMENT_PERMISSION_OPTION];
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
@@ -769,7 +783,7 @@ function editorTurn(
             }),
           asker?.sessionId,
         );
-        return (outcome.outcome === 'selected' && PERMISSION_ANSWERS[outcome.optionId]) || 'reject';
+        return permissionAnswerOf(outcome);
       } catch (error) {
         // A turn stopped while its question waited for an editor: as if the editor had cancelled it.
         if (route.signal.aborted) return 'reject';

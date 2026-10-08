@@ -7,6 +7,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import {
   PERMISSION_ADD_METHOD,
+  PERMISSION_COMMENT_META,
   PERMISSION_REMOVE_METHOD,
   PERMISSIONS_METHOD,
   type PermissionAddRequest,
@@ -50,11 +51,12 @@ async function setup(replies: readonly Reply[]) {
   };
   const permissions: acp.RequestPermissionRequest[] = [];
   let optionId = 'reject';
+  let comment: string | undefined;
   const client = acp
     .client({ name: 'test-editor' })
     .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
       permissions.push(params);
-      return { outcome: { outcome: 'selected', optionId } };
+      return { outcome: { outcome: 'selected', optionId, ...(comment === undefined ? {} : { _meta: { [PERMISSION_COMMENT_META]: comment } }) } };
     })
     .onNotification(acp.methods.client.session.update, () => {});
   const store = openStore(env);
@@ -78,7 +80,7 @@ async function setup(replies: readonly Reply[]) {
         (r.body.messages.at(-1).content as { type: string; tool_use_id?: string; content?: string }[]).flatMap((b) => (b.type === 'tool_result' ? [[b.tool_use_id!, b.content!] as const] : [])),
       ),
     );
-  return { workspace, home, transport, permissions, session, sessionless, prompt, results, answerWith: (id: string) => (optionId = id) };
+  return { workspace, home, transport, permissions, session, sessionless, prompt, results, answerWith: (id: string, said?: string) => ((optionId = id), (comment = said)) };
 }
 
 const list = (ctx: acp.ClientContext, cwd: string) => ctx.request<PermissionsResponse, PermissionsRequest>(PERMISSIONS_METHOD, { cwd });
@@ -105,6 +107,7 @@ describe('remembered permission rules', () => {
       ['allow', 'Allow once'],
       ['reject', 'Reject'],
       ['allow-workspace', 'Always allow in this workspace'],
+      ['reject-with-comment', 'No, and tell the agent…'],
     ]);
     expect(permissions[0]!.toolCall.rawInput).toMatchObject({ command: 'ls ..', reason: 'a path outside the workspace', rule: 'ls ..' });
 
@@ -161,7 +164,7 @@ describe('remembered permission rules', () => {
     });
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls', reason: 'the workspace rule that asks before `ls`, which the user set in Settings under Permissions' });
-    expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
+    expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject', 'reject-with-comment']);
     expect(transport.requests.filter((r) => r.body.tool_choice !== undefined), 'the classifier is not called').toEqual([]);
   });
 
@@ -178,8 +181,28 @@ describe('remembered permission rules', () => {
 
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'git push --force origin main', reason: 'git push' });
-    expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
+    expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject', 'reject-with-comment']);
     expect(results().get(forced.id), 'the rejection ends the turn, so no request carries its result').toBeUndefined();
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it('B/B-71 "No, and tell the agent…" puts the comment in the tool result, and the turn goes on with it', async () => {
+    const push = bash('git push origin main');
+    const fork = bash('git status');
+    const { permissions, transport, session, prompt, results, answerWith } = await setup([toolCall('Pushing.', [push], usage), toolCall('Checking.', [fork], usage), answer('Pushed to the fork instead.', usage)]);
+    answerWith('reject-with-comment', '  Push to my fork, not origin.  ');
+    await session((ctx, sessionId) => prompt(ctx, sessionId, 'Ship it'));
+    expect(permissions).toHaveLength(1);
+    expect(results().get(push.id)).toBe('The user rejected `git push origin main`, so it did not run. To tell you how to proceed, the user said:\nPush to my fork, not origin.');
+    expect(transport.requests.length, 'the model is called again with the comment').toBeGreaterThanOrEqual(2);
+  });
+
+  it('B/B-71 "No, and tell the agent…" with an empty comment is a plain no, which ends the turn', async () => {
+    const push = bash('git push origin main');
+    const { transport, session, prompt, results, answerWith } = await setup([toolCall('Pushing.', [push], usage), answer('Not pushed.', usage)]);
+    answerWith('reject-with-comment', '   ');
+    await session((ctx, sessionId) => prompt(ctx, sessionId, 'Ship it'));
+    expect(results().get(push.id)).toBeUndefined();
     expect(transport.requests).toHaveLength(1);
   });
 
@@ -206,6 +229,7 @@ describe('remembered permission rules', () => {
       ['allow', 'Allow once'],
       ['allow-session', 'Allow this directory for the session'],
       ['reject', 'Reject'],
+      ['reject-with-comment', 'No, and tell the agent…'],
     ]);
     expect(results().get(first.id)).toBe('1\tfirst note');
     expect(results().get(second.id)).toBe('1\tsecond note');

@@ -14,6 +14,7 @@ export * from './request.js';
 export * from './effort.js';
 export * from './cost.js';
 export * from './call-progress.js';
+export * from './permission-comment.js';
 export * from './context-window.js';
 export * from './model-capabilities.js';
 export * from './tools.js';
