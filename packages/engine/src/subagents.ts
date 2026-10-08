@@ -185,7 +185,7 @@ export type ChildLane = {
 /** Opens the lane `name` for the child `child`: the lane of that name when there is one, else a new one. */
 export type OpenChildLane = (name: LaneName, child: SessionId) => Promise<ChildLane>;
 
-/** At most this many read-only children of one parent run at once. */
+/** At most this many read-only or lane children of one parent run at once. */
 export const MAX_PARALLEL_CHILDREN = 4;
 
 export type SubagentEnv = {
@@ -236,6 +236,20 @@ const ownLaneName = (agent: AgentDefinition, id: SessionId): string => {
   const slug = agent.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 32);
   return `${slug === '' ? 'agent' : slug}-${id.slice(0, 8)}`;
 };
+
+// An external agent already works in a lane of its own. A step's lane is the run's, so the run's steps share it.
+const laneWant = (agent: AgentDefinition, input: { readonly lane?: string | undefined; readonly isolation?: 'worktree' | undefined }, parentId: SessionId): LaneWant | undefined =>
+  agent.backend !== undefined
+    ? undefined
+    : input.lane !== undefined
+      ? { kind: 'named', name: `${input.lane}-${parentId.slice(0, 8)}` }
+      : input.isolation === 'worktree' || agent.isolation === 'worktree'
+        ? { kind: 'own' }
+        : undefined;
+
+/** The lane a run works in, by its raw name; undefined for the main checkout. */
+const laneNameOf = (agent: AgentDefinition, run: ChildRun, id: SessionId): string | undefined =>
+  run.kind === 'resume' ? run.of.lane : run.lane === undefined ? undefined : run.lane.kind === 'own' ? ownLaneName(agent, id) : run.lane.name;
 
 const keptLaneNote = (agent: AgentDefinition, { record, files }: Extract<SettledLane, { kind: 'kept' }>): string => {
   const shown = files.length > 20 ? `${files.slice(0, 20).join(', ')} and ${files.length - 20} more` : files.join(', ');
@@ -303,6 +317,21 @@ const reportExecutor = executor({
   run: async () => REPORT_DELIVERED,
 });
 
+/** Runs work under one key after the work already queued under it; work with no key runs at once. */
+function exclusive() {
+  const tails = new Map<string, Promise<unknown>>();
+  return <T>(key: string | undefined, work: () => Promise<T>): Promise<T> => {
+    if (key === undefined) return work();
+    const done = (tails.get(key) ?? Promise.resolve()).then(work);
+    const tail = done.catch(() => {});
+    tails.set(key, tail);
+    void tail.then(() => {
+      if (tails.get(key) === tail) tails.delete(key);
+    });
+    return done;
+  };
+}
+
 function semaphore(size: number) {
   let free = size;
   const waiting: (() => void)[] = [];
@@ -331,6 +360,8 @@ const asker = (approval: Approval, name: string, sessionId: SessionId): Approval
 export function subagents(env: SubagentEnv): Subagents {
   const { io, store, parent, agents } = env;
   const parallel = semaphore(MAX_PARALLEL_CHILDREN);
+  // The writers of one checkout, the main one or a lane, take turns; children in different checkouts run side by side.
+  const checkout = exclusive();
   // Each child until its end is logged, so `settled` never returns while an end is still on its way to the log.
   const running = new Set<Promise<unknown>>();
   const track = <T>(work: Promise<T>): Promise<T> => {
@@ -416,8 +447,7 @@ export function subagents(env: SubagentEnv): Subagents {
 
   // One lane at a time, so that two children's `git worktree add` never race on the repository's shared git folder.
   let opening: Promise<unknown> = Promise.resolve();
-  const openLane = (agent: AgentDefinition, run: ChildRun, id: SessionId): Promise<ChildLane | undefined> => {
-    const raw = run.kind === 'resume' ? run.of.lane : run.lane === undefined ? undefined : run.lane.kind === 'own' ? ownLaneName(agent, id) : run.lane.name;
+  const openLane = (agent: AgentDefinition, raw: string | undefined, id: SessionId): Promise<ChildLane | undefined> => {
     if (raw === undefined) return Promise.resolve(undefined);
     const name = parseLaneName(raw);
     const open = env.lanes;
@@ -449,12 +479,20 @@ export function subagents(env: SubagentEnv): Subagents {
     return { log: { ...log, events: [...events, resumed] }, start: of.start, task: message, prompt: '', at };
   };
 
-  const runChild = async (agent: AgentDefinition, run: ChildRun, use: { readonly id: string }, ctx: Parameters<Executor['run']>[1], id: SessionId, inbox: SteerInbox): Promise<ChildOutcome> => {
+  const runChild = async (
+    agent: AgentDefinition,
+    run: ChildRun,
+    use: { readonly id: string },
+    ctx: Parameters<Executor['run']>[1],
+    id: SessionId,
+    inbox: SteerInbox,
+    laneName: string | undefined,
+  ): Promise<ChildOutcome> => {
     // A resumed child gets its spawn's caps afresh, held like any child's to what this run has left for children.
     const asked = run.kind === 'spawn' ? { maxTurns: run.step.max_turns, maxCostUsd: run.step.max_cost_usd } : run.of.caps;
     const caps = childCaps(agent, env.limits.maxCostUsd - committed, asked);
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
-    const place = await openLane(agent, run, id);
+    const place = await openLane(agent, laneName, id);
     try {
       return await runPlaced(agent, run, use, ctx, id, inbox, caps, place);
     } finally {
@@ -592,10 +630,13 @@ export function subagents(env: SubagentEnv): Subagents {
     }
     const parentId = parent.log.session.id;
     const parentInbox = env.steers.of(parentId);
-    if (background && !readOnly) throw new ToolError(`${name} may change files, so it cannot run in the background beside this conversation's own edits`);
+    const id = run.kind === 'spawn' ? asSessionId(randomUUID()) : run.log.session.id;
+    const laneName = laneNameOf(agent, run, id);
+    if (background && !readOnly && laneName === undefined) {
+      throw new ToolError(`${name} may change files, so it runs in the background only in a lane of its own, away from this conversation's edits; add isolation: "worktree"`);
+    }
     if (background && parentInbox === undefined) throw new ToolError('a background subagent needs a running turn to report to');
     const use = { id: ctx.toolUseId ?? `toolu_gcode_${randomUUID()}` };
-    const id = run.kind === 'spawn' ? asSessionId(randomUUID()) : run.log.session.id;
     // Opened before the child waits for a slot, so a message sent meanwhile reaches its first model call.
     // An external agent's turn is one prompt with no safe point between tool rounds, so a message would wait for its end.
     const refusal = agent.backend === undefined ? undefined : `${name} runs on ${EXTERNAL_BACKENDS[agent.backend].label}, which cannot take a message mid-turn`;
@@ -603,7 +644,9 @@ export function subagents(env: SubagentEnv): Subagents {
     const stop = new AbortController();
     if (background) inBackground.add(stop);
     const childCtx = background ? { ...ctx, signal: AbortSignal.any([ctx.signal, stop.signal]) } : ctx;
-    const child = (readOnly ? parallel : <T>(work: () => Promise<T>) => work())(() => runChild(agent, run, use, childCtx, id, inbox));
+    const writes = laneName !== undefined ? `lane ${laneName}` : readOnly ? undefined : 'main';
+    const slot = readOnly || laneName !== undefined ? parallel : <T>(work: () => Promise<T>) => work();
+    const child = checkout(writes, () => slot(() => runChild(agent, run, use, childCtx, id, inbox, laneName)));
     void child
       .finally(() => {
         inBackground.delete(stop);
@@ -670,9 +713,9 @@ export function subagents(env: SubagentEnv): Subagents {
   const tool = agentToolDefinition(agents);
   const run = executor({
     input: inputSchema,
-    concurrent: ({ agent }) => {
+    concurrent: ({ agent, ...input }) => {
       const definition = byName(agent);
-      return definition !== undefined && isReadOnly(definition);
+      return definition !== undefined && (isReadOnly(definition) || laneWant(definition, input, parent.log.session.id) !== undefined);
     },
     describe: ({ agent, task }) => `${AGENT_TOOL} ${agent}: ${task.split('\n')[0]}`,
     async run({ agent: name, task, fork, background, isolation, ...step }, ctx) {
@@ -680,15 +723,7 @@ export function subagents(env: SubagentEnv): Subagents {
       if (set.length > 0 && env.steps !== true) throw new ToolError(`${set.join(', ')} ${set.length === 1 ? 'is' : 'are'} for workflow steps; leave ${set.length === 1 ? 'it' : 'them'} out`);
       const agent = byName(name);
       if (agent === undefined) throw new ToolError(`no subagent ${name}; the subagents are ${agents.map((a) => a.name).join(', ')}`);
-      // An external agent already works in a lane of its own. A step's lane is the run's, so the run's steps share it.
-      const lane: LaneWant | undefined =
-        agent.backend !== undefined
-          ? undefined
-          : step.lane !== undefined
-            ? { kind: 'named', name: `${step.lane}-${parent.log.session.id.slice(0, 8)}` }
-            : isolation === 'worktree' || agent.isolation === 'worktree'
-              ? { kind: 'own' }
-              : undefined;
+      const lane = laneWant(agent, { lane: step.lane, isolation }, parent.log.session.id);
       return launch(agent, { kind: 'spawn', task, start: fork === true ? 'fork' : 'fresh', step, background: background === true, lane }, ctx, background === true);
     },
   });

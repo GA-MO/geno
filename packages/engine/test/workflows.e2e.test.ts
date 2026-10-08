@@ -99,6 +99,19 @@ const WORKFLOWS: Readonly<Record<string, unknown>> = {
       { id: 'again', role: 'worker', prompt: '[lagain] make alpha 3', lane: 'fix' },
     ],
   },
+  lanes: {
+    description: 'Three fixes side by side, two of them in one lane.',
+    maxCostUsd: 1,
+    steps: [
+      {
+        parallel: [
+          { id: 'a', role: 'worker', prompt: '[la] make alpha 2', lane: 'a' },
+          { id: 'b', role: 'worker', prompt: '[lb] make alpha 3', lane: 'b' },
+          { id: 'a2', role: 'worker', prompt: '[la2] add c.ts', lane: 'a' },
+        ],
+      },
+    ],
+  },
   slow: { description: 'One slow look.', steps: [{ id: 'hang', role: 'explore', prompt: '[hang] look slowly' }, { id: 'after', role: 'review', prompt: '[after] never' }] },
 };
 
@@ -379,6 +392,47 @@ describe('gcode serve: workflows', () => {
     for (const report of reports) expect(report).toContain(`lane ${name}, on branch geno/${name}`);
   });
 
+  it('C/C-14 runs parallel steps in different lanes at once, and steps that share a lane one after the other', async () => {
+    const read = { id: 'tu_r', name: 'read', input: { path: 'a.ts' } };
+    const edit = (from: string, to: string) => ({ id: 'tu_e', name: 'edit', input: { path: 'a.ts', old_str: from, new_str: to } });
+    // Lane a's first step holds its first answer until lane b's step asks, which only a step running beside it can.
+    const held = async () => {
+      const deadline = Date.now() + 5000;
+      while (model.requests('[lb]').length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+    const step =
+      (to: string, before = async () => {}): Script =>
+      async (n) =>
+        n === 0 ? (await before(), toolCall('Reading.', [read], usage)) : n === 1 ? toolCall('Editing.', [edit('alpha = 1', `alpha = ${to}`)], usage) : handBack(`alpha is ${to}.`, usage);
+    const model = models({
+      '[la]': step('2', held),
+      '[lb]': step('3'),
+      '[la2]': (n) => (n === 0 ? toolCall('Adding.', [{ id: 'tu_c', name: 'edit', input: { path: 'c.ts', create: true, new_str: 'export const gamma = 1;\n' } }], usage) : handBack('c.ts added.', usage)),
+      [PARENT]: () => answer('Done.', usage),
+    });
+    const { result, store } = await serve(model.fetch, async (window, heard) => {
+      await window.prompt('/workflow lanes');
+      await until(() => workflowTask(heard, 'lanes')?.status === 'done', 'the workflow to finish');
+      return workflowTask(heard, 'lanes')!;
+    });
+    expect(result.workflow?.status, JSON.stringify(result.workflow)).toBe('done');
+    const events = await logOf(store, result.sessionId);
+    const ends = new Map(events.flatMap((e) => (e.kind === 'child-end' ? [[e.toolUseId, Date.parse(e.at)] as const] : [])));
+    const ran = new Map(events.flatMap((e) => (e.kind === 'child-start' ? [[e.toolUseId, { start: Date.parse(e.at), end: ends.get(e.toolUseId)! }] as const] : [])));
+    const [a, b, a2] = ['toolu_gcode_wf_1', 'toolu_gcode_wf_2', 'toolu_gcode_wf_3'].map((id) => ran.get(id)!);
+    const overlap = (x: typeof a, y: typeof a) => x!.start < y!.end && y!.start < x!.end;
+    expect(overlap(a, b), `lanes a and b run at once: ${JSON.stringify([...ran])}`).toBe(true);
+    expect(overlap(a, a2), `the two steps of lane a take turns: ${JSON.stringify([...ran])}`).toBe(false);
+
+    const head = events[0]!;
+    const workspace = head.kind === 'session-start' ? head.session.workspace : '';
+    const laneDir = (lane: string) => path.join(workspace, '.geno', 'worktrees', `${lane}-${result.sessionId.slice(0, 8)}`);
+    expect(readFileSync(path.join(laneDir('a'), 'a.ts'), 'utf8')).toBe('export const alpha = 2;\n');
+    expect(readFileSync(path.join(laneDir('a'), 'c.ts'), 'utf8'), "lane a holds both of its steps' edits").toBe('export const gamma = 1;\n');
+    expect(readFileSync(path.join(laneDir('b'), 'a.ts'), 'utf8')).toBe('export const alpha = 3;\n');
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const alpha = 1;\n');
+  });
+
   it('lists the workflows for /workflow with no name, and names the one it does not know', async () => {
     const model = models({ [PARENT]: () => answer('never', usage), 'List the workflows': () => answer('never', usage) });
     const { store, sessionId } = await serve(model.fetch, async (window) => {
@@ -388,6 +442,6 @@ describe('gcode serve: workflows', () => {
     const outputs = (await logOf(store, sessionId)).flatMap((e) => (e.kind === 'tool-result' && 'output' in e ? [e.output] : []));
     expect(outputs[0]).toContain('- capped: A fix that runs out of money.');
     expect(outputs[0]).toContain('- three: Review, fix, check and verify. Input: What to focus on');
-    expect(outputs[1]).toContain('no workflow nope; the workflows are capped, fanout, laned, slow, three');
+    expect(outputs[1]).toContain('no workflow nope; the workflows are capped, fanout, laned, lanes, slow, three');
   });
 });

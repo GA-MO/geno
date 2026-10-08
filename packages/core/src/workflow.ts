@@ -415,7 +415,7 @@ export function stepCaps(step: AgentStep, role: AgentDefinition | undefined): Ch
 
 /**
  * Why the workflow cannot run in this session, before anything is spent: a role the session has no agent for, or a
- * writer in Plan mode. Writers side by side are safe: the loop runs a call that edits alone, one after another.
+ * writer in Plan mode. Writers side by side are safe: those of the main checkout, and those of one lane, take turns.
  */
 export function workflowRefusal(spec: WorkflowSpec, agents: readonly AgentDefinition[], mode: ApprovalMode): string | undefined {
   for (const node of spec.steps) {
