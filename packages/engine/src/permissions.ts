@@ -4,6 +4,10 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   claudePermissions,
+  DOMAIN_TOOLS,
+  isCommandRule,
+  isDomainRule,
+  isMcpToolRule,
   isPathRule,
   PATH_EFFECTS,
   PATH_TOOLS,
@@ -27,7 +31,7 @@ import { isMissing, StoreError } from './store.js';
 export type PermissionStore = {
   readonly workspace: string;
   list(): Promise<readonly PermissionRule[]>;
-  /** Saves a rule; one for the same pattern, or the same tool and path, is replaced, so saving twice keeps one. */
+  /** Saves a rule; one with the same target (`sameTarget`) is replaced, so saving twice keeps one. */
   add(rule: NewRule): Promise<readonly PermissionRule[]>;
   remove(id: string): Promise<readonly PermissionRule[]>;
 };
@@ -47,12 +51,30 @@ const ruleSchema = z.union([
     path: z.string().min(1),
     createdAt: z.string(),
   }),
+  z.strictObject({
+    id: z.string().min(1),
+    effect: z.enum(RULE_EFFECTS),
+    tool: z.enum(DOMAIN_TOOLS),
+    domain: z.string().min(1),
+    createdAt: z.string(),
+  }),
+  z.strictObject({
+    id: z.string().min(1),
+    effect: z.enum(RULE_EFFECTS),
+    mcp: z.string().min(1),
+    createdAt: z.string(),
+  }),
 ]);
 const fileSchema = z.strictObject({ version: z.literal(1), workspace: z.string(), rules: z.array(ruleSchema) });
 
 const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((word, i) => word === b[i]);
-const sameTarget = (a: PermissionRule, b: NewRule): boolean =>
-  isPathRule(a) || isPathRule(b) ? isPathRule(a) && isPathRule(b) && a.tool === b.tool && a.path === b.path : sameWords(a.pattern, b.pattern);
+/** Whether a new rule replaces an old one: the same words, the same tool and path or domain, or the same MCP name. */
+const sameTarget = (a: PermissionRule, b: NewRule): boolean => {
+  if (isPathRule(a) && isPathRule(b)) return a.tool === b.tool && a.path === b.path;
+  if (isDomainRule(a) && isDomainRule(b)) return a.tool === b.tool && a.domain === b.domain;
+  if (isMcpToolRule(a) && isMcpToolRule(b)) return a.mcp === b.mcp;
+  return isCommandRule(a) && isCommandRule(b) && sameWords(a.pattern, b.pattern);
+};
 
 /** The workspace whose rules a session follows: its main checkout when it runs in a lane. */
 export async function rulesWorkspace(workspace: string, home: string | undefined): Promise<string> {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { denialFor, type ApprovalMode, type CommandScope, type Denial } from '../src/approval.js';
 import {
+  domainMatches,
+  domainRuleFor,
+  mcpRuleFor,
+  mcpToolRuleName,
   parseRule,
   pathRuleFor,
   pathRuleMatches,
@@ -8,7 +12,10 @@ import {
   ruledDenial,
   ruleText,
   sandboxDenials,
+  toolRuleOutcome,
+  trustedDomains,
   type CommandPattern,
+  type NewRule,
   type PathEffect,
   type PathTool,
   type PermissionRule,
@@ -408,5 +415,90 @@ describe('ruledDenial under a PreToolUse hook allow', () => {
   ];
   it.each(HOOK_ALLOWS)('%s: %s with %j %s', (mode, command, rules, outcome) => {
     expect(outcomeOf(ruledDenial(command, scope, mode, rules, true))).toBe(outcome);
+  });
+});
+
+const stored = (rule: NewRule, i = 0): PermissionRule => ({ ...rule, id: `r${i}`, createdAt: '2026-10-08T00:00:00.000Z' }) as PermissionRule;
+
+describe('domain rules', () => {
+  // Claude Code's `domain:` matching: any case, no trailing dot, `*.` for subdomains only, `*` inside a label.
+  const ROWS: readonly (readonly [string, string, boolean])[] = [
+    ['example.com', 'example.com', true],
+    ['example.com', 'EXAMPLE.com.', true],
+    ['example.com', 'docs.example.com', false],
+    ['example.com', 'example.com.evil.test', false],
+    ['*.example.com', 'docs.example.com', true],
+    ['*.example.com', 'a.b.example.com', true],
+    ['*.example.com', 'example.com', false],
+    ['*.example.com', 'notexample.com', false],
+    ['*.example.com', 'example.com.evil.test', false],
+    ['api-*.example.com', 'api-eu.example.com', true],
+    ['api-*.example.com', 'api.eu.example.com', false],
+    ['*', 'anything.test', true],
+  ];
+  it.each(ROWS)('%s covers %s: %s', (domain, host, covers) => {
+    expect(domainMatches(domain, host)).toBe(covers);
+  });
+
+  it('picks a deny over an ask over an allow; an allow covers only its tool, a deny or an ask both', () => {
+    const rules = [
+      stored({ effect: 'allow', tool: 'web_fetch', domain: '*.example.com' }, 0),
+      stored({ effect: 'ask', tool: 'web_fetch', domain: 'pay.example.com' }, 1),
+      stored({ effect: 'deny', tool: 'browser', domain: 'evil.example.com' }, 2),
+    ];
+    expect(domainRuleFor('web_fetch', 'docs.example.com', rules)?.id).toBe('r0');
+    expect(domainRuleFor('browser', 'docs.example.com', rules)).toBeUndefined();
+    expect(domainRuleFor('browser', 'pay.example.com', rules)?.id).toBe('r1');
+    expect(domainRuleFor('web_fetch', 'evil.example.com', rules)?.id).toBe('r2');
+    expect(trustedDomains(rules)).toEqual(['*.example.com']);
+  });
+
+  it('honours an allow only where Geno could have asked, and turns an ask into a refusal in Plan', () => {
+    const allow = domainRuleFor('web_fetch', 'example.com', [stored({ effect: 'allow', tool: 'web_fetch', domain: 'example.com' })]);
+    const ask = domainRuleFor('web_fetch', 'example.com', [stored({ effect: 'ask', tool: 'web_fetch', domain: 'example.com' })]);
+    expect(toolRuleOutcome(allow, 'auto', 'fetch x')).toEqual({ kind: 'allowed' });
+    expect(toolRuleOutcome(allow, 'non-interactive', 'fetch x')).toBeUndefined();
+    expect(toolRuleOutcome(ask, 'auto', 'fetch x')).toMatchObject({ kind: 'ruled', denial: { rule: 'workspace-ask', verdict: 'ask' } });
+    expect(toolRuleOutcome(ask, 'plan', 'fetch x')).toMatchObject({ kind: 'ruled', denial: { rule: 'workspace-ask', verdict: 'deny' } });
+  });
+});
+
+describe('MCP rules', () => {
+  it('matches a tool by name, and a server bare or with __*, as Geno spells the names', () => {
+    const rules = [
+      stored({ effect: 'allow', mcp: 'mcp__github__get_issue' }, 0),
+      stored({ effect: 'ask', mcp: 'mcp__linear__*' }, 1),
+      stored({ effect: 'deny', mcp: 'mcp__my-server' }, 2),
+    ];
+    expect(mcpRuleFor({ server: 'github', tool: 'get_issue' }, rules)?.id).toBe('r0');
+    expect(mcpRuleFor({ server: 'github', tool: 'create_issue' }, rules)).toBeUndefined();
+    expect(mcpRuleFor({ server: 'linear', tool: 'save_issue' }, rules)?.id).toBe('r1');
+    expect(mcpRuleFor({ server: 'my-server', tool: 'anything' }, rules)?.id).toBe('r2');
+    expect(mcpRuleFor({ server: 'my', tool: 'server' }, rules)).toBeUndefined();
+    expect(mcpToolRuleName('my-server', 'get.thing')).toBe('mcp__my_server__get_thing');
+  });
+
+  it('picks a deny over an allow for the same tool', () => {
+    const rules = [stored({ effect: 'allow', mcp: 'mcp__docs' }, 0), stored({ effect: 'deny', mcp: 'mcp__docs__delete' }, 1)];
+    expect(mcpRuleFor({ server: 'docs', tool: 'delete' }, rules)?.id).toBe('r1');
+    expect(mcpRuleFor({ server: 'docs', tool: 'search' }, rules)?.id).toBe('r0');
+  });
+});
+
+describe('parseRule for domains and MCP tools', () => {
+  it('reads WebFetch(domain:...), Browser(domain:...) and MCP names, and writes them back the same', () => {
+    const typed = ['WebFetch(domain:nextjs.org)', 'Browser(domain:*.example.com)', 'mcp__github', 'mcp__github__*', 'mcp__github__create_issue'];
+    for (const text of typed) {
+      const parsed = parseRule('allow', text, scope);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(ruleText(parsed.rule)).toBe(text);
+    }
+    expect(parseRule('deny', 'WebFetch(domain:evil.test)', scope)).toEqual({ ok: true, rule: { effect: 'deny', tool: 'web_fetch', domain: 'evil.test' } });
+  });
+
+  it('refuses a URL where a host goes, a WebFetch rule without domain:, and an MCP name with other characters', () => {
+    for (const text of ['WebFetch(domain:https://nextjs.org/docs)', 'WebFetch(nextjs.org)', 'Browser(domain:)', 'mcp__', 'mcp__github__create issue']) {
+      expect(parseRule('allow', text, scope).ok, text).toBe(false);
+    }
   });
 });

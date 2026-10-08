@@ -59,13 +59,44 @@ export type PathRule = RuleSource & {
   readonly createdAt: string;
 };
 
-export type PermissionRule = CommandRule | PathRule;
+/** The tools a domain rule names: web_fetch as Claude Code's `WebFetch(domain:x)`, and the built-in browser as `Browser(domain:x)`. */
+export const DOMAIN_TOOLS = ['web_fetch', 'browser'] as const;
+export type DomainTool = (typeof DOMAIN_TOOLS)[number];
+
+/**
+ * A rule on the hosts web_fetch and the browser reach, matched as Claude Code matches `domain:` (`domainMatches`). An
+ * allow covers the tool it names. A deny or an ask covers both tools, which is stricter than Claude Code.
+ */
+export type DomainRule = RuleSource & {
+  readonly id: string;
+  readonly effect: RuleEffect;
+  readonly tool: DomainTool;
+  readonly domain: string;
+  readonly createdAt: string;
+};
+
+/** A rule on MCP tools in Claude Code's form: `mcp__server__tool` names one tool, `mcp__server` and `mcp__server__*` every tool of the server. */
+export type McpToolRule = RuleSource & {
+  readonly id: string;
+  readonly effect: RuleEffect;
+  readonly mcp: string;
+  readonly createdAt: string;
+};
+
+export type PermissionRule = CommandRule | PathRule | DomainRule | McpToolRule;
 
 /** A rule as the user gives it, before the store names and dates it. */
-export type NewRule = Pick<CommandRule, 'effect' | 'pattern' | 'exact'> | Pick<PathRule, 'effect' | 'tool' | 'path'>;
+export type NewRule =
+  | Pick<CommandRule, 'effect' | 'pattern' | 'exact'>
+  | Pick<PathRule, 'effect' | 'tool' | 'path'>
+  | Pick<DomainRule, 'effect' | 'tool' | 'domain'>
+  | Pick<McpToolRule, 'effect' | 'mcp'>;
 
-export const isPathRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly tool: PathTool }> => 'tool' in rule;
-const commandRules = (rules: readonly PermissionRule[]): readonly CommandRule[] => rules.filter((rule): rule is CommandRule => !isPathRule(rule));
+export const isPathRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly path: string }> => 'path' in rule;
+export const isDomainRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly domain: string }> => 'domain' in rule;
+export const isMcpToolRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly mcp: string }> => 'mcp' in rule;
+export const isCommandRule = <R extends PermissionRule | NewRule>(rule: R): rule is Extract<R, { readonly pattern: CommandPattern }> => 'pattern' in rule;
+const commandRules = (rules: readonly PermissionRule[]): readonly CommandRule[] => rules.filter(isCommandRule);
 
 /** The store record: one file per workspace under the app home, never in the repository. */
 export type PermissionsFile = { readonly version: 1; readonly workspace: string; readonly rules: readonly PermissionRule[] };
@@ -265,7 +296,7 @@ function caughtBy(effect: RuleEffect, parsed: readonly ParsedCommand[], rules: r
   const catches = (rule: PermissionRule, simple: SimpleCommand): boolean =>
     isPathRule(rule)
       ? rule.tool === 'read' && simple.words.some((word) => wordPaths(word, scope).some((file) => pathRuleMatches(rule, file, scope)))
-      : denies(rule.pattern, simple);
+      : isCommandRule(rule) && denies(rule.pattern, simple);
   for (const rule of rules) {
     if (rule.effect !== effect) continue;
     const hit = parsed.find(({ variants }) => variants.some((simple) => catches(rule, simple)));
@@ -373,6 +404,77 @@ export function sandboxDenials(rules: readonly PermissionRule[], scope: CommandS
   return { denyRead: reads, denyWrite: [...reads, ...denied.filter((rule) => rule.tool === 'edit').flatMap((rule) => sandboxGlobs(rule, scope))] };
 }
 
+// Claude Code's form of a host: any case, without the trailing dot a fully qualified name may carry.
+const normalHost = (host: string): string => host.toLowerCase().replace(/(?<=[^*.])\.+$/, '');
+
+// A `*` stands for any characters within one label; labels are split by dots.
+const labelsRegex = (domain: string): string => domain.split('*').map(escapeRegex).join('[^.:]*');
+
+/**
+ * Whether a domain rule covers `host`, as Claude Code matches `domain:`: `*` covers every host, `*.example.com` every
+ * subdomain of example.com but not example.com itself, and a `*` inside a label any characters of that label.
+ */
+export function domainMatches(domain: string, host: string): boolean {
+  const rule = normalHost(domain);
+  const name = normalHost(host);
+  if (rule === '*') return true;
+  if (!rule.includes('*')) return rule === name;
+  if (rule.startsWith('*.')) return new RegExp(`^(?:[^.:]+\\.)+${labelsRegex(rule.slice(2))}$`).test(name);
+  return new RegExp(`^${labelsRegex(rule)}$`).test(name);
+}
+
+/**
+ * The domain rule that governs `tool` on `host`: a deny before an ask before an allow. A deny or an ask on either tool
+ * covers both; an allow only the tool it names.
+ */
+export function domainRuleFor(tool: DomainTool, host: string, rules: readonly PermissionRule[]): DomainRule | undefined {
+  const governing = rules.filter((rule): rule is DomainRule => isDomainRule(rule) && (rule.tool === tool || rule.effect !== 'allow') && domainMatches(rule.domain, host));
+  return governing.find((rule) => rule.effect === 'deny') ?? governing.find((rule) => rule.effect === 'ask') ?? governing[0];
+}
+
+/** The hosts the user trusts: every domain an allow rule names, which the classifier is told. */
+export const trustedDomains = (rules: readonly PermissionRule[]): readonly string[] => [
+  ...new Set(rules.filter((rule): rule is DomainRule => isDomainRule(rule) && rule.effect === 'allow').map((rule) => normalHost(rule.domain))),
+];
+
+// Geno's spelling of a name in a model-facing MCP tool name (mcpToolName); a `*` stays a wildcard.
+const mcpPart = (name: string): string => name.replace(/[^A-Za-z0-9_*]/g, '_');
+
+/** An MCP rule's server, and its tool or undefined for every tool, as Claude Code splits `mcp__server__tool`. */
+function mcpTarget(rule: string): { readonly server: string; readonly tool: string | undefined } | undefined {
+  const parts = rule.split('__');
+  if (parts[0] !== 'mcp' || parts[1] === undefined || parts[1] === '') return undefined;
+  const tool = parts.slice(2).join('__');
+  return { server: mcpPart(parts[1]), tool: tool === '' || tool === '*' ? undefined : mcpPart(tool) };
+}
+
+/** The MCP rule that governs one tool of one server, by the names the server gives: a deny before an ask before an allow. */
+export function mcpRuleFor(call: { readonly server: string; readonly tool: string }, rules: readonly PermissionRule[]): McpToolRule | undefined {
+  const governing = rules.filter((rule): rule is McpToolRule => {
+    if (!isMcpToolRule(rule)) return false;
+    const target = mcpTarget(rule.mcp);
+    return target !== undefined && target.server === mcpPart(call.server) && (target.tool === undefined || target.tool === mcpPart(call.tool));
+  });
+  return governing.find((rule) => rule.effect === 'deny') ?? governing.find((rule) => rule.effect === 'ask') ?? governing[0];
+}
+
+/** The rule a "for this workspace" answer to an MCP card saves: that one tool. */
+export const mcpToolRuleName = (server: string, tool: string): string => `mcp__${mcpPart(server)}__${mcpPart(tool)}`;
+
+/** What a domain or MCP rule does to a call: puts its question or refusal on it, or lets it run unasked. */
+export type ToolRuleOutcome = { readonly kind: 'ruled'; readonly denial: Denial } | { readonly kind: 'allowed' };
+
+/**
+ * The outcome of a domain or MCP rule, or undefined when no rule applies. Plan never asks, so there an ask rule
+ * refuses. A run nobody can ask honours no allow, as for commands.
+ */
+export function toolRuleOutcome(rule: DomainRule | McpToolRule | undefined, mode: ApprovalMode, command: string): ToolRuleOutcome | undefined {
+  if (rule === undefined) return undefined;
+  if (rule.effect === 'allow') return RULES_IN_MODE[mode].allow ? { kind: 'allowed' } : undefined;
+  const denial = userRuleDenial(rule, command);
+  return { kind: 'ruled', denial: mode === 'plan' ? { ...denial, verdict: 'deny' } : denial };
+}
+
 const PLAIN_WORD = /^[\w@%+=:,./-]+$/;
 
 /** A pattern as the user reads and types it, a word with spaces or quotes in single quotes. */
@@ -381,27 +483,40 @@ export const patternText = (pattern: readonly string[]): string =>
 
 const OPERATORS = /[;&|<>()$`\n#]/;
 
-const TOOL_LABELS: Readonly<Record<PathTool, string>> = { read: 'Read', edit: 'Edit' };
+const TOOL_LABELS: Readonly<Record<PathTool | DomainTool, string>> = { read: 'Read', edit: 'Edit', web_fetch: 'WebFetch', browser: 'Browser' };
 
-/** A rule as the user reads and types it: a command's words, `Bash(words)` for an exact one, or `Read(path)` and `Edit(path)`. */
+/**
+ * A rule as the user reads and types it: a command's words, `Bash(words)` for an exact one, `Read(path)` and
+ * `Edit(path)`, `WebFetch(domain:host)` and `Browser(domain:host)`, or an MCP tool's name.
+ */
 export const ruleText = (rule: PermissionRule | NewRule): string => {
   if (isPathRule(rule)) return `${TOOL_LABELS[rule.tool]}(${rule.path})`;
+  if (isDomainRule(rule)) return `${TOOL_LABELS[rule.tool]}(domain:${rule.domain})`;
+  if (isMcpToolRule(rule)) return rule.mcp;
   return rule.exact === true ? `Bash(${patternText(rule.pattern)})` : patternText(rule.pattern);
 };
 
 export type ParsedRule = { readonly ok: true; readonly rule: NewRule } | { readonly ok: false; readonly reason: string };
 
-// Claude Code's forms: `Read(path)`, `Edit(path)`, and `Bash(command)`, whose trailing ` *` or `:*` is Geno's prefix match.
-const TOOL_FORM = /^(Read|Edit|Bash)\((.*)\)$/s;
+// Claude Code's forms: `Read(path)`, `Edit(path)`, `WebFetch(domain:host)`, and `Bash(command)`, whose trailing ` *`
+// or `:*` is Geno's prefix match. `Browser(domain:host)` is Geno's own, for the built-in browser.
+const TOOL_FORM = /^(Read|Edit|Bash|WebFetch|Browser)\((.*)\)$/s;
 const PREFIX_STAR = /(?:\s\*|:\*)$/;
+const MCP_NAME = /^mcp__[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*(?:__(?:\*|[A-Za-z0-9_.-]+))?$/;
+const DOMAIN = /^(?:\*|(?:\*\.)?[A-Za-z0-9*_-]+(?:\.[A-Za-z0-9*_-]+)*\.?)$/;
 
 /**
  * A rule the user typed. A command is one simple command of plain words, and for an allow nothing that no rule may
  * pre-allow. Plain words and `Bash(words *)` match as a prefix; an allow typed as `Bash(words)` matches exactly. A path
- * rule asks or denies.
+ * rule asks or denies. A domain rule names a host, not a URL; an MCP rule a server or one of its tools.
  */
 export function parseRule(effect: RuleEffect, text: string, scope: CommandScope): ParsedRule {
-  const form = TOOL_FORM.exec(text.trim());
+  const trimmed = text.trim();
+  if (trimmed.startsWith('mcp__')) {
+    return MCP_NAME.test(trimmed) ? { ok: true, rule: { effect, mcp: trimmed } } : { ok: false, reason: 'Name an MCP server or one of its tools, such as mcp__github or mcp__github__create_issue.' };
+  }
+  const form = TOOL_FORM.exec(trimmed);
+  if (form?.[1] === 'WebFetch' || form?.[1] === 'Browser') return parseDomainRule(effect, form[1] === 'WebFetch' ? 'web_fetch' : 'browser', form[2]!.trim());
   if (form?.[1] === 'Bash') {
     const command = form[2]!.trim();
     return parseCommandRule(effect, command.replace(PREFIX_STAR, ''), scope, effect === 'allow' && !PREFIX_STAR.test(command));
@@ -412,6 +527,14 @@ export function parseRule(effect: RuleEffect, text: string, scope: CommandScope)
   if (file === '') return { ok: false, reason: `Name a path, such as ${form[1]}(./secrets/**).` };
   if (effect === 'allow') return { ok: false, reason: `Geno already ${tool === 'read' ? 'reads' : 'edits'} the workspace without asking, so a path rule can only ask or deny.` };
   return { ok: true, rule: { effect, tool, path: file } };
+}
+
+function parseDomainRule(effect: RuleEffect, tool: DomainTool, body: string): ParsedRule {
+  const label = TOOL_LABELS[tool];
+  if (!body.startsWith('domain:')) return { ok: false, reason: `Name the host after domain:, as in ${label}(domain:example.com).` };
+  const domain = body.slice('domain:'.length).trim();
+  if (!DOMAIN.test(domain)) return { ok: false, reason: `Name a host, not a URL, as in ${label}(domain:example.com) or ${label}(domain:*.example.com).` };
+  return { ok: true, rule: { effect, tool, domain } };
 }
 
 function parseCommandRule(effect: RuleEffect, text: string, scope: CommandScope, exact = false): ParsedRule {
@@ -438,7 +561,7 @@ export const PERMISSION_ADD_METHOD = '_gcode/permissionAdd';
 export const PERMISSION_REMOVE_METHOD = '_gcode/permissionRemove';
 
 export type PermissionsRequest = { readonly cwd: string };
-/** `text` is a command, or `Read(path)` or `Edit(path)`. */
+/** `text` is a command, `Read(path)`, `Edit(path)`, `WebFetch(domain:host)`, `Browser(domain:host)` or an MCP tool's name. */
 export type PermissionAddRequest = { readonly cwd: string; readonly effect: RuleEffect; readonly text: string };
 export type PermissionRemoveRequest = { readonly cwd: string; readonly id: string };
 export type PermissionsResponse = { readonly workspace: string; readonly rules: readonly PermissionRule[] };

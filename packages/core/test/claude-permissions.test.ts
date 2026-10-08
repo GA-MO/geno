@@ -24,6 +24,31 @@ describe('claudePermissions', () => {
     });
   });
 
+  it('B/B-63 B/B-64 takes WebFetch(domain:...) as a web_fetch domain rule and an MCP name, with its wildcards, as an MCP rule', () => {
+    const parsed = claudePermissions(
+      {
+        permissions: {
+          allow: ['WebFetch(domain:nextjs.org)', 'WebFetch(domain:*.github.com)', 'mcp__github__get_issue'],
+          ask: ['mcp__linear__*'],
+          deny: ['WebFetch(domain:evil.example)', 'mcp__my-server'],
+        },
+      },
+      scope,
+    );
+    expect(parsed).toEqual({
+      rules: [
+        { effect: 'allow', tool: 'web_fetch', domain: 'nextjs.org' },
+        { effect: 'allow', tool: 'web_fetch', domain: '*.github.com' },
+        { effect: 'allow', mcp: 'mcp__github__get_issue' },
+        { effect: 'ask', mcp: 'mcp__linear__*' },
+        { effect: 'deny', tool: 'web_fetch', domain: 'evil.example' },
+        { effect: 'deny', mcp: 'mcp__my-server' },
+      ],
+      deniedTools: [],
+      skipped: [],
+    });
+  });
+
   it('B/B-65 maps a bare-tool deny to the Geno tool, Write to edit, and Bash to every tool that runs a shell command', () => {
     const parsed = claudePermissions({ permissions: { deny: ['WebFetch', 'Bash', 'Write', 'Task'] } }, scope);
     expect(parsed.deniedTools).toEqual([
@@ -42,8 +67,8 @@ describe('claudePermissions', () => {
     const parsed = claudePermissions(
       {
         permissions: {
-          allow: ['WebFetch(domain:example.com)', 'mcp__github__create_issue', 'Read(//etc/**)', 'Bash(*)', 'Bash(git * main)', 'Bash(sh -c:*)', 42, 'Bash(ls:*)'],
-          ask: ['WebSearch'],
+          allow: ['WebFetch(https://example.com)', 'WebFetch(domain:https://example.com/docs)', 'mcp__github__create:issue', 'Read(//etc/**)', 'Bash(*)', 'Bash(git * main)', 'Bash(sh -c:*)', 42, 'Bash(ls:*)'],
+          ask: ['WebSearch', 'Browser(domain:example.com)'],
           deny: ['NoSuchTool', 'Agent(Explore)', 'not a rule'],
         },
       },
@@ -52,14 +77,16 @@ describe('claudePermissions', () => {
     expect(parsed.rules).toEqual([{ effect: 'allow', pattern: ['ls'] }]);
     expect(parsed.deniedTools).toEqual([]);
     expect(parsed.skipped).toEqual([
-      'WebFetch(domain:example.com)',
-      'mcp__github__create_issue',
+      'WebFetch(https://example.com)',
+      'WebFetch(domain:https://example.com/docs)',
+      'mcp__github__create:issue',
       'Read(//etc/**)',
       'Bash(*)',
       'Bash(git * main)',
       'Bash(sh -c:*)',
       '42',
       'WebSearch',
+      'Browser(domain:example.com)',
       'NoSuchTool',
       'Agent(Explore)',
       'not a rule',
