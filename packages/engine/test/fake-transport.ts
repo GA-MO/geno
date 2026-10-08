@@ -4,6 +4,10 @@ export type Reply = {
   readonly events: readonly SseEvent[];
   /** Emit this many events, then stall until the request is aborted. */
   readonly stallAfter?: number;
+  /** Send no headers and no body until the request is aborted, as a provider that took the request and went quiet. */
+  readonly hang?: true;
+  /** Wait this long before each event, as a slow but live stream does. */
+  readonly everyMs?: number;
   /** Emit this many events, then drop the connection the way undici reports a peer reset. */
   readonly dropAfter?: number;
   /** Answer with this HTTP error instead of a stream. */
@@ -156,8 +160,9 @@ function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStr
   const events = reply.events.slice(0, reply.stallAfter ?? reply.dropAfter);
   let next = 0;
   return new ReadableStream({
-    pull(controller) {
+    async pull(controller) {
       const event = events[next++];
+      if (event !== undefined && reply.everyMs !== undefined) await new Promise((resolve) => setTimeout(resolve, reply.everyMs));
       if (event !== undefined) return controller.enqueue(encode(event));
       if (reply.dropAfter !== undefined) return controller.error(new TypeError('terminated', { cause: new Error('other side closed') }));
       if (reply.stallAfter === undefined) return controller.close();
@@ -194,6 +199,13 @@ export function fakeTransport(replies: readonly Reply[], up: () => boolean = () 
     });
     if (reply === undefined) throw new Error(`fake transport has no reply for request ${requests.length}`);
     if (reply.offline) throw refusedConnection();
+    if (reply.hang) {
+      await new Promise<void>((_, reject) => {
+        const fail = () => reject(new DOMException('This operation was aborted', 'AbortError'));
+        if (init?.signal?.aborted) fail();
+        else init?.signal?.addEventListener('abort', fail, { once: true });
+      });
+    }
     if (reply.failure !== undefined) {
       const { status, body: json, headers } = reply.failure;
       return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json', ...headers } });

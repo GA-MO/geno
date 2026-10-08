@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 /** One streamed Chat Completions answer, as the chunks an OpenAI-compatible server sends. */
@@ -6,6 +6,14 @@ export type ChatReply = {
   readonly chunks: readonly Record<string, unknown>[];
   /** Answer with this HTTP error instead of a stream. */
   readonly failure?: { readonly status: number; readonly body: unknown; readonly headers?: Record<string, string> };
+  /** Send the headers and this many chunks, then nothing until the client goes away. */
+  readonly stallAfter?: number;
+  /** Send no headers and no body until the client goes away. */
+  readonly hang?: true;
+  /** Wait this long before each chunk, as a slow but live stream does. */
+  readonly everyMs?: number;
+  /** Send an SSE comment line, as servers keep an idle stream open, this often until the next chunk. */
+  readonly keepAliveMs?: number;
 };
 
 export type ChatUsageFake = { readonly prompt: number; readonly completion: number; readonly cached: number };
@@ -65,6 +73,34 @@ export const chatFailure = (status: number, body: unknown, headers: Record<strin
 
 export const chatSse = (reply: ChatReply): string => `${reply.chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('')}data: [DONE]\n\n`;
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A reply sent piece by piece, which can go quiet and stay open until the client gives up. */
+async function stream(reply: ChatReply, res: ServerResponse): Promise<void> {
+  let gone = false;
+  const left = new Promise<void>((resolve) => res.on('close', () => resolve()));
+  res.on('close', () => {
+    gone = true;
+  });
+  if (reply.hang) return left;
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  const lines = [...reply.chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`), 'data: [DONE]\n\n'].slice(0, reply.stallAfter);
+  for (const line of lines) {
+    if (reply.everyMs !== undefined) {
+      const until = Date.now() + reply.everyMs;
+      while (!gone && reply.keepAliveMs !== undefined && Date.now() + reply.keepAliveMs < until) {
+        await sleep(reply.keepAliveMs);
+        if (!gone) res.write(': keep-alive\n\n');
+      }
+      await sleep(Math.max(0, until - Date.now()));
+    }
+    if (gone) return;
+    res.write(line);
+  }
+  if (reply.stallAfter !== undefined) return left;
+  res.end();
+}
+
 export type SeenRequest = { readonly method: string; readonly path: string; readonly headers: IncomingMessage['headers']; readonly body: any };
 
 async function bodyOf(req: IncomingMessage): Promise<string> {
@@ -96,7 +132,11 @@ export async function fakeOpenAiServer(replies: readonly ChatReply[], models: re
         res.writeHead(reply.failure.status, { 'content-type': 'application/json', ...reply.failure.headers }).end(JSON.stringify(reply.failure.body));
         return;
       }
-      res.writeHead(200, { 'content-type': 'text/event-stream' }).end(chatSse(reply));
+      if (reply.hang === undefined && reply.stallAfter === undefined && reply.everyMs === undefined) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' }).end(chatSse(reply));
+        return;
+      }
+      await stream(reply, res);
     })();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -105,6 +145,10 @@ export async function fakeOpenAiServer(replies: readonly ChatReply[], models: re
     url,
     requests,
     chats: () => requests.filter((r) => r.path === '/v1/chat/completions'),
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
   };
 }
