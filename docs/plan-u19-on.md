@@ -548,6 +548,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** A just-in-time message when 20% or less of the calls or cost is left. Then run the U22 eval with and without `agent` on qwen3.8-flash, and turn it on in Ask and Auto only if cost and success improve.
 - **Check.** An eval with a tight `--max-turns` ends with a useful final report. The agent eval goes in `docs/results/p25-agent-default.md`. At most $0.60.
 - **Size.** 1 day. **Depends on.** P23, P17.
+- **Status.** Done. The reminder is a `notice` at the safe point, once per run, and also counts the cost left in calls at the run's mean cost a call, because flash ignored a dollar figure in the eval. The `agent` tool stays off: on three speed tasks, two runs an arm, both arms passed 6/6 and flash never called `agent`; the cost gap was noise ([results/p25-agent-default.md](results/p25-agent-default.md), $0.52 spent). [conformance.md](conformance.md) has the tests.
 
 ### P26: compaction gaps
 

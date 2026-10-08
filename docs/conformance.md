@@ -484,6 +484,17 @@ P24 also covers rows that have no Claude Code conformance test:
 | C/C-44 | `workflow` runs only when the user asks for a workflow. The permission card stays. |
 | T-ASM-06 (effort) | `session.test.ts` (core) and `prompt.conformance.test.ts`: a Haiku 4.5 request has no `output_config`, and an unknown model sends none. |
 
+## Budget reminders and the agent default (P25)
+
+`budgetReminder` in `core/src/loop.ts` checks a run's limits at the safe point before each model call. When 20% or less of the run's `--max-turns` calls or `--max-cost` is left, `drive` logs it as the `budget` field of a `notice` event, once per run, and the model reads it after the newest tool results. The system prompt and the tools do not change, so the cached prefix holds. The text names the calls left, the cost left, the run's mean cost a call and about how many calls the cost covers, and asks the model to start no new exploration and end with a short report. A later run, such as the next prompt or a woken turn with its own limits, is told again. The `agent` tool stays off by default: on qwen3.8-flash the model never called it ([results/p25-agent-default.md](results/p25-agent-default.md)).
+
+P25 covers rows that have no Claude Code conformance test:
+
+| ID | Check | Status |
+|---|---|---|
+| A/B-11 | `loop.conformance.test.ts`, both wires: with `--max-turns 5`, the reminder reaches only the fifth request, says one call is left, and is logged once. The run's last turn is the model's text report with `end_turn`. That request repeats the fourth request's system prompt, tools and messages, with `cache_control` set aside, and only adds to them. `core/test/loop.test.ts`: the 20% points for calls and for cost, once a run, again in a later run, nothing at a limit, and the calls the cost covers. A live run with `--max-turns 5` on flash ended with a full report ([results/p25-agent-default.md](results/p25-agent-default.md)). | pass (adapt: one reminder, not Claude Code's running token count) |
+| C/C-12 | `gcode eval speed --agent-tool` against `--no-agent-tool` on three speed tasks, two runs each: 6/6 passed in both arms, no `agent` call in any task, $0.1172 against $0.1372 a run, inside the spread. The default stays off; `.gcode.json` `agentTool` turns it on per mode. | kept off (measured) |
+
 ## One skill listing (P12)
 
 A new session lists every skill the model may load, from the discovery the `skill` tool and the slash commands use: Geno's `~/.g-code/skills`, `~/.claude/skills`, `~/.agents/skills`, the workspace's `.agents/skills` and `.claude/skills`, and each installed plugin's `skills/` as `<plugin>:<skill>`. Each entry is the name and the first line of the description. Descriptions are cut to 250 characters, and when the entries pass 8,000 characters, Claude Code's fallback listing budget, the longest are cut to one length so the list fits. A description cut below 20 characters is dropped, and a skill whose name no longer fits is counted in a closing line. The listing is recorded in session-start as `skillListing`, so a resume sends the same bytes after the folders change. A log from before P12 keeps its workspace-only `skills`, with locations, and renders as it did. On the machine P12 was built on, the first request lists 57 skills (pstack and frontend-design) in 8,226 characters with the header, each description cut to 112 characters. The 4 skills in `~/.claude/skills` set `disable-model-invocation` and are left out.
