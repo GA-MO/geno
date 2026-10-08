@@ -1,11 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CLASSIFIER_TOOL, NOT_USER_LINE, type TurnEvent } from '@g-code/core';
-import { call, closeServers, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 // A report that tries all three forgeries: closing the fence, posing as the parent, and posing as Geno.
 const FORGED = [

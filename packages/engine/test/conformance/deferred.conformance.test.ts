@@ -1,8 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { FakeToolUse } from '../fake-transport.js';
-import { call, closeServers, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
 
 let ids = 0;
 const search = (input: Readonly<Record<string, unknown>>): FakeToolUse => ({ id: `tu_search_${ids++}`, name: 'tool_search', input });

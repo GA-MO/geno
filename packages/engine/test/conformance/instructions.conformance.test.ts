@@ -1,12 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ENVIRONMENT_HEADING } from '@g-code/core';
 import { memoryStore } from '../../src/memory.js';
 import { homeOf } from '../../src/store.js';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 async function writeAll(root: string, files: Readonly<Record<string, string>>): Promise<void> {
   for (const [file, text] of Object.entries(files)) {

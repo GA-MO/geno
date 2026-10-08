@@ -1,11 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, closeServers, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 type Run = Awaited<ReturnType<typeof scripted>>;
 

@@ -1,10 +1,8 @@
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { NOT_USER_LINE, STEER_META } from '@g-code/core';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, closeServers, say, scripted, WIRES, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, WIRES, type Wire } from './scripted.js';
 
 const background = (command: string) => ({ id: 'tu_bg', name: 'bash', input: { command, run_in_background: true } });
 

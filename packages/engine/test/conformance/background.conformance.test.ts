@@ -1,11 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { NOT_USER_LINE, openSchedulesOf } from '@g-code/core';
 import { gcodeAgent } from '../../src/serve.js';
-import { call, closeServers, say, scripted, WIRES, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, WIRES, type Wire } from './scripted.js';
 
 const load = (...names: string[]) => ({ id: `tu_load_${names.join('_')}`, name: 'tool_search', input: { select: names } });
 const stop = (id: string, use = `tu_stop_${id}`) => ({ id: use, name: 'task_stop', input: { id } });

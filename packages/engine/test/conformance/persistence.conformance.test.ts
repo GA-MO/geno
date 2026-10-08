@@ -1,10 +1,8 @@
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { describe, expect, it } from 'vitest';
+import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
 
 const KEY = 'sk-wirelogtest0123456789abcdef';
 

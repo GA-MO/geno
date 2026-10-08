@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GENO_NOTE, HOOKS_METHOD, WORKSPACE_TRUST_CAPABILITY, type CommandPattern, type Denial, type HooksResponse, type SessionMode, type TurnEvent } from '@g-code/core';
 import { runAgent } from '../../src/agent.js';
 import { startSession } from '../../src/chat.js';
@@ -11,9 +11,7 @@ import { permissionStore } from '../../src/permissions.js';
 import { gcodeAgent } from '../../src/serve.js';
 import { homeOf } from '../../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
-import { call, closeServers, report, say, scripted, sessionIdOf, WIRES, type ScriptedTurn, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, report, say, scripted, sessionIdOf, WIRES, type Turn, type Wire } from './scripted.js';
 
 type Run = Awaited<ReturnType<typeof scripted>>;
 
@@ -433,7 +431,7 @@ describe.each(WIRES)('UserPromptSubmit on the %s wire', (wire: Wire) => {
 type Asked = { readonly mode: SessionMode; readonly answers?: readonly PermissionAnswer[]; readonly files?: Readonly<Record<string, string>>; readonly deny?: string };
 
 /** One agent run in an editor's mode with the user's hooks, the user answering each card from `answers`. */
-async function interactive(wire: Wire, script: readonly ScriptedTurn[], hooks: (run: Run) => Promise<object>, { mode, answers = [], files, deny: denied }: Asked) {
+async function interactive(wire: Wire, script: readonly Turn[], hooks: (run: Run) => Promise<object>, { mode, answers = [], files, deny: denied }: Asked) {
   const run = await scripted(wire, script, files);
   await userHooks(run, await hooks(run));
   if (denied !== undefined) await permissionStore(homeOf(run.store), run.workspace).add('deny', denied.split(' ') as unknown as CommandPattern);

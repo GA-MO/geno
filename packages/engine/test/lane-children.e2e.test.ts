@@ -3,17 +3,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { asSessionId, childrenOf, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { call, closeServers, report, say, scripted, sessionIdOf } from './conformance/scripted.js';
+import { call, report, say, scripted, sessionIdOf } from './conformance/scripted.js';
 import { answer, fakeTransport, loadTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
 vi.setConfig({ testTimeout: 30_000 });
-afterEach(closeServers);
 
 const files = { 'a.ts': 'export const alpha = 1;\n', '.gcode.json': '{ "agentTool": ["non-interactive"] }\n' };
 const git = (dir: string, ...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' });

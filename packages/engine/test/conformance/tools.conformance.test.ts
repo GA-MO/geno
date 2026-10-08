@@ -1,13 +1,11 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { capabilitiesOf } from '@g-code/core';
 import { twoColorPng } from '../../../core/test/png.js';
 import type { FakeToolUse } from '../fake-transport.js';
-import { call, closeServers, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, WIRES, type SeenResult, type Wire } from './scripted.js';
 
 const A_TS = { 'a.ts': 'export const a = 1;\n' };
 

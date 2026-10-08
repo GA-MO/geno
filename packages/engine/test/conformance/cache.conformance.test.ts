@@ -1,12 +1,10 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { NOT_USER_LINE } from '@g-code/core';
 import { memoryStore } from '../../src/memory.js';
 import { homeOf } from '../../src/store.js';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
 
 type Block = { readonly type: string; readonly text?: string; readonly cache_control?: unknown };
 type Message = { readonly role: string; readonly content: string | readonly Block[] };

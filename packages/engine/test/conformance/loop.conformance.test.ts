@@ -1,12 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { gcodeAgent } from '../../src/serve.js';
 import type { FakeToolUse } from '../fake-transport.js';
-import { call, closeServers, say, scripted, sessionIdOf, WIRES } from './scripted.js';
-
-afterEach(closeServers);
+import { call, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 let ids = 0;
 const use = (name: string, input: unknown): FakeToolUse => ({ id: `call_${ids++}`, name, input });

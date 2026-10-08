@@ -12,7 +12,7 @@ import { runTool, type ToolContext } from '../../src/tools/index.js';
 import type { Resolve } from '../../src/tools/web.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
 import { rgCommand } from '../helpers.js';
-import { call as calls, closeServers, say, scripted as scriptedWire, WIRES, type ScriptedTurn, type Wire } from './scripted.js';
+import { call as calls, say, scripted as scriptedWire, WIRES, type Turn as ModelTurn, type Wire } from './scripted.js';
 
 type Turn = { readonly calls: readonly FakeToolUse[] } | { readonly answer: string };
 type ToolView = { readonly text: string; readonly error: boolean };
@@ -20,7 +20,6 @@ type ToolView = { readonly text: string; readonly error: boolean };
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
-  await closeServers();
 });
 
 const SECRET = 'sk-live-0123456789abcdef';
@@ -41,7 +40,7 @@ type Options = {
 
 /** One agent run on `wire` in `mode`, the user answering each card from `answers`, and what the model was sent. */
 async function scripted(wire: Wire, turns: readonly Turn[], { files, mode, answers = [], web }: Options) {
-  const script = turns.map((t): ScriptedTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
+  const script = turns.map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls)));
   const { workspace, io, store, seen } = await scriptedWire(wire, script, files);
   const asked: Denial[] = [];
   const pending = [...answers];
