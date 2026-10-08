@@ -247,7 +247,7 @@ describe('budgetReminder', () => {
   });
 
   it('tells what is left once 20% or less of the calls is left', () => {
-    expect(budgetReminder([start, user(1), ...calls(8)], ten)).toEqual({ calls: 2, maxCalls: 10, costUsd: expect.closeTo(0.92, 6), maxCostUsd: 1 });
+    expect(budgetReminder([start, user(1), ...calls(8)], ten)).toEqual({ calls: 2, maxCalls: 10, costUsd: expect.closeTo(0.92, 6), maxCostUsd: 1, perCallUsd: expect.closeTo(0.01, 6) });
   });
 
   it('tells what is left once 20% or less of the cost is left, however many calls remain', () => {
@@ -270,8 +270,14 @@ describe('budgetReminder', () => {
   it('reads as a notice that names both limits and asks for a closing report', () => {
     const [text] = noticeTexts({ budget: { calls: 2, maxCalls: 10, costUsd: 0.0123, maxCostUsd: 0.4 } });
     expect(text).toMatch(/^\[Geno\] /);
-    expect(text).toContain('2 of its 10 model calls');
-    expect(text).toContain('$0.0123 of its $0.40 cost limit');
+    expect(text).toContain('about 2 more model calls are left (2 of its 10 calls, and $0.0123 of its $0.40 cost limit)');
     expect(text).toMatch(/end your turn with a short report/);
+  });
+
+  it('counts the cost left in calls at the mean cost a call so far, as the last call may pass the limit', () => {
+    const say = (costUsd: number, perCallUsd: number) => noticeTexts({ budget: { calls: 30, maxCalls: 40, costUsd, maxCostUsd: 0.08, perCallUsd } })[0];
+    expect(say(0.015, 0.004)).toContain('about 4 more model calls are left (30 of its 40 calls, and $0.0150 of its $0.0800 cost limit, at about $0.0040 a call)');
+    expect(say(0.001, 0.004)).toContain('about 1 more model call is left');
+    expect(noticeTexts({ budget: { calls: 2, maxCalls: 10, costUsd: 0.9, maxCostUsd: 1, perCallUsd: 0.01 } })[0]).toContain('about 2 more model calls are left');
   });
 });

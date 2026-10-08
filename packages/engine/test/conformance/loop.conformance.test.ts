@@ -140,7 +140,7 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
     const result = await cli([...agent(workspace, 'Audit the exports'), '--max-turns', '5']);
 
     expect(result.code, 'the model ended the run itself, not the limit').toBe(0);
-    const reminded = seen().map((request) => /near its limits: (\d+) of its 5 model calls/.exec(request.text)?.[1]);
+    const reminded = seen().map((request) => /near its limits: about (\d+) more model calls? (?:is|are) left \(\d+ of its 5 calls/.exec(request.text)?.[1]);
     expect(reminded, 'once, before the last call, with one call left').toEqual([undefined, undefined, undefined, undefined, '1']);
     const events = await log(result.stdout);
     expect(events.filter((e) => e.kind === 'notice' && e.budget !== undefined)).toHaveLength(1);
