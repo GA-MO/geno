@@ -514,6 +514,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** `background: true` for writers that run in a lane. Writers in separate lanes run in parallel under the slot limiter. Workflow `lane` steps run.
 - **Check.** A background worker in a lane reports through a wake. T-AGENT-01 with Geno's blocking default.
 - **Size.** 1 day. **Depends on.** P20, U64 merged.
+- **Status.** Done. A child's checkout is its key: the main checkout, a lane's name, or none for a read-only child in the main checkout. Children under one key take turns, so writers of the main checkout, and workflow steps that share a lane, still run one after another. Lane children share the parent's 4 slots with read-only children. A background writer outside a lane is refused with the `isolation: "worktree"` that would let it run. Workflow `lane` steps already ran in P20; now steps in different lanes run at once. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P22: agent definitions
 

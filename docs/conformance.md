@@ -427,8 +427,25 @@ P20 also covers these rows:
 
 | ID | Check |
 |---|---|
-| C/C-16 | T-AGENT-05 above. `lane-children.e2e.test.ts`: two `worker` children in one turn edit `a.ts` to 2 and to 3 in two lanes, both keep their edits, the main checkout's `a.ts`, `git status` and log are unchanged, both reports name their lanes, and `gcode lane list` shows both changed. `gcode lane apply` takes the first; the second then conflicts. `message_agent` resumes a lane child in its kept lane, where an edit from 2 to 4 finds its first run's edit. A resumed child whose clean lane was removed gets the lane again under its name. `task_stop` (P19) of a background `scout` with `isolation: worktree` returns its cancelled partial report and removes its clean lane. `workflows.e2e.test.ts`: two steps with `lane: "fix"` run in one lane, the second editing what the first wrote, with the main checkout unchanged. The two writers run one after the other; running writers in lanes at once is P21. |
+| C/C-16 | T-AGENT-05 above. `lane-children.e2e.test.ts`: two `worker` children in one turn edit `a.ts` to 2 and to 3 in two lanes, both keep their edits, the main checkout's `a.ts`, `git status` and log are unchanged, both reports name their lanes, and `gcode lane list` shows both changed. `gcode lane apply` takes the first; the second then conflicts. `message_agent` resumes a lane child in its kept lane, where an edit from 2 to 4 finds its first run's edit. A resumed child whose clean lane was removed gets the lane again under its name. `task_stop` (P19) of a background `scout` with `isolation: worktree` returns its cancelled partial report and removes its clean lane. `workflows.e2e.test.ts`: two steps with `lane: "fix"` run in one lane, the second editing what the first wrote, with the main checkout unchanged. The two writers run one after the other, since they share the lane; writers in different lanes run at once since P21. |
 | B/B-70, C/C-17 | T-AGENT-05 above for the lane line in a child's opening. `environment.test.ts` (core): the ` - Lane:` line names the lane, the branch and the main checkout, warns that the stash stack is shared, and says to restore with `git stash apply <sha>`; a session outside a lane has no such line. `environment.test.ts` (engine): `captureEnvironment` finds the lane for any session whose workspace is one and none for the main checkout, so a session in a lane from the Lanes pane or `gcode agent` gets the line too. |
+
+## Background and parallel writers (P21)
+
+A child that may change files can run in the background, and beside other children, once it works in a lane: an `agent` call with `isolation: "worktree"`, a definition with `isolation: worktree`, or a workflow step with `lane`. Geno keeps its blocking default, so a call without `background` still waits for the child and returns its report; Claude Code's interactive `Agent` returns at once instead. A background writer outside a lane is refused with the reason and the `isolation: "worktree"` that would let it run.
+
+The writers of one checkout take turns, and children in different checkouts run side by side. Each child's checkout is its key: the main checkout for a writer without a lane, the lane's name for a child in a lane, and none for a read-only child in the main checkout. A child waits for the children before it under the same key, then for a slot of the parent's 4, which read-only children and lane children share. A writer of the main checkout takes no slot, because the loop runs its call alone, after every call before it. Two steps of one workflow run that name the same `lane` share the key, so they take turns in their lane. Model calls still go through the engine's shared slot limiter, which backs off on a rate limit. The loop runs an `agent` call beside the calls around it when the child is read-only or will work in a lane.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-AGENT-01 | Interactive: `Agent` returns "Async agent launched" and the id at once, and the report comes later. `-p`: it waits and returns the report with the agent id and usage. | Deliberate: blocking by default, as Claude Code's `-p`. An `explore` call without `background` returns `<subagent_report agent="explore" session="<id>" status="done" turns="1" cost=… duration=…>` with the report as the call's own result. A background `worker` without a lane is refused, names `isolation: "worktree"`, and makes no model call. Adapted: over ACP, a background `worker` with `isolation: "worktree"` returns "Started worker in the background as subagent session <id>" at once, the turn ends while it runs, it edits `a.ts` in its lane, and its report, with the lane note, wakes the session once. The main checkout's `a.ts` is unchanged. | pass (deliberate, adapt, was no test) | `agents.conformance.test.ts`, both wires |
+
+P21 also covers these rows:
+
+| ID | Check |
+|---|---|
+| C/C-13 | T-AGENT-01 above. With the lane check removed from the background refusal, the wake test fails. |
+| C/C-14 | `lane-children.e2e.test.ts`: two `worker` children with `isolation: "worktree"` in one turn overlap in time, by the `child-start` and `child-end` times their parent logged. The first child's first model answer waits until the second child asks, for at most 5 seconds, so children that ran one after the other would show apart. Two `worker` children in the main checkout in one turn do not overlap, with the same wait at 1 second. `workflows.e2e.test.ts`: a `parallel` node with steps in lanes `a`, `b` and `a` runs the steps of `a` and `b` at once, and the two steps of `a` one after the other, by the workflow log's times. Lane `a` holds both of its steps' edits, lane `b` its own, and the main checkout is unchanged. |
 
 ## Prompt tiers (P24)
 
@@ -607,7 +624,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-CTX-08 | keep Geno's, adapt | P23 | no test yet |
 | T-CTX-06 | skip | none | no test yet |
 | T-CTX-07 | keep Geno's | none | no test yet |
-| T-AGENT-01 | deliberate, adapt; deliberate | P21 | no test yet |
+| T-AGENT-01 | deliberate, adapt; deliberate | P21 | pass |
 | T-AGENT-02 | adapt | P4 | pass |
 | T-AGENT-03 | adapt | P17 | pass |
 | T-AGENT-04 | adopt | P18 | pass |
