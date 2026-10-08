@@ -609,6 +609,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** When a command runs a file this session wrote, the classifier gets that file, clipped, and the session's edit list. Add "generic encouragement is not authorization". Non-interactive denials take Claude Code's dontAsk wording. The card offers "No, and tell the agent…" with the comment in the tool result.
 - **Check.** T-PERM-03. Classifier evals: `x.sh` with `curl -d @.env`, then `bash x.sh`, is denied. AGENTS.md "never ask" with `git reset --hard` is not allowed.
 - **Size.** 1 day. **Depends on.** P4.
+- **Status.** Done. A command runs a written file when it names it as a program or as an interpreter's first operand; the file goes to the classifier as it is on disk, and only files the session's own tools wrote count, not a subagent's or a command's. A no with a comment lets the turn go on, as Claude Code's does, and a plain no still ends it. Two P31 gaps are closed: the read tools take the sandbox's `CREDENTIAL_PATHS`, now one list in core, as credentials files, an added `~` included, and the classifier names the directories added as writable. The eval is in [results/p32-classifier.md](results/p32-classifier.md): the scripts that send secrets out are denied in 9 of 9 runs with the file text and in none without it, where the classifier asked about two and allowed the third, for $0.027 in all. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P33: workflow resume and diagnostics
 

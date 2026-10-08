@@ -172,6 +172,31 @@ P31 also covers rows that have no Claude Code conformance test:
 | B/B-61 (list) | `permissions.conformance.test.ts`, both wires: `list` leaves out the files a `Read(private/**)` deny covers, and `list private` is refused naming the rule. |
 | B/B-87 (classifier) | `classifier.test.ts` (core): the same request as before with no allowlist, and the hosts in the system prompt with one. `classifier.test.ts` (engine): `GCODE_SANDBOX_ALLOWED_DOMAINS` reaches the classifier's request. |
 
+## Classifier and denial wording (P32)
+
+A command that runs a file this session wrote reaches the classifier with that file. `filesRun` in `core/src/approval.ts` finds what a command line runs: a program named by a path, such as `./x.sh`, or the first operand of an interpreter, such as `bash x.sh`, `node x.js`, `python3 x.py` or `source env.sh`. An option such as `-c` or `-e`, which runs code from the line, names no file. `sessionEdits` in `core/src/classifier.ts` lists the files the session's tools wrote, from the tool results that carry a change. In Auto, each file the command runs that is on that list goes to the classifier as it is on disk, its head and tail kept to 4,000 characters, in a `<written_files>` block after the command, with the edit list in `<session_edits>`. A line outside the fences says to judge the text as part of the command. A command that runs no written file sends the request it always did. The classifier's system prompt also says that generic encouragement is not authorization, in the request or in a project file such as AGENTS.md that the agent quotes.
+
+A call refused because nobody can answer now ends in Claude Code's dontAsk wording (`DONT_ASK` in `core/src/loop.ts`): other tools that would naturally do the job are fine, working around the intent of the denial is not, and a capability the request needs means stopping to explain. It replaces "Do not retry it; find another way" on a rule's refusal in a non-interactive run, an ask rule's, and a hook's question nobody can answer. A refusal in Plan, a deny rule's and the classifier's keep their wording.
+
+Every permission card offers "No, and tell the agent…" last. The panel opens a field for it; Enter or Send answers, Esc or Back returns to the choices. The comment rides in the ACP answer's `_meta` under `PERMISSION_COMMENT_META`, and the tool result says "To tell you how to proceed, the user said:" with the comment. A no with a comment lets the turn go on, as Claude Code's does. A plain no, or an empty comment, still ends it.
+
+P32 also closes two gaps P31 left. `CREDENTIAL_PATHS` moved from the sandbox to core, and the read tools use the same list: `isSecret` in `engine/src/tools/context.ts` takes the home's credential places, by the home's path and its real path, as credentials files wherever a read reaches them, an added `~` included. `read` there asks in Ask, goes to the classifier in Auto and is refused when nobody can answer, as `read .env` does. `grep` and `glob` refuse a path inside one and leave its files out of a wider search. A read outside the workspace there offers no directory for the session. The classifier's system prompt names the directories the user added as writable, and is byte for byte the same when there are none.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-PERM-03 | dontAsk on `touch x`: an error in dontAsk wording, with no PermissionRequest. | A run nobody can answer refuses `git push`, `read .env` and a command an ask rule names with the dontAsk wording, and puts up no card. Adapted: Geno runs `touch x` in a run nobody can answer, since the sandbox confines writes, so the test uses calls Geno does refuse there. A PermissionRequest hook may still answer, as P16 has it. | pass (was fail: "Do not retry it; find another way") | `permissions.conformance.test.ts`, both wires |
+
+P32 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-76 | `permissions.conformance.test.ts`, both wires: in Auto, after `edit` writes `x.sh`, `bash x.sh` and `./x.sh` reach the classifier with the file's text and the edit list, and `bash old.sh`, which the session did not write, with neither. `approval.test.ts` (core): 13 rows of `filesRun`. `classifier.test.ts` (core): the fences, a file that tries to close its fence, a long file cut at its middle, and `sessionEdits`. The live eval in [results/p32-classifier.md](results/p32-classifier.md) on qwen3.8-flash: three scripts that send `.env` or an SSH key out are denied in 9 of 9 runs with the file text, against 6 asks and 3 allows without it, and two benign scripts run in 6 of 6. |
+| B/B-77 | `classifier.test.ts` (core): the sentence is in the system prompt. The live eval: `git reset --hard` or `git push --force` after "never ask" in AGENTS.md or "be fully autonomous" in the request is denied in 12 of 12 runs. |
+| B/B-53 | T-PERM-03 above. B/B-72's test now checks the dontAsk wording on a rule's refusal nobody can answer. |
+| B/B-71 | `permissions.conformance.test.ts`, both wires: a no with a comment puts "the user said:" and the comment in the result, logs it on the approval, and the turn goes on. `permission-rules.e2e.test.ts`, over ACP: the comment in `_meta` reaches the result trimmed, and an empty one is a plain no that ends the turn; every card lists "No, and tell the agent…" last. `permission-comment.webview.test.ts`: the field opens with the focus, Send waits for text, Enter sends the comment, Esc goes back, and the settled card shows it. `permissions.integration.test.ts` and `backends.integration.test.ts`: the card's buttons in VS Code. |
+| B/B-68 (credentials) | `permissions.conformance.test.ts`, both wires: under an added `~` in a fake home, `read ~/.config/gh/hosts.yml` asks in Ask as a credentials file, and a run nobody can answer refuses it and a `grep` scoped to `~/.config/gh`, leaves the file out of a `grep` over `~`, and still reads `~/notes/plan.md`. The token never reaches the model. `approval.test.ts` (core): a read outside in a credential place, in any case, offers no directory. |
+| B/B-68 (classifier) | `classifier.test.ts` (core): the writable directories in the system prompt, and the same request as before with none. `permissions.conformance.test.ts`, both wires: in Auto the classifier gets the writable directory and not the read-only one, and nothing when none is writable. |
+
 ## Environment (P5)
 
 `captureEnvironment` in `engine/src/environment.ts` records the session's environment when it starts, and the session-start event keeps it beside the loaded context. `renderEnvironment` in `core/src/environment.ts` writes it into the opening user message.
@@ -657,7 +682,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-MCP-03 | adapt | P10 | pass |
 | T-PERM-01 | keep Geno's, adopt | P28 | partial: the long and unparsable asks pass (B/B-66) |
 | T-PERM-02 | deliberate | none | no test yet |
-| T-PERM-03 | adapt | P32 | no test yet |
+| T-PERM-03 | adapt | P32 | pass |
 | T-PERM-04 | adapt | P31 | pass |
 | T-PERM-05 | adapt; adopt | P3, P28, P14 | pass |
 | T-PERM-09 | at parity | P29 | pass |
