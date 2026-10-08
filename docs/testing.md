@@ -84,6 +84,8 @@ A file shows each request one value per line, and each line of a string after `|
 
 Every vitest run on the machine takes `~/.g-code/test-run.lock` when its config loads (`scripts/test-lock.ts`). A second run prints `waiting for the test run of pid N` and starts when the first ends; a lock left by a run that died is taken over. A run started inside a held run, such as a test that runs vitest, does not wait. `GCODE_TEST_LOCK=off` skips the lock.
 
+Once it holds the lock, a run also waits until the machine has room: at least 3 GB of memory the OS can hand out (free, inactive and speculative pages on macOS) and a load average under 1.5 per core. It prints `waiting for the machine to have room before testing` with the reason, once. The Mac kernel-panicked once when VS Code test windows ran out of memory. `GCODE_TEST_MIN_FREE_GB` and `GCODE_TEST_MAX_LOAD_PER_CORE` change the limits, and `GCODE_TEST_HEADROOM=off` skips the wait.
+
 The unit and webview projects use at most `GCODE_TEST_WORKERS` workers (default 4), and a run lowers its own CPU priority, so the editor stays usable while tests run. Four delegates once ran full suites at once with every core each, and the Mac froze.
 
 While working on a change, run only the test files it touches (`pnpm vitest run --project unit <file>`). Run `pnpm test:affected` once at the end, not a full `--project unit` run as well.
