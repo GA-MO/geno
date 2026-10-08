@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { readSuites, selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
+import { onlyScriptsChanged, readSuites, selectVscode, suiteFilesOf, tokensOf, type Suite } from './affected.js';
 
 const suite = (name: string, text: string, extra: string[] = []): Suite => ({
   name,
@@ -71,6 +71,29 @@ describe('selectVscode', () => {
   it('runs everything when the harness changes', () => {
     expect(names(['packages/extension/test/launch.ts'])).toHaveLength(SUITES.length);
     expect(names(['scripts/vscode-workers.ts']), 'how many files run at once').toHaveLength(SUITES.length);
+    for (const file of ['packages/extension/test/pool/broker.ts', 'packages/extension/test/pool/host.ts', 'packages/extension/test/suite/shooting.ts', 'scripts/test-vscode.ts', 'docker/vscode-tests-entry.sh']) {
+      expect(names([file]), `${file} runs every suite`).toHaveLength(SUITES.length);
+    }
+  });
+
+  it('leaves the pool’s own unit test to the unit project', () => {
+    expect(names(['packages/extension/test/pool/broker.test.ts'])).toEqual([]);
+    expect(names(['scripts/flakes.test.ts'])).toEqual([]);
+  });
+});
+
+describe('onlyScriptsChanged', () => {
+  const manifest = (scripts: Record<string, string>, devDependencies: Record<string, string> = { vitest: '^5.0.3' }) =>
+    JSON.stringify({ name: 'g-code', scripts, devDependencies }, null, 2);
+
+  it('lets a root package.json change that adds or edits scripts run no VS Code file', () => {
+    expect(onlyScriptsChanged(manifest({ test: 'vitest run' }), manifest({ test: 'vitest run', 'test:golden': 'tsx scripts/golden.ts' }))).toBe(true);
+    expect(onlyScriptsChanged(manifest({ test: 'vitest run' }), manifest({ test: 'vitest run --project unit' }))).toBe(true);
+  });
+
+  it('treats a dependency change, or a manifest it cannot read, as harness', () => {
+    expect(onlyScriptsChanged(manifest({}), manifest({}, { vitest: '^5.1.0' }))).toBe(false);
+    expect(onlyScriptsChanged('', manifest({}))).toBe(false);
   });
 });
 

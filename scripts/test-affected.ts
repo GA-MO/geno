@@ -4,8 +4,10 @@
  * can break.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { readSuites, selectVscode } from './affected.js';
+import { onlyScriptsChanged, readSuites, selectVscode } from './affected.js';
+import { vscodeWorkers } from './vscode-workers.js';
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -24,9 +26,19 @@ const panelDiff = git('diff', mergeBase, '--', 'packages/extension/src');
 
 const suites = readSuites(root);
 
-const picks = selectVscode(changed, panelDiff, suites);
+const show = (ref: string, file: string) => {
+  try {
+    return git('show', `${ref}:${file}`);
+  } catch {
+    return '';
+  }
+};
+const scriptsOnly = changed.includes('package.json') && onlyScriptsChanged(show(mergeBase, 'package.json'), readFileSync(path.join(root, 'package.json'), 'utf8'));
+if (scriptsOnly) console.log('package.json: only its scripts changed, which no VS Code suite runs');
+const picks = selectVscode(scriptsOnly ? changed.filter((p) => p !== 'package.json') : changed, panelDiff, suites);
 console.log(`changed since ${base} (${mergeBase.slice(0, 7)}): ${changed.length} files`);
-console.log(picks.length === 0 ? 'VS Code: nothing to run' : `VS Code: ${picks.length} of ${suites.length} files`);
+const windows = Math.min(picks.length, vscodeWorkers(process.env));
+console.log(picks.length === 0 ? 'VS Code: nothing to run' : `VS Code: ${picks.length} of ${suites.length} files, in ${windows} pooled window${windows === 1 ? '' : 's'}`);
 for (const p of picks) console.log(`  ${path.basename(p.file)}: ${p.reasons.join('; ')}`);
 if (flag('dry')) process.exit(0);
 
@@ -44,5 +56,5 @@ if (picks.length > 0) {
   run('pnpm', ['build']);
   const files = picks.map((p) => p.file);
   if (flag('docker')) run('pnpm', ['test:vscode:docker', ...files]);
-  else run('pnpm', ['vitest', 'run', '--project', 'vscode', ...files]);
+  else run('pnpm', ['test:vscode', ...files]);
 }

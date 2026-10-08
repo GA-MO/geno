@@ -14,8 +14,10 @@ const HARNESS = [
   /^packages\/extension\/package\.json$/,
   /^packages\/extension\/build\.mts$/,
   /^packages\/extension\/test\/(launch|vscode-setup|media)\.ts$/,
-  /^packages\/extension\/test\/suite\/(index|mac-only)\.ts$/,
-  /^scripts\/(test-tmp|test-vscode-docker|vscode-workers)\./,
+  /^packages\/extension\/test\/pool\/(broker|client|host|protocol)\.ts$/,
+  /^packages\/extension\/test\/suite\/(index|mac-only|shooting)\.ts$/,
+  /^docker\/vscode-tests/,
+  /^scripts\/(test-tmp|test-vscode|test-vscode-docker|vscode-workers|flakes)\.(ts|sh)$/,
 ];
 /** Engine and core changes reach the panel through the protocol: these suites drive whole turns end to end. */
 const ENGINE_SMOKE = ['chat', 'panel', 'working'];
@@ -33,7 +35,21 @@ const READS_REQUESTS = /\.(messages|system|tools|tool_choice)\b|\bofferedTools\(
 /** A panel change that names nothing a suite checks still runs the suites that cover the panel at large. */
 const PANEL_SMOKE = ['panel', 'chat', 'composer'];
 
-export const integrationFile = (name: string) => `packages/extension/test/${name}.integration.test.ts`;
+/**
+ * Whether a change to the root package.json touches only its `scripts`, which no VS Code suite runs: adding a
+ * script once ran all 53 files. Anything else, a dependency or a test setting, may change what the suites run on.
+ */
+export function onlyScriptsChanged(before: string, after: string): boolean {
+  try {
+    const { scripts: _before, ...restBefore } = JSON.parse(before) as Record<string, unknown>;
+    const { scripts: _after, ...restAfter } = JSON.parse(after) as Record<string, unknown>;
+    return JSON.stringify(restBefore) === JSON.stringify(restAfter);
+  } catch {
+    return false;
+  }
+}
+
+export const integrationFile =(name: string) => `packages/extension/test/${name}.integration.test.ts`;
 
 /** Class names, data values, message types and command ids that the changed lines of panel code name. */
 export function tokensOf(diff: string): Set<string> {
