@@ -1631,7 +1631,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 approval,
                 surface: shown.surface,
                 diagnostics,
-                mcp: await mcp.toolset(sessionId, approval),
+                mcp: (approval, grant) => mcp.toolset(sessionId, approval, grant),
                 // Nobody is at a scheduled run to answer a card, and nobody wants the editor moved by one at 9:00.
                 user: run.scheduled === true ? {} : shown.user,
                 widgets: from.peer.widgets,

@@ -73,7 +73,7 @@ import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
 import { bindSession, findLane, laneAt, laneRepoOf } from './lanes.js';
-import { openMcpHub, type McpToolset } from './mcp/hub.js';
+import { openMcpHub, type McpTools } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
 import { layeredPermissions, permissionStore } from './permissions.js';
@@ -144,10 +144,10 @@ export type AgentOptions = {
   readonly surface?: Surface;
   readonly diagnostics?: Diagnostics | undefined;
   /**
-   * The session's MCP tools for this turn, deferred behind tool_search, and what the model is told of its servers at
-   * the safe point; undefined for a run without MCP.
+   * The session's MCP tools, deferred behind tool_search, and what the model is told of its servers at the safe point:
+   * the run takes those ready as it starts, and each subagent those ready as it starts. Undefined for a run without MCP.
    */
-  readonly mcp?: McpToolset | undefined;
+  readonly mcp?: McpTools | undefined;
   /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
   readonly user?: UserChannel | undefined;
   /** The editor that opens files, diffs and Explorer items for the model; a non-interactive run ignores it. */
@@ -330,7 +330,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       return { lane: bound, executors: (approval) => executorsFor(approval, false, place), close: () => laneSandbox.close() };
     };
     const repo = shadowRepoFor(store, session.workspace);
-    const mcp = options.mcp;
+    const mcp = await options.mcp?.(options.approval);
     // Every mode is offered the same tools and the same system prompt, so a switch keeps the cached prefix. The model is
     // told of a switch at the next safe point, and the new mode refuses the tools it leaves out. MCP tools are offered
     // in every mode, and their rules decide what each mode lets them do.
@@ -384,6 +384,13 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       files: options.surface?.files ?? DISK_FILES,
       host: options.childHost ?? terminalChildHost(io),
       executors: executorsFor,
+      mcp:
+        options.mcp === undefined
+          ? undefined
+          : async (approval, grant) => {
+              const toolset = await options.mcp!(approval, grant);
+              return toolset === undefined ? undefined : { ...toolset, executors: withPermissions(toolset.executors, permissions, approval) };
+            },
       parentMode: () => ({ tools: mode.tools, system: mode.system }),
       readRoots,
       externals: options.externals,
@@ -524,7 +531,7 @@ export const agent: Command = async (args, { io, store }) => {
     try {
       // A one-shot run has only this turn, so it waits for its servers.
       await hub.start();
-      const mcp = await hub.toolset(approval);
+      const mcp: McpTools = (approval, grant) => hub.toolset(approval, grant);
       for (const problem of hub.problems) io.err(`mcp: ${problem}`);
       for (const view of hub.views()) if (view.state.status === 'untrusted' || view.state.status === 'failed') io.err(`mcp: ${view.name} is ${describeServerState(view.state)}`);
       return (await runAgent(io, store, { ...opened, log }, task, { ...options, mcp })).exitCode;

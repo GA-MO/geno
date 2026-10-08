@@ -16,7 +16,10 @@ import {
   childrenOf,
   DONE_REASONS,
   findAgent,
+  grantsMcp,
   isReadOnly,
+  mcpGranted,
+  mcpServerGranted,
   mergeAgents,
   NO_SUBAGENT_MODELS,
   parseAgentDefinition,
@@ -58,6 +61,7 @@ describe('parseAgentDefinition', () => {
       name: 'scout',
       description: 'Finds things.',
       tools: ['glob', 'grep', 'list', 'read'],
+      mcp: { allow: [], deny: [] },
       model: 'qwen3.8-max',
       effort: 'high',
       maxTurns: 6,
@@ -92,6 +96,41 @@ describe('parseAgentDefinition', () => {
   it('gives every tool when tools is absent, then takes disallowedTools away', () => {
     const { agent } = parsed({ description: 'Most things.', disallowedTools: 'Bash, Edit' });
     expect(agent.tools).toEqual(['check', 'glob', 'grep', 'list', 'read', 'skill']);
+  });
+
+  it("takes Claude Code's MCP forms: none with a tools list that names none, every server's without a tools field, less disallowedTools", () => {
+    const listed = parsed({ description: 'Docs.', tools: 'Read, mcp__docs, mcp__wiki__*, mcp__my-server__find' }).agent;
+    expect(listed.tools).toEqual(['read']);
+    expect(listed.mcp).toEqual({ allow: ['mcp__docs', 'mcp__wiki__*', 'mcp__my-server__find'], deny: [] });
+    expect(isReadOnly(listed), 'an MCP tool may change anything').toBe(false);
+    expect(mcpGranted(listed.mcp, 'docs', 'search')).toBe(true);
+    expect(mcpGranted(listed.mcp, 'wiki', 'edit')).toBe(true);
+    expect(mcpGranted(listed.mcp, 'my-server', 'find')).toBe(true);
+    expect(mcpGranted(listed.mcp, 'my-server', 'delete')).toBe(false);
+    expect(mcpGranted(listed.mcp, 'other', 'search')).toBe(false);
+    expect(mcpServerGranted(listed.mcp, 'my-server')).toBe(true);
+    expect(mcpServerGranted(listed.mcp, 'other')).toBe(false);
+
+    const none = parsed({ description: 'Reads.', tools: 'Read, Grep' }).agent;
+    expect(grantsMcp(none.mcp)).toBe(false);
+    expect(isReadOnly(none)).toBe(true);
+
+    const all = parsed({ description: 'Everything.', disallowedTools: 'mcp__secrets, mcp__docs__delete' }).agent;
+    expect(mcpGranted(all.mcp, 'docs', 'search')).toBe(true);
+    expect(mcpGranted(all.mcp, 'docs', 'delete')).toBe(false);
+    expect(mcpGranted(all.mcp, 'secrets', 'read')).toBe(false);
+    expect(mcpServerGranted(all.mcp, 'docs'), 'a denied tool leaves the rest of its server').toBe(true);
+    expect(mcpServerGranted(all.mcp, 'secrets')).toBe(false);
+
+    expect(parsed({ description: 'Only MCP.', tools: 'mcp__docs__*' }).agent).toMatchObject({ tools: [], mcp: { allow: ['mcp__docs__*'] } });
+  });
+
+  it('gives worker every MCP tool and the read-only built-ins none', () => {
+    expect(mcpGranted(builtin('worker').mcp, 'docs', 'echo')).toBe(true);
+    for (const name of ['explore', 'plan', 'review']) {
+      expect(grantsMcp(builtin(name).mcp), name).toBe(false);
+      expect(isReadOnly(builtin(name)), name).toBe(true);
+    }
   });
 
   it("reads omitClaudeMd: true, Geno's own field", () => {

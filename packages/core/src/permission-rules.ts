@@ -449,13 +449,21 @@ function mcpTarget(rule: string): { readonly server: string; readonly tool: stri
   return { server: mcpPart(parts[1]), tool: tool === '' || tool === '*' ? undefined : mcpPart(tool) };
 }
 
+/**
+ * Whether a name in Claude Code's MCP form covers one tool of a server, by the names the server gives; with no tool,
+ * whether it covers every tool of the server.
+ */
+export function mcpNameCovers(name: string, server: string, tool?: string): boolean {
+  const target = mcpTarget(name);
+  return target !== undefined && target.server === mcpPart(server) && (target.tool === undefined || (tool !== undefined && target.tool === mcpPart(tool)));
+}
+
+/** Whether a name in Claude Code's MCP form names this server, or one of its tools. */
+export const mcpNameReaches = (name: string, server: string): boolean => mcpTarget(name)?.server === mcpPart(server);
+
 /** The MCP rule that governs one tool of one server, by the names the server gives: a deny before an ask before an allow. */
 export function mcpRuleFor(call: { readonly server: string; readonly tool: string }, rules: readonly PermissionRule[]): McpToolRule | undefined {
-  const governing = rules.filter((rule): rule is McpToolRule => {
-    if (!isMcpToolRule(rule)) return false;
-    const target = mcpTarget(rule.mcp);
-    return target !== undefined && target.server === mcpPart(call.server) && (target.tool === undefined || target.tool === mcpPart(call.tool));
-  });
+  const governing = rules.filter((rule): rule is McpToolRule => isMcpToolRule(rule) && mcpNameCovers(rule.mcp, call.server, call.tool));
   return governing.find((rule) => rule.effect === 'deny') ?? governing.find((rule) => rule.effect === 'ask') ?? governing[0];
 }
 
@@ -520,6 +528,9 @@ export type ParsedRule = { readonly ok: true; readonly rule: NewRule } | { reado
 const TOOL_FORM = /^(Read|Edit|Bash|WebFetch|Browser)\((.*)\)$/s;
 const PREFIX_STAR = /(?:\s\*|:\*)$/;
 const MCP_NAME = /^mcp__[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*(?:__(?:\*|[A-Za-z0-9_.-]+))?$/;
+
+/** `mcp__server`, `mcp__server__*` or `mcp__server__tool`, as Claude Code's rules and agent tools fields write them. */
+export const isMcpName = (text: string): boolean => MCP_NAME.test(text);
 const DOMAIN = /^(?:\*|(?:\*\.)?[A-Za-z0-9*_-]+(?:\.[A-Za-z0-9*_-]+)*\.?)$/;
 
 /**
@@ -530,7 +541,7 @@ const DOMAIN = /^(?:\*|(?:\*\.)?[A-Za-z0-9*_-]+(?:\.[A-Za-z0-9*_-]+)*\.?)$/;
 export function parseRule(effect: RuleEffect, text: string, scope: CommandScope): ParsedRule {
   const trimmed = text.trim();
   if (trimmed.startsWith('mcp__')) {
-    return MCP_NAME.test(trimmed) ? { ok: true, rule: { effect, mcp: trimmed } } : { ok: false, reason: 'Name an MCP server or one of its tools, such as mcp__github or mcp__github__create_issue.' };
+    return isMcpName(trimmed) ? { ok: true, rule: { effect, mcp: trimmed } } : { ok: false, reason: 'Name an MCP server or one of its tools, such as mcp__github or mcp__github__create_issue.' };
   }
   const form = TOOL_FORM.exec(trimmed);
   if (form?.[1] === 'WebFetch' || form?.[1] === 'Browser') return parseDomainRule(effect, form[1] === 'WebFetch' ? 'web_fetch' : 'browser', form[2]!.trim());
