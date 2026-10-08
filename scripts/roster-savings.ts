@@ -3,7 +3,7 @@
 // Run with: pnpm tsx scripts/roster-savings.ts
 // The tool list mirrors the `own` list that runAgent builds in packages/engine/src/agent.ts, without MCP or subagent tools.
 import {
-  AGENT_MODE_TOOL_DEFINITIONS,
+  AGENT_TOOL_DEFINITIONS,
   chapterToolDefinitions,
   deferredSavings,
   editorActionToolDefinitions,
@@ -37,8 +37,8 @@ for (const search of [false, true]) {
     for (const mode of MODES) {
       if (mode === 'non-interactive' && client.name !== 'terminal') continue;
       const tools = [
-        ...AGENT_MODE_TOOL_DEFINITIONS[mode],
-        ...userToolDefinitions(mode, new Set(client.user)),
+        ...AGENT_TOOL_DEFINITIONS,
+        ...userToolDefinitions(new Set(client.user)),
         ...widgetToolDefinitions(mode, client.widgets),
         ...editorActionToolDefinitions(mode, client.editor),
         ...readTerminalToolDefinitions(mode, client.terminal),
