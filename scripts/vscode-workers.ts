@@ -1,8 +1,8 @@
 /**
- * How many VS Code windows a run keeps open, and so how many integration files run at once. Two leave the Mac usable
- * while a run goes; docs/testing.md has the runs behind the number.
+ * How many VS Code windows a run keeps open, and so how many integration files run at once. One: a 16 GB Mac ran
+ * out of memory and panicked during runs with two pooled windows. docs/testing.md has the runs.
  */
-export const DEFAULT_VSCODE_WORKERS = 2;
+export const DEFAULT_VSCODE_WORKERS = 1;
 
 /** GCODE_VSCODE_WORKERS, else `fallback`. */
 export function vscodeWorkers(env: Readonly<Record<string, string | undefined>>, fallback = DEFAULT_VSCODE_WORKERS): number {

@@ -4,7 +4,7 @@ Geno has three vitest projects:
 
 - `unit` runs in seconds on any machine.
 - `webview` loads the chat panel in headless Chromium against a fake extension host, for the files in `packages/extension/test/webview/*.webview.test.ts`. It takes a few seconds and opens no window.
-- `vscode` launches a real VS Code for each file in `packages/extension/test/*.integration.test.ts`, three files at a time, and each launch opens a window.
+- `vscode` runs each file in `packages/extension/test/*.integration.test.ts` in a real VS Code. The files share one VS Code window, which stays open from suite to suite, so a full run launches VS Code a few times instead of 53. Run it with `pnpm test:vscode`, which retries a failed file once.
 
 ## Test what a change can break
 
@@ -19,12 +19,12 @@ pnpm test:affected --dry      # print the files and why, run nothing
 It diffs the branch against its merge base with `main` (`--base <ref>` picks another), then runs `pnpm typecheck`, `pnpm lint:deps`, the unit tests vitest relates to the changed files (`--changed`), every webview test, and only these VS Code integration files (the rules are in `scripts/affected.ts`):
 
 - A file whose own test or suite part changed.
-- Every file, when the harness changes: `vitest.config.ts`, the lockfile, `package.json`, `launch.ts`, `vscode-setup.ts`, `suite/index.ts`, `scripts/vscode-workers.ts`.
+- Every file, when the harness changes: `vitest.config.ts`, the lockfile, `package.json`, `launch.ts`, `vscode-setup.ts`, the window pool in `test/pool/`, `suite/index.ts`, `suite/shooting.ts`, `scripts/vscode-workers.ts`, `scripts/test-vscode.ts` and the Docker entry. A root `package.json` change that only adds or edits `scripts` is not a harness change, since no suite runs a script; a dependency change is.
 - `chat`, `panel` and `working` when engine or core source changed, since those suites drive whole turns.
 - Every file that reads a request's `messages`, `system`, `tools` or `tool_choice`, or a session log, when a file that shapes the request or the turn's events changed: the opening, Geno's notices and arrivals, the mode's prompt and tools, tool result text, and the turn loop (`REQUEST_SHAPERS` in `scripts/affected.ts`). That is about 39 of 52 files. Without this rule, P5, P6, P11 and P17 changed the request on purpose and ten suites that check it failed only on the next full run.
 - For panel source, the suites that name a class, data value, message type, command id or module that the changed lines name. A token that 60% of the suites use says nothing and is skipped. If no suite names anything the change touched, `panel`, `chat` and `composer` run.
 
-A small panel change runs 2 to 8 files instead of 30. Run the full suite once per batch of merges, before a release or an install, not after every change.
+A small panel change runs 2 to 8 files instead of 30, and they share the run's one window like any other files. Run the full suite once per batch of merges, before a release or an install, not after every change.
 
 ## The fake model
 
@@ -90,14 +90,42 @@ The unit and webview projects use at most `GCODE_TEST_WORKERS` workers (default 
 
 While working on a change, run only the test files it touches (`pnpm vitest run --project unit <file>`). Run `pnpm test:affected` once at the end, not a full `--project unit` run as well.
 
-## Files at once
+## The VS Code windows
 
-`GCODE_VSCODE_WORKERS` sets how many VS Code files run at once. The default is 3, which runs the full project in about 10 minutes instead of 30 on a 10-core Mac. Each file has its own workspace, user data, extensions dir, `GCODE_HOME`, engine socket and ports, and `vscode-setup.ts` builds the extension once per run, so no file rewrites `dist` while another loads it. `docs/t1-fast-tests.md` has the runs at 1 to 4.
+The integration files run in a pool of long-lived VS Code windows, the way Copilot Chat, Cline and Roo Code run their extension tests in one launch instead of one per file (`docs/testing-research.md`). `vscode-setup.ts` builds the extension once, then starts the pool (`packages/extension/test/pool/`). The pool launches a window when a file first needs one, keeps it for the files after, and closes every window when the run ends.
+
+A file leases a window for its test and runs its suite there:
+
+```ts
+const { work, workspace, home, suite } = await setUp('modes', FILES, settings);
+const vscodeWindow = await leaseWindow();     // from ./pool/client.js; released when the test ends
+debugPort = vscodeWindow.debugPort;           // for CDP input and screenshots
+await vscodeWindow.run(suite, { workspace, work }, { GCODE_HOME: home, ... }); // throws the suite's error
+```
+
+Each `run` opens the suite's own workspace in the window, which starts a fresh extension host. A small extension in the window, `pool/host.ts`, sets the env the test passed and runs the suite in that host. A second `run` in the same folder is a real window reload, which is what the `-reload` suites check. So suites stay independent:
+
+- Each suite has its own workspace folder and so its own workspace storage, its own `GCODE_HOME` and engine, and its own fake model and ports.
+- Before the folder opens, the window's `User` files are reset to the suite's: `settings.json` to the user settings `setUp` was given, or to `{}`, and `mcp.json` to the suite's or to none. A theme or setting one suite wrote does not reach the next.
+- Secrets are kept in memory, so the reload clears them. Terminals are closed, and unsaved editors are reverted, before a new folder opens.
+- A released window opens an empty folder, so the last suite's extension host, and its connections to the test's servers, end with the test.
+
+The window loads Geno from a copy of `dist` and `media` whose manifest depends on the host extension. VS Code then activates the host, which sets the env, before it activates Geno, even when Geno's restored view activates it first thing after a reload. The suite runs from a copy inside that folder, because VS Code gives a module's `require('vscode')` the API of the extension whose folder holds it.
+
+`GCODE_VSCODE_WORKERS` sets how many windows the pool keeps, which is also how many files run at once. The default is 1, so one VS Code window is open at a time. Do not raise it on a 16 GB Mac, which ran out of memory and panicked during runs with two windows. Every vitest run also waits for 3 GB of free memory and a load under 1.5 per core before it starts (`scripts/test-lock.ts`). Two files launch a VS Code of their own and hold a place in the pool while they do: `install`, which installs the packed `.vsix`, and the Tab test in VS Code Insiders, which needs a proposed API. The pool closes an idle window to make that room.
 
 ```sh
-GCODE_VSCODE_WORKERS=4 pnpm vitest run --project vscode   # nobody uses the Mac
-GCODE_VSCODE_WORKERS=1 pnpm vitest run --project vscode   # one window at a time
+pnpm vitest run --project vscode packages/extension/test/modes.integration.test.ts   # one suite, one window
+pnpm vitest run --project vscode packages/extension/test/modes.integration.test.ts -t 'Ask'   # one test
 ```
+
+When a run ends, it prints how many suites it ran in how many launches, such as `vscode pool: 58 suite runs in 4 pooled VS Code launches, and 2 files that launched their own`. Each window keeps its VS Code output in `<TMPDIR>/p-*/<n>/vscode.log` and its logs under `<n>/ud/logs`. The run removes its TMPDIR when it exits; to keep it, set `GCODE_TEST_TMP_ROOT` and `TMPDIR` to a folder you made.
+
+## Retries and flakes
+
+`pnpm test:vscode [files] [vitest options]` runs the `vscode` project, then runs each failed file once more. A file that passes the second time is a flake: the run passes, lists it at the end with its first failure, and appends it to the flake log, `GCODE_FLAKE_LOG` or `gcode-vscode-flakes.jsonl` in the temp dir. A file that fails twice fails the run. `pnpm test:affected` and the Docker entry run the files this way.
+
+The retry is per file, not vitest's per-test `retry`. A file's fake model keeps its first attempt's requests in module state, so a test retried in the same module would replay against the wrong script. A flake caused by state one suite leaves for the next is a bug in the pool, not something to retry.
 
 ## Webview tests
 
@@ -117,7 +145,7 @@ pnpm test:vscode:docker                                                  # every
 pnpm test:vscode:docker packages/extension/test/modes.integration.test.ts  # some files
 ```
 
-The container runs VS Code under Xvfb, so no window appears on the host's screen. It runs one file at a time, since the Docker VM is small, unless `GCODE_VSCODE_WORKERS` says otherwise. One file takes about 7% longer there than on the host, so the host at three files at once finishes about three times sooner.
+The container runs VS Code under Xvfb, so no window appears on the host's screen. It runs `pnpm test:vscode` with one pooled window, since the Docker VM is small, unless `GCODE_VSCODE_WORKERS` says otherwise. It prints its flakes at the end; its flake log stays in the container.
 
 ## The full gate
 
@@ -139,7 +167,9 @@ The host checkout is mounted read-only. Each run copies it into the work volume,
 
 ## Screenshots
 
-Set `GCODE_SCREENSHOTS` to a host folder. The container writes the screenshots there:
+A suite's `screenshots()` switches the color theme three times and back, with a pause per switch for the window to repaint, and takes a shot in each. Without `GCODE_SCREENSHOTS` it returns at once (`suite/shooting.ts`), since the webview tests check the themes. `start` still switches to high contrast on the start page without it, for its check on Noodle. The pauses took at least 31% of the file time before.
+
+Set `GCODE_SCREENSHOTS` to a folder, on the host or for the container. The container writes the screenshots there:
 
 ```sh
 GCODE_SCREENSHOTS=/tmp/shots pnpm test:vscode:docker packages/extension/test/style.integration.test.ts
@@ -172,3 +202,17 @@ Measured on 2026-10-06 on an Apple silicon Mac, with Docker 29.8.0 on linux/aarc
 The container is about 7% slower than the host. The first run on a machine also builds the image and downloads VS Code.
 
 Measured on 2026-10-07 on a 10-core Apple silicon Mac, host, full `vscode` project with 46 files: 1,769 s and 1,800 s one file at a time, 600 s and 605 s three at a time, 452 s and 462 s four at a time. The three ported webview files take 1.7 to 2.5 s each, against 31 to 64 s in VS Code.
+
+Measured on 2026-10-08 on the same Mac, host, full `vscode` project with 53 files, through `pnpm test:vscode`:
+
+| Layout | Wall time | VS Code launches | Windows at once | Load (1 min) median |
+| --- | --- | --- | --- | --- |
+| One launch per file, 3 at a time (main before T3, 52 files) | 666 s | 52 | 3 | not recorded |
+| Pool of 2 windows, run D | 451 s | 7: 5 pooled, 2 of their own | 2 | 12.7 |
+| Pool of 2 windows, run E | 585 s, 506 s before the retry | 6, and 2 more for the retry | 2 | 17.9 |
+
+Run D passed all 53 files the first time. In run E, at a load of 18 to 24, four files failed the first time: `attention` (the 30-second wait for the card after the reload), `widget` (the grown widget's height), `composer` (one model request short) and `settings` (a user setting write that did not land in 60 s). The first three passed on the retry; `settings` failed again. `settings` ran first in a newly launched window in the retry, so no earlier suite's state reached it.
+
+For an engine change outside the request shapers, such as `packages/engine/src/checkpoints.ts`, `pnpm test:affected` picks `chat`, `panel` and `working`. Their VS Code part took 136 s in 2 launches, most of it `working`.
+
+The file times in run D add up to 839 s, so two windows can finish in no less than about 420 s, and the run took 447 s of vitest time. The pool is limited by the suites themselves: `start` (101 s) and `working` (95 s) are a quarter of it, and both could move to the webview project. The other agents on the machine kept the load between 7 and 22 during both runs, so a quiet machine is faster. `modes` now takes about 9 s; its five screenshot loops held about 36 s of pauses, by a count of the sleeps in them.
