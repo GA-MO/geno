@@ -159,7 +159,7 @@ describe('remembered permission rules', () => {
       await prompt(ctx, sessionId, 'List it');
     });
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls', reason: 'the workspace rule that asks before `ls`' });
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'ls', reason: 'the workspace rule that asks before `ls`, which the user set in Settings under Permissions' });
     expect(permissions[0]!.options.map((o) => o.optionId)).toEqual(['allow', 'reject']);
     expect(transport.requests.filter((r) => r.body.tool_choice !== undefined), 'the classifier is not called').toEqual([]);
   });

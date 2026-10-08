@@ -15,15 +15,24 @@ export type HookSources = {
   readonly plugins: readonly InstalledPlugin[];
 };
 
-type SettingsFile = { readonly file: string; readonly scope: HookOrigin['scope'] };
+export type SettingsFile = { readonly file: string; readonly scope: HookOrigin['scope'] };
 
-const settingsFiles = ({ claudeDir, appHome, workspace }: HookSources): SettingsFile[] => [
-  { file: path.join(appHome, 'settings.json'), scope: 'user' },
+/** Claude Code's own settings files, lowest scope first: the user's, the project's shared one, then its local one. */
+export const claudeSettingsFiles = (claudeDir: string | undefined, workspace: string): SettingsFile[] => [
   ...(claudeDir === undefined ? [] : [{ file: path.join(claudeDir, 'settings.json'), scope: 'user' as const }]),
-  { file: path.join(workspace, '.gcode.json'), scope: 'project' },
   { file: path.join(workspace, '.claude', 'settings.json'), scope: 'project' },
   { file: path.join(workspace, '.claude', 'settings.local.json'), scope: 'project' },
 ];
+
+const settingsFiles = ({ claudeDir, appHome, workspace }: HookSources): SettingsFile[] => {
+  const claude = claudeSettingsFiles(claudeDir, workspace);
+  return [
+    { file: path.join(appHome, 'settings.json'), scope: 'user' },
+    ...claude.filter((file) => file.scope === 'user'),
+    { file: path.join(workspace, '.gcode.json'), scope: 'project' },
+    ...claude.filter((file) => file.scope === 'project'),
+  ];
+};
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
