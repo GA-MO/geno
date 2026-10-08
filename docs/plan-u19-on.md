@@ -479,6 +479,14 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Check.** T-AGENT-04: the resumed child's first request holds its earlier turns plus the fenced message.
 - **Size.** 1 day. **Depends on.** P17.
 
+### P18b: recover agents an engine crash cut off
+
+- **Scope.** New (2026-10-07, from the coordinator's own crash recovery). Geno's children and workflow steps die with the engine, and nobody tells the parent.
+- **Why.** After a crash the user cannot tell which agents were cut off or how far they got. The coordinator recovered the same case by listing stopped agents and messaging each to resume from its transcript.
+- **Change.** At engine start, find child sessions and workflow steps whose log shows a run with no end, and log an `interrupted` end for each. Send the parent session one `[Geno]` arrival that lists each, with its last report or last text, its files changed and its spend. The parent resumes one with `message_agent` (P18's path), and Tasks shows a Resume action on each row. Nothing resumes on its own, because a run costs money.
+- **Check.** E2E: kill the engine mid-child, start it, see the interrupted end, the parent's arrival, and a resume through `message_agent` that continues from the child's log. The same for a workflow step.
+- **Size.** 1 day. **Depends on.** P18.
+
 ### P19: stop, list and wake controls
 
 - **Scope.** C/C-32, B/B-24, T-BG-03, C/C-33, B/B-27, B/B-39, T-BG-06, C/C-42, B/B-22, T-BG-01, C/C-38.
