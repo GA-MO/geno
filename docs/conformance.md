@@ -105,6 +105,24 @@ P28 also covers rows that have no Claude Code conformance test:
 | B/B-66 | `permission-rules.test.ts` (core), 12 whole-line rows: a command over 10,000 characters, an open quote, an open `$(` and a line that ends in `&&` or `\|` ask in Ask mode and go to the classifier in Auto, and no allow rule covers them. A run nobody can ask still runs them in the sandbox, as it does an unlisted command. A heredoc with a lone quote in its body still parses. |
 | B/B-61 | T-PERM-05 above, and `permission-rules.test.ts` (core): 23 rows of .gitignore matching, a Read deny that stops `edit`, and the sandbox globs. |
 
+## Claude Code settings (P29)
+
+A session also follows the `permissions` of Claude Code's settings files: `.claude/settings.local.json`, then `.claude/settings.json`, then `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`). They sit below Geno's own store. `layeredPermissions` in `engine/src/permissions.ts` reads them at each call, as it reads the store, so an edit holds for the next call. Rules from every scope merge, and the order in `RULES_IN_MODE` decides, so a deny anywhere beats an allow anywhere, as in Claude Code. `claudePermissions` in `core/src/claude-permissions.ts` turns each entry into a Geno rule with the P28 parser: `Bash(x:*)`, `Bash(x *)` and `Bash(x)` become prefix rules, and `Read(path)` and `Edit(path)` become path rules. A deny on a bare tool name maps to the Geno tool through the hooks' name table (`CLAUDE_TOOL_NAMES`), so `WebFetch` stops `web_fetch` and `Write` stops `edit`. A refusal names the rule and the file it came from.
+
+Deny and ask rules apply in every workspace. An allow from the repository's two files applies only when VS Code trusts the workspace, which the extension sends as `WORKSPACE_TRUST_CAPABILITY`, as it does for project hooks. An allow from the user's own file applies everywhere, as the user's hooks do. Geno skips an entry it cannot apply: another tool's parameter rule such as `WebFetch(domain:x)`, an `mcp__` name, a bare allow or ask, a mid-word `*`, a Read or Edit allow, or anything that is not a string. Each file gets one warning line on stderr for its skipped entries, one for allow rules that wait for trust, and one when it is not valid JSON. None of them stops the run.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-PERM-09 | `Bash(npm test *)` allows `npm test` but not `npm test && rm x`: every subcommand must match. | At parity, through an imported rule too: a trusted project allow `Bash(curl -s https://a.invalid/x:*)` runs that command unasked in Ask mode, and `curl -s https://a.invalid/x && curl -s https://b.invalid/x` still asks, since the allow does not cover the second `curl`. The test uses `curl` where Claude Code's uses `rm x`, because the sandbox confines writes and Geno runs `rm` inside the workspace unasked. Kept from Geno: only flagged simple commands need a rule, so `pnpm test \| tail` needs no `tail` rule. | pass (had no test) | `permissions.conformance.test.ts`, both wires |
+
+P29 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-62 | `permissions.conformance.test.ts`, both wires: a `Bash(touch:*)` deny in `.claude/settings.json` refuses `touch made.txt` in Auto in an untrusted workspace, naming the rule and the file, and no file is made. A project allow for a `curl` asks, with one warning line, when the workspace is untrusted, and runs unasked when it is trusted. A user allow applies without trust, and a project `Bash(curl:*)` deny beats it. A `Read(notes/**)` deny in the fake `~/.claude/settings.json` refuses `read`, and the text never reaches the model. A file with an unreadable rule warns once and its other rules apply. A file that is not JSON warns once and the run goes on. |
+| B/B-58 | `claude-permissions.test.ts` (core): `Bash(npm run test:*)`, `Bash(git status *)` and `Bash(curl)` import as prefix rules, and 11 forms Geno cannot apply are skipped. |
+| B/B-65 | `permissions.conformance.test.ts`, both wires: bare `WebFetch` and `Bash` denies in `.claude/settings.local.json` refuse `web_fetch` (once `tool_search` loads it) and `bash`, naming the rule and the file. `claude-permissions.test.ts` (core): `WebFetch`, `Bash`, `Write` and `Task` map to `web_fetch`, `bash`, `edit` and `agent`. |
+
 ## Environment (P5)
 
 `captureEnvironment` in `engine/src/environment.ts` records the session's environment when it starts, and the session-start event keeps it beside the loaded context. `renderEnvironment` in `core/src/environment.ts` writes it into the opening user message.
@@ -582,7 +600,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-PERM-03 | adapt | P32 | no test yet |
 | T-PERM-04 | adapt | P31 | no test yet |
 | T-PERM-05 | adapt; adopt | P3, P28, P14 | pass |
-| T-PERM-09 | at parity | none | no test yet |
+| T-PERM-09 | at parity | P29 | pass |
 | T-PERM-10 | adapt | P28 | pass |
 | T-PERM-11 | keep Geno's | none | no test yet |
 | T-PERM-12 | deliberate; adopt | P14 | pass |
