@@ -388,6 +388,34 @@
           "scope": "machine",
           "markdownDescription": "Hosts the commands Geno runs may reach from the sandbox, such as `registry.npmjs.org` or `*.githubusercontent.com`. Empty, the default, keeps the sandbox off the network. The list applies to every workspace, since the sandbox keeps one per engine, and a change restarts the engine. Web fetches and the browser follow the workspace's `WebFetch(domain:...)` and `Browser(domain:...)` rules instead."
         },
+        "gcode.additionalDirectories": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "writable": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "default": [],
+          "markdownDescription": "Folders beyond the workspace that Geno may read without asking, as Claude Code's `additionalDirectories`, such as `../shared` in a monorepo. A relative path starts at the workspace and `~/` at your home. A folder is read-only; write `{ \"path\": \"../shared\", \"writable\": true }` to let edits and commands write there too. Credentials files such as `.env` still ask. A workspace's value counts only in a trusted workspace, and a change restarts the engine. `additionalDirectories` in `.claude/settings.json` adds read-only folders too."
+        },
         "gcode.pages.folder": {
           "type": "string",
           "default": "geno-pages",

@@ -51,7 +51,7 @@ export const settingKey = (provider: ProviderName, field: FieldId): string =>
 type Env = Readonly<Record<string, string | undefined>>;
 export type Settings = {
   get<T>(section: string, defaultValue: T): T;
-  inspect<T>(section: string): { readonly globalValue?: T | undefined } | undefined;
+  inspect<T>(section: string): { readonly globalValue?: T | undefined; readonly workspaceValue?: T | undefined; readonly workspaceFolderValue?: T | undefined } | undefined;
 };
 type Secrets = { get(key: string): PromiseLike<string | undefined> };
 
@@ -165,6 +165,17 @@ export function sandboxEnvOf(settings: Settings): Record<string, string> {
   const value = settings.inspect<unknown>('sandbox.allowedDomains')?.globalValue;
   const domains = Array.isArray(value) ? value.filter((domain): domain is string => typeof domain === 'string' && domain.trim() !== '').map((domain) => domain.trim()) : [];
   return domains.length === 0 ? {} : { GCODE_SANDBOX_ALLOWED_DOMAINS: domains.join(',') };
+}
+
+/**
+ * The `gcode.additionalDirectories` setting as the engine reads it, which parses and checks it: the user's own value,
+ * and the workspace's only when VS Code trusts it, since a repository's settings must not open folders to reading.
+ */
+export function directoriesEnvOf(settings: Settings, trusted: boolean): Record<string, string> {
+  const values = settings.inspect<unknown>('additionalDirectories');
+  const scopes = trusted ? [values?.globalValue, values?.workspaceValue, values?.workspaceFolderValue] : [values?.globalValue];
+  const entries = scopes.flatMap((value) => (Array.isArray(value) ? value : []));
+  return entries.length === 0 ? {} : { GCODE_ADDITIONAL_DIRECTORIES: JSON.stringify(entries) };
 }
 
 /** For the output channel: everything about the runtime except the key itself. */
