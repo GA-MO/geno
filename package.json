@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "test:vscode": "tsx scripts/test-vscode.ts",
     "test:vscode:docker": "sh scripts/test-vscode-docker.sh",
     "test:all": "pnpm typecheck && pnpm lint:deps && pnpm build && pnpm vitest run --project unit --project webview && pnpm test:vscode:docker",
     "lint:deps": "tsx scripts/boundaries.ts",

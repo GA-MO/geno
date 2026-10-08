@@ -4,4 +4,4 @@ set -eu
 rsync -a --delete --exclude node_modules --exclude '/packages/*/dist' --exclude /.vscode-test --exclude /.git --exclude '*.vsix' /src/ /work/
 pnpm install --frozen-lockfile --store-dir /pnpm-store --config.confirmModulesPurge=false
 pnpm -r build
-exec xvfb-run -a -s '-screen 0 1920x1200x24' pnpm vitest run --project vscode "$@"
+exec xvfb-run -a -s '-screen 0 1920x1200x24' pnpm test:vscode "$@"
