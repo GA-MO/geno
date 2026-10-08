@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { isSecretPath } from '@g-code/core';
+import { inCredentialPlace, isSecretPath } from '@g-code/core';
 import { displayPath, isSecret, pathRuleRefusal, resolveInside, searchRule, secretRefusal, ToolError, type ToolContext } from './context.js';
 
 const execFileAsync = promisify(execFile);
@@ -105,8 +105,12 @@ async function searchDir(ctx: ToolContext, { dir, file }: SearchTarget, args: re
   // NUL after the path keeps a path with a colon in it apart from its line number. A single file is still named.
   const flags = output === 'matches' ? ['--null', '--with-filename', '--stats'] : [];
   const pathOf = (line: string): string => (output === 'matches' ? line.slice(0, line.indexOf('\0')) : line);
-  // The callers refuse a credentials directory or file, so a path below `dir` is all that can name a credentials file.
-  const kept = (line: string): boolean => !isSecretPath(pathOf(line)) && searchRule(ctx, path.resolve(dir, pathOf(line))) === undefined;
+  // The callers refuse a credentials directory or file, so a path below `dir`, or the home's credential place it reaches
+  // when `dir` holds one, is all that can name a credentials file.
+  const kept = (line: string): boolean => {
+    const target = path.resolve(dir, pathOf(line));
+    return !isSecretPath(pathOf(line)) && !inCredentialPlace(ctx.credentialPlaces, target) && searchRule(ctx, target) === undefined;
+  };
   const shown = (lines: readonly string[]): string[] => lines.filter(kept).map((line) => line.replace('\0', ':'));
   const run = async (cwd: string, extra: readonly string[]): Promise<Search> => {
     const stdout = await ripgrepOutput(ctx, cwd, [...flags, ...args, ...extra], file ?? '.');

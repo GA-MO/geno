@@ -38,7 +38,7 @@ beforeAll(async () => {
   await mkdir(path.join(ws, 'config', 'credentials'), { recursive: true });
   await writeFile(path.join(ws, 'config', 'credentials', 'prod.json'), '{"SERVER_URL": "https://secret-host"}\n');
   await symlink(path.join(ws, '.env.local'), path.join(ws, 'settings.txt'));
-  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
+  ctx = { workspace: ws, spillDir: path.join(root, 'spill', 's1'), readRoots: [], credentialPlaces: [], attachmentsDir: path.join(root, 'spill', 's1', 'attachments'), rg: rgCommand(), signal: new AbortController().signal, files: DISK_FILES, events: () => [], earlierCalls: async () => {}, spillChars: 24_000 };
 });
 
 let nextId = 0;

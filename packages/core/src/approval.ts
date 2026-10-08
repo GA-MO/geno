@@ -312,6 +312,19 @@ const HIDDEN_GLOB = /(?:^|\/)\.[^/]*[*?[]/;
 /** Whether a `/`-separated path, or a glob, names a credentials file or a path inside a credentials directory. */
 export const isSecretPath = (file: string): boolean => SECRET_PATH.test(file);
 
+/**
+ * Where the user's CLIs keep keys and tokens, under the home folder. The sandbox denies them to every command and the
+ * read tools take them as credentials files, so neither Auto's classifier nor an added `~` opens them.
+ */
+export const CREDENTIAL_PATHS = ['.ssh', '.aws', '.azure', '.config/gcloud', '.config/gh', '.docker', '.gnupg', '.kube', '.netrc'] as const;
+
+/** The home's credential places, as absolute paths. */
+export const credentialPlaces = (home: string): string[] => CREDENTIAL_PATHS.map((place) => path.join(home, place));
+
+/** Whether an absolute path is one of `places` or inside one. Case does not count, as on macOS. */
+export const inCredentialPlace = (places: readonly string[], target: string): boolean =>
+  places.some((place) => within(place.toLowerCase(), target.toLowerCase()));
+
 // A search for credentials by name, which a recursive grep answers from any file it reaches, such as .env.
 const SECRET_TERM = /api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key/i;
 // A write under .git, such as a hook, runs later outside any command the user sees.
@@ -817,14 +830,14 @@ export function secretReadDenial(shown: string, mode: ApprovalMode): Denial | un
 
 /**
  * What a read tool meets on `target`, an absolute path outside every directory it may read: the rule that makes `cat`
- * of the path ask. The question offers `directory` for the session, unless the path names credentials, which the
- * read then asks about on its own.
+ * of the path ask. The question offers `directory` for the session, unless the path names credentials, by name or as
+ * one of the home's `places`, which the read then asks about on its own.
  */
-export function outsideReadDenial(command: string, target: string, directory: string, mode: ApprovalMode): Denial | undefined {
+export function outsideReadDenial(command: string, target: string, directory: string, mode: ApprovalMode, places: readonly string[]): Denial | undefined {
   const { reason, verdicts } = DENY_RULES['path-outside-workspace'];
   const verdict = verdicts[mode];
   if (verdict === 'allow') return undefined;
-  return { rule: 'path-outside-workspace', reason, command, verdict, ...(isSecretPath(target) ? {} : { directory }) };
+  return { rule: 'path-outside-workspace', reason, command, verdict, ...(isSecretPath(target) || inCredentialPlace(places, target) ? {} : { directory }) };
 }
 
 /** What the line rule that judges `command` whole does in this mode; undefined when none does, or it lets the line run. */

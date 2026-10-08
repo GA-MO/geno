@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import type { PermissionStore } from '../permissions.js';
 import { isMissing } from '../store.js';
@@ -15,6 +15,11 @@ export type ToolContext = {
   readonly spillChars: number;
   /** Real paths of other roots the read tools may see but nothing may change, such as installed plugins. */
   readonly readRoots: readonly string[];
+  /**
+   * The home's credential places (`credentialPlaces`), under the home as named and as its real path. The read tools take
+   * them as credentials files wherever they are reached from, an added `~` included.
+   */
+  readonly credentialPlaces: readonly string[];
   /** Real paths beyond the workspace an edit may write: the directories the user added as writable. Absent is none. */
   readonly writeRoots?: readonly string[] | undefined;
   /** This session's attachments folder, where an image a tool returns is stored by its hash. */
@@ -195,11 +200,18 @@ export async function resolveWritable(ctx: ToolContext, raw: string): Promise<st
   return resolved;
 }
 
+/** The places `ctx.credentialPlaces` holds for `home`: by its path, and by its real path when that differs. */
+export async function credentialPlacesOf(home: string): Promise<string[]> {
+  const real = await realOrUndefined(home);
+  return [...new Set([home, ...(real === undefined ? [] : [real])])].flatMap(credentialPlaces);
+}
+
 /**
  * Whether `target`, an absolute path inside a readable root, is a credentials file by the rule that makes `cat .env` ask,
- * judged below that root, so the folders above the workspace do not count.
+ * judged below that root, so the folders above the workspace do not count, or is in one of the home's credential places.
  */
 export function isSecret(ctx: ToolContext, target: string): boolean {
+  if (inCredentialPlace(ctx.credentialPlaces, target)) return true;
   const root = [ctx.workspace, ctx.spillDir, ...ctx.readRoots].find((r) => within(r, target));
   return root !== undefined && isSecretPath(path.relative(root, target).split(path.sep).join('/'));
 }

@@ -146,6 +146,7 @@ describe('a plugin root as a read-only root', () => {
       spillChars: 24_000,
       attachmentsDir: path.join(fixture.root, 'spill', 'attachments'),
       readRoots: [fixture.pluginRoot],
+      credentialPlaces: [],
       rg: rgCommand(),
       signal: new AbortController().signal,
       files: DISK_FILES,

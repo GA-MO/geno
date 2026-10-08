@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import {
   agentSetupOf,
+  credentialPlaces,
   EXTERNAL_BACKEND_IDS,
   EXTERNAL_BACKENDS,
   type AgentSetup,
@@ -19,7 +20,6 @@ import {
 } from '@g-code/core';
 import { childEnv, type Env } from './child-env.js';
 import { EngineError } from './errors.js';
-import { CREDENTIAL_PATHS } from './sandbox.js';
 
 const HOMEBREW_DIRS = ['/opt/homebrew/bin', '/usr/local/bin'];
 
@@ -107,7 +107,7 @@ async function sandboxSpec(backend: ExternalBackend, command: string, cwd: strin
     command,
     hosts: [...sandbox.hosts],
     writable: [await real(cwd), await real(tempDir), ...(await Promise.all(writable.map(real))), ...sandbox.writableHome.map((p) => path.join(home, p)), ...(await Promise.all(sandbox.writableSystem.map(real)))],
-    denyRead: CREDENTIAL_PATHS.map((p) => path.join(home, p)),
+    denyRead: credentialPlaces(home),
     readable: [await real(cwd)],
   };
 }

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { childEnv } from '../src/child-env.js';
 import { EngineError } from '../src/errors.js';
-import { CREDENTIAL_PATHS, openSandbox, sandboxDomainsOf, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
+import { CREDENTIAL_PATHS } from '@g-code/core';
+import { openSandbox, sandboxDomainsOf, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 

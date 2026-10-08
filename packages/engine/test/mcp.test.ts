@@ -80,7 +80,7 @@ function approval(mode: SessionMode, answer: PermissionAnswer, verdict: Classifi
 
 const ctx = (workspace: string): ToolContext => ({
   workspace,
-  spillDir: path.join(workspace, '.spill'), readRoots: [],
+  spillDir: path.join(workspace, '.spill'), readRoots: [], credentialPlaces: [],
   spillChars: 24_000,
   attachmentsDir: path.join(workspace, '.attachments'),
   rg: 'rg',
