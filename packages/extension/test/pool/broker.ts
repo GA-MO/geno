@@ -18,7 +18,9 @@ export type PoolOptions = {
   /** How long a window may take to open a job's folder and start its suite. */
   readonly startMs?: number;
 };
-export type Pool = { readonly url: string; close(): Promise<void> };
+/** What a run used: windows the pool launched, suites run in them, and places held for files' own launches. */
+export type Tally = { launches: number; suites: number; ownLaunches: number };
+export type Pool = { readonly url: string; close(): Promise<Tally> };
 
 type Failure = NonNullable<Done['error']>;
 type Pending = { readonly job: Job; readonly workspace: string; readonly settle: (error: Failure | undefined) => void };
@@ -68,6 +70,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
   const dying = new Set<Proc>();
   const queue: Waiter[] = [];
   let reservations = 0;
+  const tally: Tally = { launches: 0, suites: 0, ownLaunches: 0 };
   let seq = 0;
   let url = '';
 
@@ -78,6 +81,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
     if (w.phase.kind === 'opening') clearTimeout(w.phase.timer);
     const { pending } = w.phase;
     w.phase = { kind: 'idle' };
+    tally.suites++;
     pending.settle(error);
   };
 
@@ -115,6 +119,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
 
   const launch = (w: PooledWindow, folder: string) => {
     const proc = options.launch(w, folder, url);
+    tally.launches++;
     w.proc = proc;
     w.folder = undefined;
     void proc.exited.then(() => {
@@ -212,6 +217,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
       }
       queue.shift();
       reservations++;
+      tally.ownLaunches++;
       head.grant();
     }
   }
@@ -300,6 +306,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
       await Promise.all([...exits, ...[...dying].map((p) => p.exited)]);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      return tally;
     },
   };
 }

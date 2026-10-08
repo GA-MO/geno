@@ -104,5 +104,8 @@ export default async function setup(project: TestProject): Promise<() => Promise
   };
   const pool = await startPool({ capacity: vscodeWorkers(process.env), dir, launch, freePort });
   project.provide('vscodePool', pool.url);
-  return () => pool.close();
+  return async () => {
+    const { launches, suites, ownLaunches } = await pool.close();
+    console.log(`vscode pool: ${suites} suite runs in ${launches} pooled VS Code launches, and ${ownLaunches} files that launched their own`);
+  };
 }
