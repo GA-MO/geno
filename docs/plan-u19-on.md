@@ -570,6 +570,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** An `ask` effect. Claude Code's safe wrappers are stripped before allow matching. Commands over 10,000 characters or unparsable ask. User `read` and `edit` path rules apply in `read`, `edit`, `grep`, `glob` and the sandbox `denyRead`.
 - **Check.** T-PERM-10. An `ask` rule asks in Auto. A user path rule blocks `read` and `cat`.
 - **Size.** 1 day. **Depends on.** P3.
+- **Status.** Done. Path rules ask or deny, never allow, since Geno already reads and edits the workspace unasked. `xargs` stays open-ended rather than a safe wrapper. A whole-line ask goes to the classifier in Auto and still runs where nobody can ask, as an unlisted command does. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P29: Claude Code settings
 
