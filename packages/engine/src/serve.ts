@@ -111,6 +111,7 @@ import {
   DEFAULT_SESSION_MODE,
   isMcpRule,
   COMMENT_OPTION,
+  EXTERNAL_RULE_IDS,
   PERMISSION_COMMENT_META,
   isSessionMode,
   MCP_ENABLE_METHOD,
@@ -354,7 +355,8 @@ function permissionAnswerOf(outcome: acp.RequestPermissionOutcome): PermissionAn
   return typeof comment === 'string' && comment.trim() !== '' ? { comment: comment.trim() } : 'reject';
 }
 
-// Last on every card, as on Claude Code's. Its answer carries the comment in _meta, under PERMISSION_COMMENT_META.
+// Last on every card, as on Claude Code's, but an external agent's: its answer has no room for the comment. The answer
+// carries the comment in _meta, under PERMISSION_COMMENT_META.
 const COMMENT_PERMISSION_OPTION: acp.PermissionOption = { optionId: COMMENT_OPTION, name: 'No, and tell the agent…', kind: 'reject_once' };
 
 const choicesFor = (denial: Denial): acp.PermissionOption[] => {
@@ -363,7 +365,8 @@ const choicesFor = (denial: Denial): acp.PermissionOption[] => {
   if (isMcpRule(denial.rule)) return keeps ? MCP_RULE_PERMISSION_OPTIONS : MCP_PERMISSION_OPTIONS;
   return keeps ? RULE_PERMISSION_OPTIONS : PERMISSION_OPTIONS;
 };
-const optionsFor = (denial: Denial): acp.PermissionOption[] => [...choicesFor(denial), COMMENT_PERMISSION_OPTION];
+const optionsFor = (denial: Denial): acp.PermissionOption[] =>
+  (EXTERNAL_RULE_IDS as readonly string[]).includes(denial.rule) ? choicesFor(denial) : [...choicesFor(denial), COMMENT_PERMISSION_OPTION];
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },

@@ -374,7 +374,6 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   // Read at each call, so a directory allowed for the session holds from the next call on.
   const scope = (): CommandScope => ({ ...tools.scope, directories: tools.directories.readable() });
   const readableDirs = (ctx: ToolContext): readonly string[] => [ctx.workspace, ...tools.directories.readable()];
-  // The classifier is told where the sandbox lets commands write, the directories the user added as writable included.
   const inputOf = (ctx: ToolContext, command: string, denial: Denial): ClassifierInput => {
     const input = classifierInputOf(ctx.events(), command, denial);
     const writable = tools.directories.writable();
