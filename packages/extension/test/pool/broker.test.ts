@@ -30,7 +30,7 @@ function fakeVscode(options: FakeOptions = {}) {
         if (order.do === 'open') return host(order.folder);
         if (order.do === 'reload') return host(folder);
         if (order.do === 'quit') return void ((alive = false), exit());
-        if (order.do === 'ignore') return;
+        if (order.do === 'ignore' || order.do === 'close') return;
         const name = path.basename(order.job.suite);
         ran.push({ window: window.id, suite: name, env: order.job.env, host: hostNumber });
         if (options.hangOn === name) return;
@@ -168,6 +168,18 @@ describe('the VS Code window pool', () => {
     await run(url, next, job('b.js'));
     expect(fake.ran.map((r) => r.suite)).toEqual(['a.js', 'b.js']);
     expect(fake.launches).toHaveLength(1);
+  });
+
+  it('closes a window without a folder that a suite opened, when the suite’s test ends', async () => {
+    const fake = fakeVscode();
+    const url = await start(1, fake);
+    const lease = await post<Lease>(`${url}/lease`, {});
+    await run(url, lease, job('agents.js'));
+    // The suite's workbench.action.newWindow: an empty window whose host asks too.
+    const extra = post<Order>(`${url}/host`, { window: lease.id, folder: null, fresh: true });
+    await new Promise((r) => setTimeout(r, 50));
+    await post(`${url}/release`, { id: lease.id });
+    expect(await extra).toEqual({ do: 'close' });
   });
 
   it('closes an idle window to make room for a file that launches VS Code itself', async () => {

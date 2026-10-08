@@ -45,6 +45,8 @@ type PooledWindow = {
   folder: string | undefined;
   /** The held reply of a host waiting for its next order. */
   waiting: ((order: Order) => void) | undefined;
+  /** The held replies of windows without a folder that a suite opened in this VS Code. */
+  readonly extras: Set<(order: Order) => void>;
   /** The User files the last job brought, which the next job's replace or remove. */
   userFiles: Set<string>;
 };
@@ -153,7 +155,13 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
 
   const hello = (h: Hello, reply: (order: Order) => void, res: ServerResponse) => {
     const w = windows.get(h.window);
-    if (w === undefined || h.folder === null) return reply({ do: 'ignore' });
+    if (w === undefined) return reply({ do: 'ignore' });
+    if (h.folder === null) {
+      // A window with no folder that a suite opened, such as one that takes the focus away: it closes when the test ends.
+      w.extras.add(reply);
+      res.on('close', () => w.extras.delete(reply));
+      return;
+    }
     w.folder = real(h.folder);
     if (h.fresh && w.phase.kind === 'running') finish(w, { message: 'the extension host restarted while the suite ran' });
     if (w.phase.kind === 'opening') {
@@ -177,7 +185,7 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
     mkdirSync(path.join(userData, 'User'), { recursive: true });
     const park = path.join(options.dir, String(id), 'park');
     mkdirSync(park);
-    const w: PooledWindow = { id, debugPort: await options.freePort(), userData, park, leased: true, phase: { kind: 'idle' }, proc: undefined, folder: undefined, waiting: undefined, userFiles: new Set() };
+    const w: PooledWindow = { id, debugPort: await options.freePort(), userData, park, leased: true, phase: { kind: 'idle' }, proc: undefined, folder: undefined, waiting: undefined, extras: new Set(), userFiles: new Set() };
     windows.set(id, w);
     return w;
   };
@@ -250,6 +258,8 @@ export async function startPool(options: PoolOptions): Promise<Pool> {
       const w = windows.get(id);
       if (w !== undefined) {
         w.leased = false;
+        for (const close of w.extras) close({ do: 'close' });
+        w.extras.clear();
         if (w.phase.kind !== 'idle') retire(w);
         else if (w.waiting !== undefined && w.folder !== real(w.park)) {
           const reply = w.waiting;

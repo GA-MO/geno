@@ -21,6 +21,7 @@ export type Order =
   | { readonly do: 'open'; readonly folder: string }
   | { readonly do: 'reload' }
   | { readonly do: 'quit' }
+  | { readonly do: 'close' }
   | { readonly do: 'ignore' };
 
 export type Done = { readonly window: number; readonly error?: { readonly message: string; readonly stack?: string } };

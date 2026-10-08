@@ -58,6 +58,7 @@ async function follow(order: Order): Promise<void> {
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(order.folder), { forceReuseWindow: true });
   } else if (order.do === 'reload') await vscode.commands.executeCommand('workbench.action.reloadWindow');
   else if (order.do === 'quit') await vscode.commands.executeCommand('workbench.action.quit');
+  else if (order.do === 'close') await vscode.commands.executeCommand('workbench.action.closeWindow');
 }
 
 /** Clears what would make VS Code ask before it changes folder: unsaved editors and terminals. */
