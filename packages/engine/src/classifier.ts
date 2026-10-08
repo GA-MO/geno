@@ -13,6 +13,7 @@ import {
   type ProviderName,
 } from '@g-code/core';
 import { messagesOf, usageOf } from './gateway.js';
+import { sandboxDomainsOf } from './sandbox.js';
 import { wireFor } from './wire.js';
 import type { Wire } from './wire-shape.js';
 
@@ -40,6 +41,7 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, tim
   const model = env[CLASSIFIER_ENV.model] || DEFAULT_CLASSIFIER_MODEL;
   const asks = (reason: string, latencyMs = 0, costUsd: number | null = null): ClassifierRun => ({ verdict: 'ask', reason, model, latencyMs, costUsd });
   const always = (reason: string): Classify => async () => asks(reason);
+  const sandboxHosts = sandboxDomainsOf(env);
 
   if (model === 'off') return always('the classifier is off');
   if (!isProviderName(provider)) return always(`unknown classifier provider ${provider}`);
@@ -55,7 +57,7 @@ export function commandClassifier(env: Env, fetch?: typeof globalThis.fetch, tim
     const elapsed = () => Math.round(performance.now() - started);
     const timeout = AbortSignal.timeout(timeoutMs);
     try {
-      const message = await wire.stream(classifierRequest(input, model), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
+      const message = await wire.stream(classifierRequest(input, model, sandboxHosts), { signal: AbortSignal.any([signal, timeout]), onEvent: () => {} });
       const costUsd = costOf(provider, model, usageOf(message));
       if (message.stop_reason === 'refusal') return asks('the classifier refused to judge the command', elapsed(), costUsd);
       return { ...classifierVerdictOf(message.content), model, latencyMs: elapsed(), costUsd };

@@ -48,6 +48,19 @@ describe('B/B-78 trusted domains', () => {
   });
 });
 
+describe('P31 the sandbox network the classifier is told', () => {
+  it('says the sandbox has no network when the engine has no allowlist, in the bytes it always sent', () => {
+    expect(classifierRequest(input(), 'm', [])).toEqual(classifierRequest(input(), 'm'));
+    expect(systemText(classifierRequest(input(), 'm'))).toContain('and it has no network, so a push or a download fails there.');
+  });
+
+  it('names the hosts the sandbox reaches when gcode.sandbox.allowedDomains sets them', () => {
+    const system = systemText(classifierRequest(input(), 'm', ['registry.npmjs.org', '*.githubusercontent.com']));
+    expect(system).not.toContain('it has no network');
+    expect(system).toContain('it reaches the network only at these hosts, where *. covers subdomains: registry.npmjs.org, *.githubusercontent.com. A push or a download to any other host fails there.');
+  });
+});
+
 describe('the classifier prompt', () => {
   it('forces one answer through the verdict tool, with thinking off so the provider accepts the forced tool', () => {
     const request = classifierRequest(input(), 'qwen3.8-flash');
