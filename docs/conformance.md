@@ -279,6 +279,22 @@ P17 also covers these rows:
 
 The eval of the parent's turns that state results before the report ran live on Model Studio qwen3.8-flash with `packages/engine/test/handback-smoke.ts`: a background explore in a small fixture repository, three runs on `main` and four on P17. No parent turn stated results before the report on either side, so this task does not separate the launch text's rules. The parent searched the repository again after the report in 3 of 3 runs on `main` and 1 of 4 on P17. On P17 the child called `report` in all four runs, after the nudge in two. The seven runs cost $0.050.
 
+## Resume a finished child (P18)
+
+`message_agent` to a child that is running delivers the message at its next tool round, as before. A message to a child that finished resumes it, however it ended: done, capped, failed or cancelled. Claude Code's `SendMessage` resumes a finished agent from its transcript and draws no line between how it ended, and Geno does the same. The child's own log is the record. Its `session-start` names its parent, its role, its caps and whether it ran in the background, so a child from an earlier turn of the parent resumes too. Geno appends the message to that log as the parent's steer, fenced as `<parent_message>` with "sent this after your report", and starts a new `drive` on the log with no prompt of its own. The run gets the caps its spawn got, afresh, with the cost reserved from what the parent's run has left for children. The new report comes back as the first did: as the `message_agent` result for a child that blocked, or as a message and a wake for one that ran in the background, with P17's `report` tool, nudge and usage attributes. A child on an external agent, or one whose role the session no longer has, is refused with the reason. Two messages to one finished child take turns, so they cannot both resume it onto its one log.
+
+The parent's log gets a second `child-start` for the same child id, under the `message_agent` call. The Tasks list keeps one row per child session, so the child shows running again on its row. The chat panel shows it running again in its place.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-AGENT-04 | `SendMessage` to a finished agent resumes it with its whole history. | `message_agent` to a finished blocking child, in a later run of the parent, resumes it from its own log. Its first resumed request starts with every message of its first request and holds its report call, and ends with the fenced message under the not-user line. The `message_agent` result is the new report, fenced with `turns`, `cost` and `duration`. A second test resumes a child whose definition caps it at 2 turns, after a first run that used 2: the resumed run makes 2 more calls and stops at its turn cap, and its cost cap is held to the parent run's `--max-cost`. | pass (was fail: "child already finished") | `agents.conformance.test.ts`, both wires |
+
+P18 also covers these rows:
+
+| ID | Check |
+|---|---|
+| C/C-30, B/B-26 | T-AGENT-04 above. `wake.e2e.test.ts`: a background child that reported is resumed by `message_agent` in a woken turn, its new report wakes the session again, and its Tasks row goes running, done, running, done. `steer.e2e.test.ts`: the same in a turn held open for its child, with the user's own steer to the finished child still refused. `subagent.test.ts` (core): `childrenOf` keeps a resumed child in its place, adds each run's turns and cost, and keeps the resumed run running when an earlier run's end is logged after it. `wakes.test.ts`: a late report of the earlier run leaves the resumed run's wait in place. `breakdown.test.ts`: each run counts in the turn that started it. `subagents.test.ts` (extension): the panel shows a resumed child running again under the call that resumed it. |
+
 ## Prompt tiers (P24)
 
 `AGENT_PROMPTS` in `core/src/agent-prompts.ts` holds one base prompt per prompt tier. `runAgent` picks the tier from the model's capability row, so the prompt stays byte-stable for as long as the session's model does. `principles` is today's prompt, lightly aligned, for strong models. `rules` follows the sections of Claude Code's Haiku prompt in Geno's words, for `qwen3.8-flash`, Haiku 4.5 and every unknown model. The tool descriptions are the same in both tiers and carry each tool's own rules. `--append-system-prompt <text>` on `gcode agent`, or `appendSystemPrompt` in `.gcode.json`, ends the system prompt. The flag replaces the setting. The A/B that kept the rules tier for flash is [results/p24-prompt-tier.md](results/p24-prompt-tier.md).
@@ -395,7 +411,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AGENT-01 | deliberate, adapt; deliberate | P21 | no test yet |
 | T-AGENT-02 | adapt | P4 | pass |
 | T-AGENT-03 | adapt | P17 | pass |
-| T-AGENT-04 | adopt | P18 | no test yet |
+| T-AGENT-04 | adopt | P18 | pass |
 | T-AGENT-05 | adapt | P20 | no test yet |
 | T-WF-01 | adapt | P34 | no test yet |
 | T-WF-02 | adopt | P33 | no test yet |
