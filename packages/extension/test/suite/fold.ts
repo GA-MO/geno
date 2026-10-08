@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ASKING_SUMMARY, LONG, LONG_ANSWER, LONG_SUMMARY, PROMPTS } from './fold-fixture.js';
 import { THEMES } from './panel-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const MODEL_NAME = 'qwen3.8-flash';
@@ -64,6 +65,7 @@ async function useTheme(theme: string): Promise<void> {
 
 /** Dark glass, light glass and high contrast, which draws native whatever the setting says. */
 async function screenshots(name: string, place: () => Promise<unknown>): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

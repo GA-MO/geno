@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { EXPANDED, SENT, THEMES } from './slash-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n', 'schedule', 'workflow'];
 
@@ -47,6 +48,7 @@ const bubble = (n: number) =>
   );
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));

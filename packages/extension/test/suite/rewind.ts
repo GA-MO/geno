@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { ANSWERS, FILES, HAND_EDIT, PROMPTS, THEMES } from './rewind-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,6 +58,7 @@ async function useTheme(theme: string): Promise<void> {
 
 /** Each theme's window and panel; `hover` keeps the pointer where it is, so a menu that hover shows stays drawn. */
 async function screenshots(name: string, hover = false): Promise<void> {
+  if (!SHOOTING) return;
   if (!hover) await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

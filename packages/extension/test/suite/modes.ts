@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { START_BUILDING_PROMPT } from '../../src/chat/chat.js';
 import { COMMANDS, FOLLOW_UP, PROMPTS, REASONS, THEMES } from './modes-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const MODES_IN_ORDER = ['plan', 'ask', 'auto'];
 
@@ -51,6 +52,7 @@ async function showPanel(): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));

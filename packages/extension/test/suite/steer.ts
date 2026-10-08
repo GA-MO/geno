@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { ANSWERS, MARKERS, PROMPTS, RELEASES, SENT, THEMES } from './steer-fixture.js';
 import { rowFits } from './lanes-ui.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -59,6 +60,7 @@ async function useTheme(theme: string): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

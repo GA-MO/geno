@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { THEMES } from './lanes-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -51,6 +52,7 @@ async function useTheme(theme: string): Promise<void> {
 
 /** The window and the panel in dark glass, light glass and high contrast. `keep` leaves VS Code's notifications up. */
 export async function screenshots(name: string, keep = false): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

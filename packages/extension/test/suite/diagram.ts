@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { THEMES } from './panel-fixture.js';
 import { BROKEN, FLOW_LABELS, FLOWCHART, PROMPTS, SEQUENCE } from './diagram-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -63,6 +64,7 @@ async function useTheme(theme: string): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);
     await sleep(800);

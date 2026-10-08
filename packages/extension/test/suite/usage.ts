@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ANSWERS, PROMPTS, THEMES, type ShownRow, type ShownSpend } from './usage-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -54,6 +55,7 @@ async function useTheme(theme: string): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   await panel(`(doc.querySelector('.usage-card')?.scrollIntoView({ block: 'start' }), 1)`);
   for (const [slug, theme] of Object.entries(THEMES)) {

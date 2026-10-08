@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AGAIN_REPLIES, ANSWERS, PROMPTS, THEMES, TROUBLE, WORK } from './working-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -61,6 +62,7 @@ async function theme(name: string): Promise<void> {
 
 /** Dark glass, light glass and high contrast, each as a window capture and a panel capture. */
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, colorTheme] of Object.entries(THEMES)) {
     await theme(colorTheme);
