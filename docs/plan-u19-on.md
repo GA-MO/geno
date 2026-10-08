@@ -291,7 +291,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 | | P9 | Nested AGENTS.md and CLAUDE.md attached on the first read in their directory. |
 | | P10 | MCP instructions, failures and late tools reach the model without moving the prefix. |
 | | P11 | Memory and mode text leave the system prompt. A system and tools snapshot. A live cache smoke. |
-| | P12 | One skill listing for every source, with `args`, `disable-model-invocation` and personal-first precedence. |
+| | P12 | One skill listing for every source, with `args`, `disable-model-invocation` and personal-first precedence. Done. |
 | 3. Hooks | P13 | Hook config and runner in Claude Code's format, with SessionStart and SessionEnd. |
 | | P14 | UserPromptSubmit and PreToolUse, placed inside the deny-first order. |
 | | P15 | PostToolUse, PostToolUseFailure, PostToolBatch and Stop. |
