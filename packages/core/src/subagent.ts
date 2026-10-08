@@ -510,11 +510,23 @@ export function agentToolDefinition(agents: readonly AgentDefinition[]): Tool {
   };
 }
 
+/**
+ * Claude Code's built-in agent types, as its agent files, skills and prompts name them, and the Geno agent each one
+ * runs as. A definition of the same name wins over the alias.
+ */
+export const AGENT_ALIASES: Readonly<Record<string, string>> = { 'general-purpose': 'worker', Explore: 'explore', Plan: 'plan' };
+
+export const findAgent = (agents: readonly AgentDefinition[], name: string): AgentDefinition | undefined => {
+  const named = agents.find((agent) => agent.name === name);
+  if (named !== undefined || !Object.hasOwn(AGENT_ALIASES, name)) return named;
+  return agents.find((agent) => agent.name === AGENT_ALIASES[name]);
+};
+
 /** A prompt that names a subagent, such as `@explore where is foo defined`; the task is the rest of the prompt. */
 export function agentMention(prompt: string, agents: readonly AgentDefinition[]): { readonly agent: AgentDefinition; readonly task: string } | undefined {
   const match = /^@([\w:.-]+)(?:\s+([\s\S]*))?$/.exec(prompt.trim());
   if (match === null) return undefined;
-  const agent = agents.find((a) => a.name === match[1]);
+  const agent = findAgent(agents, match[1]!);
   return agent === undefined ? undefined : { agent, task: (match[2] ?? '').trim() };
 }
 
