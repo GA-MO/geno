@@ -26,11 +26,18 @@ import { workspaceDir } from './drive.js';
 import { claudeDirOf, loadPlugins, type InstalledPlugin, type PluginScan } from './plugins.js';
 import { parseFrontmatter, readIfFile, shownPath, SKILL_ROOTS, sortedEntries } from './project-context.js';
 
-/** Where commands and skills live outside the workspace: Geno's home, and the user's home if the environment names one. */
-export type Homes = { readonly app: string; readonly user: string | undefined };
+/**
+ * Where commands and skills live outside the workspace: Geno's home, the user's home if the environment names one, and
+ * Claude Code's config dir, whose `skills` folder holds the user's Claude Code skills.
+ */
+export type Homes = { readonly app: string; readonly user: string | undefined; readonly claude?: string | undefined };
 
 /** The user's home as the environment names it; never guessed, so a sealed environment reads nothing from it. */
-export const homesOf = (store: Store, env: Readonly<Record<string, string | undefined>>): Homes => ({ app: homeOf(store), user: env['HOME'] || undefined });
+export const homesOf = (store: Store, env: Readonly<Record<string, string | undefined>>): Homes => ({
+  app: homeOf(store),
+  user: env['HOME'] || undefined,
+  claude: claudeDirOf(env),
+});
 
 /** `base` is the folder a source lives under, and the watch never climbs above it; undefined leaves the source out. */
 type Source = {
@@ -40,14 +47,18 @@ type Source = {
   readonly sub: string;
 };
 
-/** In precedence order: the first command of a name wins, after the built-ins, which nothing shadows. */
+/**
+ * In precedence order: the first command of a name wins, after the built-ins, which nothing shadows. The user's own
+ * come first, as in Claude Code, so a repository the user clones cannot replace one of them.
+ */
 const SOURCES: readonly Source[] = [
+  { kind: 'prompt', scope: 'global', base: (_, homes) => homes.app, sub: 'commands' },
+  { kind: 'skill', scope: 'global', base: (_, homes) => homes.app, sub: 'skills' },
+  { kind: 'skill', scope: 'global', base: (_, homes) => homes.claude, sub: 'skills' },
+  { kind: 'skill', scope: 'global', base: (_, homes) => homes.user, sub: path.join('.agents', 'skills') },
   { kind: 'prompt', scope: 'workspace', base: (workspace) => workspace, sub: path.join('.agents', 'commands') },
   { kind: 'prompt', scope: 'workspace', base: (workspace) => workspace, sub: path.join('.claude', 'commands') },
   ...SKILL_ROOTS.map((root): Source => ({ kind: 'skill', scope: 'workspace', base: (workspace) => workspace, sub: root })),
-  { kind: 'prompt', scope: 'global', base: (_, homes) => homes.app, sub: 'commands' },
-  { kind: 'skill', scope: 'global', base: (_, homes) => homes.app, sub: 'skills' },
-  { kind: 'skill', scope: 'global', base: (_, homes) => homes.user, sub: path.join('.agents', 'skills') },
 ];
 
 /**
@@ -83,6 +94,8 @@ export { homeOf };
 
 const text = (value: string | readonly string[] | undefined): string => (typeof value === 'string' ? value.trim() : '');
 
+const flag = (value: string | readonly string[] | undefined, is: 'true' | 'false'): boolean => text(value).toLowerCase() === is;
+
 /** Pi's fallback for a template without a description: its first line, cut to 60 characters. */
 const firstLine = (body: string): string => {
   const line = body.split('\n').find((l) => l.trim() !== '')?.trim() ?? '';
@@ -102,6 +115,7 @@ async function loadSkillDir(dir: string, scope: SkillSource, show: (file: string
     const description = text(fields['description']);
     if (description === '') continue;
     const hint = text(fields['argument-hint']);
+    const agent = text(fields['agent']);
     skills.push({
       kind: 'skill',
       name: namespace + (text(fields['name']) || entry.name),
@@ -110,7 +124,9 @@ async function loadSkillDir(dir: string, scope: SkillSource, show: (file: string
       scope,
       path: show(file),
       text: raw,
-      userInvocable: text(fields['user-invocable']).toLowerCase() !== 'false',
+      userInvocable: !flag(fields['user-invocable'], 'false'),
+      modelInvocable: !flag(fields['disable-model-invocation'], 'true'),
+      fork: text(fields['context']) === 'fork' ? { agent: agent === '' ? undefined : agent } : undefined,
     });
   }
   return skills;
@@ -141,8 +157,11 @@ const LOADERS: Readonly<Record<Source['kind'], Loader>> = {
   skill: (dir, scope, show) => loadSkillDir(dir, scope, show, ''),
 };
 
-/** The built-ins, then the workspace's commands and skills, then the global ones, then each plugin's skills. */
-export async function loadCommands(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[]): Promise<SlashCommand[]> {
+/** The commands a session has, and a line for the user about each workspace one that the user's own shadows. */
+export type CommandScan = { readonly commands: readonly SlashCommand[]; readonly problems: readonly string[] };
+
+/** The built-ins, then the user's global commands and skills, then the workspace's, then each plugin's skills. */
+export async function loadCommands(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[]): Promise<CommandScan> {
   const show = (file: string) => shownPath(workspace, file);
   const groups = await Promise.all([
     ...SOURCES.flatMap((source) => {
@@ -151,8 +170,17 @@ export async function loadCommands(workspace: string, homes: Homes, plugins: rea
     }),
     ...plugins.map((plugin) => loadSkillDir(path.join(plugin.root, 'skills'), 'plugin', show, `${plugin.name}:`)),
   ]);
-  return mergeCommands([builtinCommands(), ...groups]);
+  const commands = mergeCommands([builtinCommands(), ...groups]);
+  const winners = new Map(commands.map((command) => [command.name, command]));
+  const problems = groups.flat().flatMap((command) => {
+    const winner = winners.get(command.name);
+    if (command.kind === 'builtin' || command.scope !== 'workspace' || winner === undefined || winner.kind === 'builtin' || winner.scope !== 'global') return [];
+    return [`${command.path}: not loaded, because your own ${KIND_WORDS[winner.kind]} ${winner.name} (${winner.path}) has its name`];
+  });
+  return { commands, problems };
 }
+
+const KIND_WORDS: Readonly<Record<Source['kind'], string>> = { prompt: 'command', skill: 'skill' };
 
 /** The installed plugins as the environment locates them, with each problem reported once per change. */
 export function pluginLoader(io: Io): (workspace: string) => Promise<PluginScan> {
@@ -274,7 +302,7 @@ export type SessionCommands = {
 
 export function sessionCommands(homes: Homes, io: Io): SessionCommands {
   const plugins = pluginLoader(io);
-  const load = async (workspace: string) => loadCommands(workspace, homes, (await plugins(workspace)).plugins);
+  const load = async (workspace: string) => (await loadCommands(workspace, homes, (await plugins(workspace)).plugins)).commands;
   const sessions = new Map<string, { readonly workspace: string; readonly stop: () => void }>();
   return {
     attach(client, sessionId, workspace) {
@@ -320,7 +348,8 @@ const originOf = (command: SlashCommand): string => (ORIGIN[command.kind] as (c:
 export const commandsList: Command = async (args, { io, store }) => {
   const { values } = parseArgs({ args, strict: true, options: { workspace: { type: 'string', default: '.' } } });
   const workspace = await workspaceDir(io.cwd, values.workspace);
-  const commands = await loadCommands(workspace, homesOf(store, io.env), (await pluginLoader(io)(workspace)).plugins);
+  const { commands, problems } = await loadCommands(workspace, homesOf(store, io.env), (await pluginLoader(io)(workspace)).plugins);
+  for (const problem of problems) io.err(`commands: ${problem}`);
   for (const command of listedCommands(commands)) {
     const usage = command.hint === undefined ? `/${command.name}` : `/${command.name} ${command.hint}`;
     io.out(`${usage.padEnd(20)} ${originOf(command)}    ${command.description}`);

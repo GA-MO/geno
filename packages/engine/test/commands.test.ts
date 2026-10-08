@@ -24,42 +24,78 @@ const summary = (commands: readonly SlashCommand[]) =>
   commands.flatMap((c) => (c.kind === 'builtin' ? [] : [`${c.kind} ${c.name} ${c.scope}: ${c.description}`]));
 
 describe('command discovery', () => {
-  it('reads commands and skills from the workspace and ~/.g-code, and the workspace wins a name in both', async () => {
+  it("reads commands and skills from ~/.g-code and the workspace, and the user's own wins a name in both, with a problem line", async () => {
     const { workspace, home } = await tree({
       'ws/.claude/commands/review.md': '---\ndescription: Review a file\nargument-hint: <file>\n---\nReview $1.\n',
       'ws/.agents/commands/ship.md': 'Ship it now, carefully and with a changelog entry for every package touched.\n',
       'ws/.claude/commands/notes.txt': 'not a command',
       'ws/.claude/skills/add-i18n/SKILL.md': skill('add-i18n', 'Add a locale', 'argument-hint: <locale>\n'),
+      'ws/.claude/skills/lint/SKILL.md': skill('lint', 'Lint the repo'),
       'ws/.agents/skills/no-description/SKILL.md': '---\nname: no-description\n---\nbody',
       'home/commands/review.md': '---\ndescription: Global review\n---\nGlobal.',
       'home/commands/standup.md': '---\ndescription: Write a standup\n---\nStandup for $ARGUMENTS.',
-      'home/skills/add-i18n/SKILL.md': skill('add-i18n', 'Global locale skill'),
+      'home/skills/add-i18n/SKILL.md': skill('add-i18n', 'Global locale skill', 'argument-hint: <locale>\n'),
       'home/skills/tidy/SKILL.md': skill('tidy', 'Tidy the repo'),
     });
 
-    const commands = await loadCommands(workspace, { app: home, user: undefined }, []);
+    const { commands, problems } = await loadCommands(workspace, { app: home, user: undefined }, []);
 
     expect(commands.slice(0, 10).map((c) => c.name)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n']);
     expect(summary(commands)).toEqual([
-      'prompt ship workspace: Ship it now, carefully and with a changelog entry for every ...',
-      'prompt review workspace: Review a file',
-      'skill add-i18n workspace: Add a locale',
+      'prompt review global: Global review',
       'prompt standup global: Write a standup',
+      'skill add-i18n global: Global locale skill',
       'skill tidy global: Tidy the repo',
+      'prompt ship workspace: Ship it now, carefully and with a changelog entry for every ...',
+      'skill lint workspace: Lint the repo',
     ]);
-    expect(commands.find((c) => c.name === 'review')).toMatchObject({ hint: '<file>', path: '.claude/commands/review.md', template: 'Review $1.' });
-    expect(commands.find((c) => c.name === 'add-i18n')).toMatchObject({ hint: '<locale>', text: skill('add-i18n', 'Add a locale', 'argument-hint: <locale>\n') });
+    expect(problems).toEqual([
+      `.claude/commands/review.md: not loaded, because your own command review (${path.join(home, 'commands', 'review.md')}) has its name`,
+      `.claude/skills/add-i18n/SKILL.md: not loaded, because your own skill add-i18n (${path.join(home, 'skills', 'add-i18n', 'SKILL.md')}) has its name`,
+    ]);
+    expect(commands.find((c) => c.name === 'review')).toMatchObject({ path: path.join(home, 'commands', 'review.md'), template: 'Global.' });
+    expect(commands.find((c) => c.name === 'add-i18n')).toMatchObject({ hint: '<locale>', text: skill('add-i18n', 'Global locale skill', 'argument-hint: <locale>\n') });
+    expect(commands.find((c) => c.name === 'lint')).toMatchObject({ path: '.claude/skills/lint/SKILL.md' });
     expect(commands.find((c) => c.name === 'tidy')).toMatchObject({ path: path.join(home, 'skills', 'tidy', 'SKILL.md') });
+  });
+
+  it('reads the frontmatter that decides who may load a skill and where it runs', async () => {
+    const { workspace, home } = await tree({
+      'home/skills/plain/SKILL.md': skill('plain', 'Plain'),
+      'home/skills/go/SKILL.md': skill('go', 'User only', 'disable-model-invocation: true\n'),
+      'home/skills/digest/SKILL.md': skill('digest', 'Summarize in a child', 'context: fork\nagent: Explore\n'),
+      'home/skills/background/SKILL.md': skill('background', 'Model only', 'user-invocable: false\n'),
+    });
+    const { commands } = await loadCommands(workspace, { app: home, user: undefined }, []);
+    const of = (name: string) => commands.find((c) => c.name === name);
+    expect(of('plain')).toMatchObject({ userInvocable: true, modelInvocable: true, fork: undefined });
+    expect(of('go')).toMatchObject({ userInvocable: true, modelInvocable: false });
+    expect(of('digest')).toMatchObject({ modelInvocable: true, fork: { agent: 'Explore' } });
+    expect(of('background')).toMatchObject({ userInvocable: false, modelInvocable: true });
+  });
+
+  it('reads ~/.claude/skills, after ~/.g-code and before ~/.agents', async () => {
+    const { workspace, home } = await tree({
+      'home/skills/tidy/SKILL.md': skill('tidy', 'Geno tidy'),
+      'claude/skills/tidy/SKILL.md': skill('tidy', 'Claude tidy'),
+      'claude/skills/ship/SKILL.md': skill('ship', 'Claude ship'),
+      'user/.agents/skills/ship/SKILL.md': skill('ship', 'Agents ship'),
+    });
+    const root = path.dirname(home);
+    const { commands, problems } = await loadCommands(workspace, { app: home, user: path.join(root, 'user'), claude: path.join(root, 'claude') }, []);
+    expect(summary(commands)).toEqual(['skill tidy global: Geno tidy', 'skill ship global: Claude ship']);
+    expect(commands.find((c) => c.name === 'ship')).toMatchObject({ path: path.join(root, 'claude', 'skills', 'ship', 'SKILL.md') });
+    expect(problems).toEqual([]);
   });
 
   it('never lets a file shadow a built-in', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/new.md': 'Pretend to be new.' });
-    expect((await loadCommands(workspace, { app: home, user: undefined }, [])).filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
+    expect((await loadCommands(workspace, { app: home, user: undefined }, [])).commands.filter((c) => c.name === 'new')).toEqual([expect.objectContaining({ kind: 'builtin' })]);
   });
 
   it('lists each command for ACP with its description, its input hint, and whether a built-in is the editor\'s to run', async () => {
     const { workspace, home } = await tree({ 'ws/.claude/commands/review.md': '---\ndescription: Review a file\nargument-hint: <file>\n---\nReview $1.' });
-    const listed = availableCommands(await loadCommands(workspace, { app: home, user: undefined }, []));
+    const listed = availableCommands((await loadCommands(workspace, { app: home, user: undefined }, [])).commands);
     expect(listed.find((c) => c.name === 'new')).toEqual({ name: 'new', description: 'Start a new chat', input: null, _meta: { [COMMAND_META]: { kind: 'builtin', runs: 'client' } } });
     expect(listed.find((c) => c.name === 'mode')).toEqual({
       name: 'mode',
@@ -118,19 +154,20 @@ describe('command discovery', () => {
     }
   });
 
-  it('reads the standard ~/.agents/skills too: ~/.g-code wins a name in both, and the workspace wins over either', async () => {
+  it('reads the standard ~/.agents/skills too: ~/.g-code wins a name in both, and either wins over the workspace', async () => {
     const { workspace, home } = await tree({
       'ws/.agents/skills/lint/SKILL.md': skill('lint', 'Workspace lint'),
+      'ws/.agents/skills/build/SKILL.md': skill('build', 'Workspace build'),
       'home/skills/tidy/SKILL.md': skill('tidy', 'Geno tidy'),
       'user/.agents/skills/tidy/SKILL.md': skill('tidy', 'Agents tidy'),
       'user/.agents/skills/lint/SKILL.md': skill('lint', 'Agents lint'),
       'user/.agents/skills/deploy/SKILL.md': skill('deploy', 'Deploy the site'),
     });
     const user = path.join(path.dirname(home), 'user');
-    const commands = await loadCommands(workspace, { app: home, user }, []);
-    expect(summary(commands)).toEqual(['skill lint workspace: Workspace lint', 'skill tidy global: Geno tidy', 'skill deploy global: Deploy the site']);
+    const { commands } = await loadCommands(workspace, { app: home, user }, []);
+    expect(summary(commands)).toEqual(['skill tidy global: Geno tidy', 'skill deploy global: Deploy the site', 'skill lint global: Agents lint', 'skill build workspace: Workspace build']);
     expect(commands.find((c) => c.name === 'deploy')).toMatchObject({ path: path.join(user, '.agents', 'skills', 'deploy', 'SKILL.md') });
-    expect(summary(await loadCommands(workspace, { app: home, user: undefined }, []))).toEqual(['skill lint workspace: Workspace lint', 'skill tidy global: Geno tidy']);
+    expect(summary((await loadCommands(workspace, { app: home, user: undefined }, [])).commands)).toEqual(['skill tidy global: Geno tidy', 'skill build workspace: Workspace build', 'skill lint workspace: Workspace lint']);
   });
 
   it('opens the global skill folders for reading, as real paths, and never one that holds the home or the Claude config dir', async () => {
@@ -195,8 +232,8 @@ describe('gcode commands list', () => {
       '/best-of-n <2-4> <task> built-in, editor    Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models',
       '/schedule <when> [--edits] <prompt> built-in, engine    Run a prompt later or on a schedule, as a background task',
       '/workflow <name> [input] built-in, engine    Run a workflow from .g-code/workflows in the background, after its cost preview',
-      '/review <file>       .claude/commands/review.md    Review a file',
       `/tidy                ${path.join(home, 'skills', 'tidy', 'SKILL.md')}    Tidy the repo`,
+      '/review <file>       .claude/commands/review.md    Review a file',
     ]);
   });
 });

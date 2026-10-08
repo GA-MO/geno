@@ -12,7 +12,7 @@ async function write(file: string, text: string) {
 }
 
 describe('loadAgents', () => {
-  it('takes .agents, then .claude, then the global folder, then plugins, then the built-ins, the first of a name winning', async () => {
+  it("takes the user's global folder, then .agents, then .claude, then plugins, then the built-ins, the first of a name winning, with a problem line for a workspace agent the user's own shadows", async () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-agents-')));
     const workspace = path.join(root, 'ws');
     const app = path.join(root, 'app');
@@ -35,13 +35,18 @@ describe('loadAgents', () => {
       ['kit:scout', 'plugin', 'plugin scout'],
       ['plan', 'builtin', expect.any(String)],
       ['review', 'builtin', expect.any(String)],
-      ['scout', 'workspace', 'agents scout'],
+      ['scout', 'global', 'global scout'],
       ['tidy', 'global', 'global tidy'],
       ['worker', 'builtin', expect.any(String)],
     ]);
-    expect(agents.find((a) => a.name === 'scout')!.path).toBe('.agents/agents/scout.md');
+    expect(agents.find((a) => a.name === 'scout')!.path).toBe(path.join(app, 'agents', 'scout.md'));
     expect(agents.find((a) => a.name === 'kit:scout')!.prompt).toBe('Body of plugin scout.');
-    expect(problems).toEqual([`${path.join(app, 'agents', 'broken.md')}: skipped, it has no description`, `${path.join(app, 'agents', 'tidy.md')}: ignored color`]);
+    expect(problems).toEqual([
+      `${path.join(app, 'agents', 'broken.md')}: skipped, it has no description`,
+      `${path.join(app, 'agents', 'tidy.md')}: ignored color`,
+      `.agents/agents/scout.md: not loaded, because your own agent scout (${path.join(app, 'agents', 'scout.md')}) has its name`,
+      `.claude/agents/scout.md: not loaded, because your own agent scout (${path.join(app, 'agents', 'scout.md')}) has its name`,
+    ]);
   });
 
   it('gives the built-ins alone when no folder exists', async () => {

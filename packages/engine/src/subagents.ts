@@ -69,11 +69,11 @@ import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
 import type { HookAgent, ToolHooks } from './hooks.js';
 
-/** In precedence order, as for commands: the workspace's folders, then Geno's home, then plugins, then the built-ins. */
+/** In precedence order, as for commands: Geno's home, then the workspace's folders, then plugins, then the built-ins. */
 const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string }[] = [
+  { source: 'global', dir: (_, homes) => path.join(homes.app, 'agents') },
   { source: 'workspace', dir: (workspace) => path.join(workspace, '.agents', 'agents') },
   { source: 'workspace', dir: (workspace) => path.join(workspace, '.claude', 'agents') },
-  { source: 'global', dir: (_, homes) => path.join(homes.app, 'agents') },
 ];
 
 /** Each problem names its file; a file that cannot be used is reported and skipped, never thrown. */
@@ -105,7 +105,12 @@ export async function loadAgents(workspace: string, homes: Homes, plugins: reado
   const groups = [];
   for (const folder of AGENT_FOLDERS) groups.push(await loadAgentDir(folder.dir(workspace, homes), folder.source, '', show, problems));
   for (const plugin of plugins) groups.push(await loadAgentDir(path.join(plugin.root, 'agents'), 'plugin', `${plugin.name}:`, show, problems));
-  return { agents: mergeAgents([...groups, BUILTIN_AGENTS]), problems };
+  const agents = mergeAgents([...groups, BUILTIN_AGENTS]);
+  for (const agent of groups.flat()) {
+    const winner = agents.find((a) => a.name === agent.name)!;
+    if (agent.source === 'workspace' && winner.source === 'global') problems.push(`${agent.path}: not loaded, because your own agent ${agent.name} (${winner.path}) has its name`);
+  }
+  return { agents, problems };
 }
 
 /** One child as the host shows it. */
