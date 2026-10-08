@@ -74,6 +74,13 @@ describe('the command classifier', () => {
     expect(transport.requests[0]!.body).toMatchObject({ model: 'qwen3.8-flash', tool_choice: { type: 'tool', name: CLASSIFIER_TOOL.name } });
   });
 
+  it('P31 tells the classifier the hosts GCODE_SANDBOX_ALLOWED_DOMAINS opens, and that the sandbox has no network without it', async () => {
+    const open = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org' });
+    expect(JSON.stringify(open.transport.requests[0]!.body.system)).toContain('it reaches the network only at these hosts, where *. covers subdomains: registry.npmjs.org.');
+    const closed = await classify([verdict({ verdict: 'allow', reason: 'x' })]);
+    expect(JSON.stringify(closed.transport.requests[0]!.body.system)).toContain('it has no network');
+  });
+
   it('calls the model GCODE_CLASSIFIER_MODEL names', async () => {
     const { transport } = await classify([verdict({ verdict: 'allow', reason: 'x' })], 8000, { GCODE_CLASSIFIER_MODEL: 'qwen3.7-plus' });
     expect(transport.requests[0]!.body.model).toBe('qwen3.7-plus');
