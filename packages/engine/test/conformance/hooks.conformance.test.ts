@@ -263,7 +263,7 @@ describe('the session lifecycle', () => {
     expect(listing!.hooks.map((h) => [h.event, h.command, h.status])).toEqual([
       ['SessionStart', 'echo start', 'runs'],
       ['PreToolUse', 'check', 'runs'],
-      ['Stop', 'notify', 'P15'],
+      ['Stop', 'notify', 'runs'],
       ['Notification', 'notify', 'never'],
       ['SessionEnd', 'echo end', 'untrusted'],
     ]);
@@ -511,5 +511,226 @@ describe.each(WIRES)('a PreToolUse hook and the permission checks on the %s wire
     const { run, asked } = await interactive(wire, [call('', [cloud]), say('Done.')], always('ask'), { mode: 'ask', answers: ['allow'] });
     expect(asked.map((card) => card.rule), 'one card, not a second for the cloud CLI').toEqual(['hook-ask']);
     expect(resultOf(run, 'tu_cloud')!.text).not.toMatch(/denied|rejected/);
+  });
+});
+
+const context = (event: string, text: string) => JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
+const common = (stdout: string, event: string) => ({
+  session_id: sessionIdOf(stdout),
+  transcript_path: expect.stringMatching(/\.jsonl$/),
+  cwd: expect.any(String),
+  permission_mode: 'dontAsk',
+  hook_event_name: event,
+});
+
+describe.each(WIRES)('after-tool hooks on the %s wire', (wire: Wire) => {
+  it("T-HOOK-03 PostToolUse runs after Geno's check with Claude Code's payload, and its context ends the result, the same bytes on resume", async () => {
+    const write = { id: 'tu_write', name: 'edit', input: { path: 'made.ts', new_str: 'export const b = 2;\n', create: true } };
+    const run = await scripted(wire, [call('', [write]), say('Done.'), say('Again.')]);
+    const hook = await hookScript(run, 'post', { stdout: context('PostToolUse', 'Formatted made.ts.') });
+    const bashOnly = await hookScript(run, 'bash-only');
+    await userHooks(run, { PostToolUse: [...group(hook.command, { matcher: 'Edit|Write' }), ...group(bashOnly.command, { matcher: 'Bash' })] });
+
+    const result = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--check', 'true', 'Make b']);
+    expect(result.code).toBe(0);
+    const file = path.join(run.workspace, 'made.ts');
+    expect(await hook.payloads()).toEqual([
+      {
+        ...common(result.stdout, 'PostToolUse'),
+        cwd: run.workspace,
+        tool_name: 'Write',
+        tool_input: { file_path: file, content: 'export const b = 2;\n' },
+        tool_response: { type: 'create', filePath: file, content: 'export const b = 2;\n' },
+        tool_use_id: 'tu_write',
+        duration_ms: expect.any(Number),
+      },
+    ]);
+    expect(await bashOnly.payloads(), 'a Bash matcher does not fire on an edit').toEqual([]);
+    const note = `${GENO_NOTE} PostToolUse:Write hook additional context: Formatted made.ts.`;
+    const seen = resultOf(run, 'tu_write')!;
+    expect(seen.error).toBe(false);
+    expect(seen.text.indexOf('check `true` passed'), "Geno's check comes first").toBeGreaterThan(-1);
+    expect(seen.text.indexOf('check `true` passed')).toBeLessThan(seen.text.indexOf(note));
+    expect(seen.text.endsWith(note)).toBe(true);
+
+    expect((await run.cli(resume(sessionIdOf(result.stdout), 'Once more'))).code).toBe(0);
+    expect(JSON.stringify(run.bodies()[2]), 'a resumed session sends the hook text again').toContain(JSON.stringify(note).slice(1, -1));
+    expect(await hook.payloads(), 'the resume runs no hook for the old call').toHaveLength(1);
+  });
+
+  it('T-HOOK-04 a command that exits non-zero fires PostToolUseFailure, not PostToolUse, with the error', async () => {
+    const failing = { id: 'tu_fail', name: 'bash', input: { command: 'cat definitely-missing.txt' } };
+    const fine = { id: 'tu_fine', name: 'bash', input: { command: 'echo fine' } };
+    const run = await scripted(wire, [call('', [failing, fine]), say('Done.')]);
+    const post = await hookScript(run, 'post');
+    const failure = await hookScript(run, 'failure', { stdout: context('PostToolUseFailure', 'That file was never made; read the README.') });
+    await userHooks(run, { PostToolUse: group(post.command, { matcher: 'Bash' }), PostToolUseFailure: group(failure.command, { matcher: 'Bash' }) });
+
+    const result = await run.cli(agent(run.workspace, 'Go'));
+    expect(result.code).toBe(0);
+    expect((await post.payloads()).map((p) => p['tool_use_id'])).toEqual(['tu_fine']);
+    expect(await failure.payloads()).toEqual([
+      {
+        ...common(result.stdout, 'PostToolUseFailure'),
+        cwd: run.workspace,
+        tool_name: 'Bash',
+        tool_input: { command: 'cat definitely-missing.txt' },
+        tool_use_id: 'tu_fail',
+        error: expect.stringMatching(/^Exit code 1\n.*definitely-missing\.txt/s),
+        is_interrupt: false,
+        duration_ms: expect.any(Number),
+      },
+    ]);
+    expect((await post.payloads())[0]).toMatchObject({ tool_response: { stdout: expect.stringContaining('fine'), stderr: '', interrupted: false, isImage: false } });
+    const failed = resultOf(run, 'tu_fail')!;
+    expect(failed.error).toBe(true);
+    expect(failed.text.endsWith(`${GENO_NOTE} PostToolUseFailure:Bash hook additional context: That file was never made; read the README.`)).toBe(true);
+  });
+
+  it('a call a PreToolUse hook refused fires neither after-tool event', async () => {
+    const use = { id: 'tu_no', name: 'bash', input: { command: 'echo refused' } };
+    const run = await scripted(wire, [call('', [use]), say('Done.')]);
+    const pre = await hookScript(run, 'pre', { stderr: 'not today', code: 2 });
+    const post = await hookScript(run, 'post');
+    await userHooks(run, { PreToolUse: group(pre.command), PostToolUse: group(post.command), PostToolUseFailure: group(post.command) });
+
+    expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
+    expect(await post.payloads()).toEqual([]);
+  });
+
+  it('B/B-109 PostToolBatch runs once per batch with every call, and its context follows the results', async () => {
+    const uses = ['one', 'two', 'three'].map((word) => ({ id: `tu_${word}`, name: 'bash', input: { command: `echo ${word}` } }));
+    const read = { id: 'tu_read', name: 'read', input: { path: 'a.ts' } };
+    const run = await scripted(wire, [call('', uses), call('', [read]), say('Done.')]);
+    const batch = await hookScript(run, 'batch', { stdout: context('PostToolBatch', 'Run the tests before you finish.') });
+    await userHooks(run, { PostToolBatch: group(batch.command) });
+
+    const result = await run.cli(agent(run.workspace, 'Go'));
+    expect(result.code).toBe(0);
+    const [first, second] = await batch.payloads();
+    expect(first).toEqual({
+      ...common(result.stdout, 'PostToolBatch'),
+      cwd: run.workspace,
+      tool_calls: uses.map(({ id, input }) => ({ tool_name: 'Bash', tool_input: input, tool_use_id: id, tool_response: expect.objectContaining({ stdout: expect.stringContaining(input.command.slice(5)) }) })),
+    });
+    expect(second).toMatchObject({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: path.join(run.workspace, 'a.ts') }, tool_use_id: 'tu_read', tool_response: expect.stringContaining('export const a') }] });
+    expect(await batch.payloads()).toHaveLength(2);
+    const note = `${GENO_NOTE} PostToolBatch hook additional context: Run the tests before you finish.`;
+    expect(run.seen()[1]!.results.map((r) => r.id)).toEqual(['tu_one', 'tu_two', 'tu_three']);
+    expect(run.seen()[1]!.text).toContain(note);
+    expect(run.seen()[1]!.results.some((r) => r.text.includes(note)), 'the batch note is not part of any one result').toBe(false);
+  });
+
+  it('B/B-109 a PostToolBatch block stops the loop before the next model call, and the model reads why when the session goes on', async () => {
+    const use = { id: 'tu_echo', name: 'bash', input: { command: 'echo ran' } };
+    const run = await scripted(wire, [call('', [use]), say('Picked up.')]);
+    const batch = await hookScript(run, 'batch', { stderr: 'Tests are red.', code: 2 });
+    await userHooks(run, { PostToolBatch: group(batch.command) });
+
+    const stopped = await run.cli(agent(run.workspace, 'Go'));
+    expect(stopped.code).toBe(1);
+    expect(stopped.stderr).toContain('A PostToolBatch hook stopped the turn: Tests are red.');
+    expect(run.seen(), 'the model is not called after the batch').toHaveLength(1);
+
+    await writeFile(path.join(run.env['HOME']!, '.claude', 'settings.json'), JSON.stringify({ hooks: {} }));
+    expect((await run.cli(resume(sessionIdOf(stopped.stdout), 'Go on'))).code).toBe(0);
+    const next = run.seen()[1]!;
+    expect(next.results.map((r) => r.id)).toEqual(['tu_echo']);
+    expect(next.text).toContain(`${GENO_NOTE} PostToolBatch hook blocking error: Tests are red.`);
+    expect(next.text.endsWith('Go on')).toBe(true);
+  });
+
+  it("a subagent's calls fire the session's PostToolUse hooks with agent_id and agent_type", async () => {
+    const explore = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'explore', task: 'Where is alpha defined?' } }]);
+    const grep = call('', [{ id: 'tu_grep', name: 'grep', input: { pattern: 'alpha' } }]);
+    const files = { 'a.ts': 'export const alpha = 1;\n', '.gcode.json': `${JSON.stringify({ agentTool: ['non-interactive'] })}\n` };
+    const run = await scripted(wire, [explore, grep, report('In a.ts.'), say('alpha is in a.ts.')], files);
+    const post = await hookScript(run, 'post');
+    const stop = await hookScript(run, 'stop');
+    await userHooks(run, { PostToolUse: group(post.command, { matcher: 'Grep' }), Stop: group(stop.command) });
+
+    const result = await run.cli(agent(run.workspace, 'Where is alpha defined?'));
+    expect(result.code).toBe(0);
+    const [payload] = await post.payloads();
+    expect(payload).toMatchObject({ session_id: sessionIdOf(result.stdout), tool_name: 'Grep', tool_use_id: 'tu_grep', agent_type: 'explore', agent_id: expect.any(String) });
+    expect(payload!['agent_id']).not.toBe(sessionIdOf(result.stdout));
+    expect((await stop.payloads()).map((p) => p['last_assistant_message']), "Stop runs for the session's model only; SubagentStop is P16").toEqual(['alpha is in a.ts.']);
+  });
+});
+
+describe.each(WIRES)('Stop on the %s wire', (wire: Wire) => {
+  it('T-LOOP-03 end_turn ends the turn and runs Stop with the last message and stop_hook_active', async () => {
+    const run = await scripted(wire, [say('All done.')]);
+    const stop = await hookScript(run, 'stop');
+    await userHooks(run, { Stop: group(stop.command) });
+
+    const result = await run.cli(agent(run.workspace, 'Finish'));
+    expect(result.code).toBe(0);
+    expect(await stop.payloads()).toEqual([{ ...common(result.stdout, 'Stop'), cwd: run.workspace, stop_hook_active: false, last_assistant_message: 'All done.' }]);
+  });
+
+  it('B/B-114 a Stop block keeps the turn going once with the reason; a second block in a row ends the turn', async () => {
+    const run = await scripted(wire, [say('All done.'), say('Really done.')]);
+    const stop = await hookScript(run, 'stop', { stderr: 'Run the tests first.', code: 2 });
+    await userHooks(run, { Stop: group(stop.command) });
+
+    const result = await run.cli(agent(run.workspace, 'Finish'));
+    expect(result.code).toBe(0);
+    expect((await stop.payloads()).map((p) => [p['stop_hook_active'], p['last_assistant_message']])).toEqual([
+      [false, 'All done.'],
+      [true, 'Really done.'],
+    ]);
+    expect(run.seen(), 'the model is called once more, not in a loop').toHaveLength(2);
+    expect(run.seen()[1]!.text).toBe(`${GENO_NOTE} Stop hook blocking error: Run the tests first.`);
+    expect(result.stderr).toContain('Stop hook blocked the end of the turn again');
+  });
+
+  it('B/B-114 a block counts again once the model called a tool, and a hook that reads stop_hook_active lets it stop', async () => {
+    const test = { id: 'tu_test', name: 'bash', input: { command: 'echo tests pass' } };
+    const run = await scripted(wire, [say('Done.'), call('', [test]), say('Tests pass.'), say('Final.')]);
+    const always = await hookScript(run, 'always', { stderr: 'Run the tests first.', code: 2 });
+    await userHooks(run, { Stop: group(always.command) });
+    expect((await run.cli(agent(run.workspace, 'Finish'))).code).toBe(0);
+    expect(run.seen()).toHaveLength(4);
+    expect((await always.payloads()).map((p) => p['last_assistant_message'])).toEqual(['Done.', 'Tests pass.', 'Final.']);
+
+    const polite = await scripted(wire, [say('Done.'), say('Done, really.')]);
+    // The guard Claude Code's hooks reference recommends.
+    const guard = await hookScript(polite, 'guard', { before: `case "$in" in *'"stop_hook_active":true'*) exit 0;; esac\necho 'Run the tests first.' >&2\nexit 2` });
+    await userHooks(polite, { Stop: group(guard.command) });
+    const ended = await polite.cli(agent(polite.workspace, 'Finish'));
+    expect(ended.code).toBe(0);
+    expect(polite.seen()).toHaveLength(2);
+    expect(ended.stderr).not.toContain('again');
+  });
+
+  it('runs the phone notice example of docs/hooks.md as written, and the turn ends', async () => {
+    const run = await scripted(wire, [say('All done.')]);
+    const doc = await readFile(new URL('../../../../docs/hooks.md', import.meta.url), 'utf8');
+    const settings = /```json\n([\s\S]*?)```/.exec(doc.slice(doc.indexOf('## Example: a phone notice')))![1]!;
+    const bin = path.join(run.env['HOME']!, 'bin');
+    await mkdir(bin, { recursive: true });
+    const sent = path.join(run.env['HOME']!, 'curl-args.txt');
+    await writeFile(path.join(bin, 'curl'), `#!/bin/sh\nfor arg in "$@"; do printf '%s\\n' "$arg" >> '${sent}'; done\n`);
+    await chmod(path.join(bin, 'curl'), 0o755);
+    run.env['PATH'] = `${bin}:${run.env['PATH']}`;
+    await writeFile(path.join(run.env['GCODE_HOME']!, 'settings.json'), settings);
+
+    const result = await run.cli(agent(run.workspace, 'Finish'));
+    expect(result.code).toBe(0);
+    expect(result.stderr).not.toContain('hook error');
+    expect((await readFile(sent, 'utf8')).split('\n').filter(Boolean)).toEqual(['-s', '-d', `Geno finished in ${path.basename(run.workspace)}`, 'https://ntfy.sh/my-geno-topic-4f7a']);
+    expect(run.seen()).toHaveLength(1);
+  });
+
+  it('T-HOOK-01 the events of a turn fire in order: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolBatch, Stop, SessionEnd', async () => {
+    const use = { id: 'tu_echo', name: 'bash', input: { command: 'echo hi' } };
+    const run = await scripted(wire, [call('', [use]), say('Done.')]);
+    const hook = await hookScript(run, 'all');
+    const events = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'Stop', 'SessionEnd'];
+    await userHooks(run, Object.fromEntries(events.map((event) => [event, group(hook.command)])));
+
+    expect((await run.cli(agent(run.workspace, 'Go'))).code).toBe(0);
+    expect((await hook.payloads()).map((p) => p['hook_event_name'])).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolBatch', 'Stop', 'SessionEnd']);
   });
 });

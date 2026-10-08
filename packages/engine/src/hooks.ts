@@ -3,6 +3,7 @@ import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages
 import {
   classifierInputOf,
   claudeToolCall,
+  claudeToolResponse,
   genoToolInput,
   handlersFor,
   HOOK_EVENTS,
@@ -15,7 +16,10 @@ import {
   nextSeq,
   preToolDecision,
   promptDecision,
+  stopDecision,
+  toolHookVerdict,
   type ApprovalRecord,
+  type CallHookEvent,
   type Denial,
   type HookContextEvent,
   type HookEntry,
@@ -25,6 +29,10 @@ import {
   type PromptDecision,
   type RunningHookEvent,
   type SessionStartSource,
+  type StopDecision,
+  type ToolHookEvent,
+  type ToolHookVerdict,
+  type ToolStatus,
 } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { childEnv, type Env } from './child-env.js';
@@ -134,24 +142,58 @@ export type SessionOpening = {
 type Active = { readonly io: Io; readonly runner: HookRunner; readonly events: ReadonlySet<HookEventName>; readonly workspace: string; permissionMode: string };
 
 /**
+ * What a tool event's hooks said beyond a permission: the text to log for the model, beside a call's result or after
+ * a batch's, and the reason to stop the loop before the next model call, when a hook stops it.
+ */
+export type ToolHookSaid = { readonly context: HookContextEvent | undefined; readonly stop: { readonly by: ToolHookEvent; readonly reason: string } | undefined };
+
+/**
  * A call PreToolUse's hooks let go on, its input as a hook's `updatedInput` left it: as the call's own checks have it,
  * allowed (they skip their question and the classifier), or after the user answers the hook's question. Or the refusal
  * logged in its place, which the model reads as Claude Code's `PreToolUse:<Tool> hook error: <reason>`.
  */
-export type PreToolStep =
+export type PreToolStep = (
   | { readonly kind: 'run'; readonly use: ToolUseBlock; readonly allowed: boolean }
   | { readonly kind: 'ask'; readonly use: ToolUseBlock; readonly question: Denial }
-  | { readonly kind: 'refuse'; readonly text: string; readonly approval: ApprovalRecord };
+  | { readonly kind: 'refuse'; readonly text: string; readonly approval: ApprovalRecord }
+) & { readonly said: ToolHookSaid };
 
-/** PreToolUse for one run's calls: each call's verdict, all settled before the first call runs, and a hook's question. */
-export type PreToolHooks = {
+/** A call that has a result, as the after-tool hooks read it: the call as it ran, and its own time. */
+export type RanCall = { readonly use: ToolUseBlock; readonly status: ToolStatus; readonly text: string; readonly durationMs: number };
+
+/**
+ * The tool events for one run's calls. PreToolUse: each call's verdict, all settled before the first call runs, and a
+ * hook's question. PostToolUse or PostToolUseFailure after each call that ran, and PostToolBatch once the turn's calls
+ * all have results.
+ */
+export type ToolHooks = {
   decide(uses: readonly ToolUseBlock[], describe: (use: ToolUseBlock) => string): Promise<readonly PreToolStep[]>;
   /** The user's answer to a hook's question, after which the call runs as allowed; a no throws the call's refusal. */
   confirm(question: Denial, ctx: ToolContext): Promise<ApprovalRecord>;
+  /** PostToolUse for a call that ran, PostToolUseFailure for one that failed; nothing for one refused or turned down. */
+  after(call: RanCall): Promise<ToolHookSaid>;
+  batch(calls: readonly RanCall[]): Promise<ToolHookSaid>;
 };
 
-/** The subagent whose calls PreToolUse sees, as Claude Code names it in `agent_id` and `agent_type`. */
+/** The subagent whose calls the tool events see, as Claude Code names it in `agent_id` and `agent_type`. */
 export type HookAgent = { readonly id: string; readonly type: string };
+
+/** The tool events: a session that runs none of them gives its calls no hooks at all. */
+const TOOL_HOOK_EVENTS: readonly HookEventName[] = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch'];
+
+const NOTHING_SAID: ToolHookSaid = { context: undefined, stop: undefined };
+
+function saidOf(verdict: ToolHookVerdict, place: { readonly event: 'PostToolBatch' } | { readonly event: CallHookEvent; readonly matched: string; readonly toolUseId: string }): ToolHookSaid {
+  const context: HookContextEvent | undefined = verdict.notes.length === 0 ? undefined : { kind: 'hook-context', seq: 0, at: new Date().toISOString(), ...place, notes: verdict.notes };
+  return { context, stop: verdict.stop === undefined ? undefined : { by: place.event, reason: verdict.stop } };
+}
+
+const AFTER_TOOL_EVENT: Readonly<Record<ToolStatus, Extract<CallHookEvent, 'PostToolUse' | 'PostToolUseFailure'> | undefined>> = {
+  ok: 'PostToolUse',
+  error: 'PostToolUseFailure',
+  denied: undefined,
+  rejected: undefined,
+};
 
 /**
  * The hooks of each session this engine process runs. A session's hooks are read once, at its first run in the
@@ -212,27 +254,30 @@ export class HookSessions {
   }
 
   /**
-   * PreToolUse for the calls of `sessionId`'s model, or of a subagent it started, under the approval that asks for that
-   * caller. Undefined when the session runs no PreToolUse hook, so its calls go as they always have.
+   * The tool events for the calls of `sessionId`'s model, or of a subagent it started, under the approval that asks for
+   * that caller. Undefined when the session runs no tool event's hook, so its calls go as they always have.
    */
-  preToolHooks(sessionId: string, approval: Approval, agent?: HookAgent): PreToolHooks | undefined {
+  toolHooks(sessionId: string, approval: Approval, agent?: HookAgent): ToolHooks | undefined {
     const active = this.active.get(sessionId);
-    if (active === undefined || !active.events.has('PreToolUse')) return undefined;
+    if (active === undefined || !TOOL_HOOK_EVENTS.some((event) => active.events.has(event))) return undefined;
     const agentFields = agent === undefined ? {} : { agent_id: agent.id, agent_type: agent.type };
+    const permissionMode = () => HOOK_PERMISSION_MODES[modeOf(approval)];
     const step = async (use: ToolUseBlock, describe: (use: ToolUseBlock) => string): Promise<PreToolStep> => {
       const mode = modeOf(approval);
       const { tool_name, tool_input } = claudeToolCall(use.name, use.input, active.workspace);
       const results = await active.runner.run('PreToolUse', { tool_name, tool_input, tool_use_id: use.id, ...agentFields }, HOOK_PERMISSION_MODES[mode]);
       const label = hookLabel('PreToolUse', tool_name);
       reportHooks(active.io, label, results);
-      const decision = preToolDecision(results);
+      const said = saidOf(toolHookVerdict('PreToolUse', results), { event: 'PreToolUse', matched: tool_name, toolUseId: use.id });
+      // A continue false stops everything, this call first, as Claude Code's does.
+      const decision = said.stop === undefined ? preToolDecision(results) : { kind: 'deny' as const, reason: said.stop.reason };
       if (decision.kind === 'deny') {
         const record: ApprovalRecord = { mode, rule: 'hook-deny', reason: decision.reason, command: describe(use), decidedBy: 'rule', verdict: 'deny' };
-        return { kind: 'refuse', text: hookNoteText(label, { how: 'error', text: decision.reason }), approval: record };
+        return { kind: 'refuse', text: hookNoteText(label, { how: 'error', text: decision.reason }), approval: record, said };
       }
       const updated = decision.kind === 'none' || decision.input === undefined ? use : { ...use, input: genoToolInput(use.name, decision.input) };
-      if (decision.kind === 'ask') return { kind: 'ask', use: updated, question: hookAskDenial(decision, describe(updated)) };
-      return { kind: 'run', use: updated, allowed: decision.kind === 'allow' };
+      if (decision.kind === 'ask') return { kind: 'ask', use: updated, question: hookAskDenial(decision, describe(updated)), said };
+      return { kind: 'run', use: updated, allowed: decision.kind === 'allow', said };
     };
     return {
       decide: (uses, describe) => Promise.all(uses.map((use) => step(use, describe))),
@@ -241,6 +286,38 @@ export class HookSessions {
         if (record.verdict === 'deny') throw refusalOf(record);
         return record;
       },
+      async after({ use, status, text, durationMs }) {
+        const event = AFTER_TOOL_EVENT[status];
+        if (event === undefined) return NOTHING_SAID;
+        const call = { ...claudeToolCall(use.name, use.input, active.workspace), tool_use_id: use.id, ...agentFields };
+        const results =
+          event === 'PostToolUse'
+            ? await active.runner.run(event, { ...call, tool_response: claudeToolResponse(use.name, use.input, text, active.workspace), duration_ms: durationMs }, permissionMode())
+            : await active.runner.run(event, { ...call, error: text, is_interrupt: false, duration_ms: durationMs }, permissionMode());
+        reportHooks(active.io, hookLabel(event, call.tool_name), results);
+        return saidOf(toolHookVerdict(event, results), { event, matched: call.tool_name, toolUseId: use.id });
+      },
+      async batch(calls) {
+        const tool_calls = calls.map(({ use, text }) => ({
+          ...claudeToolCall(use.name, use.input, active.workspace),
+          tool_use_id: use.id,
+          tool_response: claudeToolResponse(use.name, use.input, text, active.workspace),
+        }));
+        const results = await active.runner.run('PostToolBatch', { tool_calls, ...agentFields }, permissionMode());
+        reportHooks(active.io, 'PostToolBatch', results);
+        return saidOf(toolHookVerdict('PostToolBatch', results), { event: 'PostToolBatch' });
+      },
+    };
+  }
+
+  /** Stop for the session's own model as it ends its turn; undefined when the session runs no Stop hook. */
+  stopHook(sessionId: string): ((input: HookEventInputs['Stop']) => Promise<StopDecision>) | undefined {
+    const active = this.active.get(sessionId);
+    if (active === undefined || !active.events.has('Stop')) return undefined;
+    return async (input) => {
+      const results = await active.runner.run('Stop', input, active.permissionMode);
+      reportHooks(active.io, 'Stop', results);
+      return stopDecision(results);
     };
   }
 

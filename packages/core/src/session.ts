@@ -422,8 +422,17 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
       const environment = event.environment === undefined ? undefined : renderEnvironment(event.environment, event.session);
       opening = [loaded, memory, environment].flatMap((text) => (text === undefined ? [] : [{ type: 'text' as const, text }]));
     }
-    // UserPromptSubmit's output goes with its prompt, and is dropped with it.
-    if (event.kind === 'hook-context') (event.event === 'UserPromptSubmit' ? prompts : event.matched === 'startup' ? opening : notices).push(...hookContextTexts(event).map((text) => ({ type: 'text' as const, text })));
+    if (event.kind === 'hook-context') {
+      const texts = hookContextTexts(event).map((text) => ({ type: 'text' as const, text }));
+      if ('toolUseId' in event) {
+        const result = results.get(event.toolUseId);
+        if (result !== undefined) results.set(event.toolUseId, { ...result, content: [...(typeof result.content === 'string' ? [{ type: 'text' as const, text: result.content }] : (result.content ?? [])), ...texts] });
+      } else {
+        // UserPromptSubmit's output goes with its prompt, and is dropped with it; Stop's is what the model answers next.
+        const place = event.event === 'UserPromptSubmit' || event.event === 'Stop' ? prompts : event.event === 'SessionStart' && event.matched === 'startup' ? opening : notices;
+        place.push(...texts);
+      }
+    }
     if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });

@@ -336,8 +336,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       waits: wakes?.registry,
       steps: options.director !== undefined,
       waiter: options.surface?.waiter,
-      // A subagent's calls meet the user's PreToolUse hooks too, as in Claude Code, named by agent_id and agent_type.
-      preToolUse: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.preToolHooks(session.id, approval, agent),
+      // A subagent's calls meet the user's tool hooks too, as in Claude Code, named by agent_id and agent_type.
+      toolHooks: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.toolHooks(session.id, approval, agent),
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools, mcp?.tools);
@@ -389,7 +389,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
             ...mode,
             afterCompact: () => hooks.sessionStart(session.id, 'compact'),
             promptSubmitted: (prompt) => hooks.userPromptSubmit(session.id, prompt),
-            preToolUse: hooks.preToolHooks(session.id, options.approval),
+            toolHooks: hooks.toolHooks(session.id, options.approval),
+            stop: hooks.stopHook(session.id),
           };
     result = await drive(io, store, started, prompt, options.limits, hooked, { ...(options.surface ?? terminalSurface(io)), steers: inbox, wakeLater: wakes !== undefined });
     return result;

@@ -39,7 +39,7 @@ const KEPT_BY_CUT: Readonly<Record<TurnEventKind, boolean>> = {
   review: true,
   spinoff: true,
   chapter: true,
-  // SessionStart's output is the session's context, like its start; `cutView` drops UserPromptSubmit's with its prompt.
+  // SessionStart's output is the session's context, like its start; `cutView` drops every other hook's with its turn.
   'hook-context': true,
   user: false,
   assistant: false,
@@ -71,6 +71,7 @@ const skippedByFork = (event: TurnEvent): boolean => event.kind === 'wait' || ev
 /** The tool call an event belongs to, for the events that answer or report on one. */
 function toolUseOf(event: TurnEvent): string | undefined {
   if (event.kind === 'tool-result' || event.kind === 'child-start' || event.kind === 'child-end') return event.toolUseId;
+  if (event.kind === 'hook-context' && 'toolUseId' in event) return event.toolUseId;
   if (event.kind === 'background-end') return event.job.toolUseId;
   if (event.kind === 'wake' && 'toolUseId' in event.note) return event.note.toolUseId;
   return undefined;
@@ -94,8 +95,8 @@ export function cutView(events: readonly TurnEvent[]): TurnEvent[] {
       const at = promptIndex(view, event.turnSeq);
       const dropped = at === -1 ? [] : view.splice(at);
       for (const e of dropped) if (e.kind === 'assistant') for (const use of toolUsesOf(e.content)) cutUses.add(use.id);
-      // UserPromptSubmit's output belongs to the prompt the cut drops.
-      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind] && !(e.kind === 'hook-context' && e.event === 'UserPromptSubmit')), event);
+      // Every other hook's output belongs to the prompt or the turns the cut drops.
+      view.push(...dropped.filter((e) => KEPT_BY_CUT[e.kind] && !(e.kind === 'hook-context' && e.event !== 'SessionStart')), event);
       continue;
     }
     const use = toolUseOf(event);

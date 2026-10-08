@@ -10,11 +10,14 @@ import { GENO_NOTE, neutralize } from './fence.js';
  */
 
 /** Whether Geno fires an event now, which plan unit adds it, or never: Geno has no trigger for it, or another event covers it. */
-export type HookSupport = 'runs' | 'P15' | 'P16' | 'never';
+export type HookSupport = 'runs' | 'P16' | 'never';
 
 type EventSpec = {
   readonly support: HookSupport;
-  /** Exit 2 blocks what the event is about, such as a tool call or a prompt. */
+  /**
+   * Exit 2 decides, with stderr as the reason, whatever stdout says: it blocks what the event is about, such as a tool
+   * call or a prompt, or, after a call that already ran, gives the model the reason beside its result.
+   */
   readonly blocks: boolean;
   /** Seconds before the handler is killed, unless it sets its own `timeout`. */
   readonly timeoutSec: number;
@@ -39,10 +42,10 @@ export const HOOK_EVENTS = {
   SessionEnd: spec('runs', { matcher: true }),
   UserPromptSubmit: spec('runs', { blocks: true, timeoutSec: 30, stdoutIsContext: true }),
   PreToolUse: spec('runs', { blocks: true, matcher: true }),
-  PostToolUse: spec('P15', { matcher: true }),
-  PostToolUseFailure: spec('P15', { matcher: true }),
-  PostToolBatch: spec('P15', { blocks: true }),
-  Stop: spec('P15', { blocks: true }),
+  PostToolUse: spec('runs', { blocks: true, matcher: true }),
+  PostToolUseFailure: spec('runs', { blocks: true, matcher: true }),
+  PostToolBatch: spec('runs', { blocks: true }),
+  Stop: spec('runs', { blocks: true }),
   PermissionRequest: spec('P16', { matcher: true }),
   SubagentStart: spec('P16', { matcher: true }),
   SubagentStop: spec('P16', { blocks: true, matcher: true }),
@@ -242,8 +245,11 @@ export type HookOutput = {
   readonly hookSpecificOutput?: Readonly<Record<string, unknown>> & { readonly additionalContext?: string };
 };
 
-/** Text a hook gives the model: plain stdout ("hook success") or a JSON `additionalContext`. */
-export type HookNote = { readonly how: 'success' | 'additional-context'; readonly text: string };
+/**
+ * Text a hook gives the model: plain stdout ("hook success"), a JSON `additionalContext`, or the reason of a block
+ * ("hook blocking error"), such as a Stop hook's that keeps the turn going.
+ */
+export type HookNote = { readonly how: 'success' | 'additional-context' | 'blocking'; readonly text: string };
 
 /**
  * What one handler's run means. `ok` is exit 0. `block` is exit 2 on an event that can block, whatever stdout says.
@@ -298,7 +304,12 @@ export function hookOutcome(event: HookEventName, ran: HookRan, timeoutSec = HOO
 /** Geno's cap on one hook's text in the conversation, so a hook that prints a whole file does not fill the context. */
 export const HOOK_NOTE_LIMIT = 10_000;
 
-const HOW_WORDS: Readonly<Record<HookNote['how'] | 'error', string>> = { success: 'hook success', 'additional-context': 'hook additional context', error: 'hook error' };
+const HOW_WORDS: Readonly<Record<HookNote['how'] | 'error', string>> = {
+  success: 'hook success',
+  'additional-context': 'hook additional context',
+  blocking: 'hook blocking error',
+  error: 'hook error',
+};
 
 /**
  * A hook's text as the model reads it: Claude Code's `<label> hook success: <stdout>` (or `hook additional context`,
@@ -386,17 +397,79 @@ export function promptDecision(results: readonly HookResult[]): PromptDecision {
   return { kind: 'go', notes: results.flatMap(({ outcome }) => (outcome.kind === 'block' ? [] : (outcome.notes ?? []))) };
 }
 
+/** The events whose hooks speak about tool calls: one call's, before or after it runs, or a whole batch's. */
+export type ToolHookEvent = 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'PostToolBatch';
+
+/**
+ * What a call's or a batch's hooks said beyond PreToolUse's permission: text the model reads beside the results, and
+ * the reason to stop the loop before the next model call, if a hook stops it.
+ */
+export type ToolHookVerdict = { readonly notes: readonly HookNote[]; readonly stop: string | undefined };
+
+/** The hook's notes and stop: `continue: false` stops any event; a block stops a batch and speaks after a call. */
+function toolHookSaid(event: ToolHookEvent, result: HookResult): ToolHookVerdict {
+  const { outcome } = result;
+  if (outcome.kind === 'block') {
+    if (event === 'PreToolUse') return { notes: [], stop: undefined };
+    return { notes: [{ how: 'blocking', text: outcome.reason }], stop: event === 'PostToolBatch' ? outcome.reason : undefined };
+  }
+  const output = outputOf(result);
+  if (output?.continue === false) {
+    const reason = textOf(output.stopReason) ?? `a ${event} hook stopped the turn`;
+    // PreToolUse refuses its call with the reason, which the model reads as the call's result.
+    return { notes: event === 'PreToolUse' ? [] : [{ how: 'blocking', text: reason }], stop: reason };
+  }
+  // A PreToolUse decision of block is the older deny, which preToolDecision reads; a deferring hook's text is dropped.
+  if (event === 'PreToolUse') return { notes: output?.hookSpecificOutput?.['permissionDecision'] === 'defer' ? [] : (outcome.notes ?? []), stop: undefined };
+  const block = output?.decision === 'block' ? (textOf(output.reason) ?? `a ${event} hook blocked this`) : undefined;
+  const notes: HookNote[] = [...(block === undefined ? [] : [{ how: 'blocking' as const, text: block }]), ...(outcome.notes ?? [])];
+  return { notes, stop: event === 'PostToolBatch' ? block : undefined };
+}
+
+export function toolHookVerdict(event: ToolHookEvent, results: readonly HookResult[]): ToolHookVerdict {
+  const said = results.map((result) => toolHookSaid(event, result));
+  return { notes: said.flatMap((one) => one.notes), stop: said.find((one) => one.stop !== undefined)?.stop };
+}
+
+/**
+ * What the Stop hooks decided when the model ended its turn: end it, with a `stopReason` for the user, or go on, the
+ * model reading the reasons. A `continue: false` outranks any block.
+ */
+export type StopDecision = { readonly kind: 'end'; readonly reason: string | undefined } | { readonly kind: 'continue'; readonly notes: readonly HookNote[] };
+
+export function stopDecision(results: readonly HookResult[]): StopDecision {
+  const stopped = results.find((result) => outputOf(result)?.continue === false);
+  if (stopped !== undefined) return { kind: 'end', reason: textOf(outputOf(stopped)?.stopReason) };
+  const notes = results.flatMap((result): HookNote[] => {
+    const { outcome } = result;
+    if (outcome.kind === 'block') return [{ how: 'blocking', text: outcome.reason }];
+    const output = outputOf(result);
+    const block = output?.decision === 'block' ? [{ how: 'blocking' as const, text: textOf(output.reason) ?? 'a Stop hook blocked the end of the turn' }] : [];
+    return [...block, ...(outcome.notes ?? [])];
+  });
+  return notes.length === 0 ? { kind: 'end', reason: undefined } : { kind: 'continue', notes };
+}
+
 type Input = Readonly<Record<string, unknown>>;
 
 const defined = (fields: Readonly<Record<string, unknown>>): Record<string, unknown> => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
 const numberOf = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
 
+type ClaudeShape = {
+  readonly claude: (input: Input, workspace: string) => { readonly name: string; readonly input: Input };
+  readonly geno: (input: Input) => Input;
+  /** The `tool_response` an after-tool hook reads, from Claude Code's input and the result text; the text without it. */
+  readonly response?: (claude: { readonly name: string; readonly input: Input }, text: string) => unknown;
+};
+
 /**
  * Geno's tools whose input differs from the Claude Code tool's: what a hook reads in `tool_input`, and how a hook's
  * `updatedInput` reads back. A hook written for Claude Code finds `file_path` and `command` where it looks for them.
  */
-const CLAUDE_SHAPES: Readonly<Record<string, { readonly claude: (input: Input, workspace: string) => { readonly name: string; readonly input: Input }; readonly geno: (input: Input) => Input }>> = {
+const CLAUDE_SHAPES: Readonly<Record<string, ClaudeShape>> = {
   bash: {
+    // Geno's command output is one stream, stdout and stderr as they came, so it all goes in stdout.
+    response: (_claude, text) => ({ stdout: text, stderr: '', interrupted: false, isImage: false, noOutputExpected: false }),
     claude: ({ command, description, timeout_seconds, run_in_background }) => ({
       name: 'Bash',
       input: defined({ command, description, timeout: numberOf(timeout_seconds) === undefined ? undefined : (timeout_seconds as number) * 1000, run_in_background }),
@@ -419,6 +492,10 @@ const CLAUDE_SHAPES: Readonly<Record<string, { readonly claude: (input: Input, w
     },
   },
   edit: {
+    response: ({ name, input }) =>
+      name === 'Write'
+        ? { type: 'create', filePath: input['file_path'], content: input['content'] }
+        : { filePath: input['file_path'], oldString: input['old_string'], newString: input['new_string'], replaceAll: input['replace_all'] === true },
     claude: ({ path: file, old_str, new_str, replace_all, create }, workspace) => {
       const file_path = typeof file === 'string' ? path.resolve(workspace, file) : file;
       return create === true
@@ -430,11 +507,17 @@ const CLAUDE_SHAPES: Readonly<Record<string, { readonly claude: (input: Input, w
   },
 };
 
-/** A Geno call as a PreToolUse hook reads it: Claude Code's tool name where one maps to the tool, and its input. */
+/** A Geno call as a tool event's hook reads it: Claude Code's tool name where one maps to the tool, and its input. */
 export function claudeToolCall(name: string, input: unknown, workspace: string): { readonly tool_name: string; readonly tool_input: unknown } {
   const shape = Object.hasOwn(CLAUDE_SHAPES, name) && isRecord(input) ? CLAUDE_SHAPES[name]!.claude(input, workspace) : undefined;
   if (shape !== undefined) return { tool_name: shape.name, tool_input: shape.input };
   return { tool_name: claudeNamesOf(name)[0] ?? name, tool_input: input };
+}
+
+/** A call's result as an after-tool hook reads it in `tool_response`: Claude Code's object for Bash, Write and Edit, the result text otherwise. */
+export function claudeToolResponse(name: string, input: unknown, text: string, workspace: string): unknown {
+  const shape = Object.hasOwn(CLAUDE_SHAPES, name) && isRecord(input) ? CLAUDE_SHAPES[name]! : undefined;
+  return shape?.response === undefined ? text : shape.response(shape.claude(input as Input, workspace), text);
 }
 
 /** A hook's `updatedInput`, written in Claude Code's shape, as the input of Geno's tool. */
@@ -446,17 +529,27 @@ export type SessionStartSource = 'startup' | 'resume' | 'compact';
 /** SessionEnd's reason: Geno ends a session only when its process does. */
 export type SessionEndReason = 'other';
 
+/** The events whose output joins one call's result. */
+export type CallHookEvent = Exclude<ToolHookEvent, 'PostToolBatch'>;
+
 /**
  * Hook output the model reads, logged so a resumed session sends the same bytes. `matched` is what the matcher saw,
- * such as SessionStart's source. A startup's output opens the first message and any other SessionStart's joins the
- * next one; UserPromptSubmit's follows the prompt it was about.
+ * such as SessionStart's source, or the call's Claude Code tool name. A startup's output opens the first message and
+ * any other SessionStart's joins the next one; UserPromptSubmit's follows the prompt it was about. A call's hooks
+ * append to the result of `toolUseId`, and PostToolBatch's follows the batch's results. Stop's is the message that
+ * keeps the turn going after the model ended it.
  */
 export type HookContextEvent = {
   readonly kind: 'hook-context';
   readonly seq: number;
   readonly at: string;
   readonly notes: readonly HookNote[];
-} & ({ readonly event: 'SessionStart'; readonly matched: SessionStartSource } | { readonly event: 'UserPromptSubmit'; readonly matched?: undefined });
+} & (
+  | { readonly event: 'SessionStart'; readonly matched: SessionStartSource }
+  | { readonly event: 'UserPromptSubmit' | 'PostToolBatch'; readonly matched?: undefined }
+  | { readonly event: 'Stop'; readonly matched?: undefined }
+  | { readonly event: CallHookEvent; readonly matched: string; readonly toolUseId: string }
+);
 
 /** Claude Code's label for a hook: `SessionStart:startup`, `PostToolUse:Bash`, or the bare event. */
 export const hookLabel = (event: HookEventName, matched: string | undefined): string => (matched === undefined ? event : `${event}:${matched}`);
@@ -492,25 +585,44 @@ export type PreToolUseInput = {
   readonly agent_type?: string;
 };
 
-/** Each running event's own fields. P15 and P16 add their events here. */
+/** A call that ran, as PostToolBatch lists it. */
+export type BatchCall = { readonly tool_name: string; readonly tool_input: unknown; readonly tool_use_id: string; readonly tool_response: unknown };
+
+/** The subagent a hook fires for, as Claude Code names it; a hook of the session's own model has neither field. */
+type AgentFields = { readonly agent_id?: string; readonly agent_type?: string };
+
+/** Each running event's own fields. P16 adds its events here. */
 export type HookEventInputs = {
   readonly SessionStart: { readonly source: SessionStartSource };
   readonly SessionEnd: { readonly reason: SessionEndReason };
   readonly UserPromptSubmit: { readonly prompt: string };
   readonly PreToolUse: PreToolUseInput;
+  /** `duration_ms` runs from the call's start to its result: after its PreToolUse hooks, with any question to the user. */
+  readonly PostToolUse: PreToolUseInput & { readonly tool_response: unknown; readonly duration_ms: number };
+  /** `error` is the result the model reads, `Exit code 1` and the output for a command. Geno runs no hook for a call the user stopped. */
+  readonly PostToolUseFailure: PreToolUseInput & { readonly error: string; readonly is_interrupt: false; readonly duration_ms: number };
+  readonly PostToolBatch: AgentFields & { readonly tool_calls: readonly BatchCall[] };
+  /** Geno sends no `background_tasks` or `session_crons`. */
+  readonly Stop: { readonly stop_hook_active: boolean; readonly last_assistant_message: string };
 };
 
 export type RunningHookEvent = keyof HookEventInputs;
 
+const toolMatched = (input: PreToolUseInput): string => CLAUDE_TOOL_NAMES[input.tool_name] ?? input.tool_name;
+
 /**
  * The value an event's matcher is tested against: Geno's tool name for a tool event, which a matcher may also name by
- * Claude Code's (`matcherMatches`). UserPromptSubmit has no matcher.
+ * Claude Code's (`matcherMatches`). UserPromptSubmit, PostToolBatch and Stop have no matcher.
  */
 export const MATCHED_FIELD: { readonly [E in RunningHookEvent]: (input: HookEventInputs[E]) => string | undefined } = {
   SessionStart: (input) => input.source,
   SessionEnd: (input) => input.reason,
   UserPromptSubmit: () => undefined,
-  PreToolUse: (input) => CLAUDE_TOOL_NAMES[input.tool_name] ?? input.tool_name,
+  PreToolUse: toolMatched,
+  PostToolUse: toolMatched,
+  PostToolUseFailure: toolMatched,
+  PostToolBatch: () => undefined,
+  Stop: () => undefined,
 };
 
 /**
@@ -524,7 +636,7 @@ export const HOOKS_METHOD = '_gcode/hooks';
 
 export type HooksRequest = { readonly cwd: string };
 
-/** `untrusted` is a workspace hook in a workspace the editor does not trust; P14 to P16 and `never` are events Geno does not fire. */
+/** `untrusted` is a workspace hook in a workspace the editor does not trust; P16 and `never` are events Geno does not fire. */
 export type HookStatus = 'runs' | 'untrusted' | Exclude<HookSupport, 'runs'>;
 
 export type HookRow = {

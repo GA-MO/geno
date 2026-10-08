@@ -74,16 +74,24 @@ const AFTER_STOP: Record<StopReason, LoopStep> = {
   model_context_window_exceeded: done('error'),
 };
 
-type ConversationEvent = Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' | 'mode' | 'notice' | 'effort' | 'title' | 'child-start' | 'child-end' | 'lane-apply' | 'background-end' | 'wait' | 'wake' | 'backend-start' | 'backend-model' | 'spinoff' | 'chapter' | 'cut' | 'compact' | 'file-changed' | 'hook-context' }>;
+/** A Stop hook's block: the one hook output that keeps the conversation going, after the model ended its turn. */
+type StopFeedback = Extract<TurnEvent, { kind: 'hook-context'; event: 'Stop' }>;
+
+const isStopFeedback = (event: TurnEvent): event is StopFeedback => event.kind === 'hook-context' && event.event === 'Stop';
+
+type ConversationEvent =
+  | Exclude<TurnEvent, { kind: 'checkpoint' | 'restored' | 'review' | 'retry' | 'mode' | 'notice' | 'effort' | 'title' | 'child-start' | 'child-end' | 'lane-apply' | 'background-end' | 'wait' | 'wake' | 'backend-start' | 'backend-model' | 'spinoff' | 'chapter' | 'cut' | 'compact' | 'file-changed' | 'hook-context' }>
+  | StopFeedback;
 type EventOf<K extends ConversationEvent['kind']> = Extract<ConversationEvent, { kind: K }>;
 
-const isConversation = (event: TurnEvent): event is ConversationEvent => IN_CONVERSATION[event.kind];
+const isConversation = (event: TurnEvent): event is ConversationEvent => IN_CONVERSATION[event.kind] || isStopFeedback(event);
 
 const AFTER_EVENT: { [K in ConversationEvent['kind']]: (event: EventOf<K>) => LoopStep } = {
   'session-start': () => done('end_turn'),
   user: () => CALL,
   'tool-result': () => CALL,
   'report-nudge': () => CALL,
+  'hook-context': () => CALL,
   assistant: ({ stopReason }) => (stopReason === null ? done('error') : AFTER_STOP[stopReason]),
   error: ({ error }) => done(ERROR_REASON[error]),
 };
@@ -183,3 +191,23 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);
 }
+
+/** Claude Code's `stop_hook_active`: a Stop hook already kept this run going. */
+export const stopHookActive = (events: readonly TurnEvent[], run: Run): boolean => thisRun(events, run).some(isStopFeedback);
+
+/**
+ * Whether a Stop hook's block may keep the turn going: once in a row. After a block, the model must call a tool before
+ * another block counts, so a hook that always blocks cannot loop the model; the run's limits bound the rest.
+ */
+export function stopMayContinue(events: readonly TurnEvent[], run: Run): boolean {
+  const ran = thisRun(events, run);
+  const last = ran.findLastIndex(isStopFeedback);
+  return last === -1 || ran.slice(last + 1).some((e) => e.kind === 'tool-result');
+}
+
+/** Whether the model ended the turn itself, which fires Stop, rather than the user's no or a subagent's report. */
+export const modelEndedTurn = (events: readonly TurnEvent[], run: Run): boolean => lastLiveEvent(events, run).kind === 'assistant';
+
+/** Claude Code's `last_assistant_message`: the text of the newest model turn. */
+export const lastAssistantText = (events: readonly TurnEvent[]): string =>
+  newestTurn(events)?.turn.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n') ?? '';
