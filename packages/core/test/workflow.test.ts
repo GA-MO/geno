@@ -571,6 +571,13 @@ describe('resume', () => {
     expect(parseWorkflowInput({ name: 'three', resume: ' 0a1b ' })).toEqual({ ok: true, value: { name: 'three', input: '', resume: '0a1b' } });
     expect(parseWorkflowInput({ name: 'three', resume: '../x' }).ok).toBe(false);
     expect(parseWorkflowInput({ resume: '0a1b' })).toEqual({ ok: false, problem: 'resume needs the name of the workflow it resumes' });
+    expect(parseWorkflowCommand('three --resume'), 'a bare --resume names no run, and is not the input').toEqual({ name: 'three', input: '', resume: '' });
+    expect(parseWorkflowCommand('three   --resume  ')).toEqual({ name: 'three', input: '', resume: '' });
+    expect(parseWorkflowCommand('three --resumes')).toEqual({ name: 'three', input: '--resumes' });
+    expect(parseWorkflowInput({ name: 'three', resume: '' })).toEqual({
+      ok: false,
+      problem: "resume needs the session id of the run to resume, which that run's report and its Tasks row name: /workflow <name> --resume <run>",
+    });
     const preview = workflowPreview(spec(THREE), 'a.ts', BUILTIN_AGENTS, { model: 'qwen3.8-flash', rates: (model) => PRICES.modelstudio[model] });
     expect(previewQuestion({ ...preview, resume: { run: 'run-1', replays: ['one', 'two'] } })).toMatch(/^Resume workflow review-fix-verify from run run-1: 3 steps, 2 replayed with no model call, about \$0\.\d+, at most \$0\.09 \(cap \$0\.50\)\?$/);
   });
