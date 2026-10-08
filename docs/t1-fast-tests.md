@@ -168,6 +168,39 @@ Each moved check still catches a defect. `scripts/defect-check.sh` made each cha
 
 One change went unseen. With `frameOf(working, false)` in `working-dino.ts`, the pose under reduced motion still holds its frame, because the view also stops its tick timer when Noodle is still. The two guards cover each other, so no single change shows the check working, in the browser or in VS Code.
 
+## stall
+
+`stall` became the longest file once `start` and `working` were split, at about 40.7 s. It checks a model call that goes quiet, from the engine's watchdogs to the working row: the row counts the thinking, the try that goes quiet is retried, and the row says the retry has had no response. Timestamps of each request to the file's fake server, from one run on 2026-10-08 at 23:13, showed where its 42.7 s went:
+
+| Span | Time | What it waits for |
+| --- | --- | --- |
+| Panel open to the prompt sent | 3.5 s | The window's folder switch and the panel |
+| The first try thinking | 4 s | 20 deltas, 200 ms apart |
+| The first try silent | 3 s | The idle limit, `GCODE_STREAM_IDLE_TIMEOUT_MS` |
+| The retry's wait | 1 s | `Retrying in 1s`, the engine's backoff |
+| The retry's row to say "No response" | 30.7 s | `QUIET_SHOWN_MS` in `call-progress.ts`, which has no knob |
+| The answer and the turn's end | 0.5 s | |
+
+The engine's limits already have knobs, and the file sets them. The 30 s has none: the panel computes the row's label from the try's progress and its own `Date.now()`, and redraws it every second while the turn runs. So once the retry shows on the row, the suite moves the panel's `Date.now` ahead by `QUIET_SHOWN_MS`, and the row's next redraw names the silence. The suite then waits at most 10 s for the label, so a shift that stops working fails the file instead of making it slow again. The first try also thinks for 2 s instead of 4 s, and its idle limit is 1.5 s instead of 3 s, still 7 times the gap between its deltas. Claude Code's 180 s defaults in `stream-watch.ts` are unchanged.
+
+| Run | VS Code time |
+| --- | --- |
+| Before | 42.7 s |
+| With the panel's clock ahead | 11.3 s, 11.7 s |
+| Also with the shorter thinking and idle limit | 7.4 s, 8.7 s |
+
+Each time is vitest's per-file time from one `pnpm test:vscode` run of the file alone in one pooled window. The file stays a VS Code file. Its checks are on the panel, but each label comes from progress that the engine reports through the extension. `webview/progress.webview.test.ts` already checks the labels themselves with progress it writes.
+
+`scripts/defect-check.sh` made each change below, ran the file, and restored the source:
+
+| Defect | stall |
+| --- | --- |
+| A try starts with the idle limit, not the first-byte limit (`stream-watch.ts`) | fails: "timed out waiting for the row to say the retry has had no response" |
+| The running turn's tick no longer redraws the panel (`webview.ts`, `tick`) | fails on the same check |
+| The idle watchdog is not armed at the first byte (`stream-watch.ts`, `bytes`) | fails: "timed out waiting for the quiet try to show its retry" |
+
+The tick defect went unseen in a first version, which moved the clock as soon as the retry notice showed. The retry's first progress then drew the label with the clock already ahead, and no redraw was needed. The suite now waits for the retry's plain `Thinking` row before it moves the clock, so the label changes only through the tick, as it did when the suite waited 30 s.
+
 ## Which files could move
 
 Each of the 46 files falls in one of three groups:
@@ -212,6 +245,7 @@ Each of the 46 files falls in one of three groups:
 | settings | Stays | Secret storage and provider requests |
 | slash | Split | The picker moves; skill and command expansion in the prompt stays |
 | spinoff | Stays | Starting a suggested task runs it |
+| stall | Stays | The engine's watchdogs and retry, as the working row shows them; the labels alone are in `webview/progress.webview.test.ts` |
 | start | Split, done | The start page, Noodle and the peek moved; the project, branch and sessions the extension and engine find, a replayed session and a follow-up stay |
 | steer | Stays | Steering lands in the engine's next tool round |
 | style | Browser | Ported in T1; two checks stay in VS Code |
@@ -225,7 +259,7 @@ Each of the 46 files falls in one of three groups:
 | widget | Split | The widget frame and its sandbox attributes move; Copy as Image and the widget tab stay |
 | working | Split, done | The dino's place, reduced motion and a second turn moved; the poses the engine's steps and check bring stay |
 
-That is 3 Browser, 15 Split and 28 Stays. The classification comes from each suite's checks and the VS Code APIs it calls. Only the five ported files are proven.
+That is 3 Browser, 15 Split and 29 Stays, with `stall`, which came after the first 46. The classification comes from each suite's checks and the VS Code APIs it calls. Only the five ported files are proven.
 
 ## Next steps
 
@@ -233,7 +267,7 @@ In order of what each saves:
 
 1. **Port `start` and `working`.** Done: about 93 s and 86 s in VS Code before, 2.3 s and 7.5 s after (see above). The somersault check that failed under load runs in the browser now.
 2. **Stop the screenshot loops from sleeping when nothing takes a screenshot.** Without `GCODE_SCREENSHOTS`, each loop still switches the theme three times and back, with 1.8 s of sleep per switch: at least 547 s of the 1,760 s of file time, about 180 s of a run at N=3. Returning early from each suite's `screenshots()` when the variable is unset removes them. The cost is that a normal run no longer switches themes in VS Code. The browser tests check the themes instead. Done in T3 (`suite/shooting.ts`), with the window pool in `docs/testing.md`.
-3. **Port the 13 other Split files, only where it pays.** Each would keep a short VS Code file for its end-to-end checks and move its panel checks to the browser. Since T3 stopped the screenshot loops, little of their time is panel checks. A full `pnpm test:vscode` run on 2026-10-08 at 22:59, from another checkout, timed them at 3.6 s (`attachments`) to 14.2 s (`composer`), 96 s together. Most of each file is its window's folder switch, the engine and the model turns, which stay. A port saves a few seconds a file at most. `stall`, at 40.7 s, is now the longest file, and is not in the table above: classify it next.
+3. **Port the 13 other Split files, only where it pays.** Each would keep a short VS Code file for its end-to-end checks and move its panel checks to the browser. Since T3 stopped the screenshot loops, little of their time is panel checks. A full `pnpm test:vscode` run on 2026-10-08 at 22:59, from another checkout, timed them at 3.6 s (`attachments`) to 14.2 s (`composer`), 96 s together. Most of each file is its window's folder switch, the engine and the model turns, which stay. A port saves a few seconds a file at most. `stall`, at 40.7 s, was the longest file then. It stays a VS Code file and now takes about 8 s (see above).
 4. **Harden the three timing flakes.** `attention-reload.ts` waits 30 s for a card to show again. Whether that is a slow replay under load, or a card that is sometimes never shown again, needs the engine log of a failing run. `waits.ts` presses Escape once and waits.
 5. **Fix the stuck-request check in `suite/commands.ts`.** It reads a scroll-state query in the same task as the scroll, so it passes only while the request was stuck before.
 6. **Stop the test engines.** An engine outlives its window by design, and some from test runs stay alive after the run's TMPDIR is gone: three from other worktrees, 5 to 10 hours old, and three from this branch's runs, which ignored SIGTERM. The suite teardown could stop the engine for its `GCODE_HOME`.
