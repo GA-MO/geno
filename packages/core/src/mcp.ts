@@ -8,12 +8,16 @@ import { neutralizeNoticeLines } from './fence.js';
  * Where a server definition came from. The order is precedence: a later source's server replaces an earlier one's of
  * the same name. `builtin` is Geno's own browser, whose name no other source may take.
  */
-export const MCP_SOURCES = ['global', 'vscode-mcp-json', 'mcp-json', 'acp', 'builtin'] as const;
+export const MCP_SOURCES = ['global', 'plugin', 'vscode-mcp-json', 'mcp-json', 'acp', 'builtin'] as const;
 export type McpSource = (typeof MCP_SOURCES)[number];
 
-/** A workspace file is written by whoever wrote the repository, so its servers wait for the user's approval. */
+/**
+ * A workspace file is written by whoever wrote the repository, and a plugin's by whoever wrote the plugin, so their
+ * servers wait for the user's approval.
+ */
 export const MCP_SOURCE_TRUST: Readonly<Record<McpSource, 'needs-approval' | 'trusted'>> = {
   global: 'trusted',
+  plugin: 'needs-approval',
   'vscode-mcp-json': 'needs-approval',
   'mcp-json': 'needs-approval',
   acp: 'trusted',
@@ -23,6 +27,7 @@ export const MCP_SOURCE_TRUST: Readonly<Record<McpSource, 'needs-approval' | 'tr
 /** The file each source is read from, relative to the workspace or the app home; ACP has none. */
 export const MCP_SOURCE_LABELS: Readonly<Record<McpSource, string>> = {
   global: 'mcp.json in the app home',
+  plugin: 'a Claude Code plugin',
   'vscode-mcp-json': '.vscode/mcp.json',
   'mcp-json': '.mcp.json',
   acp: 'the editor',

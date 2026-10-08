@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -204,5 +205,40 @@ describe.each(WIRES)('MCP rules on the %s wire', (wire: Wire) => {
       error: true,
       text: expect.stringContaining('matches the workspace rule that denies `mcp__docs__*`, which the user set in .claude/settings.json'),
     });
+  }, 60_000);
+});
+
+describe.each(WIRES)("a Claude Code plugin's MCP server on the %s wire", (wire: Wire) => {
+  it('C/C-55 is not approved until the user trusts it, then its tools reach the model under the names Claude Code gives them', async () => {
+    const name = 'plugin_docs_fake';
+    const run = await scripted(wire, [
+      say('Noted.'),
+      call('Loading.', [{ id: 'tu_load', name: 'tool_search', input: { select: [`mcp__${name}__echo`] } }]),
+      call('Echoing.', [{ id: 'tu_echo', name: `mcp__${name}__echo`, input: { text: 'plugin' } }]),
+      say('It answered.'),
+    ]);
+    const home = run.env['HOME']!;
+    const plugin = path.join(home, 'plugin-cache', 'docs');
+    const marker = path.join(home, 'spawned');
+    const pluginFiles: Readonly<Record<string, unknown>> = {
+      [path.join(plugin, '.claude-plugin', 'plugin.json')]: { name: 'docs' },
+      [path.join(plugin, '.mcp.json')]: { fake: fake({ MARKER: marker }) },
+      [path.join(home, '.claude', 'plugins', 'installed_plugins.json')]: { version: 2, plugins: { 'docs@market': [{ scope: 'user', installPath: plugin }] } },
+    };
+    for (const [file, value] of Object.entries(pluginFiles)) {
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, JSON.stringify(value));
+    }
+
+    expect((await agent(run, 'Use the plugin.')).code).toBe(0);
+    const first = run.openings()[0]!.first;
+    expect(first).toContain(`- ${name}: not approved for this workspace yet. The user can approve it in the editor's MCP servers view or with \`gcode mcp trust ${name}\`.`);
+    expect(first).not.toContain(`mcp__${name}__`);
+    expect(existsSync(marker), 'an unapproved plugin server never runs').toBe(false);
+
+    expect((await run.cli(['mcp', 'trust', name, '--workspace', run.workspace])).code).toBe(0);
+    expect((await agent(run, 'Echo through the plugin.')).code).toBe(0);
+    expect(run.openings()[1]!.first).toContain(`- mcp__${name}__echo: Echo the text back.`);
+    expect(run.seen()[3]!.results[0]).toEqual({ id: 'tu_echo', error: false, text: 'echo: plugin' });
   }, 60_000);
 });
