@@ -58,7 +58,19 @@ export type PolicyInput = {
 /** Where the user's CLIs keep keys and tokens, under the home folder. Auto lets the classifier judge reads outside the workspace, so these stay unreadable whatever it says. */
 export const CREDENTIAL_PATHS = ['.ssh', '.aws', '.azure', '.config/gcloud', '.config/gh', '.docker', '.gnupg', '.kube', '.netrc'] as const;
 
-/** Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. */
+/** The variable that turns on the sandbox's network for some hosts, which the editor's `gcode.sandbox.allowedDomains` sets. */
+export const SANDBOX_DOMAINS_ENV = 'GCODE_SANDBOX_ALLOWED_DOMAINS';
+const SANDBOX_DOMAIN = /^(?:\*\.)?[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/;
+
+/** The hosts commands may reach, comma or space separated, as sandbox-runtime takes them: `example.com` or `*.example.com`. Unset is none. */
+export const sandboxDomainsOf = (env: Readonly<Record<string, string | undefined>>): readonly string[] =>
+  (env[SANDBOX_DOMAINS_ENV] ?? '').split(/[\s,]+/).filter((domain) => SANDBOX_DOMAIN.test(domain));
+
+/**
+ * Writes in the workspace and temp dir only; no reads of eval answers, keys or the repos tasks are cut from. No network
+ * unless the engine was started with an allowlist: sandbox-runtime keeps one per process, so every sandbox the engine
+ * opens takes the engine's own.
+ */
 export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> {
   const repos = (await readTasks(input.store)).map((task) => task.repo);
   return {
@@ -71,7 +83,7 @@ export async function sandboxPolicy(input: PolicyInput): Promise<SandboxPolicy> 
       ...(input.denyRead ?? []),
     ]),
     readable: await withRealPaths([input.workspace]),
-    allowedDomains: input.allowedDomains ?? [],
+    allowedDomains: input.allowedDomains ?? sandboxDomainsOf(process.env),
   };
 }
 

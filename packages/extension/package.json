@@ -379,6 +379,15 @@
           "default": true,
           "markdownDescription": "Let a turn end while the background work it started still runs, and start a turn by itself when that work reports: a background subagent's report, a background command's end, a `monitor` match or a `schedule_wakeup`. It never starts one while you type, while a card waits for you, or while a turn runs, and pauses after 12 such turns in an hour. Off, a turn waits for its background subagents, and the rest waits for your next message. A change applies to the turns that start after it."
         },
+        "gcode.sandbox.allowedDomains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "markdownDescription": "Hosts the commands Geno runs may reach from the sandbox, such as `registry.npmjs.org` or `*.githubusercontent.com`. Empty, the default, keeps the sandbox off the network. The list applies to every workspace, since the sandbox keeps one per engine, and a change restarts the engine. Web fetches and the browser follow the workspace's `WebFetch(domain:...)` and `Browser(domain:...)` rules instead."
+        },
         "gcode.pages.folder": {
           "type": "string",
           "default": "geno-pages",

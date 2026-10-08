@@ -157,6 +157,16 @@ export function resumeEnvOf(settings: Settings): Record<string, string> {
 /** The `gcode.wake.auto` setting as the engine reads it: only off needs saying. */
 export const wakeEnvOf = (settings: Settings): Record<string, string> => (settings.get<unknown>('wake.auto', true) === false ? { GCODE_AUTO_WAKE: 'off' } : {});
 
+/**
+ * The `gcode.sandbox.allowedDomains` setting as the engine reads it: only a list with hosts needs saying. Only the
+ * user's own value counts, as for the base URL, since a repository's settings must not open the network.
+ */
+export function sandboxEnvOf(settings: Settings): Record<string, string> {
+  const value = settings.inspect<unknown>('sandbox.allowedDomains')?.globalValue;
+  const domains = Array.isArray(value) ? value.filter((domain): domain is string => typeof domain === 'string' && domain.trim() !== '').map((domain) => domain.trim()) : [];
+  return domains.length === 0 ? {} : { GCODE_SANDBOX_ALLOWED_DOMAINS: domains.join(',') };
+}
+
 /** For the output channel: everything about the runtime except the key itself. */
 export const describeRuntime = (runtime: ModelRuntime): string =>
   `${runtime.provider}, model ${runtime.model ?? 'default'}, key from ${runtime.key?.source ?? 'nowhere'}`;

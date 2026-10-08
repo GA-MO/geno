@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { childEnv } from '../src/child-env.js';
 import { EngineError } from '../src/errors.js';
-import { CREDENTIAL_PATHS, openSandbox, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
+import { CREDENTIAL_PATHS, openSandbox, sandboxDomainsOf, sandboxPolicy, type Sandbox } from '../src/sandbox.js';
 import { openStore } from '../src/store.js';
 import { makeRepo } from './git-fixture.js';
 
@@ -82,6 +82,14 @@ describe('the bash sandbox', () => {
       `node -e "fetch('https://example.com').then(() => process.exit(0), () => process.exit(7))" && curl -sS -m 5 https://example.com`,
     );
     expect(result.code).not.toBe(0);
+  });
+});
+
+describe('the sandbox network allowlist', () => {
+  it('B/B-87 is off unless the engine was started with hosts, and keeps only what sandbox-runtime takes as a host', () => {
+    expect(sandboxDomainsOf({})).toEqual([]);
+    expect(sandboxDomainsOf({ GCODE_SANDBOX_ALLOWED_DOMAINS: '' })).toEqual([]);
+    expect(sandboxDomainsOf({ GCODE_SANDBOX_ALLOWED_DOMAINS: 'registry.npmjs.org, *.github.com https://x.test/a *' })).toEqual(['registry.npmjs.org', '*.github.com']);
   });
 });
 
