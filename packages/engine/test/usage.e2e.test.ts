@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { asSessionId, PARTS, type SessionSpend, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { answer, fakeTransport, toolCall } from './fake-transport.js';
+import { fakeModel } from './fake-model.js';
+import { answer, toolCall } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
 
@@ -28,11 +29,16 @@ const sessionIdOf = (stdout: string): string => /^session: (\S+)$/m.exec(stdout)
 describe('gcode usage', () => {
   it('logs each request split into parts and prints where the session’s tokens went', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': `${'export const a = 1;\n'.repeat(400)}` });
-    const transport = fakeTransport([
-      toolCall('Reading.', [{ id: 'tu_1', name: 'read', input: { path: 'a.ts' } }], { input: 200, cacheRead: 0, cacheWrite: 6000 }),
-      answer('It exports a.', { input: 3000, cacheRead: 6000, cacheWrite: 0 }),
-    ]);
-    const ran = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'What does a.ts export?'], env, { fetch: transport.fetch });
+    // Recorded: a change to either request misses here, with the file to record again, before the usage is checked.
+    const model = fakeModel({
+      recording: 'usage-e2e',
+      fallback: [
+        { anthropic: toolCall('Reading.', [{ id: 'tu_1', name: 'read', input: { path: 'a.ts' } }], { input: 200, cacheRead: 0, cacheWrite: 6000 }) },
+        { anthropic: answer('It exports a.', { input: 3000, cacheRead: 6000, cacheWrite: 0 }) },
+      ],
+    });
+    const ran = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'What does a.ts export?'], env, { fetch: model.fetch });
+    expect(model.misses).toEqual([]);
     expect(ran.code).toBe(0);
     const id = sessionIdOf(ran.stdout);
     const calls = (await readSessionLog(sessionFile(store, asSessionId(id)))).events.filter((e): e is Extract<TurnEvent, { kind: 'assistant' }> => e.kind === 'assistant');
