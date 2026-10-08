@@ -11,7 +11,7 @@ import {
   agentToolDefinition,
   asSessionId,
   type AssistantTurn,
-  BUILTIN_AGENTS,
+  builtinAgents,
   childCaps,
   type ChildCaps,
   type ChildEnd,
@@ -40,6 +40,7 @@ import {
   messageAgentResult,
   nextSeq,
   type ParentMoment,
+  type SubagentModels,
   parseAgentDefinition,
   parseLaneName,
   type LaneName,
@@ -91,7 +92,9 @@ const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (wor
 /** Each problem names its file; a file that cannot be used is reported and skipped, never thrown. */
 export type AgentScan = { readonly agents: readonly AgentDefinition[]; readonly problems: readonly string[] };
 
-async function loadAgentDir(dir: string, source: AgentSource, namespace: string, show: (file: string) => string, problems: string[]): Promise<AgentDefinition[]> {
+type DirLoad = { readonly show: (file: string) => string; readonly problems: string[]; readonly models: SubagentModels };
+
+async function loadAgentDir(dir: string, source: AgentSource, namespace: string, { show, problems, models }: DirLoad): Promise<AgentDefinition[]> {
   const agents: AgentDefinition[] = [];
   for (const entry of await sortedEntries(dir)) {
     if (!entry.name.endsWith('.md')) continue;
@@ -99,7 +102,7 @@ async function loadAgentDir(dir: string, source: AgentSource, namespace: string,
     const raw = await readIfFile(file);
     if (raw === undefined) continue;
     const { fields, body } = parseFrontmatter(raw);
-    const parsed = parseAgentDefinition(fields, body, { source, path: show(file), fallbackName: entry.name.slice(0, -'.md'.length), namespace });
+    const parsed = parseAgentDefinition(fields, body, { source, path: show(file), fallbackName: entry.name.slice(0, -'.md'.length), namespace }, models);
     if (parsed.kind === 'skipped') {
       problems.push(`${show(file)}: skipped, ${parsed.reason}`);
       continue;
@@ -110,17 +113,20 @@ async function loadAgentDir(dir: string, source: AgentSource, namespace: string,
   return agents;
 }
 
-/** The agents a session can start, with Claude Code plugins' agents read in place and named `<plugin>:<agent>`. */
-export async function loadAgents(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[]): Promise<AgentScan> {
-  const show = (file: string) => shownPath(workspace, file);
+/**
+ * The agents a session can start, with Claude Code plugins' agents read in place and named `<plugin>:<agent>`, and
+ * each one's model resolved against `models`.
+ */
+export async function loadAgents(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[], models: SubagentModels): Promise<AgentScan> {
   const problems: string[] = [];
+  const load: DirLoad = { show: (file: string) => shownPath(workspace, file), problems, models };
   const groups = [];
   for (const folder of AGENT_FOLDERS) {
     const dir = folder.dir(workspace, homes);
-    if (dir !== undefined) groups.push(await loadAgentDir(dir, folder.source, '', show, problems));
+    if (dir !== undefined) groups.push(await loadAgentDir(dir, folder.source, '', load));
   }
-  for (const plugin of plugins) groups.push(await loadAgentDir(path.join(plugin.root, 'agents'), 'plugin', `${plugin.name}:`, show, problems));
-  const agents = mergeAgents([...groups, BUILTIN_AGENTS]);
+  for (const plugin of plugins) groups.push(await loadAgentDir(path.join(plugin.root, 'agents'), 'plugin', `${plugin.name}:`, load));
+  const agents = mergeAgents([...groups, builtinAgents(models)]);
   for (const agent of groups.flat()) {
     const winner = agents.find((a) => a.name === agent.name)!;
     if (agent.source === 'workspace' && winner.source === 'global') problems.push(`${agent.path}: not loaded, because your own agent ${agent.name} (${winner.path}) has its name`);

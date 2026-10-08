@@ -29,7 +29,7 @@ export type AgentDefinition = {
   readonly description: string;
   /** The Geno tools the child may call, sorted. */
   readonly tools: readonly AgentToolName[];
-  /** Undefined runs the child on the parent's model. */
+  /** Undefined runs the child on the parent's model. Aliases and the fallback are resolved when the definition loads. */
   readonly model: string | undefined;
   /** Undefined takes the parent's effort. */
   readonly effort: Effort | undefined;
@@ -69,8 +69,38 @@ const isAgentTool = (raw: string): raw is AgentToolName => (CHILD_TOOL_NAMES as 
 
 const KNOWN_FIELDS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'maxTurns', 'isolation', 'maxCost', 'backend']);
 
-/** Claude model aliases name another provider's models, so a child given one runs on the parent's model. */
-const INHERITED_MODELS = new Set(['inherit', 'sonnet', 'opus', 'haiku', 'fable']);
+/** Claude Code's model aliases. Each is a slot the user fills with a model id of the session's provider. */
+export const MODEL_ALIASES = ['haiku', 'sonnet', 'opus', 'fable'] as const;
+export type ModelAlias = (typeof MODEL_ALIASES)[number];
+
+const isModelAlias = (raw: string): raw is ModelAlias => (MODEL_ALIASES as readonly string[]).includes(raw);
+
+/**
+ * The models children run on: `fallback` for a definition that names none, and the id each alias stands for. An
+ * undefined one runs the child on its parent's model.
+ */
+export type SubagentModels = { readonly fallback: string | undefined; readonly aliases: { readonly [A in ModelAlias]?: string | undefined } };
+
+export const NO_SUBAGENT_MODELS: SubagentModels = { fallback: undefined, aliases: {} };
+
+export const SUBAGENT_MODEL_ENV = 'GCODE_SUBAGENT_MODEL';
+
+export const aliasModelEnv = (alias: ModelAlias): string => `GCODE_${alias.toUpperCase()}_MODEL`;
+
+export function subagentModelsOf(env: Readonly<Record<string, string | undefined>>): SubagentModels {
+  const set = (name: string) => env[name]?.trim() || undefined;
+  return { fallback: set(SUBAGENT_MODEL_ENV), aliases: Object.fromEntries(MODEL_ALIASES.map((alias) => [alias, set(aliasModelEnv(alias))])) };
+}
+
+/** `inherit` is the parent's model, which no fallback replaces; an alias with no id set takes the fallback. */
+function definitionModel(raw: string, models: SubagentModels, notes: string[]): string | undefined {
+  if (raw === '') return models.fallback;
+  if (raw === 'inherit') return undefined;
+  if (!isModelAlias(raw)) return raw;
+  const id = models.aliases[raw];
+  if (id === undefined) notes.push(`model ${raw} is a Claude alias and ${aliasModelEnv(raw)} is not set; ${models.fallback === undefined ? "the parent's model" : models.fallback} runs it`);
+  return id ?? models.fallback;
+}
 
 export type FrontmatterFields = Readonly<Record<string, string | readonly string[]>>;
 
@@ -93,7 +123,7 @@ const positive = (raw: string, integer: boolean): number | undefined => {
  * One agent file's frontmatter and body as a definition. Unknown fields, tools Geno lacks and values it cannot use
  * become notes; only a file with no description is skipped, as Claude Code skips it.
  */
-export function parseAgentDefinition(fields: FrontmatterFields, body: string, origin: Origin): ParsedAgent {
+export function parseAgentDefinition(fields: FrontmatterFields, body: string, origin: Origin, models: SubagentModels): ParsedAgent {
   const description = text(fields['description']);
   if (description === '') return { kind: 'skipped', reason: 'it has no description' };
   const notes: string[] = [];
@@ -111,9 +141,7 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
   const tools = [...new Set(granted)].filter((tool) => !denied.has(tool)).toSorted();
   if (tools.length === 0) return { kind: 'skipped', reason: 'it leaves no tool Geno has' };
 
-  const rawModel = text(fields['model']);
-  const model = rawModel === '' || INHERITED_MODELS.has(rawModel) ? undefined : rawModel;
-  if (rawModel !== '' && rawModel !== 'inherit' && model === undefined) notes.push(`model ${rawModel} is a Claude alias; the parent's model runs it`);
+  const model = definitionModel(text(fields['model']), models, notes);
 
   const rawEffort = text(fields['effort']);
   const effort = (EFFORTS as readonly string[]).includes(rawEffort) ? (rawEffort as Effort) : undefined;
@@ -236,6 +264,10 @@ Report findings, most severe first. Each finding is one line: the severity (high
   }),
   ...EXTERNAL_BACKEND_IDS.map(backendAgent),
 ];
+
+/** The built-ins on the fallback model; one on an external agent runs on that agent's own. */
+export const builtinAgents = (models: SubagentModels): AgentDefinition[] =>
+  BUILTIN_AGENTS.map((agent) => (agent.backend === undefined ? { ...agent, model: models.fallback } : agent));
 
 /** A fresh child's system prompt: a short frame, then the definition's own instructions. */
 export const childSystemPrompt = (agent: AgentDefinition): string =>
