@@ -1,3 +1,5 @@
+import { MCP_TOOLS_HEADER } from '@g-code/core';
+
 type SseEvent = { readonly type: string } & Record<string, unknown>;
 
 export type Reply = {
@@ -56,12 +58,30 @@ function messageStart(usage: CacheUsage): SseEvent {
 
 export type FakeToolUse = { readonly id: string; readonly name: string; readonly input: unknown };
 
-/** Every tool a request offers: those it defines, and those listed by name in tool_search's description. */
-export function offeredTools(body: { readonly tools?: readonly { readonly name: string; readonly description?: string }[] }): string[] {
+type OfferingBody = {
+  readonly tools?: readonly { readonly name: string; readonly description?: string }[];
+  readonly messages?: readonly unknown[];
+};
+
+const textBlocks = (content: unknown): string[] =>
+  typeof content === 'string'
+    ? [content]
+    : Array.isArray(content)
+      ? content.flatMap((block: { type?: unknown; text?: unknown }) => (block.type === 'text' && typeof block.text === 'string' ? [block.text] : []))
+      : [];
+
+const listedNames = (block: string): string[] => block.split('\n\n')[0]!.split('\n').flatMap((line) => /^- ([A-Za-z0-9_-]+): /.exec(line)?.[1] ?? []);
+
+/**
+ * Every tool a request offers: those it defines, those listed by name in tool_search's description, and the MCP tools
+ * Geno's notices in the conversation name.
+ */
+export function offeredTools(body: OfferingBody): string[] {
   const tools = body.tools ?? [];
-  const block = tools.find((tool) => tool.name === 'tool_search')?.description?.split('The tools:\n')[1] ?? '';
-  const deferred = block.split('\n').flatMap((line) => /^- ([A-Za-z0-9_-]+): /.exec(line)?.[1] ?? []);
-  return [...tools.map((tool) => tool.name), ...deferred];
+  const deferred = listedNames(tools.find((tool) => tool.name === 'tool_search')?.description?.split('The tools:\n')[1] ?? '');
+  const texts = (body.messages ?? []).flatMap((message) => textBlocks((message as { content?: unknown }).content));
+  const announced = texts.flatMap((text) => text.split(MCP_TOOLS_HEADER).slice(1).flatMap(listedNames));
+  return [...tools.map((tool) => tool.name), ...deferred, ...new Set(announced)];
 }
 
 let loads = 0;

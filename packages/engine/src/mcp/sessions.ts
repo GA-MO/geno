@@ -17,7 +17,7 @@ export type McpSessions = {
    * waits for its first call.
    */
   register(sessionId: string, workspace: string, servers: readonly acp.McpServer[], browser: BrowserSettings | undefined): void;
-  toolset(sessionId: string, approval: Approval): Promise<McpToolset>;
+  toolset(sessionId: string, approval: Approval): Promise<McpToolset | undefined>;
   servers(sessionId: string): Promise<McpServersResponse>;
   trust(sessionId: string, name: string, hash: string): Promise<McpServersResponse>;
   setEnabled(sessionId: string, name: string, enabled: boolean): Promise<McpServersResponse>;

@@ -52,7 +52,7 @@ async function runEchoes(mode: SessionMode, reply: PermissionAnswer) {
     classify: async () => ({ verdict: 'ask', reason: 'unsure', model: 'fake', latencyMs: 1, costUsd: 0 }),
     auto: freshAuto(),
   };
-  const toolset = await hub.toolset(approval);
+  const toolset = (await hub.toolset(approval))!;
   const uses: FakeToolUse[] = [
     { id: 'tu_1', name: 'mcp__fake__echo', input: { text: 'one' } },
     { id: 'tu_2', name: 'mcp__fake__echo', input: { text: 'two' } },

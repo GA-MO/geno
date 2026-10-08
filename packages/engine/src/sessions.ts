@@ -359,6 +359,21 @@ const turnEventSchema = z.union([
       ...seqFields,
       mode: z.enum(SESSION_MODES).optional(),
       memory: z.strictObject({ added: z.array(memoryEntrySchema), removed: z.array(memoryEntrySchema) }).optional(),
+      mcp: z
+        .strictObject({
+          added: z.array(z.strictObject({ name: z.string().min(1), hint: z.string() })),
+          removed: z.array(z.string().min(1)),
+          instructions: z.array(z.strictObject({ server: z.string().min(1), text: z.string() })),
+          unavailable: z
+            .array(
+              z.discriminatedUnion('why', [
+                z.strictObject({ server: z.string().min(1), why: z.literal('failed'), reason: z.string() }),
+                z.strictObject({ server: z.string().min(1), why: z.enum(['needs-sign-in', 'untrusted']) }),
+              ]),
+            )
+            .optional(),
+        })
+        .optional(),
     }),
     z.discriminatedUnion('event', [
       z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal('SessionStart'), matched: z.enum(['startup', 'resume', 'compact']), notes: hookNotesSchema }),

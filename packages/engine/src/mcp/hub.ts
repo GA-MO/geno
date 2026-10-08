@@ -12,12 +12,14 @@ import {
   isTrusted,
   mcpDefinitionView,
   MCP_SOURCE_LABELS,
+  mcpBriefing,
   mcpCatalog,
   mcpDenialFor,
   mcpResultText,
   mcpToolDefinitions,
   MAX_MESSAGE_BYTES,
   type ImageAttachment,
+  type McpBriefing,
   type McpContent,
   type McpPromptInfo,
   type McpResourceInfo,
@@ -35,10 +37,11 @@ import { loadMcpConfig } from './config.js';
 import { McpServerHandle } from './server.js';
 import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js';
 
-/** What a turn adds to the agent's tools: definitions for the request, sorted, and their executors. */
-export type McpToolset = { readonly tools: readonly Tool[]; readonly executors: Readonly<Record<string, Executor>> };
-
-export const NO_MCP_TOOLS: McpToolset = { tools: [], executors: {} };
+/**
+ * What a turn adds to the agent's tools: definitions for the request, sorted, and their executors, with what the model
+ * should know of the servers: their instructions, and the ones it cannot use.
+ */
+export type McpToolset = { readonly tools: readonly Tool[]; readonly executors: Readonly<Record<string, Executor>>; readonly briefing: McpBriefing };
 
 /**
  * A session's MCP servers. `start` starts them; `toolset` offers the tools of the servers ready at that moment and
@@ -56,7 +59,8 @@ export type McpHub = {
   trust(name: string, hash?: string): Promise<void>;
   /** Turns a server off for this workspace, stopping it, or back on; the next start starts it. */
   setEnabled(name: string, enabled: boolean): Promise<void>;
-  toolset(approval: Approval): Promise<McpToolset>;
+  /** Undefined for a run that gets no MCP: a non-interactive one that did not turn it on. */
+  toolset(approval: Approval): Promise<McpToolset | undefined>;
   prompts(): Promise<McpPromptInfo[]>;
   resources(): Promise<McpResourceInfo[]>;
   stop(): Promise<void>;
@@ -227,11 +231,13 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       else await handle.disable();
     },
     async toolset(approval) {
-      if (approval.kind === 'non-interactive' && approval.mcp !== true) return NO_MCP_TOOLS;
+      if (approval.kind === 'non-interactive' && approval.mcp !== true) return undefined;
       const catalog = mcpCatalog([...handles.values()].flatMap(offered));
       const executors: Record<string, Executor> = {};
       for (const [name, info] of catalog) executors[name] = toolExecutor(name, info, approval);
-      return { tools: mcpToolDefinitions(catalog), executors };
+      const tools = mcpToolDefinitions(catalog);
+      const servers = [...handles.values()].map((handle) => ({ name: handle.config.name, state: handle.state, instructions: handle.connection?.instructions }));
+      return { tools, executors, briefing: mcpBriefing(tools, servers) };
     },
     prompts: async () => (await Promise.all(ready().map((handle) => handle.connection?.prompts() ?? []))).flat(),
     resources: async () => (await Promise.all(ready().map((handle) => handle.connection?.resources() ?? []))).flat(),
