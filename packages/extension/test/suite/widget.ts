@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { onMac } from './mac-only.js';
 import { THEMES } from './panel-fixture.js';
 import { DOCS, GROW_TITLE, LOADING, PROMPTS, SPEED_TITLE } from './widget-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -66,6 +67,7 @@ async function useTheme(theme: string): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);
     await vscode.commands.executeCommand('notifications.clearAll');

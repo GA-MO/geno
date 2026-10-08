@@ -2,6 +2,7 @@ import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
 import { ANSWER, EDITED, NOTE, PROMPTS, QUESTION, THEMES } from './context-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 const home = () => process.env['GCODE_HOME']!;
@@ -42,6 +43,7 @@ const real = (file: string | undefined) => (file === undefined || !existsSync(fi
 const activeFile = () => real(vscode.window.activeTextEditor?.document.uri.fsPath);
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));

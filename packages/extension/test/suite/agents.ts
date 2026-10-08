@@ -4,6 +4,7 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { CLAUDE, claudeStatus, ENV, FAKE, fakeAdapterScript, fakeAgentScript, fakeClaudeScript, THEMES } from './agents-fixture.js';
 import { check, click, openPanel, panel, panelWidth, press, shown, sleep, textOf, ui, waitFor } from './lanes-ui.js';
+import { SHOOTING } from './shooting.js';
 
 const INSTALL = 'curl https://cursor.com/install -fsS | bash';
 const card = (inner = '') => `.agent-card[data-agent="cursor"] ${inner}`.trim();
@@ -22,6 +23,7 @@ const fitsIn = (selector: string) =>
   );
 
 async function screenshots(name: string, selector = card()): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);

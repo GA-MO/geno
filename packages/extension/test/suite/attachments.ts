@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { IMAGES, PROMPT } from './attachments-fixture.js';
 import { THEMES } from './panel-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -73,6 +74,7 @@ async function useTheme(theme: string): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

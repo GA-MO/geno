@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { THEMES } from './panel-fixture.js';
 import { PROMPTS } from './style-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -72,6 +73,7 @@ async function useTheme(theme: string): Promise<void> {
 
 /** Glass in Dark Modern and Light Modern, native in Dark High Contrast, which keeps it whatever the setting says. */
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   await ui({ do: 'pointerAway' });
   for (const [slug, theme] of Object.entries(THEMES)) {
     await useTheme(theme);

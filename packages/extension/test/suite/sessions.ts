@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ANSWERS, ELSEWHERE, OLDER, PROMPTS, RENAMED, TEMPORARY, THEMES } from './sessions-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -45,6 +46,7 @@ async function showPanel(): Promise<void> {
 }
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));

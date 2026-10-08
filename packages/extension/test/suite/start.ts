@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ANSWER, BRANCH, FOLLOW_UP, SESSIONS, THEMES } from './start-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -74,8 +75,11 @@ async function theme(name: keyof typeof THEMES): Promise<void> {
   await pause(300);
 }
 
+/** Without screenshots, only high contrast is shown, and only on the start page, for its check on Noodle. */
 async function screenshots(name: string): Promise<void> {
-  for (const slug of Object.keys(THEMES) as (keyof typeof THEMES)[]) {
+  const slugs = SHOOTING ? (Object.keys(THEMES) as (keyof typeof THEMES)[]) : (await count('.start-page')) === 1 ? (['high-contrast'] as const) : [];
+  if (slugs.length === 0) return;
+  for (const slug of slugs) {
     await theme(slug);
     await ui({ do: 'screenshot', name: `${name}-${slug}` });
     await ui({ do: 'panelshot', name: `${name}-${slug}-panel` });

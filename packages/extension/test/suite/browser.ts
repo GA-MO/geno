@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PROMPT, THEMES } from './browser-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -37,6 +38,7 @@ const ROW = '.mcp-server[data-server="browser"]';
 const status = () => panel<string | null>(`doc.querySelector(${JSON.stringify(ROW)})?.dataset.status ?? null`);
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));

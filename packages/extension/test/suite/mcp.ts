@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { ENV, PROMPTS, THEMES, USER_SERVER, WORKSPACE_SERVER } from './mcp-fixture.js';
+import { SHOOTING } from './shooting.js';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
@@ -38,6 +39,7 @@ const row = (name: string) => `.mcp-server[data-server="${name}"]`;
 const status = (name: string) => panel<string | null>(`doc.querySelector(${JSON.stringify(row(name))})?.dataset.status ?? null`);
 
 async function screenshots(name: string): Promise<void> {
+  if (!SHOOTING) return;
   for (const [slug, theme] of Object.entries(THEMES)) {
     await vscode.workspace.getConfiguration('workbench').update('colorTheme', theme, vscode.ConfigurationTarget.Global);
     await new Promise((r) => setTimeout(r, 1500));
