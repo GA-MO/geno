@@ -1,0 +1,30 @@
+=== request 1
+model: "gpt-fake"
+messages:
+  - = plain-prompt.openai.golden request 1 messages[0]
+  -
+    role: "user"
+    content:
+      - = plain-prompt.openai.golden request 1 messages[1].content[0]
+      - {"type":"text","text":"What is a?"}
+tools: = plain-prompt.openai.golden request 1 tools
+stream: true
+stream_options: {"include_usage":true}
+
+=== request 2
+model: "gpt-fake"
+messages:
+  - = plain-prompt.openai.golden request 1 messages[0]
+  - = tool-round-trip.openai.golden request 1 messages[1]
+  -
+    role: "assistant"
+    content: "Reading."
+    tool_calls:
+      -
+        id: "tu_read"
+        type: "function"
+        function: {"name":"read","arguments":"{\"path\":\"a.ts\"}"}
+  - {"role":"tool","tool_call_id":"tu_read","content":"1\texport const a = 1;"}
+tools: = plain-prompt.openai.golden request 1 tools
+stream: true
+stream_options: {"include_usage":true}

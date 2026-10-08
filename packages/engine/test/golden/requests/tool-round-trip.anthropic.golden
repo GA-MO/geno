@@ -1,0 +1,40 @@
+=== request 1
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools: = plain-prompt.anthropic.golden request 1 tools
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  -
+    role: "user"
+    content:
+      - = plain-prompt.anthropic.golden request 1 messages[0].content[0]
+      - {"type":"text","text":"What is a?"}
+output_config: {"effort":"medium"}
+stream: true
+
+=== request 2
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools: = plain-prompt.anthropic.golden request 1 tools
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  - = tool-round-trip.anthropic.golden request 1 messages[0]
+  -
+    role: "assistant"
+    content:
+      - {"type":"text","text":"Reading.","citations":null}
+      -
+        type: "tool_use"
+        id: "tu_read"
+        name: "read"
+        caller: {"type":"direct"}
+        input: {"path":"a.ts"}
+  -
+    role: "user"
+    content:
+      -
+        type: "tool_result"
+        tool_use_id: "tu_read"
+        content: "1\texport const a = 1;"
+output_config: {"effort":"medium"}
+stream: true

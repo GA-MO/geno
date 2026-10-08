@@ -16,7 +16,8 @@
     "package": "pnpm --filter ./packages/extension package",
     "gcode": "tsx packages/engine/src/cli.ts",
     "tab:bench": "tsx scripts/tab-bench.mjs",
-    "test:affected": "tsx scripts/test-affected.ts"
+    "test:affected": "tsx scripts/test-affected.ts",
+    "test:golden": "vitest run --project unit packages/engine/test/golden"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

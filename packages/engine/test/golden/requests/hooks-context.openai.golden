@@ -1,0 +1,18 @@
+=== request 1
+model: "gpt-fake"
+messages:
+  - = plain-prompt.openai.golden request 1 messages[0]
+  -
+    role: "user"
+    content:
+      - = plain-prompt.openai.golden request 1 messages[1].content[0]
+      -
+        type: "text"
+        text: "[Geno] SessionStart:startup hook success: You have pstack."
+      - {"type":"text","text":"What is the secret word?"}
+      -
+        type: "text"
+        text: "[Geno] UserPromptSubmit hook additional context: The secret word is BANANA."
+tools: = plain-prompt.openai.golden request 1 tools
+stream: true
+stream_options: {"include_usage":true}
