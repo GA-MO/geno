@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ENVIRONMENT_HEADING } from '@g-code/core';
 import { memoryStore } from '../../src/memory.js';
 import { homeOf } from '../../src/store.js';
-import { call, say, scripted, sessionIdOf, WIRES } from './scripted.js';
+import { call, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
 
 async function writeAll(root: string, files: Readonly<Record<string, string>>): Promise<void> {
   for (const [file, text] of Object.entries(files)) {
@@ -134,5 +134,29 @@ describe.each(WIRES)('instruction files on the %s wire', (wire) => {
     expect(sent.id).toBe('tu_send');
     expect(sent.error).toBe(true);
     expect(sent.text).not.toContain('[exit code');
+  });
+});
+
+describe.each(WIRES)('what a child inherits on the %s wire', (wire) => {
+  const start = (agent: string) => call('', [{ id: `tu_${agent}`, name: 'agent', input: { agent, task: 'Where is a defined?' } }]);
+  const files = { 'a.ts': 'export const a = 1;\n', 'AGENTS.md': 'Project rules.', '.gcode.json': '{"agentTool":["non-interactive"]}\n' };
+
+  it('T-MEM-03 explore and plan start without the instruction files, memory or git status; review keeps them', async () => {
+    const run = await scripted(wire, [start('explore'), report('a.ts:1.'), start('plan'), report('1. Edit a.ts.'), start('review'), report('No findings.'), say('Done.')], files);
+    const home = run.env['HOME']!;
+    await writeAll(home, { '.claude/CLAUDE.md': 'Claude user rules.' });
+    await memoryStore(homeOf(run.store), run.workspace).add('Prefer small commits.', 'global', null);
+    expect((await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Where is a defined?'])).code).toBe(0);
+
+    const [parent, explore, , plan, , review] = run.openings();
+    const kept = ['<project_instructions path="AGENTS.md">', 'Claude user rules.', 'Prefer small commits.', 'Current branch:'];
+    for (const part of kept) expect(parent!.first, part).toContain(part);
+    for (const [name, child] of [['explore', explore], ['plan', plan]] as const) {
+      for (const part of ['<project_instructions', '<global_instructions', 'Project rules.', 'Claude user rules.', '<memory>', 'Current branch:']) expect(child!.first, `${name}: ${part}`).not.toContain(part);
+      expect(child!.first, `${name} still knows where it runs`).toContain(ENVIRONMENT_HEADING);
+      expect(child!.first, `${name} still knows it is in a repository`).toContain(' - Is a git repository: true');
+      expect(child!.first, `${name} cannot load a skill, so it gets no listing`).not.toContain('The text below comes from files');
+    }
+    for (const part of kept) expect(review!.first, `review: ${part}`).toContain(part);
   });
 });

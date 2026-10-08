@@ -118,7 +118,7 @@ export type EnvironmentInput = {
 };
 
 /** The session's environment as it is now, for its session-start event. Nothing here can stop a session from starting. */
-export async function captureEnvironment({ workspace, scratchpad, env, now = new Date() }: EnvironmentInput): Promise<Environment> {
+export async function captureEnvironment({ workspace, scratchpad, env, now = new Date() }: EnvironmentInput): Promise<Environment & { readonly git?: GitSnapshot | undefined }> {
   const [git, project, lane] = await Promise.all([gitSnapshot(workspace), projectFacts(workspace), lanePlace(workspace)]);
   const shell = env['SHELL'];
   return {

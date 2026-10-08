@@ -63,6 +63,7 @@ describe('parseAgentDefinition', () => {
       maxTurns: 6,
       maxCostUsd: 0.03,
       isolation: 'none',
+      omitClaudeMd: false,
       prompt: 'Look around.',
       source: 'workspace',
       path: '.claude/agents/scout.md',
@@ -91,6 +92,11 @@ describe('parseAgentDefinition', () => {
   it('gives every tool when tools is absent, then takes disallowedTools away', () => {
     const { agent } = parsed({ description: 'Most things.', disallowedTools: 'Bash, Edit' });
     expect(agent.tools).toEqual(['check', 'glob', 'grep', 'list', 'read', 'skill']);
+  });
+
+  it("reads omitClaudeMd: true, Geno's own field", () => {
+    expect(parsed({ description: 'Lean.', omitClaudeMd: 'true' })).toMatchObject({ agent: { omitClaudeMd: true }, notes: [] });
+    expect(parsed({ description: 'Full.' }).agent.omitClaudeMd).toBe(false);
   });
 
   it('keeps worktree isolation, which runs each of its children in a lane, with nothing to report', () => {

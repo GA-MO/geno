@@ -2,6 +2,7 @@ import { EXTERNAL_BACKEND_IDS, EXTERNAL_BACKENDS, isExternalBackendId, type Exte
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { CHILD_TOOL_NAMES, type AgentToolName } from './agent.js';
 import { pendingToolUses, type DoneReason } from './loop.js';
+import { EMPTY_CONTEXT, type LoadedContext } from './context.js';
 import { EFFORTS, IN_CONVERSATION, nextSeq, type Effort, type SessionId, type TurnEvent } from './session.js';
 import { BANNER_START, GENO_NOTE, GENO_NOTES_PROMPT, indentLines, instructionPatternsIn, neutralize, REPORT_TAG } from './fence.js';
 import { REPORT_TOOL } from './handback.js';
@@ -37,6 +38,8 @@ export type AgentDefinition = {
   /** Geno's own field: the most the child may spend, in US dollars. */
   readonly maxCostUsd: number | undefined;
   readonly isolation: Isolation;
+  /** A fresh child starts without the instruction files, memory and git status, as Claude Code's Explore and Plan do. */
+  readonly omitClaudeMd: boolean;
   /** The Markdown body: the child's own instructions. */
   readonly prompt: string;
   readonly source: AgentSource;
@@ -67,7 +70,7 @@ const CLAUDE_TOOLS: Readonly<Record<string, AgentToolName>> = {
 
 const isAgentTool = (raw: string): raw is AgentToolName => (CHILD_TOOL_NAMES as readonly string[]).includes(raw);
 
-const KNOWN_FIELDS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'maxTurns', 'isolation', 'maxCost', 'backend']);
+const KNOWN_FIELDS = new Set(['name', 'description', 'tools', 'disallowedTools', 'model', 'effort', 'maxTurns', 'isolation', 'maxCost', 'backend', 'omitClaudeMd']);
 
 /** Claude Code's model aliases. Each is a slot the user fills with a model id of the session's provider. */
 export const MODEL_ALIASES = ['haiku', 'sonnet', 'opus', 'fable'] as const;
@@ -174,6 +177,7 @@ export function parseAgentDefinition(fields: FrontmatterFields, body: string, or
       maxTurns,
       maxCostUsd,
       isolation,
+      omitClaudeMd: text(fields['omitClaudeMd']).toLowerCase() === 'true',
       prompt: body.trim(),
       source: origin.source,
       path: origin.path,
@@ -190,8 +194,11 @@ export function mergeAgents(groups: readonly (readonly AgentDefinition[])[]): Ag
   return [...byName.values()].toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-const builtin = (agent: Omit<AgentDefinition, 'source' | 'path' | 'model' | 'isolation' | 'backend'> & { readonly backend?: ExternalBackendId }): AgentDefinition => ({
+const builtin = (
+  agent: Omit<AgentDefinition, 'source' | 'path' | 'model' | 'isolation' | 'backend' | 'omitClaudeMd'> & { readonly backend?: ExternalBackendId; readonly omitClaudeMd?: boolean },
+): AgentDefinition => ({
   backend: undefined,
+  omitClaudeMd: false,
   ...agent,
   model: undefined,
   isolation: 'none',
@@ -225,6 +232,7 @@ export const BUILTIN_AGENTS: readonly AgentDefinition[] = [
     effort: 'low',
     maxTurns: EXPLORE_TURNS,
     maxCostUsd: 0.02,
+    omitClaudeMd: true,
     prompt: `You are explore, a search subagent. ${READ_ONLY_NOTE}
 You have at most ${EXPLORE_TURNS} model turns, the last of which must deliver your answer. In your first turn, ask for every search you need at once (grep and glob run at the same time), then read only the lines that settle the question.
 Your answer has:
@@ -239,6 +247,7 @@ Cite only lines you saw in a tool result, with the line numbers it showed. Never
     effort: undefined,
     maxTurns: 12,
     maxCostUsd: 0.05,
+    omitClaudeMd: true,
     prompt: `You are plan, a planning subagent. ${READ_ONLY_NOTE}
 Investigate what the change touches, then report a numbered, step-by-step plan. Each step names the files it changes (as path:line where it helps) and what changes in each. End with the risks and how to check the result.`,
   }),
@@ -307,6 +316,16 @@ export function forkOpening(parent: readonly TurnEvent[], toolUseId: string, at:
   );
   return [...copied, ...answers];
 }
+
+/** A loaded context without the instruction files, for a child that omits them. The skills stay for a child that can load one. */
+export const withoutInstructions = (context: LoadedContext, agent: AgentDefinition): LoadedContext => {
+  if (!agent.tools.includes('skill')) return EMPTY_CONTEXT;
+  return {
+    ...EMPTY_CONTEXT,
+    ...(context.skills === undefined ? {} : { skills: context.skills }),
+    ...(context.skillListing === undefined ? {} : { skillListing: context.skillListing }),
+  };
+};
 
 /** The depth of a child of the session `parent` heads: one below its parent, which a log without a depth puts at 1. */
 export const childDepth = (parent: ChildOf | undefined): number => (parent === undefined ? 1 : (parent.depth ?? 1) + 1);

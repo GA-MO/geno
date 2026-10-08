@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asSessionId, replayMessages, renderEnvironment, type Environment, type Session, type TurnEvent } from '../src/index.js';
+import { asSessionId, replayMessages, renderEnvironment, type Environment, type GitSnapshot, type Session, type TurnEvent } from '../src/index.js';
 
 const session: Session = {
   id: asSessionId('s-1'),
@@ -65,8 +65,14 @@ describe('renderEnvironment', () => {
   it('says clean, detached and how many status lines it left out', () => {
     const clean = renderEnvironment({ ...mac, git: { branch: undefined, status: [], moreStatus: 0, commits: [] } }, session);
     expect(clean).toContain('Current branch: none (detached HEAD)\nStatus: clean\nRecent commits: none');
-    const long = renderEnvironment({ ...mac, git: { ...mac.git!, moreStatus: 40 } }, session);
+    const long = renderEnvironment({ ...mac, git: { ...(mac.git as GitSnapshot), moreStatus: 40 } }, session);
     expect(long).toContain('?? notes.md\n(40 more lines; run git status to see them)');
+  });
+
+  it('says a session whose status was omitted is in a repository, and gives no snapshot', () => {
+    const omitted = renderEnvironment({ ...mac, git: 'omitted' }, session);
+    expect(omitted).toContain(' - Is a git repository: true');
+    expect(omitted).not.toMatch(/Git status|Current branch|Recent commits/);
   });
 
   it("says a lane session's lane and warns that the stash stack is shared, and says nothing of lanes outside one", () => {

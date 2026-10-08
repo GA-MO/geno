@@ -129,7 +129,7 @@ const environmentSchema = z.strictObject({
   loginShell: z.string().min(1).optional(),
   scratchpad: z.string().refine(path.isAbsolute, 'must be an absolute path'),
   git: z
-    .strictObject({ branch: z.string().min(1).optional(), status: z.array(z.string()), moreStatus: count, commits: z.array(z.string()) })
+    .union([z.strictObject({ branch: z.string().min(1).optional(), status: z.array(z.string()), moreStatus: count, commits: z.array(z.string()) }), z.literal('omitted')])
     .optional(),
   project: z
     .strictObject({
