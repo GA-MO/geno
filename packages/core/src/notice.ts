@@ -1,15 +1,17 @@
 import { DEFAULT_SESSION_MODE, type SessionMode } from './approval.js';
 import { contextView } from './compact.js';
 import { GENO_NOTE } from './fence.js';
+import { mcpDelta, NO_MCP_BRIEFING, renderMcpDelta, withMcpDelta, type McpBriefing, type McpDelta } from './mcp-notice.js';
 import { memoryDelta, renderMemoryDelta, withDelta, type MemoryDelta, type MemoryEntry } from './memory.js';
 import type { TurnEvent } from './session.js';
 
 /**
- * What changed in the session's settings since the model was last told: the mode the user switched to, and the memory
- * notes added or removed. It is logged at the safe point before a model call and read as a message, so the system
- * prompt and the tools stay byte-stable for the whole session and the cached prefix holds across a change.
+ * What changed in the session's settings since the model was last told: the mode the user switched to, the memory
+ * notes added or removed, and the MCP tools and servers that came or went. It is logged at the safe point before a
+ * model call and read as a message, so the system prompt and the tools stay byte-stable for the whole session and the
+ * cached prefix holds across a change. The session's first MCP notice is its whole briefing, in the first request.
  */
-export type Notice = { readonly mode?: SessionMode | undefined; readonly memory?: MemoryDelta | undefined };
+export type Notice = { readonly mode?: SessionMode | undefined; readonly memory?: MemoryDelta | undefined; readonly mcp?: McpDelta | undefined };
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
@@ -27,7 +29,7 @@ Do not ask to switch modes; the user starts building when the plan looks right.`
 };
 
 /** What the model has been told: the session's opening, then each notice, in the events it reads now. */
-export type Told = { readonly mode: SessionMode; readonly memory: readonly MemoryEntry[] };
+export type Told = { readonly mode: SessionMode; readonly memory: readonly MemoryEntry[]; readonly mcp: McpBriefing };
 
 /**
  * Read from the context view, so a compaction that drops a notice drops what it told, and the next safe point tells
@@ -38,25 +40,32 @@ export function toldOf(events: readonly TurnEvent[]): Told {
   const start = view[0];
   let mode: SessionMode = DEFAULT_SESSION_MODE;
   let memory: readonly MemoryEntry[] = start?.kind === 'session-start' ? (start.memory ?? []) : [];
+  let mcp = NO_MCP_BRIEFING;
   for (const event of view) {
     if (event.kind !== 'notice') continue;
     if (event.mode !== undefined) mode = event.mode;
     if (event.memory !== undefined) memory = withDelta(memory, event.memory);
+    if (event.mcp !== undefined) mcp = withMcpDelta(mcp, event.mcp);
   }
-  return { mode, memory };
+  return { mode, memory, mcp };
 }
 
-/** What to tell the model before its next call, or undefined when it already knows. `mode` is undefined in a run nobody can switch. */
-export function noticeFor(events: readonly TurnEvent[], now: { readonly mode: SessionMode | undefined; readonly memory: readonly MemoryEntry[] }): Notice | undefined {
+/** The session as it is at a safe point. `mode` is undefined in a run nobody can switch, `mcp` in a run without MCP. */
+export type Now = { readonly mode: SessionMode | undefined; readonly memory: readonly MemoryEntry[]; readonly mcp?: McpBriefing | undefined };
+
+/** What to tell the model before its next call, or undefined when it already knows. */
+export function noticeFor(events: readonly TurnEvent[], now: Now): Notice | undefined {
   const told = toldOf(events);
   const mode = now.mode !== undefined && now.mode !== told.mode ? now.mode : undefined;
   const memory = memoryDelta(told.memory, now.memory);
-  if (mode === undefined && memory === undefined) return undefined;
-  return { ...(mode === undefined ? {} : { mode }), ...(memory === undefined ? {} : { memory }) };
+  const mcp = now.mcp === undefined ? undefined : mcpDelta(told.mcp, now.mcp);
+  if (mode === undefined && memory === undefined && mcp === undefined) return undefined;
+  return { ...(mode === undefined ? {} : { mode }), ...(memory === undefined ? {} : { memory }), ...(mcp === undefined ? {} : { mcp }) };
 }
 
-/** A notice as the model reads it: the mode's text, then the memory change. */
+/** A notice as the model reads it: the mode's text, then the memory change, then the MCP change. */
 export const noticeTexts = (notice: Notice): string[] => [
   ...(notice.mode === undefined ? [] : [MODE_NOTICES[notice.mode]]),
   ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
+  ...(notice.mcp === undefined ? [] : [renderMcpDelta(notice.mcp)]),
 ];

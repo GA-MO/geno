@@ -50,6 +50,8 @@ const HARNESS_TAGS = [
   'terminal_output',
   'ci_log',
   'command_output',
+  'mcp_instructions',
+  'mcp_server_error',
 ] as const;
 
 const TAG_SOURCE = `<\\s*(/?)\\s*(${HARNESS_TAGS.join('|')})\\b`;

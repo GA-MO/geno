@@ -59,9 +59,13 @@ function blockText(deferred: ReadonlyMap<string, DeferredTool>): string {
   return lines.join('\n');
 }
 
-export const toolSearchDefinition = (deferred: ReadonlyMap<string, DeferredTool>): Tool => ({
+// Fixed text: MCP tools come and go as servers connect, so naming them here would move the cached prefix.
+const MCP_LISTING = ' Tools of MCP servers are not listed here: Geno names them in the conversation as their servers connect, and you load them the same way.';
+
+/** `mcp` is true in a run that can gain MCP tools, which load through tool_search though this description never lists them. */
+export const toolSearchDefinition = (deferred: ReadonlyMap<string, DeferredTool>, mcp = false): Tool => ({
   name: TOOL_SEARCH_TOOL,
-  description: `Load the full definitions of the tools listed below by name only. A listed tool cannot be called until it is loaded; once loaded it stays callable for the rest of the session, so load each tool once. Pass select with exact names when you know them, or query with a few words to search the names and descriptions. The tools:\n${blockText(deferred)}`,
+  description: `Load the full definitions of the tools listed below by name only. A listed tool cannot be called until it is loaded; once loaded it stays callable for the rest of the session, so load each tool once. Pass select with exact names when you know them, or query with a few words to search the names and descriptions.${mcp ? MCP_LISTING : ''} The tools:\n${blockText(deferred)}`,
   input_schema: {
     type: 'object',
     properties: {
@@ -90,11 +94,19 @@ export function deferredSavings(tools: readonly Tool[]): number {
   return [...deferred.values()].reduce((sum, { definition }) => sum + toolTokens(definition), 0) - toolTokens(toolSearchDefinition(deferred)) - textTokens(DEFERRED_TOOLS_NOTE);
 }
 
-/** Splits `tools` into the core and the deferred, and sends tool_search last in place of the deferred. */
-export function toolRoster(tools: readonly Tool[], minSavedTokens: number = MIN_SAVED_TOKENS): ToolRoster {
-  const deferred = deferredOf(tools);
-  if (deferred.size === 0 || deferredSavings(tools) < minSavedTokens) return { offered: tools, deferred: new Map() };
-  return { offered: [...tools.filter((tool) => CORE_TOOL_NAMES.has(tool.name)), toolSearchDefinition(deferred)], deferred };
+/**
+ * Splits `tools` into the core and the deferred, and sends tool_search last in place of the deferred. `mcp`, in a run
+ * with MCP, is the tools of its servers ready now: always deferred, and never in tool_search's description, so the
+ * offered tools are the same bytes however many servers are ready. Such a run always offers tool_search.
+ */
+export function toolRoster(tools: readonly Tool[], mcp?: readonly Tool[], minSavedTokens: number = MIN_SAVED_TOKENS): ToolRoster {
+  const own = deferredOf(tools);
+  const deferring = own.size > 0 && deferredSavings(tools) >= minSavedTokens;
+  if (!deferring && mcp === undefined) return { offered: tools, deferred: new Map() };
+  const listed = deferring ? own : new Map<string, DeferredTool>();
+  const deferred = new Map([...listed, ...deferredOf(mcp ?? [])]);
+  const offered = deferring ? tools.filter((tool) => CORE_TOOL_NAMES.has(tool.name)) : tools;
+  return { offered: [...offered, toolSearchDefinition(listed, mcp !== undefined)], deferred };
 }
 
 /** The tools tool_search loaded so far, from the log, so a resumed or replayed session can call the same ones. */
@@ -140,7 +152,7 @@ export function searchTools(deferred: ReadonlyMap<string, DeferredTool>, input: 
   const unknown = selected.filter((name) => !deferred.has(name));
   const picked = [...new Set([...selected.filter((name) => deferred.has(name)), ...(query === undefined ? [] : matches(deferred, query))])];
   const notes = [
-    ...(unknown.length === 0 ? [] : [`Not deferred tools: ${unknown.join(', ')}. Use the names listed in the tool_search description.`]),
+    ...(unknown.length === 0 ? [] : [`Not deferred tools: ${unknown.join(', ')}. Use the names listed in the tool_search description or in Geno's MCP notices.`]),
     ...(selected.length === 0 && query === undefined ? ['Pass select or query.'] : []),
     ...(picked.length === 0 && query !== undefined ? [`No deferred tool matches "${query}".`] : []),
   ];

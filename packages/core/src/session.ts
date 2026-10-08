@@ -33,6 +33,7 @@ import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
 import { REPORT_NUDGE, type ReportNudgeEvent } from './handback.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
+import { isMcpToolName, MCP_SPILL_NOTE } from './mcp-notice.js';
 import { noticeTexts, type Notice } from './notice.js';
 import { hookContextTexts, type HookContextEvent } from './hooks.js';
 import type { Brand } from './types.js';
@@ -332,7 +333,7 @@ export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
   content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
 
 export const toolResultText = (event: ToolResultEvent): string =>
-  'spill' in event ? spillNotice(event.spill) : event.output;
+  'spill' in event ? (isMcpToolName(event.name) ? `${spillNotice(event.spill)}\n${MCP_SPILL_NOTE}` : spillNotice(event.spill)) : event.output;
 
 const toolResultBlock = (event: ToolResultEvent, stored: StoredAttachments): ToolResultBlockParam => ({
   type: 'tool_result',

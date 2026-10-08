@@ -37,6 +37,7 @@ export * from './agent-prompts.js';
 export * from './acp.js';
 export * from './inline-edit.js';
 export * from './mcp.js';
+export * from './mcp-notice.js';
 export * from './browser.js';
 export * from './web.js';
 export * from './html-markdown.js';
