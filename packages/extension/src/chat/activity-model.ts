@@ -40,6 +40,7 @@ const NEEDS_YOU_LABELS: { readonly [R in NeedsYouReason]: (where: string) => str
   permission: (where) => `Waiting for your approval in ${where}`,
   question: (where) => `Waiting for your answer in ${where}`,
   failed: (where) => `Failed in ${where}`,
+  interrupted: (where) => `Subagents cut off in ${where}`,
   limited: (where) => `Held at a rate limit in ${where}`,
   paused: (where) => `Wake-ups paused in ${where}`,
 };

@@ -1,4 +1,4 @@
-import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskEnd, type TaskUpdate, type Waiting, type WorkflowProgress } from '@g-code/core';
+import { isLive, isWaking, returnedAtOf, taskNotice, type Asking, type InterruptedChild, type WakeView, type TaskNoticeKind, type TaskRecord, type TasksResponse, type TaskJob, type TaskEnd, type TaskUpdate, type Waiting, type WorkflowProgress } from '@g-code/core';
 
 const emptyless = (wake: WakeView | undefined): WakeView | undefined => (wake === undefined || (wake.waitsFor.length === 0 && wake.paused === undefined) ? undefined : wake);
 
@@ -18,11 +18,26 @@ export class Tasks {
   private readonly changed = new Set<() => void>();
   private readonly parents = new Map<string, string>();
 
-  /** A turn of the session starts. A session that ran before keeps its parent, its running background commands and when it last came back. */
+  /**
+   * A turn of the session starts. A session that ran before keeps its parent, its running background commands, its
+   * subagents cut off and when it last came back. A subagent that starts again is no longer cut off.
+   */
   start(task: Omit<TaskRecord, 'status' | 'endedAt' | 'usage' | 'returnedAt'>): void {
     this.asking.delete(task.sessionId);
     const before = this.records.get(task.sessionId);
-    this.put({ parent: before?.parent, kind: before?.kind, jobs: before?.jobs, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined, wake: undefined });
+    this.put({ parent: before?.parent, kind: before?.kind, jobs: before?.jobs, interrupted: before?.interrupted, ...task, status: 'running', endedAt: null, usage: undefined, asking: undefined, wake: undefined });
+    const parent = task.parent == null ? undefined : this.records.get(task.parent);
+    if (parent?.interrupted?.some((child) => child.child === task.sessionId)) {
+      const left = parent.interrupted.filter((child) => child.child !== task.sessionId);
+      this.put({ ...parent, interrupted: left.length === 0 ? undefined : left });
+    }
+  }
+
+  /** Subagents of the session that a stop of Geno cut off, as the next engine found them; a session with no task yet gets one, stopped. */
+  interrupted(session: { readonly sessionId: string; readonly title: string; readonly workspace: string; readonly children: readonly InterruptedChild[] }): void {
+    const now = Date.now();
+    const record: TaskRecord = this.records.get(session.sessionId) ?? { sessionId: session.sessionId, title: session.title, workspace: session.workspace, lane: null, status: 'stopped', startedAt: now, endedAt: now };
+    this.put({ ...record, interrupted: session.children.length === 0 ? undefined : session.children });
   }
 
   /** The session's task rolls up into `parent`'s, from its next start on if it has not started yet. */

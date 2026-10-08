@@ -86,7 +86,7 @@ import { chapterExecutor } from './tools/chapters.js';
 import { showWidget } from './tools/widget.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { webExecutors, type WebDeps } from './tools/web.js';
-import { loadAgents, mentionedCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
+import { loadAgents, mentionedCall, resumeCall, subagents, terminalChildHost, type SubagentHost, type Subagents } from './subagents.js';
 import { DISK_FILES } from './files.js';
 import type { ExternalAgents, KeyOf } from './external.js';
 import { BackgroundJobs } from './background.js';
@@ -191,6 +191,8 @@ export type AgentOptions = {
   readonly hooks?: HookSessions | undefined;
   /** Whether the editor trusts the workspace, which lets its own hooks run. */
   readonly trustedWorkspace?: boolean | undefined;
+  /** A subagent of the session to resume with the prompt as its message, as the user's own `message_agent` call. */
+  readonly resumeAgent?: string | undefined;
 };
 
 export type RunEngine = { readonly jobs: BackgroundJobs; readonly steers: Steers; readonly wakes?: RunWakes | undefined };
@@ -309,7 +311,10 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     // A prompt logged before the run, with its attachments, is the newest event.
     const logged = opened.log.events.at(-1);
     const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
-    const typed = (await mentionedCall(asked, scan.agents, session)) ?? (workflows === undefined ? undefined : workflowCommandCall(logged, session));
+    const typed =
+      options.resumeAgent !== undefined
+        ? resumeCall(options.resumeAgent, asked, session)
+        : ((await mentionedCall(asked, scan.agents, session)) ?? (workflows === undefined ? undefined : workflowCommandCall(logged, session)));
     const director = options.director ?? (typed === undefined ? undefined : issuedOnce(typed));
     let tools: readonly Tool[] = own;
     children = subagents({
@@ -330,6 +335,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       steers,
       waits: wakes?.registry,
       steps: options.director !== undefined,
+      waiter: options.surface?.waiter,
       // A subagent's calls meet the user's PreToolUse hooks too, as in Claude Code, named by agent_id and agent_type.
       preToolUse: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.preToolHooks(session.id, approval, agent),
     });
@@ -359,7 +365,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         ...web,
         ...(workflows === undefined ? {} : { [WORKFLOW_TOOL]: workflowExecutor(workflows) }),
         ...(agentTool || director !== undefined ? { [AGENT_TOOL]: children.executor } : {}),
-        ...(agentTool ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
+        ...(agentTool || options.resumeAgent !== undefined ? { [MESSAGE_AGENT_TOOL]: children.message } : {}),
         ...executors,
       }),
       system,

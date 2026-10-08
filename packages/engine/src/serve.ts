@@ -38,6 +38,7 @@ import {
   workflowProgress,
   workflowReport,
   type AgentDefinition,
+  type WorkflowOrigin,
   type WorkflowPreview,
   type WorkflowSpec,
   SCHEDULES_METHOD,
@@ -70,6 +71,7 @@ import {
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   INLINE_EDIT_META,
+  RESUME_AGENT_META,
   nextSeq,
   REVIEW_METHOD,
   reviewState,
@@ -296,6 +298,7 @@ import { EngineError } from './errors.js';
 import { ruleAttacher } from './tools/rules.js';
 import { acpChildHost } from './subagent-acp.js';
 import { waitsLeft, waitUpdate } from './wait-hooks.js';
+import { recoverInterrupted } from './interrupted.js';
 import { draftNotice, wakeCancelRequest, WakeDriver, wakePolicyOf } from './wake-hooks.js';
 import { ghCli, githubRemote, lookUpPr } from './gh.js';
 import { Wake } from './waits.js';
@@ -1342,7 +1345,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const driver = workflowDriver(spec, input, agents, parent.model, (run, sessionId) => tasks.workflow(sessionId, workflowProgress(run)));
     const prompt = `Run the workflow ${spec.name}${input === '' ? '.' : ` on: ${input}`}`;
     const limits: Limits = { maxTurns: WORKFLOW_TURNS, maxCostUsd: spec.maxCostUsd };
-    const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director } });
+    const workflow: WorkflowOrigin = { parentId: asSessionId(parentId), toolUseId, name: spec.name };
+    const { id, turn } = await startBackground(parent.workspace, undefined, prompt, modes.get(parentId), { title: `Workflow ${spec.name}`, run: { limits, director: driver.director }, workflow });
     let silent = false;
     const paid = steers.of(parentId)?.owe() ?? (() => {});
     const reported = wakes.autoWake
@@ -1454,7 +1458,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     if (graft?.success === false) throw acp.RequestError.invalidParams({ sessionId }, `${LANE_GRAFT_META}: ${z.prettifyError(graft.error)}`);
     const rawLane = meta?.[LANE_APPLY_META] ?? graft?.data.lane;
     if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
-    const slash = target === undefined && rawLane === undefined ? await commands.expand(sessionId, text) : undefined;
+    const resumeAgent = meta?.[RESUME_AGENT_META];
+    if (resumeAgent !== undefined && (typeof resumeAgent !== 'string' || resumeAgent === '')) throw acp.RequestError.invalidParams({ sessionId }, `${RESUME_AGENT_META} must be a subagent's session id`);
+    const slash = target === undefined && rawLane === undefined && resumeAgent === undefined ? await commands.expand(sessionId, text) : undefined;
     if (slash?.kind === 'builtin') {
       let spent: Spent | undefined;
       const reply = await runBuiltin(slash, {
@@ -1597,6 +1603,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
                 keyOf: keyOf(sessionId),
                 hooks,
                 trustedWorkspace: from.peer.trusted,
+                resumeAgent,
                 engine: { jobs, steers, ...(wakes.autoWake ? { wakes: { registry: wakes.registry, waiter: { pid: process.pid, cwd: io.cwd }, secondMs: wakes.policy.secondMs } } : {}) },
                 childHost: acpChildHost({
                   client: { notify: (method, params) => Promise.resolve(viewers.notify(sessionId, method, params)) },
@@ -1683,13 +1690,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     lane: LaneRecord | undefined,
     prompt: string,
     rawMode: string | undefined,
-    how: { readonly variant?: VariantSpec | undefined; readonly parent?: string | undefined; readonly title?: string | undefined; readonly run?: ScheduledTurn | undefined } = {},
+    how: { readonly variant?: VariantSpec | undefined; readonly parent?: string | undefined; readonly title?: string | undefined; readonly run?: ScheduledTurn | undefined; readonly workflow?: WorkflowOrigin | undefined } = {},
   ) => {
     const { variant, parent, title } = how;
     const log =
       variant?.backend !== undefined
         ? await startExternalSession(store, io, where, { id: variant.backend })
-        : (await startSession(store, io, { workspace: where, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined })).log;
+        : (await startSession(store, io, { workspace: where, provider: undefined, model: variant?.model ?? undefined, effort: variant?.effort ?? undefined, workflow: how.workflow })).log;
     const { id } = log.session;
     if (title !== undefined) await renameSession(store, io, id, title);
     const bound = lane === undefined ? undefined : await laneAt(lane.path, undefined);
@@ -1747,8 +1754,19 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
   /** This connection's way to start scheduled runs, once it said what it can show. */
   let runner: ScheduleRunner | undefined;
 
-  /** Runs on in the background each turn an engine that stopped left waiting, as the first editor connects. */
+  /**
+   * Runs on in the background each turn an engine that stopped left waiting, as the first editor connects. First it
+   * tells each session of its subagents that engine cut off, which nothing resumes by itself.
+   */
   const takeUpWaits = async () => {
+    const cut = await recoverInterrupted(store, io.cwd, { serially }).catch((error: unknown) => {
+      io.err(`could not look for subagents cut off: ${String(error)}`);
+      return [];
+    });
+    for (const session of cut) {
+      tasks.interrupted(session);
+      io.err(`session: ${session.sessionId} has ${session.children.length === 1 ? '1 subagent' : `${session.children.length} subagents`} cut off when its last engine stopped`);
+    }
     const left = await waitsLeft(store, io.cwd).catch((error: unknown) => {
       io.err(`could not look for waits to take up: ${String(error)}`);
       return [];

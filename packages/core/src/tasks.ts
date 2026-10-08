@@ -57,7 +57,12 @@ export type TaskRecord = {
   readonly wake?: WakeView | undefined;
   /** The workflow the session runs, and how far it got; absent for any other session. */
   readonly workflow?: WorkflowProgress | undefined;
+  /** Its subagents that a stop of Geno cut off and that nothing resumed since, each with Resume; absent when none. */
+  readonly interrupted?: readonly InterruptedChild[] | undefined;
 };
+
+/** A subagent whose run a stop of Geno cut off: its session, its role, and the start of its last report or text. */
+export type InterruptedChild = { readonly child: string; readonly role: string; readonly summary: string };
 
 export type TaskJob = Pick<BackgroundJob, 'id' | 'command' | 'description' | 'startedAt' | 'preview'>;
 

@@ -57,6 +57,7 @@ import {
   SCHEDULES_UPDATE_METHOD,
   ARENA_UPDATE_METHOD,
   LANE_GRAFT_META,
+  RESUME_AGENT_META,
   laneGraftPrompt,
   type DetachRequest,
   type TaskRecord,
@@ -299,6 +300,7 @@ const taskUpdate = z.object({
     forkedFrom: forkOrigin.optional(),
     wake: wakeView.optional(),
     workflow: workflowProgress.optional(),
+    interrupted: z.array(z.object({ child: z.string(), role: z.string(), summary: z.string() })).optional(),
   }),
   notice: z.enum(['done', 'needs-input', 'failed']).nullable(),
 });
@@ -669,6 +671,10 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         openTask: (sessionId, workspace) => this.openChat(sessionId, workspace),
         openArena: (id) => this.arena.show(id),
         applyLane: (name) => this.applyLane(name),
+        resumeAgent: async (sessionId, workspace, child, text) => {
+          await this.openChat(sessionId, workspace);
+          await this.resumeAgent(child, text);
+        },
         ended: (task) => this.adoptedEnded(task),
         defaultMode,
       },
@@ -962,6 +968,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     if (this.shownCwd !== undefined) throw new Error('Open a chat of the main checkout to apply a lane into it.');
     const prompt = laneApplyPrompt(name);
     return this.prompt(prompt, prompt, { [LANE_APPLY_META]: name }, async () => []);
+  }
+
+  /** Resumes a subagent of the shown chat that a stop of Geno cut off, as the user's own message_agent call with `text`. */
+  async resumeAgent(child: string, text: string): Promise<acp.StopReason> {
+    return this.prompt(text, text, { [RESUME_AGENT_META]: child }, async () => []);
   }
 
   /** Grafts some of a lane's hunks into the main checkout as a turn of the shown chat, under review as an apply's are. */

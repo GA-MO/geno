@@ -40,6 +40,7 @@ export const ATTENTION_NOTICES: { readonly [K in NeedsYouReason | 'ready']: Atte
   permission: { kind: 'needs-input', severity: 'warning', verb: 'needs your permission', os: true },
   question: { kind: 'needs-input', severity: 'warning', verb: 'needs your answer', os: true },
   failed: { kind: 'failed', severity: 'error', verb: 'failed', os: true },
+  interrupted: { kind: 'needs-input', severity: 'warning', verb: 'has subagents that were cut off when Geno stopped', os: true },
   limited: { kind: 'needs-input', severity: 'warning', verb: 'is held at a rate limit until you retry', os: true },
   paused: { kind: 'needs-input', severity: 'warning', verb: `paused its wake-ups after ${WAKE_CAP} in an hour`, os: true },
   ready: { kind: 'done', severity: 'info', verb: 'finished', os: false },

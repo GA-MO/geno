@@ -57,12 +57,17 @@ type UserEvent = Extract<TurnEvent, { kind: 'user' }>;
 
 const PARENT_TAG = 'parent_message';
 
-/** When a parent's message reaches its child: during the child's run, or after its report, which resumes it. */
-type ParentMoment = 'working' | 'resumed';
+/**
+ * When a parent's message reaches its child: during the child's run, after its report, which resumes it, or after
+ * Geno stopped mid-run and cut the run off, which resumes it too.
+ */
+export type ParentMoment = 'working' | 'resumed' | 'interrupted';
 
 const PARENT_NOTES: Readonly<Record<ParentMoment, string>> = {
   working: 'The agent that handed you your task sent this while you worked. Take it into account as a change to that task.',
   resumed: 'The agent that handed you your task sent this after your report, so your work goes on from here. Hand back a new report when you are done.',
+  interrupted:
+    'Geno stopped while you worked, which cut your run off before you reported; calls it left running have no result. The agent that handed you your task sent this to resume it, so your work goes on from where your transcript ends. Hand back a report when you are done.',
 };
 
 /** A parent's message to its child, fenced as the child's task is data: it can neither close the fence, pose as Geno, nor stand in for the user. */
@@ -80,14 +85,15 @@ export const steerEvent = (steer: Steer, seq: number, at: string): UserEvent => 
 });
 
 /**
- * The parent's message that resumes a finished child, logged in the child's own session after its report. It is a
- * steer from the parent, as one to a running child is: the child's run goes on from where it handed back.
+ * The parent's message that resumes a finished child, logged in the child's own session after its report, or after
+ * where a run that Geno's stop cut off ends. It is a steer from the parent, as one to a running child is: the child's
+ * run goes on from where it stopped.
  */
-export const resumeEvent = (text: string, seq: number, at: string): UserEvent => ({
+export const resumeEvent = (text: string, seq: number, at: string, moment: Exclude<ParentMoment, 'working'> = 'resumed'): UserEvent => ({
   kind: 'user',
   seq,
   at,
-  content: parentMessage(text, 'resumed'),
+  content: parentMessage(text, moment),
   steer: true,
   from: 'parent',
 });
@@ -104,6 +110,12 @@ export type SteerMark = { readonly seq: number; readonly from: SteerSource };
 export const steerMarkOf = (event: UserEvent): SteerMark => ({ seq: event.seq, from: event.from === 'parent' || event.from === 'child' ? event.from : 'user' });
 
 export const MESSAGE_AGENT_TOOL = 'message_agent';
+
+/**
+ * Key in a `session/prompt`'s `_meta`: the session id of a subagent of that session to resume. The prompt's text is
+ * the message, sent as the user's own `message_agent` call, as Resume in Tasks sends it for a subagent Geno's stop cut off.
+ */
+export const RESUME_AGENT_META = 'gcode/resumeAgent';
 
 /** Offered beside the `agent` tool, and only there. */
 export const MESSAGE_AGENT_TOOL_DEFINITION: Tool = {

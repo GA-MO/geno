@@ -11,10 +11,10 @@ import type { WakeView } from './wake.js';
 export const isLive = (status: TaskStatus): boolean => status === 'running' || status === 'needs-input' || status === 'waiting';
 
 /**
- * What a task wants from the user, most urgent first: a card to answer, a failure to read, a limit to retry, or wakes
- * paused at their hourly cap.
+ * What a task wants from the user, most urgent first: a card to answer, a failure to read, subagents a stop of Geno
+ * cut off to resume or leave, a limit to retry, or wakes paused at their hourly cap.
  */
-export const NEEDS_YOU_REASONS = ['permission', 'question', 'failed', 'limited', 'paused'] as const;
+export const NEEDS_YOU_REASONS = ['permission', 'question', 'failed', 'interrupted', 'limited', 'paused'] as const;
 export type NeedsYouReason = (typeof NEEDS_YOU_REASONS)[number];
 
 /** The card a `needs-input` task shows. */
@@ -34,7 +34,7 @@ export const SECTIONS = ['needs-you', 'ready', 'working', 'done'] as const satis
 export type Section = (typeof SECTIONS)[number];
 
 /** A permission and a question share the first tier. */
-const TIER: { readonly [R in NeedsYouReason]: number } = { permission: 0, question: 0, failed: 1, limited: 2, paused: 2 };
+const TIER: { readonly [R in NeedsYouReason]: number } = { permission: 0, question: 0, failed: 1, interrupted: 1, limited: 2, paused: 2 };
 
 /** Which of a task's and its children's states the task shows: the most urgent, where a running child outranks a finished parent. */
 const urgency = (attention: Attention): number =>
@@ -68,6 +68,8 @@ export const isWaking = (wake: WakeView | undefined): boolean => wake !== undefi
 /** A task's own state, without its children. `seen` says the user opened it after it last came back. */
 function ownAttention(task: TaskRecord, seen: boolean): Attention {
   if (!isLive(task.status) && task.wake?.paused === 'cap') return { kind: 'needs-you', reason: 'paused', at: task.sessionId };
+  // Nothing resumes a subagent that was cut off but the user or the session's model, so it waits on the user, seen or not.
+  if (!isLive(task.status) && (task.interrupted?.length ?? 0) > 0) return { kind: 'needs-you', reason: 'interrupted', at: task.sessionId };
   if (!isLive(task.status) && isWaking(task.wake)) return { kind: 'working' };
   switch (task.status) {
     case 'needs-input':

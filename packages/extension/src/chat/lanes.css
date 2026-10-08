@@ -205,6 +205,19 @@
   flex: none;
 }
 
+/* A cut-off subagent's line, then its Resume field on a line of its own. */
+.task-cut {
+  flex-wrap: wrap;
+}
+
+.task-cut .job-icon {
+  color: var(--warn, var(--vscode-editorWarning-foreground));
+}
+
+.task-cut .task-resume {
+  flex-basis: 100%;
+}
+
 .task-row {
   cursor: pointer;
 }
