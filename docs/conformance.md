@@ -14,8 +14,8 @@ The suite runs inside the `unit` vitest project, not in a project of its own. `-
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-LOOP-01 | Every `tool_use` gets a result with its id, in call order, after PreToolUse runs for all of them. | Results carry their ids in call order. There is no PreToolUse yet (P14). | partial: the ordering half passes | `loop.conformance.test.ts`, both wires |
-| T-LOOP-02 | A call a hook denies does not stop the other calls of its batch. | A call the approval policy denies gets a `denied` result, and the calls before and after it run. Hooks come in P14. | pass | `loop.conformance.test.ts`, both wires |
+| T-LOOP-01 | Every `tool_use` gets a result with its id, in call order, after PreToolUse runs for all of them. | Results carry their ids in call order. PreToolUse runs for every call of the turn before the first one runs (P14). | pass (was partial) | `loop.conformance.test.ts` and `hooks.conformance.test.ts`, both wires |
+| T-LOOP-02 | A call a hook denies does not stop the other calls of its batch. | A call the approval policy denies gets a `denied` result, and the calls before and after it run. A call a PreToolUse hook denies does too (P14). | pass | `loop.conformance.test.ts` and `hooks.conformance.test.ts`, both wires |
 | T-LOOP-04 | At `max_tokens`, the cut-off `tool_use` does not run, and a reminder says to continue. | The cut-off call gets an error result that says the output limit cut it short and to continue with smaller calls. The complete calls before it run. A second cut-off in a row ends the run. | pass (was fail: on the Anthropic wire the cut-off command ran) | `loop.conformance.test.ts`, both wires |
 
 P1 also fixed rows that have no Claude Code conformance test:
@@ -217,12 +217,12 @@ P9 also covers these rows:
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. The events between come with P14 to P16. | partial: the session's two ends pass | `hooks.conformance.test.ts` |
+| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. UserPromptSubmit runs before the model sees the prompt, and PreToolUse for every call of a turn before the first runs (P14). The events after a call come with P15 and P16. | partial: SessionStart, UserPromptSubmit, PreToolUse and SessionEnd pass | `hooks.conformance.test.ts` |
 | T-HOOK-06 | A SessionStart matcher of `compact` runs after a compaction. | `startup` on a new session, `resume` on a resumed one, `compact` after a compaction, each with the common payload. A matcher that names another source does not run. The output opens the first request before the prompt, under `[Geno]`; a resume keeps the opening's bytes and its own output joins the next request; the compact output follows the compacted context. `clear` never fires: Geno has no `/clear`. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires; compaction on the Anthropic wire only |
 | T-HOOK-07 | A misspelled event name warns the user (Claude Code ignores it). | The hook never runs. The command line prints `hooks: <file>: SesionStart is not a hook event…`, and Settings lists it as a warning above the hooks. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires and over ACP |
-| T-HOOK-08 | Exit 2 blocks and a JSON allow cannot override it; exit 1 does not block; JSON that does not parse is a non-blocking error. | SessionStart with exit 2, exit 1 or broken JSON puts nothing before the model, the session goes on, and each is reported on stderr. A block needs an event that can block, which comes with P14; `hookOutcome` already returns a block for PreToolUse exit 2 whatever stdout says. | partial: the non-blocking half passes end to end, the block in `hooks.test.ts` (core) | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-08 | Exit 2 blocks and a JSON allow cannot override it; exit 1 does not block; JSON that does not parse is a non-blocking error. | SessionStart with exit 2, exit 1 or broken JSON puts nothing before the model, the session goes on, and each is reported on stderr. A PreToolUse exit 2 blocks its call with stderr as the reason, and a UserPromptSubmit exit 2 blocks the prompt (P14). A PreToolUse exit 1 without JSON is reported and the call runs. `hookOutcome` returns a block for exit 2 whatever stdout says. | pass (was partial before P14) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the JSON allow on exit 2 |
 | T-HOOK-09 | Matching hooks run in parallel, and an identical handler in two files runs once. | Two hooks that each wait for the other's mark both see it, and the same command in `~/.claude/settings.json` and `~/.g-code/settings.json` runs once. | pass (was fail) | `hooks.conformance.test.ts`, both wires |
-| T-HOOK-10 | The model sees `SessionStart:<source> hook success: <stdout>`, `UserPromptSubmit hook additional context: …` and `PostToolUse:<Tool> hook additional context: …`. | SessionStart's plain stdout and its JSON `additionalContext` reach the model in Claude Code's words under `[Geno]`, and `systemMessage` reaches only the user. UserPromptSubmit comes with P14 and PostToolUse with P15. | partial: the SessionStart texts pass | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-10 | The model sees `SessionStart:<source> hook success: <stdout>`, `UserPromptSubmit hook additional context: …` and `PostToolUse:<Tool> hook additional context: …`. | SessionStart's and UserPromptSubmit's plain stdout and JSON `additionalContext` reach the model in Claude Code's words under `[Geno]`, and `systemMessage` reaches only the user. PostToolUse comes with P15. | partial: the SessionStart and UserPromptSubmit texts pass | `hooks.conformance.test.ts`, both wires |
 | T-HOOK-11 | 600 s by default, 30 s for UserPromptSubmit, then kill. | A hook with `timeout: 1` that sleeps is killed with its process group, reported, and the session goes on. The defaults are in `HOOK_EVENTS`. | pass (was fail) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the defaults |
 
 P13 also covers rows that have no Claude Code conformance test:
@@ -238,6 +238,27 @@ P13 also covers rows that have no Claude Code conformance test:
 | B/B-97 | T-HOOK-10 above. `hooks.test.ts` (core) checks that hook output cannot pose as `[Geno]` and is cut at 10,000 characters. |
 | B/B-99 | T-HOOK-07 above. `hooks.webview.test.ts` shows the warning and each hook's status in Settings. |
 | B/B-100, B/B-126 | T-HOOK-06 and T-HOOK-01 above. A workspace hook runs inside the sandbox and cannot write outside the workspace (`hooks.test.ts`, engine). |
+
+## Hooks before a prompt and before each call (P14)
+
+UserPromptSubmit and PreToolUse run in `drive.ts`, through two fields of its `Mode` that `runAgent` sets only when the run has hooks. `promptSubmitted` runs UserPromptSubmit on the prompt the run answers. A block is logged as an `error` event of kind `blocked`, which drops the prompt from what the model is sent, as a refusal does. Context is a `hook-context` event after the prompt, so a resumed session sends the same bytes and a cut drops it with its prompt. `preToolUse` settles every call of a turn before the first batch runs: `preToolDecision` (core) takes the strictest decision, the deny is logged as a `denied` result under the `hook-deny` rule, and an ask becomes a `hook-ask` card before the call. The user's yes to that card, and a hook's allow, reach the call as `ToolContext.hookAllowed`, which `ruledDenial` takes after the deny rules and only for a command that is not firm (a credentials file, a path outside the workspace, a hard ask). Each payload names Claude Code's tool, with Claude Code's input for `bash`, `read` and `edit` (`claudeToolCall`), and `updatedInput` reads back through `genoToolInput`. A subagent's run gets the same hooks from its parent, with `agent_id` and `agent_type`.
+
+The order of one call: PreToolUse (deny ends it, `updatedInput` replaces the input), then a hook's ask as a card, then the mode's refusal in Plan, the lane check, the workspace deny rules, the firm questions, and only then a hook's allow over the remaining question and the classifier. The read-before-edit and stale-file checks, `resolveInside` and the sandbox come after all of them, whatever a hook said.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-HOOK-02 | UserPromptSubmit's `additionalContext` for the first prompt reaches the model (in the system message, layout A). | Adapted: plain stdout and `additionalContext` follow the prompt in the first user message as `[Geno] UserPromptSubmit hook success: …` and `… hook additional context: …`; the system prompt never holds hook text. The payload has `prompt`. A resume sends the opening's bytes again. Exit 2 blocks the prompt: the model is never called, the user reads why, and the next prompt goes without it. `decision: "block"` and `continue: false` block too. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) |
+| T-PERM-06 | A hook's deny gives `PreToolUse:Bash hook error: <reason>` with `is_error`. | `[Geno] PreToolUse:Bash hook error: <reason>` as an error result, for `permissionDecision: "deny"` and for exit 2 with stderr. The other call of the batch runs. Valid JSON on exit 1 decides, as in Claude Code: an edit is refused as `PreToolUse:Write`. | pass (was fail) | `hooks.conformance.test.ts`, both wires |
+| T-PERM-05 (hooks) | A deny rule and an ask rule still apply after a hook's allow. | A hook's allow skips a cloud CLI's question, but a workspace deny rule still refuses `pnpm publish`, and `cat .env` and `read .env` still ask. | pass (was fail) | `hooks.conformance.test.ts`, both wires; `permission-rules.test.ts` (core) for each mode |
+| T-PERM-12 | A hook's allow on a path outside the working directories is still blocked. | `cat ../outside.txt` still asks, `read /etc/hosts` is still refused, and a write to the home folder still fails in the sandbox. | pass (was fail) | `hooks.conformance.test.ts`, both wires |
+| T-LOOP-01 (PreToolUse) | PreToolUse for all 3 calls before any runs. | Three commands' hooks all log before the first command writes, and the results come back in call order. | pass (was partial) | `hooks.conformance.test.ts`, both wires |
+
+P14 also covers these rows:
+
+| ID | Check |
+|---|---|
+| B/B-98, B/B-104 | `preToolDecision` in `hooks.test.ts` (core): deny over defer over ask over allow, the older `approve` and `block`, `updatedInput` with the decision that won, nothing from a timed-out hook. `hooks.conformance.test.ts`: an ask is a card in Auto, which a no turns down; a yes counts as the command's own answer, so one card shows; a non-interactive run refuses the call with the reason; an allow never skips read-before-edit; `updatedInput` runs in place of the model's command; a subagent's grep meets the hook with `agent_id` and `agent_type`. `pre-tool-hooks.e2e.test.ts`: over ACP in a trusted workspace, a repository's hook refuses an edit of `src/payload-types.ts`, the model reads the reason, the file is unchanged, the editor shows the call as failed, and another edit goes through. |
+| B/B-102 | T-HOOK-02 above. `hooks.test.ts` (core): a blocked prompt and a refused one leave the conversation, and UserPromptSubmit's text follows its prompt. |
 
 ## Handback and report contents (P17)
 
@@ -283,7 +304,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 
 | ID | Parity verdict | Unit | Status |
 |---|---|---|---|
-| T-LOOP-01 | adopt; at parity | P14 | partial |
+| T-LOOP-01 | adopt; at parity | P14 | pass |
 | T-LOOP-02 | adopt | P1 | pass |
 | T-LOOP-03 | adopt | P15 | no test yet |
 | T-LOOP-04 | adopt | P1 | pass |
@@ -328,12 +349,12 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-PERM-02 | deliberate | none | no test yet |
 | T-PERM-03 | adapt | P32 | no test yet |
 | T-PERM-04 | adapt | P31 | no test yet |
-| T-PERM-05 | adapt; adopt | P3, P28, P14 | partial |
+| T-PERM-05 | adapt; adopt | P3, P28, P14 | partial: the built-in and hook halves pass |
 | T-PERM-09 | at parity | none | no test yet |
 | T-PERM-10 | adapt | P28 | no test yet |
 | T-PERM-11 | keep Geno's | none | no test yet |
-| T-PERM-12 | deliberate; adopt | P14 | no test yet |
-| T-PERM-06 | adopt | P14 | no test yet |
+| T-PERM-12 | deliberate; adopt | P14 | pass |
+| T-PERM-06 | adopt | P14 | pass |
 | T-PERM-07 | keep Geno's, adopt | P20 | no test yet |
 | T-PERM-08 | adopt | P5 | pass |
 | T-AUTO-01 | skip | none | no test yet |
@@ -341,13 +362,13 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AUTO-04 | adapt, skip | P4 | pass |
 | T-AUTO-03 | skip | none | no test yet |
 | T-HOOK-01 | adapt | P13 | partial |
-| T-HOOK-02 | adopt | P14 | no test yet |
+| T-HOOK-02 | adopt | P14 | pass |
 | T-HOOK-03 | adopt, keep Geno's | P15 | no test yet |
 | T-HOOK-04 | adopt | P15 | no test yet |
 | T-HOOK-05 | adapt | P32 | no test yet |
 | T-HOOK-06 | adopt | P13 | pass |
 | T-HOOK-07 | adapt | P13 | pass |
-| T-HOOK-08 | adopt | P13 | partial |
+| T-HOOK-08 | adopt | P13, P14 | pass |
 | T-HOOK-09 | adopt | P13 | pass |
 | T-HOOK-10 | adapt | P13 | partial |
 | T-HOOK-11 | adopt | P13 | pass |
