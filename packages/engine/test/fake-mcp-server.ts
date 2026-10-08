@@ -6,9 +6,16 @@ import { z } from 'zod';
 
 const ONE_PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-/** A test MCP server: `echo` (read-only), `env`, `crash`, `image`, plus `extra_<n>` tools that take a number. */
-export function fakeMcpServer(extraTools = 0): McpServer {
-  const server = new McpServer({ name: 'fake', version: '1.0.0' });
+/**
+ * A test MCP server: `echo` (read-only), `env`, `crash`, `image`, plus `extra_<n>` tools that take a number, and with
+ * `bigChars` a `big` tool that answers that many characters. `instructions` go out in its `initialize` answer.
+ */
+export function fakeMcpServer(extraTools = 0, options: { readonly instructions?: string | undefined; readonly bigChars?: number | undefined } = {}): McpServer {
+  const server = new McpServer({ name: 'fake', version: '1.0.0' }, options.instructions === undefined ? {} : { instructions: options.instructions });
+  const bigChars = options.bigChars;
+  if (bigChars !== undefined) {
+    server.registerTool('big', { description: 'Answer a long text.', annotations: { readOnlyHint: true } }, async () => ({ content: [{ type: 'text', text: 'x'.repeat(bigChars) }] }));
+  }
   server.registerTool(
     'echo',
     { description: 'Echo the text back.', inputSchema: { text: z.string() }, annotations: { readOnlyHint: true } },
@@ -56,5 +63,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A server that is slow to answer, as a cold `npx` download is.
   const delay = Number(process.env['DELAY_MS'] ?? '0');
   if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-  await fakeMcpServer(Number(process.env['TOOL_COUNT'] ?? '0')).connect(new StdioServerTransport());
+  const big = process.env['BIG_CHARS'];
+  await fakeMcpServer(Number(process.env['TOOL_COUNT'] ?? '0'), { instructions: process.env['INSTRUCTIONS'], bigChars: big === undefined ? undefined : Number(big) }).connect(new StdioServerTransport());
 }

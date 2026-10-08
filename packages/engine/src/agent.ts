@@ -1,3 +1,4 @@
+import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
@@ -133,7 +134,10 @@ export type AgentOptions = {
   /** Undefined runs on disk and prints to the terminal. */
   readonly surface?: Surface;
   readonly diagnostics?: Diagnostics | undefined;
-  /** The session's MCP tools for this turn, after the built-in ones. */
+  /**
+   * The session's MCP tools for this turn, deferred behind tool_search, and what the model is told of its servers at
+   * the safe point; undefined for a run without MCP.
+   */
   readonly mcp?: McpToolset | undefined;
   /** The cards the editor can show the user; a non-interactive run ignores it, having nobody to ask. */
   readonly user?: UserChannel | undefined;
@@ -306,7 +310,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const asked = prompt !== '' ? prompt : logged?.kind === 'user' ? logged.content : '';
     const typed = (await mentionedCall(asked, scan.agents, session)) ?? (workflows === undefined ? undefined : workflowCommandCall(logged, session));
     const director = options.director ?? (typed === undefined ? undefined : issuedOnce(typed));
-    let tools = mcp === undefined ? own : [...own, ...mcp.tools];
+    let tools: readonly Tool[] = own;
     children = subagents({
       io,
       store,
@@ -329,7 +333,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       preToolUse: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.preToolHooks(session.id, approval, agent),
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
-    const roster = toolRoster(tools);
+    const roster = toolRoster(tools, mcp?.tools);
     const appended = options.appendSystemPrompt ?? config.appendSystemPrompt;
     const system = [
       AGENT_PROMPTS[options.promptTier ?? capabilitiesOf(session.provider, session.model).promptTier],
@@ -362,7 +366,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       beforeCall: (events: readonly TurnEvent[]) => takeCheckpoint(repo, session.id, events),
       arrivals: () => steers.inbox.take(session.id),
       notice: async (events: readonly TurnEvent[]) =>
-        noticeFor(events, { mode: options.approval.kind === 'interactive' ? options.approval.mode() : undefined, memory: await memory.list() }),
+        noticeFor(events, { mode: options.approval.kind === 'interactive' ? options.approval.mode() : undefined, memory: await memory.list(), mcp: mcp?.briefing }),
       ...(options.effortPolicy === undefined ? {} : { effortPolicy: options.effortPolicy }),
       ...(director === undefined ? {} : { director }),
     };

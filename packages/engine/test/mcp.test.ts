@@ -105,7 +105,7 @@ const textOf = (reply: Awaited<ReturnType<import('../src/tools/context.js').Exec
 /** The tools once every server has started, as a session sees them from its second turn on. */
 async function toolsetOf(hub: McpHub, value: Approval) {
   await hub.start();
-  return hub.toolset(value);
+  return (await hub.toolset(value))!;
 }
 
 async function waitFor(check: () => boolean, ms = 10_000): Promise<void> {
@@ -178,13 +178,13 @@ describe('MCP cold start and per-server controls', () => {
     const starting = hub.start();
 
     const asked = Date.now();
-    const cold = await hub.toolset(approval('auto', 'allow').value);
+    const cold = (await hub.toolset(approval('auto', 'allow').value))!;
     expect(Date.now() - asked, 'the toolset does not wait for the cold server').toBeLessThan(500);
     expect(cold.tools).toEqual([]);
     expect(hub.views()[0]!.state).toEqual({ status: 'starting', restarts: 0 });
 
     await starting;
-    const warm = await hub.toolset(approval('auto', 'allow').value);
+    const warm = (await hub.toolset(approval('auto', 'allow').value))!;
     expect(warm.tools.map((tool) => tool.name)).toContain('mcp__slow__echo');
   });
 
@@ -355,7 +355,7 @@ describe('MCP approval', () => {
   it('offers no MCP tools to a non-interactive run unless it turns them on', async () => {
     const { open } = await setup({ global: { mcpServers: { fake: stdioServer() } } });
     const hub = await open();
-    expect((await hub.toolset({ kind: 'non-interactive' })).tools).toEqual([]);
+    expect(await hub.toolset({ kind: 'non-interactive' })).toBeUndefined();
     expect(hub.views()[0]!.state, 'nothing started').toEqual({ status: 'stopped' });
     expect((await toolsetOf(hub, { kind: 'non-interactive', mcp: true })).tools.length).toBeGreaterThan(0);
   });

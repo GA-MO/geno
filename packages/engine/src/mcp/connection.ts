@@ -9,9 +9,10 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McpContent, McpPromptInfo, McpResourceInfo, McpServerConfig, McpToolInfo } from '@g-code/core';
 import { mcpServerEnv, type Env } from '../child-env.js';
 
-/** A server that answered `initialize`, with the tools it listed then. */
+/** A server that answered `initialize`, with the tools it listed then and the instructions it sent with its answer. */
 export type McpConnection = {
   readonly tools: readonly McpToolInfo[];
+  readonly instructions: string | undefined;
   call(tool: string, args: Record<string, unknown>, signal: AbortSignal): Promise<McpCallResult>;
   prompts(): Promise<McpPromptInfo[]>;
   resources(): Promise<McpResourceInfo[]>;
@@ -155,6 +156,7 @@ export async function connectMcp(config: McpServerConfig, options: ConnectOption
   const capabilities = client.getServerCapabilities() ?? {};
   return {
     tools,
+    instructions: client.getInstructions(),
     async call(tool, args, signal) {
       const result = (await client.callTool({ name: tool, arguments: args }, undefined, { signal, timeout: CALL_TIMEOUT_MS })) as CallToolResult;
       return { content: (result.content ?? []).map(contentOf), structured: result.structuredContent, isError: result.isError === true };
