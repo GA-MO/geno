@@ -212,6 +212,29 @@ P35 covers rows that have no Claude Code conformance test:
 | C/C-55 (MCP) | `mcp.conformance.test.ts`, both wires: a plugin's server in a fake home is reported as not approved, its tools are in no request, and its process never runs. After `gcode mcp trust plugin_docs_fake`, the next session's notice names `mcp__plugin_docs_fake__echo`, and `tool_search` loads it and the call answers. `mcp.test.ts`: a plugin `.mcp.json` with servers at the top and `${CLAUDE_PLUGIN_ROOT}`, a manifest that names a file and holds a server, the `plugin_<plugin>_<server>` names, and no process before approval. |
 | C/C-62 | `mcp.conformance.test.ts`, both wires: a `worker` child loads `mcp__docs__echo` with `tool_search` and calls it, and its report, which quotes the result, reaches the parent; its notice lists the untrusted workspace server as not approved, with no tool of it. An `explore` child is offered no `tool_search` and no MCP tool, and no request of its mentions MCP. An `mcp__docs__*` deny in `.claude/settings.json` refuses the worker's call, naming the rule and the file. `subagent.test.ts` (core): the three `mcp__` forms, `disallowedTools`, a definition with no tools field, one with only MCP tools, and the built-ins' grants. |
 
+## Workflow resume and diagnostics (P33)
+
+A workflow run keeps a journal beside its session log, at `sessions/<run>/workflow-journal.jsonl` in Geno's home. Each agent call that ends done adds a line `{ key, step, child, result }`: the key, the step's label, the child session that ran it, and its report. The key is `unitKey` in `core/src/workflow.ts`, a sha256 of the task as the step sends it (its schema line included), its caps, its role and its model. Claude Code keys a call on its prompt; Geno adds the caps, the role and the model, so a step moved to a stronger model or given more turns runs again. A step in a lane has no key and never replays, since its edits live in the earlier run's lane, which a resumed run does not work in. A check is never journaled: it reads the workspace as it is now.
+
+`/workflow <name> --resume <run> [input]` and the `workflow` tool's `resume` field start a run that replays an earlier one. `<run>` is the earlier run's session id, which its report and its Tasks row name. The run must be one of the same workflow, and keeps its input unless given another. The card's question says how many steps replay before the first call that runs: "Resume workflow three from run <id>: 3 steps, 2 replayed with no model call, about …". Its estimate still counts every step, so it never reads low. The director (`workflowDriver` in `engine/src/workflows.ts`) asks `nextLiveRound` for each round: each call whose key the journal holds settles from it as `replayed`, at no cost and with no model call, and the rest are issued. Once a round issues an agent call, nothing after it replays, because a later step may lean on what the live one changed; so a changed prompt for step 2 runs step 2 and every step after it. A check runs and lets the replay go on.
+
+The run is idempotent. The director journals every finished call before it issues the next round, replayed calls too. A crash in step 3 leaves steps 1 and 2 in the journal, and step 3 runs again on resume. A line a crash tore while it was written is skipped, so its step runs again. Resuming the same run twice replays the same calls, and resuming the resumed run replays everything it finished. Each run writes only its own journal, so two resumes of one run never share a file.
+
+The closing report says "Resumed from run <id>: N replayed with no model call.", lists a replayed step as "replayed, no model call" with the child session that ran it, counts the steps whose report was empty ("Empty results: 1 (fix)."), and for each step that failed, hit a cap or came back empty, says "Read step session <id> before diagnosing <step>." This is Claude Code's completion notice with diagnostics and empty-result counts, in Geno's report.
+
+There is no `gcode` command-line entry: a workflow runs only in an editor session, which shows the card, so `--resume` lives on `/workflow` and the tool. The panel's card shows the resume in its question; its body is unchanged.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-WF-02 | Fail step 3, edit, resume with `resumeFromRunId`: steps 1 and 2 make no model call. | `/workflow three --resume <run>` after step 3 failed: steps 1 and 2 replay from the journal with no model call, by the fake model's request count, and step 3 runs. A changed prompt for step 2 runs step 2 and step 3. | pass (was no test) | `workflows.conformance.test.ts`, both wires |
+
+P33 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| C/C-46 | T-WF-02 above. `workflows.conformance.test.ts`, both wires: while step 3 waits on its model, the journal already holds steps 1 and 2; the card asks "Resume workflow three from run <id>: 3 steps, 2 replayed with no model call"; the resumed run keeps the input; resuming the first run again replays the same, and resuming the resumed run makes no model call at all; a torn last line is skipped. `workflow.test.ts` (core): the key changes with the task, each cap, the role and the model, and a lane step has none; the journal holds done calls only; a replayed report feeds the steps after it; the prefix rule; a check runs mid-replay and the steps after it replay; a lane step never replays; determinism of two resumes; `--resume` and `resume` parsed. Without the prefix rule, two core tests fail; with replay off, every T-WF-02 test fails. |
+| C/C-47 | `workflow.test.ts` (core): a fan-out with an empty, a failed and a good step says "Empty results: 1 (a)." and names the sessions of the empty and the failed step, and not the good one. `workflows.conformance.test.ts`: a failed step 3 says "Read step session <id> before diagnosing three." and "Empty results: 0.". The closing-report test checks the whole text. |
+
 ## Environment (P5)
 
 `captureEnvironment` in `engine/src/environment.ts` records the session's environment when it starts, and the session-start event keeps it beside the loaded context. `renderEnvironment` in `core/src/environment.ts` writes it into the opening user message.
@@ -748,7 +771,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AGENT-04 | adopt | P18 | pass |
 | T-AGENT-05 | adapt | P20 | pass |
 | T-WF-01 | adapt | P34 | no test yet |
-| T-WF-02 | adopt | P33 | no test yet |
+| T-WF-02 | adopt | P33 | pass |
 | T-PERSIST-01 | keep Geno's | none | no test yet |
 | T-PERSIST-02 | adopt | P11 | pass |
 | T-PERSIST-03 | adapt | P22 | pass |

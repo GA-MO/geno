@@ -618,6 +618,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** A journal of `{key: sha256(prompt, caps, role), child, result}` per unit. `/workflow <name> --resume <run>` replays matching units. The closing report adds an empty-result count and "read step session <id> before diagnosing".
 - **Check.** T-WF-02: fail step 3, edit, resume, and steps 1 and 2 make no model call.
 - **Size.** 1 day. **Depends on.** U64 merged.
+- **Status.** Done. The key also takes the step's model, so a step moved to another model runs again. A step in a lane never replays, since its edits live in the earlier run's lane. Once a round runs an agent call live, nothing after it replays, so a changed step 2 runs step 2 and every step after it. The journal sits in the run's session folder, and the director writes it before each round, so a crash in a step keeps the steps before it and resuming twice converges. There is no command-line entry, since workflows run only in an editor; the `workflow` tool takes `resume`. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P34: structured output for workflow steps
 

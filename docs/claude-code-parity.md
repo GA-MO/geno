@@ -289,8 +289,8 @@ Before P13 Geno had no user hooks. P13 reads them in Claude Code's format and fi
 | C/C-43, B/B-28 | `Workflow` runs a JavaScript script. | U64 (unmerged): declarative JSON steps, refs checked at load, no code runs (docs/u64.md on the branch). | **keep Geno's**: a file from a cloned repo cannot execute anything. | none | U64 tests | none |
 | C/C-44 | Workflows run only when the user asks. | A permission card with the cost estimate before every run. | **keep Geno's** card. **adapt**: add "only when the user asked" to the tool description. | S | Snapshot | P24, done |
 | C/C-45, B/B-46, T-WF-01 | `agent(prompt, {schema})` forces a validated `StructuredOutput` call. | A flat schema, parsed from the last JSON block in the step's text. | **adapt**: keep the flat schema. Deliver it as a forced `structured_output` tool with the derived JSON Schema, falling back to the block parse. | M | Eval: schema step success, block parse against forced tool, on qwen3.8-flash. | P34 |
-| C/C-46, T-WF-02 | `resumeFromRunId` replays finished agent calls from a journal. | A run does not survive the engine. | **adopt**: a journal keyed on prompt, caps and role. `/workflow <name> --resume <run>`. | M | Fail step 3, edit, resume: steps 1 and 2 make no model call. | P33 |
-| C/C-47 | The completion notice carries diagnostics and empty-result counts. | The closing report lists steps, calls and cost. | **adopt** an empty-result count and a "read step session <id> before diagnosing" pointer. | S | Snapshot | P33 |
+| C/C-46, T-WF-02 | `resumeFromRunId` replays finished agent calls from a journal. | A run does not survive the engine. | **adopt**: a journal keyed on prompt, caps and role. `/workflow <name> --resume <run>`. | M | Fail step 3, edit, resume: steps 1 and 2 make no model call. | P33, done |
+| C/C-47 | The completion notice carries diagnostics and empty-result counts. | The closing report lists steps, calls and cost. | **adopt** an empty-result count and a "read step session <id> before diagnosing" pointer. | S | Snapshot | P33, done |
 | C/C-48, C/C-49 | Up to 16 at once, 1,000 agents, a token budget. | 4 at once, 40 units, a round starts only if the remaining cap covers every call. | **keep Geno's**: the cap rule cannot pass the total. | none | U64 tests | none |
 
 ### Skills, plugins and MCP
@@ -389,7 +389,7 @@ Claude Code's design follows these principles (research chapter 16, section 4, a
 | **One boundary for every path.** Background work, monitors, previews and children go through the same checks. No agent launders permissions. | Matches: `approveCommand` is shared, and children approve nothing (engine/src/tools/agent.ts:73-77,254-268). | none |
 | **Parallel reads, serial writes, ordered results.** | Matches (core/src/tool-batch.ts). | none |
 | **Text is the only channel.** Every state reaches the model as text. | Matches. `message_agent` receipts are an example. | none |
-| **Everything can be rebuilt.** The transcript, the prompt snapshot and the wire log are kept. | Matches better: the request is a pure function of the log. A finished child resumes from its own log (C/C-30, P18). Gap: no workflow resume (C/C-46). | P11, P18, P33 |
+| **Everything can be rebuilt.** The transcript, the prompt snapshot and the wire log are kept. | Matches better: the request is a pure function of the log. A finished child resumes from its own log (C/C-30, P18). A workflow run resumes from its journal (C/C-46, P33). | P11, P18, P33 |
 | **Tell the model its situation.** Date, platform, git snapshot, budget, mode, failed servers, child usage. | Breaks: no environment block (A/C-12). The budget reaches the model as a reminder since P25 (A/B-11). MCP failures reach the model since P10 (C/C-59). Child usage is on the report fence (C/C-27, P17). | P5, P10, P17, P25 |
 
 ## Geno extras to keep
