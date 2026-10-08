@@ -7,6 +7,7 @@ import { approvalModeOf, Chat, CHAT_VIEW, HISTORY_COMMAND, LANES_COMMAND, MCP_CO
 import { BROWSER_ENABLED_SETTING } from './chat/browser.js';
 import { backendEnv } from './chat/backends-host.js';
 import { readForwarded, userMcpFile } from './chat/mcp-forward.js';
+import { McpTokenStore } from './chat/mcp-tokens.js';
 import type { EngineSettings } from './chat/engine.js';
 import { findExecutable } from './executables.js';
 import { registerReview } from './review/commands.js';
@@ -135,6 +136,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     seenStore(context.storageUri),
     (backend) => backendEnv(context.secrets, backend),
     (request) => terminals.read(request),
+    new McpTokenStore(context.secrets),
   );
   registerReview(context, chat, review);
   context.subscriptions.push(
