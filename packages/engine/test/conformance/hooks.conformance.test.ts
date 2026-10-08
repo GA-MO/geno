@@ -754,7 +754,7 @@ describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
         cwd: run.workspace,
         tool_name: 'Bash',
         tool_input: { command: 'kubectl get pods' },
-        permission_suggestions: [{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: expect.stringMatching(/^kubectl get/) }], behavior: 'allow', destination: 'localSettings' }],
+        permission_suggestions: [{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'kubectl get pods' }], behavior: 'allow', destination: 'localSettings' }],
       },
     ]);
     expect(resultOf(run, 'tu_kube')!.text, 'the command ran, though no kubectl is installed').not.toMatch(/denied/);
@@ -806,6 +806,28 @@ describe.each(WIRES)('PermissionRequest on the %s wire', (wire: Wire) => {
     const stopped = await interactive(wire, [call('', [kubectl]), say('Stopped.')], async (run) => ({ PermissionRequest: group((await hookScript(run, 'stop', { stdout: answerCard({ behavior: 'deny', interrupt: true }) })).command) }), { mode: 'ask' });
     expect(stopped.asked).toEqual([]);
     expect(stopped.logged('tu_kube')).toMatchObject({ status: 'rejected', approval: { decidedBy: 'hook', verdict: 'deny', interrupt: true } });
+  });
+
+  it('runs the reset example of docs/hooks.md as written: the exact command runs, and a longer line stays refused', async () => {
+    const reset = { id: 'tu_reset', name: 'bash', input: { command: 'git reset --hard' } };
+    const chained = { id: 'tu_chained', name: 'bash', input: { command: 'git reset --hard && touch chained.out' } };
+    const run = await scripted(wire, [call('', [reset]), call('', [chained]), say('Done.')]);
+    const section = (await readFile(new URL('../../../../docs/hooks.md', import.meta.url), 'utf8')).split('## PermissionRequest')[1]!;
+    const settings = /```json\n([\s\S]*?)```/.exec(section)![1]!;
+    const script = /```sh\n([\s\S]*?)```/.exec(section)![1]!;
+    await mkdir(path.join(run.env['HOME']!, 'bin'), { recursive: true });
+    await writeFile(path.join(run.env['HOME']!, 'bin', 'allow-reset.sh'), script);
+    await chmod(path.join(run.env['HOME']!, 'bin', 'allow-reset.sh'), 0o755);
+    await writeFile(path.join(run.env['GCODE_HOME']!, 'settings.json'), settings);
+    await writeFile(path.join(run.workspace, 'a.ts'), 'changed\n');
+
+    const result = await run.cli(agent(run.workspace, 'Start over'));
+    expect(result.code).toBe(0);
+    expect(result.stderr).not.toContain('hook error');
+    expect(resultOf(run, 'tu_reset')!.text).not.toMatch(/denied/);
+    expect(await readFile(path.join(run.workspace, 'a.ts'), 'utf8'), 'the reset ran').toBe('export const a = 1;\n');
+    expect(resultOf(run, 'tu_chained')).toMatchObject({ error: true, text: expect.stringContaining('denied') });
+    expect(existsSync(path.join(run.workspace, 'chained.out'))).toBe(false);
   });
 
   it('leaves a card without a decision to the user, and a Plan refusal to Plan', async () => {

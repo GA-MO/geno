@@ -463,6 +463,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** PermissionRequest fires when a card would show, with Geno's offered pattern as `permission_suggestions`. Add SubagentStart, SubagentStop and a lane-create hook.
 - **Check.** T-HOOK-05. A lane e2e with a create hook.
 - **Size.** 1 day. **Depends on.** P15.
+- **Status.** Done. Claude Code's WorktreeCreate replaces creating the worktree, which a lane cannot let a hook do, so the lane-create hook is Geno's own LaneCreated, and runs the user's hooks only. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P17: handback and report contents
 
