@@ -10,11 +10,12 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachmentFileName, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
-import { openMcpHub, type McpHub } from '../src/mcp/hub.js';
+import { openMcpHub, type McpHub, type McpTokens } from '../src/mcp/hub.js';
 import { openStore } from '../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { fakeMcpServer } from './fake-mcp-server.js';
+import { fakeOAuth, type FakeOAuth } from './fake-oauth.js';
 import { runCli } from './helpers.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
@@ -49,8 +50,8 @@ async function setup(files: { readonly mcpJson?: unknown; readonly vscode?: unkn
     await writeFile(path.join(workspace, '.vscode', 'mcp.json'), JSON.stringify(files.vscode));
   }
   if (files.global !== undefined) await writeFile(store.mcpConfigFile, JSON.stringify(files.global));
-  const open = async (acp: Parameters<typeof openMcpHub>[0]['acp'] = []) => {
-    const hub = await openMcpHub({ store, env, workspace, acp });
+  const open = async (acp: Parameters<typeof openMcpHub>[0]['acp'] = [], tokens?: McpTokens) => {
+    const hub = await openMcpHub({ store, env, workspace, acp, tokens });
     hubs.push(hub);
     return hub;
   };
@@ -449,6 +450,95 @@ describe('MCP HTTP servers', () => {
     const hub = await open();
     await toolsetOf(hub, approval('auto', 'allow').value);
     expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: true });
+  });
+});
+
+describe('MCP sign-in', () => {
+  const oauths: FakeOAuth[] = [];
+  afterEach(async () => {
+    await Promise.all(oauths.splice(0).map((oauth) => oauth.close()));
+  });
+
+  /**
+   * A server that wants a bearer token, and the editor's side as the hub sees it: `next` answers each ask in turn,
+   * and every ask is kept with the server it named and whether the last token was refused.
+   */
+  async function signedIn(next: (rejected: boolean) => string | undefined) {
+    const oauth = await fakeOAuth();
+    oauths.push(oauth);
+    const asked: { name: string; url: string; rejected: boolean }[] = [];
+    const tokens: McpTokens = async (server, rejected) => {
+      asked.push({ ...server, rejected });
+      return next(rejected);
+    };
+    const { open, workspace } = await setup({ global: { mcpServers: { docs: { type: 'http', url: oauth.mcpUrl } } } });
+    return { oauth, asked, hub: await open([], tokens), workspace };
+  }
+
+  it('needs sign-in while the editor holds no token, and asks it only after the 401', async () => {
+    const { hub, asked, oauth } = await signedIn(() => undefined);
+    const { tools } = await toolsetOf(hub, approval('auto', 'allow').value);
+    expect(hub.views()[0]!.state).toEqual({ status: 'failed', reason: 'the server needs sign-in', needsSignIn: true });
+    expect(tools).toEqual([]);
+    expect(asked).toEqual([{ name: 'docs', url: oauth.mcpUrl, rejected: false }]);
+  });
+
+  it('sends the access token as a bearer, and the tools work', async () => {
+    let oauth: FakeOAuth | undefined;
+    const { hub, workspace, ...rest } = await signedIn(() => oauth!.mint().accessToken);
+    oauth = rest.oauth;
+    const { executors } = await toolsetOf(hub, approval('auto', 'allow').value);
+    expect(textOf(await executors['mcp__docs__echo']!.run({ text: 'signed in' }, ctx(workspace)))).toBe('echo: signed in');
+    expect(rest.asked.map((ask) => ask.rejected), 'one ask for the whole connection').toEqual([false]);
+  });
+
+  it('asks for a refreshed token when the server refuses an expired one, at the start and in the middle of a session', async () => {
+    let oauth: FakeOAuth | undefined;
+    let stale: string | undefined;
+    const { hub, workspace, asked, ...rest } = await signedIn((rejected) => {
+      if (!rejected && stale !== undefined) return stale;
+      return oauth!.mint().accessToken;
+    });
+    oauth = rest.oauth;
+    stale = oauth.mint().accessToken;
+    oauth.expireAccess();
+    const { executors } = await toolsetOf(hub, approval('auto', 'allow').value);
+    expect(asked.map((ask) => ask.rejected), 'the expired token was refused, then refreshed').toEqual([false, true]);
+    expect(textOf(await executors['mcp__docs__echo']!.run({ text: 'one' }, ctx(workspace)))).toBe('echo: one');
+
+    oauth.expireAccess();
+    expect(textOf(await executors['mcp__docs__echo']!.run({ text: 'two' }, ctx(workspace)))).toBe('echo: two');
+    expect(asked.map((ask) => ask.rejected)).toEqual([false, true, true]);
+  });
+
+  it('turns to needing sign-in when the editor has no token left for a refused one, and again after a reconnect', async () => {
+    let oauth: FakeOAuth | undefined;
+    let signedOut = false;
+    const { hub, workspace, ...rest } = await signedIn(() => (signedOut ? undefined : oauth!.mint().accessToken));
+    oauth = rest.oauth;
+    const { executors } = await toolsetOf(hub, approval('auto', 'allow').value);
+    signedOut = true;
+    oauth.revokeAll();
+    await expect(executors['mcp__docs__echo']!.run({ text: 'gone' }, ctx(workspace))).rejects.toThrow(
+      "the MCP server docs needs sign-in; ask the user to sign in to it in the editor's MCP servers view",
+    );
+    expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: true });
+    expect((await hub.toolset(approval('auto', 'allow').value))!.tools, 'its tools left').toEqual([]);
+
+    await hub.reconnect('docs');
+    await hub.start();
+    expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: true });
+  });
+
+  it('never asks for a token for a server whose definition sets its own credential', async () => {
+    const oauth = await fakeOAuth();
+    oauths.push(oauth);
+    const asked: boolean[] = [];
+    const { open } = await setup({ global: { mcpServers: { docs: { type: 'http', url: oauth.mcpUrl, headers: { Authorization: 'Bearer fake-own' } } } } });
+    const hub = await open([], async (_server, rejected) => (asked.push(rejected), oauth.mint().accessToken));
+    await toolsetOf(hub, approval('auto', 'allow').value);
+    expect(hub.views()[0]!.state).toMatchObject({ status: 'failed', needsSignIn: true });
+    expect(asked).toEqual([]);
   });
 });
 

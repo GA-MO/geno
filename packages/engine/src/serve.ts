@@ -116,9 +116,13 @@ import {
   PERMISSION_COMMENT_META,
   isSessionMode,
   MCP_ENABLE_METHOD,
+  MCP_RECONNECT_METHOD,
   MCP_SERVERS_METHOD,
+  MCP_TOKEN_CAPABILITY,
+  MCP_TOKEN_METHOD,
   MCP_TRUST_METHOD,
   type McpServersResponse,
+  type McpTokenRequest,
   SESSION_MODES,
   sessionEffortOf,
   lastContextUse,
@@ -287,7 +291,7 @@ import { runInlineEdit } from './inline.js';
 import { contextItems, MentionError, mentionsOf } from './mentions.js';
 import { checkpointsOf, forkSession, rewindPreview, rewindSession, rewindTo } from './rewind.js';
 import { browserSettingsOf } from './mcp/browser.js';
-import { mcpSessions, type McpSessions } from './mcp/sessions.js';
+import { mcpSessions, type McpSessions, type McpSessionTokens } from './mcp/sessions.js';
 import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type SettingChange } from './sessions.js';
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
@@ -386,6 +390,21 @@ const modeState = (mode: SessionMode): acp.SessionModeState => ({
 const unsavedBuffersResponse = z.object({ buffers: z.array(z.object({ path: z.string(), text: z.string() })) });
 
 const backendEnvResponse = z.object({ env: z.record(z.string(), z.string()) });
+const mcpTokenResponse = z.object({ accessToken: z.string().min(1).optional() });
+
+/**
+ * An HTTP MCP server's access token, asked of the editor that shows the session; with none, or one that cannot answer,
+ * the server needs sign-in. The token is never logged.
+ */
+export const mcpTokensVia =
+  (viewers: Viewers<Peer>): McpSessionTokens =>
+  async (sessionId, server, rejected) => {
+    const viewer = viewers.of(sessionId);
+    if (viewer === undefined || !viewer.peer.mcpTokens || viewer.closed.aborted) return undefined;
+    const request: McpTokenRequest = { sessionId, server: server.name, url: server.url, rejected };
+    const parsed = mcpTokenResponse.safeParse(await viewer.client.request<unknown>(MCP_TOKEN_METHOD, request));
+    return parsed.success ? parsed.data.accessToken : undefined;
+  };
 const backendRequest = z.object({ id: z.string() }).nullish();
 
 const diagnosticsResponse = z.object({
@@ -432,6 +451,8 @@ type Peer = {
   readonly workflows: boolean;
   /** Its workspace is one the user trusts, as VS Code's workspace trust says, so the workspace's own hooks may run. */
   readonly trusted: boolean;
+  /** It answers MCP_TOKEN_METHOD from the user's sign-ins to HTTP MCP servers. */
+  readonly mcpTokens: boolean;
 };
 
 const NO_PEER: Peer = {
@@ -452,6 +473,7 @@ const NO_PEER: Peer = {
   chapters: false,
   workflows: false,
   trusted: false,
+  mcpTokens: false,
 };
 
 /**
@@ -961,6 +983,7 @@ function checkpointFor(events: readonly TurnEvent[], { before }: { readonly befo
 const mcpServersRequest = z.object({ sessionId: z.string() });
 const mcpTrustRequest = z.object({ sessionId: z.string(), name: z.string().min(1), hash: z.string().min(1) });
 const mcpEnableRequest = z.object({ sessionId: z.string(), name: z.string().min(1), enabled: z.boolean() });
+const mcpReconnectRequest = z.object({ sessionId: z.string(), name: z.string().min(1) });
 const sessionRequest = z.object({ sessionId: z.string() });
 const permissionsRequest = z.object({ cwd: z.string() });
 const permissionAddRequest = z.object({ cwd: z.string(), effect: z.enum(RULE_EFFECTS), text: z.string() });
@@ -1901,6 +1924,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         chapters: _meta?.[CHAPTER_CAPABILITY] === true,
         workflows: _meta?.[WORKFLOWS_CAPABILITY] === true,
         trusted: _meta?.[WORKSPACE_TRUST_CAPABILITY] === true,
+        mcpTokens: _meta?.[MCP_TOKEN_CAPABILITY] === true,
       };
       runner ??= { connection: self(), start: startScheduled };
       schedules.connected(runner);
@@ -2348,6 +2372,12 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(MCP_ENABLE_METHOD, mcpEnableRequest, async ({ params }): Promise<McpServersResponse> => {
       known(params.sessionId);
       return mcp.setEnabled(params.sessionId, params.name, params.enabled).catch((error: unknown) => {
+        throw acp.RequestError.invalidParams({ name: params.name }, error instanceof Error ? error.message : String(error));
+      });
+    })
+    .onRequest(MCP_RECONNECT_METHOD, mcpReconnectRequest, async ({ params }): Promise<McpServersResponse> => {
+      known(params.sessionId);
+      return mcp.reconnect(params.sessionId, params.name).catch((error: unknown) => {
         throw acp.RequestError.invalidParams({ name: params.name }, error instanceof Error ? error.message : String(error));
       });
     });

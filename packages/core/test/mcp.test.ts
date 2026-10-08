@@ -43,6 +43,8 @@ describe('the server state machine', () => {
     [{ status: 'ready', restarts: 0 }, { type: 'crashed', reason: 'exit 1' }, { status: 'starting', restarts: 1 }],
     [{ status: 'ready', restarts: MCP_MAX_RESTARTS }, { type: 'crashed', reason: 'exit 1' }, { status: 'failed', reason: `crashed ${MCP_MAX_RESTARTS + 1} times; last: exit 1`, needsSignIn: false }],
     [{ status: 'ready', restarts: 2 }, { type: 'stop' }, { status: 'stopped' }],
+    [{ status: 'ready', restarts: 0 }, { type: 'unauthorized' }, { status: 'failed', reason: 'the server needs sign-in', needsSignIn: true }],
+    [{ status: 'untrusted' }, { type: 'unauthorized' }, { status: 'untrusted' }],
     [{ status: 'ready', restarts: 2 }, { type: 'start' }, { status: 'ready', restarts: 2 }],
     [{ status: 'failed', reason: 'x', needsSignIn: false }, { type: 'start' }, { status: 'failed', reason: 'x', needsSignIn: false }],
     [{ status: 'ready', restarts: 1 }, { type: 'disable' }, { status: 'disabled', trusted: true }],

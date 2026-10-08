@@ -67,6 +67,8 @@ export type McpServerEvent =
   | { readonly type: 'connected' }
   | { readonly type: 'connect-failed'; readonly reason: string; readonly needsSignIn: boolean }
   | { readonly type: 'crashed'; readonly reason: string }
+  /** A ready server refused its credentials, as when the user signed out or the sign-in lapsed. */
+  | { readonly type: 'unauthorized' }
   | { readonly type: 'stop' }
   | { readonly type: 'disable' }
   | { readonly type: 'enable' };
@@ -105,6 +107,7 @@ const TRANSITIONS: Transitions = {
       restarts < MCP_MAX_RESTARTS
         ? { status: 'starting', restarts: restarts + 1 }
         : { status: 'failed', reason: `crashed ${restarts + 1} times; last: ${reason}`, needsSignIn: false },
+    unauthorized: () => ({ status: 'failed', reason: 'the server needs sign-in', needsSignIn: true }),
     stop: toStopped,
     disable: toDisabled,
   },
@@ -238,6 +241,20 @@ export const MCP_SERVERS_METHOD = '_gcode/mcpServers';
 export const MCP_TRUST_METHOD = '_gcode/mcpTrust';
 /** Extension method, sent by the editor: turns a server off or on for the workspace, then returns the servers. */
 export const MCP_ENABLE_METHOD = '_gcode/mcpEnable';
+/**
+ * Extension method, sent by the editor after the user signed in to a server or out of it: drops the server's
+ * connection and starts it again, then returns the servers.
+ */
+export const MCP_RECONNECT_METHOD = '_gcode/mcpReconnect';
+/**
+ * Extension method, sent by the engine to the editor that shows the session, once an HTTP server answered 401: the
+ * access token the user's sign-in holds for that server, if any. `rejected` says the server refused the one the
+ * engine sent, so the editor refreshes it. The editor keeps the sign-in; the engine keeps a token only for as long as
+ * the connection it was sent on.
+ */
+export const MCP_TOKEN_METHOD = '_gcode/mcpToken';
+/** Key in the client capabilities' `_meta`, true when the client answers MCP_TOKEN_METHOD. */
+export const MCP_TOKEN_CAPABILITY = 'gcode/mcpToken';
 
 export type McpServerView = {
   readonly name: string;
@@ -252,4 +269,7 @@ export type McpServerView = {
 export type McpServersRequest = { readonly sessionId: string };
 export type McpTrustRequest = { readonly sessionId: string; readonly name: string; readonly hash: string };
 export type McpEnableRequest = { readonly sessionId: string; readonly name: string; readonly enabled: boolean };
+export type McpReconnectRequest = { readonly sessionId: string; readonly name: string };
+export type McpTokenRequest = { readonly sessionId: string; readonly server: string; readonly url: string; readonly rejected: boolean };
+export type McpTokenResponse = { readonly accessToken?: string | undefined };
 export type McpServersResponse = { readonly servers: readonly McpServerView[]; readonly problems: readonly string[] };
