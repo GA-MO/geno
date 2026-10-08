@@ -21,19 +21,37 @@ export type McpSessions = {
   servers(sessionId: string): Promise<McpServersResponse>;
   trust(sessionId: string, name: string, hash: string): Promise<McpServersResponse>;
   setEnabled(sessionId: string, name: string, enabled: boolean): Promise<McpServersResponse>;
+  /** Drops a server's connection and starts it again, as after the user signed in to it or out. */
+  reconnect(sessionId: string, name: string): Promise<McpServersResponse>;
   /** Stops the session's servers; a later register opens them again. */
   close(sessionId: string): Promise<void>;
   stopAll(): Promise<void>;
 };
 
-export function mcpSessions(store: Store, env: Env, log: (line: string) => void = () => {}, launcher: BrowserLauncher = NPX_LAUNCHER): McpSessions {
+/** The access token for one HTTP server of a session, from the editor that shows it. */
+export type McpSessionTokens = (sessionId: string, server: { readonly name: string; readonly url: string }, rejected: boolean) => Promise<string | undefined>;
+
+export function mcpSessions(
+  store: Store,
+  env: Env,
+  log: (line: string) => void = () => {},
+  launcher: BrowserLauncher = NPX_LAUNCHER,
+  tokens?: McpSessionTokens,
+): McpSessions {
   const pending = new Map<string, { readonly workspace: string; readonly servers: readonly acp.McpServer[]; readonly browser: BrowserSettings | undefined }>();
   const hubs = new Map<string, Promise<McpHub>>();
   const hubOf = (sessionId: string): Promise<McpHub> => {
     const open = hubs.get(sessionId);
     if (open !== undefined) return open;
     const { workspace, servers, browser } = pending.get(sessionId) ?? { workspace: '', servers: [], browser: undefined };
-    const hub = openMcpHub({ store, env, workspace, acp: servers, browser: browser === undefined ? undefined : { settings: browser, launcher, home: homeOf(store) } });
+    const hub = openMcpHub({
+      store,
+      env,
+      workspace,
+      acp: servers,
+      browser: browser === undefined ? undefined : { settings: browser, launcher, home: homeOf(store) },
+      tokens: tokens === undefined ? undefined : (server, rejected) => tokens(sessionId, server, rejected),
+    });
     // A hub that failed to open, such as for a malformed trust file, is retried at the next need.
     hub.catch(() => hubs.delete(sessionId));
     hubs.set(sessionId, hub);
@@ -67,6 +85,12 @@ export function mcpSessions(store: Store, env: Env, log: (line: string) => void 
       const hub = await hubOf(sessionId);
       await hub.setEnabled(name, enabled);
       if (enabled) startInBackground(sessionId);
+      return response(hub);
+    },
+    async reconnect(sessionId, name) {
+      const hub = await hubOf(sessionId);
+      await hub.reconnect(name);
+      startInBackground(sessionId);
       return response(hub);
     },
     async close(sessionId) {

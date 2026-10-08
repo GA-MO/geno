@@ -27,6 +27,7 @@ import {
   type McpGrant,
   type McpPromptInfo,
   type McpResourceInfo,
+  type McpServerConfig,
   type McpServerView,
   type McpToolInfo,
 } from '@g-code/core';
@@ -38,6 +39,7 @@ import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, type BrowserOptions } from './browser.js';
 import { loadMcpConfig } from './config.js';
+import type { McpTokenSource } from './connection.js';
 import { McpServerHandle } from './server.js';
 import { approveServer, readDisabled, readTrust, setDisabled } from './trust.js';
 
@@ -66,6 +68,8 @@ export type McpHub = {
   trust(name: string, hash?: string): Promise<void>;
   /** Turns a server off for this workspace, stopping it, or back on; the next start starts it. */
   setEnabled(name: string, enabled: boolean): Promise<void>;
+  /** Drops a server's connection, as after the user signed in to it or out; the next start starts it again. */
+  reconnect(name: string): Promise<void>;
   /**
    * Undefined for a run that gets no MCP: a non-interactive one that did not turn it on. With `grant`, a subagent's,
    * only the tools it grants, and only the servers it may reach in the briefing.
@@ -84,6 +88,17 @@ export type McpHubOptions = {
   readonly acp: readonly acp.McpServer[];
   /** The built-in browser; without it the session has none. */
   readonly browser?: BrowserOptions | undefined;
+  /** The editor's tokens for the HTTP servers the user signed in to; without it, a server that wants sign-in stays unusable. */
+  readonly tokens?: McpTokens | undefined;
+};
+
+/** The access token for one HTTP server of the session, as McpTokenSource asks for it. */
+export type McpTokens = (server: { readonly name: string; readonly url: string }, rejected: boolean) => Promise<string | undefined>;
+
+const tokenSourceOf = (config: McpServerConfig, tokens: McpTokens | undefined): McpTokenSource | undefined => {
+  if (tokens === undefined || config.transport.kind === 'stdio') return undefined;
+  const server = { name: config.name, url: config.transport.url };
+  return (rejected) => tokens(server, rejected);
 };
 
 const argumentsSchema = z.record(z.string(), z.unknown());
@@ -120,7 +135,7 @@ async function withImages(name: string, content: readonly McpContent[], ctx: Too
   return { content: shown, images };
 }
 
-export async function openMcpHub({ store, env, workspace, acp, browser }: McpHubOptions): Promise<McpHub> {
+export async function openMcpHub({ store, env, workspace, acp, browser, tokens }: McpHubOptions): Promise<McpHub> {
   const loaded = await loadMcpConfig(store, env, workspace, acp);
   const problems = [...loaded.problems];
   const servers = loaded.servers.filter((config) => {
@@ -131,7 +146,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
   const trust = await readTrust(store);
   const disabled = await readDisabled(store, workspace);
   const handles = new Map(
-    servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), disabled.has(config.name), env, workspace)]),
+    servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), disabled.has(config.name), env, workspace, tokenSourceOf(config, tokens))]),
   );
   // Its on and off live in the editor's settings, not the disabled file.
   if (browser !== undefined) {
@@ -238,6 +253,10 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
       if (!isBuiltin(handle)) await setDisabled(store, workspace, name, !enabled);
       if (enabled) handle.enable();
       else await handle.disable();
+    },
+    async reconnect(name) {
+      const handle = handleOf(name);
+      if (!isBuiltin(handle)) await handle.stop();
     },
     async toolset(approval, grant) {
       if (approval.kind === 'non-interactive' && approval.mcp !== true) return undefined;

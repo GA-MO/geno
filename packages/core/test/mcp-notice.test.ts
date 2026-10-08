@@ -45,7 +45,7 @@ describe('the MCP briefing', () => {
       [
         ready('docs', 'Search before you echo.'),
         { name: 'broken', state: { status: 'failed', reason: 'spawn nope ENOENT', needsSignIn: false } },
-        { name: 'remote', state: { status: 'failed', reason: 'the server needs sign-in, which Geno does not support yet', needsSignIn: true } },
+        { name: 'remote', state: { status: 'failed', reason: 'the server needs sign-in', needsSignIn: true } },
         { name: 'local', state: { status: 'untrusted' } },
         { name: 'cold', state: { status: 'starting', restarts: 0 } },
         { name: 'off', state: { status: 'disabled', trusted: true } },
@@ -124,7 +124,7 @@ describe('MCP notices', () => {
     const delta = noticeFor([start], now(briefing))!;
     const first = noticeTexts(delta).join('\n');
     expect(first).toContain("- local: not approved for this workspace yet. The user can approve it in the editor's MCP servers view or with `gcode mcp trust local`.");
-    expect(first).toContain('- remote: needs sign-in, which Geno does not support yet.');
+    expect(first).toContain("- remote: needs sign-in; ask the user to sign in to it in the editor's MCP servers view. You cannot sign in for them.");
     expect(told([start, prompt(1, 'Hi.'), notice(2, delta)])).toContain('Every MCP server reported unavailable earlier has since connected or been turned off.');
   });
 

@@ -8,7 +8,7 @@ import { UsageError, type Command, type Io } from './command.js';
 import type { Limits } from './drive.js';
 import { browserLauncherOf } from './mcp/browser.js';
 import { mcpSessions } from './mcp/sessions.js';
-import { engineShared, gcodeAgent } from './serve.js';
+import { engineShared, gcodeAgent, mcpTokensVia } from './serve.js';
 import { killShells } from './process.js';
 import { guardStdout } from './stdout-guard.js';
 import type { Store } from './store.js';
@@ -48,8 +48,8 @@ async function listen(server: Server, socket: string): Promise<void> {
  * exits with 0, and the editor connects to that one. `stopping` ends it at once, windows connected or not.
  */
 export async function serveSocket(io: Io, store: Store, limits: Limits, socket: string, idleMs = IDLE_EXIT_MS, stopping?: AbortSignal): Promise<number> {
-  const mcp = mcpSessions(store, io.env, io.err, browserLauncherOf(io.env));
   const shared = engineShared(io);
+  const mcp = mcpSessions(store, io.env, io.err, browserLauncherOf(io.env), mcpTokensVia(shared.viewers));
   // A crash cannot wait for a grace period; a command or an external agent left running would outlive the engine that owns it.
   const killJobs = () => (killShells(), shared.jobs.killAllNow(), shared.externals.closeAll());
   process.once('exit', killJobs);
@@ -146,8 +146,8 @@ export const serve: Command = async (args, { io, store }) => {
     return code;
   }
   const stream = acp.ndJsonStream(guardStdout(), Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>);
-  const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env));
   const shared = engineShared(quiet);
+  const mcp = mcpSessions(store, io.env, quiet.err, browserLauncherOf(io.env), mcpTokensVia(shared.viewers));
   process.once('exit', () => (killShells(), shared.jobs.killAllNow(), shared.externals.closeAll()));
   const connection = gcodeAgent(quiet, store, limitsOf(values), mcp, shared).connect(stream);
   quiet.err(`gcode serve: ACP v${acp.PROTOCOL_VERSION} on stdio, sessions in ${store.sessionsDir}`);

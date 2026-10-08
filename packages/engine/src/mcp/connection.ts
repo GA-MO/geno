@@ -4,7 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SseError, SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport, StreamableHTTPError } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { FetchLike, Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McpContent, McpPromptInfo, McpResourceInfo, McpServerConfig, McpToolInfo } from '@g-code/core';
 import { mcpServerEnv, type Env } from '../child-env.js';
@@ -21,7 +21,7 @@ export type McpConnection = {
 
 export type McpCallResult = { readonly content: readonly McpContent[]; readonly structured: unknown; readonly isError: boolean };
 
-/** Why a connection could not be made; `needsSignIn` for a server that wants OAuth, which Geno does not do. */
+/** Why a connection could not be made; `needsSignIn` for a server that wants an OAuth sign-in the session lacks. */
 export class McpConnectError extends Error {
   constructor(
     message: string,
@@ -36,14 +36,21 @@ export const CONNECT_TIMEOUT_MS = 120_000;
 export const CALL_TIMEOUT_MS = 120_000;
 const STDERR_TAIL = 2000;
 
+/**
+ * The access token of the user's sign-in to an HTTP server, from the editor, which keeps the sign-in. `rejected` says
+ * the server refused the token sent last, so the editor refreshes it. Undefined when the user is not signed in.
+ */
+export type McpTokenSource = (rejected: boolean) => Promise<string | undefined>;
+
 export type ConnectOptions = {
   readonly env: Env;
   readonly workspace: string;
   /** Called once when an open connection ends without close(): the process exited or the stream broke. */
   readonly onLost: (reason: string) => void;
+  readonly token?: McpTokenSource | undefined;
 };
 
-const isUnauthorized = (error: unknown): boolean =>
+export const isUnauthorized = (error: unknown): boolean =>
   error instanceof UnauthorizedError || ((error instanceof StreamableHTTPError || error instanceof SseError) && error.code === 401);
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -94,22 +101,56 @@ async function connectStdio(config: McpServerConfig & { transport: { kind: 'stdi
   return { client, stderr: () => tail.trim() };
 }
 
-async function connectHttp(config: McpServerConfig & { transport: { kind: 'http' | 'sse' } }): Promise<Client> {
+/**
+ * Asks for a token only once the server answers 401, so a server that wants none never reaches the editor, and asks
+ * again when the server refuses the token it was sent, which is how an expired one is refreshed. Requests in flight
+ * together share one ask. The token lives in this closure, as long as the connection does.
+ */
+function bearerFetch(token: McpTokenSource, base: FetchLike = fetch): FetchLike {
+  let bearer: Promise<string | undefined> = Promise.resolve(undefined);
+  const send = (url: string | URL, init: RequestInit | undefined, value: string | undefined) => {
+    if (value === undefined) return base(url, init);
+    const headers = new Headers(init?.headers);
+    headers.set('authorization', `Bearer ${value}`);
+    return base(url, { ...init, headers });
+  };
+  return async (url, init) => {
+    let held = bearer;
+    let sent = await held;
+    let response = await send(url, init, sent);
+    // Two asks at most: the first token may be one the server already refuses, which the second refreshes.
+    for (let asks = 0; response.status === 401 && asks < 2; asks++) {
+      if (bearer === held) bearer = token(sent !== undefined).catch(() => undefined);
+      held = bearer;
+      const next = await held;
+      if (next === undefined || next === sent) break;
+      await response.body?.cancel();
+      sent = next;
+      response = await send(url, init, sent);
+    }
+    return response;
+  };
+}
+
+async function connectHttp(config: McpServerConfig & { transport: { kind: 'http' | 'sse' } }, token: McpTokenSource | undefined): Promise<Client> {
   const { kind, url, headers } = config.transport;
   const requestInit = { headers: { ...headers } };
+  // A credential the definition sets itself is the user's choice, and no sign-in replaces it.
+  const ownCredential = Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+  const options = { requestInit, ...(token === undefined || ownCredential ? {} : { fetch: bearerFetch(token) }) };
   const attempt = async (transport: Transport) => {
     const client = newClient();
     await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
     return client;
   };
-  if (kind === 'sse') return attempt(new SSEClientTransport(new URL(url), { requestInit }));
+  if (kind === 'sse') return attempt(new SSEClientTransport(new URL(url), options));
   try {
     // The SDK's transports predate exactOptionalPropertyTypes.
-    return await attempt(new StreamableHTTPClientTransport(new URL(url), { requestInit }) as Transport);
+    return await attempt(new StreamableHTTPClientTransport(new URL(url), options) as Transport);
   } catch (error) {
     if (isUnauthorized(error)) throw error;
     // A server from before streamable HTTP refuses the POST; the legacy transport opens with a GET.
-    return attempt(new SSEClientTransport(new URL(url), { requestInit }));
+    return attempt(new SSEClientTransport(new URL(url), options));
   }
 }
 
@@ -118,9 +159,9 @@ export async function connectMcp(config: McpServerConfig, options: ConnectOption
   let stderr = () => '';
   try {
     if (config.transport.kind === 'stdio') ({ client, stderr } = await connectStdio(config as McpServerConfig & { transport: { kind: 'stdio' } }, options));
-    else client = await connectHttp(config as McpServerConfig & { transport: { kind: 'http' | 'sse' } });
+    else client = await connectHttp(config as McpServerConfig & { transport: { kind: 'http' | 'sse' } }, options.token);
   } catch (error) {
-    if (isUnauthorized(error)) throw new McpConnectError('the server needs sign-in, which Geno does not support yet', true);
+    if (isUnauthorized(error)) throw new McpConnectError('the server needs sign-in', true);
     const detail = stderr();
     throw new McpConnectError(detail === '' ? messageOf(error) : `${messageOf(error)}: ${detail}`, false);
   }

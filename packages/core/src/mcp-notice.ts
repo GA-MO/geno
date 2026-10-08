@@ -98,7 +98,7 @@ function unavailableLine(entry: McpUnavailable): string {
     case 'failed':
       return `- ${entry.server}: failed to connect. Its error, as reported:\n<mcp_server_error server="${entry.server}">\n${neutralize(entry.reason)}\n</mcp_server_error>`;
     case 'needs-sign-in':
-      return `- ${entry.server}: needs sign-in, which Geno does not support yet.`;
+      return `- ${entry.server}: needs sign-in; ask the user to sign in to it in the editor's MCP servers view. You cannot sign in for them.`;
     case 'untrusted':
       return `- ${entry.server}: not approved for this workspace yet. The user can approve it in the editor's MCP servers view or with \`gcode mcp trust ${entry.server}\`.`;
   }

@@ -2,7 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { describeServerState, nextServerState, restartDelayMs, type McpServerConfig, type McpServerEvent, type McpServerState } from '@g-code/core';
 import type { Env } from '../child-env.js';
 import { ToolError } from '../tools/context.js';
-import { connectMcp, McpConnectError, type McpCallResult, type McpConnection } from './connection.js';
+import { connectMcp, isUnauthorized, McpConnectError, type McpCallResult, type McpConnection, type McpTokenSource } from './connection.js';
 
 /** One server of a session: the state machine of core's nextServerState, driven by real connections. */
 export class McpServerHandle {
@@ -17,6 +17,7 @@ export class McpServerHandle {
     disabled: boolean,
     private readonly env: Env,
     private readonly workspace: string,
+    private readonly token?: McpTokenSource | undefined,
   ) {
     this.#state = disabled ? { status: 'disabled', trusted } : trusted ? { status: 'stopped' } : { status: 'untrusted' };
   }
@@ -65,7 +66,7 @@ export class McpServerHandle {
   #connect(): Promise<void> {
     return (async () => {
       try {
-        const connection = await connectMcp(this.config, { env: this.env, workspace: this.workspace, onLost: (reason) => this.#lost(reason) });
+        const connection = await connectMcp(this.config, { env: this.env, workspace: this.workspace, onLost: (reason) => this.#lost(reason), token: this.token });
         if (this.#state.status !== 'starting') {
           await connection.close();
           return;
@@ -95,6 +96,14 @@ export class McpServerHandle {
       return await connection.call(tool, args, signal);
     } catch (error) {
       if (signal.aborted) throw error;
+      if (isUnauthorized(error)) {
+        if (this.#connection === connection) {
+          this.#connection = undefined;
+          this.#apply({ type: 'unauthorized' });
+          await connection.close();
+        }
+        throw new ToolError(`the MCP server ${this.config.name} needs sign-in; ask the user to sign in to it in the editor's MCP servers view`);
+      }
       throw new ToolError(`the MCP server ${this.config.name} failed the call: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
