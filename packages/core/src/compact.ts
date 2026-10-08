@@ -148,7 +148,7 @@ export function compactedText({ summary, kept }: Pick<CompactEvent, 'summary' | 
   return [
     '<compacted_context>',
     'The earlier part of this session was compacted to free context. The summary below replaces those turns; the turns after this message follow as they happened. Read a file again before you edit it, unless it is attached below as it is now.',
-    'The summary leaves out exact details. To get one back word for word, such as an error message, a command and its output, or a value you saw, call recall with a few distinctive words from it: recall searches the compacted part of this session, tool output included, before earlier sessions.',
+    'The summary leaves out exact details. To get one back word for word, such as an error message, a command and its output, or a value you saw, call recall with a few distinctive words from it, after loading it with tool_search if it is listed by name only: recall searches the compacted part of this session, tool output included, before earlier sessions.',
     '',
     '<user_messages>',
     droppedMessages === 0 ? 'Every message the user sent before this point, word for word, oldest first:' : `The newest messages the user sent before this point, word for word, oldest first (${droppedMessages} older ones are in the summary):`,
