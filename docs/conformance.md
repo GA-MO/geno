@@ -488,6 +488,31 @@ P26 also covers rows that have no Claude Code conformance test:
 | A/E-04 | T-CTX-05 above, and `compaction-gaps.test.ts`: the compacted text points at `recall`, which finds an exact error in a compacted tool output, never in the kept tail, never in its own earlier calls. The compact-smoke asks for the exact earlier error live. |
 | A/E-06 | T-CTX-05 above, and `compaction-gaps.test.ts`: the skill caps, the skills carried into a second compaction, the newest-change order, the file count and token caps, and an auto compaction skipped when the attached files would not fit. The compact-smoke loads a skill before the compaction, and every answer after it follows the skill. |
 
+## Agent definitions (P22)
+
+Agent files load from Geno's home (`~/.g-code/agents`), then Claude Code's (`~/.claude/agents`, or `$CLAUDE_CONFIG_DIR/agents`), then the workspace's `.agents/agents` and `.claude/agents`, then plugins, then the built-ins. The first definition of a name wins. Claude Code puts project agents above the user's; Geno keeps the user's own first, as it does for skills and commands since commit 79da0784, so a cloned repository cannot replace one of them. A workspace agent shadowed this way gets a problem line.
+
+`general-purpose`, `Explore` and `Plan`, Claude Code's built-in types, resolve to `worker`, `explore` and `plan` wherever an agent is named: an `@` mention, a `context: fork` skill's `agent`, a workflow step's `role` and the `agent` tool. A definition of the same name wins over the alias. The `agent` tool's list does not repeat them.
+
+A child's model is, in order: a workflow step's `model`; the definition's `model`, where `haiku`, `sonnet`, `opus` and `fable` take the id in `GCODE_HAIKU_MODEL`, `GCODE_SONNET_MODEL`, `GCODE_OPUS_MODEL` and `GCODE_FABLE_MODEL`; `GCODE_SUBAGENT_MODEL`; then the parent's model. `inherit` is the parent's model, which `GCODE_SUBAGENT_MODEL` does not replace, and an alias with no id set falls to `GCODE_SUBAGENT_MODEL` with a problem line. The ids name models of the session's provider. A fork keeps the parent's model for the cache. Claude Code lets `CLAUDE_CODE_SUBAGENT_MODEL` override a definition's model; Geno lets it fill in only where the definition names none, as the parity study's row C/C-07 has it.
+
+A definition with `omitClaudeMd: true` starts a fresh child without the instruction files, the memory notes and the git status, and without the skill listing when it has no `skill` tool. Its environment says it is in a repository and keeps the workspace, platform, scratchpad and package.json facts. A fork keeps its parent's whole opening. `explore` and `plan` set it and `review` does not. The measurement that set it is [results/p22-omit-claude-md.md](results/p22-omit-claude-md.md): explore's first request fell from 8,354 to 2,377 input tokens and a run cost 64% less on qwen3.8-flash, with 16 of 18 answers against 18 of 18, both misses at the 4-turn cap.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-MEM-03 | Explore and Plan get no CLAUDE.md, git status or memory. | A parent with an `AGENTS.md`, a `~/.claude/CLAUDE.md`, a memory note and a git repository starts `explore`, `plan` and `review`. The first request of `explore` and of `plan` has no `<project_instructions>`, no `<global_instructions>`, neither file's text, no `<memory>`, no `Current branch:` and no skill listing, and still has the environment block with `Is a git repository: true`. `review`'s first request has all four. | pass (adapt, was fail: every child copied the parent's context) | `instructions.conformance.test.ts`, both wires |
+| T-PERSIST-03 | A child has its own transcript plus `meta.json` {agentType, description, spawnDepth}. | Adapted: no `meta.json`. A child's own log opens with a `session-start` whose `child` is `{parentId, toolUseId, role, caps, start, depth}`, and the log holds its task. A child of a top-level session is depth 1. A log from before P22 has no depth and reads as 1. | pass (adapt, was fail: no depth) | `persistence.conformance.test.ts`, both wires |
+
+P22 also covers these rows:
+
+| ID | Check |
+|---|---|
+| C/C-02 | `subagent.test.ts` (core): `@general-purpose`, `@Explore` and `@Plan` resolve to `worker`, `explore` and `plan`, and a user's own `general-purpose` wins over the alias. `skills.conformance.test.ts`: a `context: fork` skill with `agent: Explore` runs as `explore`. |
+| C/C-03 | `subagents.test.ts` (engine): with `HOME` a fake home, an agent in `$HOME/.claude/agents` loads as the user's own, with Claude Code's tool names mapped. It shadows a workspace agent of the same name with a problem line, and Geno's own home shadows it. |
+| C/C-04 | T-MEM-03 above, and the measurement in `results/p22-omit-claude-md.md`. |
+| C/C-07 | `agents.conformance.test.ts`, both wires: with `GCODE_HAIKU_MODEL=qwen3.7-plus` and `GCODE_SUBAGENT_MODEL=qwen3.6-plus`, a `.claude/agents` file with `model: haiku` sends its requests as `qwen3.7-plus` and `explore` as `qwen3.6-plus`, and both `child-start` events log those ids. `subagent.test.ts` (core): `inherit`, a model id, a set alias, an unset alias and no model at all, and the built-ins on the fallback except the external ones. |
+| C/C-74 | T-PERSIST-03 above. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -573,7 +598,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-SKILL-03 | at parity | P12 | pass |
 | T-MEM-01 | adopt | P8 | pass |
 | T-MEM-02 | keep Geno's | P11 | no test yet |
-| T-MEM-03 | adapt | P22 | no test yet |
+| T-MEM-03 | adapt | P22 | pass |
 | T-CTX-01 | adapt | P7 | pass |
 | T-CTX-02 | keep Geno's | none | no test yet |
 | T-CTX-03 | at parity | none | no test yet |
@@ -591,4 +616,4 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-WF-02 | adopt | P33 | no test yet |
 | T-PERSIST-01 | keep Geno's | none | no test yet |
 | T-PERSIST-02 | adopt | P11 | pass |
-| T-PERSIST-03 | adapt | P22 | no test yet |
+| T-PERSIST-03 | adapt | P22 | pass |
