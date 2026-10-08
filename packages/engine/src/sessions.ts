@@ -245,6 +245,7 @@ const childEndSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('failed'), reason: z.string() }),
   z.strictObject({ kind: z.literal('cancelled') }),
   z.strictObject({ kind: z.literal('capped'), cap: z.enum(CHILD_CAPS) }),
+  z.strictObject({ kind: z.literal('interrupted') }),
 ]);
 
 const waiterSchema = z.strictObject({ pid: z.number().int().positive(), cwd: z.string().min(1) });
@@ -263,6 +264,7 @@ const wakeNoteSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('monitor'), id: wakeId, toolUseId: z.string().min(1), job: jobId, pattern: z.string(), outcome: z.enum(MONITOR_OUTCOMES), line: z.string().optional() }),
   z.strictObject({ kind: z.literal('pr'), id: wakeId, toolUseId: z.string().min(1), pr: z.number().int().positive(), outcome: z.enum(PR_WATCH_OUTCOMES), text: z.string() }),
   z.strictObject({ kind: z.literal('cancelled') }),
+  z.strictObject({ kind: z.literal('interrupted'), runs: z.array(z.strictObject({ child: z.string().min(1), toolUseId: z.string().min(1) })), text: z.string() }),
 ]);
 
 // A tool result is inline or spilled, so its two shapes share a kind and sit outside the discriminated union.
@@ -276,6 +278,7 @@ const turnEventSchema = z.union([
       environment: environmentSchema.optional(),
       child: childOfSchema.optional(),
       fork: z.strictObject({ sessionId: childId, turnSeq: seqFields.seq, title: z.string() }).optional(),
+      workflow: z.strictObject({ parentId: childId, toolUseId: z.string().min(1), name: z.string().min(1) }).optional(),
     }),
     z.strictObject({
       kind: z.literal('user'),
@@ -392,6 +395,7 @@ const turnEventSchema = z.union([
       effort: z.enum(EFFORTS),
       caps: childCapsSchema,
       start: childStartSchema,
+      by: waiterSchema.optional(),
     }),
     z.strictObject({
       kind: z.literal('child-end'),

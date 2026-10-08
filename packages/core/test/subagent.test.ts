@@ -146,7 +146,7 @@ describe('childCaps', () => {
 });
 
 describe('child status', () => {
-  const ends: readonly ChildEnd[] = [{ kind: 'done' }, { kind: 'failed', reason: 'x' }, { kind: 'cancelled' }, { kind: 'capped', cap: 'cost' }];
+  const ends: readonly ChildEnd[] = [{ kind: 'done' }, { kind: 'failed', reason: 'x' }, { kind: 'cancelled' }, { kind: 'capped', cap: 'cost' }, { kind: 'interrupted' }];
 
   it('names every status a child can have: running, then one of its ends', () => {
     expect(CHILD_STATUS_KINDS).toEqual(['running', ...ends.map((e) => e.kind)]);

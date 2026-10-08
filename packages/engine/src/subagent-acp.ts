@@ -26,6 +26,7 @@ const STOP_REASONS: { readonly [K in ChildEnd['kind']]: acp.StopReason } = {
   failed: 'end_turn',
   cancelled: 'cancelled',
   capped: 'max_turn_requests',
+  interrupted: 'cancelled',
 };
 
 const noticeOf = (parentId: string, child: ChildView, status: ChildStatus, spent: ChildSpent): SubagentNotice => ({

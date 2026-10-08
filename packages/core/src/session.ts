@@ -60,6 +60,9 @@ export type Session = {
   readonly backend?: BackendBinding | undefined;
 };
 
+/** A workflow's own session: the workflow, and the session whose call started it, which its report goes to. */
+export type WorkflowOrigin = { readonly parentId: SessionId; readonly toolUseId: string; readonly name: string };
+
 export type TokenUsage = {
   readonly input: number;
   readonly cacheRead: number;
@@ -172,6 +175,7 @@ export type TurnEvent =
       readonly environment?: Environment | undefined;
       readonly child?: ChildOf | undefined;
       readonly fork?: ForkOrigin | undefined;
+      readonly workflow?: WorkflowOrigin | undefined;
     }
   | ({ readonly kind: 'checkpoint'; readonly seq: number; readonly at: string } & Checkpoint)
   | {

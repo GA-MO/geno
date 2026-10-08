@@ -735,7 +735,7 @@ export type UnitOutcome =
   /** `passed` is undefined when the workspace has no check command. */
   | { readonly kind: 'check'; readonly passed: boolean | undefined; readonly text: string };
 
-const UNIT_STATUS: { readonly [K in ChildEnd['kind']]: UnitStatus } = { done: 'done', failed: 'failed', cancelled: 'cancelled', capped: 'capped' };
+const UNIT_STATUS: { readonly [K in ChildEnd['kind']]: UnitStatus } = { done: 'done', failed: 'failed', cancelled: 'cancelled', capped: 'capped', interrupted: 'failed' };
 
 /**
  * One unit settled. A failed, capped or cancelled step, a report without its schema's block, or a failed check stops
@@ -766,7 +766,7 @@ export function settleUnit(run: WorkflowRun, index: number, outcome: UnitOutcome
       }
     } else {
       settled = { ...unit, ...spent, status: UNIT_STATUS[end.kind], note: childEndWords(end) };
-      stop = end.kind === 'capped' ? { kind: 'step-cap', unit: unit.label, cap: end.cap } : end.kind === 'cancelled' ? { kind: 'cancelled' } : { kind: 'step-failed', unit: unit.label, reason: end.reason };
+      stop = end.kind === 'capped' ? { kind: 'step-cap', unit: unit.label, cap: end.cap } : end.kind === 'cancelled' ? { kind: 'cancelled' } : { kind: 'step-failed', unit: unit.label, reason: end.kind === 'failed' ? end.reason : childEndWords(end) };
     }
   }
   const node = nodeOf(run);

@@ -13,6 +13,7 @@ const LOOKS: { readonly [K in ChildStatus['kind']]: (status: Extract<ChildStatus
   failed: ({ reason }) => ({ icon: 'error', label: `Failed: ${reason}` }),
   cancelled: () => ({ icon: 'circle-slash', label: 'Cancelled' }),
   capped: ({ cap }) => ({ icon: 'warning', label: `Stopped at its ${cap === 'turns' ? 'turn' : 'cost'} cap` }),
+  interrupted: () => ({ icon: 'debug-disconnect', label: 'Cut off when Geno stopped' }),
 };
 
 export const childLook = (status: ChildStatus) => (LOOKS[status.kind] as (s: ChildStatus) => { readonly icon: string; readonly label: string })(status);
