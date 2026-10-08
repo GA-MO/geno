@@ -1043,6 +1043,7 @@ export function parseWorkflowInput(raw: unknown): Parsed<WorkflowToolInput> {
   const { name, input, resume } = raw;
   if (name !== undefined && (typeof name !== 'string' || !NAME.test(name.trim()))) return fail('name must be a workflow name, from the list');
   if (input !== undefined && typeof input !== 'string') return fail('input must be text');
+  if (typeof resume === 'string' && resume.trim() === '') return fail("resume needs the session id of the run to resume, which that run's report and its Tasks row name: /workflow <name> --resume <run>");
   if (resume !== undefined && (typeof resume !== 'string' || !RUN_ID.test(resume.trim()))) return fail("resume must be an earlier run's session id");
   if (resume !== undefined && name === undefined) return fail('resume needs the name of the workflow it resumes');
   return { ok: true, value: { name: typeof name === 'string' ? name.trim() : undefined, input: (input ?? '').trim(), ...(typeof resume === 'string' ? { resume: resume.trim() } : {}) } };
@@ -1050,9 +1051,11 @@ export function parseWorkflowInput(raw: unknown): Parsed<WorkflowToolInput> {
 
 /** `/workflow <name> [--resume <run>] [input]`: the name, the run it resumes, and the rest as the input. */
 export function parseWorkflowCommand(args: string): WorkflowToolInput {
-  const match = /^(\S+)(?:\s+--resume\s+(\S+))?(?:\s+([\s\S]*))?$/.exec(args.trim());
+  const match = /^(\S+)(?:\s+--resume(?:\s+(\S+)|\s*$))?(?:\s+([\s\S]*))?$/.exec(args.trim());
   if (match === null) return { name: undefined, input: '' };
-  return { name: match[1]!, input: (match[3] ?? '').trim(), ...(match[2] === undefined ? {} : { resume: match[2] }) };
+  // A bare --resume names no run, which the tool refuses, rather than being the input "--resume".
+  const resume = match[2] ?? (/\s--resume$/.test(args.trim()) ? '' : undefined);
+  return { name: match[1]!, input: (match[3] ?? '').trim(), ...(resume === undefined ? {} : { resume }) };
 }
 
 export const WORKFLOW_USAGE = 'Usage: /workflow <name> [--resume <run>] [input]. Workflows are JSON files in .g-code/workflows/ or ~/.g-code/workflows/.';
