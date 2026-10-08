@@ -1,10 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { leaseWindow } from './pool/client.js';
+
 import { BAD_REQUEST, MARKERS } from './suite/turn-end-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -70,26 +70,19 @@ afterAll(() => {
 
 describe('a turn that ends on a model error', () => {
   it('shows Failed in the panel, and VS Code says it failed and lists it under Needs you, though ACP stops it with end_turn', async () => {
-    const { home, suite, launchArgs } = await setUp('turn-end', { 'a.ts': 'export const a = 1;\n' }, { 'chat.mcp.enabled': false });
-    debugPort = await freePort();
+    const { workspace, work, home, suite } = await setUp('turn-end', { 'a.ts': 'export const a = 1;\n' }, { 'chat.mcp.enabled': false });
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(asked, 'each turn made one model call, and the 400 was not retried').toEqual({ [MARKERS.watched]: 1, [MARKERS.away]: 1 });
   }, 600_000);
 });

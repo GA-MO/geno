@@ -2,15 +2,15 @@ import { mkdir, readdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BreakdownView, SessionSpendView } from '@g-code/core';
 import { run as gcode } from '../../engine/src/run.js';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, FILES, MARKER, type ShownRow, type ShownSpend } from './suite/usage-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -117,29 +117,22 @@ async function usageJson(home: string, sessionId: string) {
 
 describe('where the tokens went, in VS Code', () => {
   it('opens a turn’s breakdown from its usage line, switches to the session, and shows the numbers gcode usage prints', async () => {
-    const { home, suite, launchArgs } = await setUp('usage', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('usage', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
     expect(failure).toBeUndefined();
-    expect(code).toBe(0);
     expect(requests).toBe(SCRIPT.length);
 
     const [log] = await readdir(path.join(home, 'sessions'));

@@ -3,13 +3,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { buildSuite, cachePath, root, setUp } from './launch.js';
+import { buildSuite, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, FILES, MARKERS, SUGGESTIONS } from './suite/spinoff-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -120,31 +120,25 @@ const lastText = (body: Body): string | undefined => {
 
 describe('suggested tasks in the panel', () => {
   it('draws the cards, starts one as a lane task with its prompt, dismisses one, and keeps both through a reload', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('spinoff', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { work, workspace, home, suite } = await setUp('spinoff', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     const launch = (extensionTestsPath: string) =>
-      runTests({
-        extensionDevelopmentPath: root,
-        extensionTestsPath,
-        cachePath,
-        ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-        launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-        extensionTestsEnv: {
-          GCODE_HOME: home,
-          GCODE_PROVIDER: 'modelstudio',
-          GCODE_MODEL: MODEL,
-          DASHSCOPE_API_KEY: 'sk-fake',
-          DASHSCOPE_BASE_URL: url,
-          GCODE_FAKE_MODEL: url,
-          GCODE_CLASSIFIER_MODEL: 'off',
-        },
+      vscodeWindow.run(extensionTestsPath, { workspace, work }, {
+        GCODE_HOME: home,
+        GCODE_PROVIDER: 'modelstudio',
+        GCODE_MODEL: MODEL,
+        DASHSCOPE_API_KEY: 'sk-fake',
+        DASHSCOPE_BASE_URL: url,
+        GCODE_FAKE_MODEL: url,
+        GCODE_CLASSIFIER_MODEL: 'off',
       });
-    expect(await launch(suite)).toBe(0);
+    await launch(suite);
     expect(failure).toBeUndefined();
     expect(requests[MARKERS.chat]).toHaveLength(3);
     const block = requests[MARKERS.chat]![0]!.tools?.find((tool) => tool.name === 'tool_search')?.description ?? '';
@@ -156,7 +150,7 @@ describe('suggested tasks in the panel', () => {
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
     window?.browser.close();
     window = undefined;
-    expect(await launch(await buildSuite(work, 'spinoff-reload'))).toBe(0);
+    await launch(await buildSuite(work, 'spinoff-reload'));
     expect(failure).toBeUndefined();
     expect(requests[MARKERS.chat], 'the reload sent nothing to the model').toHaveLength(3);
     expect(requests[MARKERS.task]).toHaveLength(1);

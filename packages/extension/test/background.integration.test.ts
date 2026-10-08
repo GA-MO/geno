@@ -2,14 +2,14 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NOT_USER_LINE } from '@g-code/core';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, CALLS, FILES, PROMPTS, SERVER } from './suite/background-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -93,28 +93,21 @@ const lastTexts = (body: Body): string[] => {
 
 describe('background commands in the panel', () => {
   it('show a running command with its live tail and Stop, how each one ended, and the running ones in Tasks, at 300px', async () => {
-    const { home, suite, launchArgs } = await setUp('background', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('background', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     // The build ended during the foreground wait, so the call after that one carries its end.
     expect(lastTexts(requests[3]!).map((text) => text.replace(/\/spill\/[0-9a-f-]+\//, '/spill/<session>/'))).toEqual([

@@ -1,14 +1,14 @@
 import { createSocket } from 'node:dgram';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connectWindow, evaluate, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+
 import { frameCsp, frameDocument, WIDGET_SANDBOX } from '@g-code/core/widget-frame';
 import { ATTACK_NAMES, ATTACKS } from './suite/widget-attacks.js';
 import { bypassCsp, inWidget } from './widget-cdp.js';
+import { leaseWindow } from './pool/client.js';
 
 /**
  * Each sandbox escape, proven blocked (green) and then let through against a weakened sandbox (red), so the red run
@@ -136,18 +136,13 @@ afterAll(() => {
 
 describe('a widget cannot escape its sandbox', () => {
   it('blocks fetch, a remote img, parent.document, top.location, localStorage, a form post, window.open and WebRTC, each proven with a red run', async () => {
-    const { home, suite, launchArgs } = await setUp('widget-security', { 'a.txt': 'x' }, {});
-    debugPort = await freePort();
+    const { workspace, work, home, suite } = await setUp('widget-security', { 'a.txt': 'x' }, {});
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: { GCODE_HOME: home, GCODE_PROVIDER: 'modelstudio', GCODE_MODEL: 'qwen3.8-flash', DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: url, GCODE_FAKE_MODEL: url },
+    await vscodeWindow.run(suite, { workspace, work }, { GCODE_HOME: home, GCODE_PROVIDER: 'modelstudio', GCODE_MODEL: 'qwen3.8-flash', DASHSCOPE_API_KEY: 'sk-fake', DASHSCOPE_BASE_URL: url, GCODE_FAKE_MODEL: url }).catch((error: unknown) => {
+      throw out['error'] === undefined ? error : new Error(`${String(error)}\nthe driver: ${String(out['error'])}`);
     });
-    expect(code, out['error'] as string | undefined).toBe(0);
     if (process.env['WIDGET_SECURITY_DUMP']) console.log('DUMP', JSON.stringify(out, null, 1));
 
     const strong = out['strong'] as Record<string, string | null>;

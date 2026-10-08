@@ -2,14 +2,14 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { SUMMARY_SYSTEM } from '@g-code/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type CacheUsage, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, BIG_LOGS, COMPACT_AT, FILES, MARKER, SUMMARIES } from './suite/compact-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -123,30 +123,23 @@ const textOf = (body: Body): string => JSON.stringify(body.messages);
 
 describe('context compaction in VS Code', () => {
   it('offers Compact on the ring past 80%, runs /compact as a turn with a divider, compacts on its own mid-session, and replays both dividers', async () => {
-    const { home, suite, launchArgs } = await setUp('compact', FILES, { 'gcode.approvalMode': 'auto', 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('compact', FILES, { 'gcode.approvalMode': 'auto', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        GCODE_COMPACT_AT: String(COMPACT_AT),
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      GCODE_COMPACT_AT: String(COMPACT_AT),
     });
     expect(failure).toBeUndefined();
-    expect(code).toBe(0);
     expect(chats).toHaveLength(CHAT.length);
     expect(summaries, 'one summary for /compact and one on its own').toHaveLength(SUMMARY_CALLS.length);
     expect(textOf(chats[2]!), 'after /compact the model reads the summary').toContain('Read build.log and a.ts; the build is clean.');

@@ -2,13 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, handBack, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, FILES, MARKERS, TASKS } from './suite/subagents-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -74,7 +74,6 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   },
 };
 
-
 const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
   'POST /v1/messages': async (req, res) => {
     const body = JSON.parse(await bodyOf(req)) as { messages: { content: unknown }[] };
@@ -128,28 +127,21 @@ afterAll(() => {
 
 describe('subagents in the chat panel', () => {
   it('nests children under their agent call, opens one and comes back, cancels one, and counts the running ones in the pill', async () => {
-    const { home, suite, launchArgs } = await setUp('subagents', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('subagents', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(Object.fromEntries(Object.entries(requests).map(([marker, sent]) => [marker, sent.length]))).toEqual({
       [MARKERS.parent]: 2,
       [MARKERS.alpha]: 2,

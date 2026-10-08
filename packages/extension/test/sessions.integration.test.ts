@@ -3,14 +3,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asSessionId, type Session, type TurnEvent } from '@g-code/core';
 import { answer, sseBody, type Reply } from '../../engine/test/fake-transport.js';
 import { appendEvent } from '../../engine/src/sessions.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, ELSEWHERE, FILES, OLDER, TEMPORARY } from './suite/sessions-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -100,7 +100,7 @@ const assistant = (seq: number, at: string, content: unknown[]): TurnEvent => ({
 
 describe('sessions and projects in VS Code', () => {
   it('starts new chats, lists this project or every project, loads an old session with its transcript, renames and trashes', async () => {
-    const { home, workspace, suite, launchArgs } = await setUp('sessions', FILES, {});
+    const { work, home, workspace, suite } = await setUp('sessions', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const real = await realpath(workspace);
     await logSession(home, OLDER.id, real, OLDER.prompt, '2026-10-04T09:00:00.000Z', [
@@ -113,26 +113,19 @@ describe('sessions and projects in VS Code', () => {
     ]);
     await logSession(home, ELSEWHERE.id, ELSEWHERE.workspace, ELSEWHERE.prompt, '2026-10-03T09:00:00.000Z');
     await logSession(home, TEMPORARY.id, path.join(tmpdir(), 'gcode-eval-clone'), TEMPORARY.prompt, '2026-10-04T10:00:00.000Z');
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     // The follow-up to the loaded session carries its earlier turn: the prompt, the read and the answer.
     expect(requests[1]!.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user']);

@@ -10,8 +10,8 @@ useTestLock();
 
 const VSCODE_TESTS = 'packages/extension/test/**/*.integration.test.ts';
 const WEBVIEW_TESTS = 'packages/extension/test/**/*.webview.test.ts';
-// A file mostly waits, so three at once take a third of the time; docs/t1-fast-tests.md has the runs at 1 to 4.
-const workers = vscodeWorkers(process.env, 3);
+// Each file runs in one of this many pooled VS Code windows (vscode-setup.ts), so it is also how many run at once.
+const workers = vscodeWorkers(process.env);
 // Unit and webview files each take a worker; every core at once left no room for the editor or a second checkout.
 const unitWorkers = Number(process.env['GCODE_TEST_WORKERS'] ?? 4);
 
@@ -27,7 +27,7 @@ export default defineConfig({
       // The chat webview in headless Chromium against a fake host: no VS Code, so these run in parallel with the unit tests.
       { extends: true, test: { name: 'webview', maxWorkers: unitWorkers, include: [WEBVIEW_TESTS], sequence: { groupOrder: 0 } } },
       {
-        // Each file launches a whole VS Code, with its own profile, workspace and engine, after the unit tests.
+        // Each file leases a VS Code window from the pool and runs its suite there in a fresh workspace, extension host and engine.
         extends: true,
         test: {
           name: 'vscode',

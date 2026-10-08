@@ -3,13 +3,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { buildSuite, cachePath, root, setUp } from './launch.js';
+import { buildSuite, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, CHILD_TASK, COMMAND, FILES, MARKERS } from './suite/attention-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -123,32 +123,26 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('the Tasks list, by what each task needs of the user', () => {
   it('sorts sessions into Needs you, Ready, Working and Done, rolls a child’s card into its parent, opens at the card, and keeps what was seen through a reload', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('attention', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { work, workspace, home, suite } = await setUp('attention', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     const launch = (extensionTestsPath: string) =>
-      runTests({
-        extensionDevelopmentPath: root,
-        extensionTestsPath,
-        cachePath,
-        ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-        launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-        extensionTestsEnv: {
-          GCODE_HOME: home,
-          GCODE_PROVIDER: 'modelstudio',
-          GCODE_MODEL: MODEL,
-          DASHSCOPE_API_KEY: 'sk-fake',
-          DASHSCOPE_BASE_URL: url,
-          GCODE_FAKE_MODEL: url,
-          GCODE_CLASSIFIER_MODEL: 'off',
-        },
+      vscodeWindow.run(extensionTestsPath, { workspace, work }, {
+        GCODE_HOME: home,
+        GCODE_PROVIDER: 'modelstudio',
+        GCODE_MODEL: MODEL,
+        DASHSCOPE_API_KEY: 'sk-fake',
+        DASHSCOPE_BASE_URL: url,
+        GCODE_FAKE_MODEL: url,
+        GCODE_CLASSIFIER_MODEL: 'off',
       });
 
-    expect(await launch(suite)).toBe(0);
+    await launch(suite);
     // The user's no ends the worker's turn and its parent's, so neither calls the model again.
     expect(requests[MARKERS.child], 'the worker asked once').toHaveLength(1);
     expect(requests[MARKERS.parent]).toHaveLength(1);
@@ -156,7 +150,7 @@ describe('the Tasks list, by what each task needs of the user', () => {
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
     window?.browser.close();
     window = undefined;
-    expect(await launch(await buildSuite(work, 'attention-reload'))).toBe(0);
+    await launch(await buildSuite(work, 'attention-reload'));
     expect(requests[MARKERS.ask], 'the card waited through the reload, its turn was not sent again, and the no ended it').toHaveLength(1);
     expect(requests[MARKERS.slow]).toHaveLength(2);
   }, 900_000);

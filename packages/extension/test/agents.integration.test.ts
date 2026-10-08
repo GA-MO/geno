@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { BARE_PATH, cachePath, root, setUp } from './launch.js';
+import { BARE_PATH, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ENV, FAKE } from './suite/agents-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -73,7 +73,7 @@ afterAll(() => {
 describe('the Agents section of the settings page', () => {
   it('finds no Cursor CLI and shows how to install it, then a fake one: signs in by browser and by API key, updates, and signs out; then the same for Claude Code and its adapter', async () => {
     const state = path.join(await mkdtemp(path.join(tmpdir(), 'gcode-agent-')), 'state');
-    const { work, home, suite, launchArgs } = await setUp('agents', { 'a.ts': 'export const a = 1;\n' }, {});
+    const { workspace, work, home, suite } = await setUp('agents', { 'a.ts': 'export const a = 1;\n' }, {});
     const bin = path.join(work, 'bin');
     // An empty home, so the user's own ~/.local/bin/agent is never found.
     const userHome = path.join(work, 'user-home');
@@ -82,32 +82,25 @@ describe('the Agents section of the settings page', () => {
     await Promise.all([bin, state, userHome, path.join(npmPrefix, 'bin')].map((dir) => mkdir(dir, { recursive: true })));
     await writeFile(path.join(state, 'version'), FAKE.version);
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, '--use-inmemory-secretstorage', `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        PATH: `${bin}:${BARE_PATH}`,
-        HOME: userHome,
-        NPM_CONFIG_PREFIX: npmPrefix,
-        npm_config_prefix: '',
-        NVM_BIN: '',
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        [ENV.bin]: bin,
-        [ENV.state]: state,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      PATH: `${bin}:${BARE_PATH}`,
+      HOME: userHome,
+      NPM_CONFIG_PREFIX: npmPrefix,
+      npm_config_prefix: '',
+      NVM_BIN: '',
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      [ENV.bin]: bin,
+      [ENV.state]: state,
     });
-    expect(code).toBe(0);
   }, 600_000);
 });

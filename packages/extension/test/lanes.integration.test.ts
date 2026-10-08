@@ -3,13 +3,13 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { buildSuite, cachePath, root, setUp } from './launch.js';
+import { buildSuite, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, EDIT, FILES, MARKERS } from './suite/lanes-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -69,7 +69,6 @@ const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unkno
   },
 };
 
-
 const ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
   'POST /v1/messages': async (req, res) => {
     const body = JSON.parse(await bodyOf(req)) as { messages: { content: unknown }[] };
@@ -118,32 +117,26 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('lanes and background sessions in the panel', () => {
   it('runs a draft in a new lane, applies it for review, discards with a confirm, and keeps a chat turn running through a window reload', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('lanes', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
+    const { work, workspace, home, suite } = await setUp('lanes', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     const launch = (extensionTestsPath: string) =>
-      runTests({
-        extensionDevelopmentPath: root,
-        extensionTestsPath,
-        cachePath,
-        ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-        launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-        extensionTestsEnv: {
-          GCODE_HOME: home,
-          GCODE_PROVIDER: 'modelstudio',
-          GCODE_MODEL: MODEL,
-          DASHSCOPE_API_KEY: 'sk-fake',
-          DASHSCOPE_BASE_URL: url,
-          GCODE_FAKE_MODEL: url,
-          GCODE_CLASSIFIER_MODEL: 'off',
-        },
+      vscodeWindow.run(extensionTestsPath, { workspace, work }, {
+        GCODE_HOME: home,
+        GCODE_PROVIDER: 'modelstudio',
+        GCODE_MODEL: MODEL,
+        DASHSCOPE_API_KEY: 'sk-fake',
+        DASHSCOPE_BASE_URL: url,
+        GCODE_FAKE_MODEL: url,
+        GCODE_CLASSIFIER_MODEL: 'off',
       });
 
-    expect(await launch(suite)).toBe(0);
+    await launch(suite);
     expect(requests[MARKERS.lane]).toHaveLength(3);
     expect(requests[MARKERS.slow]).toHaveLength(2);
     const applied = await readFile(path.join(workspace, 'a.ts'), 'utf8');
@@ -153,7 +146,7 @@ describe('lanes and background sessions in the panel', () => {
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
     window?.browser.close();
     window = undefined;
-    expect(await launch(await buildSuite(work, 'lanes-reload'))).toBe(0);
+    await launch(await buildSuite(work, 'lanes-reload'));
     expect(requests[MARKERS.slow], 'the turn was not sent again after the reload').toHaveLength(2);
   }, 900_000);
 });

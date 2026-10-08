@@ -5,6 +5,7 @@ import path from 'node:path';
 import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { cachePath, root, setUp } from './launch.js';
+import { leaseWindow, reserveLaunch } from './pool/client.js';
 
 const COMPLETION = 'a + b;';
 const EXTENSION_ID = 'g-code.g-code';
@@ -69,19 +70,12 @@ async function events(home: string) {
 
 describe('Tab in VS Code', () => {
   it('shows ghost text from the completion server, accepts it, and logs both', async () => {
-    const { home, suite, launchArgs } = await setUp(
+    const { work, workspace, home, suite } = await setUp(
       'index',
       { 'math.ts': 'export function add(a: number, b: number): number {\n  return \n}\n' },
       { 'gcode.tab.endpoint': `http://127.0.0.1:${portOf(fimServer)}`, 'gcode.tab.debounceMs': 10 },
     );
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      launchArgs,
-      extensionTestsEnv: { GCODE_HOME: home },
-    });
-    expect(code).toBe(0);
+    await (await leaseWindow()).run(suite, { workspace, work }, { GCODE_HOME: home });
 
     const log = await events(home);
     const shown = log.find((e) => e.kind === 'request' && e.request.outcome.kind === 'shown');
@@ -109,6 +103,8 @@ describe('Tab in VS Code', () => {
       'gcode.tab.endpoint': `http://127.0.0.1:${portOf(fimServer)}`,
       'gcode.tab.debounceMs': 10,
     });
+    // Inline edits are a proposed API that only Insiders lets an extension use, so this test launches its own VS Code.
+    await reserveLaunch();
     const code = await runTests({
       version: 'insiders',
       extensionDevelopmentPath: root,

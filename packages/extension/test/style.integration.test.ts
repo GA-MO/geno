@@ -2,13 +2,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, hover, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, panelCost, pauseRainbow, playRainbow, recordRainbow, trace, webviewPid, type PanelCost } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, EDIT, FILES } from './suite/style-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -135,28 +135,21 @@ afterAll(() => {
 describe('the chat panel style', () => {
   it('is glass with a rainbow on the composer, native on request and in high contrast', async () => {
     // These assertions open the steps of finished turns, which full detail draws as the panel did before U17.
-    const { home, suite, launchArgs } = await setUp('style', FILES, { 'gcode.chat.detail': 'full' });
+    const { workspace, work, home, suite } = await setUp('style', FILES, { 'gcode.chat.detail': 'full' });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
     });
     if (perf && shots !== undefined) await writeFile(path.resolve(shots, 'perf.json'), `${JSON.stringify(costs, null, 2)}\n`);
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
   }, 600_000);
 });

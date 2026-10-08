@@ -3,13 +3,13 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { buildSuite, cachePath, root, setUp } from './launch.js';
+import { buildSuite, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWERS, EDITS, FILES, MARKERS } from './suite/auto-review-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -110,32 +110,26 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('auto review in VS Code', () => {
   it('saves a turn of edits with no lens, decoration or dirty buffer, undoes the turn byte for byte, applies a lane whole, and replays the summaries', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('auto-review', FILES, { 'chat.mcp.enabled': false });
+    const { work, workspace, home, suite } = await setUp('auto-review', FILES, { 'chat.mcp.enabled': false });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
     const launch = (extensionTestsPath: string) =>
-      runTests({
-        extensionDevelopmentPath: root,
-        extensionTestsPath,
-        cachePath,
-        ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-        launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-        extensionTestsEnv: {
-          GCODE_HOME: home,
-          GCODE_PROVIDER: 'modelstudio',
-          GCODE_MODEL: MODEL,
-          DASHSCOPE_API_KEY: 'sk-fake',
-          DASHSCOPE_BASE_URL: url,
-          GCODE_FAKE_MODEL: url,
-          GCODE_CLASSIFIER_MODEL: 'off',
-        },
+      vscodeWindow.run(extensionTestsPath, { workspace, work }, {
+        GCODE_HOME: home,
+        GCODE_PROVIDER: 'modelstudio',
+        GCODE_MODEL: MODEL,
+        DASHSCOPE_API_KEY: 'sk-fake',
+        DASHSCOPE_BASE_URL: url,
+        GCODE_FAKE_MODEL: url,
+        GCODE_CLASSIFIER_MODEL: 'off',
       });
 
-    expect(await launch(suite)).toBe(0);
+    await launch(suite);
     expect(requests[MARKERS.chat]).toHaveLength(SCRIPTS[MARKERS.chat]!.length);
     expect(requests[MARKERS.lane]).toHaveLength(SCRIPTS[MARKERS.lane]!.length);
     for (const file of ['a.ts', 'b.ts'] as const) expect(await readFile(path.join(workspace, file), 'utf8')).toBe(FILES[file]);
@@ -143,6 +137,6 @@ describe('auto review in VS Code', () => {
     // Same workspace, user data and GCODE_HOME: a window reload, as far as the extension can tell.
     window?.browser.close();
     window = undefined;
-    expect(await launch(await buildSuite(work, 'auto-review-reload'))).toBe(0);
+    await launch(await buildSuite(work, 'auto-review-reload'));
   }, 900_000);
 });

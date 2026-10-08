@@ -4,13 +4,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
 import { captureWindow, freePort } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, CONSOLE_ERROR, SERVER_ERROR, URL_ENV } from './suite/preview-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -112,30 +112,23 @@ describe.runIf(process.platform === 'darwin')('the dev server preview in the pan
       'server.mjs': FAKE_DEV_SERVER,
       '.claude/launch.json': JSON.stringify({ version: '0.0.1', configurations: [{ name: 'web', runtimeExecutable: 'node', runtimeArgs: ['server.mjs'], port }] }, null, 2),
     };
-    const { home, suite, launchArgs } = await setUp('preview', files, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'gcode.browser.enabled': true, 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('preview', files, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'gcode.browser.enabled': true, 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        GCODE_BROWSER_SERVER_BIN: SERVER_BIN,
-        [URL_ENV]: devUrl,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      GCODE_BROWSER_SERVER_BIN: SERVER_BIN,
+      [URL_ENV]: devUrl,
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies().length);
     expect(resultOf(requests[2]!, 'tu_preview_start').text).toMatch(
       new RegExp(`^Started dev server "web" \\(\`node server\\.mjs\`\\) as bg-1\\. It answers at ${devUrl}\\. GET ${devUrl}/ returned 200, titled "Fake app"\\.`),

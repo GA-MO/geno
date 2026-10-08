@@ -6,13 +6,13 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CURSOR_SETUP, type FakeScript, type FakeStep } from '../../engine/test/fake-acp-agent.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { BARE_PATH, cachePath, root, setUp } from './launch.js';
+import { BARE_PATH, root, setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, EDITED, FILES, SWITCHED } from './suite/backends-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -92,7 +92,7 @@ const git = (cwd: string, ...args: string[]) =>
 
 describe('an external agent as a chat backend in the panel', () => {
   it('picks Cursor from the model menu, switches its model, runs a turn with a permission card, and applies its lane for review', async () => {
-    const { work, workspace, home, suite, launchArgs } = await setUp('backends', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
+    const { work, workspace, home, suite } = await setUp('backends', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false, 'gcode.review.mode': 'review' });
     git(workspace, 'init', '-q', '-b', 'main');
     git(workspace, 'add', '-A');
     git(workspace, 'commit', '-q', '--no-verify', '-m', 'start');
@@ -107,30 +107,23 @@ describe('an external agent as a chat backend in the panel', () => {
     await writeFile(path.join(bin, 'agent'), `#!/bin/sh\nFAKE_ACP_SCRIPT='${scriptFile}' exec '${process.execPath}' --import '${TSX}' '${FAKE_AGENT}' "$@"\n`);
     await chmod(path.join(bin, 'agent'), 0o755);
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, '--use-inmemory-secretstorage', `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        PATH: `${bin}:${BARE_PATH}`,
-        HOME: userHome,
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        // The fake agent's sandbox is not what this test is about; backend.e2e.test.ts covers it.
-        GCODE_BACKEND_SANDBOX: 'off',
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      PATH: `${bin}:${BARE_PATH}`,
+      HOME: userHome,
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      // The fake agent's sandbox is not what this test is about; backend.e2e.test.ts covers it.
+      GCODE_BACKEND_SANDBOX: 'off',
     });
-    expect(code).toBe(0);
 
     expect(existsSync(calls)).toBe(true);
     const logged = (await readFile(calls, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as Record<string, any>);

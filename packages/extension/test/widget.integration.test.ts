@@ -2,14 +2,14 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, loadTools, offeredTools, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { root, setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
 import { FILES, GROW, GROW_TITLE, LOADING, SPEED_TITLE } from './suite/widget-fixture.js';
 import { clickInWidget, inWidget } from './widget-cdp.js';
+import { leaseWindow } from './pool/client.js';
 
 const EXTENSION = 'g-code.g-code';
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -104,28 +104,21 @@ describe('widgets in the chat panel', () => {
       toolCall('', [{ id: 'tu_grow', name: 'show_widget', input: { title: GROW_TITLE, html: GROW } }], usage),
       answer('Click More rows to grow it.', usage),
     ];
-    const { home, workspace, suite, launchArgs } = await setUp('widget', FILES, {}, { 'files.simpleDialog.enable': true });
+    const { work, home, workspace, suite } = await setUp('widget', FILES, {}, { 'files.simpleDialog.enable': true });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_TEST_WORKSPACE: workspace,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_TEST_WORKSPACE: workspace,
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
     const tools = offeredTools(requests[0] as { tools: { name: string }[] });
     expect(tools).toContain('show_widget');

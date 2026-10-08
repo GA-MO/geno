@@ -2,13 +2,13 @@ import { mkdir } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
+import { setUp } from './launch.js';
 import { capturePanel, resizeSideBar } from './media.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { ANSWER, FILES } from './suite/waits-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -102,29 +102,22 @@ afterAll(() => {
 
 describe('a turn that loses the network, in the panel', () => {
   it('shows the offline wait in the running row and the tasks list, fits at 300px, and resumes on Retry now', async () => {
-    const { home, suite, launchArgs } = await setUp('waits', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
+    const { workspace, work, home, suite } = await setUp('waits', FILES, { 'gcode.approvalMode': 'ask', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: MODEL,
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-        GCODE_CLASSIFIER_MODEL: 'off',
-        // The first probe comes after a minute, so the row holds still for its screenshots until Retry now.
-        GCODE_WAIT_POLICY: JSON.stringify({ offline: { firstMs: 60_000, maxMs: 60_000, giveUpMs: 1_800_000 } }),
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: MODEL,
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
+      GCODE_CLASSIFIER_MODEL: 'off',
+      // The first probe comes after a minute, so the row holds still for its screenshots until Retry now.
+      GCODE_WAIT_POLICY: JSON.stringify({ offline: { firstMs: 60_000, maxMs: 60_000, giveUpMs: 1_800_000 } }),
     });
-    expect(code).toBe(0);
     expect(answered, 'the tool call and the answer after the retry were each answered once').toBe(2);
     expect(dropped).toBeGreaterThan(0);
   }, 900_000);

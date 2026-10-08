@@ -2,13 +2,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { runTests } from '@vscode/test-electron';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GENO_NOTE } from '@g-code/core';
 import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
-import { cachePath, root, setUp } from './launch.js';
-import { captureWindow, freePort } from './screenshot.js';
+import { setUp } from './launch.js';
+import { captureWindow } from './screenshot.js';
+import { leaseWindow } from './pool/client.js';
 import { FILES, PROMPT, UNSAVED } from './suite/mentions-fixture.js';
 
 const EXTENSION = 'g-code.g-code';
@@ -74,27 +74,20 @@ afterAll(() => {
 
 describe('mentions in VS Code', () => {
   it('completes @file and @selection in the composer, sends them as context, and greps the unsaved buffer', async () => {
-    const { home, suite, launchArgs } = await setUp('mentions', FILES, {});
+    const { workspace, work, home, suite } = await setUp('mentions', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
-    debugPort = await freePort();
+    const vscodeWindow = await leaseWindow();
+    debugPort = vscodeWindow.debugPort;
     const url = `http://127.0.0.1:${(fake.address() as AddressInfo).port}`;
 
-    const code = await runTests({
-      extensionDevelopmentPath: root,
-      extensionTestsPath: suite,
-      cachePath,
-      ...(process.env['GCODE_VSCODE_VERSION'] ? { version: process.env['GCODE_VSCODE_VERSION'] } : {}),
-      launchArgs: [...launchArgs, `--remote-debugging-port=${debugPort}`],
-      extensionTestsEnv: {
-        GCODE_HOME: home,
-        GCODE_PROVIDER: 'modelstudio',
-        GCODE_MODEL: 'qwen3.8-flash',
-        DASHSCOPE_API_KEY: 'sk-fake',
-        DASHSCOPE_BASE_URL: url,
-        GCODE_FAKE_MODEL: url,
-      },
+    await vscodeWindow.run(suite, { workspace, work }, {
+      GCODE_HOME: home,
+      GCODE_PROVIDER: 'modelstudio',
+      GCODE_MODEL: 'qwen3.8-flash',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: url,
+      GCODE_FAKE_MODEL: url,
     });
-    expect(code).toBe(0);
     expect(requests).toHaveLength(replies.length);
 
     // The opening also carries Geno's own notes, such as the environment; the user's blocks follow them in order.
