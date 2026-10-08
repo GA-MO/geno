@@ -405,7 +405,7 @@ describe('gcode agent --mode plan', () => {
     expect(result.code).toBe(0);
 
     const [first] = transport.requests;
-    expect(first!.body.tools, 'Plan is offered the tools of every mode, and refuses what it leaves out').toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)]).offered);
+    expect(first!.body.tools, 'Plan is offered the tools of every mode, and refuses what it leaves out').toEqual(toolRoster([...AGENT_TOOL_DEFINITIONS, ...webToolDefinitions(false)], []).offered);
     expect(first!.body.system[0].text).toBe(`${AGENT_PROMPTS.rules}\n\n${DEFERRED_TOOLS_NOTE}`);
     expect(JSON.stringify(first!.body.messages.at(-1).content)).toContain(JSON.stringify(MODE_NOTICES.plan).slice(1, -1));
     expect(asked).toEqual([]);
