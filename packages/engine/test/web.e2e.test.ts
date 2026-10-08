@@ -4,14 +4,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL, READER_SYSTEM, type Denial, type SessionMode, type TurnEvent } from '@g-code/core';
+import { CLASSIFIER_TOOL, READER_SYSTEM, type Denial, type NewRule, type SessionMode, type TurnEvent } from '@g-code/core';
 import { runAgent } from '../src/agent.js';
 import { startSession } from '../src/chat.js';
 import { commandClassifier } from '../src/classifier.js';
 import type { Io } from '../src/command.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import { guardedResolve, type Resolve } from '../src/tools/web.js';
-import { openStore } from '../src/store.js';
+import { permissionStore } from '../src/permissions.js';
+import { homeOf, openStore } from '../src/store.js';
 import { answer, fakeTransport, loadTools, offeredTools, toolCall, type Reply } from './fake-transport.js';
 import { rgCommand } from './helpers.js';
 
@@ -85,9 +86,15 @@ const resolve: Resolve = async (hostname) => {
   throw new Error(`the test resolver does not know ${hostname}`);
 };
 
-type Run = { readonly mode: SessionMode | 'non-interactive'; readonly answers?: readonly PermissionAnswer[]; readonly search?: typeof globalThis.fetch };
+type Run = {
+  readonly mode: SessionMode | 'non-interactive';
+  readonly answers?: readonly PermissionAnswer[];
+  readonly search?: typeof globalThis.fetch;
+  /** The workspace's rules, as Settings under Permissions saves them. */
+  readonly rules?: readonly NewRule[];
+};
 
-async function run(replies: readonly Reply[], { mode, answers = [], search }: Run) {
+async function run(replies: readonly Reply[], { mode, answers = [], search, rules = [] }: Run) {
   const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-web-ws-')));
   const env: Record<string, string> = {
     GCODE_HOME: await mkdtemp(path.join(tmpdir(), 'gcode-web-home-')),
@@ -117,6 +124,7 @@ async function run(replies: readonly Reply[], { mode, answers = [], search }: Ru
           auto: freshAuto(),
         };
   const store = openStore(env);
+  for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
   const opened = await startSession(store, io, { workspace, provider: undefined, model: undefined, effort: undefined });
   const reads: number[] = [];
   const result = await runAgent(io, store, opened, 'How do I change the server port?', {
@@ -323,5 +331,62 @@ describe('web_search', () => {
     expect(asked.map((d) => [d.rule, d.command])).toEqual([['web-search', 'search Brave Search for "next.js redirects"']]);
     expect(calls.map((url) => [url.origin + url.pathname, url.searchParams.get('q')])).toEqual([['https://api.search.brave.com/res/v1/web/search', 'next.js redirects']]);
     expect(output(0)).toContain('<web_search_results query="next.js redirects" provider="Brave Search">\n1. Redirects | Next.js\n   https://nextjs.org/docs/redirects\n   How to use redirects & more.');
+  });
+
+  const HITS = [
+    { title: 'Redirects', url: 'https://nextjs.org/docs/redirects', description: 'On the site.' },
+    { title: 'Blog', url: 'https://blog.nextjs.org/redirects', description: 'On a subdomain.' },
+    { title: 'Copy', url: 'https://notnextjs.org/redirects', description: 'A look-alike.' },
+    { title: 'Paste', url: 'https://paste.example/redirects', description: 'A host the user denied.' },
+  ];
+  const many = (calls: URL[]): typeof globalThis.fetch => async (input) => {
+    calls.push(new URL(String(input)));
+    return Response.json({ web: { results: HITS } });
+  };
+  const search = async (input: Record<string, unknown>, rules: readonly NewRule[] = []) => {
+    const calls: URL[] = [];
+    const done = await run([toolCall('', [{ id: 's', name: 'web_search', input: { query: 'redirects', ...input } }], usage), answer('Found it.', usage)], {
+      mode: 'plan',
+      search: many(calls),
+      rules,
+    });
+    const urls = [...done.output(0).matchAll(/^ {3}(https:\/\/\S+)$/gm)].map((m) => m[1]);
+    return { ...done, sent: calls.map((url) => url.searchParams.get('q')), urls };
+  };
+
+  it('B/B-38 allowed_domains asks Brave for those sites only and keeps only their hits, subdomains included', async () => {
+    const one = await search({ allowed_domains: ['NextJS.org.'] });
+    expect(one.sent).toEqual(['redirects site:nextjs.org']);
+    expect(one.urls).toEqual(['https://nextjs.org/docs/redirects', 'https://blog.nextjs.org/redirects']);
+    const two = await search({ allowed_domains: ['nextjs.org', 'notnextjs.org'] });
+    expect(two.sent).toEqual(['redirects (site:nextjs.org OR site:notnextjs.org)']);
+    expect(two.urls).toEqual(['https://nextjs.org/docs/redirects', 'https://blog.nextjs.org/redirects', 'https://notnextjs.org/redirects']);
+  });
+
+  it('B/B-38 blocked_domains asks Brave to leave those sites out and drops any hit on them that comes back', async () => {
+    const { sent, urls } = await search({ blocked_domains: ['nextjs.org'] });
+    expect(sent).toEqual(['redirects -site:nextjs.org']);
+    expect(urls).toEqual(['https://notnextjs.org/redirects', 'https://paste.example/redirects']);
+  });
+
+  it('B/B-38 both lists, or a domain that is not one, are refused before any search', async () => {
+    const both = await search({ allowed_domains: ['nextjs.org'], blocked_domains: ['paste.example'] });
+    expect(both.results[0]).toMatchObject({ status: 'error' });
+    expect(both.output(0)).toContain('Cannot specify both allowed_domains and blocked_domains in the same request');
+    const url = await search({ allowed_domains: ['https://nextjs.org/docs'] });
+    expect(url.output(0)).toContain('must be a domain such as docs.python.org');
+    expect([...both.sent, ...url.sent]).toEqual([]);
+    const empty = await search({ allowed_domains: [], blocked_domains: ['paste.example'] });
+    expect(empty.sent).toEqual(['redirects -site:paste.example']);
+  });
+
+  it('B/B-38 a hit on a host a deny rule covers is dropped, with no filter and when allowed_domains names the host', async () => {
+    const deny: NewRule[] = [{ effect: 'deny', tool: 'web_fetch', domain: '*.example' }];
+    const plain = await search({}, deny);
+    expect(plain.urls).toEqual(['https://nextjs.org/docs/redirects', 'https://blog.nextjs.org/redirects', 'https://notnextjs.org/redirects']);
+    const named = await search({ allowed_domains: ['paste.example'] }, deny);
+    expect(named.sent).toEqual(['redirects site:paste.example']);
+    expect(named.urls).toEqual([]);
+    expect(named.output(0)).toContain('(no results)');
   });
 });

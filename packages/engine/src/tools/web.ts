@@ -16,9 +16,11 @@ import {
   htmlToMarkdown,
   isProviderName,
   isPublicAddress,
+  keptHits,
   pageWindowOf,
   readerRequest,
   redirectTargetOf,
+  searchQueryOf,
   searchResultText,
   SEARCH_PROVIDER_SPECS,
   specOf,
@@ -32,6 +34,7 @@ import {
   type ProviderName,
   type Reachable,
   type SearchConfig,
+  type SearchDomains,
   type SearchHit,
   type TokenUsage,
   type WebAction,
@@ -264,7 +267,26 @@ function reader(deps: WebDeps): Read {
 }
 
 const fetchInput = z.strictObject({ url: z.string().min(1), question: z.string().trim().min(1), offset: z.int().min(0).optional() });
-const searchInput = z.strictObject({ query: z.string().trim().min(1) });
+const domains = z
+  .array(
+    z
+      .string()
+      .trim()
+      .toLowerCase()
+      .transform((domain) => domain.replace(/\.$/, ''))
+      .pipe(z.string().regex(/^(?:[a-z0-9-]+\.)+[a-z0-9-]+$/, 'must be a domain such as docs.python.org, with no scheme, path or wildcard')),
+  )
+  .optional();
+
+const searchInput = z
+  .strictObject({ query: z.string().trim().min(1), allowed_domains: domains, blocked_domains: domains })
+  .refine(({ allowed_domains, blocked_domains }) => !(allowed_domains?.length && blocked_domains?.length), 'Cannot specify both allowed_domains and blocked_domains in the same request');
+
+const filterOf = ({ allowed_domains, blocked_domains }: z.infer<typeof searchInput>): SearchDomains | undefined => {
+  if (allowed_domains?.length) return { kind: 'allowed', domains: allowed_domains };
+  if (blocked_domains?.length) return { kind: 'blocked', domains: blocked_domains };
+  return undefined;
+};
 
 /** The fetch's own deadline, apart from the turn's signal, so a slow page fails as the model's error, not a stop. */
 function deadline(signal: AbortSignal): { readonly signal: AbortSignal; readonly timedOut: () => boolean } {
@@ -349,11 +371,13 @@ export function webExecutors(deps: WebDeps): Partial<Record<WebTool, Executor>> 
   const spec = SEARCH_PROVIDER_SPECS[search.provider];
   const web_search = executor({
     input: searchInput,
-    describe: ({ query }) => `web_search ${query}`,
-    async run({ query }, ctx) {
+    describe: (input) => `web_search ${searchQueryOf(input.query, filterOf(input))}`,
+    async run(input, ctx) {
+      const filter = filterOf(input);
+      const query = searchQueryOf(input.query, filter);
       const approval = await judge({ kind: 'search', query, provider: spec.label }, { query }, ctx, 'web_search');
       const hits = await braveSearch(query, search.key, deps.searchFetch ?? globalThis.fetch, ctx.signal);
-      const text = searchResultText(query, spec.label, hits);
+      const text = searchResultText(query, spec.label, keptHits(hits, filter, (await ctx.permissions?.list()) ?? []));
       return approval === undefined ? text : { text, approval };
     },
   });
