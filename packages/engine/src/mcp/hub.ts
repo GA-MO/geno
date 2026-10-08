@@ -183,7 +183,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser }: McpHub
                 mode,
                 denial,
                 () => ({ ...classifierInputOf(ctx.events(), name, denial), mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args) } }),
-                ctx.signal,
+                ctx,
                 () => {
                   allowed.add(name);
                 },

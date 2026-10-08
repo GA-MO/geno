@@ -347,6 +347,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       waiter: options.surface?.waiter,
       // A subagent's calls meet the user's tool hooks too, as in Claude Code, named by agent_id and agent_type.
       toolHooks: options.hooks === undefined ? undefined : (approval, agent) => options.hooks!.toolHooks(session.id, approval, agent),
+      subagentHooks: options.hooks === undefined ? undefined : (agent, transcript, approval) => options.hooks!.subagentHooks(session.id, agent, transcript, approval),
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools, mcp?.tools);

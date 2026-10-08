@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, type HookEventInputs, type StopDecision, lastAssistantText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
+import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -14,8 +14,8 @@ import { snapshotKeeper } from './snapshots.js';
 import type { Store } from './store.js';
 import { displayPath } from './tools/context.js';
 import { workspaceDir } from './workspace.js';
-import type { PreToolStep, RanCall, ToolHookSaid, ToolHooks } from './hooks.js';
-import { describeCall, runTool, type Executor, type Executors, type ToolContext, type ToolRun } from './tools/index.js';
+import type { PreToolStep, RanCall, StopHook, ToolHookSaid, ToolHooks } from './hooks.js';
+import { describeCall, PermissionRerun, runTool, type Executor, type Executors, type ToolContext, type ToolRun } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
 import type { SteerInbox } from './steer.js';
 import type { Wake } from './waits.js';
@@ -48,8 +48,8 @@ export type Mode = {
   readonly toolHooks?: ToolHooks | undefined;
   /** The user's UserPromptSubmit hooks, on the prompt this run answers: they may block it or add to it. */
   readonly promptSubmitted?: ((prompt: string) => Promise<PromptDecision>) | undefined;
-  /** The user's Stop hooks, as the session's own model ends its turn: they may keep it going. */
-  readonly stop?: ((input: HookEventInputs['Stop']) => Promise<StopDecision>) | undefined;
+  /** The user's Stop hooks as the session's own model ends its turn, or SubagentStop as a subagent's does: they may keep it going. */
+  readonly stop?: StopHook | undefined;
 };
 
 export type Director = (events: readonly TurnEvent[]) => AssistantTurn | undefined;
@@ -271,10 +271,19 @@ export async function drive(
     };
     return { ...mode.executors, [step.use.name]: { ...own, run } };
   };
-  const callOf = async (step: PreToolStep | undefined, use: ToolUseBlock, toolCtx: ToolContext): Promise<ToolRun> => {
-    if (step?.kind === 'refuse') return { status: 'denied', text: toolText(use.name, step.text), approval: step.approval };
-    if (step?.kind === 'ask') return runTool(use, toolCtx, asking(step));
-    return runTool(use, step?.allowed === true ? { ...toolCtx, hookAllowed: true } : toolCtx, mode.executors);
+  // A PermissionRequest hook's allow with updatedInput runs the call again with that input, the allow answering its
+  // cards, so the hook is asked once per call. `ran` is the call as it ran, for the after-tool hooks.
+  const callOf = async (step: PreToolStep | undefined, use: ToolUseBlock, toolCtx: ToolContext): Promise<ToolRun & { readonly ran: ToolUseBlock }> => {
+    if (step?.kind === 'refuse') return { status: 'denied', text: toolText(use.name, step.text), approval: step.approval, ran: use };
+    const executors = step?.kind === 'ask' ? asking(step) : mode.executors;
+    const asked: ToolContext = { ...(step?.kind === 'run' && step.allowed ? { ...toolCtx, hookAllowed: true } : toolCtx), permissionRequest: mode.toolHooks?.permissionAsk(use) };
+    try {
+      return { ...(await runTool(use, asked, executors)), ran: use };
+    } catch (error) {
+      if (!(error instanceof PermissionRerun)) throw error;
+      const rewritten: ToolUseBlock = { ...use, input: error.input };
+      return { ...(await runTool(rewritten, { ...asked, permissionRequest: async () => ({ kind: 'allow' }) }, executors)), ran: rewritten };
+    }
   };
 
   // Batch by batch (see ToolBatch): an edit or command runs alone, after every call before it and before every call after.
@@ -301,11 +310,11 @@ export async function drive(
       const started = { toolUseId: use.id, name: use.name, startAt: Date.now() };
       running.set(i, started);
       watcher.toolStart(use, describeCall(use, mode.executors));
-      const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, file } = await callOf(steps?.[i], use, toolCtx);
+      const { status, text, change, approval, images, widget, editorAction, todo, loaded, spinoff, chapter, file, ran: asRan } = await callOf(steps?.[i], use, toolCtx);
       watcher.toolEnd(use, status, todo);
       if (hooks !== undefined) {
         // After Geno's own check, which the edit's result already holds, and before the call after it starts.
-        ran[i] = { use, status, text, durationMs: Date.now() - started.startAt };
+        ran[i] = { use: asRan, status, text, durationMs: Date.now() - started.startAt };
         after[i] = await hooks.after(ran[i]!);
       }
       const output = await settle(text, spillFile(ctx.spillDir, seq, use.name), ctx.spillChars);
@@ -456,19 +465,23 @@ export async function drive(
     }
     return arrived.length > 0;
   };
-  // Stop, as the model ends its turn: a hook's block keeps the turn going once in a row, its reason the model's next message.
+  // Stop, as the model ends its turn: a hook's block keeps the turn going once in a row, its reason the model's next
+  // message. A subagent's SubagentStop fires after its report too, which is its final response.
   const stopKeepsGoing = async (): Promise<boolean> => {
-    if (mode.stop === undefined || !modelEndedTurn(events, run)) return false;
-    const decision = await mode.stop({ stop_hook_active: stopHookActive(events, run), last_assistant_message: lastAssistantText(events) });
+    const hook = mode.stop;
+    if (hook === undefined) return false;
+    const subagent = hook.event === 'SubagentStop';
+    if (!(subagent ? finishedResponding(events, run) : modelEndedTurn(events, run))) return false;
+    const decision = await hook.decide({ stop_hook_active: stopHookActive(events, run), last_assistant_message: subagent ? lastResponseText(events) : lastAssistantText(events) });
     if (decision.kind === 'end') {
-      if (decision.reason !== undefined) io.err(`Stop hook: ${decision.reason}`);
+      if (decision.reason !== undefined) io.err(`${hook.event} hook: ${decision.reason}`);
       return false;
     }
     if (!stopMayContinue(events, run)) {
-      io.err('Stop hook blocked the end of the turn again, and the model called no tool since its last block, so the turn ends here');
+      io.err(`${hook.event} hook blocked the end of the turn again, and the model called no tool since its last block, so the turn ends here`);
       return false;
     }
-    await record({ kind: 'hook-context', seq: nextSeq(events), at: new Date().toISOString(), event: 'Stop', notes: decision.notes });
+    await record({ kind: 'hook-context', seq: nextSeq(events), at: new Date().toISOString(), event: hook.event, notes: decision.notes });
     return true;
   };
   const end = async (reason: DoneReason): Promise<DriveResult> => {

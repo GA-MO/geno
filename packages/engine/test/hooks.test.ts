@@ -86,8 +86,7 @@ describe('hookRunner', () => {
     const project: HookOrigin = { file: path.join(workspace, '.claude/settings.json'), scope: 'project' };
     const runner = hookRunner({
       entries: entries({ user, project }),
-      sessionId: 's-1',
-      transcriptPath: path.join(root, 'app/sessions/s-1.jsonl'),
+      session: { id: 's-1', transcriptPath: path.join(root, 'app/sessions/s-1.jsonl') },
       workspace,
       env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: home, DASHSCOPE_API_KEY: 'sk-secret' },
       sandbox: async () => openSandbox(await sandboxPolicy({ store, home, workspace, tempDir: path.join(root, 'app') })),

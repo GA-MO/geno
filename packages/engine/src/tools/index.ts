@@ -6,7 +6,7 @@ import { grep } from './grep.js';
 import { list } from './list.js';
 import { read } from './read.js';
 
-export { ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext, type ToolReply } from './context.js';
+export { PermissionRerun, ToolDenied, ToolError, ToolRejected, type PermissionAsk, type Executor, type ToolContext, type ToolReply } from './context.js';
 
 export type Executors = Readonly<Record<string, Executor>>;
 

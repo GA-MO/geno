@@ -44,6 +44,7 @@ import {
   resumeEvent,
   REPORT_TOOL,
   REPORT_TOOL_DEFINITION,
+  type HookContextEvent,
   type Session,
   sessionEffortOf,
   type SessionId,
@@ -67,7 +68,7 @@ import type { Approval } from './tools/agent.js';
 import { executor, ToolError, ToolRejected, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
 import type { Homes } from './commands.js';
-import type { HookAgent, ToolHooks } from './hooks.js';
+import type { HookAgent, SubagentHooks, ToolHooks } from './hooks.js';
 
 /** In precedence order, as for commands: Geno's home, then the workspace's folders, then plugins, then the built-ins. */
 const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string }[] = [
@@ -184,6 +185,8 @@ export type SubagentEnv = {
   readonly waiter?: Waiter | undefined;
   /** The tool hooks a child's calls meet, under the approval that asks for that child; undefined runs none. */
   readonly toolHooks?: ((approval: Approval, agent: HookAgent) => ToolHooks | undefined) | undefined;
+  /** SubagentStart and SubagentStop for a child whose log is `transcript`; undefined runs neither. */
+  readonly subagentHooks?: ((agent: HookAgent, transcript: string, approval: Approval) => SubagentHooks | undefined) | undefined;
 };
 
 /** What a workflow step sets on its child: the model, and caps in place of the definition's. */
@@ -292,7 +295,15 @@ export function subagents(env: SubagentEnv): Subagents {
   // Set once the parent's run ended and its children run on to wake the session.
   let detached = false;
 
-  const openSpawn = async (agent: AgentDefinition, run: Extract<ChildRun, { kind: 'spawn' }>, use: { readonly id: string }, id: SessionId, caps: ChildCaps, parentEvents: readonly TurnEvent[]): Promise<OpenedChild> => {
+  const openSpawn = async (
+    agent: AgentDefinition,
+    run: Extract<ChildRun, { kind: 'spawn' }>,
+    use: { readonly id: string },
+    id: SessionId,
+    caps: ChildCaps,
+    parentEvents: readonly TurnEvent[],
+    started: HookContextEvent | undefined,
+  ): Promise<OpenedChild> => {
     const parentSession = parent.log.session;
     const { start, task, step } = run;
     const session: Session = {
@@ -319,18 +330,28 @@ export function subagents(env: SubagentEnv): Subagents {
       },
       ...(start === 'fork' ? forkOpening(parentEvents, use.id, session.createdAt) : []),
     ];
+    // SubagentStart's context, just before the task the run logs first.
+    if (started !== undefined) opening.push({ ...started, seq: nextSeq(opening) });
     for (const event of opening) await appendEvent(file, event);
     const log: SessionLog = { file, session, events: opening, tornLine: undefined, goodBytes: 0 };
     return { log, start, task, prompt: start === 'fork' ? forkTask(agent, task) : task, at: session.createdAt };
   };
 
   // The run goes on from where the child's log ends, with the message as its parent's steer and nothing left to prompt.
-  const openResume = async ({ log, message, of, moment }: Extract<ChildRun, { kind: 'resume' }>): Promise<OpenedChild> => {
+  // SubagentStart's context goes in again only when the child's log does not already hold the same text, as in Claude Code.
+  const openResume = async ({ log, message, of, moment }: Extract<ChildRun, { kind: 'resume' }>, started: HookContextEvent | undefined): Promise<OpenedChild> => {
     await dropTornTail(log);
     const at = new Date().toISOString();
-    const resumed = resumeEvent(message, nextSeq(log.events), at, moment);
+    const events = [...log.events];
+    const held = (event: TurnEvent) => event.kind === 'hook-context' && event.event === 'SubagentStart' && JSON.stringify(event.notes) === JSON.stringify(started?.notes);
+    if (started !== undefined && !events.some(held)) {
+      const context = { ...started, seq: nextSeq(events) };
+      await appendEvent(log.file, context);
+      events.push(context);
+    }
+    const resumed = resumeEvent(message, nextSeq(events), at, moment);
     await appendEvent(log.file, resumed);
-    return { log: { ...log, events: [...log.events, resumed] }, start: of.start, task: message, prompt: '', at };
+    return { log: { ...log, events: [...events, resumed] }, start: of.start, task: message, prompt: '', at };
   };
 
   const runChild = async (agent: AgentDefinition, run: ChildRun, use: { readonly id: string }, ctx: Parameters<Executor['run']>[1], id: SessionId, inbox: SteerInbox): Promise<ChildOutcome> => {
@@ -340,7 +361,11 @@ export function subagents(env: SubagentEnv): Subagents {
     if (caps === undefined) throw new ToolError(`the subagents of this run have spent their $${env.limits.maxCostUsd} together; finish without another one`);
     const startedAt = Date.now();
     committed += caps.maxCostUsd;
-    const { log, start, task, prompt, at } = run.kind === 'spawn' ? await openSpawn(agent, run, use, id, caps, ctx.events()) : await openResume(run);
+    const childApproval = asker(env.approval, agent.name, id);
+    // A child on an external agent runs its turn inside that agent, where Geno has no point to add context or keep it going.
+    const lifecycle = agent.backend === undefined ? env.subagentHooks?.({ id, type: agent.name }, run.kind === 'spawn' ? sessionFile(store, id) : run.log.file, childApproval) : undefined;
+    const started = await lifecycle?.start();
+    const { log, start, task, prompt, at } = run.kind === 'spawn' ? await openSpawn(agent, run, use, id, caps, ctx.events(), started) : await openResume(run, started);
     const { session, file } = log;
     const firstSeq = nextSeq(log.events);
     const view: ChildView = { id: session.id, parentId: parent.log.session.id, toolUseId: use.id, agent, task, model: session.model, effort: session.effort, caps, start, file };
@@ -364,18 +389,19 @@ export function subagents(env: SubagentEnv): Subagents {
       },
     };
     const childIo: Io = { ...io, interrupts: () => controller.signal, out: () => {}, write: () => {}, err: (line) => io.err(`${agent.name}: ${line}`) };
-    const childApproval = asker(env.approval, agent.name, session.id);
     const executors = pick(env.executors(childApproval), agent.tools);
     const toolHooks = env.toolHooks?.(childApproval, { id: session.id, type: agent.name });
     const own = new Set<string>(agent.tools);
     // A fork keeps the parent's tools for the cache, so it has no report tool and its last text is its report.
     // A child starts no background command, so what arrives for it is the steers its parent or the user sends.
     const arrivals = () => env.steers.inbox.take(session.id);
+    const stop = lifecycle?.stop;
     const mode: Mode =
       start === 'fork'
-        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals, toolHooks }
+        ? { ...env.parentMode(), executors, readRoots: env.readRoots, arrivals, toolHooks, stop }
         : {
             toolHooks,
+            stop,
             tools: [...AGENT_TOOL_DEFINITIONS.filter((tool) => own.has(tool.name)), REPORT_TOOL_DEFINITION],
             system: childSystemPrompt(agent),
             executors: { ...executors, [REPORT_TOOL]: reportExecutor },

@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isSecretPath, type ApprovalRecord, type ChapterMark, type ChildNote, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { isSecretPath, type ApprovalRecord, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import { isMissing } from '../store.js';
 
@@ -36,7 +36,22 @@ export type ToolContext = {
    * the classifier are answered, but not its refusals or what Geno always asks (`ruledDenial`).
    */
   readonly hookAllowed?: true | undefined;
+  /** The user's PermissionRequest hooks for this call, asked where a card would show; absent when none would run. */
+  readonly permissionRequest?: PermissionAsk | undefined;
 };
+
+/** Asks a call's PermissionRequest hooks about the card `denial` would show. */
+export type PermissionAsk = (denial: Denial) => Promise<PermissionHookAnswer>;
+
+/**
+ * Thrown where a PermissionRequest hook allowed a call with an `updatedInput`, already in Geno's shape: the call runs
+ * again with that input, its own checks judging the new input, and the hook's allow answering any card it shows.
+ */
+export class PermissionRerun extends Error {
+  constructor(readonly input: Readonly<Record<string, unknown>>) {
+    super('a PermissionRequest hook changed the call');
+  }
+}
 
 /** A failure the model caused or can work around. It becomes an `error` tool result, never a crash. */
 export class ToolError extends Error {}

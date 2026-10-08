@@ -187,7 +187,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
             ...classifierInputOf(ctx.events(), name, denial),
             mcp: { server: info.server, tool: info.tool, arguments: JSON.stringify(args), ...(pageUrl === undefined ? {} : { page: pageUrl }) },
           }),
-          ctx.signal,
+          ctx,
           () => {
             if (isMcpRule(denial.rule)) allowed.add(name);
           },

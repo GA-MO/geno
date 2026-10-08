@@ -412,7 +412,7 @@ export async function runExternalTurn(options: ExternalTurnOptions): Promise<Ext
           ...classifierInputOf(events, command, denial),
           ...(access === 'command' ? {} : { mcp: { server: backend.label, tool: call.kind, arguments: JSON.stringify(call.rawInput ?? { title: call.title }) } }),
         }),
-        signal,
+        { signal },
       );
       known.approval = record;
       verdict = record.verdict;
