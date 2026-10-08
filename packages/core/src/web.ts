@@ -14,6 +14,9 @@ export type WebTool = (typeof WEB_TOOLS)[number];
 export type FetchRequest = { readonly url: string; readonly question: string; readonly offset?: number | undefined };
 export type SearchRequest = { readonly query: string };
 
+/** The model's domain filter for a search, as WebSearch takes it: results only from some domains, or never from some. */
+export type SearchDomains = { readonly kind: 'allowed' | 'blocked'; readonly domains: readonly string[] };
+
 export const WEB_LIMITS = {
   /** The whole fetch, redirects included. */
   timeoutMs: 20_000,
@@ -257,6 +260,36 @@ export function fetchAnswerText({ page, window, answer, redirects }: FetchAnswer
 
 export type SearchHit = { readonly title: string; readonly url: string; readonly snippet: string };
 
+/** The query the provider gets: Brave's `site:` operators carry the filter, so the results it returns are the right ones. */
+export function searchQueryOf(query: string, filter: SearchDomains | undefined): string {
+  if (filter === undefined) return query;
+  if (filter.kind === 'blocked') return [query, ...filter.domains.map((domain) => `-site:${domain}`)].join(' ');
+  const sites = filter.domains.map((domain) => `site:${domain}`);
+  return `${query} ${sites.length === 1 ? sites[0] : `(${sites.join(' OR ')})`}`;
+}
+
+/** A search domain covers itself and its subdomains, as WebSearch's do. */
+const coversHost = (domain: string, host: string): boolean => host === domain || host.endsWith(`.${domain}`);
+
+/**
+ * The hits the agent sees. The filter applies again whatever the provider made of the operators, and a hit on a host a
+ * deny domain rule covers is dropped too, so no filter of the model's can show what the user denied.
+ */
+export function keptHits(hits: readonly SearchHit[], filter: SearchDomains | undefined, rules: readonly PermissionRule[]): SearchHit[] {
+  return hits.filter((hit) => {
+    let host: string;
+    try {
+      host = hostnameOf(hit.url).replace(/\.$/, '');
+    } catch {
+      return false;
+    }
+    if (domainRuleFor('web_fetch', host, rules)?.effect === 'deny') return false;
+    if (filter === undefined) return true;
+    const covered = filter.domains.some((domain) => coversHost(domain, host));
+    return filter.kind === 'allowed' ? covered : !covered;
+  });
+}
+
 export function searchResultText(query: string, provider: string, hits: readonly SearchHit[]): string {
   const list = hits.length === 0 ? '(no results)' : hits.map((hit, i) => `${i + 1}. ${hit.title}\n   ${hit.url}\n   ${hit.snippet}`).join('\n');
   return [
@@ -285,12 +318,19 @@ const FETCH_SPEC: Tool = {
   },
 };
 
+const domainList = (description: string) => ({ type: 'array', items: { type: 'string' }, description: `${description}, such as docs.python.org. A domain covers its subdomains.` });
+
 const SEARCH_SPEC: Tool = {
   name: 'web_search',
-  description: 'Search the web. Returns up to 8 results, each with a title, URL and snippet. Read a result with web_fetch.',
+  description:
+    'Search the web. Returns up to 8 results, each with a title, URL and snippet. Read a result with web_fetch. allowed_domains or blocked_domains filter the results; pass one of them, not both.',
   input_schema: {
     type: 'object',
-    properties: { query: { type: 'string', description: 'The search query, as you would type it into a search engine.' } },
+    properties: {
+      query: { type: 'string', description: 'The search query, as you would type it into a search engine.' },
+      allowed_domains: domainList('Only include search results from these domains'),
+      blocked_domains: domainList('Never include search results from these domains'),
+    },
     required: ['query'],
     additionalProperties: false,
   },
