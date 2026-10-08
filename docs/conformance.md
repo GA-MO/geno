@@ -238,7 +238,7 @@ P9 also covers these rows:
 
 | ID | Claude Code | Geno | Status | Test |
 |---|---|---|---|---|
-| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. UserPromptSubmit runs before the model sees the prompt, and PreToolUse for every call of a turn before the first runs (P14). One hook on every event logs SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolBatch, Stop and SessionEnd in that order (P15). PermissionRequest comes with P16. | partial: all but PermissionRequest pass | `hooks.conformance.test.ts`, both wires |
+| T-HOOK-01 | The events of a turn fire in the order SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolBatch, Stop, SessionEnd. | SessionStart runs before the first model call and SessionEnd after the run, with `reason: other`. UserPromptSubmit runs before the model sees the prompt, and PreToolUse for every call of a turn before the first runs (P14). One hook on every event logs SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolBatch, Stop and SessionEnd in that order (P15). With an `echo` and a `kubectl` call it logs both PreToolUse runs, the `echo`'s PostToolUse, the `kubectl` card's PermissionRequest, then PostToolBatch, as Claude Code's E34 does (P16). | pass (was partial before P16) | `hooks.conformance.test.ts`, both wires |
 | T-HOOK-06 | A SessionStart matcher of `compact` runs after a compaction. | `startup` on a new session, `resume` on a resumed one, `compact` after a compaction, each with the common payload. A matcher that names another source does not run. The output opens the first request before the prompt, under `[Geno]`; a resume keeps the opening's bytes and its own output joins the next request; the compact output follows the compacted context. `clear` never fires: Geno has no `/clear`. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires; compaction on the Anthropic wire only |
 | T-HOOK-07 | A misspelled event name warns the user (Claude Code ignores it). | The hook never runs. The command line prints `hooks: <file>: SesionStart is not a hook event…`, and Settings lists it as a warning above the hooks. | pass (adapt, was fail) | `hooks.conformance.test.ts`, both wires and over ACP |
 | T-HOOK-08 | Exit 2 blocks and a JSON allow cannot override it; exit 1 does not block; JSON that does not parse is a non-blocking error. | SessionStart with exit 2, exit 1 or broken JSON puts nothing before the model, the session goes on, and each is reported on stderr. A PreToolUse exit 2 blocks its call with stderr as the reason, and a UserPromptSubmit exit 2 blocks the prompt (P14). A PreToolUse exit 1 without JSON is reported and the call runs. `hookOutcome` returns a block for exit 2 whatever stdout says. | pass (was partial before P14) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) for the JSON allow on exit 2 |
@@ -301,6 +301,24 @@ P15 also covers these rows:
 | B/B-108 | T-HOOK-04 above. |
 | B/B-109 | `hooks.conformance.test.ts`, both wires: PostToolBatch runs once per batch with every call's `tool_name`, `tool_input`, `tool_use_id` and `tool_response`, and its text follows the results. Its exit 2 stops the run with code 1 before the next model call, and the next prompt carries the reason after the results. |
 | B/B-114, A/A-04 | T-LOOP-03 above, the block-once test. `hooks.test.ts` (core): `stopDecision`, `stopHookActive` and `stopMayContinue`. `hooks.conformance.test.ts` runs the phone notice example of `hooks.md` as written, with a stand-in `curl`. |
+
+## Permission, subagent and lane hooks (P16)
+
+PermissionRequest runs inside `settle` (`engine/src/tools/agent.ts`), the one place every tool's question goes through, by way of `ToolContext.permissionRequest`, which `drive.ts` sets for each call from `toolHooks.permissionAsk`. `hookMayAnswer` (core) decides where the hook is asked: where a card would show, after Auto's classifier sends the question on, or, in a run nobody can answer, where the rule asks in Ask mode. A refusal that holds whoever answers never reaches the hook: a workspace deny rule, Plan, a refused URL, and the checks before `settle` (the lane bounds, the sandbox, read-before-edit). `permissionRequestDecision` (core) reads `hookSpecificOutput.decision`: a `deny` outranks an `allow`, and exit 2 decides nothing, as in Claude Code. The answer is an `ApprovalRecord` with `decidedBy: hook`. A deny's `message` reaches the model in the refusal, and `interrupt: true` makes it a `rejected` result, which ends the turn as the user's no does. An allow with `updatedInput` throws `PermissionRerun`, and `callOf` runs the call again with the new input, the hook's allow answering any card it shows, so the hook is asked once per call. `permission_suggestions` (`permissionSuggestions`, core) carries the command's offered rule, the one Ask's card would offer in a non-interactive run too, or an MCP tool for the session.
+
+SubagentStart and SubagentStop come from `HookSessions.subagentHooks`, which `subagents.ts` asks for each child Geno's own loop runs. SubagentStart's `additionalContext` is a `hook-context` event logged just before the child's task, or before its parent's message on a resume when the log does not already hold the same text, and the request sends it with the prompts. SubagentStop is the child's `Mode.stop`, of event `SubagentStop`: `finishedResponding` (core) fires it when the child's model ends its turn or its report call goes through, and `lastResponseText` gives the report as `last_assistant_message`. The block-once rule is Stop's, and a report call does not let a second block count, so a hook that always blocks costs one more child turn. LaneCreated is Geno's own event: `laneCreated` (engine) runs the user's hooks, never a workspace's, in a new lane after its setup, from `gcode lane new` and from `laneFor`, which every other lane goes through.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-HOOK-05 | PermissionRequest's payload has `permission_suggestions`. | Adapted: in a non-interactive run, `kubectl get pods` asks the hook with `tool_name: Bash`, `tool_input` and one `addRules` suggestion of `kubectl get pods` for `localSettings`, and the hook's allow runs it. A deny's message reaches the model; a workspace deny rule and a call that needs no card never ask the hook. `updatedInput` runs in place of the call, with no second card. A PreToolUse ask is answered after PreToolUse. In an editor the hook answers before the user sees a card, a deny with `interrupt` ends the turn, exit 2 leaves the card to the user, and Plan never asks the hook. A subagent's card names `agent_id` and `agent_type`. | pass (adapt, was no test) | `hooks.conformance.test.ts`, both wires; `hooks.test.ts` (core) |
+
+P16 also covers these rows:
+
+| ID | Check |
+|---|---|
+| B/B-105 | T-HOOK-05 above. `hooks.conformance.test.ts` runs the reset example of `hooks.md` as written: `git reset --hard` runs in a non-interactive run, and the same command with `&& touch` after it stays refused. `hooks.test.ts` (core): `permissionRequestDecision`, `permissionSuggestions` and `hookMayAnswer`. |
+| B/B-112 | `hooks.conformance.test.ts`, both wires: SubagentStart gets `agent_id` and `agent_type`, its matcher reads the agent's name, and its context opens the child's first request before the task, never the parent's. On a resume it runs again and its text goes in once. SubagentStop gets `stop_hook_active`, `agent_transcript_path` (the child's log), and the report as `last_assistant_message`; its exit 2 keeps the child going once with the reason as its next message, and the parent gets the second report. `hooks.test.ts` (core): `finishedResponding`, `lastResponseText`, and the report call not counting for a second block. |
+| B/B-122 | `lanes.e2e.test.ts`: `gcode lane new` runs the user's LaneCreated hook in the lane, with the payload, after `.worktreeinclude` and the setup, and never the repository's own; a failed hook is reported and the lane stays. `lanes-acp.e2e.test.ts`: a lane the panel starts runs the hook before its session edits. `hooks.test.ts` (core): Settings shows a workspace's LaneCreated hook as never fired, and why. |
 
 ## Handback and report contents (P17)
 
@@ -481,11 +499,11 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-AUTO-02 | keep Geno's | none | no test yet |
 | T-AUTO-04 | adapt, skip | P4 | pass |
 | T-AUTO-03 | skip | none | no test yet |
-| T-HOOK-01 | adapt | P13, P15 | partial: all but PermissionRequest (P16) pass |
+| T-HOOK-01 | adapt | P13, P15, P16 | pass |
 | T-HOOK-02 | adopt | P14 | pass |
 | T-HOOK-03 | adopt, keep Geno's | P15 | pass |
 | T-HOOK-04 | adopt | P15 | pass |
-| T-HOOK-05 | adapt | P32 | no test yet |
+| T-HOOK-05 | adapt | P16, P32 | pass: the payload and the hook's answer (P16); the card's "No, and tell the agent" is P32 |
 | T-HOOK-06 | adopt | P13 | pass |
 | T-HOOK-07 | adapt | P13 | pass |
 | T-HOOK-08 | adopt | P13, P14 | pass |

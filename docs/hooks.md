@@ -59,12 +59,15 @@ A hook gets only `PATH`, `HOME`, `LANG`, `TERM` and `TMPDIR` from Geno's environ
 | `SessionEnd` | Runs | `reason` is `other`. A `gcode agent` run ends its session when it exits. In VS Code, the engine ends each session it ran when it exits after the last window closes. A stop by a signal ends no session. |
 | `UserPromptSubmit` | Runs | Before the model sees a prompt you typed. A hook can block the prompt or add to it ([UserPromptSubmit](#userpromptsubmit)). Geno's own messages, such as a wake-up or a steer during a turn, do not fire it. |
 | `PreToolUse` | Runs | Once for every tool call of a model turn, before the first call of the turn runs. A hook can deny, ask about, allow or change a call ([PreToolUse](#pretooluse)). A subagent's calls fire it too. |
+| `PermissionRequest` | Runs | When Geno would show you a permission card, or would refuse a call only because nobody can answer, as in a `gcode agent` run. A hook can answer the card for you ([PermissionRequest](#permissionrequest)). A subagent's cards fire it too. |
 | `PostToolUse` | Runs | After a call that succeeded, and after Geno's own check of an edit. A hook can add text to the result the model reads ([PostToolUse and PostToolUseFailure](#posttooluse-and-posttoolusefailure)). |
 | `PostToolUseFailure` | Runs | After a call that failed, such as a command that exits non-zero. A call that a rule, a hook or the user refused fires neither event. |
 | `PostToolBatch` | Runs | Once after all the calls of a model turn have results, before the next model call. A hook can add text after the results, or stop the run ([PostToolBatch](#posttoolbatch)). |
-| `Stop` | Runs | When the session's model ends its turn. A hook can keep the turn going, once in a row ([Stop](#stop)). A subagent's end fires `SubagentStop` instead, in P16. |
-| `PermissionRequest`, `SubagentStart`, `SubagentStop`, a lane-create hook | Coming in P16 | Listed in Settings as "Not run yet". |
-| Every other Claude Code event, such as `Notification` or `PreCompact` | Never | Geno has no trigger for it, or another event covers it. |
+| `Stop` | Runs | When the session's model ends its turn. A hook can keep the turn going, once in a row ([Stop](#stop)). A subagent's end fires `SubagentStop` instead. |
+| `SubagentStart` | Runs | When the session starts a subagent, or resumes one with `message_agent`. A hook can add text to the subagent's context ([SubagentStart and SubagentStop](#subagentstart-and-subagentstop)). |
+| `SubagentStop` | Runs | When a subagent finishes: it hands back its report, or its model ends its turn. A hook can keep the subagent going, once in a row. |
+| `LaneCreated` | Runs | Geno's own event, which Claude Code does not have. After Geno sets up a new lane, before a session runs in it. A hook can, for example, install the lane's dependencies ([LaneCreated](#lanecreated)). |
+| Every other Claude Code event, such as `Notification`, `PreCompact` or `WorktreeCreate` | Never | Geno has no trigger for it, or another event covers it. [Events Geno never fires](#events-geno-never-fires) says why for each one. |
 
 An event name that Claude Code does not have, such as `SesionStart`, is a mistake. Claude Code ignores it without a word. Geno ignores it too, and warns in Settings under Hooks and on the command line.
 
@@ -76,7 +79,7 @@ A group's `matcher` picks the events it runs for:
 - A plain name, or names joined by `|`, must match exactly: `startup|resume`.
 - Any other matcher is a regular expression that must match the whole value: `mcp__.*__write`.
 
-SessionStart matches its source and SessionEnd its reason. UserPromptSubmit, PostToolBatch and Stop have no matcher, so every group runs. The tool events match the tool's name. A matcher may name Claude Code's tools: `Bash` matches `bash`, `Read` matches `read`, `Edit`, `Write` and `MultiEdit` match `edit`, `Grep` matches `grep`, `Glob` matches `glob`. The table is `CLAUDE_TOOL_NAMES` in `packages/core/src/hooks.ts`.
+SessionStart matches its source and SessionEnd its reason. SubagentStart and SubagentStop match the agent's name, such as `explore` or `worker`. UserPromptSubmit, PostToolBatch, Stop and LaneCreated have no matcher, so every group runs. The tool events, PermissionRequest among them, match the tool's name. A matcher may name Claude Code's tools: `Bash` matches `bash`, `Read` matches `read`, `Edit`, `Write` and `MultiEdit` match `edit`, `Grep` matches `grep`, `Glob` matches `glob`. The table is `CLAUDE_TOOL_NAMES` in `packages/core/src/hooks.ts`.
 
 ## What a hook receives
 
@@ -94,7 +97,7 @@ The hook gets one JSON object on stdin:
 ```
 
 - `transcript_path` is the Geno session log, one JSON event per line. Its events are Geno's, not Claude Code's.
-- `permission_mode` is `default` in Ask, `auto` in Auto, `plan` in Plan, and `dontAsk` in a non-interactive run.
+- `permission_mode` is `default` in Ask, `auto` in Auto, `plan` in Plan, and `dontAsk` in a non-interactive run. Unlike Claude Code's `dontAsk`, a non-interactive run fires PermissionRequest, as Claude Code's `-p` does in its default mode.
 - SessionEnd has `reason` in place of `source`.
 - UserPromptSubmit has `prompt`, the text you sent. Geno sends no `prompt_id`.
 - PreToolUse has `tool_name`, `tool_input` and `tool_use_id`. For a call of a subagent it also has `agent_id`, the subagent's session, and `agent_type`, the agent's name. The other tool events have them too.
@@ -102,6 +105,10 @@ The hook gets one JSON object on stdin:
 - PostToolUseFailure adds `error`, the result the model reads, and `is_interrupt`, which is always `false`. For a command, `error` starts with `Exit code <n>` and goes on with the output. A call you stop fires no hook. `duration_ms` is there too.
 - PostToolBatch has `tool_calls`: every call of the turn that has a result, in call order, each with `tool_name`, `tool_input`, `tool_use_id` and `tool_response`.
 - Stop has `stop_hook_active` and `last_assistant_message`, the text of the model's last turn. `stop_hook_active` is `true` when a Stop hook already kept this run going. Geno sends no `background_tasks` or `session_crons`.
+- PermissionRequest has `tool_name` and `tool_input`, as PreToolUse has them, without `tool_use_id`. `permission_suggestions`, when the card offers to keep an answer, holds Claude Code's permission update entry: `{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "kubectl get pods"}], "behavior": "allow", "destination": "localSettings"}` for a command's "Always allow in this workspace" pattern, or a `toolName` alone with `"destination": "session"` for an MCP tool. A subagent's card has `agent_id` and `agent_type`. Geno sends no `mcp_server`.
+- SubagentStart has `agent_id`, the subagent's own session, and `agent_type`, the agent's name. `session_id` and `transcript_path` stay the parent session's.
+- SubagentStop has `agent_id`, `agent_type`, `stop_hook_active`, `agent_transcript_path`, the subagent's own session log, and `last_assistant_message`, the subagent's report, or the text of its last turn when it handed back none.
+- LaneCreated has `name`, the lane's name, `worktree_path`, the lane's folder, `branch`, `base_commit`, the commit the lane started from, and `main_checkout`. `cwd` is the lane. A new lane has no session yet, so the payload has no `session_id`, `transcript_path` or `permission_mode`.
 
 A tool event's hook sees Claude Code's tool, so a hook written for Claude Code reads the fields it looks for. The table is `CLAUDE_SHAPES` in `packages/core/src/hooks.ts`:
 
@@ -133,7 +140,7 @@ Geno reads a hook's result as Claude Code does:
 | Exit 0, plain stdout | SessionStart and UserPromptSubmit: the model gets the text. Other events: the text is ignored. |
 | Exit 0, stdout that starts with `{` | JSON. `hookSpecificOutput.additionalContext` goes to the model, for every event that runs except SessionEnd. `systemMessage` goes to you, not the model. `decision`, `continue` and `permissionDecision` are below, for each event. |
 | Exit 0, JSON that does not parse | An error that blocks nothing. |
-| Exit 2 | Blocks the action, for an event that can block it: a tool call for PreToolUse, a prompt for UserPromptSubmit, the next model call for PostToolBatch, the end of the turn for Stop. PostToolUse and PostToolUseFailure come after the call ran, so the model reads the reason beside the result. The reason is stderr, and JSON on stdout cannot override it. SessionStart and SessionEnd cannot block, so exit 2 is an error there. |
+| Exit 2 | Blocks the action, for an event that can block it: a tool call for PreToolUse, a prompt for UserPromptSubmit, the next model call for PostToolBatch, the end of the turn for Stop. PostToolUse and PostToolUseFailure come after the call ran, so the model reads the reason beside the result. The reason is stderr, and JSON on stdout cannot override it. SessionStart, SessionEnd, SubagentStart and LaneCreated cannot block, so exit 2 is an error there. PermissionRequest does not take exit 2 as an answer: only its `decision` object answers the card. |
 | Any other exit | Valid JSON on stdout decides, as on exit 0, and the exit code is ignored. Without valid JSON it is an error that blocks nothing. |
 | Killed at the timeout | An error that blocks nothing, and it decides nothing. |
 
@@ -148,9 +155,11 @@ The model sees a hook's text in Claude Code's words, under Geno's note mark:
 [Geno] SessionStart:startup hook additional context: <additionalContext>
 [Geno] PostToolUse:Write hook additional context: <additionalContext>
 [Geno] Stop hook blocking error: <reason>
+[Geno] SubagentStart hook additional context: <additionalContext>
+[Geno] SubagentStop hook blocking error: <reason>
 ```
 
-The `startup` text opens the first request, after the loaded instructions and the environment, before your prompt. A `resume` or `compact` text joins the next request. A UserPromptSubmit text follows the prompt it is about. A tool call's hook text ends that call's result, and PostToolBatch's follows the results of the turn. The reason of a block reads `hook blocking error`, a wording of Geno's. Geno logs every text the model reads, so a resumed session sends the same bytes. The system prompt never changes, so the cached prefix holds. Geno keeps the first 10,000 characters of each hook's text. A line of hook output that starts with `[Geno` loses its bracket, so a hook cannot pose as Geno.
+The `startup` text opens the first request, after the loaded instructions and the environment, before your prompt. A `resume` or `compact` text joins the next request. A UserPromptSubmit text follows the prompt it is about. A SubagentStart text comes before the subagent's task, in the subagent's request, never the parent's. A tool call's hook text ends that call's result, and PostToolBatch's follows the results of the turn. The reason of a block reads `hook blocking error`, a wording of Geno's. Geno logs every text the model reads, so a resumed session sends the same bytes. The system prompt never changes, so the cached prefix holds. Geno keeps the first 10,000 characters of each hook's text. A line of hook output that starts with `[Geno` loses its bracket, so a hook cannot pose as Geno.
 
 ## UserPromptSubmit
 
@@ -168,8 +177,8 @@ When the model asks for tool calls, Geno runs the PreToolUse hooks of every call
 | The hooks say | What happens |
 |---|---|
 | Exit 2, or `"permissionDecision": "deny"` | The call does not run. The model reads `[Geno] PreToolUse:<Tool> hook error: <reason>` as an error. The reason is stderr or `permissionDecisionReason`. The other calls of the turn still run. |
-| `"permissionDecision": "ask"` | You get a permission card before the call runs, in every mode, Auto included: "A PreToolUse hook [settings] asks first: <reason>". A plugin's hook says `[plugin:<name>]`. A no turns the call down. A yes counts as the hook's allow. Nobody can answer in a non-interactive run, so the call is refused with the reason. |
-| `"permissionDecision": "allow"` | The question a command would ask, and the classifier in Auto, are skipped. Nothing else is. These still hold: a deny rule from Settings, the question before a credentials file such as `.env` or a path outside the workspace, what Geno always asks (such as a force push, or `rm -rf` outside the workspace), the read-before-edit and stale-file checks, and the sandbox. Plan stays read-only, and a non-interactive run still refuses what it would ask about: a refusal is not a question. |
+| `"permissionDecision": "ask"` | You get a permission card before the call runs, in every mode, Auto included: "A PreToolUse hook [settings] asks first: <reason>". A plugin's hook says `[plugin:<name>]`. A no turns the call down. A yes counts as the hook's allow. Nobody can answer in a non-interactive run, so the call is refused with the reason, unless a [PermissionRequest](#permissionrequest) hook answers the card. |
+| `"permissionDecision": "allow"` | The question a command would ask, and the classifier in Auto, are skipped. Nothing else is. These still hold: a deny rule from Settings, the question before a credentials file such as `.env` or a path outside the workspace, what Geno always asks (such as a force push, or `rm -rf` outside the workspace), the read-before-edit and stale-file checks, and the sandbox. Plan stays read-only, and a non-interactive run still refuses what it would ask about, unless a PermissionRequest hook answers: a refusal is not a question. |
 | `"permissionDecision": "defer"`, or no decision | The call goes through Geno's checks as usual. |
 
 The older top-level `"decision": "approve"` and `"decision": "block"` count as `allow` and `deny`.
@@ -180,7 +189,7 @@ A hook's allow answers the question of a command: `bash`, `monitor` and `preview
 
 A PreToolUse hook's `additionalContext` ends the call's result, as `[Geno] PreToolUse:<Tool> hook additional context: <text>`, unless that hook says `defer`. `"continue": false` refuses the call with the `stopReason`, and stops the run once the turn's calls have results, as [PostToolBatch](#posttoolbatch) describes.
 
-A subagent's calls run its parent session's tool hooks (PreToolUse, PostToolUse, PostToolUseFailure and PostToolBatch), with `agent_id` and `agent_type`, and a hook's card names the subagent. A subagent on an external agent, such as Codex, makes its calls inside that agent, so Geno's hooks do not see them. The Arena and evals run no hooks.
+A subagent's calls run its parent session's tool hooks (PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure and PostToolBatch), with `agent_id` and `agent_type`, and a hook's card names the subagent. A subagent on an external agent, such as Codex, makes its calls inside that agent, so Geno's hooks do not see them. The Arena and evals run no hooks.
 
 ## PostToolUse and PostToolUseFailure
 
@@ -248,6 +257,107 @@ exit 2
 
 Geno writes the payload without spaces, so the pattern matches it. A script that must also read Claude Code's payload should parse it, for example with `jq -e '.stop_hook_active'`.
 
+## PermissionRequest
+
+A PermissionRequest hook answers a permission card in your place. It runs at the moment Geno would show you the card: before a flagged command such as `git reset --hard`, a read of a credentials file, an MCP tool, a page on another host, or the card of a PreToolUse hook's `ask`. In Auto it runs when the classifier sends the question on to you, and before what Auto always asks. A run nobody can answer, such as `gcode agent` or a scheduled task, would refuse such a call. There the hook runs where Ask would show the card, so the hook can let the run go on.
+
+It never runs where the answer cannot change: a call that needs no card, a deny rule from Settings, Plan's refusal of a change, a URL Geno never fetches, Auto's classifier refusing a call without a card, and the checks that hold whoever answers (the lane's bounds, the sandbox, read-before-edit). An external agent's own permission requests, such as Codex's, do not fire it.
+
+| The hooks say | What happens |
+|---|---|
+| `"decision": {"behavior": "allow"}` | The call runs, as after your "Allow once". Nothing is saved: Geno does not read `updatedPermissions`. |
+| `"behavior": "allow"` with `updatedInput` | The call runs with `updatedInput` in place of its whole input, in Claude Code's shape, the shape `tool_input` has. The call's own checks judge the new input, and any card it shows counts as answered, so the hook runs once per call. The model reads the result of what ran, and the session log keeps the call as the model sent it. |
+| `"behavior": "deny"` | The call does not run. The model reads `` denied: `<command>` did not run. A PermissionRequest hook answered for the user and refused it: <message>. `` and goes on. |
+| `"behavior": "deny"` with `"interrupt": true` | As your "Reject": the call does not run, and the turn ends. |
+| No `decision`, exit 2, or a timeout | Nothing is answered. You get the card, or a run nobody can answer refuses the call. Exit 2 is not an answer, as in Claude Code. |
+
+When hooks disagree, a deny wins. The whole object is `{"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {...}}}`.
+
+This hook lets a `gcode agent` run reset its own checkout, and nothing else that `git reset --hard` would ask about, in `~/.g-code/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "~/bin/allow-reset.sh" }] }
+    ]
+  }
+}
+```
+
+```sh
+#!/bin/sh
+cmd=$(jq -r .tool_input.command)
+# The answer covers the whole command line, so allow only the exact command.
+[ "$cmd" = 'git reset --hard' ] || exit 0
+echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+```
+
+A card is about the whole command line, so a hook that allows `git reset --hard*` would also allow `git reset --hard && rm -rf ~/.ssh`. Match the exact command, or refuse any line with `;`, `&`, `|` or `$(`.
+
+## SubagentStart and SubagentStop
+
+SubagentStart runs when the session starts a subagent, and again when it resumes one with `message_agent`. `hookSpecificOutput.additionalContext` reaches the subagent before its task, as `[Geno] SubagentStart hook additional context: <text>`. The parent never reads it. On a resume the text goes in again only when the subagent's log does not already hold the same text, so the subagent's cached prefix holds. SubagentStart cannot block a subagent; its exit 2 is an error that you see.
+
+SubagentStop runs when a subagent finishes: when its `report` call hands back its report, or when its model ends its turn. It takes Stop's output:
+
+| The hooks say | What happens |
+|---|---|
+| Exit 2, or `"decision": "block"` | The subagent goes on. Its next message is `[Geno] SubagentStop hook blocking error: <reason>`, and it reports again. |
+| `hookSpecificOutput.additionalContext` | The subagent goes on, as for a block. |
+| `"continue": false`, or anything else | The subagent ends, and its parent gets its report. |
+
+A SubagentStop hook can keep a subagent going once in a row, as Stop does. A second block counts only after the subagent calls a tool other than `report`, so a hook that always blocks costs one more subagent turn. The subagent's limits still hold. Stop never runs for a subagent.
+
+A subagent on an external agent, such as Codex, runs its turn inside that agent, so it fires neither event.
+
+## LaneCreated
+
+LaneCreated is Geno's own event: Claude Code has no lanes. It runs after Geno sets up a new lane, from `gcode lane new` or from a lane the panel, a spin-off, a schedule or the Arena starts. It runs after `.worktreeinclude`, the copy of `node_modules` and the approved `laneSetup` commands, and before a session runs in the lane. The hook runs in the lane, as you, outside the sandbox, so it can reach the network.
+
+Only your own hooks run: those in `~/.g-code/settings.json`, `~/.claude/settings.json` and plugins installed for your user. A workspace's own LaneCreated hook never runs, and Settings says so. A repository's setup for its lanes belongs in `laneSetup` in `.gcode.json`, which you approve once with `gcode lane new --approve-setup`.
+
+This hook installs a new lane's dependencies, in `~/.g-code/settings.json`:
+
+```json
+{
+  "hooks": {
+    "LaneCreated": [
+      { "hooks": [{ "type": "command", "command": "test -f pnpm-lock.yaml && pnpm install --frozen-lockfile --prefer-offline >&2", "timeout": 300 }] }
+    ]
+  }
+}
+```
+
+A hook that fails is reported, on the command line's stderr or in the Geno output channel, and the lane stays. Its output decides nothing. A file the hook leaves that git does not ignore counts as a change of the lane.
+
+Claude Code's WorktreeCreate does not fit a lane: its hook replaces creating the worktree and prints the new folder, and a lane must be a git worktree on its own `geno/<name>` branch, which Geno applies and discards. So Geno never fires WorktreeCreate or WorktreeRemove, and a hook written for them does not run.
+
+## Events Geno never fires
+
+Settings lists a hook for one of these events as "Geno never fires it", with the reason. The reasons are `HOOK_EVENTS` in `packages/core/src/hooks.ts`.
+
+| Event | Why |
+|---|---|
+| `WorktreeCreate` | Its hook replaces creating the worktree and prints the new path, but a lane must be a git worktree on its own branch. Use LaneCreated to set up a new lane. |
+| `WorktreeRemove` | It removes what a WorktreeCreate hook made, and Geno runs no WorktreeCreate hook. |
+| `Setup` | Geno has no `--init` or `--maintenance` run. |
+| `UserPromptExpansion` | Geno has no hook on expanding a slash command; UserPromptSubmit sees the prompt. |
+| `PermissionDenied` | Auto's classifier refuses a call without a card, and the model reads why in the call's result. |
+| `Notification` | Geno shows its cards and notices in the editor. PermissionRequest and Stop fire at the same moments. |
+| `MessageDisplay` | Geno has no hook on the text it shows. |
+| `TaskCreated`, `TaskCompleted` | Geno has a todo list, not a task list. |
+| `StopFailure` | A failed model call ends the turn with the error, which Geno shows. |
+| `TeammateIdle` | Geno has no agent teams. |
+| `InstructionsLoaded` | Geno loads instruction files when a session starts, which SessionStart covers. |
+| `ConfigChange` | Geno reads hooks once per session and does not watch the settings files. |
+| `CwdChanged` | A Geno session keeps its workspace. |
+| `DirectoryAdded` | Geno has no `/add-dir`. |
+| `FileChanged` | Geno tells the model itself about files that changed on disk, before each model call. |
+| `PreCompact`, `PostCompact` | SessionStart with the source `compact` runs after a compaction. |
+| `PreModelSwitch`, `PostModelSwitch` | Geno has no hook on a model switch. |
+| `Elicitation`, `ElicitationResult` | Geno answers no MCP elicitation. |
+
 ## Timeouts and parallel runs
 
 - A hook has 600 seconds, unless its `timeout` (in seconds) says otherwise. UserPromptSubmit has 30. At the timeout Geno kills the hook and everything it started.
@@ -262,8 +372,7 @@ Settings, under Hooks, lists every hook Geno found for the open folder: its even
 |---|---|
 | Runs | Geno runs the hook at its event. |
 | Needs a trusted workspace | A workspace hook in a workspace VS Code does not trust. |
-| Not run yet | `PermissionRequest`, `SubagentStart`, `SubagentStop`, `WorktreeCreate` and `WorktreeRemove`, which come in P16. |
-| Geno never fires it | Every other Claude Code event, such as `Notification`. |
+| Geno never fires it | An event in [Events Geno never fires](#events-geno-never-fires), or a workspace's LaneCreated hook. The row says why. |
 
 ## Example: a phone notice when Geno stops
 
