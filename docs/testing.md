@@ -210,6 +210,9 @@ Measured on 2026-10-08 on the same Mac, host, full `vscode` project with 53 file
 | One launch per file, 3 at a time (main before T3, 52 files) | 666 s | 52 | 3 | not recorded |
 | Pool of 2 windows, run D | 451 s | 7: 5 pooled, 2 of their own | 2 | 12.7 |
 | Pool of 2 windows, run E | 585 s, 506 s before the retry | 6, and 2 more for the retry | 2 | 17.9 |
+| Pool of 1 window, the default, final run | 1,022 s, 917 s before the retry | 5: 3 pooled, 2 of their own, and 1 more for the retry | 1 | 10.6 |
+
+The final run passed 52 of 53 files the first time and all 53 after the retry. `start` failed once on its peek check (`the peek ducks rather than vanishing`) and passed on the retry. Its file times add up to 871 s, so one window can do no better than about 870 s. The old layout took 1,769 to 1,800 s one file at a time, for 46 files, so the pool takes about 57% of that time with 53. It is slower than three launches at once (666 s), which the Mac's memory no longer allows.
 
 Run D passed all 53 files the first time. In run E, at a load of 18 to 24, four files failed the first time: `attention` (the 30-second wait for the card after the reload), `widget` (the grown widget's height), `composer` (one model request short) and `settings` (a user setting write that did not land in 60 s). The first three passed on the retry; `settings` failed again. `settings` ran first in a newly launched window in the retry, so no earlier suite's state reached it.
 
