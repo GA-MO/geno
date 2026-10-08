@@ -1,0 +1,19 @@
+=== request 1
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools: = plain-prompt.anthropic.golden request 1 tools
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  -
+    role: "user"
+    content:
+      - = plain-prompt.anthropic.golden request 1 messages[0].content[0]
+      -
+        type: "text"
+        text: "[Geno] SessionStart:startup hook success: You have pstack."
+      - {"type":"text","text":"What is the secret word?"}
+      -
+        type: "text"
+        text: "[Geno] UserPromptSubmit hook additional context: The secret word is BANANA."
+output_config: {"effort":"medium"}
+stream: true
