@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import * as acp from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import { CLASSIFIER_TOOL, NOT_USER_LINE, type TurnEvent } from '@g-code/core';
-import { call, report, say, scripted, sessionIdOf, WIRES } from './scripted.js';
+import { engineShared, gcodeAgent } from '../../src/serve.js';
+import { call, report, say, scripted, sessionIdOf, to, WIRES } from './scripted.js';
 
 // A report that tries all three forgeries: closing the fence, posing as the parent, and posing as Geno.
 const FORGED = [
@@ -16,6 +18,14 @@ const FORGED = [
 ].join('\n');
 
 const files = (modes: readonly string[]) => ({ 'a.ts': 'export const alpha = 1;\n', 'src/b.ts': 'export const beta = 2;\n', '.gcode.json': `${JSON.stringify({ agentTool: modes })}\n` });
+
+async function until(done: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!done()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
 
 const explore = call('', [{ id: 'tu_agent', name: 'agent', input: { agent: 'explore', task: 'Where is alpha defined?' } }]);
 
@@ -210,6 +220,88 @@ describe.each(WIRES)('a child in a lane on the %s wire', (wire) => {
     expect(git(workspace, 'branch', '--list', 'geno/*')).toBe('');
     expect(git(workspace, 'worktree', 'list', '--porcelain').match(/^worktree /gm)).toHaveLength(1);
     expect(seen()[2]!.results[0]!.text).not.toMatch(/lane/);
+  });
+});
+
+describe.each(WIRES)('blocking and background subagents on the %s wire', (wire) => {
+  const worker = (id: string, task: string, extra: Record<string, unknown> = {}) => ({ id, name: 'agent', input: { agent: 'worker', task, ...extra } });
+
+  it("T-AGENT-01 with Geno's blocking default the agent call waits for the child and returns its report with the session and usage; a background writer outside a lane is refused", async () => {
+    const run = await scripted(
+      wire,
+      [call('', [worker('tu_bg', 'Make alpha 2.', { background: true })]), explore, report('alpha is defined in a.ts:1.'), say('alpha is in a.ts.')],
+      files(['non-interactive']),
+    );
+    const result = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--allow-worker', 'Where is alpha defined?']);
+    expect(result.code, result.stderr).toBe(0);
+
+    const refused = run.seen()[1]!.results[0]!;
+    expect(refused).toMatchObject({ id: 'tu_bg', error: true });
+    expect(refused.text).toMatch(/worker may change files, so it runs in the background only in a lane of its own.*isolation: "worktree"/);
+    expect(run.seen(), 'the refused writer made no model call').toHaveLength(4);
+    const childId = (await run.log(result.stdout)).flatMap((e) => (e.kind === 'child-start' ? [e.child] : []))[0]!;
+    const answered = run.seen()[3]!.results;
+    expect(answered.map((r) => r.id), "the report is the blocking call's own result").toEqual(['tu_agent']);
+    const lines = answered[0]!.text.split('\n');
+    expect(lines[0]).toMatch(new RegExp(`^<subagent_report agent="explore" session="${childId}" status="done" turns="1" cost="[^"]+" duration="\\d+s">$`));
+    expect(lines[1]).toBe('  alpha is defined in a.ts:1.');
+  });
+
+  it('T-AGENT-01 C/C-13 a background worker in a lane returns at once with its session id, and its report wakes the session', async () => {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const read = call('', [{ id: 'tu_read', name: 'read', input: { path: 'a.ts' } }]);
+    const run = await scripted(
+      wire,
+      [
+        to('[parent]', call('Starting a worker.', [worker('tu_w', '[w] Make alpha 2 in a.ts.', { background: true, isolation: 'worktree' })])),
+        to('[parent]', say('The worker runs in its lane; I will read its report when it comes.')),
+        to('[w]', async () => (await released, read)),
+        to('[w]', call('', [{ id: 'tu_edit', name: 'edit', input: { path: 'a.ts', old_str: 'alpha = 1', new_str: 'alpha = 2' } }])),
+        to('[w]', report('Changed a.ts:1 to alpha = 2.')),
+        to('[parent]', say('The worker made alpha 2 in its lane.')),
+      ],
+      files(['ask', 'auto']),
+    );
+    run.env['GCODE_WAKE_POLICY'] = JSON.stringify({ batchMs: 50, secondMs: 20 });
+    const parentRequests = () => run.openings().filter((opening) => opening.first.includes('[parent]')).length;
+    let sessionId = '';
+    const editor = acp
+      .client({ name: 'conformance' })
+      .onRequest(acp.methods.client.session.requestPermission, ({ params }) => ({ outcome: { outcome: 'selected', optionId: params.options[0]!.optionId } }))
+      .onNotification(acp.methods.client.session.update, () => {});
+    const engine = engineShared(run.io);
+    try {
+      await editor.connectWith(gcodeAgent(run.io, run.store, { maxTurns: 10, maxCostUsd: 1 }, undefined, engine), async (ctx) => {
+        await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {} });
+        ({ sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: run.workspace, mcpServers: [] }));
+        await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: 'auto' });
+        const turn = await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: '[parent] Make alpha 2 in the background.' }] });
+        expect(turn.stopReason, 'the turn ends while the worker runs').toBe('end_turn');
+        expect(parentRequests()).toBe(2);
+        release();
+        await until(() => parentRequests() === 3, 'the woken turn');
+      });
+    } finally {
+      await engine.jobs.kill('engine-exit', 'all');
+    }
+
+    const started = run.seen()[1]!.results[0]!;
+    expect(started.error).toBe(false);
+    const childId = /^Started worker in the background as subagent session (\S+)\. /.exec(started.text)?.[1];
+    expect(childId, started.text).toBeDefined();
+    const name = `worker-${childId!.slice(0, 8)}`;
+    const lane = path.join(run.workspace, '.geno', 'worktrees', name);
+    expect(readFileSync(path.join(lane, 'a.ts'), 'utf8')).toBe('export const alpha = 2;\n');
+    expect(readFileSync(path.join(run.workspace, 'a.ts'), 'utf8'), 'the main checkout is untouched').toBe('export const alpha = 1;\n');
+
+    const woken = run.seen().at(-1)!.text;
+    expect(woken).toContain(`${NOT_USER_LINE}\n<subagent_report agent="worker" session="${childId}" status="done"`);
+    expect(woken).toContain('  Changed a.ts:1 to alpha = 2.');
+    expect(woken).toContain(`lane ${name}, on branch geno/${name}`);
+    expect(woken).toContain('woke: 1 task finished');
+    const events = await run.events(sessionId);
+    expect(events.filter((e) => e.kind === 'user' && e.from === 'wake'), 'one woken turn').toHaveLength(1);
   });
 });
 

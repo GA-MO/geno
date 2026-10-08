@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { asSessionId, childrenOf, type TurnEvent } from '@g-code/core';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
-import { call, report, say, scripted, sessionIdOf } from './conformance/scripted.js';
+import { call, report, say, scripted, sessionIdOf, to } from './conformance/scripted.js';
 import { answer, fakeTransport, loadTools, toolCall, type Reply } from './fake-transport.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
@@ -20,31 +20,48 @@ const isolated = (id: string, task: string) => ({ id, name: 'agent', input: { ag
 const read = (id: string) => call('', [{ id, name: 'read', input: { path: 'a.ts' } }]);
 const edit = (id: string, from: string, to: string) => call('', [{ id, name: 'edit', input: { path: 'a.ts', old_str: from, new_str: to } }]);
 const childStarts = (events: readonly TurnEvent[]) => events.flatMap((e) => (e.kind === 'child-start' ? [e] : []));
+/** Each child's run from its logged start to its logged end, by the call that started it. */
+const spans = (events: readonly TurnEvent[]) => {
+  const ms = (at: string) => Date.parse(at);
+  const ends = new Map(events.flatMap((e) => (e.kind === 'child-end' ? [[e.toolUseId, ms(e.at)] as const] : [])));
+  return new Map(childStarts(events).map((start) => [start.toolUseId, { start: ms(start.at), end: ends.get(start.toolUseId)! }] as const));
+};
+const overlap = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < b.end && b.start < a.end;
+type Run = Awaited<ReturnType<typeof scripted>>;
+const asked = (run: Run, marker: string) => run.openings().some((opening) => opening.first.includes(marker));
+/** Waits until `marker`'s conversation made a request, or `ms` passed, which the logged times then tell apart. */
+const gate = async (run: Run, marker: string, ms: number) => {
+  const deadline = Date.now() + ms;
+  while (!asked(run, marker) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+};
 const laneOf = (workspace: string, child: string) => {
   const name = `worker-${child.slice(0, 8)}`;
   return { name, dir: path.join(workspace, '.geno', 'worktrees', name) };
 };
 
 describe('subagents in lanes', () => {
-  it('two workers edit the same file in lanes of their own: each lane keeps its edit, and the main checkout is unchanged until the user applies one', async () => {
-    const run = await scripted(
+  it('C/C-14 two workers edit the same file at once in lanes of their own: each lane keeps its edit, and the main checkout is unchanged until the user applies one', async () => {
+    const run: Run = await scripted(
       'anthropic',
       [
-        call('Two attempts.', [isolated('tu_w1', 'Make alpha 2.'), isolated('tu_w2', 'Make alpha 3.')]),
-        read('tu_r1'),
-        edit('tu_e1', 'alpha = 1', 'alpha = 2'),
-        report('alpha is 2.', 'tu_rep1'),
-        read('tu_r2'),
-        edit('tu_e2', 'alpha = 1', 'alpha = 3'),
-        report('alpha is 3.', 'tu_rep2'),
-        say('Both lanes are ready.'),
+        to('[parent]', call('Two attempts.', [isolated('tu_w1', '[w2] Make alpha 2.'), isolated('tu_w2', '[w3] Make alpha 3.')])),
+        to('[w2]', async () => (await gate(run, '[w3]', 5000), read('tu_r1'))),
+        to('[w2]', edit('tu_e1', 'alpha = 1', 'alpha = 2')),
+        to('[w2]', report('alpha is 2.', 'tu_rep1')),
+        to('[w3]', read('tu_r2')),
+        to('[w3]', edit('tu_e2', 'alpha = 1', 'alpha = 3')),
+        to('[w3]', report('alpha is 3.', 'tu_rep2')),
+        to('[parent]', say('Both lanes are ready.')),
       ],
       files,
     );
-    const result = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--allow-worker', 'Try alpha 2 and alpha 3.']);
+    const result = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--allow-worker', '[parent] Try alpha 2 and alpha 3.']);
     expect(result.code, result.stderr).toBe(0);
 
-    const [first, second] = childStarts(await run.log(result.stdout)).map((start) => laneOf(run.workspace, start.child));
+    const events = await run.log(result.stdout);
+    const ran = spans(events);
+    expect(overlap(ran.get('tu_w1')!, ran.get('tu_w2')!), `the two lane workers overlap: ${JSON.stringify([...ran])}`).toBe(true);
+    const [first, second] = childStarts(events).map((start) => laneOf(run.workspace, start.child));
     expect(first!.name).not.toBe(second!.name);
     expect(readFileSync(path.join(first!.dir, 'a.ts'), 'utf8')).toBe('export const alpha = 2;\n');
     expect(readFileSync(path.join(second!.dir, 'a.ts'), 'utf8')).toBe('export const alpha = 3;\n');
@@ -52,7 +69,7 @@ describe('subagents in lanes', () => {
     expect(git(run.workspace, 'status', '--porcelain'), 'the main checkout is untouched').toBe('');
     expect(git(run.workspace, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
 
-    const results = run.seen()[7]!.results;
+    const results = run.seen().at(-1)!.results;
     expect(results.map((r) => r.id)).toEqual(['tu_w1', 'tu_w2']);
     expect(results[0]!.text).toContain(`lane ${first!.name}, on branch geno/${first!.name}`);
     expect(results[1]!.text).toContain(`lane ${second!.name}, on branch geno/${second!.name}`);
@@ -63,6 +80,27 @@ describe('subagents in lanes', () => {
     expect((await run.cli(['lane', 'apply', first!.name, '--workspace', run.workspace])).code, 'the existing apply takes a kept lane').toBe(0);
     expect(readFileSync(path.join(run.workspace, 'a.ts'), 'utf8')).toBe('export const alpha = 2;\n');
     expect((await run.cli(['lane', 'apply', second!.name, '--workspace', run.workspace])).code, 'and the other lane now conflicts').toBe(1);
+  });
+
+  it('C/C-14 two workers in the main checkout still run one after the other', async () => {
+    const worker = (id: string, task: string) => ({ id, name: 'agent', input: { agent: 'worker', task } });
+    const run: Run = await scripted(
+      'anthropic',
+      [
+        to('[parent]', call('Two looks.', [worker('tu_w1', '[w2] Look at alpha.'), worker('tu_w2', '[w3] Look at alpha again.')])),
+        to('[w2]', async () => (await gate(run, '[w3]', 1000), report('alpha is 1.', 'tu_rep1'))),
+        to('[w3]', report('alpha is still 1.', 'tu_rep2')),
+        to('[parent]', say('Both looked.')),
+      ],
+      files,
+    );
+    const result = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', '--allow-worker', '[parent] Look at alpha twice.']);
+    expect(result.code, result.stderr).toBe(0);
+
+    const ran = spans(await run.log(result.stdout));
+    expect(ran.size).toBe(2);
+    expect(overlap(ran.get('tu_w1')!, ran.get('tu_w2')!), `the main checkout's writers do not overlap: ${JSON.stringify([...ran])}`).toBe(false);
+    expect(run.seen().at(-1)!.results.map((r) => r.id)).toEqual(['tu_w1', 'tu_w2']);
   });
 
   it('message_agent resumes a lane child in its kept lane, where its earlier edit is, and the new report names the same lane', async () => {
