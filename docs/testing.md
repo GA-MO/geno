@@ -26,6 +26,60 @@ It diffs the branch against its merge base with `main` (`--base <ref>` picks ano
 
 A small panel change runs 2 to 8 files instead of 30. Run the full suite once per batch of merges, before a release or an install, not after every change.
 
+## The fake model
+
+No test calls a live model. Tests answer the engine's model requests with the shared fake in `packages/engine/test/fake-model.ts`. One fake speaks both wires. It reads the request's path to tell them apart: `/v1/messages` is the Anthropic Messages API and `/chat/completions` is Chat Completions.
+
+```ts
+import { call, fakeModel, say } from './fake-model.js';
+
+const model = fakeModel({ script: [call('Reading.', [{ id: 'tu_1', name: 'read', input: { path: 'a.ts' } }]), say('a is 1.')] });
+await runCli(['agent', '--workspace', workspace, 'What is a?'], env, { fetch: model.fetch }); // in process
+model.bodies();   // each request body as sent
+model.misses;     // why a request got no answer, if one did
+```
+
+- `fetch` serves an engine in the test's process. `handle(req, res)` serves an engine in another process, such as the extension host, from the test's own HTTP server, and returns false for a route that is not the model's, such as a suite's `/ui`. `listen()` starts a server of its own.
+- A script entry is a turn (`say`, `call`, `report`), which the fake streams on whichever wire the request used, or a raw reply for one wire (`{ anthropic: Reply }`, `{ openai: ChatReply }`) for stalls, failures and exact usage. `{ when, answer }` answers the next request that `when` accepts, and `answer` can be a function of the request that waits, to hold a turn open. Entries are served in order, and `more()` adds entries.
+- A request with no answer gets a 400 that the engine shows and does not retry, and the reason goes in `misses`.
+
+### Recordings
+
+`fakeModel({ recording: 'name', fallback: [...] })` answers each request by its key, from `packages/engine/test/recordings/name.json`. The key is 16 hex characters of the SHA-256 of the wire and the normalized request body. Any change to a request changes its key, so a recorded test fails on a request-shape change, the way Copilot Chat's cache does. The miss names the file, the key, the end of the request's last user message, and the command that records it.
+
+```sh
+GCODE_RECORD=1 pnpm vitest run --project unit packages/engine/test/usage.e2e.test.ts      # answers from the fallback script
+GCODE_RECORD=live pnpm vitest run --project unit <file>                                   # answers from Model Studio
+```
+
+- Without `GCODE_RECORD`, a recording only replays, and the fallback is never used. A missing entry fails the test.
+- `GCODE_RECORD=1` adds each missing entry with the fallback's next answer. This is how a hand-written answer goes into a recording.
+- `GCODE_RECORD=live` sends each missing request to Model Studio's Anthropic endpoint and keeps the whole stream. It reads `DASHSCOPE_API_KEY` and `DASHSCOPE_BASE_URL` from the main checkout's `.env`. It never prints them, and a recording holds only the reply events, not the request headers. It speaks only the Anthropic wire.
+- Recording adds entries and keeps the old ones. To drop the entries a test no longer uses, delete the file and record again.
+
+### Normalization
+
+`request-normal.ts` takes out the parts of a request that change from run to run. The key and the goldens below both use it:
+
+- Every `cache_control` key is dropped, since the breakpoint moves to the newest message on each call.
+- Paths under the temp dir, either spelling of it on macOS, become `<tmp>`. The six random characters that `mkdtemp` adds after a dash become `XXXXXX`.
+- Uuids, such as session ids, become `<uuid-N>`, numbered by first appearance in the request, so one session named twice stays apart from two sessions.
+- ISO dates and times become `<date>`. The environment block's `Platform:` and `OS version:` values become `<platform>` and `<os-version>`. Commit hashes at the start of a git log line become `<commit>`.
+- Tool-call ids stay, since the script or the recording chooses them.
+
+A missing rule shows up as a key or a golden that changes on every run. Add the rule to `RULES` with the case it covers.
+
+### Golden requests
+
+`packages/engine/test/golden/requests.test.ts` runs a few turns on both wires and compares the normalized bodies of every model request with the files in `packages/engine/test/golden/requests/`: a plain prompt, a tool call round trip, a steer, a background notice, a `/compact`, an MCP server's instructions, and hook context. A change to the system prompt, a tool, a notice or the turn loop fails it in about ten seconds, with a diff of the lines that changed. This is the check that would have caught the requests that P5, P6 and P11 changed, before the VS Code suites that read them failed on the next full run.
+
+```sh
+pnpm test:golden        # check
+pnpm test:golden -u     # the change is meant: rewrite the files, then review and commit the diff
+```
+
+A file shows each request one value per line, and each line of a string after `|`. A long value that a request repeats from an earlier one, or from `plain-prompt`, is written as `= <file> <where>`, so the system prompt and the tools appear once in `plain-prompt.<wire>.golden`.
+
 ## One run at a time
 
 Every vitest run on the machine takes `~/.g-code/test-run.lock` when its config loads (`scripts/test-lock.ts`). A second run prints `waiting for the test run of pid N` and starts when the first ends; a lock left by a run that died is taken over. A run started inside a held run, such as a test that runs vitest, does not wait. `GCODE_TEST_LOCK=off` skips the lock.
