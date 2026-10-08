@@ -5,8 +5,11 @@ import { executor, ToolError, ToolRejected, type Executor } from './context.js';
 /** The session's workflows, and the user's yes to a run's preview, which no mode or classifier gives. */
 export type WorkflowTools = {
   readonly list: () => Promise<string>;
-  /** The run the user confirms, read once; throws a ToolError naming why the workflow cannot run here. */
-  readonly prepare: (name: string, input: string) => Promise<PreparedWorkflow>;
+  /**
+   * The run the user confirms, read once; throws a ToolError naming why the workflow cannot run here. `resume` names an
+   * earlier run whose journal the run replays.
+   */
+  readonly prepare: (name: string, input: string, resume: string | undefined) => Promise<PreparedWorkflow>;
   readonly approve: (preview: WorkflowPreview, signal: AbortSignal) => Promise<boolean>;
 };
 
@@ -28,14 +31,16 @@ export function workflowExecutor(tools: WorkflowTools): Executor {
   });
   return executor({
     input,
-    describe: ({ name, input: text }) => (name === undefined ? `${WORKFLOW_TOOL} list` : `${WORKFLOW_TOOL} ${name}${text === '' ? '' : `: ${text.split('\n')[0]}`}`),
-    async run({ name, input: text }, ctx) {
+    describe: ({ name, input: text, resume }) =>
+      name === undefined ? `${WORKFLOW_TOOL} list` : `${WORKFLOW_TOOL} ${name}${resume === undefined ? '' : ` --resume ${resume}`}${text === '' ? '' : `: ${text.split('\n')[0]}`}`,
+    async run({ name, input: text, resume }, ctx) {
       if (name === undefined) return tools.list();
       if (ctx.toolUseId === undefined) throw new ToolError('a workflow starts only inside an agent run');
-      const prepared = await tools.prepare(name, text);
+      const prepared = await tools.prepare(name, text, resume);
       if (!(await tools.approve(prepared.preview, ctx.signal))) throw new ToolRejected(DECLINED);
       const { sessionId } = await prepared.start(ctx.toolUseId);
-      return `Started workflow ${name} in the background as session ${sessionId}. The user follows it in Tasks. Its report arrives as a message when it ends; until then, do not start it again or redo its steps.`;
+      const resumed = resume === undefined ? '' : `, resuming run ${resume}`;
+      return `Started workflow ${name} in the background as session ${sessionId}${resumed}. The user follows it in Tasks. Its report arrives as a message when it ends; until then, do not start it again or redo its steps.`;
     },
   });
 }
