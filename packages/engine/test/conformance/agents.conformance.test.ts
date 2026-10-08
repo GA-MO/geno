@@ -212,3 +212,25 @@ describe.each(WIRES)('a child in a lane on the %s wire', (wire) => {
     expect(seen()[2]!.results[0]!.text).not.toMatch(/lane/);
   });
 });
+
+describe.each(WIRES)('a child model on the %s wire', (wire) => {
+  const quick = '---\nname: quick\ndescription: Quick lookups.\ntools: Grep\nmodel: haiku\n---\nLook it up.\n';
+  const start = (agent: string) => call('', [{ id: 'tu_agent', name: 'agent', input: { agent, task: 'Where is alpha defined?' } }]);
+
+  it('C/C-07 model: haiku runs on the id GCODE_HAIKU_MODEL names, and a built-in on GCODE_SUBAGENT_MODEL', async () => {
+    const run = await scripted(wire, [start('quick'), report('a.ts:1.'), start('explore'), report('a.ts:1.'), say('alpha is in a.ts.')], {
+      ...files(['non-interactive']),
+      '.claude/agents/quick.md': quick,
+    });
+    run.env['GCODE_HAIKU_MODEL'] = 'qwen3.7-plus';
+    run.env['GCODE_SUBAGENT_MODEL'] = 'qwen3.6-plus';
+    const parent = await run.cli(['agent', '--workspace', run.workspace, '--non-interactive', 'Where is alpha defined?']);
+    expect(parent.code, parent.stderr).toBe(0);
+
+    const models = run.bodies().map((body: { readonly model: string }) => body.model);
+    const own = wire === 'anthropic' ? 'qwen3.8-flash' : 'gpt-fake';
+    expect(models).toEqual([own, 'qwen3.7-plus', own, 'qwen3.6-plus', own]);
+    const starts = (await run.log(parent.stdout)).flatMap((e) => (e.kind === 'child-start' ? [e.model] : []));
+    expect(starts).toEqual(['qwen3.7-plus', 'qwen3.6-plus']);
+  });
+});

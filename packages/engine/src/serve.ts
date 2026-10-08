@@ -254,6 +254,7 @@ import {
   WAKE_CANCEL_METHOD,
   DRAFT_METHOD,
   type WakeTrigger,
+  subagentModelsOf,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -1331,7 +1332,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       model: session.model,
       rates: (model) => ratesOf(session.provider, model),
       mode: () => modes.get(sessionId) ?? DEFAULT_SESSION_MODE,
-      agents: async () => (await loadAgents(session.workspace, homes, (await pluginsOf(session.workspace)).plugins)).agents,
+      agents: async () => (await loadAgents(session.workspace, homes, (await pluginsOf(session.workspace)).plugins, subagentModelsOf(io.env))).agents,
       approve: (preview, signal) => turn.approveWorkflow(preview, signal),
       run: (spec, input, agents, toolUseId) => runWorkflow(sessionId, session, spec, input, agents, toolUseId),
     });

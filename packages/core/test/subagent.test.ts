@@ -4,6 +4,7 @@ import {
   agentToolDefinition,
   asSessionId,
   BUILTIN_AGENTS,
+  builtinAgents,
   CHILD_STATUS_KINDS,
   childCaps,
   childEndOf,
@@ -16,8 +17,11 @@ import {
   findAgent,
   isReadOnly,
   mergeAgents,
+  NO_SUBAGENT_MODELS,
   parseAgentDefinition,
   reportBody,
+  subagentModelsOf,
+  type SubagentModels,
   type AgentDefinition,
   type ChildEnd,
   type TurnEvent,
@@ -26,8 +30,8 @@ import {
 const origin = { source: 'workspace', path: '.claude/agents/scout.md', fallbackName: 'scout', namespace: '' } as const;
 const builtin = (name: string) => BUILTIN_AGENTS.find((a) => a.name === name)!;
 
-const parsed = (fields: Record<string, string | string[]>, body = 'Look around.') => {
-  const result = parseAgentDefinition(fields, body, origin);
+const parsed = (fields: Record<string, string | string[]>, body = 'Look around.', models: SubagentModels = NO_SUBAGENT_MODELS) => {
+  const result = parseAgentDefinition(fields, body, origin, models);
   if (result.kind !== 'agent') throw new Error(`skipped: ${result.reason}`);
   return result;
 };
@@ -77,7 +81,7 @@ describe('parseAgentDefinition', () => {
     expect(notes).toEqual([
       'ignored color, permissionMode',
       'no Geno tool for WebFetch',
-      "model sonnet is a Claude alias; the parent's model runs it",
+      "model sonnet is a Claude alias and GCODE_SONNET_MODEL is not set; the parent's model runs it",
       'effort turbo is not one of low, medium, high, xhigh, max',
       'maxTurns 0 is not a positive integer',
     ]);
@@ -95,12 +99,32 @@ describe('parseAgentDefinition', () => {
   });
 
   it('skips a file with no description, or with no tool Geno has', () => {
-    expect(parseAgentDefinition({ name: 'x' }, '', origin)).toEqual({ kind: 'skipped', reason: 'it has no description' });
-    expect(parseAgentDefinition({ description: 'Web.', tools: 'WebFetch' }, '', origin)).toEqual({ kind: 'skipped', reason: 'it leaves no tool Geno has' });
+    expect(parseAgentDefinition({ name: 'x' }, '', origin, NO_SUBAGENT_MODELS)).toEqual({ kind: 'skipped', reason: 'it has no description' });
+    expect(parseAgentDefinition({ description: 'Web.', tools: 'WebFetch' }, '', origin, NO_SUBAGENT_MODELS)).toEqual({ kind: 'skipped', reason: 'it leaves no tool Geno has' });
+  });
+
+  it('runs an alias on the id its slot names, a definition without a model on the fallback, and inherit on the parent model', () => {
+    const models = subagentModelsOf({ GCODE_SUBAGENT_MODEL: 'qwen3.7-plus', GCODE_HAIKU_MODEL: ' qwen3.6-flash ', GCODE_OPUS_MODEL: '' });
+    expect(models).toEqual({ fallback: 'qwen3.7-plus', aliases: { haiku: 'qwen3.6-flash', sonnet: undefined, opus: undefined, fable: undefined } });
+    expect(parsed({ description: 'Quick.', model: 'haiku' }, '', models)).toMatchObject({ agent: { model: 'qwen3.6-flash' }, notes: [] });
+    expect(parsed({ description: 'Plain.' }, '', models).agent.model).toBe('qwen3.7-plus');
+    expect(parsed({ description: 'Mine.', model: 'inherit' }, '', models).agent.model).toBeUndefined();
+    expect(parsed({ description: 'Own.', model: 'qwen3.8-max' }, '', models).agent.model).toBe('qwen3.8-max');
+    expect(parsed({ description: 'Deep.', model: 'opus' }, '', models)).toMatchObject({
+      agent: { model: 'qwen3.7-plus' },
+      notes: ['model opus is a Claude alias and GCODE_OPUS_MODEL is not set; qwen3.7-plus runs it'],
+    });
+  });
+
+  it('puts the built-ins on the fallback model, except one that runs on an external agent', () => {
+    const agents = builtinAgents({ fallback: 'qwen3.7-plus', aliases: {} });
+    expect(agents.find((a) => a.name === 'explore')!.model).toBe('qwen3.7-plus');
+    expect(agents.find((a) => a.name === 'cursor')!.model).toBeUndefined();
+    expect(builtinAgents(NO_SUBAGENT_MODELS)).toEqual(BUILTIN_AGENTS);
   });
 
   it('names a plugin agent <plugin>:<name>', () => {
-    const result = parseAgentDefinition({ description: 'Plugin.' }, '', { source: 'plugin', path: '/p/agents/how.md', fallbackName: 'how', namespace: 'pstack:' });
+    const result = parseAgentDefinition({ description: 'Plugin.' }, '', { source: 'plugin', path: '/p/agents/how.md', fallbackName: 'how', namespace: 'pstack:' }, NO_SUBAGENT_MODELS);
     expect(result.kind === 'agent' && result.agent.name).toBe('pstack:how');
   });
 });

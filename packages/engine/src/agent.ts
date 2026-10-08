@@ -55,6 +55,7 @@ import {
   scheduleToolDefinitions,
   WORKFLOW_TOOL,
   workflowToolDefinitions,
+  subagentModelsOf,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -340,7 +341,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const agentTool = config.agentTool?.includes(startMode) === true;
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
-    const scan = await loadAgents(workspace, homes, plugins);
+    const scan = await loadAgents(workspace, homes, plugins, subagentModelsOf(io.env));
     for (const problem of scan.problems) io.err(`agents: ${problem}`);
     // A prompt logged before the run, with its attachments, is the newest event.
     const logged = opened.log.events.at(-1);
