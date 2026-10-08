@@ -40,11 +40,11 @@ async function bodyOf(req: IncomingMessage): Promise<string> {
   return body;
 }
 
-/** Thinks for a few seconds, a delta every 200 ms, then sends nothing more while the connection stays open. */
+/** Thinks for 2 s, a delta every 200 ms, then sends nothing more while the connection stays open. */
 async function thinkThenGoQuiet(res: ServerResponse): Promise<void> {
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   res.write(sse(messageStart!) + sse(thinkingStart!));
-  for (let i = 0; i < 20 && !res.closed; i++) {
+  for (let i = 0; i < 10 && !res.closed; i++) {
     await sleep(200);
     res.write(sse({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Laying out the maze, tile by tile. '.repeat(4) } }));
   }
