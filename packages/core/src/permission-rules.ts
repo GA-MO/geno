@@ -117,8 +117,15 @@ function offerFor(words: readonly string[], flagged: readonly DenyRuleId[], scop
 
 const isVerb = (word: string | undefined): boolean => word !== undefined && !word.startsWith('-') && !computed(word) && !word.includes('=');
 
-/** The verdict for a line under the workspace's rules; see RULES_IN_MODE for the order. */
-export function ruledDenial(command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[]): Denial | undefined {
+/** What a PreToolUse hook's allow never answers: a credentials file, a path outside the workspace, or a hard ask. */
+const FIRM_RULES: ReadonlySet<DenyRuleId> = new Set(['secret-path', 'path-outside-workspace']);
+
+/**
+ * The verdict for a line under the workspace's rules; see RULES_IN_MODE for the order. `hookAllows` is a PreToolUse
+ * hook's allow, which answers the question and skips the classifier after the deny rules, unless a flagged command is
+ * firm (FIRM_RULES, `isHardAsk`).
+ */
+export function ruledDenial(command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[], hookAllows = false): Denial | undefined {
   const parsed = parseCommandLine(command, scope);
   const honours = RULES_IN_MODE[mode];
   if (honours.deny) {
@@ -135,6 +142,7 @@ export function ruledDenial(command: string, scope: CommandScope, mode: Approval
   const denial = mergedDenial(command, flags.flags);
   if (denial === undefined || !honours.allow) return denial;
   const flagged = flaggedCommands(flags.flags);
+  if (hookAllows && [...flagged].every(([at, ids]) => !isHard(parsed[at]!, scope) && !ids.some((id) => FIRM_RULES.has(id)))) return undefined;
   const allows = rules.filter((rule) => rule.effect === 'allow');
   const isCovered = ([at, ids]: readonly [number, readonly DenyRuleId[]]) =>
     !isHard(parsed[at]!, scope) && allows.some((rule) => covers(rule, parsed[at]!, ids, scope, mode));
