@@ -1,3 +1,4 @@
+import { QUIET_SHOWN_MS } from '@g-code/core/call-progress';
 import * as vscode from 'vscode';
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
@@ -76,11 +77,12 @@ async function steps(): Promise<void> {
   await ui({ do: 'pointerAway' });
   await ui({ do: 'screenshot', name: 'stall-streaming' });
 
-  // The first try goes quiet; its retry has no response, which the row names once 30 s pass.
-  await waitFor('the row to say the retry has had no response', async () => /^No response from the model after 3\ds · waiting up to 2m$/.test((await workingRow()) ?? ''), 120_000);
+  await waitFor('the quiet try to show its retry', async () => (await panel<string[]>('doc.defaultView.__notices')).includes('Retrying in 1s (the model went quiet)'), 10_000);
+  await waitFor('the retry on the working row', async () => (await workingRow()) === 'Thinking', 10_000);
+  // The row names a silent call only after QUIET_SHOWN_MS; the panel's clock runs that far ahead so the suite need not wait it out.
+  await panel(`(() => { const w = doc.defaultView, now = w.Date.now.bind(w.Date); w.Date.now = () => now() + ${QUIET_SHOWN_MS}; return 1; })()`);
+  await waitFor('the row to say the retry has had no response', async () => /^No response from the model after 3\ds · waiting up to 2m$/.test((await workingRow()) ?? ''), 10_000);
   await ui({ do: 'screenshot', name: 'stall-no-response' });
-  const notices = await panel<string[]>('doc.defaultView.__notices');
-  check(notices.includes('Retrying in 1s (the model went quiet)'), 'the quiet try showed its retry', notices);
 
   await ui({ do: 'release' });
   await waitFor('the answer', async () => (await panel<string>(`doc.querySelector('.transcript .turn .step-text')?.textContent ?? ''`)).includes('Here is the maze.'));
