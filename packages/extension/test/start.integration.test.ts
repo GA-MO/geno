@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asSessionId, type Session } from '@g-code/core';
 import { answer, sseBody } from '../../engine/test/fake-transport.js';
 import { appendEvent } from '../../engine/src/sessions.js';
-import { click, connectWindow, evaluate, hover, press, typeText, webview, type Window } from './cdp.js';
+import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { setUp } from './launch.js';
 import { capturePanel, panelClip, panelCost, trace, webviewPid, type PanelCost } from './media.js';
 import { captureWindow } from './screenshot.js';
@@ -19,8 +19,9 @@ const EXTENSION = 'g-code.g-code';
 const MODEL = 'qwen3.8-flash';
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
 
-/** GCODE_SCREENSHOTS names a folder for the screenshots, the start page GIF and the CPU profile's numbers. */
+/** GCODE_SCREENSHOTS names a folder for the screenshots, the start page GIF and the CPU profile's numbers; GCODE_PERF=1 takes the profile. */
 const shots = process.env['GCODE_SCREENSHOTS'];
+const perf = process.env['GCODE_PERF'] === '1';
 const PROFILE_MS = 10_000;
 /** About 8 s of the start page, one still per 70 ms tick, paced to the clock so the GIF plays at the page's speed. */
 const GIF_FRAMES = 115;
@@ -68,11 +69,8 @@ async function recordPanel(w: Window, file: string): Promise<void> {
 const UI: Readonly<Record<string, (action: any, window: Window) => Promise<unknown>>> = {
   eval: async ({ expression }, w) => evaluate(await webview(w, EXTENSION, READY), expression),
   click: async ({ selector, text }, w) => click(await webview(w, EXTENSION, READY), selector, text),
-  hover: async ({ selector }, w) => hover(await webview(w, EXTENSION, READY), selector),
   type: async ({ text }, w) => typeText(await webview(w, EXTENSION, READY), text),
   press: async ({ key, modifiers }, w) => press(await webview(w, EXTENSION, READY), key, modifiers),
-  motion: async ({ value }, w) =>
-    (await webview(w, EXTENSION, READY)).send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] }),
   pointerAway: async (_action, w) => w.page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 300 }),
   screenshot: async ({ name }) => {
     if (shots !== undefined) await captureWindow(debugPort, path.resolve(shots, `${name}.png`));
@@ -155,8 +153,8 @@ async function logSession(home: string, workspace: string, { id, prompt, at }: (
   });
 }
 
-describe('the start page and the peek in VS Code', () => {
-  it('shows Noodle alone with geno, the branch and recent sessions; loads one; peeks over the composer while the user types', async () => {
+describe('the start page in VS Code', () => {
+  it('names the project and its branch, lists the engine’s newest sessions, loads one and answers a follow-up', async () => {
     const { work, home, workspace, suite } = await setUp('start', FILES, {});
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const git = spawnSync('git', ['init', '-q', '-b', BRANCH, workspace], { encoding: 'utf8' });
@@ -175,6 +173,7 @@ describe('the start page and the peek in VS Code', () => {
       DASHSCOPE_BASE_URL: url,
       GCODE_FAKE_MODEL: url,
       GCODE_CLASSIFIER_MODEL: 'off',
+      ...(perf ? { GCODE_PERF: '1' } : {}),
     });
     if (shots !== undefined && costs.length > 0) await writeFile(path.resolve(shots, 'perf.json'), `${JSON.stringify(costs, null, 2)}\n`);
     expect(requests).toHaveLength(1);
