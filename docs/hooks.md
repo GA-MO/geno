@@ -59,7 +59,10 @@ A hook gets only `PATH`, `HOME`, `LANG`, `TERM` and `TMPDIR` from Geno's environ
 | `SessionEnd` | Runs | `reason` is `other`. A `gcode agent` run ends its session when it exits. In VS Code, the engine ends each session it ran when it exits after the last window closes. A stop by a signal ends no session. |
 | `UserPromptSubmit` | Runs | Before the model sees a prompt you typed. A hook can block the prompt or add to it ([UserPromptSubmit](#userpromptsubmit)). Geno's own messages, such as a wake-up or a steer during a turn, do not fire it. |
 | `PreToolUse` | Runs | Once for every tool call of a model turn, before the first call of the turn runs. A hook can deny, ask about, allow or change a call ([PreToolUse](#pretooluse)). A subagent's calls fire it too. |
-| `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `Stop` | Coming in P15 | Listed in Settings as "Not run yet". |
+| `PostToolUse` | Runs | After a call that succeeded, and after Geno's own check of an edit. A hook can add text to the result the model reads ([PostToolUse and PostToolUseFailure](#posttooluse-and-posttoolusefailure)). |
+| `PostToolUseFailure` | Runs | After a call that failed, such as a command that exits non-zero. A call that a rule, a hook or the user refused fires neither event. |
+| `PostToolBatch` | Runs | Once after all the calls of a model turn have results, before the next model call. A hook can add text after the results, or stop the run ([PostToolBatch](#posttoolbatch)). |
+| `Stop` | Runs | When the session's model ends its turn. A hook can keep the turn going, once in a row ([Stop](#stop)). A subagent's end fires `SubagentStop` instead, in P16. |
 | `PermissionRequest`, `SubagentStart`, `SubagentStop`, a lane-create hook | Coming in P16 | Listed in Settings as "Not run yet". |
 | Every other Claude Code event, such as `Notification` or `PreCompact` | Never | Geno has no trigger for it, or another event covers it. |
 
@@ -73,7 +76,7 @@ A group's `matcher` picks the events it runs for:
 - A plain name, or names joined by `|`, must match exactly: `startup|resume`.
 - Any other matcher is a regular expression that must match the whole value: `mcp__.*__write`.
 
-SessionStart matches its source and SessionEnd its reason. UserPromptSubmit has no matcher, so every group runs. The tool events match the tool's name. A matcher may name Claude Code's tools: `Bash` matches `bash`, `Read` matches `read`, `Edit`, `Write` and `MultiEdit` match `edit`, `Grep` matches `grep`, `Glob` matches `glob`. The table is `CLAUDE_TOOL_NAMES` in `packages/core/src/hooks.ts`.
+SessionStart matches its source and SessionEnd its reason. UserPromptSubmit, PostToolBatch and Stop have no matcher, so every group runs. The tool events match the tool's name. A matcher may name Claude Code's tools: `Bash` matches `bash`, `Read` matches `read`, `Edit`, `Write` and `MultiEdit` match `edit`, `Grep` matches `grep`, `Glob` matches `glob`. The table is `CLAUDE_TOOL_NAMES` in `packages/core/src/hooks.ts`.
 
 ## What a hook receives
 
@@ -94,9 +97,13 @@ The hook gets one JSON object on stdin:
 - `permission_mode` is `default` in Ask, `auto` in Auto, `plan` in Plan, and `dontAsk` in a non-interactive run.
 - SessionEnd has `reason` in place of `source`.
 - UserPromptSubmit has `prompt`, the text you sent. Geno sends no `prompt_id`.
-- PreToolUse has `tool_name`, `tool_input` and `tool_use_id`. For a call of a subagent it also has `agent_id`, the subagent's session, and `agent_type`, the agent's name.
+- PreToolUse has `tool_name`, `tool_input` and `tool_use_id`. For a call of a subagent it also has `agent_id`, the subagent's session, and `agent_type`, the agent's name. The other tool events have them too.
+- PostToolUse adds `tool_response`, the call's result, and `duration_ms`, the time from the call's start to its result. The time leaves out the PreToolUse hooks. Unlike Claude Code's, it includes the time you take to answer a question about the call.
+- PostToolUseFailure adds `error`, the result the model reads, and `is_interrupt`, which is always `false`. For a command, `error` starts with `Exit code <n>` and goes on with the output. A call you stop fires no hook. `duration_ms` is there too.
+- PostToolBatch has `tool_calls`: every call of the turn that has a result, in call order, each with `tool_name`, `tool_input`, `tool_use_id` and `tool_response`.
+- Stop has `stop_hook_active` and `last_assistant_message`, the text of the model's last turn. `stop_hook_active` is `true` when a Stop hook already kept this run going. Geno sends no `background_tasks` or `session_crons`.
 
-A PreToolUse hook sees Claude Code's tool, so a hook written for Claude Code reads the fields it looks for. The table is `CLAUDE_SHAPES` in `packages/core/src/hooks.ts`:
+A tool event's hook sees Claude Code's tool, so a hook written for Claude Code reads the fields it looks for. The table is `CLAUDE_SHAPES` in `packages/core/src/hooks.ts`:
 
 | Geno call | `tool_name` | `tool_input` |
 |---|---|---|
@@ -107,6 +114,14 @@ A PreToolUse hook sees Claude Code's tool, so a hook written for Claude Code rea
 | another tool with a Claude Code name, such as `grep` | That name, such as `Grep` | Geno's input |
 | any other tool, such as an MCP tool | Geno's name | Geno's input |
 
+`tool_response` has Claude Code's shape for these tools, and is the result text the model reads for every other tool:
+
+| `tool_name` | `tool_response` |
+|---|---|
+| `Bash` | `stdout`, the command's output with stdout and stderr together as they came, then `stderr` (always `""`), `interrupted`, `isImage` and `noOutputExpected` (all `false`) |
+| `Write` | `type` (`"create"`), `filePath` and `content` |
+| `Edit` | `filePath`, `oldString`, `newString` and `replaceAll` |
+
 The environment has `CLAUDE_PROJECT_DIR`, the workspace. A plugin's hook also has `CLAUDE_PLUGIN_ROOT`, the plugin's folder. `CLAUDE_CONFIG_DIR` is passed on when it is set.
 
 ## Exit codes and output
@@ -116,9 +131,9 @@ Geno reads a hook's result as Claude Code does:
 | Result | Meaning |
 |---|---|
 | Exit 0, plain stdout | SessionStart and UserPromptSubmit: the model gets the text. Other events: the text is ignored. |
-| Exit 0, stdout that starts with `{` | JSON. `hookSpecificOutput.additionalContext` goes to the model for SessionStart and UserPromptSubmit. `systemMessage` goes to you, not the model. `decision`, `continue` and `permissionDecision` are below, for each event. |
+| Exit 0, stdout that starts with `{` | JSON. `hookSpecificOutput.additionalContext` goes to the model, for every event that runs except SessionEnd. `systemMessage` goes to you, not the model. `decision`, `continue` and `permissionDecision` are below, for each event. |
 | Exit 0, JSON that does not parse | An error that blocks nothing. |
-| Exit 2 | Blocks the action, for an event that can block it: a tool call for PreToolUse, a prompt for UserPromptSubmit. The reason is stderr, and JSON on stdout cannot override it. SessionStart and SessionEnd cannot block, so exit 2 is an error there. |
+| Exit 2 | Blocks the action, for an event that can block it: a tool call for PreToolUse, a prompt for UserPromptSubmit, the next model call for PostToolBatch, the end of the turn for Stop. PostToolUse and PostToolUseFailure come after the call ran, so the model reads the reason beside the result. The reason is stderr, and JSON on stdout cannot override it. SessionStart and SessionEnd cannot block, so exit 2 is an error there. |
 | Any other exit | Valid JSON on stdout decides, as on exit 0, and the exit code is ignored. Without valid JSON it is an error that blocks nothing. |
 | Killed at the timeout | An error that blocks nothing, and it decides nothing. |
 
@@ -131,9 +146,11 @@ The model sees a hook's text in Claude Code's words, under Geno's note mark:
 ```
 [Geno] SessionStart:startup hook success: <stdout>
 [Geno] SessionStart:startup hook additional context: <additionalContext>
+[Geno] PostToolUse:Write hook additional context: <additionalContext>
+[Geno] Stop hook blocking error: <reason>
 ```
 
-The `startup` text opens the first request, after the loaded instructions and the environment, before your prompt. A `resume` or `compact` text joins the next request. A UserPromptSubmit text follows the prompt it is about, and Geno logs it, so a resumed session sends the same bytes. The system prompt never changes, so the cached prefix holds. Geno keeps the first 10,000 characters of each hook's text. A line of hook output that starts with `[Geno` loses its bracket, so a hook cannot pose as Geno.
+The `startup` text opens the first request, after the loaded instructions and the environment, before your prompt. A `resume` or `compact` text joins the next request. A UserPromptSubmit text follows the prompt it is about. A tool call's hook text ends that call's result, and PostToolBatch's follows the results of the turn. The reason of a block reads `hook blocking error`, a wording of Geno's. Geno logs every text the model reads, so a resumed session sends the same bytes. The system prompt never changes, so the cached prefix holds. Geno keeps the first 10,000 characters of each hook's text. A line of hook output that starts with `[Geno` loses its bracket, so a hook cannot pose as Geno.
 
 ## UserPromptSubmit
 
@@ -159,9 +176,77 @@ The older top-level `"decision": "approve"` and `"decision": "block"` count as `
 
 `updatedInput`, with `allow` or `ask`, replaces the call's whole input before it runs. Write it in Claude Code's shape, the one `tool_input` has. The call's checks judge the new input, not the model's, and the model reads the result of what ran. The session log keeps the call as the model sent it.
 
-A hook's allow answers the question of a command: `bash`, `monitor` and `preview_start`. An MCP tool, `web_fetch`, `web_search` and the browser still ask their own questions after a hook's allow, and after a yes to a hook's ask they may ask again. Geno does not read a PreToolUse hook's `additionalContext` or `continue` yet. PostToolUse, in P15, brings text after a result.
+A hook's allow answers the question of a command: `bash`, `monitor` and `preview_start`. An MCP tool, `web_fetch`, `web_search` and the browser still ask their own questions after a hook's allow, and after a yes to a hook's ask they may ask again.
 
-A subagent's calls run its parent session's PreToolUse hooks, with `agent_id` and `agent_type`, and a hook's card names the subagent. A subagent on an external agent, such as Codex, makes its calls inside that agent, so Geno's hooks do not see them. The Arena and evals run no hooks.
+A PreToolUse hook's `additionalContext` ends the call's result, as `[Geno] PreToolUse:<Tool> hook additional context: <text>`, unless that hook says `defer`. `"continue": false` refuses the call with the `stopReason`, and stops the run once the turn's calls have results, as [PostToolBatch](#posttoolbatch) describes.
+
+A subagent's calls run its parent session's tool hooks (PreToolUse, PostToolUse, PostToolUseFailure and PostToolBatch), with `agent_id` and `agent_type`, and a hook's card names the subagent. A subagent on an external agent, such as Codex, makes its calls inside that agent, so Geno's hooks do not see them. The Arena and evals run no hooks.
+
+## PostToolUse and PostToolUseFailure
+
+PostToolUse runs after each call that succeeded, and PostToolUseFailure after each call that failed. A command fails when it exits non-zero or is killed at its timeout. Any other tool fails when its result is an error, such as an edit of a file the model has not read. A call that was refused or turned down fires neither.
+
+Each call's hooks run once the call ends, and before the next call of the turn starts, so a formatter finishes before the model's next edit. An edit's hooks run after Geno's own check (`--check`), so the result reads the edit, then the check, then the hooks' text.
+
+| The hooks say | What happens |
+|---|---|
+| `hookSpecificOutput.additionalContext` | The text ends the call's result: `[Geno] PostToolUse:<Tool> hook additional context: <text>`. |
+| Exit 2, or `"decision": "block"` | The call already ran, so nothing is undone. The reason ends the call's result: `[Geno] PostToolUse:<Tool> hook blocking error: <reason>`. The reason is stderr or `reason`. |
+| `"continue": false` | The run stops once the turn's calls have results, as a PostToolBatch block does. |
+| Plain stdout on exit 0 | Ignored. |
+
+PostToolUseFailure takes the same output; its text reads `PostToolUseFailure:<Tool>`. Geno does not read `updatedToolOutput`, `updatedMCPToolOutput` or `classifierContext`: the model always reads the call's own result.
+
+This hook formats each file the model writes, as a team would set it up for Claude Code, in `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "jq -r .tool_input.file_path | xargs npx prettier --write" }]
+      }
+    ]
+  }
+}
+```
+
+A workspace hook runs only in a trusted workspace, inside the sandbox, which has no network. `npx` must find prettier in the workspace's `node_modules`.
+
+## PostToolBatch
+
+PostToolBatch runs once after all the calls of a model turn have results, before the next model call.
+
+| The hooks say | What happens |
+|---|---|
+| `hookSpecificOutput.additionalContext` | The text follows the turn's results: `[Geno] PostToolBatch hook additional context: <text>`. |
+| Exit 2, `"decision": "block"` or `"continue": false` | The run stops before the next model call. You read `blocked: A PostToolBatch hook stopped the turn: <reason>`, and `gcode agent` exits with code 1. The reason stays in the session: when you send the next prompt, the model reads `[Geno] PostToolBatch hook blocking error: <reason>` after the results. |
+
+## Stop
+
+Stop runs when the session's model ends its turn. It does not run when the turn ends for another reason: you stop it, you turn down a call, a limit such as `--max-turns` is reached, or a model call fails.
+
+| The hooks say | What happens |
+|---|---|
+| Exit 2, or `"decision": "block"` | The turn goes on. The model's next message is `[Geno] Stop hook blocking error: <reason>`. The reason is stderr or `reason`. |
+| `hookSpecificOutput.additionalContext` | The turn goes on, as for a block. The message reads `Stop hook additional context`. |
+| `"continue": false` | The turn ends, whatever the other hooks say. Geno shows you the `stopReason`. |
+| Anything else | The turn ends. |
+
+A Stop hook can keep the turn going once in a row. When the model ends its turn again without calling a tool, Stop runs again, with `stop_hook_active: true`, and a second block does not count: the turn ends, and Geno tells you so. Once the model calls a tool, the next block counts again. So a hook that always blocks cannot keep the model talking, and a hook that asks for tests gets them run before it lets the turn end. The run's limits, such as `--max-turns`, still hold.
+
+Claude Code lets a Stop hook block eight times in a row. Geno allows one, so a hook that blocks the same way each time costs one extra model call, not eight. A hook that should block only once can read `stop_hook_active`:
+
+```sh
+#!/bin/sh
+in=$(cat)
+case "$in" in *'"stop_hook_active":true'*) exit 0 ;; esac
+echo 'Run the tests before you finish.' >&2
+exit 2
+```
+
+Geno writes the payload without spaces, so the pattern matches it. A script that must also read Claude Code's payload should parse it, for example with `jq -e '.stop_hook_active'`.
 
 ## Timeouts and parallel runs
 
@@ -171,11 +256,16 @@ A subagent's calls run its parent session's PreToolUse hooks, with `agent_id` an
 
 ## Settings
 
-Settings, under Hooks, lists every hook Geno found for the open folder: its event and matcher, its command, the file or plugin it came from, and whether it runs. "Needs a trusted workspace" marks a workspace hook in a workspace VS Code does not trust. A warning above the list names each mistake, such as an unknown event or a file that is not valid JSON.
+Settings, under Hooks, lists every hook Geno found for the open folder: its event and matcher, its command, the file or plugin it came from, and whether it runs. A warning above the list names each mistake, such as an unknown event or a file that is not valid JSON. Each hook has one of these statuses:
+
+| Status | Meaning |
+|---|---|
+| Runs | Geno runs the hook at its event. |
+| Needs a trusted workspace | A workspace hook in a workspace VS Code does not trust. |
+| Not run yet | `PermissionRequest`, `SubagentStart`, `SubagentStop`, `WorktreeCreate` and `WorktreeRemove`, which come in P16. |
+| Geno never fires it | Every other Claude Code event, such as `Notification`. |
 
 ## Example: a phone notice when Geno stops
-
-This needs the `Stop` event, which comes in P15. Until then Settings lists the hook as "Not run yet".
 
 Install the ntfy app on your phone and subscribe to a topic name that only you know. Then add this to `~/.g-code/settings.json`, so that only Geno sends it:
 
@@ -197,4 +287,6 @@ Install the ntfy app on your phone and subscribe to a topic name that only you k
 }
 ```
 
-The hook is yours, so it runs outside the sandbox and can reach ntfy.sh. Put the same hook in `~/.claude/settings.json` to get the notice from Claude Code as well.
+The hook is yours, so it runs outside the sandbox and can reach ntfy.sh. It runs each time the model ends a turn, in VS Code and with `gcode agent`. When another Stop hook keeps the turn going, you get a notice for each end. The hook prints nothing and exits 0, so it never keeps the turn going itself. `-s` keeps curl quiet, and the `timeout` of 10 seconds keeps a slow network from holding the end of the turn. Put the same hook in `~/.claude/settings.json` to get the notice from Claude Code as well.
+
+To put the model's last words in the notice, read them from the payload with jq: `jq -r .last_assistant_message | curl -s --data-binary @- https://ntfy.sh/my-geno-topic-4f7a`. Here `--data-binary @-` sends stdin as the message.
