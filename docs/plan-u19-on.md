@@ -644,6 +644,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** `offset` paging for long pages in `web_fetch`. Allowed and blocked domains in `web_search`. `eager_input_streaming` on the Anthropic wire only.
 - **Check.** T-TOOL-09 and T-ASM-15.
 - **Size.** 0.5 day. **Depends on.** P1.
+- **Status.** Done. A `web_fetch` call reads 80000 characters, and a longer page's answer gives the `offset` of the next part in the same bytes each time. `web_search` takes `allowed_domains` or `blocked_domains`, not both, sends them to Brave as `site:` operators and filters the results by host again; a hit on a host a deny domain rule covers is always dropped. `eager_input_streaming` goes on every tool sent to Anthropic's API and Vertex, not to Bedrock, OpenRouter or Model Studio, and never on Chat Completions; the goldens, all on Model Studio, did not change. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P37: notebook cell edits
 

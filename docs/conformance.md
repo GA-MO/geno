@@ -149,6 +149,27 @@ P30 covers rows that have no Claude Code conformance test:
 | B/B-87 | `sandbox.test.ts`: the allowlist is empty unless `GCODE_SANDBOX_ALLOWED_DOMAINS` names hosts, and keeps only host forms. `runtime.test.ts` (extension): the setting reaches the engine, and a workspace's value does not. |
 | B/B-65 | `permissions.conformance.test.ts`, both wires: with `checkAfterEdit` on and a bare `Bash` deny in `.claude/settings.json`, an edit lands, its result says the check did not run and names the rule, and the check's file is not made. Without the deny, the same edit runs the check. |
 
+## Web and wire options (P36)
+
+`web_fetch` takes `offset`, as `WebFetch` does: the character position in the page's markdown to start reading from. One call reads `WEB_LIMITS.maxPageChars`, 80000 characters (`pageWindowOf` in `core/src/web.ts`). The helper's request names the part it holds, "[characters 80000 to 160000 of the page's 250000; the rest is read in other parts]", and the answer says the same and how to read on: "To read on, call web_fetch again with the url <final url> and offset 160000." The note is a function of the page and the offset alone, so the same call returns the same bytes. An offset at or past the end of the text is refused before the helper runs, naming the page's length. Each call fetches the page again; Geno keeps no 15-minute cache as Claude Code does. A body longer than 3 MB is still cut, and the answer says the text stops early.
+
+`web_search` takes `allowed_domains` or `blocked_domains`, as `WebSearch` does. Giving both is refused with Claude Code's words, "Cannot specify both allowed_domains and blocked_domains in the same request", and an entry that is not a plain domain, such as a URL, is refused too; either way no search is sent. An empty list counts as none. Brave gets the filter as `site:` operators (`searchQueryOf`): `redirects site:nextjs.org`, `redirects (site:a OR site:b)`, `redirects -site:a`, and the card and the classifier see that query. The results are filtered again by host (`keptHits`), since a provider may not honour an operator; a domain covers its subdomains, so `nextjs.org` keeps `blog.nextjs.org` and drops `notnextjs.org`. A filter cannot loosen P30's rules: a hit on a host a deny domain rule covers is dropped whatever the filter says, and a fetch of any result still meets the domain rules.
+
+On the Anthropic wire, every tool sent to Anthropic's API or to Vertex has `eager_input_streaming: true`, as Claude Code's tools do, so a tool's input streams as the model writes it (`eager` in `engine/src/wire.ts`). The field is GA in the Messages API that Geno's SDK speaks, with no beta header. Without the API's buffering it no longer checks the input, which the executors already do with their own schemas, and an input cut off at the output limit already takes the loop's `max_tokens` path. Bedrock, OpenRouter and Model Studio go without it: Bedrock's older deployments refuse the field with a 400, and the other two have not been tried with it, as with the cache TTL (T-ASM-01). A Chat Completions request never carries it.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-TOOL-09 | WebFetch makes a separate request with no tools and no thinking and returns only the answer. | `web_fetch` reads through a helper request with no tools and, on the Anthropic wire, thinking disabled, and the result is the fenced answer and Geno's note. A page longer than one read is paged by `offset`, and the answer names the next offset. | pass (was no test) | `tools.conformance.test.ts`, both wires |
+| T-ASM-15 | Every tool in `tools` has `eager_input_streaming: true`. | Every tool sent to Anthropic's API has it. A Chat Completions request and a Model Studio request do not. Adapted: Anthropic's API and Vertex only. | pass (was no test) | `assembly.conformance.test.ts` |
+
+P36 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| B/B-37 | T-TOOL-09 above, over a page on a local server: the first call's helper reads characters 0 to 80000 and its answer gives offset 80000 in full, the second call reads the rest, and an offset at the end is refused with no helper call. `web.test.ts` (core): the window from an offset, the last character, an empty page, and the same note bytes for the same window. |
+| B/B-38 | `web.e2e.test.ts`, against a fake Brave: `allowed_domains` with one and with two domains, normalized from `NextJS.org.`, sends the `site:` query and keeps the site and its subdomain but not a look-alike; `blocked_domains` sends `-site:` and drops the site's hits; both lists, or a URL as a domain, are refused with no search; a hit under a `*.example` deny is dropped with no filter and when `allowed_domains` names its host. |
+| B/B-02 | T-ASM-15 above. |
+
 ## Reads outside the workspace (P31)
 
 `read`, `grep`, `glob` and `list` reach as far as Claude Code's working directories: the workspace, the directories the user added, and those allowed for the session. A path outside all of them meets the rule `cat` of the same path meets (`path-outside-workspace`, `outsideReadDenial` in `core/src/approval.ts`): Ask asks, Auto sends it to the classifier, and Plan and a run nobody can answer refuse it. A refusal names the readable directories. A Read deny refuses before any question. After a yes, the call reads the path, and the credentials rule (`SECRET_PATH`) is judged on the whole path, so `read ~/.ssh/config` still asks as a credentials file. `withReach` in `engine/src/tools/agent.ts` wraps the four tools; a call that names an absolute path or `..` runs alone, since it may ask.
@@ -710,7 +731,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-TOOL-11 | adapt | P27 | pass |
 | T-TOOL-12 | adopt | P2 | pass |
 | T-TOOL-08 | adopt | P27 | pass |
-| T-TOOL-09 | adopt | P36 | no test yet |
+| T-TOOL-09 | adopt | P36 | pass |
 | T-ASM-01 | adapt | P23 | pass |
 | T-ASM-03 | adopt | P5 | pass |
 | T-ASM-04 | at parity | none | no test yet |
@@ -722,7 +743,7 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-ASM-10 | adopt; adapt | P8 | pass |
 | T-ASM-11 | adopt | P9 | pass |
 | T-ASM-13 | at parity | none | no test yet |
-| T-ASM-15 | adapt | P36 | no test yet |
+| T-ASM-15 | adapt | P36 | pass |
 | T-ASM-16 | at parity | none | no test yet |
 | T-ASM-17 | adapt | P6 | pass |
 | T-ASM-18 | deliberate | none | no test yet |
