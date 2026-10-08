@@ -42,6 +42,20 @@ describe('the transcript reducer', () => {
     expect(run([{ type: 'notice', text: 'late' }], ended).turns[0]!.notice).toBeUndefined();
   });
 
+  it('keeps a model call’s progress until the next output, and lets the next try clear a retry’s notice', () => {
+    const progress = { requestAt: 5, lastByteAt: 6, limitMs: 180_000, writing: { kind: 'thinking' as const }, tokens: 640 };
+    const retrying = run([
+      { type: 'turn-start', id: 't1', at: 0, prompt: 'p' },
+      { type: 'notice', text: 'Retrying in 1s (the model went quiet)' },
+    ]);
+    const streaming = run([{ type: 'progress', progress }], retrying).turns[0]!;
+    expect(streaming).toMatchObject({ progress, notice: undefined });
+    expect(run([{ type: 'progress', progress }, { type: 'text', text: 'Back.' }], retrying).turns[0]!.progress).toBeUndefined();
+    expect(run([{ type: 'progress', progress }, { type: 'tool', id: 'tu1', at: 1, name: 'edit', status: 'running' }], retrying).turns[0]!.progress).toBeUndefined();
+    const ended = run([{ type: 'turn-end', at: 1, status: 'done', usage: undefined }], retrying);
+    expect(run([{ type: 'progress', progress }], ended).turns[0]!.progress, 'a late report does not touch an ended turn').toBeUndefined();
+  });
+
   it('times a tool call from its start to its first end, and keeps fields an update leaves out', () => {
     const t = run([
       { type: 'turn-start', id: 't1', at: 0, prompt: 'p' },

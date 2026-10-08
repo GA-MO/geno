@@ -1,5 +1,5 @@
 import type { ChangedFile } from './fold.js';
-import type { WaitKind } from '@g-code/core';
+import type { CallProgress, WaitKind } from '@g-code/core';
 import { TODO_TOOL, type TodoList } from '@g-code/core/todo';
 import { SPAWN_TASK_TOOL } from '@g-code/core/spinoff';
 import type { Child, CompactBlock, ErrorBlock, PermissionBlock, SteerBlock, TextBlock, ToolBlock, Turn } from './messages.js';
@@ -34,7 +34,7 @@ export type Step =
   /** The todo list: pinned above a running turn's latest step, and once the turn ends, where it last changed. */
   | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly pinned: boolean }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
-  | { readonly kind: 'thinking'; readonly key: 'thinking' }
+  | { readonly kind: 'thinking'; readonly key: 'thinking'; readonly progress: CallProgress | undefined }
   | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
   /** Compact detail only: the line the turn's work folds behind, which opens and closes the whole trail. */
   | { readonly kind: 'fold'; readonly key: 'fold'; readonly turn: string; readonly label: string; readonly open: boolean }
@@ -98,7 +98,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
     else steps.push({ kind: 'calls', key: `calls:${block.id}`, name: block.name, tools: [block] });
   }
   if (turn.notice !== undefined) steps.push({ kind: 'notice', key: 'notice', text: turn.notice });
-  else if (isThinking(turn)) steps.push({ kind: 'thinking', key: 'thinking' });
+  else if (isThinking(turn)) steps.push({ kind: 'thinking', key: 'thinking', progress: turn.progress });
   const pinned = streaming ? pinnedList(turn, carried) : undefined;
   if (pinned !== undefined) steps.splice(Math.max(0, steps.length - 1), 0, { kind: 'todo', key: 'todo', turn: turn.id, list: pinned, pinned: true });
   const edits = turn.blocks.flatMap((b) => (b.kind === 'tool' && isEdit(b) ? [b] : []));

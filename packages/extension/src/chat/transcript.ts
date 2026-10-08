@@ -62,7 +62,7 @@ export const workedMs = (turn: Turn, now: number): number =>
   (turn.endedAt ?? now) - turn.startedAt - (turn.waitedMs ?? 0) - (turn.waiting === undefined ? 0 : Math.max(0, now - turn.waiting.since));
 
 /** The turn without its passing status, which any new output replaces. */
-const quiet = (turn: Turn): Turn => (turn.notice === undefined ? turn : { ...turn, notice: undefined });
+const quiet = (turn: Turn): Turn => (turn.notice === undefined && turn.progress === undefined ? turn : { ...turn, notice: undefined, progress: undefined });
 
 /** How a child's end reads on its own turn. */
 const CHILD_TURN_ENDS: Readonly<Record<ChildEnd['kind'], Exclude<TurnStatus, 'streaming'>>> = { done: 'done', cancelled: 'stopped', failed: 'failed', capped: 'failed' };
@@ -126,6 +126,8 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
       return { ...turn, blocks: [...turn.blocks, { kind: 'text', id: nextId(turn), text }] };
     }),
   notice: (transcript, { text }) => onLast(transcript, (turn) => (turn.status !== 'streaming' || turn.notice === text ? turn : { ...turn, notice: text })),
+  // A new try going out, or bytes of one coming in, makes a retry's notice old news.
+  progress: (transcript, { progress }) => onLast(transcript, (turn) => (turn.status !== 'streaming' ? turn : { ...turn, notice: undefined, progress })),
   waiting: (transcript, { at, waiting }) =>
     onLast(transcript, (turn) => {
       if (turn.status !== 'streaming') return turn;
