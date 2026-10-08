@@ -198,6 +198,26 @@ function body(reply: Reply, signal: AbortSignal | null | undefined): ReadableStr
   });
 }
 
+/** The response a provider gives for `reply`; a stream that stalls waits on `signal`. */
+export async function replyResponse(reply: Reply, signal: AbortSignal | null | undefined): Promise<Response> {
+  if (reply.offline) throw refusedConnection();
+  if (reply.hang) {
+    await new Promise<void>((_, reject) => {
+      const fail = () => reject(new DOMException('This operation was aborted', 'AbortError'));
+      if (signal?.aborted) fail();
+      else signal?.addEventListener('abort', fail, { once: true });
+    });
+  }
+  if (reply.failure !== undefined) {
+    const { status, body: json, headers } = reply.failure;
+    return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json', ...headers } });
+  }
+  return new Response(body(reply, signal), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
+
 /**
  * A fetch that serves replies in order and records every request it receives. A HEAD request is a reachability probe,
  * answered by `up` without taking a reply; it counts in `probes`.
@@ -218,22 +238,7 @@ export function fakeTransport(replies: readonly Reply[], up: () => boolean = () 
       body: JSON.parse(String(init?.body)),
     });
     if (reply === undefined) throw new Error(`fake transport has no reply for request ${requests.length}`);
-    if (reply.offline) throw refusedConnection();
-    if (reply.hang) {
-      await new Promise<void>((_, reject) => {
-        const fail = () => reject(new DOMException('This operation was aborted', 'AbortError'));
-        if (init?.signal?.aborted) fail();
-        else init?.signal?.addEventListener('abort', fail, { once: true });
-      });
-    }
-    if (reply.failure !== undefined) {
-      const { status, body: json, headers } = reply.failure;
-      return new Response(JSON.stringify(json), { status, headers: { 'content-type': 'application/json', ...headers } });
-    }
-    return new Response(body(reply, init?.signal), {
-      status: 200,
-      headers: { 'content-type': 'text/event-stream' },
-    });
+    return replyResponse(reply, init?.signal);
   };
   return { fetch, requests, probes };
 }
