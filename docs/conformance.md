@@ -395,6 +395,29 @@ P24 also covers rows that have no Claude Code conformance test:
 | C/C-44 | `workflow` runs only when the user asks for a workflow. The permission card stays. |
 | T-ASM-06 (effort) | `session.test.ts` (core) and `prompt.conformance.test.ts`: a Haiku 4.5 request has no `output_config`, and an unknown model sends none. |
 
+## One skill listing (P12)
+
+A new session lists every skill the model may load, from the discovery the `skill` tool and the slash commands use: Geno's `~/.g-code/skills`, `~/.claude/skills`, `~/.agents/skills`, the workspace's `.agents/skills` and `.claude/skills`, and each installed plugin's `skills/` as `<plugin>:<skill>`. Each entry is the name and the first line of the description. Descriptions are cut to 250 characters, and when the entries pass 8,000 characters, Claude Code's fallback listing budget, the longest are cut to one length so the list fits. A description cut below 20 characters is dropped, and a skill whose name no longer fits is counted in a closing line. The listing is recorded in session-start as `skillListing`, so a resume sends the same bytes after the folders change. A log from before P12 keeps its workspace-only `skills`, with locations, and renders as it did. On the machine P12 was built on, the first request lists 57 skills (pstack and frontend-design) in 8,226 characters with the header, each description cut to 112 characters. The 4 skills in `~/.claude/skills` set `disable-model-invocation` and are left out.
+
+The user's own skills, commands and agents now win a name over the workspace's, as in Claude Code, so a cloned repository cannot replace one. Each one shadowed this way prints a `commands:` or `agents:` line at session start, and `gcode commands list` prints it too.
+
+`skill` takes optional `args`. They replace `$ARGUMENTS` in the body, or follow it as `ARGUMENTS: <args>`. `skill` refuses a skill whose frontmatter sets `disable-model-invocation: true` unless the user typed it as a slash command in this session. A skill with `context: fork` runs as a subagent: `agent` names it, Claude Code's `Explore`, `Plan` and `general-purpose` map to `explore`, `plan` and `worker`, and no `agent` runs `worker`. The subagent's task is the skill's text with its args, and its report is the result. In a subagent, which starts none, the skill loads in place.
+
+| ID | Claude Code | Geno | Status | Test |
+|---|---|---|---|---|
+| T-SKILL-01 | The listing has only a name and a description per skill. | Adopted: a name and the first line of the description, bounded as above, with no location. The user's, the workspace's and a plugin's skills all appear in the first request. A user-only skill does not, and a workspace skill the user's own shadows does not, with a problem line. A resume after a new skill appears sends the same opening. | pass (was no test) | `skills.conformance.test.ts`, both wires |
+| T-SKILL-02 | `/x args` sends the command tags and a meta message, "Base directory for this skill", with the body. | At parity in meaning: the typed `/go ship it` is the user's message, and the SKILL.md follows it as `<context_item kind="skill" name="go" path="…">`. `skill` then loads that user-only skill too, with its args in `$ARGUMENTS`. | pass (was no test) | `skills.conformance.test.ts`, both wires, over ACP |
+| T-SKILL-03 | The Skill tool returns "Launching skill: x", then the body. | At parity in meaning: `skill {name, args}` returns the skill's path, its folder and its body, with `ARGUMENTS: <args>` after it. A user-only skill the user did not type is an error that says to ask for `/go`. | pass (was no test) | `skills.conformance.test.ts`, both wires |
+
+P12 also covers rows that have no Claude Code conformance test:
+
+| ID | Check |
+|---|---|
+| C/C-50 | T-SKILL-01 above. `skill-listing.test.ts` (core): first lines and the 250 cap, a list that fits kept whole, the longest descriptions cut first within the budget, names alone below 20 characters, a count for names that do not fit, and 120 skills within 8,000 characters. `context.test.ts` (core): the listing text, the closing count, neutralized descriptions, and a log from before P12 rendered as then. |
+| C/C-53 | T-SKILL-03 above. `skills.conformance.test.ts` also runs a `context: fork` skill with `agent: Explore` as `explore`, which gets the skill and its args as its task. `commands.test.ts` (engine) reads `disable-model-invocation`, `user-invocable`, `context: fork` and `agent`. |
+| C/C-54 | `commands.test.ts` (engine): a global command and skill beat the workspace's of the same name, with one problem line each, and `~/.claude/skills` loads after `~/.g-code/skills` and before `~/.agents/skills`. `subagents.test.ts`: a global agent beats the workspace's, with a problem line. |
+| A/B-12, B/B-30, C/C-51 | T-SKILL-03 above. `docs/geno-tools.md` maps `Skill`'s `skill` and `args`. |
+
 ## Every conformance test
 
 Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 pass, 5 pass+, 33 partial, 29 fail, 6 n/a, 1 unverified. Its per-test verdicts were not kept in the repository. So this table gives, for each test, the parity doc's verdict and the unit that closes it, and the status column records only what the suite shows: **pass**, **partial** (a test covers part of it, as the unit's section says), or **no test yet**. A unit that adds a test updates its row here.
@@ -475,9 +498,9 @@ Matrix D of the parity study checked the 98 tests against `main` at ef7596e: 24 
 | T-BG-04 | adapt | P6 | pass |
 | T-BG-05 | adapt | P6 | pass |
 | T-BG-06 | adopt | P19 | pass |
-| T-SKILL-01 | keep Geno's | none | no test yet |
-| T-SKILL-02 | at parity | none | no test yet |
-| T-SKILL-03 | at parity | none | no test yet |
+| T-SKILL-01 | adopt (was keep Geno's) | P12 | pass |
+| T-SKILL-02 | at parity | P12 | pass |
+| T-SKILL-03 | at parity | P12 | pass |
 | T-MEM-01 | adopt | P8 | pass |
 | T-MEM-02 | keep Geno's | P11 | no test yet |
 | T-MEM-03 | adapt | P22 | no test yet |
