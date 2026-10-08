@@ -298,6 +298,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 | | P16 | PermissionRequest, SubagentStart and SubagentStop, and a lane-create hook. |
 | 4. Agent communication | P17 | A `report` handback tool, usage in the report, and Claude Code's launch rules. |
 | | P18 | `message_agent` resumes a finished child. |
+| | P18b | The next engine tells the parent which agents a crash cut off, and `message_agent` or Resume in Tasks resumes them. Done. |
 | | P19 | `task_stop`, `list_agents`, wake-up cancel and the background output path. |
 | | P20 | A child with `isolation: worktree` runs in a lane. |
 | | P21 | Background and parallel writers in their own lanes. |
@@ -486,6 +487,7 @@ Rules for every P unit, on top of "Shared rules for every unit" in `docs/plan-u1
 - **Change.** At engine start, find child sessions and workflow steps whose log shows a run with no end, and log an `interrupted` end for each. Send the parent session one `[Geno]` arrival that lists each, with its last report or last text, its files changed and its spend. The parent resumes one with `message_agent` (P18's path), and Tasks shows a Resume action on each row. Nothing resumes on its own, because a run costs money.
 - **Check.** E2E: kill the engine mid-child, start it, see the interrupted end, the parent's arrival, and a resume through `message_agent` that continues from the child's log. The same for a workflow step.
 - **Size.** 1 day. **Depends on.** P18.
+- **Status.** Done. [conformance.md](conformance.md) has what runs and the tests that check it.
 
 ### P19: stop, list and wake controls
 
