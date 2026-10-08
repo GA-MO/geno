@@ -59,11 +59,12 @@ import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
 import { checkCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
+import { workspaceDir } from './workspace.js';
 import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { writeGenoTools } from './geno-tools.js';
-import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, workspaceDir, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
+import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { bindSession, laneAt } from './lanes.js';
 import { openMcpHub, type McpToolset } from './mcp/hub.js';
@@ -74,6 +75,7 @@ import { logMode } from './sessions.js';
 import { sessionIndex } from './session-index.js';
 import { isMissing, StoreError, type Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
+import type { ToolContext } from './tools/context.js';
 import { agentExecutors, freshAuto, modeOf, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
 import { shownUserTools, userExecutors, type UserChannel } from './tools/user.js';
 import { editorActionExecutors, type Editor } from './tools/editor.js';
@@ -270,7 +272,12 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         permissions,
         wakes: own && wakes !== undefined ? { ...wakes, sessionId: session.id } : undefined,
         // Read at each call: the run's subagents start after its tools are built.
-        children: own ? { stop: (childId: string) => children?.stop(childId) } : undefined,
+        children: own
+          ? {
+              stop: (childId: string) => children?.stop(childId),
+              start: (agent: string, task: string, ctx: ToolContext) => children!.executor.run({ agent, task }, ctx),
+            }
+          : undefined,
         recall: own ? recall : undefined,
         pr: own ? prTools : undefined,
       });

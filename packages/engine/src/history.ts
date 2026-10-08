@@ -11,7 +11,7 @@ import {
 } from '@g-code/core';
 import { openSessionLog } from './chat.js';
 import { UsageError, type Command, type Io } from './command.js';
-import { workspaceDir } from './drive.js';
+import { workspaceDir } from './workspace.js';
 import { sessionIndex, TEMP_ROOTS } from './session-index.js';
 import { appendEvent, dropTornTail } from './sessions.js';
 import { isMissing, type Store } from './store.js';

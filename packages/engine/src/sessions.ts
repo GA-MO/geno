@@ -115,7 +115,10 @@ const loadedContextSchema = z.strictObject({
       text: z.string(),
     }),
   ),
-  skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string().min(1), path: z.string().min(1) })),
+  skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string().min(1), path: z.string().min(1) })).optional(),
+  skillListing: z
+    .strictObject({ skills: z.array(z.strictObject({ name: z.string().min(1), description: z.string() })), unlisted: z.int().nonnegative() })
+    .optional(),
   nested: z.array(instructionFileSchema.extend({ dir: z.string().min(1) })).optional(),
 });
 

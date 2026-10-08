@@ -1,4 +1,3 @@
-import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, type HookEventInputs, type StopDecision, lastAssistantText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
@@ -6,15 +5,15 @@ import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
 import { UsageError, type Io } from './command.js';
-import { EngineError } from './errors.js';
 import { changedOnDisk } from './file-tracker.js';
 import { DISK_FILES, type Files } from './files.js';
 import type { ToolInputDraft } from './gateway.js';
 import { arrivalEvents, type Arrival } from './inbox.js';
 import { appendEvent } from './sessions.js';
 import { snapshotKeeper } from './snapshots.js';
-import { isMissing, type Store } from './store.js';
+import type { Store } from './store.js';
 import { displayPath } from './tools/context.js';
+import { workspaceDir } from './workspace.js';
 import type { PreToolStep, RanCall, ToolHookSaid, ToolHooks } from './hooks.js';
 import { describeCall, runTool, type Executor, type Executors, type ToolContext, type ToolRun } from './tools/index.js';
 import { settle, spillFile } from './tools/spill.js';
@@ -159,16 +158,6 @@ export function positiveNumber(flag: string, raw: string, integer: boolean): num
     throw new UsageError(`--${flag} must be a positive ${integer ? 'integer' : 'number'}`);
   }
   return value;
-}
-
-export async function workspaceDir(cwd: string, raw: string): Promise<string> {
-  try {
-    const real = await realpath(path.resolve(cwd, raw));
-    if ((await stat(real)).isDirectory()) return real;
-  } catch (error) {
-    if (!isMissing(error)) throw error;
-  }
-  throw new EngineError(`workspace ${raw} is not a directory`);
 }
 
 export async function openForPrompt(

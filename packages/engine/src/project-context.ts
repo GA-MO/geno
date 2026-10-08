@@ -12,7 +12,6 @@ import {
   type NestedInstructionFile,
   type ProjectRule,
   type RuleTrigger,
-  type SkillEntry,
 } from '@g-code/core';
 import { comparePaths } from './tools/ripgrep.js';
 
@@ -331,25 +330,6 @@ export async function loadCursorRules(workspace: string): Promise<ProjectRule[]>
   return rules;
 }
 
-/** Skills by frontmatter name; one without a description is skipped, and a name already listed keeps its first. */
-export async function loadSkills(workspace: string): Promise<SkillEntry[]> {
-  const skills: SkillEntry[] = [];
-  for (const root of SKILL_ROOTS) {
-    for (const entry of await sortedEntries(path.join(workspace, root))) {
-      if (!entry.isDirectory()) continue;
-      const file = path.join(workspace, root, entry.name, 'SKILL.md');
-      const text = await readIfFile(file);
-      if (text === undefined) continue;
-      const { fields } = parseFrontmatter(text);
-      const name = asText(fields['name']) || entry.name;
-      const description = asText(fields['description']);
-      if (description === '' || skills.some((skill) => skill.name === name)) continue;
-      skills.push({ name, description, path: shownPath(workspace, file) });
-    }
-  }
-  return skills;
-}
-
 export const globalRulesFile = (home: string): string => path.join(home, 'AGENTS.md');
 
 /** The global rules file, created empty when missing; one that exists is left as it is. */
@@ -375,6 +355,6 @@ export async function loadProjectContext(workspace: string, user?: UserDirs, rg 
   // The user's files go first, so a project file that is one of them, or imports one, does not load it again.
   const own = user === undefined ? [] : await loadLayer(walk, userRoots(user));
   const instructions = await loadLayer(walk, await projectRoots(root));
-  const [nested, rules, skills] = await Promise.all([loadNested(walk, rg), loadCursorRules(root), loadSkills(root)]);
-  return { context: { ...(own.length === 0 ? {} : { user: own }), instructions, rules, skills, ...(nested.length === 0 ? {} : { nested }) }, problems: walk.problems };
+  const [nested, rules] = await Promise.all([loadNested(walk, rg), loadCursorRules(root)]);
+  return { context: { ...(own.length === 0 ? {} : { user: own }), instructions, rules, ...(nested.length === 0 ? {} : { nested }) }, problems: walk.problems };
 }

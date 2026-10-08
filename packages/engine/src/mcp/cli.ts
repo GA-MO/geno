@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { describeServerState, MCP_SOURCE_LABELS } from '@g-code/core';
 import { singleId, type Command } from '../command.js';
-import { workspaceDir } from '../drive.js';
+import { workspaceDir } from '../workspace.js';
 import { openMcpHub } from './hub.js';
 
 const workspaceFlag = { workspace: { type: 'string', default: '.' } } as const;

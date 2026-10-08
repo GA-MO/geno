@@ -52,7 +52,7 @@ export const BOUNDARIES: Boundaries = {
         'packages/engine/src/errors.ts',
         // `gcode mcp list` and `gcode mcp trust` plug into the CLI's command table.
         'packages/engine/src/command.ts',
-        'packages/engine/src/drive.ts',
+        'packages/engine/src/workspace.ts',
       ],
     },
   ],

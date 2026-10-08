@@ -47,8 +47,50 @@ export type NestedInstructionFile = InstructionFile & { readonly dir: string };
 /** What a read attaches: a `globs` rule, or a nested instruction file with the importer it names. */
 export type RuleText = Pick<ProjectRule, 'path' | 'text'> & { readonly importedFrom?: string | undefined };
 
-/** A `SKILL.md` under `.agents/skills/*` or `.claude/skills/*`, listed so the model can load it with the skill tool when a task needs it. */
+/** A workspace skill as a log from before the skill listing records it, with its location. */
 export type SkillEntry = { readonly name: string; readonly description: string; readonly path: string };
+
+/** A skill the listing names, with the start of its description; empty when only the name fit. */
+export type ListedSkill = { readonly name: string; readonly description: string };
+
+/** The skills the model may load, as the session lists them. `unlisted` counts those past the budget. */
+export type SkillListing = { readonly skills: readonly ListedSkill[]; readonly unlisted: number };
+
+/** Claude Code's fallback budget for its skill listing, in characters. */
+export const SKILL_LISTING_CHARS = 8_000;
+export const SKILL_DESCRIPTION_CHARS = 250;
+/** A description cut shorter than this no longer says when to use the skill, so the listing names the skill alone. */
+const SHORTEST_DESCRIPTION = 20;
+
+const cut = (text: string, chars: number): string => (text.length <= chars ? text : `${text.slice(0, chars - 1).trimEnd()}…`);
+
+/**
+ * The listing of `skills`, in their order, within `budget` characters: each name with the first line of its
+ * description. When they do not all fit, the longest descriptions are cut to one length first, then every skill is
+ * named alone, and last the skills whose names do not fit are counted instead.
+ */
+export function skillListing(skills: readonly ListedSkill[], budget = SKILL_LISTING_CHARS): SkillListing {
+  const firstLines = skills.map((skill) => ({ name: skill.name, description: cut(skill.description.split('\n')[0]!.trim(), SKILL_DESCRIPTION_CHARS) }));
+  // Each line costs its text and a newline: `- name` alone, and `: description` on top.
+  let left = budget;
+  let listed = 0;
+  while (listed < firstLines.length && firstLines[listed]!.name.length + 3 <= left) left -= firstLines[listed++]!.name.length + 3;
+  const kept = firstLines.slice(0, listed);
+  const cost = (chars: number) => kept.reduce((sum, skill) => sum + 2 + Math.min(skill.description.length, chars), 0);
+  let chars = SKILL_DESCRIPTION_CHARS;
+  if (cost(chars) > left) {
+    let low = 0;
+    while (low < chars) {
+      const mid = Math.ceil((low + chars) / 2);
+      if (cost(mid) <= left) low = mid;
+      else chars = mid - 1;
+    }
+  }
+  return {
+    skills: kept.map((skill) => ({ name: skill.name, description: chars < SHORTEST_DESCRIPTION ? '' : cut(skill.description, chars) })),
+    unlisted: firstLines.length - listed,
+  };
+}
 
 /**
  * What a session loaded from the workspace when it started. It is recorded in the session-start event, so a resumed
@@ -68,17 +110,24 @@ export type LoadedContext = {
    */
   readonly instructions: readonly InstructionFile[];
   readonly rules: readonly ProjectRule[];
-  readonly skills: readonly SkillEntry[];
+  /** A log written before `skillListing` existed holds the workspace's skills here, and renders as it did then. */
+  readonly skills?: readonly SkillEntry[] | undefined;
+  /** Every skill the model may load: the user's, the workspace's and the installed plugins'. Absent when there are none. */
+  readonly skillListing?: SkillListing | undefined;
   /** Outer directories first, each file followed by the files it imports; absent when there are none. */
   readonly nested?: readonly NestedInstructionFile[] | undefined;
 };
 
-export const EMPTY_CONTEXT: LoadedContext = { instructions: [], rules: [], skills: [] };
+export const EMPTY_CONTEXT: LoadedContext = { instructions: [], rules: [] };
 
 export const isEmptyContext = (context: LoadedContext): boolean =>
   context.global === undefined &&
   (context.user ?? []).length === 0 &&
-  context.instructions.length === 0 && context.rules.length === 0 && context.skills.length === 0 && (context.nested ?? []).length === 0;
+  context.instructions.length === 0 &&
+  context.rules.length === 0 &&
+  (context.skills ?? []).length === 0 &&
+  (context.skillListing?.skills ?? []).length === 0 &&
+  (context.nested ?? []).length === 0;
 
 /**
  * Something attached to one prompt, as the model sees it. `text` is final: a file is numbered and paged like a read,
@@ -111,6 +160,18 @@ const instructionBlock = (file: InstructionFile): string => fenced('project_inst
 
 const rulesOf = <K extends RuleTrigger['kind']>(context: LoadedContext, kind: K) =>
   context.rules.filter((rule): rule is ProjectRule & { readonly trigger: Extract<RuleTrigger, { kind: K }> } => rule.trigger.kind === kind);
+
+function listingSection(listing: SkillListing | undefined): string[] {
+  if (listing === undefined || listing.skills.length === 0) return [];
+  return [
+    [
+      "The following skills are available for use with the skill tool. When a task matches a skill's description, call skill with its name before you start; it returns the skill's instructions and the folder its relative paths resolve against.",
+      '',
+      ...listing.skills.map((skill) => neutralize(skill.description === '' ? `- ${skill.name}` : `- ${skill.name}: ${skill.description}`)),
+      ...(listing.unlisted === 0 ? [] : [`${listing.unlisted} more skills did not fit in this list.`]),
+    ].join('\n'),
+  ];
+}
 
 function skillsSection(skills: readonly SkillEntry[]): string[] {
   if (skills.length === 0) return [];
@@ -156,7 +217,8 @@ export function renderLoadedContext(context: LoadedContext): string | undefined 
             .map((rule) => `- ${rule.path}: ${rule.trigger.description}`)
             .join('\n')}`,
         ]),
-    ...skillsSection(context.skills),
+    ...skillsSection(context.skills ?? []),
+    ...listingSection(context.skillListing),
   ];
   const user = context.user ?? [];
   if (user.length > 0) {
