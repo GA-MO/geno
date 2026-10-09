@@ -750,7 +750,7 @@ export type HookRow = {
 export type HooksResponse = { readonly workspace: string; readonly trusted: boolean; readonly hooks: readonly HookRow[]; readonly problems: readonly HookProblem[] };
 
 /** A workspace's own LaneCreated hook never runs: a repository's setup for its lanes is `laneSetup`, which the user approves once. */
-const WORKSPACE_LANE_WHY = "A workspace's LaneCreated hook never runs. Put the repository's lane setup in laneSetup in .gcode.json, which you approve once, or the hook in your own settings.";
+const WORKSPACE_LANE_WHY = "A workspace's LaneCreated hook never runs. Put the repository's lane setup in laneSetup in .g-code/settings.json, which you approve once, or the hook in your own settings.";
 
 const whyNever = (entry: HookEntry): string | undefined =>
   entry.event === 'LaneCreated' && entry.origin.scope === 'project' ? WORKSPACE_LANE_WHY : HOOK_EVENTS[entry.event].why;

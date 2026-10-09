@@ -263,7 +263,6 @@ import {
   DRAFT_METHOD,
   type WakeTrigger,
   subagentModelsOf,
-  claudeDirOf,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -2176,14 +2175,14 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     .onRequest(ARENA_PREVIEW_METHOD, arenaPreviewRequest, async ({ params }): Promise<ArenaPreviewResponse> => {
       const n = arenaSizeOf(params.n, params);
       const repo = await laneRepo(params.cwd);
-      const variants = await arenaVariants(repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
+      const variants = await arenaVariants(homesOf(store, io.env), repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
       return { preview: await arenaPreview(store, io, n), variants };
     })
     .onRequest(ARENA_NEW_METHOD, arenaNewRequest, async ({ params }): Promise<ArenaNewResponse> => {
       const n = arenaSizeOf(params.n, params);
       let rootId: string | undefined;
       const repo = await laneRepo(params.cwd);
-      const variants = await arenaVariants(repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
+      const variants = await arenaVariants(homesOf(store, io.env), repo.main, n, varietyOf(params.variety, params)).catch(refused({ cwd: params.cwd }));
       const started = await startArena(
         {
           repo,
@@ -2333,7 +2332,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     }))
     .onRequest(HOOKS_METHOD, permissionsRequest, async ({ params }): Promise<HooksResponse> => {
       const workspace = await workspaceDir(io.cwd, params.cwd).catch(refused({ cwd: params.cwd }));
-      const config = await loadHookConfig({ claudeDir: claudeDirOf(io.env), appHome: homeOf(store), workspace, plugins: (await pluginsOf(workspace)).plugins });
+      const config = await loadHookConfig({ homes: homesOf(store, io.env), workspace, plugins: (await pluginsOf(workspace)).plugins });
       return { workspace, trusted: peer.trusted, hooks: hookRows(config.entries, peer.trusted), problems: config.problems };
     })
     .onRequest(PERMISSIONS_METHOD, permissionsRequest, async ({ params }): Promise<PermissionsResponse> => {

@@ -1,51 +1,29 @@
 import path from 'node:path';
-import { parseHookSettings, type HookEntry, type HookOrigin, type HookProblem, type ParsedHooks } from '@g-code/core';
+import { byPrecedence, parseHookSettings, settingsFiles, type ConfigHomes, type HookEntry, type HookOrigin, type HookProblem, type ParsedHooks, type SettingsFile } from '@g-code/core';
 import { readJson, type InstalledPlugin } from './plugins.js';
+import { readSettings, type LoadedSettings } from './settings.js';
 
 /**
- * Where hooks are read from, the user's own files first: an identical handler in a later file runs once, as the
- * earlier one. All of them run; there is no override between scopes, as in Claude Code.
+ * Where hooks are read from: every settings file the config roots name, the user's own first, and the plugins'. An
+ * identical handler in a later file runs once, as the earlier one. All of them run; there is no override between
+ * scopes, as in Claude Code.
  */
-export type HookSources = {
-  /** Claude Code's config dir, `~/.claude` or CLAUDE_CONFIG_DIR. */
-  readonly claudeDir: string | undefined;
-  /** Geno's own folder, `~/.g-code` or GCODE_HOME. */
-  readonly appHome: string;
-  readonly workspace: string;
-  readonly plugins: readonly InstalledPlugin[];
-};
-
-export type SettingsFile = { readonly file: string; readonly scope: HookOrigin['scope'] };
-
-/** Claude Code's own settings files, lowest scope first: the user's, the project's shared one, then its local one. */
-export const claudeSettingsFiles = (claudeDir: string | undefined, workspace: string): SettingsFile[] => [
-  ...(claudeDir === undefined ? [] : [{ file: path.join(claudeDir, 'settings.json'), scope: 'user' as const }]),
-  { file: path.join(workspace, '.claude', 'settings.json'), scope: 'project' },
-  { file: path.join(workspace, '.claude', 'settings.local.json'), scope: 'project' },
-];
-
-const settingsFiles = ({ claudeDir, appHome, workspace }: HookSources): SettingsFile[] => {
-  const claude = claudeSettingsFiles(claudeDir, workspace);
-  return [
-    { file: path.join(appHome, 'settings.json'), scope: 'user' },
-    ...claude.filter((file) => file.scope === 'user'),
-    { file: path.join(workspace, '.gcode.json'), scope: 'project' },
-    ...claude.filter((file) => file.scope === 'project'),
-  ];
-};
+export type HookSources = { readonly homes: ConfigHomes; readonly workspace: string; readonly plugins: readonly InstalledPlugin[] };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** `enabledPlugins` across the settings files, a later file over an earlier one, as Claude Code merges its scopes. */
-function enabledPluginsOf(read: readonly { readonly value: unknown }[]): ReadonlyMap<string, boolean> {
+/** `enabledPlugins` across the settings files, the file that wins a scalar winning each plugin. */
+function enabledPluginsOf(read: readonly LoadedSettings[]): ReadonlyMap<string, boolean> {
   const enabled = new Map<string, boolean>();
-  for (const { value } of read) {
-    const raw = isRecord(value) ? value['enabledPlugins'] : undefined;
+  for (const { value } of byPrecedence(read)) {
+    const raw = value['enabledPlugins'];
     if (!isRecord(raw)) continue;
     for (const [key, on] of Object.entries(raw)) if (typeof on === 'boolean') enabled.set(key, on);
   }
   return enabled;
 }
+
+const originOf = (source: SettingsFile): HookOrigin => ({ file: source.file, scope: source.scope === 'user' ? 'user' : 'project' });
 
 /**
  * Every hook the session could run, with what could not be read. Nothing here decides what runs: a project hook needs a
@@ -54,18 +32,13 @@ function enabledPluginsOf(read: readonly { readonly value: unknown }[]): Readonl
 export async function loadHookConfig(sources: HookSources): Promise<ParsedHooks> {
   const entries: HookEntry[] = [];
   const problems: HookProblem[] = [];
-  const read: { readonly file: SettingsFile; readonly value: unknown }[] = [];
   const take = (parsed: ParsedHooks) => {
     entries.push(...parsed.entries);
     problems.push(...parsed.problems);
   };
-  const files = settingsFiles(sources);
-  for (const file of files) {
-    const raw = await readJson(file.file);
-    if (raw.kind === 'broken') problems.push({ severity: 'warning', text: `${file.file} is not valid JSON, so its hooks do not run: ${raw.reason}` });
-    if (raw.kind === 'read') read.push({ file, value: raw.value });
-  }
-  const enabled = enabledPluginsOf(read);
+  const settings = await readSettings(settingsFiles(sources.homes, sources.workspace), (file) => file);
+  for (const { source, reason } of settings.broken) problems.push({ severity: 'warning', text: `${source.file} is not valid JSON, so its hooks do not run: ${reason}` });
+  const enabled = enabledPluginsOf(settings.files);
   const pluginHooks: ParsedHooks[] = [];
   for (const plugin of sources.plugins) {
     if (plugin.key !== undefined && enabled.get(plugin.key) === false) continue;
@@ -76,9 +49,9 @@ export async function loadHookConfig(sources: HookSources): Promise<ParsedHooks>
     const origin: HookOrigin = { file, scope: plugin.project === true ? 'project' : 'user', plugin: { name: plugin.name, root: plugin.root } };
     pluginHooks.push(parseHookSettings(raw.value, origin));
   }
-  for (const { file, value } of read.filter(({ file }) => file.scope === 'user')) take(parseHookSettings(value, file));
+  for (const { source, value } of settings.files.filter(({ source }) => source.scope === 'user')) take(parseHookSettings(value, originOf(source)));
   for (const parsed of pluginHooks) take(parsed);
-  for (const { file, value } of read.filter(({ file }) => file.scope === 'project')) take(parseHookSettings(value, file));
+  for (const { source, value } of settings.files.filter(({ source }) => source.scope !== 'user')) take(parseHookSettings(value, originOf(source)));
   return { entries, problems };
 }
 

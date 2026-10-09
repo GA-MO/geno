@@ -94,20 +94,25 @@ export type SettingsFile = { readonly file: string; readonly vendor: ConfigVendo
 
 export const LEGACY_SETTINGS_FILE = '.gcode.json';
 
+/** The project's settings files, shared then local, each in vendor order; alone for what only a repository may set. */
+export function projectSettingsFiles(workspace: string): SettingsFile[] {
+  const files: SettingsFile[] = [];
+  for (const vendor of CONFIG_VENDORS) {
+    files.push({ file: path.join(workspace, CONFIG_ROOTS[vendor].project, 'settings.json'), vendor, scope: 'project-shared' });
+    if (vendor === 'geno') files.push({ file: path.join(workspace, LEGACY_SETTINGS_FILE), vendor, scope: 'project-shared', legacy: true });
+  }
+  for (const vendor of CONFIG_VENDORS) files.push({ file: path.join(workspace, CONFIG_ROOTS[vendor].project, 'settings.local.json'), vendor, scope: 'project-local' });
+  return files;
+}
+
 /**
  * Every settings file, by scope (user, project-shared, project-local) and, in each, by vendor: `settings.json` in each
  * root, and `settings.local.json` too in a project's.
  */
-export function settingsFiles(homes: ConfigHomes, workspace: string): SettingsFile[] {
-  const roots = configRoots(homes, workspace);
-  const files: SettingsFile[] = roots.filter((root) => root.place === 'user').map((root) => ({ file: path.join(root.dir, 'settings.json'), vendor: root.vendor, scope: 'user' }));
-  for (const root of roots.filter((root) => root.place === 'project')) {
-    files.push({ file: path.join(root.dir, 'settings.json'), vendor: root.vendor, scope: 'project-shared' });
-    if (root.vendor === 'geno') files.push({ file: path.join(workspace, LEGACY_SETTINGS_FILE), vendor: 'geno', scope: 'project-shared', legacy: true });
-  }
-  for (const root of roots.filter((root) => root.place === 'project')) files.push({ file: path.join(root.dir, 'settings.local.json'), vendor: root.vendor, scope: 'project-local' });
-  return files;
-}
+export const settingsFiles = (homes: ConfigHomes, workspace: string): SettingsFile[] => [
+  ...configRoots(homes, workspace).flatMap((root): SettingsFile[] => (root.place === 'user' ? [{ file: path.join(root.dir, 'settings.json'), vendor: root.vendor, scope: 'user' }] : [])),
+  ...projectSettingsFiles(workspace),
+];
 
 const rank = (file: SettingsFile): number => SETTINGS_SCOPES.indexOf(file.scope) * 10 - CONFIG_VENDORS.indexOf(file.vendor) * 2 - (file.legacy === true ? 1 : 0);
 
