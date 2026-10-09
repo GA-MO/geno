@@ -244,8 +244,11 @@ export const outsideRefusal = (record: ApprovalRecord, readable: readonly string
     record,
     record.decidedBy === 'user'
       ? denialText(record)
-      : `${denialText(record)} Geno may read only in these directories in this session: ${readable.map((dir) => `'${dir}'`).join(', ')}. If the task needs another one, say so in your answer: the user can add it to permissions.additionalDirectories in .g-code/settings.json, or to the gcode.additionalDirectories setting in the editor.`,
+      : `${denialText(record)} Geno may read only in these directories in this session: ${readable.map((dir) => `'${dir}'`).join(', ')}. If the task needs another one, say so in your answer: the user can add it to permissions.additionalDirectories in .g-code/settings.json, or to the gcode.additionalDirectories setting in the editor.${JOB_OUTPUT.test(record.command) ? JOB_OUTPUT_HINT : ''}`,
   );
+
+const JOB_OUTPUT = /\/background\/bg-\d+\.log\b/;
+const JOB_OUTPUT_HINT = " That looks like another session's background output file: read this session's background commands with bash_output and their bg-N id.";
 
 /**
  * The tool, refused while the session's mode leaves it out. Every mode is offered every tool, so the cached prefix
@@ -650,8 +653,13 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     const jobs = tools.background === undefined ? [] : tools.background.jobs.jobs(tools.background.sessionId).filter((job) => job.state.status === 'running');
     return membersOf(new Set([...leftRunning, ...jobs.map((job) => job.pid)]));
   };
-  /** The scope a command line is judged in, with what the session started when the line may kill. */
-  const commandScope = async (command: string): Promise<CommandScope> => ({ ...scope(), ...(/\bkill\b/.test(command) ? { processes: await ownProcesses() } : {}) });
+  /** The scope a command line is judged in: the session's spill folder, where its jobs' output goes, reads as the workspace does. */
+  const commandScope = async (command: string, ctx: ToolContext): Promise<CommandScope> => {
+    const base = scope();
+    const spill = await realOrUndefined(ctx.spillDir);
+    const directories = [...(base.directories ?? []), ctx.spillDir, ...(spill === undefined ? [] : [spill])];
+    return { ...base, directories, ...(/\bkill\b/.test(command) ? { processes: await ownProcesses() } : {}) };
+  };
   /** A refused kill names task_stop, which stops a background command without reaching anything else. */
   const killHint = (): string => {
     if (tools.background === undefined) return '';
@@ -669,7 +677,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
     const rules = (await permissions?.list()) ?? [];
-    const judged = await commandScope(command);
+    const judged = await commandScope(command, ctx);
     const ruled = ruledDenial(command, judged, mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
     const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, judged, 'ask', rules)?.offer;
