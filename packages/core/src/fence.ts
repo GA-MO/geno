@@ -22,6 +22,12 @@ export const NOT_USER_LINE = `${GENO_NOTE} Automated notice, not a message from 
  */
 export const USER_PROMPT_FOLLOWS = `${GENO_NOTE} End of Geno's notes. The user's message follows.`;
 
+/**
+ * After the user stopped a turn, as Claude Code's "[Request interrupted by user]": a question asked after a Stop, such
+ * as how far the work got, is a question, not a go-ahead (ISSUES.md P-10).
+ */
+export const STOPPED_TURN_NOTE = `${GENO_NOTE} The user stopped your last turn. If their next message asks a question, such as how far you got, answer it from the conversation first, then ask whether to go on; do not resume the task until they say so.`;
+
 /** An arrival as the model reads it: the not-user line, then what arrived. */
 export const arrivalText = (body: string): string => `${NOT_USER_LINE}\n${body}`;
 

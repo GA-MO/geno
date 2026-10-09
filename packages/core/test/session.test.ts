@@ -10,6 +10,7 @@ import {
   TOOL_DEFINITIONS,
   type Session,
   type TurnEvent,
+  STOPPED_TURN_NOTE,
 } from '../src/index.js';
 
 const session: Session = {
@@ -69,6 +70,7 @@ describe('replayMessages', () => {
           role: 'user',
           content: [
             { type: 'text', text: 'first' },
+            ...(kind === 'abort' ? [{ type: 'text', text: STOPPED_TURN_NOTE }] : []),
             { type: 'text', text: 'second' },
           ],
         },
@@ -163,6 +165,7 @@ describe('replayMessages with tools', () => {
       role: 'user',
       content: [
         { type: 'tool_result', tool_use_id: 'tu_a', content: 'hit' },
+        { type: 'text', text: STOPPED_TURN_NOTE },
         { type: 'text', text: 'go on' },
       ],
     });
@@ -191,6 +194,7 @@ describe('buildRequest', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'a' },
+          { type: 'text', text: STOPPED_TURN_NOTE },
           { type: 'text', text: 'b', cache_control: { type: 'ephemeral' } },
         ],
       },

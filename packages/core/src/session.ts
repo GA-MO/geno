@@ -29,7 +29,7 @@ import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
-import { arrivalText, GENO_NOTE, USER_PROMPT_FOLLOWS, userSteerText } from './fence.js';
+import { arrivalText, GENO_NOTE, STOPPED_TURN_NOTE, USER_PROMPT_FOLLOWS, userSteerText } from './fence.js';
 import { nudgeText, type ReportNudgeEvent } from './handback.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
@@ -418,6 +418,8 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
   let notices: TextBlockParam[] = [];
   // Whether the prompts hold one the user wrote, which the notices must not seem to cover.
   let typed = false;
+  // Whether the user stopped the turn since the model last answered.
+  let stopped = false;
   // Before a model turn the opening goes out even alone: a compaction can keep from the middle of a turn.
   const flush = (beforeTurn: boolean) => {
     const answers = toolUses.flatMap((use) => results.get(use.id) ?? []);
@@ -431,6 +433,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     results = new Map();
     prompts = [];
     typed = false;
+    stopped = false;
   };
   for (const event of contextView(events)) {
     if (event.kind === 'session-start') {
@@ -454,6 +457,9 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     }
     if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
     if (event.kind === 'user') {
+      // A new message after a Stop, not a resume of the stopped one.
+      if (stopped && event.from === undefined && event.steer !== true) prompts.push({ type: 'text', text: STOPPED_TURN_NOTE });
+      stopped = false;
       prompts.push(...userBlocks(event, stored, workspace));
       typed ||= event.from === undefined;
     }
@@ -464,6 +470,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'file-changed') prompts.push({ type: 'text', text: changedOnDiskNote(event.shown, event.excerpt) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
     if (noted !== undefined) prompts.push({ type: 'text', text: noted });
+    if (event.kind === 'error' && event.error === 'abort') stopped = true;
     if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) {
       prompts = [];
       typed = false;
