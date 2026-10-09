@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CLASSIFIER_TOOL, MODE_NOTICES } from '@g-code/core';
+import { CLASSIFIER_TOOL, MODE_NOTICES, USER_PROMPT_FOLLOWS } from '@g-code/core';
 import { answer, sseBody, toolCall, type FakeToolUse, type Reply } from '../../engine/test/fake-transport.js';
 import { click, connectWindow, evaluate, press, typeText, webview, type Window } from './cdp.js';
 import { setUp } from './launch.js';
@@ -131,7 +131,7 @@ describe('Ask and Auto in the chat panel', () => {
     expect(JSON.stringify(refused?.content)).toContain('edit is not available: Plan mode is read-only');
     expect(await readFile(path.join(workspace, 'a.ts'), 'utf8'), 'and a.ts is unchanged').toBe(FILES['a.ts']);
     // Start building left Plan for the configured default, Auto, told the model so, and sent the follow-up.
-    expect(lastTexts(10)).toEqual([MODE_NOTICES.auto, FOLLOW_UP]);
+    expect(lastTexts(10)).toEqual([MODE_NOTICES.auto, USER_PROMPT_FOLLOWS, FOLLOW_UP]);
     expect(await exists(path.join(workspace, 'build'))).toBe(false);
     expect(await exists(path.join(workspace, 'dist'))).toBe(true);
   }, 600_000);
