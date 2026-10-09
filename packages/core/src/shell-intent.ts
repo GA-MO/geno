@@ -265,6 +265,9 @@ const serverFile = (args: readonly string[]): boolean => {
   return file !== undefined && /(?:^|\/)server\.[cm]?[jt]s$/.test(file);
 };
 
+const pythonServer = ([first, second]: readonly string[]): boolean =>
+  (first === '-m' && second === 'http.server') || (/manage\.py$/.test(first ?? '') && second === 'runserver');
+
 /** Programs that serve until stopped, given their arguments. */
 const SERVERS: Readonly<Record<string, (args: readonly string[]) => boolean>> = {
   vite: ([first]) => first === undefined || first.startsWith('-') || ['dev', 'serve', 'preview'].includes(first),
@@ -280,8 +283,8 @@ const SERVERS: Readonly<Record<string, (args: readonly string[]) => boolean>> = 
   'ts-node': serverFile,
   bun: serverFile,
   deno: (args) => serverFile(args.filter((arg) => arg !== 'run')),
-  python: (args) => (args[0] === '-m' && args[1] === 'http.server') || (/manage\.py$/.test(args[0] ?? '') && args[1] === 'runserver'),
-  python3: (args) => (args[0] === '-m' && args[1] === 'http.server') || (/manage\.py$/.test(args[0] ?? '') && args[1] === 'runserver'),
+  python: pythonServer,
+  python3: pythonServer,
   php: ([first]) => first === '-S',
   flask: ([first]) => first === 'run',
   uvicorn: () => true,
