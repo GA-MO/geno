@@ -465,7 +465,8 @@ export async function drive(
   // The one safe point: whatever reached the session from outside the loop, a background command's end or a steer, is
   // logged after the last tool results and before the model next sees the log, with a note for each file the model
   // read that changed on disk, a notice of a mode switch or a memory change, the todo list when it has gone stale, and
-  // the budget reminder when the run's limits are near. True when anything arrived; a note or a notice alone does not hold back the model call.
+  // the budget reminder when the run's limits are near. True when anything arrived; a note or a notice alone does not
+  // hold back the model call.
   const deliver = async (): Promise<boolean> => {
     for (const { path, now, excerpt } of await changedOnDisk(events, verified)) {
       await record({ kind: 'file-changed', seq: 0, at: new Date().toISOString(), path, shown: displayPath(ctx, path), now, ...(excerpt === undefined ? {} : { excerpt }) });
