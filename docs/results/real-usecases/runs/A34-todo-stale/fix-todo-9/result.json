@@ -1,0 +1,90 @@
+{
+  "case": "A34-todo-stale",
+  "run": "fix-todo-9",
+  "session": "aea54677-48be-4eee-83a2-7ea1b73a9688",
+  "passed": true,
+  "costUsd": 0.014695719999999999,
+  "classifierUsd": 0,
+  "modelCalls": 9,
+  "toolCalls": 15,
+  "tokens": {
+    "input": 54,
+    "cacheRead": 64933,
+    "cacheWrite": 19404,
+    "output": 2786,
+    "latencyMs": 50130
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=673ch"
+    },
+    {
+      "id": "left-unfinished",
+      "pass": true,
+      "detail": "in_progress,pending,pending,pending,pending"
+    },
+    {
+      "id": "told-stale",
+      "pass": true,
+      "detail": "budget+last; todo"
+    },
+    {
+      "id": "updates-or-clears",
+      "pass": true,
+      "detail": "cleared"
+    },
+    {
+      "id": "answers",
+      "pass": true,
+      "detail": "Run them with `npm test` — that's just `node --test` (package.json:7), which auto-discovers `test/*.test.ts`. Directly on this machine:\n\n```\nnode --test\n```\n\nI "
+    }
+  ]
+}
