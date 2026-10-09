@@ -1,10 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
-import type { MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
+import type { MessageCreateParamsStreaming, MessageStreamEvent, MessageStreamParams } from '@anthropic-ai/sdk/resources/messages/messages';
 import type { AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import type { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
 import {
   baseUrlOf,
+  messageFromEvents,
   missingField,
   providerValues,
   specOf,
@@ -106,6 +107,15 @@ const EAGER_INPUT: ReadonlySet<ProviderName> = new Set(['anthropic', 'vertex']);
 const eager = (params: MessageStreamParams): MessageStreamParams =>
   params.tools === undefined ? params : { ...params, tools: params.tools.map((tool) => ('input_schema' in tool ? { ...tool, eager_input_streaming: true } : tool)) };
 
+/** A stream that broke, as the SDK's own message stream reports it, so the gateway's retry rules see an AnthropicError. */
+function asAnthropicError(error: unknown, signal: AbortSignal | undefined): unknown {
+  if (error instanceof Anthropic.AnthropicError) return error;
+  if (signal?.aborted === true) return new Anthropic.APIUserAbortError();
+  const wrapped = new Anthropic.AnthropicError(error instanceof Error ? error.message : String(error));
+  if (error instanceof Error) wrapped.cause = error;
+  return wrapped;
+}
+
 function anthropicWire(config: WireConfig): Wire {
   let pending: ReturnType<typeof anthropicClient> | undefined;
   const clientOf = () => (pending ??= anthropicClient({ ...config, fetch: countingFetch(config.fetch) }));
@@ -113,11 +123,23 @@ function anthropicWire(config: WireConfig): Wire {
     async stream(params, { signal, headers, onEvent, onAnswered, onBytes = () => {} }) {
       const client = await clientOf();
       const request = EAGER_INPUT.has(config.spec.id) ? eager(params) : params;
-      return byteCounters.run(onBytes, () => {
-        const stream = client.messages.stream(request, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) });
-        if (onAnswered !== undefined) stream.on('connect', onAnswered);
-        stream.on('streamEvent', onEvent);
-        return stream.finalMessage();
+      return byteCounters.run(onBytes, async () => {
+        // The raw events, assembled here: the SDK's own message stream throws on a tool input that is not JSON, which
+        // ends the turn; built from the events, that input reaches the tool as `invalid_json` and the model tries again.
+        const { data: stream } = await client.messages.create({ ...request, stream: true } as MessageCreateParamsStreaming, { signal, ...(headers === undefined ? {} : { headers: { ...headers } }) }).withResponse();
+        onAnswered?.();
+        const seen: MessageStreamEvent[] = [];
+        try {
+          for await (const event of stream) {
+            seen.push(event);
+            onEvent(event);
+          }
+        } catch (error) {
+          throw asAnthropicError(error, signal);
+        }
+        const message = messageFromEvents(seen);
+        if (message === undefined) throw new EngineError(`${config.spec.label} ended the answer's stream before the answer was complete`);
+        return message;
       });
     },
     async listModels(signal) {
