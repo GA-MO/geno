@@ -1,4 +1,5 @@
 import type { Look } from './messages.js';
+import { TOKENS_STYLE_ID, tokenStyle } from './tokens.js';
 
 /** What a webview page needs from its host: the source its CSP names, a fresh nonce, and the address of a dist file. */
 export type PageHost = {
@@ -16,5 +17,6 @@ export function pageMarkup({ cspSource, nonce, uri, entry, look }: PageHost): st
 <html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data:; style-src ${cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; font-src ${cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${uri('webview.css')}">
+<style id="${TOKENS_STYLE_ID}" nonce="${nonce}">${tokenStyle(look?.tokens)}</style>
 </head><body${look === undefined ? '' : ` data-style="${look.style}" data-detail="${look.detail}" data-review="${look.review}"`}><script nonce="${nonce}" src="${uri(entry)}" data-diagrams="${uri('diagram/render.js')}" data-manual></script></body></html>`;
 }

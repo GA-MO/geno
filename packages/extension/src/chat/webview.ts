@@ -53,6 +53,7 @@ import { usageCardView } from './usage-view.js';
 import { prStatusBar } from './pr-status-view.js';
 import type { ReviewMode } from '../review/mode.js';
 import { turnChangesOf } from '../review/summary.js';
+import { TOKENS_STYLE_ID, tokenStyle } from './tokens.js';
 
 /** What only this view knows, kept across the panel being hidden: the draft and which folds are open. */
 type ViewState = { readonly draft: string; readonly open: readonly string[]; readonly unfolded: readonly string[] };
@@ -596,6 +597,7 @@ window.addEventListener('message', (event: MessageEvent<ToView>) => {
     document.body.dataset['style'] = message.look.style;
     document.body.dataset['detail'] = message.look.detail;
     document.body.dataset['review'] = message.look.review;
+    document.getElementById(TOKENS_STYLE_ID)!.textContent = tokenStyle(message.look.tokens);
     schedule();
     return;
   }

@@ -23,6 +23,8 @@ import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
 import { describeEngineRuntime, ENGINE_SECRETS, engineEnvOf, modelLabel, providerOf, readEngineRuntime, resumeEnvOf, sandboxEnvOf, directoriesEnvOf, wakeEnvOf, secretName, SET_KEY_COMMAND, SETTINGS_COMMAND, setupProblem } from './runtime.js';
 import { SettingsPage } from './chat/settings-host.js';
 import { TerminalRecorder } from './chat/terminals.js';
+import { tokenSettings } from './chat/tokens-host.js';
+import { TOKENS_SETTING } from './chat/tokens.js';
 import { seenStore } from './chat/seen.js';
 import { isProviderName, PROVIDERS, specOf, type FieldId, type ProviderName } from '@g-code/core';
 
@@ -112,6 +114,7 @@ function registerChat(context: vscode.ExtensionContext): void {
   const memory = sessionMemory(context.storageUri);
   // From activation on, so a command the user ran before opening the chat can still be read.
   const terminals = new TerminalRecorder(vscode.window);
+  const tokens = tokenSettings(path.join(context.extensionPath, 'dist', 'webview.css'), output);
   const chat = new Chat(
     () => engineSettings(context, output),
     context.extensionUri,
@@ -119,7 +122,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     memory,
     (document, change) => review.track(document, change),
     () => modelLabel(vscode.workspace.getConfiguration('gcode'), process.env),
-    () => lookOf(vscode.workspace.getConfiguration('gcode')),
+    () => ({ ...lookOf(vscode.workspace.getConfiguration('gcode')), tokens: tokens.tokens() }),
     (workspace, sessionId) => openElsewhere(context, workspace, sessionId),
     () => approvalModeOf(vscode.workspace.getConfiguration('gcode')),
     async () => {
@@ -150,6 +153,7 @@ function registerChat(context: vscode.ExtensionContext): void {
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();
+      if (event.affectsConfiguration(TOKENS_SETTING)) tokens.reread();
       if (LOOK_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.restyle();
       if (event.affectsConfiguration(BROWSER_ENABLED_SETTING)) chat.syncBrowser();
     }),

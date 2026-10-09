@@ -22,6 +22,7 @@ import type { MentionCompletion } from './mentions.js';
 import type { CommandOption, SentCommand } from './slash.js';
 import type { CompactMark } from '@g-code/core/compact';
 import type { ReviewMode } from '../review/mode.js';
+import type { ThemeTokens } from './tokens.js';
 
 /**
  * The chat transcript, the one model the panel renders. The extension owns it and sends every change as an
@@ -320,8 +321,11 @@ export type UiStyle = (typeof UI_STYLES)[number];
 export const CHAT_DETAILS = ['compact', 'full'] as const;
 export type ChatDetail = (typeof CHAT_DETAILS)[number];
 
-/** The panel's look from settings, which the page carries as `data-style`, `data-detail` and `data-review` on its body. */
-export type Look = { readonly style: UiStyle; readonly detail: ChatDetail; readonly review: ReviewMode };
+/**
+ * The panel's look from settings, which the page carries as `data-style`, `data-detail` and `data-review` on its body,
+ * and the user's theme tokens (`gcode.appearance.tokens`), which it applies as a stylesheet of their own.
+ */
+export type Look = { readonly style: UiStyle; readonly detail: ChatDetail; readonly review: ReviewMode; readonly tokens?: ThemeTokens | undefined };
 
 /** An approval mode the session can be in, as the engine advertises it through ACP. */
 export type ModeOption = { readonly id: string; readonly name: string; readonly description: string | undefined };

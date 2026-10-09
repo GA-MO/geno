@@ -191,8 +191,15 @@ export async function run(): Promise<void> {
   await setStyle('glass');
   check((await blurOf('.request-bubble')).includes('blur'), 'glass comes back without a reload');
 
+  const muted = () => panel<string>(`getComputedStyle(doc.body).getPropertyValue('--muted').trim()`);
+  await vscode.workspace.getConfiguration('gcode').update('appearance.tokens', { dark: { '--muted': '#ff00aa', '--not-a-token': 'red' } }, vscode.ConfigurationTarget.Global);
+  await waitFor('the dark --muted token to reach the panel', async () => (await muted()) === '#ff00aa');
+  check((await panel<string>(`getComputedStyle(doc.querySelector('.turn-meta')).color`)) === 'rgb(255, 0, 170)', 'the token changes what the panel draws', await panel(`getComputedStyle(doc.querySelector('.turn-meta')).color`));
+
   await useTheme(THEMES['high-contrast']);
   check(await panel<boolean>(`doc.body.classList.contains('vscode-high-contrast')`), 'the theme is high contrast');
+  check((await muted()) !== '#ff00aa', 'high contrast keeps its own --muted while the setting names no high contrast kind', await muted());
+  await vscode.workspace.getConfiguration('gcode').update('appearance.tokens', undefined, vscode.ConfigurationTarget.Global);
   check((await blurOf('.request-bubble')) === 'none', 'high contrast has no blur', await blurOf('.request-bubble'));
   check((await ring()).display === 'none', 'high contrast draws no rainbow', await ring());
   check((await fillOf('button.send')) !== WHITE, 'high contrast keeps the native button colors', await fillOf('button.send'));
