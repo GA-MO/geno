@@ -1,0 +1,27 @@
+{
+  "case": "A35-show-before-after",
+  "area": "show-files",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "The Sign in button on index.html sticks out of the card and it is red. Take a screenshot of the page first with node shot.mjs, then move the button inside the card and make it green (#2ea05c), take another screenshot, and show me the before and after screenshots side by side.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.15,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "e7a483e3",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "web-page",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "b3853a28a1e35d3a2aa278c7c12f515e2c0c23bb"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A35-show-before-after --run <n>"
+}

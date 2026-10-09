@@ -1,0 +1,80 @@
+{
+  "case": "A35-show-before-after",
+  "run": 2,
+  "session": "c5ec7cf0-f57d-47c8-a850-7ef796abf48c",
+  "passed": true,
+  "costUsd": 0.017407052500000002,
+  "classifierUsd": 0,
+  "modelCalls": 11,
+  "toolCalls": 14,
+  "tokens": {
+    "input": 66,
+    "cacheRead": 95871,
+    "cacheWrite": 10067,
+    "output": 2402,
+    "latencyMs": 45286
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=330ch"
+    },
+    {
+      "id": "fixed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "shows-pair",
+      "pass": true,
+      "detail": "ok: [\"before.png\", \"after.png\"]"
+    }
+  ]
+}
