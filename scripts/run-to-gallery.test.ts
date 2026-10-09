@@ -6,6 +6,6 @@ it('the gallery’s real sessions are what the engine’s replay and the panel�
   const sessions = realSessions();
   expect(readFileSync(OUTPUT, 'utf8'), 'the mapping changed: run pnpm tsx scripts/run-to-gallery.ts and review the diff').toBe(renderRealSessions(sessions));
   const card = sessions.find((s) => s.id === 'real-approval')!.actions.at(-1);
-  expect(card).toMatchObject({ type: 'permission', command: 'rm -rf build', rule: 'rm -rf build' });
+  expect(card).toMatchObject({ type: 'permission', command: expect.stringContaining('rm -rf build'), reason: expect.stringContaining('rm -rf of a path inside the workspace') });
   expect(sessions.find((s) => s.id === 'real-subagent')!.actions.map((a) => a.type)).toContain('child-start');
 });

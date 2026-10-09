@@ -53,7 +53,8 @@ function approvalRequest(run: ArchivedRun, conversation: Conversation, toolUseId
   const logged = conversation.events.find((e) => e.kind === 'tool-result' && e.toolUseId === toolUseId)!.approval;
   const scope = { workspace: conversation.workspace, tempDir: tmpdir(), home: homedir() };
   const denial = ruledDenial(call.input.command, scope, 'ask', []);
-  if (denial === undefined || denial.rule !== logged.rule || denial.command !== logged.command) {
+  // The rule must still be the one the run logged; the command the card shows may span more of the line as the rules change.
+  if (denial === undefined || denial.rule !== logged.rule || !denial.command.includes(logged.command)) {
     throw new Error(`${run.rel}: the engine flags ${JSON.stringify(call.input.command)} as ${denial?.rule ?? 'nothing'} today, not ${logged.rule} as the run logged`);
   }
   const rawInput = {
