@@ -52,7 +52,8 @@ describe('the Hooks section of Settings', () => {
     await panel.host.post({ type: 'show-settings' });
     await panel.host.next('hooks-list');
     await panel.host.post({ type: 'hooks', listing: { kind: 'loaded', trusted: true, hooks: [], problems: [] } });
-    expect(await panel.eval(`doc.querySelector('.hooks-section .perm-note').textContent`)).toBe('No hooks. Add one under "hooks" in ~/.claude/settings.json.');
+    expect(await panel.eval(`doc.querySelector('.hooks-section .settings-intro').textContent`)).toContain('from the settings files of .g-code, .agents and .claude, yours and the workspace’s, from .gcode.json, and from installed plugins');
+    expect(await panel.eval(`doc.querySelector('.hooks-section .perm-note').textContent`)).toBe('No hooks. Add one under "hooks" in ~/.g-code/settings.json, or the workspace’s .g-code/settings.json.');
     await panel.host.post({ type: 'hooks', listing: { kind: 'failed', message: 'the engine is not running' } });
     expect(await panel.eval(`doc.querySelector('.hooks-section .perm-note').textContent`)).toBe('the engine is not running');
     expect(await panel.eval(`doc.querySelectorAll('.hook-row').length`)).toBe(0);
