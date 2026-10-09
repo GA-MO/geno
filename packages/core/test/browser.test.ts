@@ -104,6 +104,14 @@ describe('B/B-63 domain and MCP rules in the browser', () => {
   });
 });
 
+describe('what a browser question asks about', () => {
+  it('names the host a navigation opens, without its port, and the tool any other call uses', () => {
+    expect(browserDenialFor(call('new_page', { url: 'https://docs.example.com:8443/guide' }), 'ask', ctx())?.subject).toEqual({ kind: 'browse', url: 'https://docs.example.com:8443/guide', host: 'docs.example.com' });
+    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx())?.subject).toEqual({ kind: 'mcp', server: 'browser', tool: 'click' });
+    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx({ page: remotePage }))).toMatchObject({ rule: 'browser-remote-page', subject: { kind: 'mcp', server: 'browser', tool: 'click' } });
+  });
+});
+
 describe('the browser approval table', () => {
   it('opens a local page without asking in Ask and Auto, for new_page and navigate_page alike', () => {
     for (const tool of ['new_page', 'navigate_page']) {

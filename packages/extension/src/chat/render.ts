@@ -3,7 +3,7 @@ import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { AskUserRequest, BackendShown } from '@g-code/core';
+import type { ApprovalSubject, AskUserRequest, BackendShown } from '@g-code/core';
 import { COMMENT_OPTION } from '@g-code/core/permission-comment';
 import { showsTokens, turnCost } from './backend-model.js';
 import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
@@ -510,7 +510,7 @@ const allowedOf = (block: PermissionBlock): boolean => {
 type CardFace = {
   readonly label: string;
   readonly glyph: string;
-  readonly title: string;
+  readonly title: (block: PermissionBlock) => string;
   readonly body: (block: PermissionBlock) => readonly Child[];
   readonly actions: (block: PermissionBlock, ui: Ui) => HTMLElement;
   readonly settled: (block: PermissionBlock, quiet: boolean) => readonly Child[];
@@ -521,20 +521,24 @@ const SCOPE_TEXT = {
   global: 'Geno will follow this note in every later chat, in every project.',
 } as const;
 
-/** How each kind of waiting card reads: a command to run, a note to keep, or a question to answer. */
-const COMMAND_FACE: CardFace = {
-  label: 'Geno asks to run a command',
-  glyph: 'shield',
-  title: 'Run this command?',
-  body: (block) => [
+/** How each kind of waiting card reads: a command to run, a path, host or MCP tool to reach, a note to keep, or a question to answer. */
+const commandBody =
+  (because: (reason: string) => string) =>
+  (block: PermissionBlock): Child[] => [
     block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
     h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
-    h('p', { class: 'permission-reason' }, `Geno asks because it uses ${block.reason}.`),
+    h('p', { class: 'permission-reason' }, because(block.reason)),
     block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
     block.rule !== undefined &&
       block.outcome.kind === 'open' &&
       h('p', { class: 'permission-reason permission-rule' }, 'Always allow saves the rule ', h('code', {}, block.rule), ' for this workspace. Settings lists its rules.'),
-  ],
+  ];
+
+const COMMAND_FACE: CardFace = {
+  label: 'Geno asks to run a command',
+  glyph: 'shield',
+  title: () => 'Run this command?',
+  body: commandBody((reason) => `Geno asks because it uses ${reason}.`),
   actions: (block, ui) => choiceButtons(block, ui, CHOICE_LABELS),
   settled: (block) => {
     const { outcome } = block;
@@ -545,13 +549,42 @@ const COMMAND_FACE: CardFace = {
   },
 };
 
+function subjectTitle(subject: ApprovalSubject): string {
+  switch (subject.kind) {
+    case 'read':
+      return 'Read outside the workspace?';
+    case 'fetch':
+      return `Fetch from ${subject.host}?`;
+    case 'browse':
+      return `Open a page on ${subject.host}?`;
+    case 'mcp':
+      return `Use ${subject.server} tool ${subject.tool}?`;
+  }
+}
+
+/** A question about what a call reaches rather than a command line: it reads as the command card, under its own title. */
+const reachFace = (label: string, glyph: string): CardFace => ({
+  ...COMMAND_FACE,
+  label,
+  glyph,
+  title: (block) => (block.subject === undefined ? COMMAND_FACE.title(block) : subjectTitle(block.subject)),
+  body: commandBody((reason) => `Geno asks about ${reason}.`),
+});
+
+const SUBJECT_FACES: Readonly<Record<ApprovalSubject['kind'], CardFace>> = {
+  read: reachFace('Geno asks to read outside the workspace', 'folder-opened'),
+  fetch: reachFace('Geno asks to fetch a page', 'globe'),
+  browse: reachFace('Geno asks to open a page', 'globe'),
+  mcp: reachFace('Geno asks to use an MCP tool', 'plug'),
+};
+
 const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFace>> = {
-  edit: { ...COMMAND_FACE, label: 'Geno asks to change a file', glyph: 'edit', title: 'Change this file?' },
+  edit: { ...COMMAND_FACE, label: 'Geno asks to change a file', glyph: 'edit', title: () => 'Change this file?' },
   command: COMMAND_FACE,
   memory: {
     label: 'Geno asks to remember a note',
     glyph: 'bookmark',
-    title: 'Remember this?',
+    title: () => 'Remember this?',
     body: (block) => [
       h('blockquote', { class: 'memory-text' }, block.command),
       h('p', { class: 'permission-reason' }, block.ask?.kind === 'memory' ? `${SCOPE_TEXT[block.ask.scope]} You can change or delete it in /memory.` : ''),
@@ -564,7 +597,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
   workflow: {
     label: 'Geno asks to run a workflow',
     glyph: 'run-all',
-    title: 'Run this workflow?',
+    title: () => 'Run this workflow?',
     body: (block) => (block.ask?.kind === 'workflow' ? workflowCardBody(block.ask.preview) : []),
     actions: (block, ui) => choiceButtons(block, ui, {}),
     settled: (block) => [
@@ -574,7 +607,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
   question: {
     label: 'Geno asks you a question',
     glyph: 'question',
-    title: 'Geno asks',
+    title: () => 'Geno asks',
     body: () => [],
     actions: (block, ui) => questionCard(block.id, requestOf(block), { post: ui.post, markdown: (text) => textBlock(text, false, ui) }),
     settled: (block, quiet) => settledQuestion(requestOf(block), block.outcome, quiet),
@@ -586,7 +619,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
  * A `quiet` card is one a compact turn keeps in view while its work is folded: an answered question shows only its line.
  */
 export function permissionCard(block: PermissionBlock, ui: Ui, quiet = false): HTMLElement {
-  const face = FACES[block.ask?.kind ?? (block.toolKind === 'edit' ? 'edit' : 'command')];
+  const face = block.ask === undefined && block.subject !== undefined ? SUBJECT_FACES[block.subject.kind] : FACES[block.ask?.kind ?? (block.toolKind === 'edit' ? 'edit' : 'command')];
   const folded = quiet && block.ask?.kind === 'question' && block.outcome.kind !== 'open';
   return h(
     'section',
@@ -596,7 +629,7 @@ export function permissionCard(block: PermissionBlock, ui: Ui, quiet = false): H
       'aria-label': face.label,
       'data-permission': block.id,
     },
-    !folded && h('div', { class: 'permission-title' }, icon(face.glyph), h('span', {}, face.title)),
+    !folded && h('div', { class: 'permission-title' }, icon(face.glyph), h('span', {}, face.title(block))),
     ...(folded ? [] : face.body(block)),
     ...(block.outcome.kind === 'open' ? [face.actions(block, ui)] : face.settled(block, folded)),
   );

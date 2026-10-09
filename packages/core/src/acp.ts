@@ -1,5 +1,6 @@
 /** g-code's additions to the Agent Client Protocol, shared by the engine and the extension. docs/e12.md maps every flow. */
 
+import type { ApprovalSubject } from './approval.js';
 import type { ExternalBackendId } from './backends.js';
 import type { Invocation } from './commands.js';
 import type { HunkStatus } from './hunks.js';
@@ -42,8 +43,9 @@ export const APPROVAL_META = 'gcode/approval';
 /**
  * session/request_permission's `toolCall.rawInput`: the command asked about, why it needs asking, and the bash call's
  * own description, for display only. `rule` is the pattern "Always allow in this workspace" saves, when offered.
+ * `subject` names the path, host or MCP tool a question asks about when it is not a command line.
  */
-export type PermissionInput = { readonly command: string; readonly reason: string; readonly description?: string; readonly rule?: string };
+export type PermissionInput = { readonly command: string; readonly reason: string; readonly description?: string; readonly rule?: string; readonly subject?: ApprovalSubject };
 
 /** The JSON-RPC error a client answers fs/write_text_file with when the file no longer holds that text. */
 export const STALE_BASE_ERROR = { code: -32010, reason: 'stale-base' } as const;

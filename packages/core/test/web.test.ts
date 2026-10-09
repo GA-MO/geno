@@ -144,7 +144,11 @@ describe('webDenialFor', () => {
 
   it('puts the host on the card, and the URL it was redirected from', () => {
     const denial = webDenialFor({ kind: 'fetch', target: webTargetOf('https://nextjs.org/docs'), redirectedFrom: 'http://localhost:3000/go' }, 'ask');
-    expect(denial).toMatchObject({ rule: 'web-remote-url', command: 'fetch https://nextjs.org/docs (host nextjs.org), redirected from http://localhost:3000/go' });
+    expect(denial).toMatchObject({
+      rule: 'web-remote-url',
+      command: 'fetch https://nextjs.org/docs (host nextjs.org), redirected from http://localhost:3000/go',
+      subject: { kind: 'fetch', url: 'https://nextjs.org/docs', host: 'nextjs.org' },
+    });
   });
 
   it('B/B-63 follows a domain rule on the host first: an allow fetches unasked, a deny refuses in every mode, and an ask asks in Auto', () => {

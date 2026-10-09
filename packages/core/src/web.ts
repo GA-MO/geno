@@ -1,5 +1,5 @@
 import type { MessageStreamParams, Tool } from '@anthropic-ai/sdk/resources/messages/messages';
-import { WEB_RULES, type ApprovalMode, type Denial, type WebRuleId } from './approval.js';
+import { WEB_RULES, withSubject, type ApprovalMode, type Denial, type WebRuleId } from './approval.js';
 import { isLocalHost } from './browser.js';
 import { neutralizeNoticeLines } from './fence.js';
 import { domainRuleFor, ruleText, toolRuleOutcome, type PermissionRule } from './permission-rules.js';
@@ -176,6 +176,11 @@ export const hostnameOf = (url: string): string => new URL(url).hostname;
  * that host for the workspace.
  */
 export function webDenialFor(action: WebAction, mode: ApprovalMode, rules: readonly PermissionRule[] = []): Denial | undefined {
+  const denial = webRuleDenial(action, mode, rules);
+  return action.kind === 'fetch' && action.target.kind !== 'refused' ? withSubject(denial, { kind: 'fetch', url: action.target.url, host: hostnameOf(action.target.url) }) : denial;
+}
+
+function webRuleDenial(action: WebAction, mode: ApprovalMode, rules: readonly PermissionRule[]): Denial | undefined {
   const command = webActionCommand(action);
   if (action.kind === 'fetch' && action.target.kind !== 'refused') {
     const ruled = toolRuleOutcome(domainRuleFor('web_fetch', hostnameOf(action.target.url), rules), mode, command);

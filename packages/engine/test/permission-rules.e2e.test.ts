@@ -225,6 +225,7 @@ describe('remembered permission rules', () => {
     });
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.toolCall.title).toBe(`Allow \`read ${path.join(outside, 'a.md')}\`? It uses a path outside the workspace.`);
+    expect(permissions[0]!.toolCall.rawInput).toMatchObject({ subject: { kind: 'read', path: path.join(outside, 'a.md') } });
     expect(permissions[0]!.options.map((o) => [o.optionId, o.name])).toEqual([
       ['allow', 'Allow once'],
       ['allow-session', 'Allow this directory for the session'],

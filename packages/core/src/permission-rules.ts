@@ -16,6 +16,7 @@ import {
   type Flag,
   type ParsedCommand,
   type SimpleCommand,
+  withSubject,
 } from './approval.js';
 
 /** `ask` puts the question to the user in Ask and Auto alike, and refuses where nobody can answer. */
@@ -494,10 +495,11 @@ export type McpCall = { readonly name: string; readonly server: string; readonly
  * allow that one tool for the workspace.
  */
 export function mcpCallDenial(call: McpCall, mode: ApprovalMode, allowedForSession: boolean, rules: readonly PermissionRule[]): Denial | undefined {
+  const subject = { kind: 'mcp', server: call.server, tool: call.tool } as const;
   const ruled = toolRuleOutcome(mcpRuleFor(call, rules), mode, call.name);
-  if (ruled?.kind === 'ruled') return ruled.denial;
+  if (ruled?.kind === 'ruled') return withSubject(ruled.denial, subject);
   const denial = mcpDenialFor(call, mode, allowedForSession || ruled?.kind === 'allowed');
-  return denial === undefined || denial.verdict === 'deny' ? denial : { ...denial, keeps: mcpToolRuleName(call.server, call.tool) };
+  return withSubject(denial === undefined || denial.verdict === 'deny' ? denial : { ...denial, keeps: mcpToolRuleName(call.server, call.tool) }, subject);
 }
 
 const PLAIN_WORD = /^[\w@%+=:,./-]+$/;

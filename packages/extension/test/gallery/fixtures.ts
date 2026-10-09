@@ -668,8 +668,14 @@ export const FIXTURES: readonly Fixture[] = [
     play: async ({ host }) =>
       asking(
         host,
-        { command: 'read /Users/me/.ssh/config', reason: 'a path outside the workspace', options: [PERMISSION_OPTIONS[0], { optionId: 'allow-session', name: 'Allow this directory for the session', kind: 'allow_always' }, PERMISSION_OPTIONS[1], COMMENT], toolKind: 'read' },
-        { narration: 'Reading the SSH config.', name: 'read', input: { path: '/Users/me/.ssh/config' } },
+        {
+          command: 'read /Users/me/notes/release-plan.md',
+          reason: 'a path outside the workspace',
+          options: [PERMISSION_OPTIONS[0], { optionId: 'allow-session', name: 'Allow this directory for the session', kind: 'allow_always' }, PERMISSION_OPTIONS[1], COMMENT],
+          toolKind: 'read',
+          subject: { kind: 'read', path: '/Users/me/notes/release-plan.md' },
+        },
+        { narration: 'Reading the release plan.', name: 'read', input: { path: '/Users/me/notes/release-plan.md' } },
       ),
   },
   {
@@ -679,8 +685,32 @@ export const FIXTURES: readonly Fixture[] = [
     play: async ({ host }) =>
       asking(
         host,
-        { command: 'web_fetch https://docs.stripe.com/api/charges', reason: 'fetching a page from another host', rule: 'WebFetch(domain:docs.stripe.com)', options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT], toolKind: 'other' },
+        {
+          command: 'fetch https://docs.stripe.com/api/charges (host docs.stripe.com)',
+          reason: 'fetching a page from another host',
+          rule: 'WebFetch(domain:docs.stripe.com)',
+          options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT],
+          toolKind: 'other',
+          subject: { kind: 'fetch', url: 'https://docs.stripe.com/api/charges', host: 'docs.stripe.com' },
+        },
         { narration: 'Checking the Stripe docs.', name: 'web_fetch', input: { url: 'https://docs.stripe.com/api/charges' } },
+      ),
+  },
+  {
+    id: 'approve-browse',
+    group: 'Approval cards',
+    title: 'Open a page on another host',
+    play: async ({ host }) =>
+      asking(
+        host,
+        {
+          command: 'open https://dashboard.stripe.com/test/payments (host dashboard.stripe.com)',
+          reason: 'opening a page on another host',
+          options: [...PERMISSION_OPTIONS, COMMENT],
+          toolKind: 'other',
+          subject: { kind: 'browse', url: 'https://dashboard.stripe.com/test/payments', host: 'dashboard.stripe.com' },
+        },
+        { narration: 'Opening the payments dashboard.', name: 'mcp__browser__new_page', input: { url: 'https://dashboard.stripe.com/test/payments' } },
       ),
   },
   {
@@ -691,11 +721,12 @@ export const FIXTURES: readonly Fixture[] = [
       asking(
         host,
         {
-          command: 'mcp__github__create_issue {"title":"Login fails with a trailing space","labels":["bug"]}',
+          command: 'mcp__github__create_issue',
           reason: 'an MCP tool',
           rule: 'mcp__github__create_issue',
           options: [PERMISSION_OPTIONS[0], { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' }, PERMISSION_OPTIONS[1], WORKSPACE_RULE, COMMENT],
           toolKind: 'other',
+          subject: { kind: 'mcp', server: 'github', tool: 'create_issue' },
         },
         { narration: 'Filing the issue.', name: 'mcp__github__create_issue', input: { title: 'Login fails with a trailing space' } },
       ),

@@ -3,6 +3,7 @@ import { denialFor, type ApprovalMode, type CommandScope, type Denial } from '..
 import {
   domainMatches,
   domainRuleFor,
+  mcpCallDenial,
   mcpRuleFor,
   mcpToolRuleName,
   parseRule,
@@ -482,6 +483,13 @@ describe('MCP rules', () => {
     const rules = [stored({ effect: 'allow', mcp: 'mcp__docs' }, 0), stored({ effect: 'deny', mcp: 'mcp__docs__delete' }, 1)];
     expect(mcpRuleFor({ server: 'docs', tool: 'delete' }, rules)?.id).toBe('r1');
     expect(mcpRuleFor({ server: 'docs', tool: 'search' }, rules)?.id).toBe('r0');
+  });
+
+  it("names the server and the tool a question asks about, whether a rule or the mode asks", () => {
+    const call = { name: 'mcp__github__create_issue', server: 'github', tool: 'create_issue', readOnly: false };
+    const subject = { kind: 'mcp', server: 'github', tool: 'create_issue' };
+    expect(mcpCallDenial(call, 'ask', false, [])).toMatchObject({ rule: 'mcp-tool', subject });
+    expect(mcpCallDenial(call, 'auto', false, [stored({ effect: 'ask', mcp: 'mcp__github' })])).toMatchObject({ rule: 'workspace-ask', subject });
   });
 });
 
