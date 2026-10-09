@@ -28,7 +28,7 @@ export type SessionWakes = {
 export type StartCommand = (command: string, description: string | undefined, ctx: ToolContext) => Promise<{ readonly job: JobId; readonly text: string; readonly approval: ApprovalRecord | undefined }>;
 
 export const NO_WAKES =
-  'nothing would wake this session: auto-wake is off in the settings, or this run ends when its call does. Wait in this turn with bash_output instead, or tell the user what to check later.';
+  'nothing would wake this session: auto-wake is off in the settings, or this run ends when its call does. Wait in this turn instead, with one foreground bash command that ends when the condition holds, such as until curl -sf http://localhost:3000/health; do sleep 0.5; done, or read the output with bash_output; or tell the user what to check later.';
 
 const withApproval = (text: string, approval: ApprovalRecord | undefined) => (approval === undefined ? text : { text, approval });
 
