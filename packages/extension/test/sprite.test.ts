@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DINO_FILES } from '../src/dino.js';
-import { compose, composePeek, crop, flip, framesOf, PALETTE, PEEK_MOVES, POSE_NAMES, POSES, rotate, SIZE, svgOf, type Frame, type Grid, type PeekFrame } from '../src/chat/sprite.js';
+import { compose, composePeek, crop, flip, framesOf, PALETTE, PEEK_MOVES, POSE_NAMES, POSES, rotate, SITTING, SIZE, svgOf, type Frame, type Grid, type PeekFrame } from '../src/chat/sprite.js';
 
 const STAND: Frame = { eye: 'open', tail: 'down', legs: 'stand', arms: 'none' };
 
@@ -91,6 +91,39 @@ describe('the sprite', () => {
     expect(inks(compose(POSES.sweat.loop[0]!)).has('b')).toBe(true);
   });
 
+  it('sits up for what it holds, stands on its hind legs to flex, and stays on four legs for the rest', () => {
+    const postures = Object.fromEntries(POSE_NAMES.map((name) => [name, [...new Set(framesOf(POSES[name]).map((f) => `${f.body ?? 'four'} ${f.legs}`))]]));
+    expect(postures).toMatchObject({ reading: ['upright haunch'], coding: ['upright haunch'], writing: ['upright haunch'], planning: ['upright haunch'], flex: ['upright rear', 'four stand'] });
+    for (const name of ['idle', 'thinking', 'running', 'asking', 'hop', 'sweat', 'somersault', 'face'] as const)
+      expect(postures[name]!.every((p) => p.startsWith('four')), name).toBe(true);
+  });
+
+  it('keeps the head, eye and ground line when it sits up', () => {
+    const lowest = (grid: Grid) => grid.findLastIndex((row) => /[^.]/.test(row));
+    expect(compose(SITTING).slice(0, 12)).toEqual(compose(STAND).slice(0, 12));
+    expect(lowest(compose(SITTING))).toBe(lowest(compose(STAND)));
+    expect(lowest(compose(POSES.flex.loop[0]!))).toBe(lowest(compose(STAND)));
+    expect(compose(SITTING).join('')).toMatch(/w/);
+  });
+
+  it('holds and works each prop with a foreleg that reaches it, not a stub beside it', () => {
+    const cells = (grid: Grid) => new Set(grid.flatMap((row, y) => [...row].map((ink, x) => `${x},${y},${ink}`)));
+    const changed = (a: Grid, b: Grid) => {
+      const before = cells(b);
+      return [...cells(a)].filter((c) => !before.has(c)).map((c) => c.split(',').slice(0, 2).map(Number) as [number, number]);
+    };
+    for (const name of ['reading', 'coding', 'writing', 'planning'] as const)
+      for (const frame of POSES[name].loop) {
+        expect(frame.arms, name).not.toBe('none');
+        const { prop: _, ...unheld } = frame;
+        const bare = compose({ ...frame, arms: 'none' });
+        const prop = changed(bare, compose({ ...unheld, arms: 'none' }));
+        const leg = changed(compose(frame), bare);
+        const touches = leg.some(([x, y]) => prop.some(([px, py]) => Math.abs(px - x) + Math.abs(py - y) <= 1));
+        expect(touches, `${name} ${JSON.stringify(frame)}`).toBe(true);
+      }
+  });
+
   it('flexes with both arms up, happy eyes and a sparkle; the hop sparkles too; both play once', () => {
     const flexed = POSES.flex.loop[0]!;
     expect([flexed.arms, flexed.eye]).toEqual(['flex', 'happy']);
@@ -160,21 +193,36 @@ function bodies(grid: Grid): number {
 }
 
 describe('the peek over the composer', () => {
-  it('is one connected body: head, neck, chest with a white belly, arms, and two 3 by 2 hands with darker knuckles on the edge', () => {
+  it('is one connected body: head, neck, chest with a white belly, and two forelegs ending in wide paws hooked over the edge', () => {
     const grid = composePeek(GRIP);
     expect(grid).toHaveLength(SIZE);
     expect(bodies(grid)).toBe(1);
     expect(PALETTE.d).toBe('#4fae86');
-    // The hands sit on the bottom two rows, the composer's edge, one each side of the chest.
-    const hands = grid.slice(SIZE - 2).map((row) => [...row.matchAll(/[gd]{3}/g)].map((m) => `${m.index}:${m[0]}`));
-    expect(hands).toEqual([
-      ['6:dgd', '21:dgd'],
-      ['6:ggg', '21:ggg'],
-    ]);
-    expect(grid[SIZE - 3]!.slice(10, 20)).toBe('ggwwwwwwgg');
     expect(grid[3]!.slice(17, 19)).toBe('wk');
-    // Outside the chest, only the hands reach the edge.
-    expect([grid[SIZE - 1]!.slice(0, 10), grid[SIZE - 1]!.slice(20)]).toEqual(['......ggg.', '.ggg']);
+    // The edge row: the chest, and beside it only the paws, their toes split by the darker green.
+    expect(grid[SIZE - 1]).toBe('......gdgdg.gwwwwg.gdgdg');
+    // A paw is wider than the leg above it.
+    const widths = (row: string) => [...row.matchAll(/g+/g)].map((m) => m[0].length);
+    expect(widths(grid[SIZE - 2]!)).toEqual([5, 1, 1, 5]);
+    expect(widths(grid[SIZE - 6]!)).toEqual([3, 1, 1, 3]);
+  });
+
+  it('draws the two paws as mirrors of each other about the chest, below the head', () => {
+    const mirror = (row: string) => [...row].map((_, x) => row[29 - x] ?? '.').join('');
+    const below = (grid: Grid) => grid.slice(7);
+    for (const hand of ['grip', 'lift', 'off'] as const) {
+      const grid = below(composePeek({ ...GRIP, left: hand, right: hand }));
+      expect(grid.map(mirror), hand).toEqual(grid);
+    }
+    const leftUp = below(composePeek({ ...GRIP, left: 'lift' }));
+    expect(below(composePeek({ ...GRIP, right: 'lift' }))).toEqual(leftUp.map(mirror));
+  });
+
+  it('touches the edge only with its paws: a lifted paw leaves it, a let-go leg hangs past it', () => {
+    const edge = (frame: PeekFrame) => composePeek(frame)[SIZE - 1]!;
+    expect(edge({ ...GRIP, right: 'lift' })).toBe('......gdgdg.gwwwwg......');
+    expect(edge({ ...GRIP, left: 'off', right: 'off' })).toBe('.......ggg..gwwwwg..ggg.');
+    expect(edge({ ...GRIP, right: 'waveA' })).toBe('......gdgdg.gwwwwg......');
   });
 
   it('has the moves the brief keeps: climb, typing, look around, drum, wave and duck', () => {

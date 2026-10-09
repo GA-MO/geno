@@ -1,4 +1,4 @@
-import { POSES, SIZE, STAND, type Frame } from './sprite.js';
+import { POSES, SITTING, SIZE, STAND, type Frame } from './sprite.js';
 
 /**
  * Noodle wandering the start page, as a pure scene a tick advances. Each move is a row of MOVES: how likely it is
@@ -108,13 +108,13 @@ export const MOVES = {
     weight: 1,
     speed: 0,
     length: { ground: [18, 24] },
-    frame: (t) => ({ ...STAND, arms: Math.floor(t / 3) % 2 === 0 ? 'up' : 'out' }),
+    frame: (t) => ({ ...SITTING, arms: Math.floor(t / 3) % 2 === 0 ? 'up' : 'out' }),
   },
   flex: {
     weight: 1,
     speed: 0,
     length: { ground: [16, 22] },
-    frame: (t) => ({ ...STAND, arms: 'flex', eye: 'happy', ...(Math.floor(t / 3) % 2 === 1 ? { marks: ['sparkle'] as const } : {}) }),
+    frame: (t) => looped(POSES.flex.loop.filter((frame) => frame.arms === 'flex'), t),
   },
 } as const satisfies Record<string, Move>;
 export type MoveName = keyof typeof MOVES;

@@ -186,7 +186,7 @@ describe('the start page and the peek in the chat webview', () => {
       `(() => { const p = doc.querySelector('.peek').getBoundingClientRect(); const b = doc.querySelector('.input-box').getBoundingClientRect(); const rows = doc.querySelector('.peek-body').dataset.frame.match(/.{24}/g); return { peek: p.bottom, box: b.top, right: p.right, boxRight: b.right, tray: doc.querySelector('.tray').hidden ? b.top : doc.querySelector('.tray').getBoundingClientRect().top, hands: rows.slice(22).join('/') }; })()`,
     );
     expect(Math.abs(sits.peek - sits.box) <= 2 && sits.right > sits.boxRight - 100 && sits.peek <= sits.tray + 2, `Noodle leans on the composer's top edge, on the right, above the tray: ${JSON.stringify(sits)}`).toBe(true);
-    expect(sits.hands.split('/')[0], 'both hands grip the edge, knuckles up').toMatch(/dgd.*dgd/);
+    expect(sits.hands.split('/')[1], 'both paws hook over the edge, toes down').toMatch(/gdgdg.*gdgdg/);
 
     // A pause in typing brings one move, then Noodle watches again.
     await panel.waitFor('one move after a pause', async () => (await peekSeen(panel)).some((state) => state === 'drum' || state === 'lookAround'));
