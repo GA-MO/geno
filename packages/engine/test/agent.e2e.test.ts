@@ -196,6 +196,26 @@ describe('gcode agent', () => {
     expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 5;\n');
   });
 
+  it('G-05 keeps the reads of an earlier run of a resumed session, and edits a file that changed since only as the change note told it', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 1;\n' });
+    const transport = fakeTransport([
+      toolCall('Reading.', [use('read', { path: 'a.ts' }), use('read', { path: 'b.ts' })], usage),
+      answer('Read both.', usage),
+      toolCall('Editing.', [use('edit', { path: 'a.ts', old_str: 'a = 1', new_str: 'a = 2' }), use('edit', { path: 'b.ts', old_str: 'b = 3', new_str: 'b = 4' })], usage),
+      answer('Done.', usage),
+    ]);
+    const first = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Read a and b'], env, { fetch: transport.fetch });
+    const id = sessionIdOf(first.stdout);
+    writeFileSync(path.join(workspace, 'b.ts'), 'export const b = 3;\n');
+    expect((await runCli(['agent', '--session', id, '--non-interactive', 'Change them'], env, { fetch: transport.fetch })).code).toBe(0);
+    const log = await readSessionLog(sessionFile(store, asSessionId(id)));
+    const edits = ofKind(log.events, 'tool-result').filter((r) => r.name === 'edit');
+    expect(edits.map((r) => r.status)).toEqual(['ok', 'ok']);
+    expect(ofKind(log.events, 'file-changed').map((e) => e.shown), 'the model heard of the change before it edited').toEqual(['b.ts']);
+    expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    expect(readFileSync(path.join(workspace, 'b.ts'), 'utf8')).toBe('export const b = 4;\n');
+  });
+
   it('denies every deny-list rule without asking in non-interactive mode, and runs npx vitest run', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
     const denied = [
