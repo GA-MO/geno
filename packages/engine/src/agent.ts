@@ -66,7 +66,7 @@ import { commandClassifier } from './classifier.js';
 import { addedDirectories, settingDirectories, workingDirectories } from './directories.js';
 import { UsageError, type Command, type Io } from './command.js';
 import { EngineError } from './errors.js';
-import { writeGenoTools } from './geno-tools.js';
+import { pstackMap, writeGenoTools } from './geno-tools.js';
 import { drive, issuedOnce, openForPrompt, positiveNumber, terminalSurface, type Director, type DriveResult, type Limits, type Mode, type Surface } from './drive.js';
 import { Steers } from './steer.js';
 import { laneFor } from './lane-hooks.js';
@@ -270,6 +270,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         diagnostics: place.diagnostics,
         rules: ruleAttacher(opened.log.events),
         commands,
+        // Read at each call: the mapping's file is written once the run's tools are known.
+        skillNote: (name: string) => (genoTools !== undefined && name.startsWith('pstack:') ? pstackMap(genoTools, { subagents: own && agentTool }) : undefined),
         lane: place.lane,
         background: own ? { jobs, sessionId: session.id } : undefined,
         permissions,

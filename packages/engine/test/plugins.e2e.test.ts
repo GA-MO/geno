@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { AGENT_PROMPTS, asSessionId, DEFERRED_TOOLS_NOTE, toolResultText, WORKSPACE_TRUST_CAPABILITY, type TurnEvent } from '@g-code/core';
 import type { Io } from '../src/command.js';
 import { gcodeAgent } from '../src/serve.js';
-import { renderGenoTools } from '../src/geno-tools.js';
+import { pstackMap, renderGenoTools } from '../src/geno-tools.js';
 import { readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, loadTools, toolCall, type FakeToolUse } from './fake-transport.js';
@@ -76,6 +76,7 @@ describe('pstack through gcode agent', () => {
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(run.stdout))));
     const [, skill, read, bash] = results(log.events);
     expect(skill).toEqual({ name: 'skill', status: 'ok', output: expect.stringContaining('# How\n\nRead references/explorer.md first.') });
+    expect(skill!.output.endsWith(`\n\n${pstackMap(genoTools, { subagents: false })}`), 'the mapping rows follow the skill (ISSUES.md P-08)').toBe(true);
     expect(read).toEqual({ name: 'read', status: 'ok', output: '1\tExplore with grep.' });
     expect(bash).toMatchObject({ name: 'bash', status: 'error', output: expect.stringMatching(/^Exit code 1\n[\s\S]*Operation not permitted[\s\S]*\[exit code 1\]$/) });
     expect(existsSync(escaped)).toBe(false);

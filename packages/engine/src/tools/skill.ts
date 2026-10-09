@@ -15,11 +15,11 @@ const typedByUser = (events: readonly TurnEvent[], name: string): boolean =>
   events.some((e) => e.kind === 'user' && e.from === undefined && e.command?.name === name);
 
 /**
- * The `skill` tool: a skill's SKILL.md by name, from the same discovery as the slash commands and the listing, so a
+ * The `skill` tool: a skill's SKILL.md by name, and `noteFor`'s text after it when it has some for that skill, from the same discovery as the slash commands and the listing, so a
  * plugin skill hidden from the slash list still loads. `commands` is read on each call, as the folders are now. With
  * `start`, a `context: fork` skill runs as a subagent; without it, as in a subagent, which starts none, it loads here.
  */
-export function skillExecutor(commands: () => Promise<readonly SlashCommand[]>, start?: StartChild): Executor {
+export function skillExecutor(commands: () => Promise<readonly SlashCommand[]>, start?: StartChild, noteFor?: (name: string) => string | undefined): Executor {
   return executor({
     // A forked skill may start a subagent that edits, which must run alone.
     ...(start === undefined ? { concurrent: ALWAYS } : {}),
@@ -36,7 +36,8 @@ export function skillExecutor(commands: () => Promise<readonly SlashCommand[]>, 
         throw new ToolError(`no skill named ${name}; ${names.length === 0 ? 'there are no skills' : `the skills are ${names.join(', ')}`}`);
       }
       const folder = path.dirname(skill.path);
-      const text = `Skill ${name}, from ${skill.path}. Resolve relative paths in it against ${folder}.\n\n${withArgs(parseFrontmatter(skill.text).body, args ?? '')}`;
+      const note = noteFor?.(name);
+      const text = `Skill ${name}, from ${skill.path}. Resolve relative paths in it against ${folder}.\n\n${withArgs(parseFrontmatter(skill.text).body, args ?? '')}${note === undefined ? '' : `\n\n${note}`}`;
       if (skill.fork === undefined || start === undefined) return text;
       return start(skill.fork.agent ?? 'worker', text, ctx);
     },

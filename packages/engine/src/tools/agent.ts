@@ -310,6 +310,8 @@ export type AgentToolEnv = {
   readonly rules: RuleAttacher;
   /** The slash commands as discovered now, for the skill tool. */
   readonly commands: () => Promise<readonly SlashCommand[]>;
+  /** What the skill tool adds after a skill's body, such as the tool mapping for a pstack skill. */
+  readonly skillNote?: ((name: string) => string | undefined) | undefined;
   /** Set when the session runs in a lane: commands that would reach the main checkout are refused. */
   readonly lane?: LaneBounds | undefined;
   /** Where the session's background commands run; undefined for a subagent, which starts none. */
@@ -733,7 +735,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     check,
     recall: recallExecutor(tools.recall),
-    skill: skillExecutor(tools.commands, tools.children?.start),
+    skill: skillExecutor(tools.commands, tools.children?.start, tools.skillNote),
     todo,
     watch_pr: watchPrExecutor(tools.wakes, tools.pr),
   };

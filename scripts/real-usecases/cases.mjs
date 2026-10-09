@@ -273,7 +273,7 @@ export const CASES = [
     prompt: 'ใช้ poteto-mode ช่วยเพิ่มระบบคะแนน: เหรียญแต่ละเหรียญได้ 10 คะแนน และแสดงคะแนนมุมซ้ายบนของจอ พร้อมเทสของ logic',
     checks: [
       { id: 'skill-poteto', what: 'loads pstack:poteto-mode', test: (run) => ok(named(run, 'skill').some((c) => /poteto-mode/.test(JSON.stringify(c.input)))) },
-      { id: 'reads-geno-tools', what: 'reads geno-tools.md before following the pstack skill', test: (run) => ok(named(run, 'read').some((c) => /geno-tools\.md/.test(pathOf(c)))) },
+      { id: 'reads-geno-tools', what: 'has the geno-tools mapping before following the pstack skill: reads geno-tools.md, or gets its rows with the skill (P-08)', test: (run) => ok(named(run, 'read').some((c) => /geno-tools\.md/.test(pathOf(c))) || named(run, 'skill').some((c) => outputOf(c).includes('Geno runs this pstack skill with its own tools'))) },
       verify('score-test', 'score tests pass', 'node --test'),
       { id: 'score-10', what: 'collectCoin adds 10 points', verify: "node -e \"import('./src/logic/score.js').then(m=>{const s=m.collectCoin(m.createState());process.exit(s.score===10?0:1)})\"" },
       thai,

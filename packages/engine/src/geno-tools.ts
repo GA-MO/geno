@@ -21,6 +21,25 @@ export function renderGenoTools({ subagents }: GenoToolsShape): string {
 }
 
 /**
+ * The rows of docs/geno-tools.md a pstack skill needs most, appended to its `skill` result: the system prompt's pointer
+ * to the file alone went unread (ISSUES.md P-08).
+ */
+export function pstackMap(file: string, { subagents }: GenoToolsShape): string {
+  return [
+    `Geno runs this pstack skill with its own tools. The whole mapping is in ${file}; the rows that matter most:`,
+    '- Skill, or a /command such as /pstack:how: skill with { "name": "pstack:how" }.',
+    '- ToolSearch: tool_search, to load a tool listed by name only.',
+    subagents
+      ? '- Agent or Task: agent with { "agent": "<name>", "task": "<everything it needs>" }; subagent_type is agent and prompt is task. There is no model parameter.'
+      : '- Agent or Task: not available in this run. Do the work yourself in one pass, and say in your reply that a panel ran as one model.',
+    '- TaskCreate, TaskUpdate or TodoWrite: todo, with the whole list each time.',
+    '- AskUserQuestion: ask in plain text at the end of your reply and end your turn. In a non-interactive run nobody answers, so choose the default, say which, and go on.',
+    '- Write: edit with create: true and the whole content.',
+    '- Bash with run_in_background, Monitor: bash with run_in_background, then monitor with a pattern.',
+  ].join('\n');
+}
+
+/**
  * Writes the run's rendering of docs/geno-tools.md, embedded in the bundle, to `<home>` when it is missing or stale, and
  * returns its real path for the read tools. Each rendering has its own file, so runs with and without subagents never
  * rewrite each other's. The rename keeps a concurrent session from reading half a file.
