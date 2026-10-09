@@ -74,6 +74,7 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ['curl --proxy=http://proxy.example.com http://localhost:3000', 'network-download'],
   ['curl -K curl.cfg http://localhost:3000', 'network-download'],
   ['curl http://localhost:3000 https://example.com', 'network-download'],
+  ['curl -s https://example.com > /dev/null 2>&1', 'network-download'],
   ['echo "$(curl -s https://example.com)"', 'network-download'],
   ['cat <<EOF\n$(curl -s https://example.com)\nEOF', 'network-download'],
   ['cat .env', 'secret-path'],
@@ -147,6 +148,8 @@ const ALLOWED = [
   'curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:3100/',
   'curl http://[::1]:8080/health',
   'wget -qO- http://localhost:5173',
+  'until curl -sf http://localhost:5173/health >/dev/null 2>&1; do sleep 0.5; done',
+  'curl -s http://localhost:5173/health > /dev/null',
 ];
 
 // Every command the Phase 4 evals (E5 and E14 on qwen3.8-flash) denied, verbatim from the session logs.
@@ -473,7 +476,7 @@ describe('splitCommand', () => {
     expect(splitCommand(`echo "a && b" 'c|d' && ls -la | wc -l 2>&1 >out.txt; # comment`)).toEqual([
       ['echo', 'a && b', 'c|d'],
       ['ls', '-la'],
-      ['wc', '-l', '1', 'out.txt'],
+      ['wc', '-l', 'out.txt'],
     ]);
   });
 

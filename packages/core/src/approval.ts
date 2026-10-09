@@ -221,7 +221,7 @@ function onlyLocalUrls(options: DownloaderOptions, args: readonly string[]): boo
         }
         if (!options.flags.includes(letter)) return false;
       }
-    } else if (!isLocalUrl(arg)) return false;
+    } else if (!isLocalUrl(arg) && arg !== '/dev/null') return false;
   }
   return true;
 }
@@ -663,6 +663,8 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       if (word !== null && /^\d$/.test(word)) word = null;
       endWord();
       i += redirect.length - 1;
+      // `>&1` and `>&-` name a file descriptor, not a file.
+      if (redirect === '>&') i += /^(?:\d+|-)?/.exec(src.slice(i + 1))![0].length;
       continue;
     }
     if (/\s/.test(ch)) {
