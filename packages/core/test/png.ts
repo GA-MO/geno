@@ -23,14 +23,21 @@ function chunk(type: string, data: Buffer): Buffer {
 
 export type Rgb = readonly [number, number, number];
 
-/** An RGB PNG whose left half is `left` and right half `right`. */
-export function twoColorPng(width: number, height: number, left: Rgb, right: Rgb): Buffer {
+/** An RGB PNG with each pixel the color `pixel` gives it. */
+export function paintPng(width: number, height: number, pixel: (x: number, y: number) => Rgb): Buffer {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr.set([8, 2, 0, 0, 0], 8);
-  const row = Buffer.alloc(1 + width * 3);
-  for (let x = 0; x < width; x++) row.set(x < width / 2 ? left : right, 1 + x * 3);
-  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  const raw = Buffer.concat(
+    Array.from({ length: height }, (_, y) => {
+      const row = Buffer.alloc(1 + width * 3);
+      for (let x = 0; x < width; x++) row.set(pixel(x, y), 1 + x * 3);
+      return row;
+    }),
+  );
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
+
+/** An RGB PNG whose left half is `left` and right half `right`. */
+export const twoColorPng = (width: number, height: number, left: Rgb, right: Rgb): Buffer => paintPng(width, height, (x) => (x < width / 2 ? left : right));

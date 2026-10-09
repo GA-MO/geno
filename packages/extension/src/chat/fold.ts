@@ -126,6 +126,8 @@ export function turnView(turn: Turn, carried: TodoList = []): TurnView {
   };
 }
 
+const showsFiles = (step: Step): boolean => step.kind === 'calls' && step.tools.some((tool) => tool.shown !== undefined);
+
 /** A running turn shows its current step and the three before it. */
 const RECENT = 4;
 
@@ -134,8 +136,8 @@ type Folded = { readonly shown: readonly Step[]; readonly label: ((open: boolean
 /** What a compact turn keeps in view while folded, widgets included, and its fold line's label; undefined when nothing folds. */
 function folded(turn: Turn, view: TurnView): Folded | undefined {
   const work = view.trail.filter((step) => step.kind !== 'changes');
-  // What the user said mid-turn shapes the answer below it, as a decided question does; a compaction marks where the model stopped reading the chat word for word, and a chapter is where the table of contents jumps to.
-  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'compact' || step.kind === 'todo' || step.kind === 'spinoff' || step.kind === 'chapter');
+  // What the user said mid-turn shapes the answer below it, as a decided question does; a compaction marks where the model stopped reading the chat word for word, and a chapter is where the table of contents jumps to. Files the agent showed are there for the user to see, as a widget is.
+  const kept = (keep: (step: Step) => boolean) => work.filter((step) => keep(step) || view.attention.includes(step) || decided(step) || step.kind === 'widget' || step.kind === 'editor' || step.kind === 'steer' || step.kind === 'compact' || step.kind === 'todo' || step.kind === 'spinoff' || step.kind === 'chapter' || showsFiles(step));
   if (turn.status === 'streaming') {
     const narration = work.findLast((step) => step.kind === 'text');
     const recent = new Set<Step>(work.filter((step) => (step.kind !== 'text' || step === narration) && step.kind !== 'todo').slice(-RECENT));

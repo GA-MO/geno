@@ -14,6 +14,7 @@ import { changedFiles, type ChangedFile } from './fold.js';
 import { byFile, headerOf, isEdit, type EditTool, type FileCalls, type Step } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
+import { showFilesStep } from './show-files.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
@@ -186,6 +187,7 @@ const FILE_TOOLS: Readonly<Record<string, string | undefined>> = { read: 'reads'
 export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui, quiet = false): HTMLElement {
   const first = tools[0]!;
   if (name === 'bash' || (name === 'preview_start' && first.background !== undefined)) return commandStep(first, ui, quiet);
+  if (first.shown !== undefined) return showFilesStep({ ...first, shown: first.shown }, (target) => ui.post({ type: 'open', target }));
   const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
   const failed = tools.filter((t) => t.status === 'failed').length;

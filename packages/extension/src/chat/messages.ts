@@ -14,6 +14,7 @@ import type { UsageFromView, UsageToView } from './usage-model.js';
 import type { SpinoffFromView, SpinoffToView } from './spinoff-model.js';
 import type { ChapterFromView, ChapterToView } from './chapter-model.js';
 import type { ChapterMark } from '@g-code/core/chapters';
+import type { ShownFiles } from '@g-code/core/show-files';
 import type { Spinoff, SpinoffShown } from '@g-code/core/spinoff';
 import type { PrStatusFromView, PrStatusToView } from './pr-status-model.js';
 import type { PageFromView } from './page-model.js';
@@ -141,6 +142,8 @@ export type ToolBlock = {
   readonly spinoff?: Spinoff | undefined;
   /** The chapter a mark_chapter call started. */
   readonly chapter?: ChapterMark | undefined;
+  /** What a show_files call showed the user, and what it refused. */
+  readonly shown?: ShownFiles | undefined;
   /** The background command a bash call started, as the engine last reported it. */
   readonly background?: BackgroundStep | undefined;
   /** What an open_file, reveal or show_diff call showed in the editor, which its step shows again. */
@@ -278,6 +281,7 @@ export type Action =
       readonly editorAction?: EditorAction;
       readonly todo?: TodoList;
       readonly chapter?: ChapterMark;
+      readonly shown?: ShownFiles;
       /** An offer sets this call's card; a move, such as from dismiss_task, changes the card with its id. */
       readonly spinoff?: SpinoffShown;
     }

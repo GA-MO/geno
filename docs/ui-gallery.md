@@ -72,6 +72,8 @@ The state then appears in the gallery and in `packages/extension/test/webview/ga
 pnpm vitest run --project webview packages/extension/test/webview/gallery.webview.test.ts
 ```
 
+A state that shows images, such as the **Shown files** group, gives the panel the root `/gallery-media` and names its files under it. `test/gallery/media.ts` paints those PNGs, and the gallery server and the webview test serve them, so no image file sits in the repository. To add an image, add a painter to `MEDIA` there. `show-files.webview.test.ts` opens each Shown files state at 240 and 300 pixels in each theme.
+
 ## Real sessions
 
 The **Real sessions** group plays sessions from the real-model campaign (`docs/results/real-usecases/runs/`) as the panel showed them:

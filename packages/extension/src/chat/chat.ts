@@ -85,7 +85,8 @@ import { TOKENS_SETTING } from './tokens.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { currentBranch } from '../git-branch.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
-import { droppedUris, openTarget, pickFiles, promptBlocks, readForComposer, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
+import { droppedUris, openTarget, pickFiles, promptBlocks, readForComposer, sessionFolders, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
+import { shownPaths } from './show-files-model.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
@@ -1268,7 +1269,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       send: ({ text, attachments }) => void this.send(text, attachments).catch(() => {}),
       'attach-uris': ({ uris }) => void this.attach(view, droppedUris(uris)),
       'pick-files': () => void pickFiles().then((uris) => this.attach(view, uris)),
-      open: ({ target }) => void openTarget(target, this.lastSession, this.attachedPaths),
+      open: ({ target }) => void openTarget(target, this.lastSession, new Set([...this.attachedPaths, ...shownPaths(this.transcript)])),
       complete: ({ id, query }) =>
         void this.mentions.completions(query).then(
           (items) => view.webview.postMessage({ type: 'completions', id, items } satisfies ToView),
@@ -1339,7 +1340,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
 
   resolveWebviewView(view: vscode.WebviewView): void {
     const dist = vscode.Uri.joinPath(this.extensionUri, 'dist');
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri), vscode.Uri.file(sessionsDir())] };
+    view.webview.options = { enableScripts: true, localResourceRoots: [dist, ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri), ...[sessionsDir(), ...sessionFolders()].map((dir) => vscode.Uri.file(dir))] };
     view.webview.html = pageHtml(view.webview, dist, 'webview.js', this.look());
     const handlers = this.handlers(view);
     view.webview.onDidReceiveMessage((message: FromView) => (handlers[message.type] as (m: FromView) => void)(message));
