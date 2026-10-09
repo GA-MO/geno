@@ -106,6 +106,19 @@ describe('the sprite', () => {
     expect(compose(SITTING).join('')).toMatch(/w/);
   });
 
+  it('shows all four legs when upright: both hind feet on the ground and both forelegs raised or working, near green and far darker', () => {
+    const inksOf = (grid: Grid, rows: readonly number[]) => new Set(rows.flatMap((y) => [...grid[y]!]));
+    for (const name of POSE_NAMES)
+      for (const frame of framesOf(POSES[name]).filter((f) => f.body === 'upright')) {
+        const grid = compose({ ...frame, prop: undefined as never });
+        const ground = inksOf(grid, [19, 20, 21]);
+        expect(ground.has('g') && ground.has('d'), `${name}: two hind legs on the ground`).toBe(true);
+        const bare = compose({ ...frame, arms: 'none', prop: undefined as never });
+        const fore = new Set(grid.flatMap((row, y) => [...row].filter((ink, x) => bare[y]![x] !== ink)));
+        expect(fore.has('g') && fore.has('d'), `${name} ${frame.arms}: two forelegs`).toBe(true);
+      }
+  });
+
   it('holds and works each prop with a foreleg that reaches it, not a stub beside it', () => {
     const cells = (grid: Grid) => new Set(grid.flatMap((row, y) => [...row].map((ink, x) => `${x},${y},${ink}`)));
     const changed = (a: Grid, b: Grid) => {
@@ -193,7 +206,7 @@ function bodies(grid: Grid): number {
 }
 
 describe('the peek over the composer', () => {
-  it('is one connected body: head, neck, chest with a white belly, and two forelegs ending in wide paws hooked over the edge', () => {
+  it('is one connected body: head, long neck, shoulders just above the edge, and two wide paws hooked over it on short wrists', () => {
     const grid = composePeek(GRIP);
     expect(grid).toHaveLength(SIZE);
     expect(bodies(grid)).toBe(1);
@@ -201,10 +214,12 @@ describe('the peek over the composer', () => {
     expect(grid[3]!.slice(17, 19)).toBe('wk');
     // The edge row: the chest, and beside it only the paws, their toes split by the darker green.
     expect(grid[SIZE - 1]).toBe('......gdgdg.gwwwwg.gdgdg');
-    // A paw is wider than the leg above it.
+    // A paw is wider than the wrist above it, and no leg runs down the body's sides above the shoulders.
     const widths = (row: string) => [...row.matchAll(/g+/g)].map((m) => m[0].length);
     expect(widths(grid[SIZE - 2]!)).toEqual([5, 1, 1, 5]);
-    expect(widths(grid[SIZE - 6]!)).toEqual([3, 1, 1, 3]);
+    expect(widths(grid[SIZE - 4]!)).toEqual([3, 1, 1, 3]);
+    expect(grid.slice(7, 17).every((row) => row === '.............gggg.......')).toBe(true);
+    expect(grid[18]!).toBe('.........gggggggggggg...');
   });
 
   it('draws the two paws as mirrors of each other about the chest, below the head', () => {
@@ -218,10 +233,14 @@ describe('the peek over the composer', () => {
     expect(below(composePeek({ ...GRIP, right: 'lift' }))).toEqual(leftUp.map(mirror));
   });
 
+  it('waves a blunt foot, not fingers', () => {
+    for (const frame of PEEK_MOVES.wave.loop) expect(crop(composePeek(frame), { x: 18, y: 7, width: 6, height: 10 }).join('/'), JSON.stringify(frame)).not.toMatch(/g\.g/);
+  });
+
   it('touches the edge only with its paws: a lifted paw leaves it, a let-go leg hangs past it', () => {
     const edge = (frame: PeekFrame) => composePeek(frame)[SIZE - 1]!;
     expect(edge({ ...GRIP, right: 'lift' })).toBe('......gdgdg.gwwwwg......');
-    expect(edge({ ...GRIP, left: 'off', right: 'off' })).toBe('.......ggg..gwwwwg..ggg.');
+    expect(edge({ ...GRIP, left: 'off', right: 'off' })).toBe('........ggg.gwwwwg.ggg..');
     expect(edge({ ...GRIP, right: 'waveA' })).toBe('......gdgdg.gwwwwg......');
   });
 
@@ -241,12 +260,14 @@ describe('the peek over the composer', () => {
       }
   });
 
-  it('climbs: the body rises from below the edge, the hands land on it, then it blinks', () => {
+  it('climbs: the body rises from below the edge, the paws come up and land on it last, then it blinks', () => {
     const sinks = PEEK_MOVES.climb.loop.map((f) => f.sink ?? 0);
     expect(sinks[0]).toBeGreaterThanOrEqual(SIZE - 1);
     expect(sinks).toEqual([...sinks].sort((a, b) => b - a));
     const landed = PEEK_MOVES.climb.loop.findIndex((f) => f.left === 'grip' && f.right === 'grip');
-    expect(PEEK_MOVES.climb.loop.slice(0, landed).every((f) => f.left === 'off' && f.right === 'off')).toBe(true);
+    const rising = PEEK_MOVES.climb.loop.slice(0, landed);
+    expect(rising.slice(0, -1).every((f) => f.left === 'off' && f.right === 'off')).toBe(true);
+    expect([rising.at(-1)!.left, rising.at(-1)!.right, rising.at(-1)!.sink ?? 0]).toEqual(['lift', 'lift', 0]);
     expect(PEEK_MOVES.climb.loop.slice(landed).every((f) => (f.sink ?? 0) === 0)).toBe(true);
     expect(PEEK_MOVES.climb.loop.slice(landed).some((f) => f.eye === 'blink')).toBe(true);
   });

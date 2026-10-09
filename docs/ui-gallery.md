@@ -39,7 +39,7 @@ The design-system page reads the panel's stylesheet as the page loaded it. It sh
 
 ![The design-system page](ui-gallery/design-dark.png)
 
-Noodle, the dinosaur, walks, runs and thinks on four legs. To hold or work something, it sits up on its haunches and uses its front legs: it reads a notebook, types on a laptop, writes on a pad and ticks a clipboard. It stands on its hind legs to flex. Over the composer it peeks with both front paws hooked over the edge. Every pose and peek move, frame by frame, at 4×:
+Noodle, the dinosaur, walks, runs and thinks on four legs. To hold or work something, it sits back on its haunches with both hind feet on the ground and uses its thick front legs, as a circus elephant does: it holds up a notebook or clipboard, types on a laptop and writes on a pad. It rears up on its hind legs to flex. Over the composer it rests its two front feet on the edge and looks over. Every pose and peek move, frame by frame, at 4×:
 
 ![Every Noodle frame](ui-gallery/noodle-after.png)
 
