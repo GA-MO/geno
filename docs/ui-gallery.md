@@ -66,7 +66,7 @@ Every state is one entry in `FIXTURES` in `packages/extension/test/gallery/fixtu
 
 `play` gets a `Stage`. `stage.host` is the `FakeHost` from `test/webview/host.ts`. Call `host.act` with the actions the extension dispatches, and `host.post` with any other message the extension sends, such as `show-settings` or `mcp`. The helpers in `test/webview/turns.ts` build the common actions. To answer a message the panel sends, register a handler with `host.on`, as the `history` state does for `list-sessions`. To act as the user, use `stage.click`, `stage.fill`, and `stage.reveal`. To wait for the panel, use `stage.shows`.
 
-The state then appears in the gallery and in `packages/extension/test/webview/gallery.webview.test.ts`. That test opens each state at 300 pixels in each of the four themes. It fails when the page logs an error or when anything runs past the panel edge. To run it alone:
+The state then appears in the gallery and in `packages/extension/test/webview/gallery.webview.test.ts`. That test opens each state at 300 pixels in each of the four themes, and at 240 pixels in Dark Modern. It fails when the page logs an error or when anything runs past the panel edge. To run it alone:
 
 ```sh
 pnpm vitest run --project webview packages/extension/test/webview/gallery.webview.test.ts
