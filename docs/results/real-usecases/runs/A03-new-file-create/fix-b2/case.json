@@ -1,0 +1,27 @@
+{
+  "case": "A03-new-file-create",
+  "area": "editing",
+  "layer": "A",
+  "run": "fix-b2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add a clamp(value, min, max) helper in a new file src/clamp.ts, export it from src/index.ts, and add tests for it in test/clamp.test.ts.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "13e05087",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "dfa86ae3c095d81be815ce9eeb713ae0122a3abe"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A03-new-file-create --run <n>"
+}

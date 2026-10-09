@@ -1,0 +1,144 @@
+diff --git a/src/shop/cart.ts b/src/shop/cart.ts
+index a46c60a..f42e427 100644
+--- a/src/shop/cart.ts
++++ b/src/shop/cart.ts
+@@ -2,7 +2,10 @@
+ 
+ export type Cart = { readonly id: string; readonly cents: number; readonly note: string };
+ 
+-/** Step 0 of the cart flow. */
++/**
++ * Step 0 of the cart flow.
++ * @returns the cart after step 0
++ */
+ export function cartStep0(value: Cart): Cart {
+   // cart rule 0.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // cart rule 0.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/checkout.ts b/src/shop/checkout.ts
+index 7437f0a..96c184e 100644
+--- a/src/shop/checkout.ts
++++ b/src/shop/checkout.ts
+@@ -2,7 +2,10 @@
+ 
+ export type Checkout = { readonly id: string; readonly cents: number; readonly note: string };
+ 
+-/** Step 0 of the checkout flow. */
++/**
++ * Step 0 of the checkout flow.
++ * @returns the checkout after step 0
++ */
+ export function checkoutStep0(value: Checkout): Checkout {
+   // checkout rule 0.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // checkout rule 0.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/coupon.ts b/src/shop/coupon.ts
+index b2a6e88..7d3fafe 100644
+--- a/src/shop/coupon.ts
++++ b/src/shop/coupon.ts
+@@ -30,7 +30,10 @@ export function couponStep1(value: Coupon): Coupon {
+   return { ...value, cents: Math.max(0, value.cents - 8), note: value.note + 'coupon1;' };
+ }
+ 
+-/** Step 2 of the coupon flow. */
++/**
++ * Step 2 of the coupon flow.
++ * @returns the coupon after step 2
++ */
+ export function couponStep2(value: Coupon): Coupon {
+   // coupon rule 2.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // coupon rule 2.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/discount.ts b/src/shop/discount.ts
+index 2c38fc4..4dc3129 100644
+--- a/src/shop/discount.ts
++++ b/src/shop/discount.ts
+@@ -2,7 +2,10 @@
+ 
+ export type Discount = { readonly id: string; readonly cents: number; readonly note: string };
+ 
+-/** Step 0 of the discount flow. */
++/**
++ * Step 0 of the discount flow.
++ * @returns the discount after step 0
++ */
+ export function discountStep0(value: Discount): Discount {
+   // discount rule 0.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // discount rule 0.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/giftcard.ts b/src/shop/giftcard.ts
+index f8d6916..9f23788 100644
+--- a/src/shop/giftcard.ts
++++ b/src/shop/giftcard.ts
+@@ -16,7 +16,10 @@ export function giftcardStep0(value: Giftcard): Giftcard {
+   return { ...value, cents: Math.max(0, value.cents - 17), note: value.note + 'giftcard0;' };
+ }
+ 
+-/** Step 1 of the giftcard flow. */
++/**
++ * Step 1 of the giftcard flow.
++ * @returns the giftcard after step 1
++ */
+ export function giftcardStep1(value: Giftcard): Giftcard {
+   // giftcard rule 1.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // giftcard rule 1.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/inventory.ts b/src/shop/inventory.ts
+index 2ddf06d..c42a6dd 100644
+--- a/src/shop/inventory.ts
++++ b/src/shop/inventory.ts
+@@ -16,7 +16,10 @@ export function inventoryStep0(value: Inventory): Inventory {
+   return { ...value, cents: Math.max(0, value.cents - 14), note: value.note + 'inventory0;' };
+ }
+ 
+-/** Step 1 of the inventory flow. */
++/**
++ * Step 1 of the inventory flow.
++ * @returns the inventory after step 1
++ */
+ export function inventoryStep1(value: Inventory): Inventory {
+   // inventory rule 1.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // inventory rule 1.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/invoice.ts b/src/shop/invoice.ts
+index eedcc43..e1f539f 100644
+--- a/src/shop/invoice.ts
++++ b/src/shop/invoice.ts
+@@ -16,7 +16,10 @@ export function invoiceStep0(value: Invoice): Invoice {
+   return { ...value, cents: Math.max(0, value.cents - 2), note: value.note + 'invoice0;' };
+ }
+ 
+-/** Step 1 of the invoice flow. */
++/**
++ * Step 1 of the invoice flow.
++ * @returns the invoice after step 1
++ */
+ export function invoiceStep1(value: Invoice): Invoice {
+   // invoice rule 1.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // invoice rule 1.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/ledger.ts b/src/shop/ledger.ts
+index edcfb00..ca19895 100644
+--- a/src/shop/ledger.ts
++++ b/src/shop/ledger.ts
+@@ -30,7 +30,10 @@ export function ledgerStep1(value: Ledger): Ledger {
+   return { ...value, cents: Math.max(0, value.cents - 14), note: value.note + 'ledger1;' };
+ }
+ 
+-/** Step 2 of the ledger flow. */
++/**
++ * Step 2 of the ledger flow.
++ * @returns the ledger after step 2
++ */
+ export function ledgerStep2(value: Ledger): Ledger {
+   // ledger rule 2.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // ledger rule 2.1: keep cents non-negative and round half up when splitting across 3 parts.
+diff --git a/src/shop/loyalty.ts b/src/shop/loyalty.ts
+index c64cbb4..7042a6c 100644
+--- a/src/shop/loyalty.ts
++++ b/src/shop/loyalty.ts
+@@ -30,7 +30,10 @@ export function loyaltyStep1(value: Loyalty): Loyalty {
+   return { ...value, cents: Math.max(0, value.cents - 23), note: value.note + 'loyalty1;' };
+ }
+ 
+-/** Step 2 of the loyalty flow. */
++/**
++ * Step 2 of the loyalty flow.
++ * @returns the loyalty after step 2
++ */
+ export function loyaltyStep2(value: Loyalty): Loyalty {
+   // loyalty rule 2.0: keep cents non-negative and round half up when splitting across 2 parts.
+   // loyalty rule 2.1: keep cents non-negative and round half up when splitting across 3 parts.

@@ -2,6 +2,8 @@
 
 Geno on qwen3.8-flash (Alibaba Model Studio), 2026-10-09, against the cases in [catalog.md](catalog.md). Layer A ran 46 headless runs of 32 cases through `gcode agent`. Layer B drove the chat panel in the pooled VS Code window for 13 step runs of 9 UI cases. Every run's input and output is in [runs/](runs/README.md), indexed by `runs/index.json`. Nothing in product code was changed.
 
+The fixes, with each one's commit and its before and after on the real model, are in [FIXES.md](FIXES.md).
+
 Session ids below are the first 8 characters; the full id and log are in `runs/<case>/<run>/`. "Seq" is the event's `seq` in `session.jsonl`.
 
 ## Summary

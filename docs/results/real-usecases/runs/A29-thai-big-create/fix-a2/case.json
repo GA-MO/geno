@@ -1,0 +1,27 @@
+{
+  "case": "A29-thai-big-create",
+  "area": "editing",
+  "layer": "A",
+  "run": "fix-a2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "สร้างไฟล์ src/scenes/PacmanScene.js ใหม่ทั้งไฟล์ในครั้งเดียว: ฉาก Phaser ของ Pac-Man แบบต้นฉบับ มีแผนที่ 28x31 แบบเกมจริงฝังอยู่ในไฟล์ (เป็น array ของ string ครบทุกแถว), ผีครบ 4 ตัวพร้อมโหมด scatter/chase/frightened, ระบบชีวิต, คะแนน และ power pellet แล้วเพิ่มฉากนี้ใน src/main.js",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.3,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "6238d339",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "54169a996ebf8d24712a5c54910c4f58ca910851"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A29-thai-big-create --run <n>"
+}

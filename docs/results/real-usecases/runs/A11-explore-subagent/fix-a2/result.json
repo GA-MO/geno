@@ -1,0 +1,85 @@
+{
+  "case": "A11-explore-subagent",
+  "run": "fix-a2",
+  "session": "675e60a9-29d4-4415-b40a-9f2227e2307d",
+  "passed": true,
+  "costUsd": 0.00635326,
+  "classifierUsd": 0,
+  "modelCalls": 3,
+  "toolCalls": 2,
+  "tokens": {
+    "input": 50,
+    "cacheRead": 20624,
+    "cacheWrite": 14392,
+    "output": 1178,
+    "latencyMs": 24727
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=640ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "agent-called",
+      "pass": true,
+      "detail": "{\"agent\":\"explore\",\"task\":\"Find every place the function `getUser` is CALLED (invoked) across the pa"
+    },
+    {
+      "id": "lists-callers",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

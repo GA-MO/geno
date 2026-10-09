@@ -1,0 +1,90 @@
+{
+  "case": "A18-project-skill",
+  "run": "fix-b2",
+  "session": "8807bedc-5747-4bbf-a079-5d33966add5e",
+  "passed": false,
+  "costUsd": 0.0099465575,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 11,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 57527,
+    "cacheWrite": 3677,
+    "output": 1321,
+    "latencyMs": 26352
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "node --test test/money.test.ts 2>&1 | grep -E \"^(not ok|ok|# (pass|fail))\"; ls t"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=416ch"
+    },
+    {
+      "id": "skill-loaded",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "skill-format",
+      "pass": true,
+      "detail": "# Changelog\n\n## Unreleased\n\n- fix: formatPrice now always shows two decimals (src/money.ts)\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n"
+    },
+    {
+      "id": "skill-quote",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "money-passes",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

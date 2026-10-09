@@ -1,0 +1,85 @@
+{
+  "case": "A11-explore-subagent",
+  "run": "fix-b2",
+  "session": "2392c804-5757-44e7-9203-903a0b29ff91",
+  "passed": false,
+  "costUsd": 0.006896902499999999,
+  "classifierUsd": 0,
+  "modelCalls": 3,
+  "toolCalls": 2,
+  "tokens": {
+    "input": 42,
+    "cacheRead": 23525,
+    "cacheWrite": 12147,
+    "output": 2307,
+    "latencyMs": 42705
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "cd <home>/Development/g-code/.claude/worktrees/agent-a7f1c810ed841ca5"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=835ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "agent-called",
+      "pass": true,
+      "detail": "{\"agent\":\"explore\",\"task\":\"Search the entire repository at <home>/Development/g-code/.cla"
+    },
+    {
+      "id": "lists-callers",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

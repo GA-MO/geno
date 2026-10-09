@@ -1,0 +1,648 @@
+diff --git a/src/main.js b/src/main.js
+index b286302..dd473f0 100644
+--- a/src/main.js
++++ b/src/main.js
+@@ -5,5 +5,6 @@ new Phaser.Game({
+   width: 800,
+   height: 600,
+   physics: { default: 'arcade', arcade: { debug: false } },
+-  scene: [GameScene],
++  scene: [GameScene, PacmanScene],
++  startScene: 'pacman',
+ });
+diff --git a/src/scenes/PacmanScene.js b/src/scenes/PacmanScene.js
+new file mode 100644
+index 0000000..9357eac
+--- /dev/null
++++ b/src/scenes/PacmanScene.js
+@@ -0,0 +1,555 @@
++export const MAZE = [
++  "############################",
++  "#............##............#",
++  "#.####.#####.##.#####.####.#",
++  "#o####.#####.##.#####.####o#",
++  "#.####.#####.##.#####.####.#",
++  "#..........................#",
++  "#.####.##.########.##.####.#",
++  "#.####.##.########.##.####.#",
++  "#......##....##....##......#",
++  "######.###        ###.######",
++  "######.######--######.######",
++  "######.#####    #####.######",
++  "######.#####    #####.######",
++  "######.#####    #####.######",
++  "######.##############.######",
++  "      .####      ####.      ",
++  "######.##..........##.######",
++  "######.##.########.##.######",
++  "#.####.##....##....##.####.#",
++  "#.####.##.########.##.####.#",
++  "#......##....##....##......#",
++  "######.###.######.###.######",
++  "#......##....##....##......#",
++  "#.####.##.########.##.####.#",
++  "#.####.##.########.##.####.#",
++  "#............  ............#",
++  "#.####.#####.##.#####.####.#",
++  "#o####.#####.##.#####.####o#",
++  "#.####.#####.##.#####.####.#",
++  "#............##............#",
++  "############################",
++];
++
++// Phaser loads from a CDN tag before this module, so the global exists in the
++// browser. The fallback keeps the file importable in plain node (the map tests).
++const Scene = typeof Phaser !== 'undefined' ? Phaser.Scene : class {};
++
++const COLS = 28;
++const ROWS = 31;
++const TILE = 16;
++const OX = 176;
++const OY = 70;
++const TUNNEL_ROW = 15;
++
++const DIRS = {
++  none: [0, 0],
++  up: [0, -1],
++  down: [0, 1],
++  left: [-1, 0],
++  right: [1, 0],
++};
++const OPPOSITE = { none: 'none', up: 'down', down: 'up', left: 'right', right: 'left' };
++
++const GHOST_DEFS = [
++  { name: 'blinky', color: 0xff4040, start: [13, 9], scatter: [26, 2], wait: 0 },
++  { name: 'pinky', color: 0xffb8ff, start: [13, 12], scatter: [1, 2], wait: 2 },
++  { name: 'inky', color: 0x40ffff, start: [12, 12], scatter: [26, 28], wait: 5 },
++  { name: 'clyde', color: 0xffb852, start: [15, 12], scatter: [1, 28], wait: 8 },
++];
++
++const MODE_DURATIONS = [7, 20, 7, 20, 5, 20, 5, Infinity];
++const SPEEDS = { pac: 96, chase: 84, scatter: 76, frightened: 46, eaten: 200, exit: 60 };
++
++export class PacmanScene extends Scene {
++  constructor() {
++    super('pacman');
++  }
++
++  create() {
++    this.cameras.main.setBackgroundColor('#000009');
++    this.score = 0;
++    this.lives = 3;
++    this.level = 1;
++    this.modeIndex = 0;
++    this.modeTimer = MODE_DURATIONS[0];
++    this.frightTimer = 0;
++    this.chain = 1;
++    this.lock = 1.5;
++    this.state = 'ready';
++    this.buildPellets();
++    this.resetActors();
++
++    this.wallGfx = this.add.graphics();
++    this.pelletGfx = this.add.graphics();
++    this.spriteGfx = this.add.graphics();
++    this.drawWalls();
++    this.drawPellets();
++
++    this.scoreText = this.add.text(OX, 40, '', { fontFamily: 'monospace', fontSize: '18px', color: '#ffffff' });
++    this.levelText = this.add.text(OX + 298, 40, '', { fontFamily: 'monospace', fontSize: '18px', color: '#ffffff' });
++    this.centerText = this.add.text(OX + 224, OY + 23 * TILE, '', { fontFamily: 'monospace', fontSize: '20px', color: '#ffff00' }).setOrigin(0.5);
++
++    this.cursors = this.input.keyboard.createCursorKeys();
++    this.wasd = this.input.keyboard.addKeys('W,A,S,D,SPACE');
++  }
++
++  buildPellets() {
++    this.pellets = MAZE.map((row) =>
++      [...row].map((ch) => (ch === '.' ? 1 : ch === 'o' ? 2 : 0))
++    );
++    this.pelletLeft = this.pellets.flat().reduce((n, v) => n + (v ? 1 : 0), 0);
++  }
++
++  resetActors() {
++    this.pac = { col: 13, row: 25, dir: 'left', nextDir: 'left', t: 0 };
++    const mode = this.globalMode();
++    this.ghosts = GHOST_DEFS.map((def) => {
++      const outside = def.start[1] < 10;
++      return {
++        ...def,
++        col: def.start[0],
++        row: def.start[1],
++        dir: 'left',
++        t: 0,
++        status: outside ? mode : 'house',
++        wait: outside ? 0 : def.wait,
++        path: null,
++        reverseQueued: false,
++      };
++    });
++  }
++
++  charAt(row, col) {
++    return MAZE[row][col];
++  }
++
++  wrapCol(col) {
++    return ((col % COLS) + COLS) % COLS;
++  }
++
++  neighbor(col, row, dir) {
++    const [dx, dy] = DIRS[dir];
++    const r = row + dy;
++    if (r < 0 || r >= ROWS) return null;
++    return [this.wrapCol(col + dx), r];
++  }
++
++  pacCanGo(col, row, dir) {
++    const n = this.neighbor(col, row, dir);
++    if (!n) return false;
++    const ch = this.charAt(n[1], n[0]);
++    return ch !== '#' && ch !== '-';
++  }
++
++  ghostCanGo(col, row, dir, ghost) {
++    const n = this.neighbor(col, row, dir);
++    if (!n) return false;
++    const ch = this.charAt(n[1], n[0]);
++    if (ch === '#') return false;
++    if (ch === '-' && ghost.status !== 'eaten' && ghost.status !== 'exit') return false;
++    return true;
++  }
++
++  center(col, row, dir, t) {
++    const [dx, dy] = DIRS[dir];
++    return {
++      x: OX + (col + 0.5) * TILE + dx * t * TILE,
++      y: OY + (row + 0.5) * TILE + dy * t * TILE,
++    };
++  }
++
++  advance(walker, speed, dt, onArrive) {
++    if (walker.dir === 'none' || speed === 0) return;
++    walker.t += (speed * dt) / TILE;
++    while (walker.t >= 1) {
++      const [dx, dy] = DIRS[walker.dir];
++      walker.col = this.wrapCol(walker.col + dx);
++      walker.row += dy;
++      walker.t -= 1;
++      onArrive(walker);
++      if (walker.dir === 'none') {
++        walker.t = 0;
++        break;
++      }
++    }
++  }
++
++  update(time, deltaMs) {
++    const dt = Math.min(deltaMs, 50) / 1000;
++    if (this.lock > 0) {
++      this.lock -= dt;
++      if (this.lock <= 0) this.afterLock();
++      this.render(time);
++      return;
++    }
++    if (this.state === 'over') {
++      if (this.wasd.SPACE.isDown) this.scene.restart();
++      this.render(time);
++      return;
++    }
++
++    this.tickMode(dt);
++    if (this.frightTimer > 0) this.frightTimer = Math.max(0, this.frightTimer - dt);
++
++    if (this.pac.dir === 'none' && this.pacCanGo(this.pac.col, this.pac.row, this.pac.nextDir)) {
++      this.pac.dir = this.pac.nextDir;
++    }
++    this.advance(this.pac, SPEEDS.pac, dt, (pac) => this.onPacArrive(pac));
++    for (const g of this.ghosts) this.tickGhost(g, dt);
++    this.checkCollisions();
++    if (this.pelletLeft === 0 && this.state === 'play') this.clearLevel();
++    this.render(time);
++  }
++
++  tickMode(dt) {
++    if (this.modeTimer === Infinity) return;
++    this.modeTimer -= dt;
++    if (this.modeTimer <= 0 && this.modeIndex < MODE_DURATIONS.length - 1) {
++      this.modeIndex += 1;
++      this.modeTimer = MODE_DURATIONS[this.modeIndex];
++      for (const g of this.ghosts) {
++        if (g.status === 'chase' || g.status === 'scatter' || g.status === 'frightened') {
++          g.reverseQueued = true;
++        }
++      }
++    }
++  }
++
++  globalMode() {
++    return this.modeIndex % 2 === 0 ? 'scatter' : 'chase';
++  }
++
++  onPacArrive(pac) {
++    if (pac.nextDir !== 'none' && this.pacCanGo(pac.col, pac.row, pac.nextDir)) {
++      pac.dir = pac.nextDir;
++    }
++    if (!this.pacCanGo(pac.col, pac.row, pac.dir)) pac.dir = 'none';
++    const pellet = this.pellets[pac.row][pac.col];
++    if (pellet) {
++      this.pellets[pac.row][pac.col] = 0;
++      this.pelletLeft -= 1;
++      this.score += pellet === 1 ? 10 : 50;
++      if (pellet === 2) {
++        this.frightTimer = Math.max(1, 6 - this.level);
++        this.chain = 1;
++        for (const g of this.ghosts) {
++          if (g.status === 'chase' || g.status === 'scatter') {
++            g.status = 'frightened';
++            g.reverseQueued = true;
++            g.path = null;
++          }
++        }
++      }
++      this.drawPellets();
++    }
++  }
++
++  tickGhost(g, dt) {
++    if (g.status === 'house') {
++      g.wait -= dt;
++      if (g.wait <= 0) {
++        g.status = 'exit';
++        g.path = this.bfsTo(g.col, g.row, 13, 9);
++      }
++      return;
++    }
++    if (g.status === 'frightened' && this.frightTimer === 0) {
++      g.status = this.globalMode();
++      g.path = null;
++    }
++    const speed =
++      g.status === 'eaten' ? SPEEDS.eaten :
++      g.status === 'exit' ? SPEEDS.exit :
++      g.status === 'frightened' ? SPEEDS.frightened :
++      g.status === 'chase' ? SPEEDS.chase : SPEEDS.scatter;
++    this.advance(g, speed, dt, (ghost) => this.onGhostArrive(ghost));
++  }
++
++  onGhostArrive(g) {
++    if (g.status === 'eaten') {
++      if (g.col === 13 && g.row === 12) {
++        g.status = 'house';
++        g.wait = 0.8;
++        g.dir = 'none';
++        g.t = 0;
++        return;
++      }
++      this.followPath(g);
++      return;
++    }
++    if (g.status === 'exit') {
++      this.followPath(g);
++      if (g.col === 13 && g.row === 9) g.status = this.globalMode();
++      return;
++    }
++    g.dir = this.chooseGhostDir(g);
++  }
++
++  followPath(g) {
++    if (!g.path || !g.path.length) {
++      g.dir = 'none';
++      return;
++    }
++    const [c, r] = g.path.shift();
++    for (const dir of ['up', 'down', 'left', 'right']) {
++      const [dx, dy] = DIRS[dir];
++      if (this.wrapCol(g.col + dx) === c && g.row + dy === r) {
++        g.dir = dir;
++        return;
++      }
++    }
++    g.path = null;
++    g.dir = this.chooseGhostDir(g);
++  }
++
++  ghostTarget(g) {
++    if (g.status === 'eaten') return [13, 12];
++    if (g.status === 'scatter') return g.scatter;
++    const pac = this.pac;
++    if (g.name === 'blinky') return [pac.col, pac.row];
++    const [dx, dy] = DIRS[pac.dir];
++    const ahead = (n) => [pac.col + dx * n, pac.row + dy * n];
++    if (g.name === 'pinky') return ahead(4);
++    if (g.name === 'inky') {
++      const blinky = this.ghosts[0];
++      const [bx, by] = ahead(2);
++      return [2 * bx - blinky.col, 2 * by - blinky.row];
++    }
++    const dist = Math.hypot(pac.col - g.col, pac.row - g.row);
++    return dist > 8 ? [pac.col, pac.row] : g.scatter;
++  }
++
++  chooseGhostDir(g) {
++    const options = [];
++    for (const dir of ['up', 'left', 'down', 'right']) {
++      if (!g.reverseQueued && dir === OPPOSITE[g.dir]) continue;
++      if (this.ghostCanGo(g.col, g.row, dir, g)) options.push(dir);
++    }
++    g.reverseQueued = false;
++    if (!options.length) return OPPOSITE[g.dir];
++    if (g.status === 'frightened') {
++      return options[Math.floor(Math.random() * options.length)];
++    }
++    const [tc, tr] = this.ghostTarget(g);
++    let best = options[0];
++    let bestDist = Infinity;
++    for (const dir of options) {
++      const [nc, nr] = this.neighbor(g.col, g.row, dir);
++      const d = Math.hypot(nc - tc, nr - tr);
++      if (d < bestDist) {
++        bestDist = d;
++        best = dir;
++      }
++    }
++    return best;
++  }
++
++  bfsTo(fromC, fromR, toC, toR) {
++    const key = (c, r) => r * COLS + c;
++    const prev = new Map([[key(fromC, fromR), null]]);
++    const queue = [[fromC, fromR]];
++    for (let head = 0; head < queue.length; head++) {
++      const [c, r] = queue[head];
++      if (c === toC && r === toR) break;
++      for (const dir of ['up', 'down', 'left', 'right']) {
++        const n = this.neighbor(c, r, dir);
++        if (!n) continue;
++        const [nc, nr] = n;
++        if (this.charAt(nr, nc) === '#') continue;
++        if (!prev.has(key(nc, nr))) {
++          prev.set(key(nc, nr), [c, r]);
++          queue.push([nc, nr]);
++        }
++      }
++    }
++    if (!prev.has(key(toC, toR))) return null;
++    const path = [];
++    let node = [toC, toR];
++    while (node) {
++      path.unshift(node);
++      node = prev.get(key(node[0], node[1]));
++    }
++    path.shift();
++    return path;
++  }
++
++  checkCollisions() {
++    const p = this.center(this.pac.col, this.pac.row, this.pac.dir, this.pac.t);
++    for (const g of this.ghosts) {
++      if (g.status === 'house' || g.status === 'eaten') continue;
++      const q = this.center(g.col, g.row, g.dir, g.t);
++      if (Math.abs(p.x - q.x) < TILE * 0.6 && Math.abs(p.y - q.y) < TILE * 0.6) {
++        if (g.status === 'frightened') {
++          this.score += 200 * this.chain;
++          this.chain *= 2;
++          g.status = 'eaten';
++          g.path = this.bfsTo(g.col, g.row, 13, 12);
++        } else {
++          this.loseLife();
++          return;
++        }
++      }
++    }
++  }
++
++  loseLife() {
++    this.lives -= 1;
++    this.state = 'dying';
++    this.lock = 1.5;
++  }
++
++  clearLevel() {
++    this.state = 'clearing';
++    this.lock = 2;
++  }
++
++  afterLock() {
++    if (this.state === 'dying') {
++      if (this.lives === 0) {
++        this.state = 'over';
++        return;
++      }
++      this.frightTimer = 0;
++      this.chain = 1;
++      this.modeIndex = 0;
++      this.modeTimer = MODE_DURATIONS[0];
++      this.resetActors();
++      this.state = 'ready';
++      this.lock = 1.5;
++      return;
++    }
++    if (this.state === 'clearing') {
++      this.level += 1;
++      this.buildPellets();
++      this.drawPellets();
++      this.wallGfx.setVisible(true);
++      this.modeIndex = 0;
++      this.modeTimer = MODE_DURATIONS[0];
++      this.frightTimer = 0;
++      this.resetActors();
++      this.state = 'ready';
++      this.lock = 1.5;
++      return;
++    }
++    this.state = 'play';
++  }
++
++  readInput() {
++    const c = this.cursors;
++    const w = this.wasd;
++    if (c.left.isDown || w.A.isDown) this.pac.nextDir = 'left';
++    else if (c.right.isDown || w.D.isDown) this.pac.nextDir = 'right';
++    else if (c.up.isDown || w.W.isDown) this.pac.nextDir = 'up';
++    else if (c.down.isDown || w.S.isDown) this.pac.nextDir = 'down';
++  }
++
++  render(time) {
++    if (this.state === 'play' || this.state === 'ready') this.readInput();
++    const g = this.spriteGfx;
++    g.clear();
++    this.scoreText.setText(`SCORE ${this.score}`);
++    this.levelText.setText(`LEVEL ${this.level}`);
++    this.centerText.setText(
++      this.state === 'ready' ? 'READY!' : this.state === 'over' ? 'GAME OVER - PRESS SPACE' : ''
++    );
++
++    if (this.state !== 'over') {
++      const p = this.center(this.pac.col, this.pac.row, this.pac.dir, this.pac.t);
++      this.drawPacman(g, p.x, p.y, this.pac.dir, time);
++      for (const ghost of this.ghosts) {
++        const q = this.center(ghost.col, ghost.row, ghost.dir, ghost.t);
++        const bob = ghost.status === 'house' ? Math.sin(time / 120) * 3 : 0;
++        this.drawGhost(g, ghost, q.x, q.y + bob, time);
++      }
++      for (let i = 0; i < this.lives - 1; i++) {
++        this.drawPacman(g, OX + 14 + i * 22, OY + ROWS * TILE + 20, 'left', 0);
++      }
++    }
++    if (this.state === 'clearing') {
++      this.wallGfx.setVisible(Math.floor(time / 250) % 2 === 0);
++    }
++  }
++
++  drawPacman(g, x, y, dir, time) {
++    const angles = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2, none: Math.PI };
++    const open = (0.05 + 0.95 * Math.abs(Math.sin(time / 90))) * (Math.PI / 5);
++    const base = angles[dir];
++    g.fillStyle(0xffe000);
++    g.slice(x, y, TILE * 0.62, base + open, base - open + Math.PI * 2);
++  }
++
++  drawGhost(g, ghost, x, y, time) {
++    const r = TILE * 0.55;
++    let body = ghost.color;
++    if (ghost.status === 'frightened') {
++      const flash = this.frightTimer < 2 && Math.floor(time / 200) % 2 === 0;
++      body = flash ? 0xf8f8f8 : 0x2030f8;
++    }
++    if (ghost.status !== 'eaten') {
++      g.fillStyle(body);
++      g.slice(x, y - 1, r, Math.PI, Math.PI * 2);
++      g.fillRect(x - r, y - 1, r * 2, r + 2);
++      const feet = 4;
++      for (let i = 0; i < 3; i++) {
++        const fx = x - r + i * (r * 2 / 3);
++        g.fillTriangle(fx, y + r + 2, fx + r / 3, y + r + 2, fx + r / 3, y + r + 2 - feet * 1.4);
++      }
++    }
++    if (ghost.status === 'frightened') {
++      g.fillStyle(0xffffff);
++      g.fillCircle(x - 3, y - 3, 1.6);
++      g.fillCircle(x + 3, y - 3, 1.6);
++      return;
++    }
++    const [dx, dy] = DIRS[ghost.dir === 'none' ? 'left' : ghost.dir];
++    g.fillStyle(0xffffff);
++    g.fillEllipse(x - 3.4, y - 3, 5.4, 6.4);
++    g.fillEllipse(x + 3.4, y - 3, 5.4, 6.4);
++    g.fillStyle(0x2030f8);
++    g.fillCircle(x - 3.4 + dx * 1.6, y - 3 + dy * 1.6, 1.8);
++    g.fillCircle(x + 3.4 + dx * 1.6, y - 3 + dy * 1.6, 1.8);
++  }
++
++  drawWalls() {
++    const g = this.wallGfx;
++    g.clear();
++    g.lineStyle(2, 0x2233ff, 1);
++    const inset = 3;
++    for (let r = 0; r < ROWS; r++) {
++      for (let c = 0; c < COLS; c++) {
++        const ch = this.charAt(r, c);
++        const x = OX + c * TILE;
++        const y = OY + r * TILE;
++        if (ch === '#') {
++          const isWall = (rr, cc) =>
++            rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && MAZE[rr][cc] === '#';
++          if (!isWall(r - 1, c)) g.lineBetween(x + inset, y + inset, x + TILE - inset, y + inset);
++          if (!isWall(r + 1, c)) g.lineBetween(x + inset, y + TILE - inset, x + TILE - inset, y + TILE - inset);
++          if (!isWall(r, c - 1)) g.lineBetween(x + inset, y + inset, x + inset, y + TILE - inset);
++          if (!isWall(r, c + 1)) g.lineBetween(x + TILE - inset, y + inset, x + TILE - inset, y + TILE - inset);
++        } else if (ch === '-') {
++          g.lineStyle(3, 0xffb8ff, 1);
++          g.lineBetween(x, y + TILE / 2, x + TILE, y + TILE / 2);
++          g.lineStyle(2, 0x2233ff, 1);
++        }
++      }
++    }
++  }
++
++  drawPellets() {
++    const g = this.pelletGfx;
++    g.clear();
++    g.fillStyle(0xffb8ae, 1);
++    for (let r = 0; r < ROWS; r++) {
++      for (let c = 0; c < COLS; c++) {
++        const pellet = this.pellets[r][c];
++        if (!pellet) continue;
++        const x = OX + (c + 0.5) * TILE;
++        const y = OY + (r + 0.5) * TILE;
++        g.fillCircle(x, y, pellet === 1 ? 2 : 5);
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/test/pacman-map.test.js b/test/pacman-map.test.js
+new file mode 100644
+index 0000000..175db2e
+--- /dev/null
++++ b/test/pacman-map.test.js
+@@ -0,0 +1,67 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { MAZE } from '../src/scenes/PacmanScene.js';
++
++const COLS = 28;
++const ROWS = 31;
++const START = [13, 25];
++const HOUSE = [13, 12];
++
++const cell = (r, c) => MAZE[r][c];
++const wrapped = (c) => ((c % COLS) + COLS) % COLS;
++
++function reachable(startRow, startCol, doorPassable) {
++  const seen = new Set([startRow * COLS + startCol]);
++  const queue = [[startCol, startRow]];
++  for (let head = 0; head < queue.length; head++) {
++    const [c, r] = queue[head];
++    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
++      const nr = r + dy;
++      const nc = wrapped(c + dx);
++      if (nr < 0 || nr >= ROWS) continue;
++      const ch = cell(nr, nc);
++      if (ch === '#' || (ch === '-' && !doorPassable)) continue;
++      const key = nr * COLS + nc;
++      if (!seen.has(key)) {
++        seen.add(key);
++        queue.push([nc, nr]);
++      }
++    }
++  }
++  return seen;
++}
++
++test('maze is 28 columns by 31 rows', () => {
++  assert.equal(MAZE.length, ROWS);
++  for (const row of MAZE) assert.equal(row.length, COLS);
++});
++
++test('maze is left-right symmetric', () => {
++  for (const row of MAZE) {
++    assert.equal(row, [...row].reverse().join(''));
++  }
++});
++
++test('maze has four power pellets and the tunnel row is open at both ends', () => {
++  const flat = MAZE.join('');
++  assert.equal([...flat].filter((ch) => ch === 'o').length, 4);
++  assert.notEqual(cell(15, 0), '#');
++  assert.notEqual(cell(15, COLS - 1), '#');
++});
++
++test('every pellet is reachable from the pacman start without crossing the door', () => {
++  const area = reachable(START[1], START[0], false);
++  for (let r = 0; r < ROWS; r++) {
++    for (let c = 0; c < COLS; c++) {
++      if (cell(r, c) === '.' || cell(r, c) === 'o') {
++        assert.ok(area.has(r * COLS + c), `pellet at row ${r} col ${c} is unreachable`);
++      }
++    }
++  }
++});
++
++test('the ghost house connects to the maze through the door', () => {
++  const area = reachable(HOUSE[1], HOUSE[0], true);
++  assert.ok(area.has(9 * COLS + 13), 'ghosts cannot reach the chamber above the door');
++  assert.ok(area.has(START[1] * COLS + START[0]), 'ghosts cannot reach the pacman start row');
++});
+\ No newline at end of file

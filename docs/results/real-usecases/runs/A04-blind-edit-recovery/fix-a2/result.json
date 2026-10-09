@@ -1,0 +1,90 @@
+{
+  "case": "A04-blind-edit-recovery",
+  "run": "fix-a2",
+  "session": "a1cc361f-bfcf-4125-9401-7ba351d5e148",
+  "passed": false,
+  "costUsd": 0.0162283975,
+  "classifierUsd": 0,
+  "modelCalls": 12,
+  "toolCalls": 11,
+  "tokens": {
+    "input": 72,
+    "cacheRead": 96068,
+    "cacheWrite": 4017,
+    "output": 2243,
+    "latencyMs": 64343
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "find . -path ./node_modules -prune -o -name \"config.ts\" -print | grep -rn \"config\" test/ src/ --include=* -l 2>/dev/null; echo \"---\"; git worktre | grep -rn \"config\" --include=*.ts . | grep -v node_modules; echo \"=== tests ===\";"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": false,
+      "detail": "bash grep -rn \"config\" test/ src/ --include=* -l 2>/dev/null; ech"
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=905ch"
+    },
+    {
+      "id": "values-changed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "tabs-kept",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "recovers-from-refused-edit",
+      "pass": null,
+      "detail": "no edit was refused"
+    },
+    {
+      "id": "few-calls",
+      "pass": false,
+      "detail": "11 calls"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "case": "A17-budget-reminder",
+  "area": "limits",
+  "layer": "A",
+  "run": "fix-b2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add an @returns line to every exported function in src/shop/ whose doc comment lacks one.",
+      "maxTurns": 6
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "13e05087",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "2df34e7f5a556f855858cffaa8cfa583178c4c42"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A17-budget-reminder --run <n>"
+}

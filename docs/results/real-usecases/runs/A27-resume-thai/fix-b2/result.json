@@ -1,0 +1,87 @@
+{
+  "case": "A27-resume-thai",
+  "run": "fix-b2",
+  "session": "b85047ca-37f9-49fe-aacb-61b955c30a6d",
+  "passed": false,
+  "costUsd": 0.012219102499999999,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 20,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 63405,
+    "cacheWrite": 6831,
+    "output": 3022,
+    "latencyMs": 50333
+  },
+  "errors": [
+    "max-turns: stopped after 4 model calls (--max-turns 4)"
+  ],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "cat package.json src/index.ts src/config.ts legacy/old-money.js; node --version"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=610ch"
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": true,
+      "detail": "thai share 0.43"
+    },
+    {
+      "id": "suite-green",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "continues",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}
