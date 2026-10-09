@@ -8,7 +8,7 @@ export const MODES: Modes = {
   current: 'ask',
   available: [
     { id: 'plan', name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
-    { id: 'ask', name: 'Ask', description: 'Ask before risky commands.' },
+    { id: 'ask', name: 'Ask', description: 'Ask before commands off the safe list.' },
     { id: 'auto', name: 'Auto', description: 'Run safe commands on its own and let a classifier judge the rest, without asking.' },
   ],
 };

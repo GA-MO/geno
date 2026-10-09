@@ -137,15 +137,15 @@ const ALLOWED = [
 ];
 
 // Every command the Phase 4 evals (E5 and E14 on qwen3.8-flash) denied, verbatim from the session logs.
-// The third column is ask mode's verdict: it asks before the commands that rm -rf a folder inside the workspace.
+// The third column is ask mode's verdict: it asks before every line that runs a command not on the safe list.
 const EVAL_FALSE_POSITIVES: readonly [string, string, 'ask' | undefined][] = [
   ['payload-migration-check-lines', String.raw`npm run check:migrations 2>&1 | tail -3
 S=/tmp/migdemo; rm -rf $S; mkdir -p $S/src/migrations $S/scripts
 printf "\nexport async function up({ db }: any) {\n  await db.execute('CREATE INDEX x ON y')\n  await db.execute('DROP TABLE a; DROP TABLE b')\n  await db.execute('TRUNCATE c')\n}\n" > $S/src/migrations/20260105_demo.ts
 cp scripts/check-migrations.ts $S/scripts/
-cd $S && ln -sf "$(cd - >/dev/null; pwd)" 2>/dev/null; true`, undefined],
-  ['payload-site-url-runtime', String.raw`node --import tsx scripts/check-migrations.ts 2>&1 | head -5; echo ===; d=$(mktemp -d); mkdir -p $d/scripts $d/src/migrations; cp scripts/check-migrations.ts $d/scripts/; (cd $d && node --import tsx scripts/check-migrations.ts) 2>&1 | head -5; rm -rf $d`, undefined],
-  ['next-base-path', String.raw`cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && (NEXT_PUBLIC_BASE_PATH=/app-path PORT=3100 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js > /tmp/next-server.log 2>&1 &) && sleep 3 && for p in "/" "/app-path" "/app-path/" "/app-path/en" "/app-path/th" "/mockup/demo/list.json" "/app-path/mockup/demo/list.json" "/app-path/_next/static"; do echo "== $p"; curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" "http://127.0.0.1:3100$p"; done`, undefined],
+cd $S && ln -sf "$(cd - >/dev/null; pwd)" 2>/dev/null; true`, 'ask'],
+  ['payload-site-url-runtime', String.raw`node --import tsx scripts/check-migrations.ts 2>&1 | head -5; echo ===; d=$(mktemp -d); mkdir -p $d/scripts $d/src/migrations; cp scripts/check-migrations.ts $d/scripts/; (cd $d && node --import tsx scripts/check-migrations.ts) 2>&1 | head -5; rm -rf $d`, 'ask'],
+  ['next-base-path', String.raw`cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/ && (NEXT_PUBLIC_BASE_PATH=/app-path PORT=3100 HOSTNAME=127.0.0.1 NODE_ENV=production node .next/standalone/server.js > /tmp/next-server.log 2>&1 &) && sleep 3 && for p in "/" "/app-path" "/app-path/" "/app-path/en" "/app-path/th" "/mockup/demo/list.json" "/app-path/mockup/demo/list.json" "/app-path/_next/static"; do echo "== $p"; curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" "http://127.0.0.1:3100$p"; done`, 'ask'],
   ['payload-manual-code-fences', String.raw`git stash -q && mkdir -p .tmp-check && git show HEAD:src/lib/manual.ts | sed 's/^function parseSections/export function parseSections/' > .tmp-check/manual-old.ts && cat > .tmp-check/old.test.ts <<'EOF'
 import { expect, it } from 'vitest'
 import { parseSections } from './manual-old'
@@ -202,8 +202,8 @@ delete process.env.SITE_NOINDEX
 console.log('robots(default):', JSON.stringify(await robots()))
 console.log('page robots:', JSON.stringify((await pageMetadata({ title: 't', path: '/x' })).robots))
 EOF
-node --import tsx "$d/probe.ts" 2>&1 | tail -20; rm -rf "$d"`, undefined],
-  ['payload-noindex-env', String.raw`(SITE_NOINDEX=true SERVER_URL=https://uat.example.com npx next dev -p 3210 > /tmp/dev1.log 2>&1 &) ; sleep 20; echo '--- robots.txt (SITE_NOINDEX=true):'; curl -s http://127.0.0.1:3210/robots.txt; echo '--- home <meta name=robots>:'; curl -s http://127.0.0.1:3210/ | grep -o '<meta name="robots"[^>]*>'; pkill -f 'next dev -p 3210'; sleep 2; echo done`, undefined],
+node --import tsx "$d/probe.ts" 2>&1 | tail -20; rm -rf "$d"`, 'ask'],
+  ['payload-noindex-env', String.raw`(SITE_NOINDEX=true SERVER_URL=https://uat.example.com npx next dev -p 3210 > /tmp/dev1.log 2>&1 &) ; sleep 20; echo '--- robots.txt (SITE_NOINDEX=true):'; curl -s http://127.0.0.1:3210/robots.txt; echo '--- home <meta name=robots>:'; curl -s http://127.0.0.1:3210/ | grep -o '<meta name="robots"[^>]*>'; pkill -f 'next dev -p 3210'; sleep 2; echo done`, 'ask'],
 ];
 
 describe('the deny-to-approve list', () => {
@@ -212,9 +212,13 @@ describe('the deny-to-approve list', () => {
       expect(denialFor(command, scope, mode)?.rule).toBe(rule);
     });
 
-    it.each(ALLOWED)('allows %s', (command) => {
-      expect(denialFor(command, scope, mode)).toBeUndefined();
+    it.each(ALLOWED)('flags %s by no rule but unlisted', (command) => {
+      expect([undefined, 'unlisted']).toContain(denialFor(command, scope, mode)?.rule);
     });
+  });
+
+  it.each(ALLOWED)('allows %s in non-interactive mode', (command) => {
+    expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
   });
 
   it.each(DENIED)('asks before %s in ask mode and denies it in non-interactive mode', (command) => {
@@ -263,7 +267,7 @@ describe('the deny-to-approve list', () => {
   });
 
   it('keeps naming just the flagged part when only one command in the line is flagged', () => {
-    expect(denialFor('npm ci; rm -rf src', scope, 'ask')).toMatchObject({ command: 'rm -rf src', verdict: 'ask' });
+    expect(denialFor('npm test; rm -rf src', scope, 'ask')).toMatchObject({ command: 'rm -rf src', verdict: 'ask' });
   });
 
   it('names the part of a compound command that was denied', () => {
@@ -289,7 +293,7 @@ const MODE_TABLE: readonly [DenyRuleId, string, Expected][] = [
   ['cloud-cli', 'aws s3 ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['database-cli', 'psql -c "select 1"', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['secret-path', 'cat .env', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
-  ['unlisted', 'python3 build.py', { plan: 'deny', ask: undefined, auto: 'classify', 'non-interactive': undefined }],
+  ['unlisted', 'python3 build.py', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': undefined }],
 ];
 
 // Clearly safe: Auto runs these without asking anyone.
@@ -395,8 +399,12 @@ describe('auto mode', () => {
     expect(denialFor(command, scope, 'auto')?.verdict).toBe('classify');
   });
 
-  it.each(GRAY)('keeps running %s unasked in ask mode, as before', (command) => {
-    expect(denialFor(command, scope, 'ask')?.rule).not.toBe('unlisted');
+  it.each(GRAY)('asks before %s in ask mode, as Claude Code asks before any command not allowed', (command) => {
+    expect(denialFor(command, scope, 'ask')?.verdict).toBe('ask');
+  });
+
+  it.each(SAFE)('runs %s in ask mode without asking', (command) => {
+    expect(denialFor(command, scope, 'ask')).toBeUndefined();
   });
 
   it.each(SECRET)('asks before %s in ask mode, classifies it in auto and refuses it with nobody to ask', (command) => {
