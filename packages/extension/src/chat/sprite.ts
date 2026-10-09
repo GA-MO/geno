@@ -57,6 +57,26 @@ const BODY: Grid = [
   '........................',
 ];
 
+/** Box A up on its haunches or hind legs, the same head and neck over an upright chest whose white belly faces front. */
+const UPRIGHT: Grid = [
+  ...BODY.slice(0, 12),
+  '.........gggggggg.......',
+  '........ggggggggg.......',
+  '........ggggggwwg.......',
+  '........ggggggwwg.......',
+  '........ggggggwwg.......',
+  '........ggggggwwg.......',
+  '........ggggggwwg.......',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+];
+
+const BODIES = { four: BODY, upright: UPRIGHT } as const;
+export type Body = keyof typeof BODIES;
+
 /** A part table, its names taken from its keys. */
 const parts = <K extends string>(table: Readonly<Record<K, readonly Stamp[]>>) => table;
 
@@ -75,6 +95,9 @@ export type Eye = keyof typeof EYES;
 const TAILS = parts({
   down: [{ x: 0, y: 14, art: ['ggg', 'ggg'] }],
   up: [{ x: 0, y: 11, art: ['g..', 'gg.', 'ggg'] }],
+  /** Upright: laid along the ground behind, a counterweight; then its tip flicked up. */
+  rest: [{ x: 0, y: 18, art: ['.....gggg', '..ggggggg', 'ggggg....'] }],
+  restUp: [{ x: 0, y: 16, art: ['g........', 'g........', '.gg..gggg', '...gggggg'] }],
 });
 export type Tail = keyof typeof TAILS;
 
@@ -85,21 +108,38 @@ const LEGS = parts({
   tucked: [{ x: 4, y: 19, art: ['ggg......ggg', '.ggg......ggg'] }],
   /** Sitting: drawn under a body lowered two rows, the feet forward. */
   folded: [{ x: 4, y: 19, art: ['gggggg...gggggg'] }],
+  /** Upright, sat on its haunches: the thigh's curve in a darker green, the foot forward along the ground. */
+  haunch: [{ x: 6, y: 16, art: ['...dd', '.g...d', 'gg....d', 'ggggggdgwwg', 'gggggggggggggg', '.gggggggggggggg'] }],
+  /** Upright, stood on its hind legs, the far one darker. */
+  rear: [{ x: 8, y: 19, art: ['.ddd.ggg', '.ddd.ggg', '.ddd.ggggg'] }],
 });
 export type Legs = keyof typeof LEGS;
 
+/** The forelegs of the upright body, from its shoulder; the far one, when it shows, is the darker green. */
 const ARMS = parts({
   none: [],
-  half: [{ x: 18, y: 14, art: ['gg'] }],
-  up: [{ x: 18, y: 11, art: ['.g', '.g', 'g.'] }],
-  out: [{ x: 18, y: 12, art: ['..g', '.g.', 'g..'] }],
+  /** A wave: the near paw up, then out, from a foreleg that crosses the belly. */
+  up: [{ x: 14, y: 8, art: ['....g.g', '....ggg', '.....g.', '.....g.', '....g..', '...g...', 'ggg....'] }],
+  out: [{ x: 14, y: 9, art: ['.....g.g', '.....ggg', '......g.', '.....g..', '...gg...', 'ggg.....'] }],
   flex: [
-    { x: 10, y: 9, art: ['g..', 'g..', 'ggg'] },
-    { x: 18, y: 10, art: ['..g', '..g', 'ggg'] },
+    { x: 9, y: 8, art: ['d..', 'd..', 'ddd', '..d'] },
+    { x: 17, y: 9, art: ['..g', '..g', 'ggg', 'g..'] },
   ],
-  /** Typing: the hand down on the keys, then lifted. */
-  tapA: [{ x: 18, y: 16, art: ['g', 'g'] }],
-  tapB: [{ x: 18, y: 15, art: ['g', 'g'] }],
+  /**
+   * The near foreleg crosses the white belly so it reads apart from the chest. Holding a notebook or clipboard: the
+   * near paw at its lower left, the far one on its right edge.
+   */
+  hold: [
+    { x: 14, y: 13, art: ['...gg', '..ggg', 'ggg..'] },
+    { x: 23, y: 13, art: ['d', 'd'] },
+  ],
+  /** Typing: the paw down on the keys, then lifted. */
+  tapA: [{ x: 14, y: 15, art: ['gggg', '...g', '...gg'] }],
+  tapB: [{ x: 14, y: 14, art: ['gggg', '...g', '...gg'] }],
+  /** Writing: the paw on the pencil, where the pad's `pencil` puts it. */
+  pen0: [{ x: 14, y: 14, art: ['ggggg'] }],
+  pen1: [{ x: 14, y: 14, art: ['gggggg'] }],
+  pen2: [{ x: 14, y: 14, art: ['ggggggg'] }],
 });
 export type Arms = keyof typeof ARMS;
 
@@ -148,7 +188,7 @@ const PROPS: { readonly [K in Prop['kind']]: (prop: PropOf<K>) => readonly Stamp
   notebook: ({ page }) => [{ x: 17, y: 9, art: NOTEBOOK_PAGES[page] }],
   pad: ({ pencil }) => [
     { x: 17, y: 16, art: ['wwwwwww', 'nnnnnnn'] },
-    { x: 17 + pencil * 2, y: 13, art: ['..y', '.y.', 'k..'] },
+    { x: 18 + pencil, y: 13, art: ['..y', '.y.', 'k..'] },
   ],
   laptop: ({ rise, lid, lines }) => {
     const base = 18 + rise;
@@ -172,6 +212,7 @@ const PROPS: { readonly [K in Prop['kind']]: (prop: PropOf<K>) => readonly Stamp
 
 /** One picture of Noodle: its parts, then shifts and turns of the whole sprite. */
 export type Frame = {
+  readonly body?: Body;
   readonly eye: Eye;
   readonly tail: Tail;
   readonly legs: Legs;
@@ -197,6 +238,12 @@ const f = (over: Partial<Frame>): Frame => ({ ...STAND, ...over });
 
 const poseTable = <K extends string>(table: Readonly<Record<K, Pose>>) => table;
 
+/** On its haunches, forelegs free for what it holds. */
+export const SITTING: Frame = { ...STAND, body: 'upright', legs: 'haunch', tail: 'rest' };
+const sat = (over: Partial<Frame>): Frame => ({ ...SITTING, ...over });
+
+const reared = (over: Partial<Frame>): Frame => f({ body: 'upright', legs: 'rear', tail: 'rest', arms: 'flex', eye: 'happy', ...over });
+
 const laptop = (rise: number, lid: number, lines = 0): Prop => ({ kind: 'laptop', rise, lid, lines });
 
 export const POSES = poseTable({
@@ -208,37 +255,37 @@ export const POSES = poseTable({
   },
   reading: {
     loop: [
-      f({ eye: 'down', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
-      f({ eye: 'downLeft', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
-      f({ eye: 'down', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
-      f({ eye: 'downLeft', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
-      f({ eye: 'down', prop: { kind: 'notebook', page: 1 }, hold: 3 }),
+      sat({ eye: 'down', arms: 'hold', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
+      sat({ eye: 'downLeft', arms: 'hold', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
+      sat({ eye: 'down', arms: 'hold', prop: { kind: 'notebook', page: 0 }, tail: 'restUp', hold: 6 }),
+      sat({ eye: 'downLeft', arms: 'hold', prop: { kind: 'notebook', page: 0 }, hold: 6 }),
+      sat({ eye: 'down', arms: 'hold', prop: { kind: 'notebook', page: 1 }, hold: 3 }),
     ],
   },
   coding: {
     intro: [
-      f({ eye: 'down', prop: laptop(3, 0), hold: 2 }),
-      f({ eye: 'down', prop: laptop(2, 0), hold: 2 }),
-      f({ eye: 'down', prop: laptop(1, 0), hold: 2 }),
-      f({ eye: 'down', prop: laptop(0, 0), hold: 2 }),
-      f({ eye: 'down', prop: laptop(0, 2) }),
-      f({ eye: 'down', prop: laptop(0, 4) }),
-      f({ eye: 'down', prop: laptop(0, 6), hold: 3 }),
-      f({ eye: 'down', prop: laptop(0, 6), glasses: true, hold: 4 }),
+      sat({ eye: 'down', prop: laptop(3, 0), hold: 2 }),
+      sat({ eye: 'down', prop: laptop(2, 0), hold: 2 }),
+      sat({ eye: 'down', prop: laptop(1, 0), hold: 2 }),
+      sat({ eye: 'down', prop: laptop(0, 0), hold: 2 }),
+      sat({ eye: 'down', prop: laptop(0, 2) }),
+      sat({ eye: 'down', prop: laptop(0, 4) }),
+      sat({ eye: 'down', prop: laptop(0, 6), hold: 3 }),
+      sat({ eye: 'down', prop: laptop(0, 6), glasses: true, hold: 4 }),
     ],
     loop: [1, 2, 3, 4, 4, 4].flatMap((lines) => [
-      f({ eye: 'down', glasses: true, arms: 'tapA', prop: laptop(0, 6, lines), hold: 2 }),
-      f({ eye: 'down', glasses: true, arms: 'tapB', prop: laptop(0, 6, lines), hold: 2 }),
+      sat({ eye: 'down', glasses: true, arms: 'tapA', prop: laptop(0, 6, lines), hold: 2 }),
+      sat({ eye: 'down', glasses: true, arms: 'tapB', prop: laptop(0, 6, lines), hold: 2 }),
     ]),
   },
   writing: {
-    loop: ([0, 1, 2, 1] as const).map((pencil) => f({ eye: 'down', prop: { kind: 'pad', pencil }, hold: 3 })),
+    loop: ([0, 1, 2, 1] as const).map((pencil) => sat({ eye: 'down', arms: `pen${pencil}`, prop: { kind: 'pad', pencil }, hold: 3 })),
   },
   running: {
     loop: [f({ legs: 'stepA', marks: ['dust'] }), f({ legs: 'stepB', dy: -1 }), f({ legs: 'stepA' }), f({ legs: 'stepB', dy: -1, marks: ['dust'] })],
   },
   planning: {
-    loop: [0, 1, 2, 3].map((ticks) => f({ eye: 'down', prop: { kind: 'clipboard', ticks }, hold: ticks === 3 ? 10 : 6 })),
+    loop: [0, 1, 2, 3].map((ticks) => sat({ eye: 'down', arms: 'hold', prop: { kind: 'clipboard', ticks }, hold: ticks === 3 ? 10 : 6 })),
   },
   asking: {
     loop: [f({ eye: 'up', marks: ['question'], hold: 4 }), f({ eye: 'up', marks: ['question'], dy: -1, hold: 4 })],
@@ -247,13 +294,14 @@ export const POSES = poseTable({
     once: true,
     loop: [f({ legs: 'tucked', dy: -1, hold: 2 }), f({ legs: 'tucked', dy: -1, marks: ['sparkle'], hold: 2 }), f({ marks: ['sparkle'], hold: 3 }), f({ hold: 1 })],
   },
+  /** Up on its hind legs, both forelegs raised. */
   flex: {
     once: true,
     loop: [
-      f({ arms: 'flex', eye: 'happy', hold: 2 }),
-      f({ arms: 'flex', eye: 'happy', marks: ['sparkle'], hold: 3 }),
-      f({ arms: 'flex', eye: 'happy', hold: 2 }),
-      f({ arms: 'flex', eye: 'happy', marks: ['sparkle'], hold: 3 }),
+      reared({ hold: 2 }),
+      reared({ marks: ['sparkle'], hold: 3 }),
+      reared({ hold: 2 }),
+      reared({ marks: ['sparkle'], hold: 3 }),
       f({ hold: 1 }),
     ],
   },
@@ -334,7 +382,7 @@ export const crop = (grid: Grid, area: { readonly x: number; readonly y: number;
   grid.slice(area.y, area.y + area.height).map((row) => row.slice(area.x, area.x + area.width));
 
 export function compose(frame: Frame): Grid {
-  const cells = BODY.map((row) => [...row]);
+  const cells = BODIES[frame.body ?? 'four'].map((row) => [...row]);
   const prop = frame.prop === undefined ? [] : (PROPS[frame.prop.kind] as (p: Prop) => readonly Stamp[])(frame.prop);
   paint(cells, [
     ...TAILS[frame.tail],
@@ -365,52 +413,48 @@ export function svgOf(grid: Grid): string {
 
 /**
  * The peek: Noodle leaning on the composer's top edge, the grid's last row. One body, from the head down the neck
- * to the shoulders and the chest with its white belly, cut off by the edge; the arms and hands are drawn per frame.
+ * to the shoulders and the chest with its white belly, cut off by the edge; the forelegs and paws are drawn per frame.
  */
 const PEEK_BODY: Grid = [
-  '........................',
-  '.............ggggggggg..',
-  '.............ggggggggg..',
-  '.............ggggggggg..',
-  '.............ggggggggg..',
-  '.............ggggggggg..',
-  '.............ggggggggg..',
-  '.............gggg.......',
-  '.............gggg.......',
-  '.............gggg.......',
-  '.............gggg.......',
-  '.............gggg.......',
+  ...BODY.slice(0, 12),
+  '...........gggggggg.....',
   '..........gggggggggg....',
-  '.........gggggggggggg...',
-  '.........gggggggggggg...',
-  '..........gggwwwwggg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
-  '..........ggwwwwwwgg....',
+  ...Array<string>(10).fill('............gwwwwg......'),
 ];
 
-/** A 3 by 2 hand, its knuckles a darker green. */
-const HAND = ['dgd', 'ggg'];
+/** The foreleg from the right shoulder, three pixels thick, braced outward, apart from the chest. */
+const FORELEG = ['ggg.', 'ggg.', 'gggg', '.ggg', '.ggg', '.ggg', '.ggg'];
+/** A wide forepaw seen from the front, its toes hooked over the edge, a darker green between them. */
+const PAW = ['ggggg', 'ggggg', 'gdgdg'];
+/** The paw turned up to wave, its toes spread. */
+const PALM = ['g.g.g', 'ggggg', 'ggggg'];
 
 /**
- * Where a hand is: gripping the edge, lifted a row off it, let go (the arm hangs below the edge), or waving above
- * it in one of two places. Drawn for the right side; the left side is its mirror about the chest.
+ * Where a paw is: hooked over the edge, lifted a row off it, let go (the leg hangs past the edge), or waving above
+ * the shoulder in one of two places. Drawn for the right side; the left side is its mirror about the chest.
  */
 const HANDS = parts({
-  grip: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', ...HAND] }],
-  lift: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', ...HAND] }],
-  off: [{ x: 21, y: 14, art: ['g..', 'gg.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.', '.g.'] }],
-  waveA: [{ x: 21, y: 8, art: [...HAND, '.g.', '.g.', '.g.', 'gg.', 'g..'] }],
-  waveB: [{ x: 20, y: 9, art: [...HAND, '.g.', '.g.', '.g.', '.g.'] }],
+  grip: [
+    { x: 19, y: 13, art: [...FORELEG, '.ggg'] },
+    { x: 19, y: 21, art: PAW },
+  ],
+  lift: [
+    { x: 19, y: 13, art: FORELEG },
+    { x: 19, y: 20, art: PAW },
+  ],
+  off: [{ x: 19, y: 13, art: [...FORELEG, '.ggg', '.ggg', '.ggg', '.ggg'] }],
+  waveA: [
+    { x: 19, y: 8, art: PALM },
+    { x: 19, y: 11, art: ['ggg', 'ggg', 'ggg'] },
+  ],
+  waveB: [
+    { x: 18, y: 9, art: PALM },
+    { x: 19, y: 12, art: ['gg.', 'ggg'] },
+  ],
 });
 export type Hand = keyof typeof HANDS;
 
-/** The chest's middle column, doubled: the left hand is the right one mirrored about it. */
+/** The chest's middle column, doubled: the left paw is the right one mirrored about it. */
 const CHEST_MIRROR = 29;
 const mirrored = (stamps: readonly Stamp[]): Stamp[] =>
   stamps.map(({ x, y, art }) => ({ x: CHEST_MIRROR - (x + art[0]!.length - 1), y, art: art.map((line) => [...line].reverse().join('')) }));

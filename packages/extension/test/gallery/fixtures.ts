@@ -494,6 +494,15 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'tool-editing',
+    group: 'Tools',
+    title: 'An edit running, Noodle at the laptop',
+    look: { detail: 'full' },
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'Trim the email'), { type: 'text', text: EDIT.narration }, toolStart('tu_e', EDIT));
+    },
+  },
+  {
     id: 'tool-failed',
     group: 'Tools',
     title: 'A failed command',
