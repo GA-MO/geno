@@ -64,13 +64,25 @@ const isLayout = (raw: unknown): raw is ShowLayout => (SHOW_LAYOUTS as readonly 
 
 const INPUT_FIELDS = ['files', 'caption', 'layout'];
 
+/** qwen3.8-flash sends the list as its JSON text, such as "[\"a.png\"]", and a lone path as a string; both mean a list. */
+function listOf(raw: unknown): unknown {
+  if (typeof raw !== 'string') return raw;
+  if (!raw.trim().startsWith('[')) return [raw];
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
 /** The model's input, or what is wrong with it in words it can act on. A path named twice is shown once. */
 export function parseShowFilesInput(raw: unknown): Parsed<ShowFilesInput> {
   if (!isRecord(raw)) return fail(`${SHOW_FILES_TOOL} takes an object with files`);
   const extra = Object.keys(raw).find((key) => !INPUT_FIELDS.includes(key));
   if (extra !== undefined) return fail(`${SHOW_FILES_TOOL} has an unknown field "${extra}"`);
-  const { files, caption, layout } = raw;
-  if (!Array.isArray(files) || files.length === 0) return fail(`${SHOW_FILES_TOOL} needs files, a list of 1 to ${SHOW_FILES_LIMITS.files} paths`);
+  const { caption, layout } = raw;
+  const files = listOf(raw['files']);
+  if (!Array.isArray(files) || files.length === 0) return fail(`${SHOW_FILES_TOOL} needs files, an array of 1 to ${SHOW_FILES_LIMITS.files} paths such as ["before.png", "after.png"]`);
   if (files.some((file) => typeof file !== 'string' || file.trim() === '')) return fail('each entry of files must be a path');
   const unique = [...new Set((files as string[]).map((file) => file.trim()))];
   if (unique.length > SHOW_FILES_LIMITS.files) return fail(`files names ${unique.length} paths; show at most ${SHOW_FILES_LIMITS.files} at once`);

@@ -7,9 +7,15 @@ describe('show_files input', () => {
     expect(parseShowFilesInput({ files: ['a.png'], layout: 'single', caption: null })).toEqual({ ok: true, value: { files: ['a.png'], layout: 'single' } });
   });
 
+  it('takes the list as its JSON text and a lone path as a string, as qwen3.8-flash sends them', () => {
+    expect(parseShowFilesInput({ files: '["before.png", "after.png"]' })).toEqual({ ok: true, value: { files: ['before.png', 'after.png'], layout: 'grid' } });
+    expect(parseShowFilesInput({ files: 'shot.png' })).toEqual({ ok: true, value: { files: ['shot.png'], layout: 'grid' } });
+    expect(parseShowFilesInput({ files: '["a.png"' })).toMatchObject({ ok: false, problem: expect.stringContaining('needs files, an array') });
+  });
+
   it.each([
-    [{}, 'show_files needs files, a list of 1 to 12 paths'],
-    [{ files: [] }, 'show_files needs files, a list of 1 to 12 paths'],
+    [{}, 'show_files needs files, an array of 1 to 12 paths such as ["before.png", "after.png"]'],
+    [{ files: [] }, 'show_files needs files, an array of 1 to 12 paths such as ["before.png", "after.png"]'],
     [{ files: [''] }, 'each entry of files must be a path'],
     [{ files: Array.from({ length: 13 }, (_, i) => `${i}.png`) }, 'files names 13 paths; show at most 12 at once'],
     [{ files: ['a.png'], layout: 'carousel' }, 'layout is "grid" or "single"'],
