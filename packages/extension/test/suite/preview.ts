@@ -31,8 +31,8 @@ export async function run(): Promise<void> {
   await ui({ do: 'type', text: PROMPT });
   await press('Enter');
 
-  // Ask mode asks before each read-only browser tool: the screenshot, then the console.
-  for (const tool of ['take_screenshot', 'list_console_messages']) {
+  // Ask mode asks before the server's command, which is not on the safe list, then before each read-only browser tool.
+  for (const tool of ['node server.mjs', 'take_screenshot', 'list_console_messages']) {
     await waitFor(`the card for ${tool}`, async () => (await count(CARD)) === 1 && ((await textOf(CARD)) ?? '').includes(tool), 90_000, () => textOf('.transcript'));
     await click(`${CARD} button[data-focus$=":allow"]`);
     await waitFor(`the ${tool} card to settle`, async () => (await count(CARD)) === 0);
