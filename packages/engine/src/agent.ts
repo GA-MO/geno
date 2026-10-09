@@ -1,14 +1,12 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { z } from 'zod';
 import {
   AGENT_PROMPTS,
   AGENT_TOOL,
   AGENT_TOOL_DEFINITIONS,
-  APPROVAL_MODES,
   approvalQuestion,
   capabilitiesOf,
   DEFERRED_TOOLS_NOTE,
@@ -77,9 +75,10 @@ import { openMcpHub, type McpTools } from './mcp/hub.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { memoryStore } from './memory.js';
 import { layeredPermissions, permissionStore } from './permissions.js';
+import { genoSettings } from './settings.js';
 import { logMode } from './sessions.js';
 import { sessionIndex } from './session-index.js';
-import { isMissing, StoreError, type Store } from './store.js';
+import type { Store } from './store.js';
 import { ruleAttacher } from './tools/rules.js';
 import type { ToolContext } from './tools/context.js';
 import { agentExecutors, freshAuto, modeOf, withPermissions, type Approval, type Approver, type Diagnostics } from './tools/agent.js';
@@ -102,41 +101,9 @@ import type { Wakes } from './wakes.js';
 import { ghCli, githubRemote } from './gh.js';
 import { HookSessions } from './hooks.js';
 
-/**
- * `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
- * `appendSystemPrompt` is text that ends the system prompt of every agent run in the workspace.
- */
-const workspaceConfigSchema = z.looseObject({
-  check: z.string().min(1).optional(),
-  agentTool: z.array(z.enum(APPROVAL_MODES)).optional(),
-  appendSystemPrompt: z.string().min(1).optional(),
-});
-
-type WorkspaceConfig = z.infer<typeof workspaceConfigSchema>;
-
-export async function workspaceConfig(workspace: string): Promise<WorkspaceConfig> {
-  const file = path.join(workspace, '.gcode.json');
-  let text: string;
-  try {
-    text = await readFile(file, 'utf8');
-  } catch (error) {
-    if (isMissing(error)) return {};
-    throw error;
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (error) {
-    throw new StoreError(file, (error as Error).message);
-  }
-  const parsed = workspaceConfigSchema.safeParse(raw);
-  if (!parsed.success) throw new StoreError(file, z.prettifyError(parsed.error));
-  return parsed.data;
-}
-
 export type AgentOptions = {
   readonly limits: Limits;
-  /** From --check; undefined falls back to `.gcode.json`. */
+  /** From --check; undefined falls back to the `check` setting. */
   readonly check: string | undefined;
   readonly checkAfterEdit: boolean;
   readonly approval: Approval;
@@ -168,9 +135,9 @@ export type AgentOptions = {
   readonly effortPolicy?: EffortPolicy | undefined;
   /** Replaces the model's prompt tier; for the eval that compares them. */
   readonly promptTier?: PromptTier | undefined;
-  /** Replaces `.gcode.json`'s `agentTool` for this run; for the eval that compares a run with and without it. */
+  /** Replaces the `agentTool` setting for this run; for the eval that compares a run with and without it. */
   readonly agentTool?: boolean | undefined;
-  /** From --append-system-prompt; undefined falls back to `.gcode.json`. It ends the system prompt. */
+  /** From --append-system-prompt; undefined falls back to the `appendSystemPrompt` setting. It ends the system prompt. */
   readonly appendSystemPrompt?: string | undefined;
   /** Where subagents show; undefined prints them on the terminal. */
   readonly childHost?: SubagentHost | undefined;
@@ -251,7 +218,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
   if (lane !== undefined) await bindSession(lane, session.id);
   const permissions = layeredPermissions(
     permissionStore(homeOf(store), lane?.repo.main ?? workspace),
-    { claudeDir: claudeDirOf(io.env), trusted: options.trustedWorkspace === true },
+    { homes: homesOf(store, io.env), trusted: options.trustedWorkspace === true },
     { workspace, tempDir, home },
     io.err,
   );
@@ -274,8 +241,9 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     const commands = async () => (await loadCommands(workspace, homes, plugins)).commands;
     const skillRoots = await globalSkillRoots(homes, claudeDirOf(io.env));
     const pstack = (await commands()).some((c) => c.kind === 'skill' && c.name.startsWith('pstack:'));
-    const config = await workspaceConfig(workspace);
-    const check = await checkCommand(options.check ?? config.check, workspace, homeOf(store));
+    const settings = await genoSettings(homes, workspace);
+    for (const note of settings.notes) io.err(`settings: ${note}`);
+    const check = await checkCommand(options.check ?? settings.geno.check?.value, workspace, homeOf(store));
     const project: SessionScope = { kind: 'project', workspace: lane?.repo.main ?? session.workspace };
     const forkSource = head?.kind === 'session-start' ? head.fork?.sessionId : undefined;
     // The session, its forks and the session it was forked from all hold turns the model already has in context.
@@ -324,7 +292,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       const bound = await laneAt(record.path, home);
       if (bound === undefined) throw new EngineError(`lane ${name} at ${record.path} is not a lane checkout`);
       await bindSession(bound, child);
-      const laneCheck = await checkCommand(options.check ?? config.check, record.path, homeOf(store));
+      const laneCheck = await checkCommand(options.check ?? settings.geno.check?.value, record.path, homeOf(store));
       const laneSandbox = await openSandbox(await sandboxPolicy({ store, home, workspace: record.path, tempDir, writable: writable(bound.gitWritable) }), ruledPaths(record.path));
       const place: Place = { sandbox: laneSandbox, workspace: record.path, lane: bound.bounds, check: laneCheck, diagnostics: undefined };
       return { lane: bound, executors: (approval) => executorsFor(approval, false, place), close: () => laneSandbox.close() };
@@ -359,7 +327,8 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       ...chapterToolDefinitions(startMode, chapters),
       ...webToolDefinitions(search !== undefined),
     ];
-    const agentTool = options.agentTool ?? config.agentTool?.includes(startMode) === true;
+    // `agentTool` lists the modes whose model may start subagents itself; `@` mentions work in every mode.
+    const agentTool = options.agentTool ?? settings.geno.agentTool?.value.includes(startMode) === true;
     const genoTools = pstack ? await writeGenoTools(homeOf(store), { subagents: agentTool }) : undefined;
     const readRoots = [...plugins.map((plugin) => plugin.root), ...skillRoots, ...(genoTools === undefined ? [] : [genoTools])];
     const scan = await loadAgents(workspace, homes, plugins, subagentModelsOf(io.env));
@@ -406,7 +375,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
     });
     if (agentTool) tools = [...tools, children.tool, MESSAGE_AGENT_TOOL_DEFINITION];
     const roster = toolRoster(tools, mcp?.tools);
-    const appended = options.appendSystemPrompt ?? config.appendSystemPrompt;
+    const appended = options.appendSystemPrompt ?? settings.geno.appendSystemPrompt?.value;
     const system = [
       AGENT_PROMPTS[options.promptTier ?? capabilitiesOf(session.provider, session.model).promptTier],
       ...(offersToolSearch(roster) ? [DEFERRED_TOOLS_NOTE] : []),

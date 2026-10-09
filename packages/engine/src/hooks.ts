@@ -48,7 +48,8 @@ import { loadPlugins } from './plugins.js';
 import { runWithInput } from './process.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { appendEvent } from './sessions.js';
-import { homeOf, type Store } from './store.js';
+import type { Store } from './store.js';
+import { homesOf } from './commands.js';
 import { modeOf, refusalOf, settle, type Approval } from './tools/agent.js';
 import type { PermissionAsk, ToolContext } from './tools/context.js';
 
@@ -129,8 +130,7 @@ export function reportHooks(io: Io, label: string, results: readonly HookResult[
  * setup for its lanes is `laneSetup`, which the user approves once. A failed hook is reported, and the lane stays.
  */
 export async function laneCreated(io: Io, store: Store, repo: { readonly main: string }, lane: LaneRecord): Promise<void> {
-  const claudeDir = claudeDirOf(io.env);
-  const config = await loadHookConfig({ claudeDir, appHome: homeOf(store), workspace: repo.main, plugins: (await loadPlugins(claudeDir, repo.main)).plugins });
+  const config = await loadHookConfig({ homes: homesOf(store, io.env), workspace: repo.main, plugins: (await loadPlugins(claudeDirOf(io.env), repo.main)).plugins });
   const entries = runnableEntries(config.entries, false).filter((entry) => entry.event === 'LaneCreated');
   if (entries.length === 0) return;
   const runner = hookRunner({
@@ -261,7 +261,7 @@ export class HookSessions {
       return opened;
     }
     const plugins = (await loadPlugins(claudeDirOf(io.env), opening.workspace)).plugins;
-    const config = await loadHookConfig({ claudeDir: claudeDirOf(io.env), appHome: homeOf(opening.store), workspace: opening.workspace, plugins });
+    const config = await loadHookConfig({ homes: homesOf(opening.store, io.env), workspace: opening.workspace, plugins });
     for (const problem of config.problems) if (problem.severity === 'warning') io.err(`hooks: ${problem.text}`);
     const home = io.env['HOME'] || homedir();
     const entries = runnableEntries(config.entries, opening.trusted);

@@ -40,7 +40,7 @@ describe('loadHookConfig', () => {
     await installKit(root);
     const workspace = path.join(root, 'ws');
     const { plugins } = await loadPlugins(path.join(root, 'claude'), workspace);
-    const config = await loadHookConfig({ claudeDir: path.join(root, 'claude'), appHome: path.join(root, 'app'), workspace, plugins });
+    const config = await loadHookConfig({ homes: { app: path.join(root, 'app'), user: undefined, claude: path.join(root, 'claude') }, workspace, plugins });
     expect(config.problems).toEqual([]);
     expect(config.entries.map((e) => [e.command, e.origin.scope, e.origin.file])).toEqual([
       ['geno-user', 'user', path.join(root, 'app/settings.json')],
@@ -64,7 +64,7 @@ describe('loadHookConfig', () => {
     const workspace = path.join(root, 'ws');
     const { plugins } = await loadPlugins(path.join(root, 'claude'), workspace);
     expect(plugins.map((p) => p.name)).toEqual(['kit']);
-    const config = await loadHookConfig({ claudeDir: path.join(root, 'claude'), appHome: path.join(root, 'app'), workspace, plugins });
+    const config = await loadHookConfig({ homes: { app: path.join(root, 'app'), user: undefined, claude: path.join(root, 'claude') }, workspace, plugins });
     expect(config.entries.map((e) => e.command)).toEqual(['geno-project']);
     expect(config.problems).toEqual([{ severity: 'warning', text: expect.stringContaining(`${path.join(workspace, '.claude/settings.json')} is not valid JSON`) }]);
   });

@@ -27,6 +27,7 @@ import { sharedSlots } from './model-slots.js';
 import { runShell, tail } from './process.js';
 import { readSessionLog } from './sessions.js';
 import { homeOf, readTask, taskDir } from './store.js';
+import { homesOf } from './commands.js';
 import { NON_INTERACTIVE } from './tools/agent.js';
 
 const LANE_ENDS: Readonly<Record<DoneReason, LaneEnd>> = { end_turn: 'done', 'max-turns': 'capped', budget: 'capped', refusal: 'failed', error: 'failed' };
@@ -119,7 +120,7 @@ async function runArenaTask(task: EvalTask, n: ArenaSize, laneCapUsd: number, ma
         return { sessionId: opened.log.session.id, ended };
       },
     };
-    const variants = await arenaVariants(repo.main, n, undefined);
+    const variants = await arenaVariants(homesOf(store, io.env), repo.main, n, undefined);
     const arena = await startArena(deps, task.prompt, variants, await arenaPreview(store, quiet, n));
     const run: ArenaRun = await arena.finished;
     const lanes = await Promise.all(

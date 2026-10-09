@@ -357,7 +357,7 @@ describe('a run', () => {
   it('stops at a failed check, and at a workspace with no check', () => {
     const answer = (passed: boolean | undefined) => (call: UnitCall) => (call.kind === 'check' ? ({ kind: 'check', passed, text: '' } as const) : done(json({ findings: ['x'] })));
     expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), answer(false)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the check failed' });
-    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), answer(undefined)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the workspace has no check command (set "check" in .gcode.json)' });
+    expect(drive(startWorkflow(spec(REVIEW_FIX_VERIFY), ''), answer(undefined)).run.stop).toEqual({ kind: 'gate', unit: 'gate', why: 'the workspace has no check command (set "check" in .g-code/settings.json)' });
   });
 
   it('stops at a field gate whose value differs', () => {

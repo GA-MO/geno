@@ -578,6 +578,60 @@ describe.each(WIRES)('B/B-62 Claude Code settings on the %s wire', (wire) => {
   });
 });
 
+describe.each(WIRES)('P39 the settings files of every config root on the %s wire', (wire) => {
+  const settings = (permissions: unknown): string => JSON.stringify({ permissions });
+  const FETCH = 'curl -s https://a.invalid/x';
+  const ALLOW = `Bash(${FETCH}:*)`;
+
+  it('B/B-62 a deny in .agents/settings.json refuses the command in an untrusted workspace, naming the file', async () => {
+    const touch = call('bash', { command: 'touch made.txt' });
+    const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Refused.' }], { files: { '.agents/settings.json': settings({ deny: ['Bash(touch:*)'] }) }, mode: 'auto', trusted: false });
+    expect(run.view().get(touch.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `touch`, which the user set in .agents/settings.json') });
+    expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
+    expect(run.warnings).toEqual([]);
+  });
+
+  it('B/B-62 a project allow in .g-code/settings.json waits for a trusted workspace, with one warning line naming the file', async () => {
+    const files = { '.g-code/settings.json': settings({ allow: [ALLOW] }) };
+    const untrusted = call('bash', { command: FETCH });
+    const held = await scripted(wire, [{ calls: [untrusted] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'], trusted: false });
+    expect(held.asked).toEqual([expect.objectContaining({ command: FETCH, verdict: 'ask' })]);
+    expect(held.warnings).toEqual(['permissions: .g-code/settings.json: 1 allow rule waits for a trusted workspace']);
+
+    const trusted = call('bash', { command: FETCH });
+    const run = await scripted(wire, [{ calls: [trusted] }, { answer: 'Ran.' }], { files, mode: 'ask', trusted: true });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(trusted.id)?.text).not.toMatch(/denied|rejected/);
+  });
+
+  it("B/B-62 a user allow in ~/.agents/settings.json applies without trust, and a deny in Geno's own user file beats it", async () => {
+    const fetch = call('bash', { command: FETCH });
+    const run = await scripted(wire, [{ calls: [fetch] }, { answer: 'Ran.' }], { files: { 'a.ts': '' }, homeFiles: { '.agents/settings.json': settings({ allow: [ALLOW] }) }, mode: 'ask', trusted: false });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(fetch.id)?.text).not.toMatch(/denied|rejected/);
+
+    const denied = call('bash', { command: FETCH });
+    const refused = await scripted(wire, [{ calls: [denied] }, { answer: 'Refused.' }], {
+      files: { 'a.ts': '' },
+      homeFiles: { '.agents/settings.json': settings({ allow: [ALLOW] }), 'settings.json': settings({ deny: ['Bash(curl:*)'] }) },
+      mode: 'ask',
+    });
+    expect(refused.asked).toEqual([]);
+    // The fake home is GCODE_HOME too, so Geno's user file is settings.json at its top.
+    expect(refused.view().get(denied.id)).toMatchObject({ error: true, text: expect.stringContaining('denies `curl`, which the user set in ~/settings.json') });
+  });
+
+  it("B/B-62 a Geno-only key in .claude/settings.json is ignored with one warning line, and the file's permissions still apply", async () => {
+    const touch = call('bash', { command: 'touch made.txt' });
+    const run = await scripted(wire, [{ calls: [touch] }, { answer: 'Refused.' }], {
+      files: { '.claude/settings.json': JSON.stringify({ check: 'true', permissions: { deny: ['Bash(touch:*)'] } }) },
+      mode: 'auto',
+    });
+    expect(run.view().get(touch.id)).toMatchObject({ error: true, text: expect.stringContaining('which the user set in .claude/settings.json') });
+    expect(run.warnings).toEqual(['settings: .claude/settings.json: Geno ignores check, which it reads only from .g-code/settings.json']);
+  });
+});
+
 describe.each(WIRES)('B/B-63 domain rules on the %s wire', (wire) => {
   const PAGE = '<!doctype html><title>Docs</title><main><p>The port is 4321.</p></main>';
   /** A page any host name reaches, as the fetch resolves every name to this machine, and how often it was asked for. */

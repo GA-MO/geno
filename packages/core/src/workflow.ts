@@ -820,7 +820,7 @@ export function settleUnit(run: WorkflowRun, index: number, outcome: UnitOutcome
   let output: StepOutput | undefined;
   let stop: WorkflowStop | undefined;
   if (outcome.kind === 'check') {
-    const why = outcome.passed === undefined ? 'the workspace has no check command (set "check" in .gcode.json)' : outcome.passed ? undefined : 'the check failed';
+    const why = outcome.passed === undefined ? 'the workspace has no check command (set "check" in .g-code/settings.json)' : outcome.passed ? undefined : 'the check failed';
     settled = { ...unit, status: why === undefined ? 'passed' : 'failed', note: why };
     if (why !== undefined) stop = { kind: 'gate', unit: unit.label, why };
   } else {

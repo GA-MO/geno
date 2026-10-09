@@ -32,12 +32,14 @@ import {
   type FileChange,
   type SessionId,
   type SetupApproval,
+  projectSettingsFiles,
 } from '@g-code/core';
 import { childEnv, type Env } from './child-env.js';
 import { EngineError } from './errors.js';
 import { DISK_FILES, type Files } from './files.js';
 import { runShell } from './process.js';
 import { isMissing, StoreError } from './store.js';
+import { readSettings } from './settings.js';
 
 type GitResult = { readonly code: number; readonly stdout: string; readonly stderr: string };
 
@@ -257,16 +259,16 @@ export async function cloneDeps(repo: LaneRepo, lane: LaneRecord, platform: stri
   return { kind: 'cloned', folders, ms: Math.round(performance.now() - started) };
 }
 
-/** Where a repository's lane setup is configured. Geno's own `.gcode.json` wins over Cursor's file. */
+/** Where a repository's lane setup is configured. Geno's own `laneSetup` setting wins over Cursor's file. */
 export type SetupSource = { readonly file: string; readonly commands: readonly string[] };
 
 const commandList = z.union([z.string().min(1).transform((one) => [one]), z.array(z.string().min(1))]);
-const gcodeSetup = z.looseObject({ laneSetup: commandList.optional() });
 const cursorSetup = z.looseObject({ 'setup-worktree-unix': commandList.optional(), 'setup-worktree': commandList.optional() });
 
 export async function setupSource(main: string): Promise<SetupSource | undefined> {
+  const own = (await readSettings(projectSettingsFiles(main), (file) => path.relative(main, file))).geno.laneSetup;
+  if (own !== undefined && own.value.length > 0) return { file: path.relative(main, own.source.file), commands: own.value };
   const sources: readonly [string, (raw: unknown) => readonly string[] | undefined][] = [
-    ['.gcode.json', (raw) => gcodeSetup.parse(raw).laneSetup],
     [path.join('.cursor', 'worktrees.json'), (raw) => {
       const parsed = cursorSetup.parse(raw);
       return parsed['setup-worktree-unix'] ?? parsed['setup-worktree'];

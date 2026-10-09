@@ -9,18 +9,15 @@ import {
   arenaSettled,
   arenaStep,
   costPreview,
-  EFFORTS,
   laneLetter,
   laneNameFor,
   parseLaneName,
   parseRanking,
   passingLanes,
   rankingTask,
-  SEED_IDS,
   summarizeSession,
   trivialRanking,
   variantPrompt,
-  EXTERNAL_BACKEND_IDS,
   variantsFor,
   ZERO_USAGE,
   type ArenaDiff,
@@ -29,6 +26,7 @@ import {
   type ArenaReview,
   type ArenaRun,
   type ArenaSize,
+  type ConfigHomes,
   type AssistantTurn,
   type LaneCheck,
   type LaneEnd,
@@ -37,7 +35,7 @@ import {
   type VariantSpec,
   type Variety,
 } from '@g-code/core';
-import { runAgent, workspaceConfig } from './agent.js';
+import { runAgent } from './agent.js';
 import { openSessionLog, startSession } from './chat.js';
 import { checkCommand } from './check-command.js';
 import { issuedOnce } from './drive.js';
@@ -50,6 +48,8 @@ import { laneChanges, laneDiffText, requireLane, type LaneRepo } from './lanes.j
 import { tail } from './process.js';
 import { openSandbox, sandboxPolicy } from './sandbox.js';
 import { homeOf, isMissing, StoreError, type Store } from './store.js';
+import { homesOf } from './commands.js';
+import { genoSettings } from './settings.js';
 import { CHECK_TIMEOUT_MS, NON_INTERACTIVE } from './tools/agent.js';
 
 /**
@@ -64,7 +64,7 @@ export type ArenaDeps = {
   readonly store: Store;
   readonly io: Io;
   readonly runLane: LaneRunner;
-  /** The check to run in each lane; undefined uses the workspace's `.gcode.json` `check`. */
+  /** The check to run in each lane; undefined uses the `check` setting. */
   readonly check: string | undefined;
   /** Each step of the run, after it is saved. */
   readonly onUpdate: (run: ArenaRun) => void;
@@ -73,29 +73,9 @@ export type ArenaDeps = {
 /** The review child's caps, which the cost preview counts in full. */
 export const REVIEW_LIMITS = { maxTurns: 8, maxCostUsd: 0.05 };
 
-const variantSchema = z.strictObject({
-  seed: z.enum(SEED_IDS as [string, ...string[]]).default('plain'),
-  model: z.string().min(1).nullable().default(null),
-  effort: z.enum(EFFORTS).nullable().default(null),
-  backend: z.enum(EXTERNAL_BACKEND_IDS).optional(),
-});
-const arenaConfigSchema = z.strictObject({
-  variety: z.enum(['seeds', 'effort', 'models']).optional(),
-  models: z.array(z.string().min(1)).optional(),
-  variants: z.array(variantSchema).optional(),
-});
-
-/** `.gcode.json` `arena`: the default variety, the models the `models` variety uses, or an explicit variant list. */
-async function arenaConfig(workspace: string): Promise<z.infer<typeof arenaConfigSchema>> {
-  const raw = (await workspaceConfig(workspace))['arena'];
-  if (raw === undefined) return {};
-  const parsed = arenaConfigSchema.safeParse(raw);
-  if (!parsed.success) throw new StoreError(path.join(workspace, '.gcode.json'), `arena: ${z.prettifyError(parsed.error)}`);
-  return parsed.data;
-}
-
-export async function arenaVariants(workspace: string, n: ArenaSize, variety: Variety | undefined): Promise<VariantSpec[]> {
-  const config = await arenaConfig(workspace);
+/** The `arena` setting: the default variety, the models the `models` variety uses, or an explicit variant list. */
+export async function arenaVariants(homes: ConfigHomes, workspace: string, n: ArenaSize, variety: Variety | undefined): Promise<VariantSpec[]> {
+  const config = (await genoSettings(homes, workspace)).geno.arena?.value ?? {};
   // A variety the user asks for by name wins over the workspace's list.
   return variantsFor(n, variety ?? config.variety ?? 'seeds', config.models ?? [], variety === undefined ? ((config.variants ?? []) as VariantSpec[]) : []);
 }
@@ -152,7 +132,7 @@ export async function listArenas(repo: LaneRepo): Promise<ArenaRun[]> {
 
 /** Runs the project check in the lane, in the sandbox, since the code it checks is the model's. */
 export async function checkLane(store: Store, io: Io, lane: LaneRecord, command: string | undefined, signal?: AbortSignal): Promise<LaneCheck> {
-  const check = await checkCommand(command ?? (await workspaceConfig(lane.path)).check, lane.path, homeOf(store));
+  const check = await checkCommand(command ?? (await genoSettings(homesOf(store, io.env), lane.path)).geno.check?.value, lane.path, homeOf(store));
   if (check === undefined) return { outcome: 'none', tail: '' };
   const tempDir = await mkdtemp(path.join(tmpdir(), 'gcode-arena-check-'));
   const sandbox = await openSandbox(await sandboxPolicy({ store, home: io.env['HOME'] || homedir(), workspace: lane.path, tempDir }));
