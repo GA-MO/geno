@@ -1,0 +1,24 @@
+{
+  "case": "A04-blind-edit-recovery",
+  "area": "editing",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "In src/config.ts change `timeout: 1000` to `timeout: 5000` and `retries: 3` to `retries: 5`. That's all.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "d4a0918b0daea8ce4da3e66a10dab107e3839ee1"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A04-blind-edit-recovery --run <n>"
+}

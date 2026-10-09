@@ -1,0 +1,24 @@
+{
+  "case": "A10-plan-mode",
+  "area": "modes",
+  "layer": "A",
+  "run": 1,
+  "mode": "plan",
+  "prompts": [
+    {
+      "prompt": "Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "82b57eb70d8b3a353048ef4f0eca3cfff74a6eef"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A10-plan-mode --run <n>"
+}

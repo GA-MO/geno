@@ -1,0 +1,18 @@
+{
+  "case": "B05-lanes",
+  "layer": "B",
+  "run": "2",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "43624dbc-18cb-48f7-8720-a6136d4012dd",
+    "fb6a4643-d008-4320-9b37-3b1a1fc787df"
+  ],
+  "screenshots": [
+    "shots/r2/B05-lane-from-cmd-shift-enter.png",
+    "shots/r2/B05-lane-from-slash.png",
+    "shots/r2/B05-lanes-done.png"
+  ],
+  "wire": "runs/B-panel/2/wire.jsonl.gz"
+}

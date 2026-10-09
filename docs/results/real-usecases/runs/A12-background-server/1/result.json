@@ -1,0 +1,90 @@
+{
+  "case": "A12-background-server",
+  "run": 1,
+  "session": "aa414ca6-0acc-429a-8f1b-634b7d58abfd",
+  "passed": false,
+  "costUsd": 0.012717554999999998,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 8,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 74420,
+    "cacheWrite": 5222,
+    "output": 1209,
+    "latencyMs": 24922
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": false,
+      "detail": "for i in $(seq 1 20); do body=$(curl -s -m 2 http://localhost:5173/health) && [ "
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=430ch"
+    },
+    {
+      "id": "background",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "waits-without-sleep",
+      "pass": false,
+      "detail": "read,bash,bash,read,tool_search,task_stop,task_stop,bash"
+    },
+    {
+      "id": "answer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stopped",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

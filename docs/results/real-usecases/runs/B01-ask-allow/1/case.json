@@ -1,0 +1,16 @@
+{
+  "case": "B01-ask-allow",
+  "layer": "B",
+  "run": "1",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "6107e07a-1ae7-45a7-80c5-9349b64dbbf9"
+  ],
+  "screenshots": [
+    "shots/r1/B01-after-allow.png",
+    "shots/r1/B01-ask-card.png"
+  ],
+  "wire": "runs/B-panel/1/wire.jsonl.gz"
+}

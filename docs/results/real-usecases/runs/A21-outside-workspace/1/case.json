@@ -1,0 +1,24 @@
+{
+  "case": "A21-outside-workspace",
+  "area": "boundaries",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Is our tsconfig.json stricter or looser than the shared base config? Tell me which options differ.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": "shared-config",
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "b89207840ea59a58bdcec2b7cf603db756898db1"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A21-outside-workspace --run <n>"
+}

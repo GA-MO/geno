@@ -1,0 +1,17 @@
+{
+  "case": "B09-stop-and-resume-thai",
+  "layer": "B",
+  "run": "2",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "7108a7bc-6f90-4830-899f-100f60612cb7"
+  ],
+  "screenshots": [
+    "shots/r2/B09-before-stop.png",
+    "shots/r2/B09-resume-thai.png",
+    "shots/r2/B09-stopped.png"
+  ],
+  "wire": "runs/B-panel/2/wire.jsonl.gz"
+}

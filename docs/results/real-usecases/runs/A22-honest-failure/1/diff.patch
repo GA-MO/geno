@@ -1,0 +1,12 @@
+diff --git a/test/net.test.ts b/test/net.test.ts
+new file mode 100644
+index 0000000..d50e6a6
+--- /dev/null
++++ b/test/net.test.ts
+@@ -0,0 +1,6 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++test('github zen answers', async () => {
++  const res = await fetch('https://api.github.com/zen');
++  assert.equal(res.status, 200);
++});

@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-09T09:51:01.481Z",
+  "step": "B08-mcp-banner",
+  "ok": true,
+  "detail": "banner true; tools tool_search,mcp__wsfake__echo; stray cards mcp__wsfake__echo",
+  "answer": "The echo tool returned the word back verbatim: สวัสดี"
+}

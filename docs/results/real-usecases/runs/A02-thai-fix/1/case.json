@@ -1,0 +1,24 @@
+{
+  "case": "A02-thai-fix",
+  "area": "thai",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "52ce4e7410db81be0babc1a916ecf8182f29d9cf"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A02-thai-fix --run <n>"
+}

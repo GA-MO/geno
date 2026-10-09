@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-09T09:50:51.397Z",
+  "step": "B07-subagent-row",
+  "ok": false,
+  "detail": "threw: Error: ui {\"do\":\"click\",\"selector\":\"textarea\"}: Error: textarea is covered at its center by header.chat-header"
+}

@@ -1,0 +1,24 @@
+{
+  "case": "A20-thai-question",
+  "area": "thai",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "โปรเจกต์นี้คืออะไร ทำงานยังไง อธิบายสั้นๆ ไม่ต้องแก้โค้ด",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "a1142c2e91a75e58213926d31e1337ab2d2e6dbe"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A20-thai-question --run <n>"
+}

@@ -1,0 +1,85 @@
+{
+  "case": "A16-compaction-goal",
+  "run": 2,
+  "session": "0ac6a194-8c61-42e8-b361-fc96d5ccaf7a",
+  "passed": false,
+  "costUsd": 0.04948674249999999,
+  "classifierUsd": 0,
+  "modelCalls": 14,
+  "toolCalls": 65,
+  "tokens": {
+    "input": 84,
+    "cacheRead": 205351,
+    "cacheWrite": 77287,
+    "output": 8894,
+    "latencyMs": 133308
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "git status && ls | cd src/shop && for f in *.ts; do echo \"=== $f ===\"; cat \"$f\"; done | cd src/shop && grep -n '^/\\*\\*' *.ts | grep -v '@returns' | grep -v ' \\* Step' | | cd src/shop && grep -n '/\\*\\* Step .* \\*/$' *.ts && echo \"--- multiline blocks m | cd src/shop && grep -h '@returns' *.ts | sort -u | cd \"$PWD\" && echo \"--- remaining single-line step comments:\"; grep -rn '^/\\*\\* S | head -20 test/slug.test.ts; echo ---; git stash list; git log --oneline -2 | grep -rn '^/\\*\\* Step .* \\*/$' src/shop/; echo ---; git diff --name-only | grep  | cd repo 2>/dev/null; grep -rn '^/\\*\\* Step .* \\*/$' src/shop/ | wc -l; echo \"---"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1080ch"
+    },
+    {
+      "id": "compacted",
+      "pass": true,
+      "detail": "session-start,hook-context,user,checkpoint,assistant,tool-result,compact"
+    },
+    {
+      "id": "legacy-untouched",
+      "pass": true,
+      "detail": " M src/shop/cart.ts\n M src/shop/checkout.ts\n M src/shop/coupon.ts\n M src/shop/discount.ts\n M src/shop/giftcard.ts\n M src/shop/inventory.ts\n M src/shop/invoice.ts\n M src/shop/ledger.ts\n M src/shop/loyalty.ts\n M src/shop/payout.ts\n M src/shop/pricing.ts\n M src/shop/receipt.ts\n M src/shop/refund.ts\n M src/shop/shipping.ts\n M src/shop/subscription.ts\n M src/shop/tax.ts\n M src/shop/wallet.ts\n M src/shop/warehouse.ts\n"
+    },
+    {
+      "id": "all-documented",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

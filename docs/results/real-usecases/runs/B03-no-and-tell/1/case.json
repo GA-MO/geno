@@ -1,0 +1,16 @@
+{
+  "case": "B03-no-and-tell",
+  "layer": "B",
+  "run": "1",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "ab3b80ec-cf7d-419d-b7fc-782589cfe896"
+  ],
+  "screenshots": [
+    "shots/r1/B03-after-comment.png",
+    "shots/r1/B03-comment.png"
+  ],
+  "wire": "runs/B-panel/1/wire.jsonl.gz"
+}
