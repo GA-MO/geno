@@ -35,7 +35,7 @@ messages:
       -
         type: "tool_result"
         tool_use_id: "tu_bg"
-        content: "Started background command bg-1. Its whole output goes to <tmp>/gcode-home-XXXXXX/spill/<uuid-1>/background/bg-1.log. It keeps running while you work, and Geno tells you when it ends, so do not poll it. Read its output with bash_output or read, and stop it with task_stop."
+        content: "Started background command bg-1. Its whole output goes to <tmp>/gcode-home-XXXXXX/spill/<uuid-1>/background/bg-1.log. It keeps running while you work, and Geno tells you when it ends, so do not poll it. To wait for a line such as \"listening\", call monitor with that pattern. Read its output with bash_output or read, and stop it with task_stop."
 output_config: {"effort":"medium"}
 stream: true
 

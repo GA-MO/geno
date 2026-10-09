@@ -142,4 +142,4 @@ export const backgroundEndNotice = ({ job, tail }: Pick<BackgroundEndEvent, 'job
 
 /** The line `bash` returns for a command it started in the background. */
 export const backgroundStartText = (id: JobId, outputFile: string): string =>
-  `Started background command ${id}. Its whole output goes to ${outputFile}. It keeps running while you work, and Geno tells you when it ends, so do not poll it. Read its output with bash_output or read, and stop it with task_stop.`;
+  `Started background command ${id}. Its whole output goes to ${outputFile}. It keeps running while you work, and Geno tells you when it ends, so do not poll it. To wait for a line such as "listening", call monitor with that pattern. Read its output with bash_output or read, and stop it with task_stop.`;
