@@ -23,6 +23,8 @@ Then open **Geno: Models and Keys** from the gear in the chat view's title bar, 
 
 Keys are stored in VS Code's SecretStorage, one entry per provider and secret field, never in settings. The settings page takes a key and then shows only that it is set. A key in the environment VS Code started with, such as `DASHSCOPE_API_KEY`, is used only when SecretStorage has none. The **Geno engine** output channel names where each key came from, never the key itself. Changing a key or any of these settings restarts the engine.
 
+Workspace and user configuration files, such as `.g-code/settings.json`, are in [config.md](config.md).
+
 A base URL decides where your key is sent, so Geno reads it only from your user settings or your environment. A base URL in a workspace's `.vscode/settings.json` is ignored.
 
 ## Providers
