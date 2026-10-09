@@ -1,0 +1,142 @@
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..9bf5389 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,4 +1,5 @@
+ import { createState, collectCoin } from '../logic/score.js';
++import debounce from '../../vendor/lodash/debounce.js';
+ 
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+@@ -16,6 +17,9 @@ export class GameScene extends Phaser.Scene {
+       this.state = collectCoin(this.state);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
++    const restart = debounce(() => this.scene.restart(), 300);
++    this.input.keyboard.on('keydown-SPACE', restart);
++    this.events.once('shutdown', () => restart.cancel());
+   }
+ 
+   update() {
+diff --git a/test/debounce.test.js b/test/debounce.test.js
+new file mode 100644
+index 0000000..01109d5
+--- /dev/null
++++ b/test/debounce.test.js
+@@ -0,0 +1,48 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import debounce from '../vendor/lodash/debounce.js';
++
++const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
++
++test('calls once with the last arguments after the wait elapses', async () => {
++  const calls = [];
++  const fn = debounce((x) => calls.push(x), 20);
++  fn(1);
++  fn(2);
++  fn(3);
++  assert.deepEqual(calls, []);
++  await sleep(60);
++  assert.deepEqual(calls, [3]);
++});
++
++test('leading option calls immediately at the start of a burst', async () => {
++  const calls = [];
++  const fn = debounce((x) => calls.push(x), 20, { leading: true, trailing: false });
++  fn(1);
++  fn(2);
++  await sleep(60);
++  assert.deepEqual(calls, [1]);
++});
++
++test('cancel stops a pending call', async () => {
++  const calls = [];
++  const fn = debounce(() => calls.push(1), 20);
++  fn();
++  fn.cancel();
++  await sleep(60);
++  assert.deepEqual(calls, []);
++});
++
++test('flush runs a pending call right away', async () => {
++  const calls = [];
++  const fn = debounce(() => calls.push(1), 20);
++  fn();
++  fn.flush();
++  assert.deepEqual(calls, [1]);
++  await sleep(60);
++  assert.deepEqual(calls, [1]);
++});
++
++test('rejects a non-function', () => {
++  assert.throws(() => debounce(undefined, 10), TypeError);
++});
+diff --git a/vendor/lodash/debounce.js b/vendor/lodash/debounce.js
+new file mode 100644
+index 0000000..0383716
+--- /dev/null
++++ b/vendor/lodash/debounce.js
+@@ -0,0 +1,62 @@
++// Vendored stand-in for `lodash`'s `debounce`, following the project policy of
++// shipping third-party code in-repo instead of `npm install` (this environment
++// has no network, so the upstream package could not be fetched). This is NOT
++// upstream lodash code; it implements lodash's debounce API and semantics for
++// the options used here (leading, trailing, cancel, flush). `maxWait` is not
++// supported. When a network-enabled checkout can run `npm i lodash`, replace
++// this file with the upstream `lodash/debounce.js` (MIT licensed).
++
++export default function debounce(func, wait = 0, options = {}) {
++  if (typeof func !== 'function') {
++    throw new TypeError('Expected a function');
++  }
++  const leading = options.leading === true;
++  const trailing = options.trailing !== false;
++  wait = Math.max(0, Number(wait) || 0);
++
++  let timerId;
++  let lastArgs;
++  let lastThis;
++  let result;
++
++  function invoke() {
++    const args = lastArgs;
++    const thisArg = lastThis;
++    lastArgs = lastThis = undefined;
++    result = func.apply(thisArg, args);
++    return result;
++  }
++
++  function onTimedOut() {
++    timerId = undefined;
++    if (trailing && lastArgs) return invoke();
++    lastArgs = lastThis = undefined;
++    return result;
++  }
++
++  function debounced(...args) {
++    const isFirstCallOfBurst = timerId === undefined;
++    lastArgs = args;
++    lastThis = this;
++    if (isFirstCallOfBurst && leading) invoke();
++    clearTimeout(timerId);
++    timerId = setTimeout(onTimedOut, wait);
++    return result;
++  }
++
++  debounced.cancel = function cancel() {
++    clearTimeout(timerId);
++    timerId = undefined;
++    lastArgs = lastThis = undefined;
++  };
++
++  debounced.flush = function flush() {
++    if (timerId === undefined) return result;
++    clearTimeout(timerId);
++    timerId = undefined;
++    if (lastArgs) return invoke();
++    return result;
++  };
++
++  return debounced;
++}

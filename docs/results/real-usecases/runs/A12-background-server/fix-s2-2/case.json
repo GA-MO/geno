@@ -1,0 +1,27 @@
+{
+  "case": "A12-background-server",
+  "area": "background",
+  "layer": "A",
+  "run": "fix-s2-2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Start the dev server (npm run dev), wait until it is listening, request http://localhost:5173/health and tell me the JSON it returns. Stop the server when you are done.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "1b0a2ec4",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "dd3702b00d5492fe8815704c00eded92e0e8578f"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A12-background-server --run <n>"
+}

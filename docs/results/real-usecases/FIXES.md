@@ -67,10 +67,54 @@ Costs are each run's `gcode usage` plus, for a base engine, the classifier calls
 
 ## Left open
 
-- P-03 and P-04: the description helps, but cat, ls and find still appear in about half the runs, and a server with `&` still appears (A19 fix-a2). A harness note on a bash call that only reads files, as ISSUES.md suggests, is the next step to measure.
+- P-03 and P-04: see round 2 below.
 - P-11: no todo call in A07 after the change. The rows say it is a model limit at this task size; a reminder notice when a prompt names three or more actions is untested.
 - P-12: no measurable change; answers stay near the 1,500-character line.
 - G-01's cost: every command off the safe list now asks in Ask, as in Claude Code. In a terminal-less CLI run that refuses it, so a benign first command such as A08's grep ends the turn. The safe list could grow (for example `git check-ignore`, `git clean -n`) where users find the cards noisy.
 - G-02, G-10 in the panel, and P-10 were not run on the real model; they need the Layer B suite.
 - G-03 and the non-JSON recovery did not recur live, so their live paths are unverified.
 - M-01 (the classifier judges a plain project script by a risky request) and M-02 (ignores "run no commands", claims scrambled reads): no prompt or classifier change here. M-01 needs a hand-written benign case in the classifier eval, which today draws benign cases from eval logs only; M-02 needs a regression eval.
+
+# Round 2: P-03 and P-04
+
+Round 1 left P-03 (cat, ls and find through bash) and P-04 (servers started with `&`) half fixed. Round 2 follows Claude Code's harness design in three steps, each measured on qwen3.8-flash before the next: a note in the tool result, then a refusal and process cleanup for servers, then one line of description wording.
+
+## How the runs were made
+
+- Same runner, one case at a time, with `GCODE_CAMPAIGN_SCRATCH=scratchpad/fixes-p03-p04` and this checkout's engine. Each run had a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME: `run.mjs` calls `prepareHome` (`scripts/real-usecases/home.mjs`) for every run. Before archiving, every new file, gzipped ones included, was searched for `pstack model configuration`, `EXTREMELY_IMPORTANT` and `/Users/me`. None of the 238 files matched.
+- Before counts round 1's runs of the same cases. For P-03 that is fix-a1, fix-a2 and fix-a3 of A04, A07, A12, A19, A24 and A28 (15 runs). For P-04 it is every archived run of A12, A19, A25 and A26 (campaign c1 and c2, fix-b2, fix-a1 to fix-a3: 14 runs).
+- After counts `fix-s1-*` (engine ee34a245, step 1), `fix-s2-*` (1b0a2ec4, step 2) and `fix-s3-*` (87537571 for fix-s3-1; 51ec0aa6 for fix-s3-2 and fix-s3-3, step 3). The runs are in [runs/](runs/README.md) under those labels.
+- `dedicated-file-tools` is the campaign check. It fails a run for any bash line that holds cat, ls, find, grep, head, tail or sed -n, including lines that need the shell, such as `ls && node --test` or `grep -l`. "Pure reads" counts what the note targets: bash lines that only read, list or search files, as `fileToolsOf` judges them. A check verdict counts every call the model made, refused ones included.
+
+## Per step
+
+| Step | Change | Commit | Before | After |
+|---|---|---|---|---|
+| 1. Note in the result (P-03) | A bash call that only reads, lists or searches files runs. The first time in a session for each tool, its result ends with one `[Geno] Next time, …` line that names read, list, glob or grep. A table in `core/src/shell-intent.ts` decides it. Pipes into other programs, writes, special files, substitutions and `&` stay unflagged. The line rides in the tool result, so no request golden changed. | ee34a245 | `dedicated-file-tools` 5 of 15. Pure reads in 7 of 15 runs (9 calls); A12 fix-a3 made 3. | fix-s1 (11 runs): `dedicated-file-tools` 8 of 11, pure reads in 2 of 11 runs. Over fix-s1 and fix-s2 the note fired in 7 runs. After it, those runs made 13 read, list, glob or grep calls and no pure shell read. |
+| 2. Servers and process cleanup (P-04) | A known dev server started with `&`, `nohup` or `( … ) &`, or in the foreground, is refused unrun. The refusal gives the exact `run_in_background` call; then monitor where something wakes the session, or one until-loop where nothing does; the rest of the line; and preview_start when a launch file has an entry. A finished command whose process group still runs is named in its result, and the sandbox kills that group when the run ends. | 1b0a2ec4 | A `&` server ran in 5 of 14 runs (A19 c1, c2 and fix-a2, A25 c1, A26 c1). A19 c2's server outlived its run. | fix-s2 and fix-s3 (15 runs of these cases): no `&` server ran. Three attempts were refused (A25 fix-s2-2 `(node server.js … &)`, A12 fix-s2-3 `node server.js &>… &`, A12 fix-s3-2 `npm run dev 2>&1 \| tail -40`). Each time the next call started the server with `run_in_background`. After every batch nothing listened on 5173 or 3000. A conformance test shows a `sleep 60 &` gone when its run ends. |
+| 2b. Until-loop check (runner) | The campaign's until-loop test accepts `>/dev/null 2>&1` in the condition. | cdce523f | | Rescored the fix-s2 runs that had failed on it alone. |
+| 2c. Localhost curl with a redirect (found in step 2) | A localhost `curl … >/dev/null` or `… 2>&1` ran as a download and was denied in a headless run: the split kept `/dev/null` and the `1` of `2>&1` as curl operands. `>&N` now drops its descriptor, and `/dev/null` counts as no URL. A remote curl still asks. | 51ec0aa6 | In fix-s1 and fix-s2, all 8 until-loops with a redirect (A12, A19, A25, A26) were denied, and the model fell back to node fetch loops. | fix-s3-2 and fix-s3-3: both until-loops with a redirect ran (A19). |
+| 3. Description wording (P-03) | The bash description adds one line: make one read, list or glob call per file or folder in the same turn, rather than one bash line that chains cat, ls and find. Steps 1 and 2 left first-turn bundles such as `cat package.json; echo "--- README"; cat README.md; …` (A28 fix-s2-3). | 87537571 | fix-s2 on the same six cases: pure reads in 5 of 9 runs, `dedicated-file-tools` 3 of 9. | fix-s3 (16 runs): pure reads in 3 of 16 runs and no first-turn bundle; `dedicated-file-tools` 11 of 16. One repeat after a note: A24 fix-s3-3 ran `ls notes` again after the list note. |
+
+Read these as signs, not rates. Each step has 9 to 16 runs on six cases. The first pure read of a run comes before any note can fire, so step 1 can only stop repeats. Most of fix-s1's drop, from 7 of 15 runs to 2 of 11, is first calls, which the note does not touch: treat that part as noise. The step 3 drop, from 5 of 9 runs to 3 of 16 with no first-turn bundle, is the wording's likely effect.
+
+## Goldens and recordings
+
+- Steps 1, 2 and 2c changed no request bytes. `pnpm test:golden` passed unchanged.
+- Step 3 re-recorded plain-prompt's two request goldens (the bash description) and `packages/engine/test/recordings/usage-e2e.json` from its fallback script, with the same answers. `real-runs.e2e.test.ts` and `scripts/run-to-gallery.test.ts` pass.
+
+## Cost
+
+| Batch | Runs | USD |
+|---|---|---|
+| fix-s1 | 11 | 0.1751 |
+| fix-s2 | 12 | 0.3374 |
+| fix-s3 | 16 | 0.2983 |
+| **Total** | **39** | **0.8108** of the $1.50 cap |
+
+## Left open
+
+- Some waits still poll. A19 fix-s1-1 and A12 fix-s3-2 waited with a bounded `for … sleep … break` loop. A19 fix-s3-1 tried `sleep 4; …`, which the sleep refusal blocked.
+- A19 fix-s2-2 stopped its background server with `pkill -f "node server.js"` instead of `task_stop`. That pattern can kill the user's own processes. No refusal or note for `pkill -f` or `killall` exists yet.
+- A12 fix-s3-2 read its background job's output file with `tail`, and the read was denied as outside the workspace. The start line names that file, so either allow it or name `bash_output` there.
+- The note covers only lines that do nothing but read. Mixed lines such as `ls && node --test` or `git diff && cat notes/*` still fail `dedicated-file-tools`.

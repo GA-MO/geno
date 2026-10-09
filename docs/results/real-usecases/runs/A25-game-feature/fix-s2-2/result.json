@@ -1,0 +1,85 @@
+{
+  "case": "A25-game-feature",
+  "run": "fix-s2-2",
+  "session": "c247bb56-3976-4e80-8238-fdfc2e52ea6c",
+  "passed": false,
+  "costUsd": 0.0368083525,
+  "classifierUsd": 0,
+  "modelCalls": 20,
+  "toolCalls": 22,
+  "tokens": {
+    "input": 120,
+    "cacheRead": 218244,
+    "cacheWrite": 8455,
+    "output": 5252,
+    "latencyMs": 96627
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": false,
+      "detail": "(node server.js > \"$TMPDIR/coin-dash-server.log\" 2>&1 &) ; until curl -sf http:/"
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1589ch"
+    },
+    {
+      "id": "tests-pass",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-install",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-unchecked-said",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

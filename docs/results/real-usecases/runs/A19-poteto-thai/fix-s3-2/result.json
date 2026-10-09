@@ -1,0 +1,95 @@
+{
+  "case": "A19-poteto-thai",
+  "run": "fix-s3-2",
+  "session": "e38648e5-e339-4776-97a5-c2a6404eacaa",
+  "passed": false,
+  "costUsd": 0.0466835575,
+  "classifierUsd": 0,
+  "modelCalls": 16,
+  "toolCalls": 28,
+  "tokens": {
+    "input": 96,
+    "cacheRead": 264198,
+    "cacheWrite": 23529,
+    "output": 5591,
+    "latencyMs": 106044
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls -a <home>/Development/g-code/.claude/worktrees/agent-ace111efcc733 | cat > /private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/e3"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": false,
+      "detail": "cat > /private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/e3"
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1113ch"
+    },
+    {
+      "id": "skill-poteto",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "reads-geno-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-test",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-10",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": true,
+      "detail": "thai share 0.50"
+    }
+  ]
+}

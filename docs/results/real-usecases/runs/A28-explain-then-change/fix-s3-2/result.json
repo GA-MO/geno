@@ -1,0 +1,80 @@
+{
+  "case": "A28-explain-then-change",
+  "run": "fix-s3-2",
+  "session": "8ea4fc1d-d5d3-4b45-8a9b-5772cca6db4f",
+  "passed": true,
+  "costUsd": 0.0039746949999999994,
+  "classifierUsd": 0,
+  "modelCalls": 3,
+  "toolCalls": 4,
+  "tokens": {
+    "input": 18,
+    "cacheRead": 20992,
+    "cacheWrite": 1618,
+    "output": 1106,
+    "latencyMs": 22838
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1336ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "short-reco",
+      "pass": true,
+      "detail": "1336 chars"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "case": "A12-background-server",
+  "run": "fix-s2-2",
+  "session": "6b37a918-029d-43f4-89bf-85c4f2712b25",
+  "passed": false,
+  "costUsd": 0.015346455,
+  "classifierUsd": 0,
+  "modelCalls": 11,
+  "toolCalls": 10,
+  "tokens": {
+    "input": 66,
+    "cacheRead": 91368,
+    "cacheWrite": 3978,
+    "output": 1884,
+    "latencyMs": 37643
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls; grep -n \"listen\\|port\\|5173\" server.js | head -20"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=478ch"
+    },
+    {
+      "id": "background",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "waits-without-sleep",
+      "pass": true,
+      "detail": "bash,tool_search,read,monitor,bash,bash,bash,tool_search,bash_output,task_stop"
+    },
+    {
+      "id": "answer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stopped",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

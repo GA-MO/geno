@@ -1,0 +1,27 @@
+{
+  "case": "A07-multi-step-todo",
+  "area": "planning",
+  "layer": "A",
+  "run": "fix-s1-1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Rename getUser to fetchUser everywhere in the monorepo (core, api, web and their tests), make sure all tests still pass, and add a line about the rename under Unreleased in CHANGELOG.md.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "ee34a245",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "2313b33ab29c7d9b49237b4c1c58ca5c4a74c323"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A07-multi-step-todo --run <n>"
+}

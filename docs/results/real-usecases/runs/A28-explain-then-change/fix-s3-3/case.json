@@ -1,0 +1,27 @@
+{
+  "case": "A28-explain-then-change",
+  "area": "conversation",
+  "layer": "A",
+  "run": "fix-s3-3",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "What could we do about prices in currencies with no minor unit, like JPY? Do not change code yet.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "51ec0aa6",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "c031202eee3067f4a783fb1db80cf0b9d3d42368"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A28-explain-then-change --run <n>"
+}

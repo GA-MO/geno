@@ -1,0 +1,77 @@
+diff --git a/src/logic/score.js b/src/logic/score.js
+index 7d1a666..d0d8cc0 100644
+--- a/src/logic/score.js
++++ b/src/logic/score.js
+@@ -1,5 +1,9 @@
+-export const createState = () => ({ coins: 0, score: 0 });
++export const createState = () => ({ coins: 0, score: 0, paused: false });
+ 
+ export function collectCoin(state) {
+   return { ...state, coins: state.coins + 1 };
+ }
++
++export function togglePause(state) {
++  return { ...state, paused: !state.paused };
++}
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..1b22788 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,4 +1,4 @@
+-import { createState, collectCoin } from '../logic/score.js';
++import { createState, collectCoin, togglePause } from '../logic/score.js';
+ 
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+@@ -16,9 +16,21 @@ export class GameScene extends Phaser.Scene {
+       this.state = collectCoin(this.state);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
++    this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
++    this.pauseText = this.add.text(400, 300, 'PAUSED', { fontSize: '48px', color: '#ffffff' })
++      .setOrigin(0.5)
++      .setVisible(false);
+   }
+ 
+   update() {
++    if (Phaser.Input.Keyboard.JustDown(this.pauseKey)) {
++      this.state = togglePause(this.state);
++      this.pauseText.setVisible(this.state.paused);
++      if (this.state.paused) this.physics.world.pause();
++      else this.physics.world.resume();
++      return;
++    }
++    if (this.state.paused) return;
+     const speed = 200;
+     const body = this.player.body;
+     body.setVelocity(0);
+diff --git a/test/score.test.js b/test/score.test.js
+index 9fe2f9e..37712a9 100644
+--- a/test/score.test.js
++++ b/test/score.test.js
+@@ -1,7 +1,24 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { collectCoin, createState } from '../src/logic/score.js';
++import { collectCoin, createState, togglePause } from '../src/logic/score.js';
+ 
+ test('collecting a coin counts it', () => {
+   assert.equal(collectCoin(createState()).coins, 1);
+ });
++
++test('new game starts unpaused', () => {
++  assert.equal(createState().paused, false);
++});
++
++test('togglePause flips the pause flag back and forth', () => {
++  const paused = togglePause(createState());
++  assert.equal(paused.paused, true);
++  assert.equal(togglePause(paused).paused, false);
++});
++
++test('togglePause does not mutate or disturb other state', () => {
++  const state = collectCoin(createState());
++  togglePause(state);
++  assert.equal(state.paused, false);
++  assert.equal(togglePause(state).coins, 1);
++});
