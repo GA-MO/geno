@@ -1,7 +1,29 @@
-import type { Action, FromView, ToView, Transcript } from '../../src/chat/messages.js';
+import type { Action, FromView, Look, Modes, ToView, Transcript } from '../../src/chat/messages.js';
 import { reduce } from '../../src/chat/transcript.js';
 
 type MessageOf<K extends FromView['type']> = Extract<FromView, { type: K }>;
+
+/** The modes the engine offers a session, as its new-session response names them. */
+export const MODES: Modes = {
+  current: 'ask',
+  available: [
+    { id: 'plan', name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
+    { id: 'ask', name: 'Ask', description: 'Ask before risky commands.' },
+    { id: 'auto', name: 'Auto', description: 'Run safe commands on its own and let a classifier judge the rest, without asking.' },
+  ],
+};
+
+export const DEFAULT_LOOK: Look = { style: 'glass', detail: 'compact', review: 'auto' };
+
+/** What the extension posts once the page says it is ready: an empty chat in `workspace`, in Ask. */
+export async function answerReady(host: FakeHost, focused: boolean): Promise<void> {
+  await host.post({ type: 'roots', roots: [] });
+  await host.act({ type: 'reset', transcript: host.transcript });
+  await host.post({ type: 'header', header: { project: 'workspace', title: undefined, branch: undefined } });
+  await host.post({ type: 'window-focus', focused });
+  await host.post({ type: 'modes', modes: MODES });
+  await host.post({ type: 'commands', commands: [] });
+}
 
 /**
  * The extension's side of the chat webview's postMessage protocol, played by a test: it records what the view sends,
