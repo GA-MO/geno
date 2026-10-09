@@ -899,8 +899,24 @@ body.diagram-tab {
 
 .step-row:hover .chevron,
 .step-row:focus-visible .chevron,
-.step-row[aria-expanded='true'] .chevron {
+.step-row:has(> .step-toggle:focus-visible) .chevron,
+.step-row:has(> .step-toggle[aria-expanded='true']) .chevron {
   opacity: 0.8;
+}
+
+div.step-row {
+  cursor: pointer;
+}
+
+.step-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
 }
 
 .step-verb {
@@ -945,8 +961,13 @@ body.diagram-tab {
   margin-left: auto;
 }
 
-.changed-file:hover {
+.changed-file:hover,
+button.file-chip:hover {
   border-color: var(--vscode-focusBorder);
+}
+
+.call-count {
+  color: var(--muted);
 }
 
 .step-files > .node {
