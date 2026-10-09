@@ -70,6 +70,7 @@ function inspect() {
     target: (s.querySelector('.step-target')?.textContent ?? '').trim(),
     chips: s.querySelectorAll('.file-chip').length,
     failed: s.querySelector('.step-failed') !== null,
+    denied: s.querySelector('.step-denied') !== null,
   }));
   const harnessText = [...document.querySelectorAll('.turn *')]
     .filter((e) => e.children.length === 0 && /^\[(abort|error|max-turns|max-cost)\]|\[exit code \d+\]|\[Geno\] Next time/.test((e.textContent ?? '').trim()))
@@ -77,7 +78,8 @@ function inspect() {
     .map((e) => (e.textContent ?? '').trim().slice(0, 100));
   const lastHead = ([...document.querySelectorAll('.turn-head')].at(-1)?.textContent ?? '').trim().replace(/\s+/g, ' ');
   for (const e of document.querySelectorAll('*')) if ((e as HTMLElement).scrollTop > 0) (e as HTMLElement).scrollTop = 0;
-  return { pastEdge, cutText, steps, harnessText, lastHead, replacement: (document.body.innerText.match(/�/g) ?? []).length };
+  const noReply = document.querySelectorAll('.no-reply').length;
+  return { pastEdge, cutText, steps, harnessText, lastHead, noReply, replacement: (document.body.innerText.match(/�/g) ?? []).length };
 }
 
 type Seen = ReturnType<typeof inspect>;
@@ -97,7 +99,8 @@ function verdicts(seen: Seen, actions: readonly Action[], consoleErrors: readonl
   if (raw.length > 0) failed['raw label'] = [...new Set(raw.map((s) => s.verb))].join(', ');
   if (bare.length > 0) failed['no target'] = [...new Set(bare.map((s) => `${s.verb} (${s.name})`))].join(', ');
   if (prompts.some((p) => thaiShare(p) > 0.3) && thaiShare(texts.slice(-3).join(' ')) < 0.2) failed['Thai answer'] = 'a Thai prompt got a non-Thai answer';
-  if (actions.findLastIndex((a) => a.type === 'tool' && 'name' in a) > actions.findLastIndex((a) => a.type === 'text')) failed['ends with answer'] = 'the turn ends on a tool step';
+  // A turn may end without an answer, as long as the panel says so.
+  if (actions.findLastIndex((a) => a.type === 'tool' && 'name' in a) > actions.findLastIndex((a) => a.type === 'text') && seen.noReply === 0) failed['ends with answer'] = 'the turn ends on a tool step with no notice';
   return failed;
 }
 
@@ -163,13 +166,13 @@ try {
 
 writeFileSync(path.join(out, 'results.json'), JSON.stringify(rows, null, 1));
 const table = [
-  '| Run | Steps (full) | Chips | Failed steps | Last header | Checks passed | Failed checks |',
-  '| --- | --- | --- | --- | --- | --- | --- |',
+  '| Run | Steps (full) | Chips | Failed steps | Denied steps | Last header | Checks passed | Failed checks |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- |',
   ...rows.map((r) => {
-    if (r.error !== undefined) return `| ${r.rel} | | | | | not replayed | ${r.error} |`;
+    if (r.error !== undefined) return `| ${r.rel} | | | | | | not replayed | ${r.error} |`;
     const failed = CHECKS.filter((c) => Object.values(r.looks).some((l) => c in l.failed));
     const full = r.looks['light-420']!;
-    return `| ${r.rel} | ${full.steps.length} | ${full.steps.reduce((n, s) => n + s.chips, 0)} | ${full.steps.filter((s) => s.failed).length} | ${full.lastHead.replace(/^Geno/, '')} | ${CHECKS.length - failed.length}/${CHECKS.length} | ${failed.join(', ') || 'none'} |`;
+    return `| ${r.rel} | ${full.steps.length} | ${full.steps.reduce((n, s) => n + s.chips, 0)} | ${full.steps.filter((s) => s.failed).length} | ${full.steps.filter((s) => s.denied).length} | ${full.lastHead.replace(/^Geno/, '')} | ${CHECKS.length - failed.length}/${CHECKS.length} | ${failed.join(', ') || 'none'} |`;
   }),
 ];
 writeFileSync(path.join(out, 'table.md'), `${table.join('\n')}\n`);
