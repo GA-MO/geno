@@ -81,6 +81,16 @@ describe('the loaded context', () => {
     );
   });
 
+  it('P-07 keeps the skill listing out from under the repository preamble, which comes only with repository files', () => {
+    const listing = { skills: [{ name: 'deploy', description: 'Ship it' }], unlisted: 0 };
+    const alone = renderLoadedContext({ instructions: [], rules: [], skillListing: listing })!;
+    expect(alone.startsWith('The following skills are available')).toBe(true);
+    expect(alone).not.toContain('repository text');
+    const withFile = renderLoadedContext({ instructions: [{ path: 'AGENTS.md', text: 'Use pnpm.' }], rules: [], skillListing: listing })!;
+    expect(withFile.indexOf('repository text')).toBeLessThan(withFile.indexOf('Use pnpm.'));
+    expect(withFile.indexOf('</project_instructions>')).toBeLessThan(withFile.indexOf('The following skills'));
+  });
+
   it('says how many skills the listing left out', () => {
     const text = renderLoadedContext({ instructions: [], rules: [], skillListing: { skills: [{ name: 'deploy', description: 'Ship it' }], unlisted: 3 } })!;
     expect(text.endsWith('- deploy: Ship it\n3 more skills did not fit in this list.')).toBe(true);
