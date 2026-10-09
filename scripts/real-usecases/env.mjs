@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
 export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const SCRATCH = path.join(REPO, 'scratchpad/real-usecases');
+/** A later round keeps its runs apart from the first campaign's: GCODE_CAMPAIGN_SCRATCH=scratchpad/fixes-r1. */
+export const SCRATCH = path.resolve(REPO, process.env.GCODE_CAMPAIGN_SCRATCH ?? 'scratchpad/real-usecases');
+/** The checkout whose engine the cases run, so a before run can use the base commit's engine with this runner. */
+export const ENGINE = path.resolve(process.env.GCODE_CAMPAIGN_ENGINE ?? REPO);
 export const HOME = path.join(SCRATCH, 'home');
 export const FIXTURES = path.join(REPO, 'scripts/real-usecases/fixtures');
 
