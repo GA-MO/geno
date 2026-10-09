@@ -341,6 +341,9 @@ export const KEEPS_PENDING_PROMPT: Record<TurnErrorKind, boolean> = {
 export const spendOf = (event: TurnEvent): Spend | undefined =>
   event.kind === 'assistant' || event.kind === 'compact' ? { usage: event.usage, costUsd: event.costUsd, model: event.model } : undefined;
 
+/** What the Auto classifier's call cost to settle one tool call; 0 when none ran or its model has no price. */
+export const classifierCostOf = (event: TurnEvent): number => (event.kind === 'tool-result' ? (event.approval?.classifier?.costUsd ?? 0) : 0);
+
 export const toolUsesOf = (content: readonly ContentBlock[]): ToolUseBlock[] =>
   content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
 

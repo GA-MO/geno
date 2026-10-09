@@ -1,5 +1,5 @@
 import type { ForkOrigin } from './rewind.js';
-import { spendOf, type Session, type SessionId, type TurnEvent } from './session.js';
+import { classifierCostOf, spendOf, type Session, type SessionId, type TurnEvent } from './session.js';
 
 /** One past conversation as the history lists it, read from its log. */
 export type SessionSummary = {
@@ -48,7 +48,8 @@ export function summarizeSession(session: Session, events: readonly TurnEvent[])
   const spends = events.flatMap((e): (number | null)[] => {
     if (e.kind === 'child-end') return [e.costUsd];
     const spend = spendOf(e);
-    return spend === undefined ? [] : [spend.costUsd];
+    if (spend === undefined) return classifierCostOf(e) > 0 ? [classifierCostOf(e)] : [];
+    return [spend.costUsd];
   });
   const last = events.at(-1);
   const head = events[0];
