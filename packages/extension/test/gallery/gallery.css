@@ -1,0 +1,392 @@
+:root {
+  color-scheme: light dark;
+  --chrome: light-dark(#f6f6f7, #18181b);
+  --chrome-2: light-dark(#ffffff, #202024);
+  --ink: light-dark(#18181b, #e7e7ea);
+  --quiet: light-dark(#6b6b74, #9a9aa3);
+  --line: light-dark(#e2e2e6, #2e2e34);
+  --pick: light-dark(#2563eb, #7aa2ff);
+  --bad: light-dark(#b42318, #ff7a6b);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--chrome);
+  color: var(--ink);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  position: fixed;
+  inset: 0;
+}
+
+.sidebar {
+  overflow: auto;
+  padding: 12px 10px 24px;
+  border-right: 1px solid var(--line);
+  background: var(--chrome-2);
+}
+
+.brand {
+  padding: 2px 6px 10px;
+  font-size: 15px;
+}
+
+.sidebar input[type='search'] {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--chrome);
+}
+
+.group {
+  margin-top: 10px;
+}
+
+.group ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group-name,
+.group li button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  text-align: left;
+}
+
+.group-name {
+  font-weight: 600;
+}
+
+.group li button {
+  color: var(--quiet);
+}
+
+.group-name:hover,
+.group li button:hover {
+  background: var(--chrome);
+}
+
+[aria-current='true'] {
+  color: var(--pick) !important;
+  background: color-mix(in srgb, var(--pick) 12%, transparent) !important;
+}
+
+.count {
+  color: var(--quiet);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.center {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--chrome-2);
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control > span {
+  color: var(--quiet);
+}
+
+.control select,
+.control input[type='number'] {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--chrome);
+}
+
+.control input[type='number'] {
+  width: 72px;
+}
+
+.segment {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.segment button {
+  padding: 3px 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: none;
+}
+
+.segment button:last-child {
+  border-right: 0;
+}
+
+.segment button[aria-pressed='true'],
+.tokens-toggle[aria-pressed='true'] {
+  background: var(--pick);
+  color: white;
+}
+
+.tokens-toggle {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+}
+
+.banner {
+  margin: 0;
+  padding: 8px 14px;
+  background: var(--bad);
+  color: white;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+}
+
+.stage {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.card,
+.single {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card {
+  width: var(--frame-width);
+  min-height: 560px;
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.card-title {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  text-align: left;
+}
+
+button.card-title:hover {
+  color: var(--pick);
+  text-decoration: underline;
+}
+
+.card-head code {
+  color: var(--quiet);
+  font-size: 11px;
+}
+
+.badge {
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--bad);
+  color: white;
+  font-size: 11px;
+}
+
+.panel-frame,
+.design-frame {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--backdrop);
+}
+
+.design-frame {
+  height: calc(100vh - 120px);
+}
+
+.drawer {
+  width: 360px;
+  overflow: auto;
+  padding: 12px 14px 24px;
+  border-left: 1px solid var(--line);
+  background: var(--chrome-2);
+}
+
+.drawer[hidden] {
+  display: none;
+}
+
+.drawer h2 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.hint {
+  margin: 0 0 10px;
+  color: var(--quiet);
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.drawer-actions button {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--chrome);
+}
+
+.problems {
+  margin: 0 0 10px;
+  padding: 6px 8px 6px 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  color: var(--bad);
+}
+
+.token-filter {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--chrome);
+}
+
+.token-group h3 {
+  margin: 14px 0 4px;
+  color: var(--quiet);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.token-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.token {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.token.changed .token-name code {
+  color: var(--pick);
+  font-weight: 600;
+}
+
+.token-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.token-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.token-edit input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--chrome);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.token-edit input[type='color'] {
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: none;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pick);
+}
+
+.token-computed {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--quiet);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
