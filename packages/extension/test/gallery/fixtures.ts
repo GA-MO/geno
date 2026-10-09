@@ -3,6 +3,7 @@ import type { Action, ChildAction, HistoryRow, PermissionChoice, ToolKind } from
 import type { SettingsListing } from '../../src/chat/settings-model.js';
 import type { FakeHost } from '../webview/host.js';
 import { PERMISSION_OPTIONS, round, toolEnd, toolStart, turnStart, usageOf, type Call } from '../webview/turns.js';
+import { REAL_SESSIONS } from './real-sessions.js';
 import type { Fixture, Stage } from './stage.js';
 
 const MODEL = 'qwen3.8-flash';
@@ -289,6 +290,17 @@ const SPEND: SessionSpend = {
 };
 
 /** Fixtures for each state of the panel, by group, in the order the gallery lists them. */
+/** The real sessions whose diff or subagent row shows only in full detail. */
+const REAL_FULL_DETAIL: ReadonlySet<string> = new Set(['real-code-fix', 'real-subagent']);
+
+/** A logged session's actions moved in time to end now, so a running turn's clock reads its real length. */
+function recent(actions: readonly Action[]): Action[] {
+  const times = actions.flatMap((a) => [a, ...(a.type === 'child' ? [a.action] : [])]).flatMap((a) => ('at' in a && typeof a.at === 'number' ? [a.at] : []));
+  const shift = Date.now() - Math.max(...times);
+  const moved = <T extends object>(a: T): T => ('at' in a && typeof a.at === 'number' ? { ...a, at: a.at + shift } : a);
+  return actions.map((a) => (a.type === 'child' ? { ...a, action: moved(a.action) } : moved(a)));
+}
+
 export const FIXTURES: readonly Fixture[] = [
   {
     id: 'start',
@@ -1199,6 +1211,20 @@ export const FIXTURES: readonly Fixture[] = [
       await stage.host.post({ type: 'show-history' });
     },
   },
+  // Each state plays a real model run's session as the panel showed it: scripts/run-to-gallery.ts writes the actions.
+  ...REAL_SESSIONS.map(
+    (session): Fixture => ({
+      id: session.id,
+      group: 'Real sessions',
+      title: session.title,
+      ...(REAL_FULL_DETAIL.has(session.id) ? { look: { detail: 'full' } } : {}),
+      play: async (stage) => {
+        await stage.host.act(...recent(session.actions));
+        if (session.actions.some((a) => a.type === 'child-start')) await stage.reveal('.child-open');
+        if (session.actions.some((a) => a.type === 'tool' && a.todo !== undefined)) await stage.reveal('.todo');
+      },
+    }),
+  ),
 ];
 
 export const GROUPS: readonly string[] = [...new Set(FIXTURES.map((f) => f.group))];
