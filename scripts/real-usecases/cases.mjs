@@ -513,4 +513,23 @@ export const CASES = [
       { id: 'answers', what: 'answers the unrelated question', test: (run) => ok(/node --test|npm test/.test(run.finalText) && /22/.test(run.finalText), run.finalText.slice(0, 160)) },
     ],
   },
+  {
+    id: 'A35-show-before-after',
+    area: 'show-files',
+    fixture: 'web-page',
+    prompt: 'The Sign in button on index.html sticks out of the card and it is red. Take a screenshot of the page first with node shot.mjs, then move the button inside the card and make it green (#2ea05c), take another screenshot, and show me the before and after screenshots side by side.',
+    maxCost: 0.15,
+    checks: [
+      { id: 'fixed', what: 'the button is green and no longer offset', verify: "grep -qi '2ea05c' index.html && ! grep -q 'margin-left: 140px' index.html" },
+      {
+        id: 'shows-pair',
+        what: 'shows at least two PNG screenshots with show_files',
+        test: (run) => {
+          const calls = named(run, 'show_files');
+          const images = calls.flatMap((c) => c.result?.shown?.files ?? []).filter((f) => f.kind === 'shown' && f.show === 'image');
+          return ok(images.length >= 2, calls.map((c) => `${c.result?.status}: ${[c.input.files ?? []].flat().join(' ')}`).join('; ') || 'no show_files call');
+        },
+      },
+    ],
+  },
 ];

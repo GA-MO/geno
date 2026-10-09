@@ -3603,5 +3603,77 @@
       "transcript": "transcript.md",
       "result": "result.json"
     }
+  },
+  {
+    "case": "A35-show-before-after",
+    "area": "show-files",
+    "layer": "A",
+    "run": 1,
+    "engineCommit": "e7a483e3",
+    "phase": "after",
+    "note": "after the fixes, on e7a483e3; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T18:51:02.406Z",
+    "passed": false,
+    "costUsd": 0.030377,
+    "modelCalls": 16,
+    "goodExample": false,
+    "dir": "runs/A35-show-before-after/1",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl.gz",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A35-show-before-after",
+    "area": "show-files",
+    "layer": "A",
+    "run": 2,
+    "engineCommit": "e7a483e3+dirty",
+    "phase": "after",
+    "note": "after the fixes, on e7a483e3+dirty; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T18:53:54.411Z",
+    "passed": true,
+    "costUsd": 0.017407,
+    "modelCalls": 11,
+    "goodExample": false,
+    "dir": "runs/A35-show-before-after/2",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A35-show-before-after",
+    "area": "show-files",
+    "layer": "A",
+    "run": 3,
+    "engineCommit": "e7a483e3+dirty",
+    "phase": "after",
+    "note": "after the fixes, on e7a483e3+dirty; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T18:54:46.042Z",
+    "passed": true,
+    "costUsd": 0.011248,
+    "modelCalls": 8,
+    "goodExample": true,
+    "dir": "runs/A35-show-before-after/3",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
   }
 ]

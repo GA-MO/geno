@@ -1,0 +1,80 @@
+{
+  "case": "A35-show-before-after",
+  "run": 1,
+  "session": "5aade6da-c5d3-4640-89de-824b71684766",
+  "passed": false,
+  "costUsd": 0.030376602500000002,
+  "classifierUsd": 0,
+  "modelCalls": 16,
+  "toolCalls": 18,
+  "tokens": {
+    "input": 96,
+    "cacheRead": 151115,
+    "cacheWrite": 25531,
+    "output": 6187,
+    "latencyMs": 110930
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "node shot.mjs before.png && cat .gitignore"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=987ch"
+    },
+    {
+      "id": "fixed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "shows-pair",
+      "pass": false,
+      "detail": "error: [\"before.png\", \"after.png\"]; error: [\"<repo>/scratchpad/show-files/real/ws/A35-show-before-after-r1/repo/before.png\", \"<repo>/scratchpad/show-files/real/ws/A35-show-before-after-r1/repo/after.png\"]; error: [\"before.png\", \"after.png\"]; error: [\"before.png\"]"
+    }
+  ]
+}

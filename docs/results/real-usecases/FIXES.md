@@ -184,3 +184,15 @@ With the first wording, the notice fired in two runs. One updated the list and o
 
 - The prompt reminder now goes out at every prompt while a list has work left. That includes Start building after Plan, where the list is all pending by design. A model that ignores it gets it again at each prompt. The real model has not run either case yet.
 - The real model has not hit the 10-call idle reminder in any run.
+
+## show_files (A35)
+
+Case A35-show-before-after gives qwen3.8-flash a static sign-in page and `shot.mjs`, which paints a PNG of the page with no browser. The prompt asks it to take a screenshot, fix the button, take another, and show the two side by side. It does not name `show_files`. Each run had its own HOME, CLAUDE_CONFIG_DIR and GCODE_HOME.
+
+| Run | Engine | Result | What the model did |
+|---|---|---|---|
+| 1 | e7a483e3 | FAIL | Loaded `show_files` with `tool_search` on its own, then sent `files` as the JSON text `"[\"before.png\", \"after.png\"]"` four times and was refused each time. It gave up, wrote a script that joined the PNGs, and put a markdown image in its answer. Before that it wrote its first screenshot to its scratchpad as `/var/folders/...`, the environment's `/private/var/folders/...` without `/private`, and bash refused it as a path outside the workspace. |
+| 2 | e7a483e3 and the fix | PASS | Sent `files` as JSON text again; `show_files` took it and showed both screenshots. |
+| 3 | e7a483e3 and the fix | PASS | The same, in 8 model calls. |
+
+The fix: `parseShowFilesInput` takes `files` as an array, as its JSON text, or as one path. None of the 18 archived files, the gzipped one included, holds `pstack model configuration`, `EXTREMELY_IMPORTANT` or `/Users/me`. The three runs cost $0.0590 of the $0.30 cap.

@@ -258,8 +258,54 @@ function longSource() {
   return files;
 }
 
+/**
+ * A sign-in page and `shot.mjs`, which stands in for a browser screenshot: it reads the button's color and offset from
+ * index.html and paints a PNG of the page, with no browser and no network.
+ */
+const webPage = {
+  'package.json': json({ name: 'sign-in', version: '0.1.0', type: 'module', private: true }),
+  'README.md': '# sign-in\n\nA static sign-in page. `node shot.mjs <file.png>` saves a screenshot of index.html.\n',
+  'index.html': `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign in</title></head>
+<body>
+<main class="card" style="width: 260px">
+  <input placeholder="Email">
+  <input placeholder="Password" type="password">
+  <button id="sign-in" style="background: #d6403a; margin-left: 140px">Sign in</button>
+</main>
+</body>
+</html>
+`,
+  'shot.mjs': `import { readFileSync, writeFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
+
+const out = process.argv[2];
+if (!out) throw new Error('usage: node shot.mjs <file.png>');
+const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const button = /<button[^>]*style="([^"]*)"/.exec(html)?.[1] ?? '';
+const hex = /background:\\s*#([0-9a-f]{6})/i.exec(button)?.[1] ?? '888888';
+const left = Number(/margin-left:\\s*(\\d+)px/.exec(button)?.[1] ?? 0);
+const color = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const W = 480, H = 320;
+const rects = [[0, 0, 480, 36, [38, 52, 84]], [110, 70, 370, 280, [255, 255, 255]], [130, 124, 350, 148, [214, 216, 222]], [130, 162, 350, 186, [214, 216, 222]], [130 + left, 214, 350 + left, 246, color]];
+const raw = Buffer.alloc((W * 3 + 1) * H);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const rgb = rects.findLast(([a, b, c, d]) => x >= a && x < c && y >= b && y < d)?.[4] ?? [248, 248, 246];
+  raw.set(rgb, y * (W * 3 + 1) + 1 + x * 3);
+}
+const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+const crc = (bytes) => { let c = 0xffffffff; for (const b of bytes) c = table[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+const chunk = (type, data) => { const head = Buffer.alloc(8); head.writeUInt32BE(data.length); head.write(type, 4); const sum = Buffer.alloc(4); sum.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data]))); return Buffer.concat([head, data, sum]); };
+const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W); ihdr.writeUInt32BE(H, 4); ihdr.set([8, 2, 0, 0, 0], 8);
+writeFileSync(out, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
+console.log(\`saved \${out}\`);
+`,
+};
+
 export const FIXTURES = {
   'ts-lib': tsLib,
+  'web-page': webPage,
   game,
   secrets,
   monorepo,

@@ -1,0 +1,21 @@
+diff --git a/after.png b/after.png
+new file mode 100644
+index 0000000..9c18bf7
+Binary files /dev/null and b/after.png differ
+diff --git a/before.png b/before.png
+new file mode 100644
+index 0000000..8388185
+Binary files /dev/null and b/before.png differ
+diff --git a/index.html b/index.html
+index e20660a..a3beded 100644
+--- a/index.html
++++ b/index.html
+@@ -5,7 +5,7 @@
+ <main class="card" style="width: 260px">
+   <input placeholder="Email">
+   <input placeholder="Password" type="password">
+-  <button id="sign-in" style="background: #d6403a; margin-left: 140px">Sign in</button>
++  <button id="sign-in" style="background: #2ea05c">Sign in</button>
+ </main>
+ </body>
+ </html>
