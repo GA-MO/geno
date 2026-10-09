@@ -185,7 +185,8 @@ function pageDenial(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext):
   return mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly }, mode, ctx.allowedForSession, ctx.rules ?? []);
 }
 
-const DEV_SCRIPTS = ['dev', 'start', 'serve', 'preview'] as const;
+/** The package.json scripts that start a dev server by name. */
+export const DEV_SCRIPTS = ['dev', 'start', 'serve', 'preview'] as const;
 const LOCKFILES: readonly (readonly [string, string])[] = [
   ['pnpm-lock.yaml', 'pnpm'],
   ['yarn.lock', 'yarn'],

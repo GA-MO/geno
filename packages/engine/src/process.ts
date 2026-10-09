@@ -15,6 +15,8 @@ export type ShellResult = {
   readonly output: string;
   readonly timedOut: boolean;
   readonly truncated: boolean;
+  /** The command's process group, when something it started outlived it, as a server started with & does. */
+  readonly lingering?: number;
 };
 
 export const OUTPUT_LIMIT = 4 * 1024 * 1024;
@@ -22,14 +24,28 @@ export const OUTPUT_LIMIT = 4 * 1024 * 1024;
 /** The process groups of the commands runShell runs now, which an engine on its way out kills. */
 const running = new Set<number>();
 
-/** Kills every command runShell runs now, with all it started. */
+/** Kills every command runShell runs now, with all it started, and every group a finished command left running. */
 export function killShells(): void {
-  for (const group of running) {
-    try {
-      process.kill(-group, 'SIGKILL');
-    } catch {
-      // The group is already gone.
-    }
+  for (const group of running) stopGroup(group);
+}
+
+/** Kills a process group that runShell started, with all it holds. */
+export function stopGroup(group: number): void {
+  running.delete(group);
+  try {
+    process.kill(-group, 'SIGKILL');
+  } catch {
+    // The group is already gone.
+  }
+}
+
+/** Whether any process of the group still runs. */
+function groupAlive(group: number): boolean {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -83,10 +99,13 @@ export function runShell(command: string, options: ShellOptions): Promise<ShellR
       reject(error);
     });
     child.on('close', (code) => {
-      if (child.pid !== undefined) running.delete(child.pid);
+      const group = child.pid;
+      // A killed group may not be gone yet; what is left of it is not something the command left running.
+      const lingering = group !== undefined && !timedOut && signal?.aborted !== true && groupAlive(group) ? group : undefined;
+      if (group !== undefined && lingering === undefined) running.delete(group);
       clearTimeout(timer);
       signal?.removeEventListener('abort', kill);
-      resolve({ code, output, timedOut, truncated });
+      resolve({ code, output, timedOut, truncated, ...(lingering === undefined ? {} : { lingering }) });
     });
   });
 }

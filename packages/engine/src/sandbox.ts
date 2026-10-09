@@ -4,7 +4,7 @@ import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
 import { credentialPlaces } from '@g-code/core';
 import { ENGINE_ENV_FILE } from './child-env.js';
 import { EngineError } from './errors.js';
-import { runShell, spawnShell, type ShellOptions, type ShellResult, type SpawnedShell, type SpawnOptions } from './process.js';
+import { runShell, spawnShell, stopGroup, type ShellOptions, type ShellResult, type SpawnedShell, type SpawnOptions } from './process.js';
 import { isMissing, readTasks, type Store } from './store.js';
 
 export type SandboxPolicy = {
@@ -165,11 +165,15 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
     if (--holds === 0) await leave(runtime);
   };
   let open = true;
+  // The process groups of commands that left something running, as `cmd &` does, stopped when the run ends.
+  const lingering = new Set<number>();
   return {
     run: async (command, options) => {
       const filesystem = await rules();
       const allowWrite = options.writable === undefined ? filesystem.allowWrite : [...filesystem.allowWrite, ...options.writable];
-      return runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
+      const result = await runShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: { ...filesystem, allowWrite } }), options);
+      if (result.lingering !== undefined) lingering.add(result.lingering);
+      return result;
     },
     spawn: async (command, options) => spawnShell(await SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }), options),
     wrap: async (command) => SandboxManager.wrapWithSandbox(command, undefined, { filesystem: await rules() }),
@@ -183,6 +187,8 @@ export async function openSandbox(policy: SandboxPolicy, denials?: PathDenials):
       };
     },
     async close() {
+      for (const group of lingering) stopGroup(group);
+      lingering.clear();
       if (!open) return;
       open = false;
       await release();
