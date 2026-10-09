@@ -93,7 +93,7 @@ describe('the sprite', () => {
 
   it('sits up for what it holds, stands on its hind legs to flex, and stays on four legs for the rest', () => {
     const postures = Object.fromEntries(POSE_NAMES.map((name) => [name, [...new Set(framesOf(POSES[name]).map((f) => `${f.body ?? 'four'} ${f.legs}`))]]));
-    expect(postures).toMatchObject({ reading: ['upright haunch'], coding: ['upright haunch'], writing: ['upright haunch'], planning: ['upright haunch'], flex: ['upright rear', 'four stand'] });
+    expect(postures).toMatchObject({ reading: ['seated haunch'], coding: ['seated haunch'], writing: ['seated haunch'], planning: ['seated haunch'], flex: ['upright rear', 'four stand'] });
     for (const name of ['idle', 'thinking', 'running', 'asking', 'hop', 'sweat', 'somersault', 'face'] as const)
       expect(postures[name]!.every((p) => p.startsWith('four')), name).toBe(true);
   });
@@ -106,10 +106,10 @@ describe('the sprite', () => {
     expect(compose(SITTING).join('')).toMatch(/w/);
   });
 
-  it('shows all four legs when upright: both hind feet on the ground and both forelegs raised or working, near green and far darker', () => {
+  it('shows all four legs when it sits or rears: both hind feet on the ground and both forelegs raised or working, near green and far darker', () => {
     const inksOf = (grid: Grid, rows: readonly number[]) => new Set(rows.flatMap((y) => [...grid[y]!]));
     for (const name of POSE_NAMES)
-      for (const frame of framesOf(POSES[name]).filter((f) => f.body === 'upright')) {
+      for (const frame of framesOf(POSES[name]).filter((f) => (f.body ?? 'four') !== 'four')) {
         const grid = compose({ ...frame, prop: undefined as never });
         const ground = inksOf(grid, [19, 20, 21]);
         expect(ground.has('g') && ground.has('d'), `${name}: two hind legs on the ground`).toBe(true);
@@ -117,6 +117,11 @@ describe('the sprite', () => {
         const fore = new Set(grid.flatMap((row, y) => [...row].filter((ink, x) => bare[y]![x] !== ink)));
         expect(fore.has('g') && fore.has('d'), `${name} ${frame.arms}: two forelegs`).toBe(true);
       }
+  });
+
+  it('keeps the seated chest plain: no leg drawn or outlined across it, so the forelegs read against the belly', () => {
+    for (const name of ['reading', 'coding', 'writing', 'planning'] as const)
+      for (const frame of framesOf(POSES[name])) expect(crop(compose(frame), { x: 8, y: 12, width: 7, height: 6 }).join('/'), name).not.toMatch(/d/);
   });
 
   it('holds and works each prop with a foreleg that reaches it, not a stub beside it', () => {
