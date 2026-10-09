@@ -215,6 +215,19 @@ const isTodoReminder = (event: TurnEvent): boolean => event.kind === 'notice' &&
 const isTypedPrompt = (event: TurnEvent | undefined): boolean => event?.kind === 'user' && event.from === undefined && event.steer !== true;
 
 /**
+ * Whether the log ends with a prompt the user typed after a turn that did not finish on its own: stopped, failed, or
+ * capped by its run's limits, which ends on an error or on the last call the limits allow, a report with tools off.
+ */
+function cutShort(events: readonly TurnEvent[]): boolean {
+  const conversation = events.filter((e) => IN_CONVERSATION[e.kind] && e.kind !== 'session-start');
+  if (!isTypedPrompt(conversation.at(-1))) return false;
+  if (conversation.at(-2)?.kind === 'error') return true;
+  const prompt = events.lastIndexOf(conversation.at(-1)!);
+  const before = events.slice(0, prompt);
+  return before.slice(before.findLastIndex(isTypedPrompt) + 1).some((e) => e.kind === 'notice' && e.last === true);
+}
+
+/**
  * Whether to show the model its unfinished list before its next call. Read from the session as its cuts leave it, not
  * its context view, so a compaction neither hides the list nor restarts the count. Undefined when the list is empty or
  * done, and once told, until the model has called again (`stopped`) or made `TODO_REMINDER_CALLS` more calls (`idle`).
@@ -222,9 +235,8 @@ const isTypedPrompt = (event: TurnEvent | undefined): boolean => event?.kind ===
 export function todoReminder(events: readonly TurnEvent[]): TodoReminder | undefined {
   const list = todoOf(events);
   if (!list.some((item) => item.status !== 'done')) return undefined;
-  const conversation = events.filter((e) => IN_CONVERSATION[e.kind] && e.kind !== 'session-start');
   const toldSinceCall = events.slice(events.findLastIndex((e) => e.kind === 'assistant') + 1).some(isTodoReminder);
-  if (!toldSinceCall && isTypedPrompt(conversation.at(-1)) && conversation.at(-2)?.kind === 'error') return { why: 'stopped', list };
+  if (!toldSinceCall && cutShort(events)) return { why: 'stopped', list };
   const since = events.slice(events.findLastIndex((e) => (e.kind === 'tool-result' && e.name === TODO_TOOL) || isTodoReminder(e)) + 1);
   const calls = since.filter((e) => e.kind === 'assistant' && e.issuedBy !== 'user').length;
   return calls >= TODO_REMINDER_CALLS ? { why: 'idle', list } : undefined;
