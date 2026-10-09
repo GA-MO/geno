@@ -1,4 +1,5 @@
 import { simpleCommand, splitCommand, type SimpleCommand } from './approval.js';
+import { DEV_SCRIPTS } from './browser.js';
 
 /** What ends a step of a command line: the operator after it, or the end of the line. */
 export type StepOperator = '&&' | '||' | ';' | '|' | '&' | 'end';
@@ -254,4 +255,103 @@ export function fileToolNoter(earlier: readonly string[]): FileToolNoter {
       return fresh.map((tool) => FILE_TOOL_NOTES[tool]);
     },
   };
+}
+
+/** A package.json's scripts, by name. */
+export type Scripts = Readonly<Record<string, string>>;
+
+const serverFile = (args: readonly string[]): boolean => {
+  const file = args.find((arg) => !arg.startsWith('-'));
+  return file !== undefined && /(?:^|\/)server\.[cm]?[jt]s$/.test(file);
+};
+
+/** Programs that serve until stopped, given their arguments. */
+const SERVERS: Readonly<Record<string, (args: readonly string[]) => boolean>> = {
+  vite: ([first]) => first === undefined || first.startsWith('-') || ['dev', 'serve', 'preview'].includes(first),
+  next: ([first]) => first === 'dev' || first === 'start',
+  nodemon: () => true,
+  'http-server': () => true,
+  'live-server': () => true,
+  serve: () => true,
+  'webpack-dev-server': () => true,
+  webpack: ([first]) => first === 'serve',
+  node: serverFile,
+  tsx: serverFile,
+  'ts-node': serverFile,
+  bun: serverFile,
+  deno: (args) => serverFile(args.filter((arg) => arg !== 'run')),
+  python: (args) => (args[0] === '-m' && args[1] === 'http.server') || (/manage\.py$/.test(args[0] ?? '') && args[1] === 'runserver'),
+  python3: (args) => (args[0] === '-m' && args[1] === 'http.server') || (/manage\.py$/.test(args[0] ?? '') && args[1] === 'runserver'),
+  php: ([first]) => first === '-S',
+  flask: ([first]) => first === 'run',
+  uvicorn: () => true,
+  rails: ([first]) => first === 's' || first === 'server',
+};
+
+const SCRIPT_RUNNERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+
+/** The package.json script a command runs, such as dev for npm run dev or pnpm dev. */
+function scriptOf({ program, args }: SimpleCommand): string | undefined {
+  if (!SCRIPT_RUNNERS.has(program)) return undefined;
+  if (program === 'npm') return args[0] === 'start' ? 'start' : args[0] === 'run' || args[0] === 'run-script' ? args[1] : undefined;
+  return args[0] === 'run' ? args[1] : program === 'bun' ? undefined : args[0];
+}
+
+/**
+ * Whether a command starts a server. A script counts by its name when it is a dev, serve or preview script, or by its
+ * body. `start` names a server only when its body runs one, or when the line backgrounds it, since a start script may
+ * also run a program that ends.
+ */
+function startsServer(command: SimpleCommand, scripts: Scripts, background: boolean): boolean {
+  const script = scriptOf(command);
+  if (script !== undefined) {
+    const body = scripts[script];
+    if (body !== undefined && (stepsOf(body) ?? []).some((step) => step.commands.some((c) => scriptOf(c) === undefined && startsServer(c, {}, false)))) return true;
+    return script === 'start' ? background : (DEV_SCRIPTS as readonly string[]).includes(script);
+  }
+  return SERVERS[command.program]?.(command.args) === true;
+}
+
+/** A server a command line starts itself, as written, and whether the line puts it in the background. */
+export type ServerStart = { readonly server: string; readonly background: boolean; readonly rest: string };
+
+/**
+ * The server a command line starts with &, nohup or ( … ) &, or in the foreground, where a background job is what
+ * runs it: either way bash would leave it running past the call or hold the call until the timeout.
+ */
+export function serverStartOf(command: string, scripts: Scripts): ServerStart | undefined {
+  const steps = stepsOf(command);
+  if (steps === undefined) return undefined;
+  const pipelines = pipelinesOf(steps);
+  const index = pipelines.findIndex((pipeline) => {
+    const background = pipeline.at(-1)!.then === '&';
+    return pipeline.some((step) => step.commands.some((c) => startsServer(c, scripts, background) || (background && c.prefix.includes('nohup'))));
+  });
+  if (index === -1) return undefined;
+  const join = (pipeline: readonly Step[]) => pipeline.map((step) => step.text).join(' | ');
+  const rest = pipelines.filter((_, i) => i !== index).map((pipeline) => `${join(pipeline)}${pipeline.at(-1)!.then === ';' ? ';' : ` ${pipeline.at(-1)!.then}`}`);
+  return {
+    server: join(pipelines[index]!),
+    background: pipelines[index]!.at(-1)!.then === '&',
+    rest: rest.join(' ').replace(/\s*(?:&&|\|\||;|&|end)$/, ''),
+  };
+}
+
+/** How the model can wait for a server: monitor where something wakes the session, a foreground until-loop elsewhere. */
+export type ServerWait = { readonly monitor: boolean; readonly launchFile?: string | undefined };
+
+/** The refusal of a server started by a plain bash call, which says how to start it in the background and wait for it. */
+export function serverRefusal({ server, background, rest }: ServerStart, { monitor, launchFile }: ServerWait): string {
+  const url = /https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s'"`;|&)]*/.exec(rest)?.[0] ?? 'http://localhost:<port>/';
+  const why = background ? 'with & it would keep running after this call and this session' : 'in the foreground it would hold this call until the timeout kills it';
+  const wait = monitor
+    ? 'Then wait for it with monitor (load it with tool_search first) on that job id, with a pattern for its ready line such as "listening|ready|Local:", and end your turn: Geno wakes you on that line.'
+    : `Then wait for it with one foreground bash command that ends when it answers, such as until curl -sf ${url} >/dev/null; do sleep 0.5; done, with timeout_seconds as its limit.`;
+  return [
+    `Blocked: \`${server}\` starts a server, and ${why}. Start it on its own instead: call bash with {"command": ${JSON.stringify(server.replace(/^nohup\s+/, ''))}, "run_in_background": true}. That returns a job id such as bg-1 at once, and Geno stops the job when the session ends.`,
+    wait,
+    ...(rest === '' ? [] : [`Run the rest of this line, \`${rest}\`, after that, without the & job and its sleep or kill.`]),
+    'Stop the server with task_stop when you are done.',
+    ...(launchFile === undefined ? [] : [`Or start it with preview_start (load it with tool_search first), which reads ${launchFile} and waits until the server answers.`]),
+  ].join(' ');
 }

@@ -41,6 +41,8 @@ import {
   DONT_ASK,
   ruledDenial,
   secretReadDenial,
+  serverRefusal,
+  serverStartOf,
   sleepRefusal,
   staleBaseDetail,
   trackedFiles,
@@ -61,6 +63,7 @@ import {
   type FileToolNoter,
   type LaneBounds,
   type PathTool,
+  type Scripts,
   type SessionMode,
   type SlashCommand,
 } from '@g-code/core';
@@ -70,6 +73,7 @@ import type { Classify } from '../classifier.js';
 import type { WorkingDirectories } from '../directories.js';
 import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
+import { readLaunchConfigs } from '../preview.js';
 import { tail } from '../process.js';
 import type { PermissionStore, SessionPermissions } from '../permissions.js';
 import type { Sandbox } from '../sandbox.js';
@@ -299,6 +303,19 @@ const mayLeave = (given: string | undefined): boolean => given !== undefined && 
 
 /** The editor's problems in some files, given and returned as absolute paths. */
 export type Diagnostics = (files: readonly string[]) => Promise<readonly EditorDiagnostic[]>;
+
+/** The scripts of the workspace's package.json; none when it has no readable one. */
+async function scriptsOf(workspace: string): Promise<Scripts> {
+  try {
+    const { scripts } = JSON.parse(await readFile(path.join(workspace, 'package.json'), 'utf8')) as { scripts?: unknown };
+    return typeof scripts === 'object' && scripts !== null ? (Object.fromEntries(Object.entries(scripts).filter(([, body]) => typeof body === 'string')) as Scripts) : {};
+  } catch {
+    return {};
+  }
+}
+
+const LINGERING = '[Geno] A process this command started is still running. Geno stops it when this run ends.';
+const LINGERING_ADVICE = 'For a server or a watcher, use run_in_background instead: read it with bash_output and stop it with task_stop.';
 
 export type AgentToolEnv = {
   readonly sandbox: Sandbox;
@@ -679,6 +696,11 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       // Only where run_in_background and monitor exist to wait with instead; a subagent may still sleep.
       const sleep = run_in_background || tools.background === undefined ? undefined : leadingSleep(command);
       if (sleep !== undefined) throw new ToolError(sleepRefusal(sleep));
+      const server = run_in_background || tools.background === undefined ? undefined : serverStartOf(command, await scriptsOf(ctx.workspace));
+      if (server !== undefined) {
+        const launchFile = (await readLaunchConfigs(ctx.workspace)).configs[0]?.file;
+        throw new ToolError(serverRefusal(server, { monitor: tools.wakes !== undefined, launchFile }));
+      }
       const approval = await approveCommand(command, ctx, background !== undefined);
       if (background !== undefined) {
         const { text } = await startInBackground(background, command, description, ctx);
@@ -695,7 +717,10 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
       const output = `${neutralizeNoticeLines(result.output)}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
       const reset = changesDirectory(command) ? `${cwdResetLine(ctx.workspace)}\n` : '';
-      const notes = failure === undefined ? (tools.fileNotes?.take(fileToolsOf(command)) ?? []) : [];
+      const notes = [
+        ...(failure === undefined ? (tools.fileNotes?.take(fileToolsOf(command)) ?? []) : []),
+        ...(result.lingering === undefined ? [] : [tools.background === undefined ? LINGERING : `${LINGERING} ${LINGERING_ADVICE}`]),
+      ];
       const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${reset}${commandStatusLine(result.code, killedAfter)}${notes.map((note) => `\n${note}`).join('')}`;
       return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };
     },

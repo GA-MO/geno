@@ -175,6 +175,26 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     expect(result(piped).text).not.toMatch(/\[Geno\]/);
   });
 
+  it('a server started with & or in the foreground is refused unrun, with the run_in_background call to make instead', async () => {
+    const files = { 'server.js': "require('fs').writeFileSync('started.txt', 'x');\n", 'package.json': '{"scripts":{"dev":"node server.js"}}\n' };
+    const amp = use('bash', { command: 'node server.js > server.log 2>&1 & sleep 2; curl -s http://localhost:5173/health' });
+    const foreground = use('bash', { command: 'npm run dev' });
+    const { result, workspace } = await session(wire, files, () => [[amp], [foreground]]);
+    expect(result(amp)).toMatchObject({ error: true, text: expect.stringMatching(/^Blocked: `node server\.js` starts a server, and with & it would keep running/) });
+    expect(result(amp).text).toContain('{"command": "node server.js", "run_in_background": true}');
+    expect(result(amp).text).toContain('until curl -sf http://localhost:5173/health >/dev/null; do sleep 0.5; done');
+    expect(result(foreground)).toMatchObject({ error: true, text: expect.stringMatching(/^Blocked: `npm run dev` starts a server, and in the foreground it would hold this call/) });
+    expect(existsSync(path.join(workspace, 'started.txt')), 'neither command ran').toBe(false);
+  });
+
+  it('a process a command leaves running with & is named in its result and stopped when the run ends', async () => {
+    const left = use('bash', { command: 'sleep 60 > /dev/null 2>&1 & echo $! > pid.txt' });
+    const { result, file } = await session(wire, A_TS, () => [[left]]);
+    expect(result(left)).toMatchObject({ error: false, text: expect.stringMatching(/\[exit code 0\]\n\[Geno\] A process this command started is still running\. Geno stops it when this run ends\. For a server/) });
+    const pid = Number((await file('pid.txt')).trim());
+    expect(() => process.kill(pid, 0), 'the sleep was stopped').toThrow(/ESRCH/);
+  });
+
   it('T-TOOL-08 a foreground command that starts with a long sleep is refused unrun, with a pointer to monitor and run_in_background', async () => {
     const slept = use('bash', { command: 'sleep 45; echo ran > ran.txt' });
     const short = use('bash', { command: 'sleep 1; cat a.ts' });
