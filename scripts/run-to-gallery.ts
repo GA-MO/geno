@@ -4,7 +4,6 @@
 import { writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import type * as acp from '@agentclientprotocol/sdk';
 import { approvalQuestion, patternText, ruledDenial, SUBAGENT_META, type TurnEvent } from '../packages/core/src/index.js';
 import { replayUpdates } from '../packages/engine/src/session-replay.js';
 import { optionsFor } from '../packages/engine/src/serve.js';
@@ -13,6 +12,10 @@ import { actionOf, permissionAction, replayedEnd, replayedTurnStart, timeOf, upd
 import { isChildAction, subagentAction } from '../packages/extension/src/chat/subagent-host.js';
 import { steerActionOf } from '../packages/extension/src/chat/steer-host.js';
 import { portableValue, readRun, REPO, RUNS, workspacesOf, type ArchivedRun, type Conversation, type LogEvent } from './real-usecases/archived-run.js';
+
+type SessionUpdate = ReturnType<typeof replayUpdates>[number];
+type SubagentUpdate = Extract<SessionUpdate, { sessionUpdate: 'subagent_update' }>;
+type PermissionRequest = Parameters<typeof permissionAction>[0];
 
 export const OUTPUT = path.join(REPO, 'packages/extension/test/gallery/real-sessions.ts');
 
@@ -26,7 +29,7 @@ export const STATES = [
 ] as const;
 
 /** A subagent's start and end, as the engine tells an editor that shows subagents (`noticeOf` in subagent-acp.ts). */
-function subagentUpdate(parent: string, start: LogEvent, end: LogEvent | undefined, task: string): acp.SessionUpdate[] {
+function subagentUpdate(parent: string, start: LogEvent, end: LogEvent | undefined, task: string): SessionUpdate[] {
   const notice = (status: unknown, turns: number, costUsd: number | null) => ({
     sessionId: parent,
     child: start.child,
@@ -40,17 +43,17 @@ function subagentUpdate(parent: string, start: LogEvent, end: LogEvent | undefin
     turns,
     costUsd,
   });
-  const update = (n: object): acp.SessionUpdate => ({ sessionUpdate: 'subagent_update', sessionId: start.child, state: { state: 'running' }, _meta: { [SUBAGENT_META]: n } }) as acp.SessionUpdate;
+  const update = (n: object): SessionUpdate => ({ sessionUpdate: 'subagent_update', sessionId: start.child, state: { state: 'running' }, _meta: { [SUBAGENT_META]: n } }) as SessionUpdate;
   return [update(notice({ kind: 'running' }, 0, 0)), ...(end === undefined ? [] : [update(notice(end.end, end.turns, end.costUsd))])];
 }
 
 /** The card the engine's `approve` asks with for the call the user allowed, from the rule that flags its command today. */
-function approvalRequest(run: ArchivedRun, conversation: Conversation, toolUseId: string): Pick<acp.RequestPermissionRequest, 'toolCall' | 'options'> {
+function approvalRequest(run: ArchivedRun, conversation: Conversation, toolUseId: string): PermissionRequest {
   const call = conversation.events.flatMap((e) => (e.kind === 'assistant' ? e.content : [])).find((b: any) => b.type === 'tool_use' && b.id === toolUseId);
   const logged = conversation.events.find((e) => e.kind === 'tool-result' && e.toolUseId === toolUseId)!.approval;
   const scope = { workspace: conversation.workspace, tempDir: tmpdir(), home: homedir() };
   const denial = ruledDenial(call.input.command, scope, 'ask', []);
-  if (denial?.rule !== logged.rule || denial.command !== logged.command) {
+  if (denial === undefined || denial.rule !== logged.rule || denial.command !== logged.command) {
     throw new Error(`${run.rel}: the engine flags ${JSON.stringify(call.input.command)} as ${denial?.rule ?? 'nothing'} today, not ${logged.rule} as the run logged`);
   }
   const rawInput = {
@@ -98,14 +101,14 @@ export function actionsOf(run: ArchivedRun, untilApproval = false): Action[] {
     const at = Date.parse(start.at!);
     const task = (update.rawInput as { task?: string } | undefined)?.task ?? '';
     const [running, ended] = subagentUpdate(main!.id, start, events.find((e) => e.kind === 'child-end' && e.child === start.child), task);
-    const begun = subagentAction(running as Extract<acp.SessionUpdate, { sessionUpdate: 'subagent_update' }>, at);
+    const begun = subagentAction(running as SubagentUpdate, at);
     if (begun !== undefined) actions.push(begun);
     for (const step of replayUpdates((children.get(start.child)?.events ?? []) as TurnEvent[])) {
       const action = actionOf(step, timeOf(step));
       if (isChildAction(action)) actions.push({ type: 'child', id: start.child, action });
     }
     if (ended !== undefined) {
-      const done = subagentAction(ended as Extract<acp.SessionUpdate, { sessionUpdate: 'subagent_update' }>, Date.parse(events.find((e) => e.kind === 'child-end' && e.child === start.child)!.at!));
+      const done = subagentAction(ended as SubagentUpdate, Date.parse(events.find((e) => e.kind === 'child-end' && e.child === start.child)!.at!));
       if (done !== undefined) actions.push(done);
     }
   }
