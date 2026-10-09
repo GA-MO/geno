@@ -198,7 +198,13 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       { class: 'step-row', onclick: () => ui.toggle(key) },
       h(
         'button',
-        { type: 'button', class: 'step-toggle', 'aria-expanded': String(open), 'data-focus': `step:${key}` },
+        {
+          type: 'button',
+          class: 'step-toggle',
+          'aria-expanded': String(open),
+          'data-focus': `step:${key}`,
+          'aria-label': [verbOf(name, running), ...(FILE_TOOLS[name] !== undefined ? byFile(tools).map((file) => file.path) : target ? [first.target] : [])].join(' '),
+        },
         icon(KIND_ICONS[first.toolKind], 'kind'),
         mcpServerChip(name),
         h('span', { class: 'step-verb' }, verbOf(name, running)),

@@ -13,6 +13,7 @@ describe('a step that edits one file five times and another once', () => {
     const panel = await playFixture(fixtureOf('edit-same-file'));
     expect(await textsOf(panel, `${STEP} .file-chip`), 'one chip per file').toEqual(['game.js+10−17· 5 edits', 'style.css+1−1']);
     expect(await panel.page.evaluate(overflowing as () => string[]), 'nothing runs past the panel at 300px').toEqual([]);
+    expect(await panel.page.getAttribute(`${STEP} .step-toggle`, 'aria-label'), 'the toggle names the step and its files for a screen reader').toBe('Edited src/game.js src/style.css');
 
     await panel.click(`${STEP} .step-toggle`);
     await panel.waitFor('the step to open', async () => (await panel.count(`${STEP} .tool-row`)) > 0);
