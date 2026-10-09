@@ -192,7 +192,7 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
         outcome: answer !== undefined ? answered(answer) : optionId === undefined ? { kind: 'cancelled' } : { kind: 'chosen', optionId, ...(comment === undefined ? {} : { comment }) },
       })),
     ),
-  error: (transcript, { message }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message }] })),
+  error: (transcript, { message, error }) => onLast(transcript, (turn) => ({ ...turn, blocks: [...turn.blocks, { kind: 'error', id: nextId(turn), message, ...(error === undefined ? {} : { error }) }] })),
   steer: (transcript, { seq, shown }) => onLast(transcript, (turn) => withSteer(turn, seq, shown)),
   // The divider ends the "Compacting the context" notice the summary call showed.
   compact: (transcript, { mark }) => onLast(transcript, (turn) => withCompact(quiet(turn), mark)),

@@ -41,6 +41,12 @@ export type TurnUsage = { readonly model: string; readonly costUsd: number | nul
 export const APPROVAL_META = 'gcode/approval';
 
 /**
+ * Key in the agent text a turn's error goes out as, live and replayed: the error's kind and message, so a client can
+ * word it for its user. The text says the same for clients that read only text.
+ */
+export const TURN_ERROR_META = 'gcode/turnError';
+
+/**
  * session/request_permission's `toolCall.rawInput`: the command asked about, why it needs asking, and the bash call's
  * own description, for display only. `rule` is the pattern "Always allow in this workspace" saves, when offered.
  * `subject` names the path, host or MCP tool a question asks about when it is not a command line.

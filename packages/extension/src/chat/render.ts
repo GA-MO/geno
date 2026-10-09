@@ -3,7 +3,7 @@ import { diagramBlock } from './diagram-view.js';
 import { h, icon, type Child } from './dom.js';
 import { formatDuration, formatTokens } from './format.js';
 import { renderMarkdown } from './markdown.js';
-import type { ApprovalSubject, AskUserRequest, BackendShown } from '@g-code/core';
+import type { ApprovalSubject, AskUserRequest, BackendShown, TurnErrorKind } from '@g-code/core';
 import { COMMENT_OPTION } from '@g-code/core/permission-comment';
 import { showsTokens, turnCost } from './backend-model.js';
 import type { AutoDecision, Denial, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
@@ -177,20 +177,19 @@ const deniedLabel = (denial: Denial): string => (denial.rule === undefined ? DEN
 
 const deniedBadge = (label: string): HTMLElement => h('span', { class: 'step-denied', title: label }, icon('circle-slash'), h('span', { class: 'step-denied-label' }, label));
 
-/** Under a refused call: why, in plain words, with the text the model got behind Show details. */
-function denialNote(tool: DeniedTool, ui: Ui): HTMLElement {
-  const id = `denial:${tool.id}`;
+/** What the engine told the model about a call, behind Show details: there to read, out of the way. */
+function modelDetails(toolId: string, text: string, ui: Ui): Child[] {
+  const id = `details:${toolId}`;
   const open = ui.isOpen(id);
-  return h(
-    'div',
-    { class: 'denial-note', 'data-denial': tool.id },
-    h('span', { class: 'denial-reason' }, tool.denial.reason),
-    tool.output !== undefined &&
-      tool.output !== '' &&
-      h('button', { type: 'button', class: 'link-button denial-toggle', 'aria-expanded': String(open), 'data-focus': `details:${tool.id}`, onclick: () => ui.toggle(id) }, open ? 'Hide details' : 'Show details'),
-    open && h('pre', { class: 'denial-details' }, tool.output),
-  );
+  return [
+    h('button', { type: 'button', class: 'link-button details-toggle', 'aria-expanded': String(open), 'data-focus': id, onclick: () => ui.toggle(id) }, open ? 'Hide details' : 'Show details'),
+    open && h('pre', { class: 'model-details' }, text),
+  ];
 }
+
+/** Under a refused call: why, in plain words, with the text the model got behind Show details. */
+const denialNote = (tool: DeniedTool, ui: Ui): HTMLElement =>
+  h('div', { class: 'denial-note', 'data-denial': tool.id }, h('span', { class: 'denial-reason' }, tool.denial.reason), ...(tool.output === undefined || tool.output === '' ? [] : modelDetails(tool.id, tool.output, ui)));
 
 /** Tools whose runs show as file chips rather than a target, with what a chip counts when calls repeat a file. */
 const FILE_TOOLS: Readonly<Record<string, string | undefined>> = { read: 'reads', edit: 'edits' };
@@ -262,6 +261,7 @@ function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
       step.status === 'running' && icon('loading', 'codicon-modifier-spin step-status'),
       step.status === 'failed' && h('span', { class: 'step-failed' }, icon('error'), 'Failed'),
       isDenied(tool) && deniedBadge(deniedLabel(tool.denial)),
+      step.exit !== undefined && h('span', { class: 'command-exit', title: `The command ended with ${step.exit}` }, step.exit),
     ),
     ...autoNotes([tool], quiet),
     h(
@@ -284,6 +284,7 @@ function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
         ),
     ),
     isDenied(tool) && denialNote(tool, ui),
+    step.notes.length > 0 && h('div', { class: 'command-notes' }, ...modelDetails(tool.id, step.notes.join('\n'), ui)),
     step.job !== undefined && jobRow(step.job, ui),
   );
 }
@@ -714,8 +715,27 @@ function settledQuestion(request: AskUserRequest, outcome: PermissionOutcome, fo
   ];
 }
 
-export const errorBlock = (block: ErrorBlock): HTMLElement =>
-  h('div', { class: 'turn-error', role: 'alert' }, icon('error'), h('span', {}, block.message));
+type Limit = { readonly words: string; readonly value: RegExp; readonly shown: (value: string) => string };
+
+/** The limits a run stops at, in plain words; the engine's message names them by the command line's flags. */
+const LIMITS: Readonly<Partial<Record<TurnErrorKind, Limit>>> = {
+  'max-turns': { words: 'Reached the turn limit', value: /after (\d+) model calls/, shown: (calls) => calls },
+  budget: { words: 'Reached the cost limit', value: /--max-cost ([\d.]+)/, shown: (usd) => `$${usd}` },
+};
+
+function limitText({ words, value, shown }: Limit, message: string): string {
+  const found = value.exec(message)?.[1];
+  return found === undefined ? words : `${words} (${shown(found)})`;
+}
+
+const sentence = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
+/** How a turn's error reads: a limit it reached as a warning, anything else as the error it is. */
+export function errorBlock(block: ErrorBlock): HTMLElement {
+  const limit = block.error === undefined ? undefined : LIMITS[block.error];
+  if (limit !== undefined) return h('div', { class: 'turn-error turn-limit', role: 'alert' }, icon('warning'), h('span', {}, limitText(limit, block.message)));
+  return h('div', { class: 'turn-error', role: 'alert' }, icon('error'), h('span', {}, sentence(block.message)));
+}
 
 /** Assistant text, revealed up to `shown` characters, with a caret while more is coming. */
 export function textBlock(text: string, caret: boolean, ui: Ui): HTMLElement {
@@ -778,7 +798,7 @@ export const startBuilding = (ui: Ui): HTMLElement =>
   );
 
 const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { readonly icon: string; readonly label: string }>> = {
-  stopped: { icon: 'debug-stop', label: 'Stopped' },
+  stopped: { icon: 'debug-stop', label: 'Stopped by you' },
   failed: { icon: 'error', label: 'Failed' },
 };
 

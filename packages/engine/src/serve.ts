@@ -296,7 +296,7 @@ import { appendEvent, dropTornTail, logBesideTurn, logSettingChange, type Settin
 import { chosenEffort, effortConfigOptions } from './effort-option.js';
 import { usageUpdate } from './usage-update.js';
 import { compactAtOf, compactContext, numbered } from './compact.js';
-import { wakeMetaOf, backgroundUpdate, compactUpdate, errorText, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
+import { wakeMetaOf, backgroundUpdate, compactUpdate, errorUpdate, replayUpdates, steerUpdate, textUpdate, TOOL_KINDS, TOOL_STATUS, toolResultUpdate, type ShownWidget } from './session-replay.js';
 import { listSessions, renameSession, trashSession } from './history.js';
 import { sessionIndex } from './session-index.js';
 import type { Store } from './store.js';
@@ -537,7 +537,7 @@ const retryReason = (message: string): string => RETRY_REASONS.find(([pattern]) 
 const LOGGED: { readonly [K in TurnEvent['kind']]?: (event: EventOf<K>, peer: Peer) => acp.SessionUpdate | undefined } = {
   'tool-result': (event) => toolResultUpdate(event),
   user: (event) => (event.steer === true ? steerUpdate(event) : undefined),
-  error: (event) => textUpdate(errorText(event)),
+  error: (event) => errorUpdate(event),
   compact: (event) => compactUpdate(event),
   // A retry is live status, not history, which is what a notice is; a client without notices hears only the outcome.
   retry: ({ delayMs, message }, peer) =>

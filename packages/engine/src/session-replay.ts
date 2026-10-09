@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   APPROVAL_META,
+  TURN_ERROR_META,
   COMPACT_META,
   compactMarkOf,
   compactNotice,
@@ -167,7 +168,10 @@ export const compactPrompt = (event: EventOf<'compact'>): EventOf<'user'> => ({
 });
 
 /** A failure belongs in the transcript, and a notice is live status only, so it goes as agent text, live and replayed. */
-export const errorText = (event: EventOf<'error'>): string => `\n\n[${event.error}] ${event.message}`;
+export const errorUpdate = (event: EventOf<'error'>): acp.SessionUpdate => ({
+  ...textUpdate(`\n\n[${event.error}] ${event.message}`),
+  _meta: { [TURN_ERROR_META]: { error: event.error, message: event.message } },
+});
 
 /** A stored widget as the editor gets it: the file's address, and its html unless the file is gone. */
 export type ShownWidget = { readonly uri: string; readonly html: string | undefined };
@@ -336,7 +340,7 @@ export function replayUpdates(events: readonly TurnEvent[], widgetOf: (widget: W
       }
       if (event.kind === 'user') updates.push(steerUpdate(event));
       if (event.kind === 'compact') updates.push(compactUpdate(event));
-      if (event.kind === 'error') updates.push(textUpdate(errorText(event)));
+      if (event.kind === 'error') updates.push(errorUpdate(event));
       if (event.kind === 'background-end') {
         const { id, toolUseId, command, preview, state } = event.job;
         updates.push(backgroundUpdate({ id, toolUseId, command, ...(preview === undefined ? {} : { preview }), state, tail: event.tail }, { [REPLAYED_AT_META]: ms(event.at) }));

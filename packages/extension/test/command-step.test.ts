@@ -20,7 +20,7 @@ const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`
 describe('a command step', () => {
   it('titles the step with the call’s description on one line, and keeps the command whole', () => {
     const step = commandStepOf(bash({ target: LONG_COMMAND, description: '  Show disk usage\n of each package  ' }), false);
-    expect(step).toEqual({ title: 'Show disk usage of each package', command: LONG_COMMAND, output: undefined, truncated: false, fromEnd: false, lines: 0, status: 'running' });
+    expect(step).toEqual({ title: 'Show disk usage of each package', command: LONG_COMMAND, output: undefined, truncated: false, fromEnd: false, exit: undefined, notes: [], lines: 0, status: 'running' });
   });
 
   it('falls back to a plain title without a description, by whether the command still runs', () => {
@@ -42,15 +42,21 @@ describe('a command step', () => {
 
   it('previews the last lines of a failed command, where its error is, and shows them all once expanded', () => {
     const tool = bash({ target: 'pnpm test' }, { output: `${lines(9)}\n[exit code 1]\n`, status: 'failed' });
-    expect(commandStepOf(tool, false)).toMatchObject({ output: ['line 7', 'line 8', 'line 9', '[exit code 1]'], truncated: true, fromEnd: true, lines: 10 });
-    expect(commandStepOf(tool, true)).toMatchObject({ output: [...lines(9).split('\n'), '[exit code 1]'], truncated: false });
+    expect(commandStepOf(tool, false)).toMatchObject({ output: ['line 6', 'line 7', 'line 8', 'line 9'], truncated: true, fromEnd: true, lines: 9 });
+    expect(commandStepOf(tool, true)).toMatchObject({ output: lines(9).split('\n'), truncated: false });
   });
 
-  it('keeps a failing exit line once, at the end, and shows a short output whole', () => {
+  it('shows how a failed command exited as a badge, not the engine lines, and a short output whole', () => {
     const step = commandStepOf(bash({ target: 'false' }, { output: 'Exit code 1\nnope\n[exit code 1]\n', status: 'failed' }), false);
-    expect(step).toMatchObject({ output: ['nope', '[exit code 1]'], truncated: false, lines: 2, status: 'failed' });
+    expect(step).toMatchObject({ output: ['nope'], truncated: false, lines: 1, status: 'failed', exit: 'exit 1' });
+    expect(commandStepOf(bash({ target: 'sleep 99' }, { output: 'Killed after 30 seconds\n[killed after 30 seconds]', status: 'failed' }), false)).toMatchObject({ output: [], exit: 'killed after 30s' });
     const printed = commandStepOf(bash({ target: 'cat log' }, { output: 'Exit code 3\nfrom the log\n[exit code 0]\n' }), false);
     expect(printed).toMatchObject({ output: ['Exit code 3', 'from the log'], status: 'completed' });
+  });
+
+  it("keeps Geno's notes for the model out of the output, after the exit line or not", () => {
+    const step = commandStepOf(bash({ target: 'cat a.ts' }, { output: 'const a = 1;\nShell cwd was reset to /w\n[exit code 0]\n[Geno] Next time, read files with the read tool.' }), false);
+    expect(step).toMatchObject({ output: ['const a = 1;'], exit: undefined, notes: ['Shell cwd was reset to /w', '[Geno] Next time, read files with the read tool.'] });
   });
 
   it('shows a background command by its job: the newest lines of its output, Stop while it runs, and how it ended', () => {
