@@ -15,6 +15,8 @@ import { isChapterCall, type ChapterTool } from './chapter-model.js';
 export type Step =
   | { readonly kind: 'text'; readonly key: string; readonly block: TextBlock }
   | { readonly kind: 'calls'; readonly key: string; readonly name: string; readonly tools: readonly ToolBlock[] }
+  /** A call that waits on its card: the card shows what it asks, so the step only says it waits. */
+  | { readonly kind: 'asking'; readonly key: string; readonly tool: ToolBlock }
   | { readonly kind: 'permission'; readonly key: string; readonly block: PermissionBlock }
   | { readonly kind: 'error'; readonly key: string; readonly block: ErrorBlock }
   /** A message that joined the turn while it ran, where it landed. */
@@ -99,6 +101,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
   const steps: Step[] = [];
   const streaming = turn.status === 'streaming';
   const lastSet = turn.blocks.findLast((block) => block.kind === 'tool' && block.todo !== undefined);
+  const asking = new Set(turn.blocks.flatMap((block) => (block.kind === 'permission' && block.outcome.kind === 'open' && block.toolId !== undefined ? [block.toolId] : [])));
   for (const block of turn.blocks) {
     const last = steps.at(-1);
     if (block.kind === 'tool' && isTodoCall(block)) {
@@ -111,6 +114,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
     else if (block.kind === 'error') steps.push({ kind: 'error', key: block.id, block });
     else if (block.kind === 'steer') steps.push({ kind: 'steer', key: block.id, block });
     else if (block.kind === 'compact') steps.push({ kind: 'compact', key: block.id, block });
+    else if (asking.has(block.id)) steps.push({ kind: 'asking', key: `calls:${block.id}`, tool: block });
     else if (block.editorAction !== undefined) steps.push({ kind: 'editor', key: `editor:${block.id}`, tool: block as EditorTool });
     else if (block.widget !== undefined) steps.push({ kind: 'widget', key: `widget:${block.id}`, tool: block as WidgetTool });
     else if (block.name === AGENT_CALL) steps.push({ kind: 'agent', key: `agent:${block.id}`, tool: block, children: childrenUnder(turn, block.id) });
@@ -146,6 +150,8 @@ export function nodeOf(step: Step): NodeState {
       return step.tools.every((t) => t.status === 'denied') ? 'denied' : 'done';
     case 'permission':
       return step.block.outcome.kind === 'open' ? 'wait' : 'done';
+    case 'asking':
+      return 'wait';
     case 'error':
       return 'failed';
     case 'editor':

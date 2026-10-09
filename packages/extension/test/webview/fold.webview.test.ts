@@ -111,7 +111,7 @@ describe('the fold in the chat webview', () => {
     // The command's own step and its permission card can arrive in either order, so the steps are compared as a set.
     const running = await railOf(panel, 't1');
     expect({ ...running, steps: [...running.steps].sort() }, 'the running turn shows its last four steps, the approval card among them, and folds the rest').toEqual({
-      steps: ['calls', 'calls', 'fold', 'permission', 'text'],
+      steps: ['asking', 'calls', 'fold', 'permission', 'text'],
       fold: '+7 earlier steps',
       open: 'false',
     });

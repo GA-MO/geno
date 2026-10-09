@@ -9,7 +9,7 @@ const WIDTHS = [240, 300] as const;
 afterAll(closeBrowser);
 
 const texts = (panel: Panel, selector: string) => panel.eval<string[]>(`[...doc.querySelectorAll(${JSON.stringify(selector)})].map((e) => e.textContent.trim())`);
-const visibleText = (panel: Panel) => panel.eval<string>('doc.body.innerText');
+const visibleText = (panel: Panel) => panel.eval<string>("doc.querySelector('.transcript').innerText");
 
 /** Plays a gallery state at `width`, checks nothing runs past the panel edge, then hands the panel to `check`. */
 async function at(id: string, width: number, check: (panel: Panel) => Promise<void>): Promise<void> {
@@ -41,6 +41,17 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       await panel.waitFor('the details', async () => (await panel.count('.denial-details')) === 1);
       expect(await texts(panel, '.denial-details')).toEqual(['The user rejected `rm -rf build`, so it did not run. STOP what you are doing and wait for the user to tell you how to proceed.']);
       expect(await panel.page.evaluate(overflowing as () => string[]), 'the details fit too').toEqual([]);
+    }));
+
+  it.each(['approve-command', 'real-approval'])('a call that waits on its card %s says it waits for you, with no spinner and the command only in the card', (id) =>
+    at(id, width, async (panel) => {
+      const command = await panel.eval<string>(`doc.querySelector('.permission-open .permission-command').textContent`);
+      expect(await texts(panel, '.step-asking .step-verb')).toEqual(['Waiting for you']);
+      expect(await panel.count('.step-asking .codicon-modifier-spin, .step-asking .command-in'), 'no spinner and no IN box on the waiting step').toBe(0);
+      expect(await panel.count('.node-wait > .step-asking'), 'its node waits on the user').toBe(1);
+      expect((await visibleText(panel)).split(command).length - 1, 'the command shows once, in the card').toBe(1);
+      await panel.host.act({ type: 'permission-done', id: '0', optionId: 'allow' });
+      await panel.waitFor('the allowed step to show its command', async () => (await panel.count('.step-asking')) === 0 && (await texts(panel, '.command-in, .step-target')).includes(command));
     }));
 
   it('a command Auto refused reads as denied by Auto, not failed', () =>
