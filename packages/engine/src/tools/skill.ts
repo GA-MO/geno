@@ -15,8 +15,8 @@ const typedByUser = (events: readonly TurnEvent[], name: string): boolean =>
   events.some((e) => e.kind === 'user' && e.from === undefined && e.command?.name === name);
 
 /**
- * The `skill` tool: a skill's SKILL.md by name, and `noteFor`'s text after it when it has some for that skill, from the same discovery as the slash commands and the listing, so a
- * plugin skill hidden from the slash list still loads. `commands` is read on each call, as the folders are now. With
+ * The `skill` tool: a skill's SKILL.md by name, then `noteFor`'s text for that skill if any. It reads the same discovery
+ * as the slash commands and the listing, so a plugin skill hidden from the slash list still loads. `commands` is read on each call, as the folders are now. With
  * `start`, a `context: fork` skill runs as a subagent; without it, as in a subagent, which starts none, it loads here.
  */
 export function skillExecutor(commands: () => Promise<readonly SlashCommand[]>, start?: StartChild, noteFor?: (name: string) => string | undefined): Executor {
