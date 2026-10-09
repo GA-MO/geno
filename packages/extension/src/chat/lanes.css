@@ -360,11 +360,17 @@ body.vscode-high-contrast-light .button.danger {
   background: var(--vscode-button-background);
 }
 
-/* The send menu's chevron: as narrow as the row allows, so the 300px row keeps its controls. */
+/*
+ * The send menu's chevron hits like the other icons, 24px, but the full 300px row has no room for that. The negative
+ * margins reach into the gaps on either side, so it takes the 10px a 16px chevron took, and the padding keeps the
+ * hover drawn at 16px.
+ */
 .input-box .send-more {
-  width: 16px;
-  margin-right: -6px;
+  width: 24px;
+  margin: 0 -7px;
+  padding: 0 4px;
   border-radius: 5px;
+  background-clip: content-box;
 }
 
 .input-box .send-more[hidden] {

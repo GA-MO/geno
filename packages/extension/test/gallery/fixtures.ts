@@ -372,6 +372,16 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'composer-send-menu',
+    group: 'Composer and menus',
+    title: 'Send menu',
+    play: async (stage) => {
+      await stage.fill('textarea', 'fix the flaky login test');
+      await stage.click('.send-more');
+      await stage.shows('#send-menu:not([hidden])');
+    },
+  },
+  {
     id: 'composer-mentions',
     group: 'Composer and menus',
     title: 'Mention completions',
