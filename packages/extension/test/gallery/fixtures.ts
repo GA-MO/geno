@@ -41,6 +41,16 @@ const READS: readonly Call[] = [
 ];
 const EDIT: Call = { narration: 'Trimming the email.', name: 'edit', input: { path: 'src/login.ts', old_str: 'raw.toLowerCase()', new_str: 'raw.trim().toLowerCase()' } };
 
+/** One step's edits: five to game.js, −17 +10 in all, then one to style.css. */
+const REPEATED_EDITS: readonly (readonly [id: string, path: string, line: number, removed: string[], added: string[]])[] = [
+  ['g1', 'src/game.js', 12, ['let ghostSpeed = 2;', 'let ghostTarget = null;', 'let ghostMode = "scatter";'], []],
+  ['g2', 'src/game.js', 40, ['function chase(ghost) {', '  ghost.target = player;', '}'], ['function chase(ghost) {', '  ghost.target = nearest(ghost, player);']],
+  ['g3', 'src/game.js', 58, ['if (ghost.mode === "scatter") {', '  ghost.target = corner;', '  return;', '}'], ['if (ghost.mode === "scatter") return corner;', 'ghost.speed = speedFor(level);', 'ghost.target = player;']],
+  ['g4', 'src/game.js', 91, ['ghost.x += dx;', 'ghost.y += dy;', 'draw(ghost);', 'tick++;'], ['move(ghost, dx, dy);', 'draw(ghost);']],
+  ['g5', 'src/game.js', 130, ['const level = 1;', 'const lives = 3;', 'let score = 0;'], ['const level = levelFrom(url);', 'const lives = 3;', 'let score = savedScore();']],
+  ['s1', 'src/style.css', 8, ['.ghost { transition: none; }'], ['.ghost { transition: transform 80ms linear; }']],
+];
+
 /** A finished turn: two reads, an edit with its diff, and the answer. */
 async function finishedTurn(host: FakeHost, id = 't0', prompt = 'Fix the login form so a trailing space works'): Promise<void> {
   await host.act(started(id, prompt, { seq: 1 }));
@@ -619,6 +629,21 @@ export const FIXTURES: readonly Fixture[] = [
         },
       });
       await host.act(toolEnd('e1', 'completed', 'ok'), { type: 'text', text: 'Renamed.' }, ended());
+    },
+  },
+  {
+    id: 'edit-same-file',
+    group: 'Edits and diffs',
+    title: 'Five edits to one file in one step',
+    look: { detail: 'full' },
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'Make the ghosts smarter'), { type: 'text', text: 'Tightening the ghost AI.' });
+      for (const [id, path, line, removed, added] of REPEATED_EDITS) {
+        await host.act(toolStart(id, { name: 'edit', input: { path } }));
+        await host.act({ type: 'diff', toolId: id, at: Date.now(), diff: { path, change: `${id}-change`, hunks: [{ id: `${id}-h0`, line, removed, added, status: 'pending' }] } });
+        await host.act(toolEnd(id, 'completed', `ok: ${path}`));
+      }
+      await host.act({ type: 'text', text: 'The ghosts now chase by distance.' }, ended());
     },
   },
   {
