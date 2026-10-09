@@ -258,6 +258,9 @@ describe('gcode agent', () => {
       'a credentials file such as .env',
     ]);
     expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
+    const outside = results[denied.indexOf('cat /etc/hosts')]!;
+    expect('output' in outside && outside.output, 'a path the user must allow invites no other tool (ISSUES.md P-06)').toContain('Do not reach that path another way');
+    expect('output' in outside && outside.output).not.toContain('You *may* attempt');
     const vitest = results.at(-1)!;
     const [, code] = /\[exit code (\d+)\]$/.exec('output' in vitest ? vitest.output : '')!;
     expect(vitest.status).toBe(code === '0' ? 'ok' : 'error');
