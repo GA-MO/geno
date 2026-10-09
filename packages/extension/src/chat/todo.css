@@ -1,4 +1,4 @@
-/* The todo list (U56): one line that folds and opens a compact checklist, pinned above a running turn's latest step. */
+/* The todo list (U56): one line that folds and opens a compact checklist, above a running turn's latest step. */
 
 .todo {
   margin: 2px 0 4px;
@@ -95,6 +95,23 @@
   color: var(--ok);
 }
 
+/* An earlier turn's list on a running turn: history, not progress, until the turn updates it. */
+.todo[data-place='carried'] {
+  border-style: dashed;
+  outline-style: dashed;
+  background: transparent;
+}
+
+.todo[data-place='carried'] .todo-line,
+.todo[data-place='carried'] .todo-text,
+.todo[data-place='carried'] .todo-item[data-status='in_progress'] .todo-mark {
+  color: var(--muted);
+}
+
+.todo[data-place='carried'] .todo-item[data-status='in_progress'] .todo-text {
+  font-weight: inherit;
+}
+
 /* High contrast keeps every item at full strength, so done reads from its mark and a line through, not a fade. */
 .vscode-high-contrast .todo-item[data-status='done'],
 .vscode-high-contrast-light .todo-item[data-status='done'] {
@@ -109,6 +126,10 @@
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .todo {
   border-color: var(--glass-edge);
   background: var(--glass-pane);
+}
+
+body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .todo[data-place='carried'] {
+  background: transparent;
 }
 
 body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light) .todo-head:hover {

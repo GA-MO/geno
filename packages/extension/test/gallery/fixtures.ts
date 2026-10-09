@@ -51,6 +51,33 @@ const REPEATED_EDITS: readonly (readonly [id: string, path: string, line: number
   ['s1', 'src/style.css', 8, ['.ghost { transition: none; }'], ['.ghost { transition: transform 80ms linear; }']],
 ];
 
+/** A todo call that ran, with the list it set. */
+const todoSet = (id: string, todo: readonly { readonly id: string; readonly text: string; readonly status: 'pending' | 'in_progress' | 'done' }[]): Action => ({
+  type: 'tool',
+  id,
+  at: Date.now(),
+  name: 'todo',
+  target: '',
+  toolKind: 'other',
+  status: 'completed',
+  output: 'ok',
+  todo,
+});
+
+/** A turn stopped halfway through its list, then a prompt about something else, running. */
+async function stoppedThenAsked(host: FakeHost): Promise<void> {
+  await host.act(turnStart('t0', 'Port the login form to the new API'));
+  await host.act(
+    todoSet('tu_todo', [
+      { id: '1', text: 'Read the old form', status: 'done' },
+      { id: '2', text: 'Move validation to the API client', status: 'in_progress' },
+      { id: '3', text: 'Update the tests', status: 'pending' },
+    ]),
+    ended('stopped'),
+  );
+  await host.act(turnStart('t1', 'Why does the build fail on main?'), { type: 'text', text: 'Checking the build log.' }, toolStart('tu_b', { name: 'bash', input: { command: 'pnpm build', description: 'Run the build' } }));
+}
+
 /** A finished turn: two reads, an edit with its diff, and the answer. */
 async function finishedTurn(host: FakeHost, id = 't0', prompt = 'Fix the login form so a trailing space works'): Promise<void> {
   await host.act(started(id, prompt, { seq: 1 }));
@@ -586,6 +613,29 @@ export const FIXTURES: readonly Fixture[] = [
           { id: '3', text: 'Update the tests', status: 'pending' },
         ],
       });
+    },
+  },
+  {
+    id: 'todo-carried',
+    group: 'Tools',
+    title: 'Todo list carried from a stopped turn',
+    play: async ({ host }) => stoppedThenAsked(host),
+  },
+  {
+    id: 'todo-carried-updated',
+    group: 'Tools',
+    title: 'Carried todo list after the turn updates it',
+    play: async ({ host }) => {
+      await stoppedThenAsked(host);
+      await host.act(
+        toolEnd('tu_b', 'failed', 'error TS2307: Cannot find module ./api-client\n[exit code 1]'),
+        todoSet('tu_todo2', [
+          { id: '1', text: 'Read the old form', status: 'done' },
+          { id: '2', text: 'Move validation to the API client', status: 'done' },
+          { id: '3', text: 'Update the tests', status: 'in_progress' },
+        ]),
+        toolStart('tu_r', { name: 'read', input: { path: 'src/api-client.ts' } }),
+      );
     },
   },
   {

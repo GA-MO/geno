@@ -44,7 +44,7 @@ const release = (file: string) => writeFile(path.join(vscode.workspace.workspace
 type Shown = {
   /** The step kinds of the turn's rail, in order. */
   readonly rail: readonly string[];
-  readonly pinned: boolean;
+  readonly place: string | undefined;
   readonly open: boolean;
   readonly line: string | null;
   readonly items: readonly { readonly status: string; readonly text: string; readonly spins: boolean; readonly opacity: number; readonly shown: boolean }[];
@@ -57,7 +57,7 @@ const listOf = (n: number) =>
     const todo = turn.querySelector('.todo');
     return {
       rail: [...turn.querySelectorAll(':scope > .rail > .step')].map((s) => [...s.classList].find((c) => c.startsWith('step-')).slice(5)),
-      pinned: todo?.dataset.pinned === 'true',
+      place: todo?.dataset.place,
       open: todo?.querySelector('.todo-head')?.getAttribute('aria-expanded') === 'true',
       line: todo?.querySelector('.todo-line')?.textContent ?? null,
       items: [...(todo?.querySelectorAll('.todo-item') ?? [])].map((li) => ({
@@ -140,19 +140,20 @@ async function steps(): Promise<void> {
   await waitFor('the Plan turn to finish', async () => (await footers()) === 1);
   const plan = await listOf(1);
   check(plan.rail.join() === 'text,todo,text', 'the plan keeps its list where it was set, before the answer', plan.rail);
-  check(!plan.pinned && !plan.open && plan.line === '0 of 3 done', 'once the turn ended, the list folds to its line', plan);
+  check(plan.place === 'kept' && !plan.open && plan.line === '0 of 3 done', 'once the turn ended, the list folds to its line', plan);
   check(plan.items.every((item) => !item.shown), 'folded, no item shows', plan.items);
   const answerOf = () => panel<string | undefined>('[...doc.querySelectorAll(".turn:last-child .markdown")].at(-1)?.textContent');
   check((await answerOf())?.includes(ANSWERS.plan) === true, 'the plan answers', await answerOf());
 
   await click('.start-building button');
   await waitFor('the building turn to start', async () => (await count('.transcript .turn')) === 2);
-  await waitFor('the plan pinned before any call', async () => (await listOf(2)).pinned);
+  await waitFor('the plan carried before any call', async () => (await listOf(2)).place === 'carried');
   const carried = await listOf(2);
-  check(carried.open && carried.items.length === 3 && carried.items.every((item) => item.status === 'pending'), "Start building pins the plan's own list, open", carried);
+  check(!carried.open && carried.line === '0 of 3 done · from an earlier turn' && carried.items.every((item) => item.status === 'pending' && !item.spins), "Start building shows the plan's list as carried, folded, until the turn sets it", carried);
   await ui({ do: 'release', name: 'build' });
 
   await waitFor('the second item in progress', async () => (await listOf(2)).items[1]?.status === 'in_progress');
+  check((await listOf(2)).place === 'live', 'once the turn sets the list, it is live', await listOf(2));
   await waitFor('the second command to run', async () => (await listOf(2)).rail.at(-1) === 'calls');
   const running = await listOf(2);
   check(running.rail.at(-2) === 'todo' && running.rail.indexOf('todo') === running.rail.length - 2, 'the list stands right above the latest step', running.rail);
@@ -176,7 +177,7 @@ async function steps(): Promise<void> {
   await release(RELEASES.write);
   await waitFor('the building turn to finish', async () => (await footers()) === 2);
   const kept = await listOf(2);
-  check(!kept.pinned && kept.rail.at(-2) === 'todo' && kept.rail.at(-1) === 'text', 'the list stays where it last changed, before the answer', kept.rail);
+  check(kept.place === 'kept' && kept.rail.at(-2) === 'todo' && kept.rail.at(-1) === 'text', 'the list stays where it last changed, before the answer', kept.rail);
   check(kept.line === '3 of 3 done' && !kept.open, 'the finished list folds to its line', kept);
   await click('.turn:nth-of-type(2) .todo-head');
   await waitFor('the kept list to open', async () => (await listOf(2)).open);

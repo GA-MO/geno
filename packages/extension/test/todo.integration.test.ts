@@ -116,7 +116,7 @@ const todoInputs = (body: Body): string[] =>
   body.messages.flatMap((m) => (m.role !== 'assistant' || typeof m.content === 'string' ? [] : m.content.flatMap((b) => (b.type === 'tool_use' && (b as { name?: string }).name === 'todo' ? [JSON.stringify((b as { input?: unknown }).input)] : []))));
 
 describe('the todo list in VS Code', () => {
-  it('pins the plan as the list Start building ticks off, folds it to one line, keeps it where it last changed, and fits at 300px', async () => {
+  it('carries the plan into Start building until the turn ticks it off, folds it to one line, keeps it where it last changed, and fits at 300px', async () => {
     const { workspace, work, home, suite } = await setUp('todo', FILES, { 'gcode.approvalMode': 'auto', 'gcode.chat.detail': 'full', 'chat.mcp.enabled': false });
     if (shots !== undefined) await mkdir(shots, { recursive: true });
     const vscodeWindow = await leaseWindow();

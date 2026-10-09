@@ -72,14 +72,11 @@ function latestStep(transcript: Transcript): string | undefined {
   return steps.toSorted((a, b) => b.at - a.at)[0]?.text;
 }
 
-/** The todo item this chat's running turn works on, the user's own words for where it is. */
+/** The todo item this chat's running turn works on, the user's own words for where it is; an earlier turn's list is not. */
 function inProgress(transcript: Transcript): string | undefined {
-  if (transcript.turns.at(-1)?.status !== 'streaming') return undefined;
-  for (let i = transcript.turns.length - 1; i >= 0; i--) {
-    const list = todoListOf(transcript.turns[i]!);
-    if (list !== undefined) return list.find((item) => item.status === 'in_progress')?.text;
-  }
-  return undefined;
+  const turn = transcript.turns.at(-1);
+  if (turn?.status !== 'streaming') return undefined;
+  return todoListOf(turn)?.find((item) => item.status === 'in_progress')?.text;
 }
 
 const workingLabel = (text: string | undefined): ActivityView['label'] => (text === undefined ? undefined : { text, tone: 'working' });

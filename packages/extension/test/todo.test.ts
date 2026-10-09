@@ -23,19 +23,19 @@ const todoCall = (id: string, todo: TodoList | undefined, status: 'running' | 'c
   ...(todo === undefined ? {} : { todo }),
 });
 const call = (id: string, name: string, status: 'running' | 'completed' = 'completed'): Action => ({ type: 'tool', id, at: 2000, name, target: 'a.ts', toolKind: name === 'read' ? 'read' : 'search', status });
-const names = (steps: readonly Step[]) => steps.map((s) => (s.kind === 'todo' ? `todo:${s.pinned ? 'pinned' : 'kept'}` : s.kind === 'calls' ? `calls:${s.name}` : s.kind));
+const names = (steps: readonly Step[]) => steps.map((s) => (s.kind === 'todo' ? `todo:${s.place}` : s.kind === 'calls' ? `calls:${s.name}` : s.kind));
 
 describe('where the list stands on the rail', () => {
   it('pins the running turn\'s list just above its latest step, and no todo call shows as a call', () => {
     const t = run([start('t1'), todoCall('d1', list('in_progress', 'pending', 'pending')), call('g1', 'grep'), { type: 'text', text: 'Found it.' }, todoCall('d2', list('done', 'in_progress', 'pending')), call('r1', 'read', 'running')]);
     const rail = railOf(t.turns[0]!);
-    expect(names(rail)).toEqual(['calls:grep', 'text', 'todo:pinned', 'calls:read']);
+    expect(names(rail)).toEqual(['calls:grep', 'text', 'todo:live', 'calls:read']);
     expect(rail.find((s) => s.kind === 'todo')).toMatchObject({ list: list('done', 'in_progress', 'pending') });
   });
 
   it('moves down as steps arrive, staying above the thinking step', () => {
     const t = run([start('t1'), todoCall('d1', list('in_progress', 'pending', 'pending')), call('g1', 'grep')]);
-    expect(names(railOf(t.turns[0]!))).toEqual(['calls:grep', 'todo:pinned', 'thinking']);
+    expect(names(railOf(t.turns[0]!))).toEqual(['calls:grep', 'todo:live', 'thinking']);
   });
 
   it('keeps the list where it last changed once the turn ends, not where it was first set', () => {
@@ -45,10 +45,15 @@ describe('where the list stands on the rail', () => {
     expect(rail[1]).toMatchObject({ list: list('done', 'done', 'done') });
   });
 
-  it("pins the plan's list in the next turn before any call, as Start building runs it", () => {
-    const t = run([start('t2'), call('r1', 'read', 'running')]);
-    expect(names(railOf(t.turns[0]!, list('pending', 'pending', 'pending')))).toEqual(['todo:pinned', 'calls:read']);
-    expect(names(railOf(t.turns[0]!, list('done', 'done', 'done'))), 'a finished list from an earlier turn is not pinned').toEqual(['calls:read']);
+  it("shows an earlier turn's unfinished list as carried until this turn sets its own, then as live", () => {
+    const earlier = list('done', 'in_progress', 'pending');
+    const before = run([start('t2'), call('r1', 'read', 'running')]);
+    expect(names(railOf(before.turns[0]!, earlier))).toEqual(['todo:carried', 'calls:read']);
+    expect(names(railOf(before.turns[0]!, list('done', 'done', 'done'))), 'a finished list from an earlier turn is not pinned').toEqual(['calls:read']);
+    const updated = run([start('t2'), call('r1', 'read'), todoCall('d1', list('done', 'done', 'in_progress')), call('g1', 'grep', 'running')]);
+    expect(names(railOf(updated.turns[0]!, earlier))).toEqual(['calls:read', 'todo:live', 'calls:grep']);
+    const cleared = run([start('t2'), todoCall('d1', []), call('g1', 'grep', 'running')]);
+    expect(names(railOf(cleared.turns[0]!, earlier)), 'a list this turn cleared shows nothing').toEqual(['calls:grep']);
   });
 
   it('shows a refused call as a failed call, and a cleared list as nothing', () => {
@@ -79,6 +84,8 @@ describe("the composer's label", () => {
   it('names the item in progress while the chat runs and nothing needs the user', () => {
     const t = run([start('t1'), todoCall('d1', list('done', 'in_progress', 'pending')), call('g1', 'grep', 'running')]);
     expect(activityOf(t, busy)?.label).toEqual({ text: 'Write tests', tone: 'working' });
+    const later = run([start('t1'), todoCall('d1', list('done', 'in_progress', 'pending')), end, start('t2'), call('g1', 'grep', 'running')]);
+    expect(activityOf(later, busy)?.label?.text, "an earlier turn's item is not what this turn works on").toMatch(/^Searching for/);
     const none = run([start('t1'), call('g1', 'grep', 'running')]);
     expect(activityOf(none, busy)?.label?.text, 'with no list it names the latest step').toMatch(/^Searching for/);
   });
