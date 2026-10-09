@@ -115,6 +115,7 @@ tools:
         | - Edit files: edit (not sed -i, perl -i or awk)
         | - Write files: edit with create: true and the whole content (not echo >, cat <<EOF, tee, or a script that writes them)
         | - Talk to the user: write text (not echo or printf)
+        | To look at several files or folders, make one read, list or glob call for each, all in the same turn, rather than one bash line that chains cat, ls and find.
         | Use bash for builds, tests, git and other programs. Every command starts at the workspace root, so do not start one with cd to it. Dependencies are already installed; do not install packages. If a command is denied, do not run it again as it was; find another way or say what you could not do.
         |
         | Waiting:
