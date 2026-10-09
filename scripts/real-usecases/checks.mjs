@@ -58,7 +58,10 @@ const verdict = (ok, detail) => (ok ? pass(detail) : fail(detail));
  * One foreground wait that ends when its condition holds, Claude Code's until-loop: what a run must use where monitor
  * cannot wake it, as in a headless `gcode agent` run. A for loop of tries, or `&` and a sleep, is polling.
  */
-export const isUntilWait = (command) => /^\s*until\s[^;&|]+;\s*do\s+sleep\s+[\d.]+;\s*done\s*(;|&&|$)/.test(command) && !/&\s*$|&\s+[^&]/.test(command.replace(/&&/g, ''));
+export const isUntilWait = (command) => {
+  const plain = command.replace(/\d?>&\d/g, '');
+  return /^\s*until\s[^;&|]+;\s*do\s+sleep\s+[\d.]+;\s*done\s*(;|&&|$)/.test(plain) && !/&\s*$|&\s+[^&]/.test(plain.replace(/&&/g, ''));
+};
 
 const SHELL_FOR_FILES = /^\s*(cat|head|tail|less|ls|find|grep|rg|sed\s+-n|awk)\b/;
 const SHELL_WRITES = /(^|[;&|]\s*)(echo|printf|cat)\b[^|]*>[^&]|\bsed\s+-i\b|\btee\b/;
