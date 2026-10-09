@@ -1,0 +1,95 @@
+{
+  "case": "A19-poteto-thai",
+  "run": "fix-r3-1",
+  "session": "b4f40bd1-9ec0-489f-9167-eeb21f754982",
+  "passed": false,
+  "costUsd": 0.05458038,
+  "classifierUsd": 0,
+  "modelCalls": 16,
+  "toolCalls": 25,
+  "tokens": {
+    "input": 96,
+    "cacheRead": 312723,
+    "cacheWrite": 27808,
+    "output": 5199,
+    "latencyMs": 99419
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls src/logic src/scenes test && cat README.md"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1186ch"
+    },
+    {
+      "id": "skill-poteto",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "reads-geno-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-test",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-10",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": true,
+      "detail": "thai share 0.55"
+    }
+  ]
+}
