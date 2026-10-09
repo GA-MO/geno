@@ -25,7 +25,7 @@ Each root holds some of these items:
 
 A command, skill or agent of one name is taken from the first root that has it: your roots before the project's, and in each, Geno's before `.agents` before `.claude`. A project item that one of your own shadows is reported once. A workflow in the project shadows one of yours of the same name. An entry in `.g-code/launch.json` wins over one of the same name in `.claude/launch.json`.
 
-The Skills catalog installs a skill or an agent for you into `~/.g-code`, and for the project into `.claude`, which Claude Code and Geno both read.
+The Skills catalog installs a skill or an agent into Geno's own root: for you into `~/.g-code`, and for the project into `.g-code`. A project install that an earlier Geno made in `.claude` stays there. Settings lists it as installed, and Uninstall removes it from `.claude`.
 
 ## Settings files
 

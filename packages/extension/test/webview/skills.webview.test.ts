@@ -122,6 +122,7 @@ describe('the Skills section of Settings', () => {
     expect(await panel.eval(`doc.querySelector('${card('deploy-notes')} .skills-body').textContent`)).toBe(PREVIEW.body);
     expect(await panel.count(`${card('deploy-notes')} .skills-body img`), 'the body is text, never markup').toBe(0);
     expect(await panel.eval(`doc.body.dataset.pwned ?? null`)).toBe(null);
+    expect(await panel.eval(`[...doc.querySelectorAll('${card('deploy-notes')} .skills-scope option')].map((o) => o.textContent)`)).toEqual(['For you, in ~/.g-code', 'This workspace, in .g-code']);
 
     await panel.eval(`(() => { const s = doc.querySelector('${card('deploy-notes')} .skills-scope'); s.value = 'project'; s.dispatchEvent(new Event('change')); return 1; })()`);
     await panel.frame();

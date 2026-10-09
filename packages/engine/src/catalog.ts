@@ -343,7 +343,7 @@ export function catalogService(
     }
   }
 
-  /** The folder the install writes in must resolve inside its base, so a symlinked `.claude` cannot send it elsewhere. */
+  /** The folder the install writes in must resolve inside its base, so a symlinked `.g-code` cannot send it elsewhere. */
   async function checkedParent(target: string, base: string): Promise<string> {
     const parent = path.dirname(target);
     await mkdir(parent, { recursive: true });

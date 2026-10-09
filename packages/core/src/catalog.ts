@@ -160,10 +160,10 @@ export function matchesQuery(entry: Pick<CatalogEntry, 'name' | 'description'>, 
 }
 
 /**
- * The root an install goes to: Geno's home for the user, and the project's `.claude`, which Claude Code reads as well
- * as Geno, so a teammate on either gets what the repository installed.
+ * An install goes to Geno's own root: its home for the user, `.g-code` for the project. An install an older Geno made
+ * in the project's `.claude` stays where its record says, and is listed and removed there.
  */
-const INSTALL_VENDORS: Readonly<Record<InstallScope, ConfigVendor>> = { user: 'geno', project: 'claude' };
+const INSTALL_VENDOR: ConfigVendor = 'geno';
 const INSTALL_ITEMS: Readonly<Record<CatalogKind, ConfigItem>> = { skill: 'skills', agent: 'agents' };
 
 /** `user` is Geno's home (`~/.g-code`), `project` the workspace. */
@@ -174,7 +174,7 @@ export type InstallBases = { readonly user: string; readonly project: string };
  * and may remove once empty; an agent's file sits in a folder that others share, so it owns none.
  */
 export function installTargetOf(entry: Pick<CatalogEntry, 'kind' | 'name'>, scope: InstallScope, bases: InstallBases): { readonly dir: string; readonly target: string; readonly owns: string | undefined } {
-  const parent = configPaths({ app: bases.user, user: undefined }, bases.project, INSTALL_ITEMS[entry.kind]).find((root) => root.place === scope && root.vendor === INSTALL_VENDORS[scope])!.path;
+  const parent = configPaths({ app: bases.user, user: undefined }, bases.project, INSTALL_ITEMS[entry.kind]).find((root) => root.place === scope && root.vendor === INSTALL_VENDOR)!.path;
   if (entry.kind === 'skill') {
     const dir = path.join(parent, entry.name);
     return { dir, target: dir, owns: dir };
@@ -234,8 +234,11 @@ export type PlanInput = {
   readonly occupied: boolean;
 };
 
-const sameFiles = (record: InstallRecord, entry: CatalogEntry, dir: string): boolean =>
-  record.files.length === entry.files.length && entry.files.every((file) => record.files.some((f) => f.path === path.join(dir, file.path) && f.sha256 === file.sha256));
+/** The folder a record's files sit in: a skill's own folder, or the folder that holds an agent's one file. */
+const recordDir = (record: InstallRecord): string => (record.kind === 'skill' ? record.target : path.dirname(record.target));
+
+const sameFiles = (record: InstallRecord, entry: CatalogEntry): boolean =>
+  record.files.length === entry.files.length && entry.files.every((file) => record.files.some((f) => f.path === path.join(recordDir(record), file.path) && f.sha256 === file.sha256));
 
 const KIND_WORDS: Readonly<Record<CatalogKind, string>> = { skill: 'a skill', agent: 'an agent' };
 
@@ -250,10 +253,10 @@ export function planInstall({ entry, source, scope, bases, existing, records, oc
     if (origin.kind === 'refused') return { kind: 'refused', why: `${file.path}: ${origin.why}` };
     writes.push({ file, origin, dest: path.join(dir, file.path) });
   }
-  const mine = records.find((record) => record.target === target);
+  const mine = records.find((record) => record.target === target || (record.scope === scope && record.kind === entry.kind && record.name === entry.name));
   if (mine !== undefined) {
-    if (mine.kind === entry.kind && mine.catalog === source.text && sameFiles(mine, entry, dir)) return { kind: 'installed', record: mine };
-    return { kind: 'refused', why: `${mine.name} ${mine.version} from ${mine.catalog} is already installed at ${target}; uninstall it first` };
+    if (mine.kind === entry.kind && mine.catalog === source.text && sameFiles(mine, entry)) return { kind: 'installed', record: mine };
+    return { kind: 'refused', why: `${mine.name} ${mine.version} from ${mine.catalog} is already installed at ${mine.target}; uninstall it first` };
   }
   if (occupied) return { kind: 'refused', why: `${target} already exists, and Geno does not overwrite files it did not install` };
   const clash = existing.find((item) => item.kind === entry.kind && item.name === entry.name);

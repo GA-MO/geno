@@ -40,7 +40,7 @@ export type SkillsFromView =
   | { readonly type: 'catalog-add'; readonly text: string }
   | { readonly type: 'catalog-remove'; readonly text: string };
 
-export const SCOPE_LABELS: Readonly<Record<InstallScope, string>> = { user: 'For you, in ~/.g-code', project: 'This workspace, in .claude' };
+export const SCOPE_LABELS: Readonly<Record<InstallScope, string>> = { user: 'For you, in ~/.g-code', project: 'This workspace, in .g-code' };
 export const KIND_LABELS: Readonly<Record<CatalogKind, string>> = { skill: 'Skill', agent: 'Agent' };
 
 /** The key of an outcome about the installed list, such as an uninstall, whose row is gone once it worked. */

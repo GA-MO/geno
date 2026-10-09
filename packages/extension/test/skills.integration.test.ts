@@ -117,7 +117,7 @@ describe('skills from a catalog in Settings', () => {
     expect(loaded).toContain('Read references/steps.md, then write the notes.');
 
     expect(existsSync(path.join(home, 'skills', 'deploy-notes')), 'Uninstall removed the skill it installed').toBe(false);
-    expect(await readFile(path.join(workspace, '.claude', 'agents', 'reviewer.md'), 'utf8')).toBe(AGENT);
+    expect(await readFile(path.join(workspace, '.g-code', 'agents', 'reviewer.md'), 'utf8')).toBe(AGENT);
     const manifest = JSON.parse(await readFile(path.join(home, 'catalog', 'installs.json'), 'utf8'));
     expect(manifest.installs).toEqual([expect.objectContaining({ kind: 'agent', name: 'reviewer', scope: 'project', catalog })]);
     expect(existsSync(marker), 'install.sh was copied and never run').toBe(false);
