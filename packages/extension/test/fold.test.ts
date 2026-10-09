@@ -9,7 +9,7 @@ const KINDS: Readonly<Record<string, ToolKind>> = { read: 'read', grep: 'search'
 const turnOf = (actions: readonly Action[]): Turn =>
   [{ type: 'turn-start', id: 't1', at: 1000, prompt: 'p' } as Action, ...actions].reduce(reduce, emptyTranscript('m')).turns[0]!;
 
-const call = (id: string, name: string, target: string, status: 'running' | 'completed' | 'failed' = 'completed', extra: Partial<Extract<Action, { type: 'tool' }>> = {}): Action => ({
+const call = (id: string, name: string, target: string, status: 'running' | 'completed' | 'failed' | 'denied' = 'completed', extra: Partial<Extract<Action, { type: 'tool' }>> = {}): Action => ({
   type: 'tool',
   id,
   at: 2000,
@@ -49,7 +49,7 @@ describe('the summary of a turn', () => {
       { type: 'diff', toolId: 'e2', at: 2200, diff: diff('b.ts', 'h2', 2, 0) },
       call('b1', 'bash', 'ls'),
       call('b2', 'bash', 'npm test', 'failed'),
-      call('b3', 'bash', 'rm -rf /', 'failed', { auto: { verdict: 'deny', reason: 'it deletes everything' } }),
+      call('b3', 'bash', 'rm -rf /', 'denied', { denial: { by: 'auto', reason: 'It deletes everything.' } }),
       call('b4', 'bash', 'rm -rf build', 'running'),
       { type: 'permission', id: 'p1', toolId: 'b4', command: 'rm -rf build', reason: 'rm', options: [{ optionId: 'no', name: 'Deny', kind: 'reject_once' }] },
       { type: 'permission-done', id: 'p1', optionId: 'no' },

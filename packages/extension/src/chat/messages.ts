@@ -110,8 +110,8 @@ export type TextBlock = { readonly kind: 'text'; readonly id: string; readonly t
 export const TOOL_KINDS = ['read', 'search', 'edit', 'execute', 'other'] as const;
 export type ToolKind = (typeof TOOL_KINDS)[number];
 
-/** `cancelled` is a tool still running when its turn ended. */
-export type ToolStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+/** `cancelled` is a tool still running when its turn ended; `denied` is one the user, Auto, a rule or a hook refused, so it never ran. */
+export type ToolStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'denied';
 
 /** One tool call. An edit that reached the editor carries its diff, and renders as an edit card. */
 export type ToolBlock = {
@@ -134,6 +134,8 @@ export type ToolBlock = {
   readonly images?: readonly ToolImage[] | undefined;
   /** A flagged command Auto settled without asking: the classifier's verdict and its reason. */
   readonly auto?: AutoDecision | undefined;
+  /** Who refused a `denied` call and why, in the user's words; its output stays the text the model got. */
+  readonly denial?: Denial | undefined;
   /** What a show_widget call draws: its loading lines while the model writes it, then the widget. */
   readonly widget?: ToolWidget | undefined;
   /** The whole list a todo call set, once it ran. */
@@ -168,7 +170,11 @@ export type ToolWidget =
 /** An image file a tool returned; `path` is absolute. */
 export type ToolImage = { readonly path: string; readonly name: string };
 
-export type AutoDecision = { readonly verdict: 'allow' | 'deny'; readonly reason: string };
+/** A command Auto let run without asking, and the classifier's reason. */
+export type AutoDecision = { readonly reason: string };
+
+/** `rule` is the user's own rule that refused the call, as they wrote it. */
+export type Denial = { readonly by: 'you' | 'auto' | 'rule' | 'hook'; readonly reason: string; readonly rule?: string | undefined };
 
 /** A file an edit changed, as hunks the review controller tracks by the same ids. `change` is the engine's id for the edit. */
 export type FileDiff = { readonly path: string; readonly change: string; readonly hunks: readonly DiffHunk[] };
@@ -277,6 +283,7 @@ export type Action =
       readonly output?: string;
       readonly images?: readonly ToolImage[];
       readonly auto?: AutoDecision;
+      readonly denial?: Denial;
       readonly widget?: ToolWidget;
       readonly editorAction?: EditorAction;
       readonly todo?: TodoList;

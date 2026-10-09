@@ -52,8 +52,8 @@ export type SpinoffTool = ToolBlock & { readonly spinoff: NonNullable<ToolBlock[
  */
 export type TodoPlace = 'live' | 'carried' | 'kept';
 
-/** How a step's node on the rail reads: done, under way, waiting on the user, failed, or text. */
-export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
+/** How a step's node on the rail reads: done, under way, waiting on the user, failed, refused, or text. */
+export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'denied' | 'text';
 
 /** Tools whose consecutive calls fold into one step, each file one chip. */
 const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
@@ -142,7 +142,8 @@ export function nodeOf(step: Step): NodeState {
       return 'text';
     case 'calls':
       if (step.tools.some((t) => t.status === 'running')) return 'live';
-      return step.tools.some((t) => t.status === 'failed') ? 'failed' : 'done';
+      if (step.tools.some((t) => t.status === 'failed')) return 'failed';
+      return step.tools.every((t) => t.status === 'denied') ? 'denied' : 'done';
     case 'permission':
       return step.block.outcome.kind === 'open' ? 'wait' : 'done';
     case 'error':
@@ -158,7 +159,7 @@ export function nodeOf(step: Step): NodeState {
       return step.place === 'live' ? 'live' : 'done';
     case 'agent':
       if (step.tool.status === 'running' || step.children.some((child) => child.status.kind === 'running')) return 'live';
-      return step.tool.status === 'failed' ? 'failed' : 'done';
+      return step.tool.status === 'failed' ? 'failed' : step.tool.status === 'denied' ? 'denied' : 'done';
     case 'notice':
     case 'thinking':
       return 'live';

@@ -29,7 +29,7 @@ import {
 import { isImageMediaType } from '@g-code/core/attachments';
 import { agentChunkAction } from './compact-host.js';
 import { editorActionOf } from './editor-action-wire.js';
-import { TOOL_KINDS, type Action, type FileDiff, type ToolImage, type ToolKind, type ToolStatus } from './messages.js';
+import { TOOL_KINDS, type Action, type Denial, type FileDiff, type ToolImage, type ToolKind, type ToolStatus } from './messages.js';
 import type { SentCommand } from './slash.js';
 import { steerActionOf } from './steer-host.js';
 import { todoOfUpdate } from './todo-model.js';
@@ -93,16 +93,46 @@ const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), command
 export const wakeMark = z.object({ seq: z.number(), label: z.string() });
 
 const approvalRecord = z.object({
+  mode: z.string(),
+  rule: z.string(),
+  reason: z.string(),
   decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: z.enum(['allow', 'deny']),
   classifier: z.object({ reason: z.string() }).optional(),
+  comment: z.string().optional(),
+  message: z.string().optional(),
 });
+type ApprovalRecord = z.infer<typeof approvalRecord>;
 
-/** A flagged command the classifier settled, which the step shows; one the user or a rule settled shows nothing more. */
-function autoOf(meta: Record<string, unknown> | null | undefined): Extract<Action, { type: 'tool' }>['auto'] {
+const recordOf = (meta: Record<string, unknown> | null | undefined): ApprovalRecord | undefined => {
   const record = approvalRecord.safeParse(meta?.[APPROVAL_META]);
-  if (!record.success || record.data.decidedBy !== 'classifier' || record.data.classifier === undefined) return undefined;
-  return { verdict: record.data.verdict, reason: record.data.classifier.reason };
+  return record.success ? record.data : undefined;
+};
+
+/** A command Auto let run without asking, with the classifier's reason; one it refused is a denial. */
+function autoOf(record: ApprovalRecord | undefined): Extract<Action, { type: 'tool' }>['auto'] {
+  if (record?.decidedBy !== 'classifier' || record.classifier === undefined || record.verdict !== 'allow') return undefined;
+  return { reason: record.classifier.reason };
+}
+
+const sentence = (text: string): string => {
+  const trimmed = text.trim().replace(/\.$/, '');
+  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}.`;
+};
+
+/** The pattern of the user's own rule a workspace refusal names, and the file they keep it in. */
+const USER_RULE = /`([^`]+)`, which the user set in (.+)$/;
+
+/** Who refused a call and why, in the user's words: the record's reason and the call's output speak to the model. */
+export function denialOf(record: ApprovalRecord): Denial | undefined {
+  if (record.verdict !== 'deny') return undefined;
+  if (record.decidedBy === 'user') return { by: 'you', reason: record.comment === undefined ? 'It did not run, and Geno waits for you.' : `It did not run. You told Geno: ${record.comment}` };
+  if (record.decidedBy === 'classifier') return { by: 'auto', reason: record.classifier === undefined ? 'Auto would not run it.' : sentence(record.classifier.reason) };
+  if (record.decidedBy === 'hook' || record.rule === 'hook-deny') return { by: 'hook', reason: sentence(record.message ?? record.reason) };
+  const own = record.rule === 'workspace-deny' ? USER_RULE.exec(record.reason) : null;
+  if (own !== null) return { by: 'rule', rule: own[1]!, reason: `Your rule in ${own[2]} blocks it.` };
+  if (record.mode === 'non-interactive') return { by: 'rule', reason: `${sentence(record.reason).slice(0, -1)} needs your approval, and nobody could answer.` };
+  return { by: 'rule', reason: `${sentence(record.reason).slice(0, -1)} is not allowed here.` };
 }
 
 /** The classifier's reason in a permission question it would not answer itself, as the engine words it. */
@@ -144,13 +174,15 @@ const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: U
   tool_call_update: ({ toolCallId, title, status, content, _meta }, at) => {
     const output = outputOf(content);
     const images = imagesOf(content);
-    const auto = autoOf(_meta);
+    const record = recordOf(_meta);
+    const auto = autoOf(record);
+    const denial = record === undefined ? undefined : denialOf(record);
     return {
       type: 'tool',
       id: toolCallId,
       at,
       ...(title == null ? {} : callOf(title)),
-      ...(status == null ? {} : { status: TOOL_STATUSES[status] }),
+      ...(denial !== undefined ? { status: 'denied' as const, denial } : status == null ? {} : { status: TOOL_STATUSES[status] }),
       ...(output === undefined ? {} : { output }),
       ...(images.length === 0 ? {} : { images }),
       ...(auto === undefined ? {} : { auto }),

@@ -1,6 +1,6 @@
 import type { ArenaId, ArenaLane, ArenaRun, Breakdown, CallProgress, CatalogHit, CostPreview, HookRow, InstalledItem, LaneInfo, McpServerView, SessionSpend, SpinoffId, TaskRecord, VariantSpec, WorkflowPreview, WorkflowProgress } from '@g-code/core';
 import { shownKindOf, shownText, type ShownFile, type ShownFiles } from '@g-code/core/show-files';
-import type { Action, ChildAction, HistoryRow, PermissionChoice, ToolKind } from '../../src/chat/messages.js';
+import type { Action, ChildAction, Denial, HistoryRow, PermissionChoice, ToolKind } from '../../src/chat/messages.js';
 import type { SettingsListing } from '../../src/chat/settings-model.js';
 import type { FakeHost } from '../webview/host.js';
 import { PERMISSION_OPTIONS, round, toolEnd, toolStart, turnStart, usageOf, type Call } from '../webview/turns.js';
@@ -35,6 +35,14 @@ const ran = (id: string, name: string, kind: ToolKind, target: string, output: s
   { type: 'tool', id, at: Date.now(), name, target, toolKind: kind, status: 'running', ...extra },
   { type: 'tool', id, at: Date.now(), status: 'completed', output },
 ];
+
+/** A call a rule, Auto, a hook or the user refused: the engine's text for the model, and the panel's plain denial. */
+const refused = (id: string, name: string, kind: ToolKind, target: string, output: string, denial: Denial, extra: Partial<Extract<Action, { type: 'tool' }>> = {}): Action[] => [
+  { type: 'tool', id, at: Date.now(), name, target, toolKind: kind, status: 'running', ...extra },
+  { type: 'tool', id, at: Date.now(), status: 'denied', output, denial },
+];
+
+const STOP_AND_WAIT = 'STOP what you are doing and wait for the user to tell you how to proceed.';
 
 const READS: readonly Call[] = [
   { narration: 'Reading the form first.', name: 'read', input: { path: 'src/login.ts' } },
@@ -581,6 +589,38 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'tool-denied',
+    group: 'Tools',
+    title: 'Calls the user, Auto and rules refused',
+    look: { detail: 'full' },
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'Delete the build folder, then check the Stripe docs'), { type: 'text', text: 'Removing the build output first.' });
+      await host.act(...refused('d_rm', 'bash', 'execute', 'rm -rf build', `The user rejected \`rm -rf build\`, so it did not run. ${STOP_AND_WAIT}`, { by: 'you', reason: 'It did not run, and Geno waits for you.' }, { description: 'Delete build folder and run tests' }));
+      await host.act(
+        ...refused(
+          'd_fetch',
+          'web_fetch',
+          'other',
+          'https://docs.stripe.com/api/charges',
+          "denied: `fetch https://docs.stripe.com/api/charges (host docs.stripe.com)` uses fetching a page from another host, which needs the user's approval, and nobody can answer here.",
+          { by: 'rule', reason: 'Fetching a page from another host needs your approval, and nobody could answer.' },
+        ),
+      );
+      await host.act(
+        ...refused(
+          'd_push',
+          'bash',
+          'execute',
+          'git push --force origin main',
+          'denied: `git push --force origin main` matches the workspace rule that denies `Bash(git push --force:*)`, which the user set in .g-code/settings.json. Do not retry it; find another way, or say in your answer that the rule stops you.',
+          { by: 'rule', rule: 'Bash(git push --force:*)', reason: 'Your rule in .g-code/settings.json blocks it.' },
+          { description: 'Force push the branch' },
+        ),
+      );
+      await host.act(ended());
+    },
+  },
+  {
     id: 'background-job',
     group: 'Tools',
     title: 'Background command',
@@ -888,7 +928,13 @@ export const FIXTURES: readonly Fixture[] = [
         ['pnpm publish', WORKSPACE_RULE.optionId, undefined],
       ] as const).entries()) {
         await host.act(toolStart(`tu_${i}`, { name: 'bash', input: { command } }), { type: 'permission', id: `${i}`, command, reason: 'a risky command', options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT], toolId: `tu_${i}` });
-        await host.act({ type: 'permission-done', id: `${i}`, optionId, comment }, toolEnd(`tu_${i}`, optionId === 'allow' || optionId === WORKSPACE_RULE.optionId ? 'completed' : 'failed', 'done'));
+        const allowed = optionId === 'allow' || optionId === WORKSPACE_RULE.optionId;
+        const said = comment === undefined ? STOP_AND_WAIT : `To tell you how to proceed, the user said:\n${comment}`;
+        const denial: Denial = { by: 'you', reason: comment === undefined ? 'It did not run, and Geno waits for you.' : `It did not run. You told Geno: ${comment}` };
+        await host.act(
+          { type: 'permission-done', id: `${i}`, optionId, comment },
+          allowed ? toolEnd(`tu_${i}`, 'completed', 'done') : { type: 'tool', id: `tu_${i}`, at: Date.now(), status: 'denied', output: `The user rejected \`${command}\`, so it did not run. ${said}`, denial },
+        );
       }
       await host.act(ended());
     },
@@ -900,9 +946,18 @@ export const FIXTURES: readonly Fixture[] = [
     look: { detail: 'full' },
     play: async ({ host }) => {
       await host.act(turnStart('t0', 'Clean the build', 'auto'));
-      await host.act(...ran('k_rm', 'bash', 'execute', 'rm -rf dist', '[exit code 0]', { description: 'Remove the build output', auto: { verdict: 'allow', reason: 'it deletes only the build output inside the workspace' } }));
-      await host.act(toolStart('k_push', { name: 'bash', input: { command: 'git push --force', description: 'Force push' } }));
-      await host.act({ type: 'tool', id: 'k_push', at: Date.now(), status: 'failed', output: 'denied by Auto', auto: { verdict: 'deny', reason: 'a force push rewrites the shared branch' } });
+      await host.act(...ran('k_rm', 'bash', 'execute', 'rm -rf dist', '[exit code 0]', { description: 'Remove the build output', auto: { reason: 'it deletes only the build output inside the workspace' } }));
+      await host.act(
+        ...refused(
+          'k_push',
+          'bash',
+          'execute',
+          'git push --force',
+          'denied: Auto mode blocked `git push --force` without asking the user, because the safety classifier would not allow it: a force push rewrites the shared branch. Do not retry it. Find another way, or say in your answer what you need the user to allow.',
+          { by: 'auto', reason: 'A force push rewrites the shared branch.' },
+          { description: 'Force push' },
+        ),
+      );
       await host.act({ type: 'text', text: 'Cleaned; I did not force push.' }, ended());
     },
   },

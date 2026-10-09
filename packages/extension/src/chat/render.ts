@@ -6,7 +6,7 @@ import { renderMarkdown } from './markdown.js';
 import type { ApprovalSubject, AskUserRequest, BackendShown } from '@g-code/core';
 import { COMMENT_OPTION } from '@g-code/core/permission-comment';
 import { showsTokens, turnCost } from './backend-model.js';
-import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
+import type { AutoDecision, Denial, DiffHunk, ErrorBlock, FileDiff, FromView, PermissionAsk, PermissionBlock, PermissionOutcome, ToolBlock, ToolKind, ToolStatus, Turn, TurnStatus } from './messages.js';
 import { answerWords, settledLine } from './question-model.js';
 import { questionCard } from './question-view.js';
 import { workflowCardBody } from './workflow-view.js';
@@ -55,6 +55,7 @@ const STATUS_ICONS: Readonly<Record<ToolStatus, { readonly name: string; readonl
   completed: { name: 'check', label: 'Done' },
   failed: { name: 'error', label: 'Failed' },
   cancelled: { name: 'circle-slash', label: 'Cancelled' },
+  denied: { name: 'circle-slash', label: 'Denied' },
 };
 
 const mcpServerChip = (name: string): HTMLElement | undefined => {
@@ -128,7 +129,7 @@ const lineCounts = ({ added, removed }: { readonly added: number; readonly remov
   h('span', { class: 'line-counts' }, h('span', { class: 'lines-added' }, `+${added}`), h('span', { class: 'lines-removed' }, `−${removed}`));
 
 /** A file's calls read as the first status here any of them has: one that still runs shows the file as running. */
-const CHIP_STATUSES: readonly ToolStatus[] = ['running', 'completed', 'failed', 'cancelled'];
+const CHIP_STATUSES: readonly ToolStatus[] = ['running', 'completed', 'failed', 'denied', 'cancelled'];
 
 const statusOf = (tools: readonly ToolBlock[]): ToolStatus => CHIP_STATUSES.find((status) => tools.some((tool) => tool.status === status)) ?? 'completed';
 
@@ -156,24 +157,40 @@ function fileChip(name: string, { path, tools }: FileCalls, ui: Ui): HTMLElement
   );
 }
 
-/** `quiet` badges show only with every step drawn, not on a compact turn's recent steps. */
-const AUTO_BADGES: Readonly<Record<AutoDecision['verdict'], { readonly label: string; readonly icon: string; readonly quiet: boolean }>> = {
-  allow: { label: 'Auto-approved', icon: 'zap', quiet: true },
-  deny: { label: 'Auto-denied', icon: 'circle-slash', quiet: false },
-};
-
-/** What Auto decided about a command without asking, and the classifier's reason, shown on the step even while it is folded. */
+/** A command Auto let run without asking, and the classifier's reason, shown on the step even while it is folded. */
 function autoNote(tool: ToolBlock & { readonly auto: AutoDecision }): HTMLElement {
-  const badge = AUTO_BADGES[tool.auto.verdict];
-  return h(
-    'div',
-    { class: `auto-note auto-${tool.auto.verdict}`, 'data-auto': tool.id },
-    h('span', { class: 'auto-badge' }, icon(badge.icon), badge.label),
-    h('span', { class: 'auto-reason' }, tool.auto.reason),
-  );
+  return h('div', { class: 'auto-note auto-allow', 'data-auto': tool.id }, h('span', { class: 'auto-badge' }, icon('zap'), 'Auto-approved'), h('span', { class: 'auto-reason' }, tool.auto.reason));
 }
 
 const isAuto = (tool: ToolBlock): tool is ToolBlock & { readonly auto: AutoDecision } => tool.auto !== undefined;
+
+/** Auto's approvals show only with every step drawn, not on a compact turn's recent steps. */
+const autoNotes = (tools: readonly ToolBlock[], quiet: boolean): HTMLElement[] => (quiet ? [] : tools.filter(isAuto).map(autoNote));
+
+type DeniedTool = ToolBlock & { readonly denial: Denial };
+
+const isDenied = (tool: ToolBlock): tool is DeniedTool => tool.status === 'denied' && tool.denial !== undefined;
+
+const DENIED_BY: Readonly<Record<Denial['by'], string>> = { you: 'Denied by you', auto: 'Denied by Auto', rule: 'Denied by a rule', hook: 'Denied by a hook' };
+
+const deniedLabel = (denial: Denial): string => (denial.rule === undefined ? DENIED_BY[denial.by] : `${DENIED_BY[denial.by]} (${denial.rule})`);
+
+const deniedBadge = (label: string): HTMLElement => h('span', { class: 'step-denied', title: label }, icon('circle-slash'), h('span', { class: 'step-denied-label' }, label));
+
+/** Under a refused call: why, in plain words, with the text the model got behind Show details. */
+function denialNote(tool: DeniedTool, ui: Ui): HTMLElement {
+  const id = `denial:${tool.id}`;
+  const open = ui.isOpen(id);
+  return h(
+    'div',
+    { class: 'denial-note', 'data-denial': tool.id },
+    h('span', { class: 'denial-reason' }, tool.denial.reason),
+    tool.output !== undefined &&
+      tool.output !== '' &&
+      h('button', { type: 'button', class: 'link-button denial-toggle', 'aria-expanded': String(open), 'data-focus': `details:${tool.id}`, onclick: () => ui.toggle(id) }, open ? 'Hide details' : 'Show details'),
+    open && h('pre', { class: 'denial-details' }, tool.output),
+  );
+}
 
 /** Tools whose runs show as file chips rather than a target, with what a chip counts when calls repeat a file. */
 const FILE_TOOLS: Readonly<Record<string, string | undefined>> = { read: 'reads', edit: 'edits' };
@@ -191,6 +208,7 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
   const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
   const failed = tools.filter((t) => t.status === 'failed').length;
+  const denied = tools.filter(isDenied);
   const open = ui.isOpen(key);
   return h(
     'div',
@@ -215,9 +233,11 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
       h('span', { class: 'spacer' }),
       running && icon('loading', 'codicon-modifier-spin step-status'),
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),
+      denied.length > 0 && deniedBadge(denied.length === 1 ? deniedLabel(denied[0]!.denial) : `${denied.length} denied`),
       icon(open ? 'chevron-down' : 'chevron-right', 'chevron'),
     ),
-    ...tools.filter(isAuto).filter((tool) => !(quiet && AUTO_BADGES[tool.auto.verdict].quiet)).map(autoNote),
+    ...autoNotes(tools, quiet),
+    ...denied.map((tool) => denialNote(tool, ui)),
     toolImages(tools, (target) => ui.post({ type: 'open', target })),
     open && h('div', { class: 'call-list' }, ...tools.map((tool) => toolRow(tool, ui))),
   );
@@ -237,8 +257,9 @@ function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
       h('span', { class: 'command-title', title: step.title }, step.title),
       step.status === 'running' && icon('loading', 'codicon-modifier-spin step-status'),
       step.status === 'failed' && h('span', { class: 'step-failed' }, icon('error'), 'Failed'),
+      isDenied(tool) && deniedBadge(deniedLabel(tool.denial)),
     ),
-    ...(isAuto(tool) && !(quiet && AUTO_BADGES[tool.auto.verdict].quiet) ? [autoNote(tool)] : []),
+    ...autoNotes([tool], quiet),
     h(
       'div',
       { class: 'command-box' },
@@ -258,6 +279,7 @@ function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
             h('button', { class: 'link-button show-all', 'data-focus': `unfold:${unfold}`, onclick: () => ui.unfold(unfold) }, `Show all ${step.lines} lines`),
         ),
     ),
+    isDenied(tool) && denialNote(tool, ui),
     step.job !== undefined && jobRow(step.job, ui),
   );
 }

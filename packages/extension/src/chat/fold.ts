@@ -59,11 +59,11 @@ const ENDINGS: readonly { readonly of: 'failed' | 'denied'; readonly says: (n: n
 const rejected = ({ outcome, options }: PermissionBlock): boolean =>
   outcome.kind === 'chosen' && options.find((option) => option.optionId === outcome.optionId)?.kind.startsWith('reject') === true;
 
-/** The calls Auto denied, or whose permission the user rejected. */
+/** The calls a rule, Auto or a hook refused, or whose permission the user rejected. */
 function deniedCalls(blocks: readonly Block[]): ReadonlySet<string> {
   return new Set(
     blocks.flatMap((block) => {
-      if (block.kind === 'tool') return block.auto?.verdict === 'deny' ? [block.id] : [];
+      if (block.kind === 'tool') return block.status === 'denied' ? [block.id] : [];
       return block.kind === 'permission' && block.toolId !== undefined && rejected(block) ? [block.toolId] : [];
     }),
   );

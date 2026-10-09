@@ -40,10 +40,14 @@ const picker = () => panel<{ mode: string; label: string; box: string }>(
   `({ mode: doc.querySelector('.mode-picker').dataset.mode, label: doc.querySelector('.mode-name').textContent, box: doc.querySelector('.input-box').dataset.mode })`,
 );
 /** The badge and reason under the step that ran `command`. */
-const note = (command: string) =>
+const note = (command: string, selector = '.auto-note') =>
   panel<string | null>(
-    `(() => { const step = [...doc.querySelectorAll('.calls[data-step="bash"]')].find((s) => s.querySelector('.command-in')?.textContent === ${JSON.stringify(command)}); return step?.querySelector('.auto-note')?.textContent ?? null; })()`,
+    `(() => { const step = [...doc.querySelectorAll('.calls[data-step="bash"]')].find((s) => s.querySelector('.command-in')?.textContent === ${JSON.stringify(command)}); return [...(step?.querySelectorAll(${JSON.stringify(selector)}) ?? [])].map((e) => e.textContent).join(' ') || null; })()`,
   );
+
+/** A step Auto refused: its badge, then its reason as the step words it. */
+const denied = (command: string) => note(command, '.step-denied, .denial-reason');
+const sentence = (reason: string) => `${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`;
 
 async function showPanel(): Promise<void> {
   await vscode.commands.executeCommand('workbench.view.extension.gcode');
@@ -85,8 +89,8 @@ export async function run(): Promise<void> {
   check((await count('.permission-open')) === 0, 'Auto asks nobody when the classifier will not allow a command');
 
   check((await note(COMMANDS.removeBuild)) === `Auto-approved${REASONS.allow}`, 'an auto-approved step shows its badge and the classifier\'s reason', await note(COMMANDS.removeBuild));
-  check((await note(COMMANDS.script)) === `Auto-denied${REASONS.deny}`, 'an auto-denied step shows the denial reason', await note(COMMANDS.script));
-  check((await note(COMMANDS.removeDist)) === `Auto-denied${REASONS.ask}`, 'a step the classifier would not allow is blocked and shows its reason', await note(COMMANDS.removeDist));
+  check((await denied(COMMANDS.script)) === `Denied by Auto ${sentence(REASONS.deny)}`, 'an auto-denied step says Auto denied it, and why', await denied(COMMANDS.script));
+  check((await denied(COMMANDS.removeDist)) === `Denied by Auto ${sentence(REASONS.ask)}`, 'a step the classifier would not allow is blocked and shows its reason', await denied(COMMANDS.removeDist));
   check((await count('.tool-row')) === 0, 'the badges show while the steps are folded');
   await screenshots('auto');
 

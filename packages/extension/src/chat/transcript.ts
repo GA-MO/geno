@@ -138,7 +138,9 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
   tool: (transcript, { id, at, type: _type, spinoff, ...fields }) => {
     const next = onLast(transcript, (turn) =>
       withTool(quiet(turn), id, at, (tool) => {
-        const defined = Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) as Partial<ToolBlock>;
+        // The engine's plain end of a call can follow the update that says who refused it.
+        const kept = tool.status === 'denied' && fields.status === 'failed' ? { ...fields, status: undefined } : fields;
+        const defined = Object.fromEntries(Object.entries(kept).filter(([, value]) => value !== undefined)) as Partial<ToolBlock>;
         const next = { ...tool, ...defined, endedAt: ended(tool, fields.status, at) };
         return (Object.keys(next) as (keyof ToolBlock)[]).every((key) => next[key] === tool[key]) ? tool : next;
       }),
