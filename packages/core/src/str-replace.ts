@@ -1,3 +1,4 @@
+import { showHidden } from './hidden.js';
 import type { ApplyOutcome } from './types.js';
 
 /** Lines numbered the way the read tool numbers them, so a region the model sees here matches what it read. */
@@ -139,13 +140,15 @@ function zero(path: string, lines: readonly string[], target: readonly string[])
     return { kind: 'failed', reason: 'zero-matches', detail: `old_str does not appear in ${path}, which is empty.` };
   }
   const { start, end } = closestRegion(lines, target);
+  const closest = numberLines(lines.slice(start, end), start + 1);
   return {
     kind: 'failed',
     reason: 'zero-matches',
     detail: [
       `old_str does not appear in ${path}, even ignoring indentation and trailing whitespace. The closest text is lines ${start + 1}-${end}:`,
-      numberLines(lines.slice(start, end), start + 1),
+      closest,
       'Copy old_str exactly from the file, without the line numbers and the tab after them.',
+      ...(showHidden(closest) !== closest ? ['A [U+XXXX] there is a hidden character: keep the escape in old_str as shown, and it matches the real character.'] : []),
     ].join('\n'),
   };
 }
