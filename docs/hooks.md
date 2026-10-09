@@ -6,16 +6,18 @@ This page covers the hook files, the events Geno fires, what a hook receives and
 
 ## Where Geno reads hooks
 
-Geno reads the `hooks` key of each of these files. Every hook in every file runs. No file overrides another.
+Geno reads the `hooks` key of each settings file that [config.md](config.md) lists, and of each installed plugin's `hooks/hooks.json`. Every hook in every file runs. No file overrides another.
 
 | File | Scope |
 |---|---|
 | `~/.g-code/settings.json` (or `$GCODE_HOME/settings.json`) | You. Geno only. |
+| `~/.agents/settings.json` | You. |
 | `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) | You. Claude Code reads it too. |
 | `hooks/hooks.json` of each installed Claude Code plugin | You, for a plugin installed for your user. The workspace, for a plugin installed for one project. |
-| `.gcode.json` in the workspace | The workspace. |
+| `.g-code/settings.json`, and `.gcode.json` from before it | The workspace. |
+| `.agents/settings.json` | The workspace. |
 | `.claude/settings.json` in the workspace | The workspace. |
-| `.claude/settings.local.json` in the workspace | The workspace. |
+| `.g-code/settings.local.json`, `.agents/settings.local.json` and `.claude/settings.local.json` | The workspace. |
 
 Geno reads the plugins listed in `~/.claude/plugins/installed_plugins.json`. A plugin that `enabledPlugins` turns off (`"name@marketplace": false` in any of the settings files) runs no hooks.
 
@@ -315,7 +317,7 @@ A subagent on an external agent, such as Codex, runs its turn inside that agent,
 
 LaneCreated is Geno's own event: Claude Code has no lanes. It runs after Geno sets up a new lane, from `gcode lane new` or from a lane the panel, a spin-off, a schedule or the Arena starts. It runs after `.worktreeinclude`, the copy of `node_modules` and the approved `laneSetup` commands, and before a session runs in the lane. The hook runs in the lane, as you, outside the sandbox, so it can reach the network.
 
-Only your own hooks run: those in `~/.g-code/settings.json`, `~/.claude/settings.json` and plugins installed for your user. A workspace's own LaneCreated hook never runs, and Settings says so. A repository's setup for its lanes belongs in `laneSetup` in `.gcode.json`, which you approve once with `gcode lane new --approve-setup`.
+Only your own hooks run: those in `~/.g-code/settings.json`, `~/.agents/settings.json`, `~/.claude/settings.json` and plugins installed for your user. A workspace's own LaneCreated hook never runs, and Settings says so. A repository's setup for its lanes belongs in `laneSetup` in `.g-code/settings.json`, which you approve once with `gcode lane new --approve-setup`.
 
 This hook installs a new lane's dependencies, in `~/.g-code/settings.json`:
 
