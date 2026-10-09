@@ -16,6 +16,7 @@ export const DENY_RULE_IDS = [
   'rm-rf-in-workspace',
   'git-push',
   'git-reset-hard',
+  'git-discard',
   'path-outside-workspace',
   'network-download',
   'cloud-cli',
@@ -247,6 +248,29 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 
 const always = () => true;
 
+/**
+ * A git command that drops the user's uncommitted work or sets it aside where a failed step strands it, as Claude
+ * Code's git safety protocol lists them: a stash, a clean that is not a dry run, a checkout or restore of files, a
+ * forced checkout, a forced branch delete. git reset --hard has its own rule.
+ */
+function discardsWork({ name, rest }: { readonly name: string | undefined; readonly rest: readonly string[] }): boolean {
+  const has = (...flags: string[]) => rest.some((arg) => flags.includes(arg));
+  switch (name) {
+    case 'stash':
+      return !['list', 'show'].includes(rest[0] ?? '');
+    case 'clean':
+      return !rest.some((arg) => arg === '--dry-run' || /^-[^-]*n/.test(arg));
+    case 'checkout':
+      return has('--', '.', '-f', '--force');
+    case 'restore':
+      return !has('--staged', '-S') || has('--worktree', '-W');
+    case 'branch':
+      return has('-D') || (has('-d', '--delete') && has('-f', '--force'));
+    default:
+      return false;
+  }
+}
+
 // Options that make an otherwise read-only program run another program, delete or write elsewhere.
 const FIND_ACTIONS = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fprint', '-fprint0', '-fprintf', '-fls']);
 const SED_PRINT = /^(?:\d+|\$)(?:,(?:\d+|\$))?p$/;
@@ -384,6 +408,11 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
       const { name, rest } = gitSubcommand(args);
       return program === 'git' && name === 'reset' && rest.includes('--hard');
     },
+  },
+  'git-discard': {
+    reason: 'a git command that can lose uncommitted work: stash, clean, checkout or restore of files, or branch -D',
+    verdicts: ASK_OR_CLASSIFY,
+    matches: ({ program, args }) => program === 'git' && discardsWork(gitSubcommand(args)),
   },
   'path-outside-workspace': {
     reason: 'a path outside the workspace',

@@ -88,6 +88,15 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ['mongosh', 'database-cli'],
   ['redis-cli ping', 'database-cli'],
   ['npm test && git push', 'git-push'],
+  ['git stash', 'git-discard'],
+  ['git stash -u >/dev/null && node --test; git stash pop', 'git-discard'],
+  ['git stash drop', 'git-discard'],
+  ['git clean -fdx', 'git-discard'],
+  ['git checkout -- .', 'git-discard'],
+  ['git checkout -- src/a.ts', 'git-discard'],
+  ['git checkout -f main', 'git-discard'],
+  ['git restore src/a.ts', 'git-discard'],
+  ['git branch -D feature', 'git-discard'],
   ['echo $(curl -s https://example.com)', 'network-download'],
 ];
 
@@ -115,6 +124,10 @@ const ALLOWED = [
   'git status',
   'git diff HEAD',
   'git reset --soft HEAD~1',
+  'git stash list',
+  'git clean -nxd',
+  'git restore --staged src/a.ts',
+  'git checkout -b feature',
   'rm -rf /private/var/folders/x/T/gcode-tmp/build',
   'rm -rf /tmp/scratch',
   'd=$(mktemp -d); rm -rf "$d"',
@@ -231,8 +244,15 @@ describe('the deny-to-approve list', () => {
     expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
   });
 
-  it.each(EVAL_FALSE_POSITIVES)('allows the command %s was denied in non-interactive mode', (_task, command) => {
+  // That run stashed the user's work to test the old code: the real-model campaign's P-01 counts it as a real denial now.
+  const STASHES = new Set(['payload-manual-code-fences']);
+
+  it.each(EVAL_FALSE_POSITIVES.filter(([task]) => !STASHES.has(task)))('allows the command %s was denied in non-interactive mode', (_task, command) => {
     expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
+  });
+
+  it.each(EVAL_FALSE_POSITIVES.filter(([task]) => STASHES.has(task)))('denies the stash in the command %s ran in non-interactive mode', (_task, command) => {
+    expect(denialFor(command, scope, 'non-interactive')).toMatchObject({ rule: 'git-discard', verdict: 'deny' });
   });
 
   it.each(EVAL_FALSE_POSITIVES)('gives the command %s was denied its ask verdict', (_task, command, verdict) => {
@@ -288,6 +308,7 @@ const MODE_TABLE: readonly [DenyRuleId, string, Expected][] = [
   ['rm-rf-in-workspace', 'rm -rf node_modules', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': undefined }],
   ['git-push', 'git push origin main', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['git-reset-hard', 'git reset --hard HEAD~1', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['git-discard', 'git stash -u', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['path-outside-workspace', 'cat /etc/passwd', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['network-download', 'curl https://example.com', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['cloud-cli', 'aws s3 ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],

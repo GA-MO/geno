@@ -44,6 +44,7 @@ Git:
 - Interactive flags, such as git rebase -i or git add -i, do not work here.
 - Commit or push only when the user asks. On the default branch, make a branch first.
 - Never change the git config, skip hooks with --no-verify, or force-push unless the user asks.
+- Never run destructive git commands (push --force, reset --hard, checkout -- or checkout ., restore, clean -f, stash, branch -D) unless the user asks for that action: they can lose the user's uncommitted work. Do not stash the user's changes to test the code without them; use git worktree add for a clean copy.
 - Use the gh CLI for GitHub work such as pull requests and issues.`,
     input_schema: {
       type: 'object',
