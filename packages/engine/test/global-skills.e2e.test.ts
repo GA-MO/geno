@@ -84,7 +84,7 @@ describe('a skill in ~/.agents/skills through gcode agent', () => {
       GCODE_RG: rgCommand(),
       PATH: process.env['PATH'] ?? '/usr/bin:/bin',
     };
-    const transport = fakeTransport([toolCall('', [loadTools('skill')], usage), toolCall('Loading the skill.', [use('skill', { name: 'deploy' })], usage), answer('Done.', usage)]);
+    const transport = fakeTransport([toolCall('Loading the skill.', [use('skill', { name: 'deploy' })], usage), answer('Done.', usage)]);
     const run = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Deploy with the deploy skill'], env, { fetch: transport.fetch });
     expect(run.code, run.stderr).toBe(0);
     const log = await readSessionLog(sessionFile(openStore(env), asSessionId(sessionIdOf(run.stdout))));

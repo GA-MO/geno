@@ -5,7 +5,7 @@ import type { TurnEvent } from './session.js';
 export const TOOL_SEARCH_TOOL = 'tool_search';
 
 /** The tools the loop uses nearly every turn. They are always sent in full; every other tool may be deferred. */
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['agent', 'ask_user', 'bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo']);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['agent', 'ask_user', 'bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'skill', 'todo']);
 
 /** Follows the mode's system prompt in a run that defers tools; fixed text, so the cached prefix holds. */
 export const DEFERRED_TOOLS_NOTE = `Some of your tools are listed by name only, in the description of ${TOOL_SEARCH_TOOL}. Before the first call of one, load it with ${TOOL_SEARCH_TOOL}; it then stays callable for the rest of the session.`;

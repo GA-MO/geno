@@ -47,10 +47,10 @@ describe('tool roster', () => {
     expect(toolRoster(tools).offered).toBe(tools);
   });
 
-  it('defers what eval runs offer beyond the core: background reads, lists and stops, notebook edits, the dev server tools, recall, wakes, skill and the PR watch', () => {
+  it('defers what eval runs offer beyond the core: background reads, lists and stops, notebook edits, the dev server tools, recall, wakes and the PR watch', () => {
     const roster = toolRoster(AGENT_TOOL_DEFINITIONS);
-    expect([...roster.deferred.keys()]).toEqual(['bash_output', 'list_agents', 'monitor', 'notebook_edit', 'preview_list', 'preview_logs', 'preview_start', 'preview_stop', 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'watch_pr']);
-    expect(names(roster.offered)).toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo', TOOL_SEARCH_TOOL]);
+    expect([...roster.deferred.keys()]).toEqual(['bash_output', 'list_agents', 'monitor', 'notebook_edit', 'preview_list', 'preview_logs', 'preview_start', 'preview_stop', 'recall', 'schedule_wakeup', 'task_stop', 'watch_pr']);
+    expect(names(roster.offered), 'skill is core, as Claude Code keeps it, since the skill listing tells the model to call it (ISSUES.md G-07)').toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'skill', 'todo', TOOL_SEARCH_TOOL]);
   });
 
   it('writes the same tool_search bytes whatever order the tools arrive in', () => {

@@ -129,7 +129,7 @@ describe('gcode serve with MCP', () => {
     expect(stop).toBe('end_turn');
     const tools = offeredTools(transport.requests[0]!.body);
     expect(tools.filter((name) => name.startsWith('mcp__'))).toEqual(['mcp__fake__crash', 'mcp__fake__echo', 'mcp__fake__env', 'mcp__fake__fail', 'mcp__fake__image', 'mcp__fake__screenshot']);
-    expect((transport.requests[0]!.body.tools as { name: string }[]).map((tool) => tool.name), 'the core tools in full, the rest behind tool_search').toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'todo', 'tool_search']);
+    expect((transport.requests[0]!.body.tools as { name: string }[]).map((tool) => tool.name), 'the core tools in full, the rest behind tool_search').toEqual(['bash', 'check', 'edit', 'glob', 'grep', 'list', 'read', 'skill', 'todo', 'tool_search']);
     for (const later of transport.requests.slice(1)) expect(JSON.stringify(later.body.tools), 'the tool list is the same bytes on every call, loads included').toBe(JSON.stringify(transport.requests[0]!.body.tools));
 
     expect(permissions).toHaveLength(1);
