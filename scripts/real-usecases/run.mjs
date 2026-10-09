@@ -1,12 +1,12 @@
 // Layer A runner: one case at a time through the real engine on the real model, scored from the session log.
-// usage: node scripts/real-usecases/run.mjs (--case <id>)... | --all  [--run <n>] [--cap 2.80]
+// usage: node scripts/real-usecases/run.mjs (--case <id>)... | --all  [--run <n or label>] [--cap 2.80]
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { CASES } from './cases.mjs';
 import { analyze, checksFor } from './checks.mjs';
-import { campaignEnv, HOME, REPO, SCRATCH } from './env.mjs';
+import { campaignEnv, ENGINE, HOME, REPO, SCRATCH } from './env.mjs';
 import { FIXTURES, SIBLINGS } from './fixtures.mjs';
 
 const { values } = parseArgs({ options: { case: { type: 'string', multiple: true }, all: { type: 'boolean' }, run: { type: 'string', default: '1' }, cap: { type: 'string', default: '2.80' } } });
@@ -47,7 +47,7 @@ function prepare(spec, runNo) {
 }
 
 function gcode(cwd, args, extraEnv, timeoutMs = AGENT_TIMEOUT_MS) {
-  return spawnSync(`${REPO}/node_modules/.bin/tsx`, [`${REPO}/packages/engine/src/cli.ts`, ...args], { cwd, env: campaignEnv(extraEnv), encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+  return spawnSync(`${ENGINE}/node_modules/.bin/tsx`, [`${ENGINE}/packages/engine/src/cli.ts`, ...args], { cwd, env: campaignEnv(extraEnv), encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
 }
 
 /** `gcode usage` leaves out the Auto classifier's calls, which the log keeps on each judged tool result. */
@@ -110,7 +110,7 @@ for (const spec of chosen) {
     break;
   }
   console.log(`>>> ${spec.id} run ${values.run} (spent so far $${spent().toFixed(4)})`);
-  const result = runCase(spec, Number(values.run));
+  const result = runCase(spec, /^\d+$/.test(values.run) ? Number(values.run) : values.run);
   appendFileSync(LEDGER, `${JSON.stringify({ layer: 'A', case: spec.id, run: result.run, session: result.session, costUsd: result.costUsd })}\n`);
   appendFileSync(RESULTS, `${JSON.stringify(result)}\n`);
   const failed = (result.checks ?? []).filter((c) => c.pass === false);
