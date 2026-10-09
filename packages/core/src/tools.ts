@@ -104,6 +104,15 @@ export const TOOL_DEFINITIONS: readonly ToolSpec[] = deepFreeze(
 /** How many characters of a spilled result's start and end the model still sees. */
 export const SPILL_EDGE = 2_000;
 
+/**
+ * A loaded skill comes back whole, as Claude Code's does, up to this many characters: a spilled skill sent the model
+ * reading its own instructions in pieces from a file (ISSUES.md G-06).
+ */
+const SKILL_INLINE_CHARS = 100_000;
+
+/** The spill limit for one tool's result: the model's own, or more for a tool whose result must be read whole. */
+export const spillLimitOf = (tool: string, spillChars: number): number => (tool === 'skill' ? Math.max(spillChars, SKILL_INLINE_CHARS) : spillChars);
+
 export type Spill = {
   readonly path: string;
   readonly bytes: number;
