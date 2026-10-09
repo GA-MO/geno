@@ -1,0 +1,90 @@
+{
+  "case": "A12-background-server",
+  "run": "fix-s3-2",
+  "session": "c5d73e44-135c-4a6a-a9fb-23b2288e1d05",
+  "passed": false,
+  "costUsd": 0.0325697025,
+  "classifierUsd": 0,
+  "modelCalls": 19,
+  "toolCalls": 19,
+  "tokens": {
+    "input": 114,
+    "cacheRead": 195772,
+    "cacheWrite": 7867,
+    "output": 3642,
+    "latencyMs": 77428
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": false,
+      "detail": "task_stop at seq 31 before any load"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "cat /private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/c5d7 | tail -5 <home>/Development/g-code/.claude/worktrees/agent-ace111efcc7"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": false,
+      "detail": "for i in $(seq 1 60); do out=$(curl -sf http://localhost:5173/health) && { echo  | for i in $(seq 1 60); do body=$(curl -sf http://localhost:5173/health) && { echo"
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=396ch"
+    },
+    {
+      "id": "background",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "waits-without-sleep",
+      "pass": false,
+      "detail": "bash,bash,bash,tool_search,bash,bash,read,bash,bash,bash,task_stop,bash,tool_search,bash,tool_search,list_agents,bash,task_stop,bash"
+    },
+    {
+      "id": "answer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stopped",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

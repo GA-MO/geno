@@ -1,0 +1,57 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1512c42..25e6e20 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,3 +1,4 @@
+ # Changelog
+ 
+ ## Unreleased
++- Renamed `getUser` to `fetchUser` across core, api and web
+diff --git a/packages/api/src/routes.js b/packages/api/src/routes.js
+index d6ea2e1..f967917 100644
+--- a/packages/api/src/routes.js
++++ b/packages/api/src/routes.js
+@@ -1,6 +1,6 @@
+-import { getUser } from '../../core/src/user.js';
++import { fetchUser } from '../../core/src/user.js';
+ 
+ export function userRoute(params) {
+-  const user = getUser(Number(params.id));
++  const user = fetchUser(Number(params.id));
+   return user ? { status: 200, body: user } : { status: 404, body: { error: 'not found' } };
+ }
+diff --git a/packages/core/src/user.js b/packages/core/src/user.js
+index 3c18b0f..d449151 100644
+--- a/packages/core/src/user.js
++++ b/packages/core/src/user.js
+@@ -1,6 +1,6 @@
+ const USERS = new Map([[1, { id: 1, name: 'Ada' }], [2, { id: 2, name: 'Grace' }]]);
+ 
+-export function getUser(id) {
++export function fetchUser(id) {
+   return USERS.get(id) ?? null;
+ }
+ 
+diff --git a/packages/core/test/user.test.js b/packages/core/test/user.test.js
+index 583e2b3..f3d8a1c 100644
+--- a/packages/core/test/user.test.js
++++ b/packages/core/test/user.test.js
+@@ -1,5 +1,5 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { getUser } from '../src/user.js';
+-test('finds a user', () => assert.equal(getUser(1).name, 'Ada'));
+-test('misses a user', () => assert.equal(getUser(9), null));
++import { fetchUser } from '../src/user.js';
++test('finds a user', () => assert.equal(fetchUser(1).name, 'Ada'));
++test('misses a user', () => assert.equal(fetchUser(9), null));
+diff --git a/packages/web/src/profile.js b/packages/web/src/profile.js
+index d4ebf3d..7c3f477 100644
+--- a/packages/web/src/profile.js
++++ b/packages/web/src/profile.js
+@@ -1,3 +1,3 @@
+-import { getUser } from '../../core/src/user.js';
++import { fetchUser } from '../../core/src/user.js';
+ 
+-export const profileTitle = (id) => `Profile of ${getUser(id)?.name ?? 'nobody'}`;
++export const profileTitle = (id) => `Profile of ${fetchUser(id)?.name ?? 'nobody'}`;

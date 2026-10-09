@@ -1,0 +1,90 @@
+{
+  "case": "A12-background-server",
+  "run": "fix-s1-2",
+  "session": "3df16241-7226-4852-a271-4a39244962bd",
+  "passed": true,
+  "costUsd": 0.011823837499999998,
+  "classifierUsd": 0,
+  "modelCalls": 9,
+  "toolCalls": 8,
+  "tokens": {
+    "input": 54,
+    "cacheRead": 70725,
+    "cacheWrite": 2953,
+    "output": 1390,
+    "latencyMs": 28626
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=403ch"
+    },
+    {
+      "id": "background",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "waits-without-sleep",
+      "pass": true,
+      "detail": "bash,bash,tool_search,read,web_fetch,bash,tool_search,task_stop"
+    },
+    {
+      "id": "answer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stopped",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

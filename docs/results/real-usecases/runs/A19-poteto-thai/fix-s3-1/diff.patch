@@ -1,0 +1,49 @@
+diff --git a/src/logic/score.js b/src/logic/score.js
+index 7d1a666..4033795 100644
+--- a/src/logic/score.js
++++ b/src/logic/score.js
+@@ -1,5 +1,5 @@
+ export const createState = () => ({ coins: 0, score: 0 });
+ 
+ export function collectCoin(state) {
+-  return { ...state, coins: state.coins + 1 };
++  return { ...state, coins: state.coins + 1, score: state.score + 10 };
+ }
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..1551b78 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -11,9 +11,11 @@ export class GameScene extends Phaser.Scene {
+     this.physics.add.existing(this.player);
+     this.coins = this.physics.add.group();
+     for (let i = 0; i < 8; i++) this.coins.add(this.add.circle(80 + i * 90, 120, 8, 0xffffff));
++    this.scoreText = this.add.text(8, 8, 'Score: 0', { fontFamily: 'monospace', fontSize: '20px', color: '#000000' });
+     this.physics.add.overlap(this.player, this.coins, (_player, coin) => {
+       coin.destroy();
+       this.state = collectCoin(this.state);
++      this.scoreText.setText(`Score: ${this.state.score}`);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
+   }
+diff --git a/test/score.test.js b/test/score.test.js
+index 9fe2f9e..3bccccc 100644
+--- a/test/score.test.js
++++ b/test/score.test.js
+@@ -5,3 +5,17 @@ import { collectCoin, createState } from '../src/logic/score.js';
+ test('collecting a coin counts it', () => {
+   assert.equal(collectCoin(createState()).coins, 1);
+ });
++
++test('a fresh state starts at zero', () => {
++  assert.equal(createState().score, 0);
++});
++
++test('collecting one coin adds 10 points', () => {
++  assert.equal(collectCoin(createState()).score, 10);
++});
++
++test('coins add 10 points each', () => {
++  const state = collectCoin(collectCoin(collectCoin(createState())));
++  assert.equal(state.score, 30);
++  assert.equal(state.coins, 3);
++});

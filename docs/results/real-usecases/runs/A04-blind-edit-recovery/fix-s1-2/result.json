@@ -1,0 +1,90 @@
+{
+  "case": "A04-blind-edit-recovery",
+  "run": "fix-s1-2",
+  "session": "368b4b24-0404-468b-bf44-bf91209fb94c",
+  "passed": false,
+  "costUsd": 0.02217864,
+  "classifierUsd": 0,
+  "modelCalls": 7,
+  "toolCalls": 8,
+  "tokens": {
+    "input": 42,
+    "cacheRead": 90434,
+    "cacheWrite": 14404,
+    "output": 12567,
+    "latencyMs": 187199
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=524ch"
+    },
+    {
+      "id": "values-changed",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "tabs-kept",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "recovers-from-refused-edit",
+      "pass": null,
+      "detail": "no edit was refused"
+    },
+    {
+      "id": "few-calls",
+      "pass": false,
+      "detail": "8 calls"
+    }
+  ]
+}

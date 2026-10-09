@@ -1,0 +1,95 @@
+{
+  "case": "A19-poteto-thai",
+  "run": "fix-s2-2",
+  "session": "14a48407-da4f-46e9-9e14-03a5594f3b3e",
+  "passed": false,
+  "costUsd": 0.0892980875,
+  "classifierUsd": 0,
+  "modelCalls": 24,
+  "toolCalls": 30,
+  "tokens": {
+    "input": 144,
+    "cacheRead": 540279,
+    "cacheWrite": 28853,
+    "output": 6010,
+    "latencyMs": 127107
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls -R src test 2>/dev/null; echo ---; git status --short | ls src/logic src/scenes test | D=\"/private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/14a48"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1026ch"
+    },
+    {
+      "id": "skill-poteto",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "reads-geno-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-test",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "score-10",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": true,
+      "detail": "thai share 0.49"
+    }
+  ]
+}

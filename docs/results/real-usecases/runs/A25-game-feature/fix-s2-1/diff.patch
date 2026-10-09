@@ -1,0 +1,65 @@
+diff --git a/src/logic/score.js b/src/logic/score.js
+index 7d1a666..d0d8cc0 100644
+--- a/src/logic/score.js
++++ b/src/logic/score.js
+@@ -1,5 +1,9 @@
+-export const createState = () => ({ coins: 0, score: 0 });
++export const createState = () => ({ coins: 0, score: 0, paused: false });
+ 
+ export function collectCoin(state) {
+   return { ...state, coins: state.coins + 1 };
+ }
++
++export function togglePause(state) {
++  return { ...state, paused: !state.paused };
++}
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..2a92709 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,4 +1,4 @@
+-import { createState, collectCoin } from '../logic/score.js';
++import { createState, collectCoin, togglePause } from '../logic/score.js';
+ 
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+@@ -16,9 +16,16 @@ export class GameScene extends Phaser.Scene {
+       this.state = collectCoin(this.state);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
++    this.pauseText = this.add.text(400, 300, 'PAUSED', { fontSize: '48px', color: '#ffffff' }).setOrigin(0.5).setVisible(false);
++    this.input.keyboard.on('keydown-P', () => {
++      this.state = togglePause(this.state);
++      this.player.body.setVelocity(0);
++      this.pauseText.setVisible(this.state.paused);
++    });
+   }
+ 
+   update() {
++    if (this.state.paused) return;
+     const speed = 200;
+     const body = this.player.body;
+     body.setVelocity(0);
+diff --git a/test/score.test.js b/test/score.test.js
+index 9fe2f9e..96d1652 100644
+--- a/test/score.test.js
++++ b/test/score.test.js
+@@ -1,7 +1,17 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { collectCoin, createState } from '../src/logic/score.js';
++import { collectCoin, createState, togglePause } from '../src/logic/score.js';
+ 
+ test('collecting a coin counts it', () => {
+   assert.equal(collectCoin(createState()).coins, 1);
+ });
++
++test('state starts unpaused', () => {
++  assert.equal(createState().paused, false);
++});
++
++test('togglePause flips the pause flag', () => {
++  const paused = togglePause(createState());
++  assert.equal(paused.paused, true);
++  assert.equal(togglePause(paused).paused, false);
++});

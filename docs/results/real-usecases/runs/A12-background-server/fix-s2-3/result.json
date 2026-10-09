@@ -1,0 +1,90 @@
+{
+  "case": "A12-background-server",
+  "run": "fix-s2-3",
+  "session": "9f93ad50-8131-452a-83fb-377ca27dc7af",
+  "passed": false,
+  "costUsd": 0.0113384475,
+  "classifierUsd": 0,
+  "modelCalls": 9,
+  "toolCalls": 8,
+  "tokens": {
+    "input": 54,
+    "cacheRead": 69100,
+    "cacheWrite": 2509,
+    "output": 1053,
+    "latencyMs": 23276
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "node server.js &>/tmp/ignore-check.txt & sleep 0.1; kill %1 2>/dev/null; grep -n"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": false,
+      "detail": "node server.js &>/tmp/ignore-check.txt & sleep 0.1; kill %1 2>/dev/null; grep -n"
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": false,
+      "detail": "bash node server.js &>/tmp/ignore-check.txt & sleep 0.1; kill %1 "
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=405ch"
+    },
+    {
+      "id": "background",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "waits-without-sleep",
+      "pass": false,
+      "detail": "bash,grep,bash,bash,bash,tool_search,bash,task_stop"
+    },
+    {
+      "id": "answer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stopped",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}
