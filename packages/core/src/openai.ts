@@ -1,3 +1,4 @@
+import { parseToolInput } from './stream-message.js';
 import type {
   ContentBlock,
   ContentBlockParam,
@@ -274,7 +275,7 @@ export function chatStream() {
       close(events);
       for (const draft of tools.values()) {
         const block = content[draft.index];
-        if (block?.type === 'tool_use') block.input = parseInput(draft.json);
+        if (block?.type === 'tool_use') block.input = parseToolInput(draft.json);
         events.push({ type: 'content_block_stop', index: draft.index });
       }
       const final = chatUsage(usage);
@@ -294,15 +295,4 @@ export function chatStream() {
       return { events, message: { ...started!, content, stop_reason: stopReason, usage: final } };
     },
   };
-}
-
-/** Arguments that are not a JSON object reach the tool as they came, so its validation error shows the model what it sent. */
-function parseInput(json: string): unknown {
-  if (json.trim() === '') return {};
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : { invalid_json: json };
-  } catch {
-    return { invalid_json: json };
-  }
 }

@@ -56,7 +56,8 @@ function messageStart(usage: CacheUsage): SseEvent {
   };
 }
 
-export type FakeToolUse = { readonly id: string; readonly name: string; readonly input: unknown };
+/** `rawJson` streams that text as the input instead of `input`, for a model that sends arguments that are not JSON. */
+export type FakeToolUse = { readonly id: string; readonly name: string; readonly input: unknown; readonly rawJson?: string };
 
 type OfferingBody = {
   readonly tools?: readonly { readonly name: string; readonly description?: string }[];
@@ -95,7 +96,7 @@ export const loadTools = (...names: string[]): FakeToolUse => ({ id: `tu_load_${
 export function toolCall(text: string, uses: readonly FakeToolUse[], usage: CacheUsage, opts: { cutOff?: true } = {}): Reply {
   const blocks = uses.flatMap((use, i): SseEvent[] => {
     const index = i + 1;
-    const json = JSON.stringify(use.input);
+    const json = use.rawJson ?? JSON.stringify(use.input);
     const half = Math.ceil(json.length / 2);
     const cut = opts.cutOff === true && i === uses.length - 1;
     return [

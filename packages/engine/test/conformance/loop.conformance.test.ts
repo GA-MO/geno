@@ -42,6 +42,19 @@ describe.each(WIRES)('the agent loop on the %s wire', (wire) => {
     expect((await log(result.stdout)).flatMap((e) => (e.kind === 'tool-result' ? [e.status] : []))).toEqual(['ok', 'denied', 'ok']);
   });
 
+  it('a tool call whose arguments are not JSON gets an error result and the turn goes on, instead of failing', async () => {
+    const broken: FakeToolUse = { id: `call_${ids++}`, name: 'edit', input: {}, rawJson: '{"path":"game.js","create":}' };
+    const fixed = use('edit', { path: 'game.js', create: true, new_str: 'export const game = 1;\n' });
+    const { workspace, cli, seen } = await scripted(wire, [call('Writing.', [broken]), call('Again.', [fixed]), say('Written.')]);
+
+    const result = await cli(agent(workspace, 'Write the game'));
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('Written.');
+    expect(seen()[1]!.results[0]).toMatchObject({ id: broken.id, error: true });
+    expect(readFileSync(path.join(workspace, 'game.js'), 'utf8'), 'the call the model sent again runs').toBe('export const game = 1;\n');
+  });
+
   it('T-LOOP-04 a tool call cut off at max_tokens does not run, gets an error result, and the turn goes on', async () => {
     // The cut lands in the long description, after a whole command: on the Anthropic wire the SDK's partial parse keeps the command and drops the rest.
     const description = 'Record that the command ran, in a description long enough that the output limit cuts it short';
