@@ -54,8 +54,8 @@ export const LAST_CALL_NOTE = `${GENO_NOTE} This is the last model call this run
 
 /**
  * The todo list as it stands, when it has work left that the model may have let go stale: `idle` after
- * `TODO_REMINDER_CALLS` model calls without a todo call, `stopped` at a prompt that follows a turn that was stopped or
- * failed. Logged with the list, so a replay sends the same bytes.
+ * `TODO_REMINDER_CALLS` model calls without a todo call, `stopped` at a prompt that follows a turn that was stopped,
+ * failed or capped by its limits. Logged with the list, so a replay sends the same bytes.
  */
 export type TodoReminder = { readonly why: 'idle' | 'stopped'; readonly list: TodoList };
 

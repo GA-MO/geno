@@ -71,6 +71,17 @@ describe('the todo reminder', () => {
     expect(s.told()?.why).toBe('stopped');
   });
 
+  it('fires after a turn its limits capped with a last report call, though that turn ended on its own', () => {
+    const s = log().prompt().todo(list('in_progress', 'pending', 'pending'));
+    s.events.push({ kind: 'notice', seq: 98, at, last: true });
+    s.answer().prompt('Something else.');
+    expect(s.told()?.why).toBe('stopped');
+    const finished = log().prompt().todo(list('in_progress', 'pending', 'pending'));
+    finished.events.push({ kind: 'notice', seq: 98, at, last: true });
+    finished.answer().prompt('Next.').answer().prompt('And then?');
+    expect(finished.told(), 'only the prompt right after the capped turn').toBeUndefined();
+  });
+
   it('stays quiet with no list, a finished list, or a cleared one', () => {
     expect(log().prompt().reads(TODO_REMINDER_CALLS * 2).told()).toBeUndefined();
     expect(log().prompt().todo(list('done', 'done', 'done')).reads(TODO_REMINDER_CALLS).told()).toBeUndefined();

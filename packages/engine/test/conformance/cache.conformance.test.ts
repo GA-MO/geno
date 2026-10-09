@@ -106,17 +106,20 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
     expect((await log(result.stdout)).filter((e) => e.kind === 'notice' && e.todo !== undefined)).toHaveLength(1);
   });
 
-  it('a prompt after a turn that stopped at its limit shows the unfinished list before the prompt, and the prefix holds', async () => {
-    const { workspace, cli, bodies, events } = await scripted(wire, [todo('tu_t'), read('tu_r'), say('The build fails on a missing import.')]);
-    const id = sessionIdOf((await cli(['agent', '--workspace', workspace, '--max-turns', '2', 'Change a.ts'])).stdout);
+  it.each([
+    ['stopped at its limit mid-call', ['--max-turns', '2'], [todo('tu_t'), read('tu_r')]],
+    ['capped by its limit with a closing report', ['--max-turns', '3'], [todo('tu_t'), read('tu_r'), say('I ran out of calls: a.ts is read, the change is still to do.')]],
+  ] as const)('a prompt after a turn %s shows the unfinished list before the prompt, and the prefix holds', async (_how, limit, first) => {
+    const { workspace, cli, bodies, events } = await scripted(wire, [...first, say('The build fails on a missing import.')]);
+    const id = sessionIdOf((await cli(['agent', '--workspace', workspace, ...limit, 'Change a.ts'])).stdout);
     expect((await cli(['agent', '--session', id, 'Why does the build fail?'])).code).toBe(0);
 
     const sent = bodies() as Body[];
-    expect(sent.slice(0, 2).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
-    const asked = newestOf(sent[2]!);
+    const asked = newestOf(sent.at(-1)!);
+    expect(sent.slice(0, -1).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
     expect(asked).toMatch(/last turn ended before your todo list was finished/);
     expect(asked.search(REMINDED), 'the list comes before the prompt').toBeLessThan(asked.indexOf('Why does the build fail?'));
-    expectPrefix(sent[1]!, sent[2]!);
+    expectPrefix(sent.at(-2)!, sent.at(-1)!);
     expect((await events(id)).find((e) => e.kind === 'notice' && e.todo !== undefined)).toMatchObject({ todo: { why: 'stopped', list: items } });
   });
 });
