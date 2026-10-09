@@ -27,7 +27,7 @@ export const isTodoEvent = (event: TurnEvent): event is TodoEvent => event.kind 
 
 export const TODO_SPEC: Tool = {
   name: TODO_TOOL,
-  description: `Keep a checklist of the task's steps, which the user sees pinned in the chat as you work. Each call replaces the whole list, so pass every item each time, with the same id for the same step. Use it for work of three or more steps, and skip it for a quick single change. Mark an item in_progress when you start it and done as soon as it is finished, before you start the next; at most one item is in_progress. At most ${TODO_LIMITS.items} items. An empty list clears it.`,
+  description: `Keep a checklist of the task's steps, which the user sees pinned in the chat as you work. Each call replaces the whole list, so pass every item each time, with the same id for the same step. Use it proactively, as your first call, when the work takes three or more steps or the user lists several things to do, such as "rename it everywhere, make sure the tests pass, and add a changelog line"; skip it for a quick single change. Mark an item in_progress when you start it and done as soon as it is finished, before you start the next; at most one item is in_progress. At most ${TODO_LIMITS.items} items. An empty list clears it.`,
   input_schema: {
     type: 'object',
     properties: {
