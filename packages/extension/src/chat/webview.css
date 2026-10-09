@@ -1222,6 +1222,7 @@ button.file-chip:hover {
 
 .edit-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   min-width: 0;

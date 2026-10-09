@@ -248,10 +248,12 @@ body.vscode-high-contrast-light .input-box .compact-offer[aria-disabled='true'] 
   border-style: dashed;
 }
 
+/* The status gives way first on a narrow row: its wait text ends in an ellipsis before Stop moves. */
 .run-status {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -274,8 +276,20 @@ body.vscode-high-contrast-light .input-box .compact-offer[aria-disabled='true'] 
 .run-wait {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   gap: 4px;
   color: var(--vscode-foreground);
+}
+
+.run-wait .wait-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-box .round-button.stop,
+.input-box .retry-now {
+  flex: none;
 }
 
 .run-wait .wait-icon {

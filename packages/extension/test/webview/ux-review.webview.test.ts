@@ -109,6 +109,17 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       expect(await texts(panel, '.no-reply-reason')).toEqual(['It reached its limit before it answered.']);
     }));
 
+  it.each(['rate-limited', 'offline'])('a turn waiting %s keeps Stop and Retry now inside the panel, the wait text giving way first', (id) =>
+    at(id, width, async (panel) => {
+      const inside = await panel.eval<Record<string, boolean>>(`(() => {
+        const right = doc.documentElement.clientWidth;
+        const fits = (selector) => { const box = doc.querySelector(selector).getBoundingClientRect(); return box.width > 0 && box.left >= 0 && box.right <= right; };
+        return { stop: fits('.round-button.stop'), retry: fits('.retry-now') };
+      })()`);
+      expect(inside).toEqual({ stop: true, retry: true });
+      expect(await panel.eval<number>(`doc.querySelector('.round-button.stop').getBoundingClientRect().width`), 'Stop keeps its full size').toBeGreaterThanOrEqual(24);
+    }));
+
   it('a command Auto refused reads as denied by Auto, not failed', () =>
     at('auto-decision', width, async (panel) => {
       expect(await texts(panel, '.step-denied')).toEqual(['Denied by Auto']);
