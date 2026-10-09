@@ -561,6 +561,22 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'tools-deferred',
+    group: 'Tools',
+    title: 'Deferred, skill and background tools',
+    look: { detail: 'full' },
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'Read the Stripe charge docs with the poteto skill, then stop the server'), { type: 'text', text: 'Loading what I need.' });
+      await host.act(...ran('n_ts', 'tool_search', 'other', 'web_fetch monitor', 'Loaded web_fetch, monitor.'));
+      await host.act(...ran('n_skill', 'skill', 'other', 'poteto-mode', '# Poteto mode'));
+      await host.act(...ran('n_fetch', 'web_fetch', 'other', 'https://docs.stripe.com/api/charges', '# Charges'));
+      await host.act(...ran('n_stop', 'task_stop', 'other', 'bg-1', 'Stopped bg-1.'));
+      await host.act(...ran('n_mem', 'remember', 'other', 'project', 'Remembered.'));
+      await host.act(...ran('n_agent', 'agent', 'other', 'explore: find callers of getUser', '<subagent_report agent="explore" status="done">Two callers.</subagent_report>'));
+      await host.act({ type: 'text', text: 'Done.' }, ended());
+    },
+  },
+  {
     id: 'tool-running',
     group: 'Tools',
     title: 'A command running',
