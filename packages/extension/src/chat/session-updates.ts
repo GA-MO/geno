@@ -10,12 +10,14 @@ import {
   hunkIdOf,
   MEMORY_SCOPES,
   parseChapterMark,
+  parseShownFiles,
   parseSpinoffShown,
   PROGRESS_META,
   REMEMBER_META,
   REPLAYED_AT_META,
   REPLAYED_CHANGE_META,
   REPLAYED_TURN_META,
+  SHOW_FILES_META,
   SPINOFF_META,
   WAIT_KINDS,
   WAITING_META,
@@ -164,6 +166,7 @@ export function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: U
   const todo = todoOfUpdate(update);
   const spinoff = update.sessionUpdate === 'tool_call_update' ? parseSpinoffShown(update._meta?.[SPINOFF_META]) : undefined;
   const chapter = update.sessionUpdate === 'tool_call_update' ? chapterOf(update._meta) : undefined;
+  const shown = update.sessionUpdate === 'tool_call_update' ? parseShownFiles(update._meta?.[SHOW_FILES_META]) : undefined;
   return {
     ...action,
     ...(widget === undefined ? {} : { widget }),
@@ -171,6 +174,7 @@ export function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: U
     ...(todo === undefined ? {} : { todo }),
     ...(spinoff === undefined ? {} : { spinoff }),
     ...(chapter === undefined ? {} : { chapter }),
+    ...(shown === undefined ? {} : { shown }),
   };
 }
 

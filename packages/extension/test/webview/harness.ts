@@ -8,6 +8,7 @@ import { chromium, type Browser, type Page } from 'playwright-core';
 import { BUNDLES } from '../../build.mjs';
 import type { FromView, Look, ToView, Transcript } from '../../src/chat/messages.js';
 import { pageMarkup } from '../../src/chat/page-markup.js';
+import { galleryMedia } from '../gallery/media.js';
 import { answerReady, DEFAULT_LOOK, FakeHost } from './host.js';
 import { applyTheme, themedPage, themeOf, type ThemeSlug } from './theme.js';
 
@@ -122,6 +123,8 @@ export async function openPanel({ theme = 'dark', look = DEFAULT_LOOK, model = '
   const html = themedPage(pageMarkup({ cspSource: ORIGIN, nonce, uri: (file) => `${ORIGIN}/${file}`, entry: 'webview.js', look }), dump, nonce);
   await page.route(`${ORIGIN}/**`, (route) => {
     const { pathname } = new URL(route.request().url());
+    const media = galleryMedia(pathname);
+    if (media !== undefined) return route.fulfill({ contentType: 'image/png', body: media });
     return pathname === '/index.html' ? route.fulfill({ contentType: 'text/html', body: html }) : route.fulfill({ path: path.join(out, decodeURIComponent(pathname)) });
   });
   await page.goto(`${ORIGIN}/index.html`);

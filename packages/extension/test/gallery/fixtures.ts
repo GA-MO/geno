@@ -1,4 +1,5 @@
 import type { ArenaId, ArenaLane, ArenaRun, Breakdown, CallProgress, CatalogHit, CostPreview, HookRow, InstalledItem, LaneInfo, McpServerView, SessionSpend, SpinoffId, TaskRecord, VariantSpec, WorkflowPreview, WorkflowProgress } from '@g-code/core';
+import { shownKindOf, shownText, type ShownFile, type ShownFiles } from '@g-code/core/show-files';
 import type { Action, ChildAction, HistoryRow, PermissionChoice, ToolKind } from '../../src/chat/messages.js';
 import type { SettingsListing } from '../../src/chat/settings-model.js';
 import type { FakeHost } from '../webview/host.js';
@@ -325,6 +326,24 @@ const SPEND: SessionSpend = {
   turns: [{ kind: 'model', seq: 1, prompt: 'Fix the login form so a trailing space works', breakdown: BREAKDOWN, children: [], costUsd: 0.00078 }],
   top: [1],
 };
+
+/** Where the show_files states' images are: `media.ts` paints them, and the page serves them under /gallery-media/. */
+const MEDIA = '/gallery-media';
+const SCRATCH = '/private/var/folders/x1/T/gcode-sessions/4eb7ce59';
+const SIZES: Readonly<Record<string, number>> = { 'before.png': 4210, 'after.png': 4188, 'phone-before.png': 2630, 'phone-after.png': 2611, 'chart.png': 3020 };
+
+const shownFile = (name: string, bytes = SIZES[name] ?? 18_400): ShownFile => ({ kind: 'shown', given: `${SCRATCH}/${name}`, path: `${MEDIA}/${name}`, name, bytes, show: shownKindOf(name) });
+
+/** A finished turn whose show_files call drew `shown`, with the images loaded from the gallery's media. */
+async function showFilesTurn(stage: Stage, prompt: string, shown: ShownFiles, answer: string): Promise<void> {
+  await stage.host.post({ type: 'roots', roots: [{ path: MEDIA, uri: 'gallery-media' }] });
+  await stage.host.act(turnStart('t0', prompt));
+  const target = shown.files.map((file) => file.given).join(' ');
+  await stage.host.act({ type: 'tool', id: 'tu_show', at: Date.now(), name: 'show_files', target, toolKind: 'other', status: 'running' });
+  await stage.host.act({ type: 'tool', id: 'tu_show', at: Date.now(), status: shown.files.some((file) => file.kind === 'shown') ? 'completed' : 'failed', output: shownText(shown), shown });
+  await stage.host.act({ type: 'text', text: answer }, ended());
+  await stage.shows('.show-files');
+}
 
 /** Fixtures for each state of the panel, by group, in the order the gallery lists them. */
 /** The real sessions whose diff or subagent row shows only in full detail. */
@@ -1285,6 +1304,82 @@ export const FIXTURES: readonly Fixture[] = [
       stage.host.on('list-sessions', ({ scope }) => stage.host.post({ type: 'history-failed', scope, message: 'the engine is not running' }));
       await stage.host.post({ type: 'show-history' });
     },
+  },
+  {
+    id: 'show-files-pair',
+    group: 'Shown files',
+    title: 'A before and after pair in a grid',
+    play: (stage) =>
+      showFilesTurn(
+        stage,
+        'Fix the sign-in button and show me before and after',
+        { caption: 'The sign-in page before and after the fix: the button now sits inside the card.', layout: 'grid', files: [shownFile('before.png'), shownFile('after.png')] },
+        'The button had a fixed left offset; it now fills the card width.',
+      ),
+  },
+  {
+    id: 'show-files-five',
+    group: 'Shown files',
+    title: 'Five images in a grid',
+    play: (stage) =>
+      showFilesTurn(
+        stage,
+        'Show me the page on desktop and phone, and the bundle sizes',
+        { caption: 'Desktop and phone, before and after, and the bundle size per route.', layout: 'grid', files: ['before.png', 'after.png', 'phone-before.png', 'phone-after.png', 'chart.png'].map((name) => shownFile(name)) },
+        'Both widths are fixed, and the sign-in route is the largest bundle.',
+      ),
+  },
+  {
+    id: 'show-files-single',
+    group: 'Shown files',
+    title: 'One large image each',
+    play: (stage) =>
+      showFilesTurn(
+        stage,
+        'Show me the new page full width',
+        { caption: 'The sign-in page after the fix, at 480 pixels wide.', layout: 'single', files: [shownFile('after.png'), shownFile('chart.png')] },
+        'Click an image to open it full size.',
+      ),
+  },
+  {
+    id: 'show-files-mixed',
+    group: 'Shown files',
+    title: 'An image with a report, notes, a chart, data and a page',
+    play: (stage) =>
+      showFilesTurn(
+        stage,
+        'Write up the audit and show me what you made',
+        {
+          caption: 'The audit: a screenshot, the PDF report, my notes, the chart, the raw data and the HTML page.',
+          layout: 'grid',
+          files: [shownFile('after.png'), shownFile('audit-report-october.pdf', 812_000), shownFile('notes.md', 3_100), shownFile('sizes.svg', 9_800), shownFile('sizes.csv', 1_250), shownFile('report.html', 22_400)],
+        },
+        'The HTML and SVG files open in the editor rather than in the chat.',
+      ),
+  },
+  {
+    id: 'show-files-refused',
+    group: 'Shown files',
+    title: 'A shown image beside two refused files',
+    play: (stage) =>
+      showFilesTurn(
+        stage,
+        'Show me the screenshot and the config you used',
+        {
+          caption: 'The screenshot, and the two files I could not show.',
+          layout: 'grid',
+          files: [
+            shownFile('after.png'),
+            { kind: 'refused', given: '.env', reason: ".env is off limits to show_files: it matches Geno's built-in rule for credentials files (.env files, keys, .ssh and the like), whose contents would reach the model provider." },
+            {
+              kind: 'refused',
+              given: '/Users/me/Downloads/old-shot.png',
+              reason: "denied: `show_files /Users/me/Downloads/old-shot.png` uses a path outside the workspace, which needs the user's approval, and nobody can answer here. Geno may read only in these directories in this session: '/Users/me/work/app'.",
+            },
+          ],
+        },
+        'I could not show the .env file or the old screenshot.',
+      ),
   },
   // Each state plays a real model run's session as the panel showed it: scripts/run-to-gallery.ts writes the actions.
   ...REAL_SESSIONS.map(

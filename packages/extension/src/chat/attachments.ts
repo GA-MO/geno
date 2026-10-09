@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
@@ -105,8 +106,22 @@ export async function openTarget(target: OpenTarget, sessionId: string | undefin
 export const sessionsDir = (): string => path.join(gcodeHome(process.env), 'sessions');
 const storedDir = (sessionId: string): string => path.join(sessionsDir(), sessionId, 'attachments');
 
-/** The workspace folders and the stored attachments as the webview reaches them, for tool thumbnails and markdown images. */
+const realOr = (dir: string): string => {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return dir;
+  }
+};
+
+/**
+ * Where the engine keeps each session's spilled output and its scratchpad (`scratchpadOf`), by their real paths, as
+ * show_files names the files in them. The panel loads images from these and the workspace, never the rest of the disk.
+ */
+export const sessionFolders = (): string[] => [path.join(realOr(gcodeHome(process.env)), 'spill'), path.join(realOr(tmpdir()), 'gcode-sessions')];
+
+/** The workspace folders, the stored attachments and the sessions' own folders as the webview reaches them, for images. */
 export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] => [
   ...folderPaths().flatMap(({ folder, paths }) => paths.map((root) => ({ path: root, uri: webview.asWebviewUri(folder).toString() }))),
-  { path: sessionsDir(), uri: webview.asWebviewUri(vscode.Uri.file(sessionsDir())).toString() },
+  ...[sessionsDir(), ...sessionFolders()].map((root) => ({ path: root, uri: webview.asWebviewUri(vscode.Uri.file(root)).toString() })),
 ];

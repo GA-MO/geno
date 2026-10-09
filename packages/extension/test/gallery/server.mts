@@ -14,6 +14,7 @@ import { UI_STYLES, type Look } from '../../src/chat/messages.js';
 import { pageMarkup } from '../../src/chat/page-markup.js';
 import { REVIEW_MODES } from '../../src/review/mode.js';
 import { THEME_SLUGS, themedPage, themeOf, type ThemeSlug } from '../webview/theme.js';
+import { galleryMedia } from './media.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const extension = path.resolve(here, '../..');
@@ -122,6 +123,8 @@ const server = createServer((req, res) => {
     if (url.pathname === '/design.html') return send(res, 200, 'text/html', framePage(url.searchParams, origin, 'design.js', JSON.stringify({ icons: await iconsInSource() })));
     if (url.pathname === '/version') return send(res, 200, 'application/json', JSON.stringify({ version, failure }));
     if (url.pathname === '/icons.json') return send(res, 200, 'application/json', JSON.stringify(await iconsInSource()));
+    const media = galleryMedia(url.pathname);
+    if (media !== undefined) return send(res, 200, 'image/png', media);
     const theme = /^\/themes\/([a-z-]+)\.json$/.exec(url.pathname)?.[1];
     if (theme !== undefined) return (THEME_SLUGS as readonly string[]).includes(theme) ? send(res, 200, 'application/json', JSON.stringify(themeOf(theme as ThemeSlug))) : send(res, 404, 'text/plain', 'no such theme');
     const file = path.join(out, decodeURIComponent(url.pathname));
