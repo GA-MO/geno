@@ -1,0 +1,85 @@
+{
+  "case": "A30-hidden-char-edit",
+  "run": "fix-a3",
+  "session": "0ecff56e-2429-474c-846b-97a0fb0c1961",
+  "passed": false,
+  "costUsd": 0.01054511,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 7,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 62102,
+    "cacheWrite": 2916,
+    "output": 1438,
+    "latencyMs": 46798
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "sed -n '2p' src/config.ts | od -c | head -20 | sed -n '1,5p' src/config.ts | od -c | head -8"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=572ch"
+    },
+    {
+      "id": "value-set",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "few-calls",
+      "pass": false,
+      "detail": "7 calls"
+    },
+    {
+      "id": "edit-tool",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

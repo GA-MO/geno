@@ -1,0 +1,85 @@
+{
+  "case": "A30-hidden-char-edit",
+  "run": "fix-b2",
+  "session": "43be06a4-9f9c-4d4c-9b86-7d69d87bca4e",
+  "passed": false,
+  "costUsd": 0.005644194999999999,
+  "classifierUsd": 0,
+  "modelCalls": 5,
+  "toolCalls": 4,
+  "tokens": {
+    "input": 30,
+    "cacheRead": 32177,
+    "cacheWrite": 2166,
+    "output": 866,
+    "latencyMs": 20057
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "sed -n '1,6p' src/config.ts | cat -v; echo '---'; hexdump -C src/config.ts | sed | sed -i '' $'s/\\ttretries:/\\tretries:/' /dev/null 2>/dev/null; perl -i -pe 's/^(\\ | grep -c $'\\xe2\\x80\\x8b' src/config.ts; git diff src/config.ts"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=392ch"
+    },
+    {
+      "id": "value-set",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "few-calls",
+      "pass": true,
+      "detail": "4 calls"
+    },
+    {
+      "id": "edit-tool",
+      "pass": false,
+      "detail": ""
+    }
+  ]
+}

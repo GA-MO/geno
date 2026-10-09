@@ -1,0 +1,44 @@
+diff --git a/src/duration.ts b/src/duration.ts
+index 261abb5..2b497f8 100644
+--- a/src/duration.ts
++++ b/src/duration.ts
+@@ -1,4 +1,14 @@
++const UNIT_SECONDS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
++
+ /** Parses a duration such as "1h30m", "45s" or "2d" into seconds. Throws on anything else. */
+ export function parseDuration(text: string): number {
+-  throw new Error('not implemented');
++  const cleaned = text.replace(/\s+/g, '');
++  if (!/^(\d+[smhd])+$/.test(cleaned)) {
++    throw new Error(`invalid duration: ${text}`);
++  }
++  let total = 0;
++  for (const [, amount, unit] of cleaned.matchAll(/(\d+)([smhd])/g)) {
++    total += Number(amount) * UNIT_SECONDS[unit];
++  }
++  return total;
+ }
+diff --git a/src/money.ts b/src/money.ts
+index 7dc9491..5f2bdad 100644
+--- a/src/money.ts
++++ b/src/money.ts
+@@ -4,8 +4,7 @@ const SYMBOLS: Record<Currency, string> = { USD: '$', THB: '฿', EUR: '€' };
+ 
+ /** Formats an amount in cents, such as 1250 -> "$12.50". */
+ export function formatPrice(cents: number, currency: Currency = 'USD'): string {
+-  const amount = cents / 100;
+-  return `${SYMBOLS[currency]}${amount}`;
++  return `${SYMBOLS[currency]}${(cents / 100).toFixed(2)}`;
+ }
+ 
+ export function sum(prices: readonly number[]): number {
+diff --git a/src/slug.ts b/src/slug.ts
+index 1486261..6a51096 100644
+--- a/src/slug.ts
++++ b/src/slug.ts
+@@ -1,4 +1,4 @@
+ /** Turns a title into a URL slug: lower case, words joined by single dashes. */
+ export function slugify(title: string): string {
+-  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');
++  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ +/g, '-');
+ }

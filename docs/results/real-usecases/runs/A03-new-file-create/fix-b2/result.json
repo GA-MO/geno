@@ -1,0 +1,85 @@
+{
+  "case": "A03-new-file-create",
+  "run": "fix-b2",
+  "session": "16a356ad-d9a8-4504-9f2b-6bb278761516",
+  "passed": false,
+  "costUsd": 0.021318999999999994,
+  "classifierUsd": 0,
+  "modelCalls": 15,
+  "toolCalls": 19,
+  "tokens": {
+    "input": 90,
+    "cacheRead": 126273,
+    "cacheWrite": 5868,
+    "output": 2690,
+    "latencyMs": 61612
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "node --version && cat CHANGELOG.md | cat .g-code/settings.json; ls .agents/skills; find . -iname 'AGENTS.md' -o -inam"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": false,
+      "detail": "src/clamp.ts seq 26 (error)"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=988ch"
+    },
+    {
+      "id": "create-for-new",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "clamp-tests-pass",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "index-exports",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+diff --git a/index.html b/index.html
+index fd57bef..bf42245 100644
+--- a/index.html
++++ b/index.html
+@@ -3,6 +3,7 @@
+ <head><meta charset="utf-8"><title>Coin Dash</title></head>
+ <body>
+ <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
++<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+ <script type="module" src="./src/main.js"></script>
+ </body>
+ </html>
+diff --git a/package.json b/package.json
+index 39ff1db..6019cfe 100644
+--- a/package.json
++++ b/package.json
+@@ -3,6 +3,9 @@
+   "version": "0.1.0",
+   "type": "module",
+   "private": true,
++  "dependencies": {
++    "lodash": "^4.17.21"
++  },
+   "scripts": {
+     "dev": "node server.js",
+     "test": "node --test"
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..9fd836a 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,9 +1,13 @@
+ import { createState, collectCoin } from '../logic/score.js';
+ 
++const SPEED = 200;
++const KEY_SETTLE_MS = 100;
++
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+     super('game');
+     this.state = createState();
++    this.held = { left: false, right: false, up: false, down: false };
+   }
+ 
+   create() {
+@@ -15,16 +19,27 @@ export class GameScene extends Phaser.Scene {
+       coin.destroy();
+       this.state = collectCoin(this.state);
+     });
+-    this.cursors = this.input.keyboard.createCursorKeys();
++
++    // leading so a press moves at once, trailing to settle the final key state
++    // after a held key's auto-repeat stops.
++    this.settleVelocity = _.debounce(() => {
++      const body = this.player.body;
++      body.setVelocity(0);
++      if (this.held.left) body.setVelocityX(-SPEED);
++      if (this.held.right) body.setVelocityX(SPEED);
++      if (this.held.up) body.setVelocityY(-SPEED);
++      if (this.held.down) body.setVelocityY(SPEED);
++    }, KEY_SETTLE_MS, { leading: true, trailing: true });
++
++    for (const key of Object.keys(this.held)) {
++      const code = key.toUpperCase();
++      this.input.keyboard.on(`keydown-${code}`, () => this.setHeld(key, true));
++      this.input.keyboard.on(`keyup-${code}`, () => this.setHeld(key, false));
++    }
+   }
+ 
+-  update() {
+-    const speed = 200;
+-    const body = this.player.body;
+-    body.setVelocity(0);
+-    if (this.cursors.left.isDown) body.setVelocityX(-speed);
+-    if (this.cursors.right.isDown) body.setVelocityX(speed);
+-    if (this.cursors.up.isDown) body.setVelocityY(-speed);
+-    if (this.cursors.down.isDown) body.setVelocityY(speed);
++  setHeld(key, isDown) {
++    this.held[key] = isDown;
++    this.settleVelocity();
+   }
+-}
++}
+\ No newline at end of file

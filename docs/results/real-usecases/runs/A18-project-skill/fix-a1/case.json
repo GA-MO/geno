@@ -1,0 +1,27 @@
+{
+  "case": "A18-project-skill",
+  "area": "skills",
+  "layer": "A",
+  "run": "fix-a1",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Fix formatPrice so it always shows two decimals, then add a changelog entry for it.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "84461d3b",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "4a8daf52d1686d237ef666ec7ced21a7d9749f8c"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A18-project-skill --run <n>"
+}

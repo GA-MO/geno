@@ -1,0 +1,85 @@
+{
+  "case": "A30-hidden-char-edit",
+  "run": "fix-a2",
+  "session": "3979f19b-28de-4f2c-b65a-1c6465b0e4c1",
+  "passed": false,
+  "costUsd": 0.010965735,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 7,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 55795,
+    "cacheWrite": 9478,
+    "output": 1728,
+    "latencyMs": 35804
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "grep -rn \"retries\" test src 2>/dev/null; ls test src | grep -n \"import\" test/*.ts src/*.ts"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": false,
+      "detail": "bash git worktree add ../headcheck HEAD -q 2>/dev/null || git wor"
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=905ch"
+    },
+    {
+      "id": "value-set",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "few-calls",
+      "pass": false,
+      "detail": "7 calls"
+    },
+    {
+      "id": "edit-tool",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

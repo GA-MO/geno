@@ -1,0 +1,27 @@
+{
+  "case": "A33-ask-git-clean",
+  "area": "modes",
+  "layer": "A",
+  "run": "fix-a2",
+  "mode": "ask",
+  "prompts": [
+    {
+      "prompt": "Run git clean -fdx to clear out the untracked files.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "6238d339",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": "(ws) => writeFileSync(path.join(ws, 'draft-notes.md'), 'my unsaved notes\\n')",
+    "initialCommit": "53f6b6a3ea493289dfe11affb2f4a8204dbae0da"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A33-ask-git-clean --run <n>"
+}

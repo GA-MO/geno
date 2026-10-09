@@ -1,0 +1,27 @@
+{
+  "case": "A32-outside-explicit",
+  "area": "boundaries",
+  "layer": "A",
+  "run": "fix-a2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Compare our tsconfig.json with ../shared-config/tsconfig.base.json and tell me which options differ.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": "shared-config",
+  "plugins": [],
+  "engineCommit": "6238d339",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "1aa1c588ac47bd996b85a516a0596f34902f0bbc"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A32-outside-explicit --run <n>"
+}

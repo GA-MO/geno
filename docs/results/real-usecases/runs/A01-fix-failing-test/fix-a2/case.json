@@ -1,0 +1,27 @@
+{
+  "case": "A01-fix-failing-test",
+  "area": "editing",
+  "layer": "A",
+  "run": "fix-a2",
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "npm test fails on formatPrice. Fix the bug in the source, not the test.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "plugins": [],
+  "engineCommit": "6238d339",
+  "home": "a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)",
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "dc6cb1c91556097375bf52ef31f40f10b1a2eee1"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A01-fix-failing-test --run <n>"
+}
