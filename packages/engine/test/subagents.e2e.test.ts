@@ -164,6 +164,21 @@ describe('gcode serve: subagents', () => {
     expect(own.events.at(-1)).toMatchObject({ kind: 'error', error: 'budget' });
   });
 
+  it('G-04 forces the report on the last call a child turn cap allows, so the parent gets what it found', async () => {
+    const grep = (id: string) => toolCall('Searching.', [{ id, name: 'grep', input: { pattern: 'alpha' } }], usage);
+    const { transport } = await runPrompt(
+      {
+        '[parent]': { replies: [toolCall('Exploring.', [agentCall('tu_x', 'explore', '[child-x] where is alpha')], usage), answer('Found it.', usage)] },
+        '[child-x]': { replies: [grep('tu_g1'), grep('tu_g2'), grep('tu_g3'), handBack('a.ts:1 defines alpha; b.ts unchecked.', usage)] },
+      },
+      '[parent] find alpha',
+    );
+    const child = transport.requests('[child-x]');
+    expect(child.map((r) => r.body.tool_choice)).toEqual([undefined, undefined, undefined, { type: 'tool', name: 'report' }]);
+    const [sent] = toolResults(transport.requests('[parent]')[1]!.body);
+    expect(sent!.content).toContain('a.ts:1 defines alpha; b.ts unchecked.');
+  });
+
   it('cancels one child by its session id, and the parent goes on with its partial report', async () => {
     let cancelled = false;
     const { transport, updates, log, response } = await runPrompt(

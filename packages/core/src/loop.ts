@@ -196,6 +196,20 @@ export function budgetReminder(events: readonly TurnEvent[], run: Run): BudgetLe
   return low ? left : undefined;
 }
 
+/**
+ * Whether the next model call is the last the run's limits allow: its turn cap, or its cost limit at the run's mean cost
+ * a call. No tool would run after that call, so it goes out with the tools off and a note that asks for the report
+ * (ISSUES.md G-04).
+ */
+export function lastCallDue(events: readonly TurnEvent[], run: Run): boolean {
+  if (limitReached(events, run) !== undefined) return false;
+  const { calls, costUsd } = spent(events, run);
+  return calls + 1 >= run.maxTurns || (calls > 0 && costUsd > 0 && costUsd + costUsd / calls > run.maxCostUsd);
+}
+
+/** Whether this run already told the model its next call is its last. */
+export const toldLastCall = (events: readonly TurnEvent[], run: Run): boolean => thisRun(events, run).some((e) => e.kind === 'notice' && e.last === true);
+
 const reported = (after: readonly TurnEvent[]): boolean => after.some((e) => e.kind === 'tool-result' && e.name === REPORT_TOOL && e.status === 'ok');
 
 /** A turn with no text and no tool call, such as thinking alone: the user would see nothing. */

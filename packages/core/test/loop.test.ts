@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StopReason } from '@anthropic-ai/sdk/resources/messages/messages';
-import { asSessionId, budgetReminder, loopStep, noticeTexts, type LoopStep, type Run, type TurnErrorKind, type TurnEvent } from '../src/index.js';
+import { asSessionId, budgetReminder, lastCallDue, loopStep, noticeTexts, type LoopStep, type Run, type TurnErrorKind, type TurnEvent } from '../src/index.js';
 
 const at = '2026-10-04T00:00:01.000Z';
 const start: TurnEvent = {
@@ -287,5 +287,22 @@ describe('budgetReminder', () => {
     expect(say(0.015, 0.004)).toContain('about 4 more model calls are left (30 of its 40 calls, and $0.0150 of its $0.0800 cost limit, at about $0.0040 a call)');
     expect(say(0.001, 0.004)).toContain('about 1 more model call is left');
     expect(noticeTexts({ budget: { calls: 2, maxCalls: 10, costUsd: 0.9, maxCostUsd: 1, perCallUsd: 0.01 } })[0]).toContain('about 2 more model calls are left');
+  });
+});
+
+describe('lastCallDue (ISSUES.md G-04)', () => {
+  it('is due before the call that reaches the turn cap, and not before', () => {
+    expect(lastCallDue([start, user(1)], { ...run, maxTurns: 2 })).toBe(false);
+    expect(lastCallDue([start, user(1), assistant(2, 'tool_use', ['a'], 0.001), result(3, 'a')], { ...run, maxTurns: 2 })).toBe(true);
+  });
+
+  it('is due when another call at the mean cost so far would pass the cost limit', () => {
+    const events = [start, user(1), assistant(2, 'tool_use', ['a'], 0.03), result(3, 'a')];
+    expect(lastCallDue(events, { ...run, maxTurns: 10, maxCostUsd: 0.05 })).toBe(true);
+    expect(lastCallDue(events, { ...run, maxTurns: 10, maxCostUsd: 0.07 })).toBe(false);
+  });
+
+  it('is not due once a limit is reached, when no call is left at all', () => {
+    expect(lastCallDue([start, user(1), assistant(2, 'tool_use', ['a']), result(3, 'a')], { ...run, maxTurns: 1 })).toBe(false);
   });
 });

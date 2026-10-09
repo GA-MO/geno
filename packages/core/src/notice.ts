@@ -16,6 +16,8 @@ export type Notice = {
   readonly memory?: MemoryDelta | undefined;
   readonly mcp?: McpDelta | undefined;
   readonly budget?: BudgetLeft | undefined;
+  /** The next model call is the last the run's limits allow, and it goes out with the tools off. */
+  readonly last?: true | undefined;
 };
 
 /**
@@ -45,6 +47,8 @@ export function renderBudgetLeft(left: BudgetLeft): string {
   const perCall = left.perCallUsd === undefined ? '' : `, at about ${usd(left.perCallUsd)} a call`;
   return `${GENO_NOTE} This run is near its limits: about ${n} more model call${n === 1 ? ' is' : 's are'} left (${left.calls} of its ${left.maxCalls} calls, and ${usd(left.costUsd)} of its ${usd(left.maxCostUsd)} cost limit${perCall}). When either runs out, the run stops and you get no further turn. Start no new exploration or checks. Finish the step in hand, then end your turn with a short report: what you did, how you checked it, and what is still open.`;
 }
+
+export const LAST_CALL_NOTE = `${GENO_NOTE} This is the last model call this run's limits allow, so tools are off for it and nothing runs after it. Do not call a tool. Write your report now: what you did, how you checked it, and what is still open.`;
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
@@ -102,4 +106,5 @@ export const noticeTexts = (notice: Notice): string[] => [
   ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
   ...(notice.mcp === undefined ? [] : [renderMcpDelta(notice.mcp)]),
   ...(notice.budget === undefined ? [] : [renderBudgetLeft(notice.budget)]),
+  ...(notice.last === true ? [LAST_CALL_NOTE] : []),
 ];

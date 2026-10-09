@@ -73,7 +73,8 @@ function maxTokensFor({ window, maxOutput }: ModelCapabilities, inputTokens: num
 /**
  * Tools precede the system prompt in the cached prefix, so the system block's breakpoint caches them too. Every
  * breakpoint has the model's TTL, since an entry may not outlive one before it. `forced` names the one tool the model
- * must call, with thinking off, which a forced tool requires.
+ * must call, with thinking off, which a forced tool requires. `toolsOff` keeps the tools offered, so the cached prefix
+ * holds, but lets the model call none: the last call a run's limits allow must answer, since no tool would run after it.
  */
 export function buildRequest(
   session: Session,
@@ -82,6 +83,7 @@ export function buildRequest(
   system: string = SYSTEM_PROMPT,
   stored: StoredAttachments = NO_ATTACHMENTS,
   forced?: string,
+  toolsOff?: true,
 ): MessageStreamParams {
   const capabilities = capabilitiesOf(session.provider, session.model);
   const control = cacheControl(capabilities.cacheTtl);
@@ -93,7 +95,7 @@ export function buildRequest(
     max_tokens: maxTokensFor(capabilities, inputTokens),
     ...(forced !== undefined ? { thinking: { type: 'disabled' } } : capabilities.thinking === 'adaptive' ? { thinking: { type: 'adaptive', display: 'omitted' } } : {}),
     ...(tools.length > 0 ? { tools: [...tools] } : {}),
-    ...(forced === undefined ? {} : { tool_choice: { type: 'tool', name: forced } }),
+    ...(forced !== undefined ? { tool_choice: { type: 'tool', name: forced } } : toolsOff === true && tools.length > 0 ? { tool_choice: { type: 'none' } } : {}),
     system: [{ type: 'text', text: system, cache_control: control }],
     messages: withNewestUserBreakpoint(replayMessages(events, stored), control),
     ...(capabilities.effort ? { output_config: { effort: session.effort } } : {}),

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { asSessionId, TOOL_DEFINITIONS, turnTimings, type Session, type TurnEvent } from '@g-code/core';
+import { asSessionId, LAST_CALL_NOTE, TOOL_DEFINITIONS, turnTimings, type Session, type TurnEvent } from '@g-code/core';
 import { appendEvent, readSessionLog, sessionFile } from '../src/sessions.js';
 import { openStore } from '../src/store.js';
 import { answer, fakeTransport, httpError, toolCall } from './fake-transport.js';
@@ -91,6 +91,22 @@ describe('gcode ask', () => {
     expect(transport.requests).toHaveLength(3);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionIdOf(result.stdout))));
     expect(kinds(log.events).slice(-3)).toEqual(['assistant', 'tool-result', 'error:max-turns']);
+    expect(transport.requests.map((r) => r.body.tool_choice), 'only the last call goes with the tools off').toEqual([undefined, undefined, { type: 'none' }]);
+  });
+
+  it('G-04 sends the last call a turn cap allows with the tools off and a note, so the run ends with a report', async () => {
+    const { workspace, env } = await setup();
+    const transport = fakeTransport([
+      toolCall('Looking.', [{ id: 'tu_1', name: 'list', input: {} }], usage),
+      answer('Listed the root; the subfolders are still unchecked.', usage),
+    ]);
+    const result = await runCli(['ask', '--workspace', workspace, '--max-turns', '2', 'Check every folder.'], env, { fetch: transport.fetch });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('the subfolders are still unchecked');
+    const last = transport.requests[1]!.body;
+    expect(last.tool_choice).toEqual({ type: 'none' });
+    expect(last.tools, 'the tools stay offered, so the cached prefix holds').toEqual(transport.requests[0]!.body.tools);
+    expect(JSON.stringify(last.messages.at(-1))).toContain(LAST_CALL_NOTE);
   });
 
   it('stops when the estimated cost passes --max-cost and exits 3', async () => {
