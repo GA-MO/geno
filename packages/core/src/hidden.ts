@@ -40,6 +40,7 @@ const HIDDEN_IN: Readonly<Record<AgentToolName, 'show' | 'strip'>> = {
   read: 'show',
   recall: 'strip',
   schedule_wakeup: 'strip',
+  show_files: 'show',
   skill: 'strip',
   task_stop: 'show',
   todo: 'strip',

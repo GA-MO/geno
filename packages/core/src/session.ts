@@ -40,6 +40,7 @@ import type { Brand } from './types.js';
 import type { TodoList } from './todo.js';
 import type { SpinoffEvent, SpinoffNote } from './spinoff.js';
 import type { ChapterEvent, ChapterMark } from './chapters.js';
+import type { ShownFiles } from './show-files.js';
 import type { WidgetRef } from './widget.js';
 
 export type SessionId = Brand<string, 'SessionId'>;
@@ -153,6 +154,8 @@ export type ToolResultEvent = {
   readonly spinoff?: SpinoffNote | undefined;
   /** The chapter a mark_chapter call started (`chapters.ts`). */
   readonly chapter?: ChapterMark | undefined;
+  /** The card a show_files call drew (`show-files.ts`). */
+  readonly shown?: ShownFiles | undefined;
   /** The file a read showed or an edit wrote, as the model now knows it (`file-tracker.ts`). */
   readonly file?: FileStamp | undefined;
   /** Absent in logs written before turns were timed. */

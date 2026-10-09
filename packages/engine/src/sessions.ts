@@ -39,6 +39,7 @@ import {
   type WakeId,
   spinoffsOf,
   CHAPTER_LIMITS,
+  SHOW_LAYOUTS,
   chaptersOf,
   userChapterAt,
   type ChapterMark,
@@ -213,6 +214,11 @@ const keptSchema = z.strictObject({
   attached: z.array(z.strictObject({ path: z.string().min(1), text: z.string() })).optional(),
 });
 const chapterMarkSchema = z.strictObject({ title: z.string().min(1).max(CHAPTER_LIMITS.title), summary: z.string().min(1).max(CHAPTER_LIMITS.summary).optional() });
+const showEntrySchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('shown'), given: z.string().min(1), path: z.string().min(1), name: z.string(), bytes: count, show: z.enum(['image', 'file']) }),
+  z.strictObject({ kind: z.literal('refused'), given: z.string().min(1), reason: z.string() }),
+]);
+const shownFilesSchema = z.strictObject({ caption: z.string().min(1).optional(), layout: z.enum(SHOW_LAYOUTS), files: z.array(showEntrySchema) });
 
 const diskStateFields = { hash: z.string().min(1), size: count, mtimeMs: z.number().nonnegative() };
 
@@ -231,6 +237,7 @@ const toolResultFields = {
   loaded: z.array(z.string()).optional(),
   spinoff: spinoffNoteSchema.optional(),
   chapter: chapterMarkSchema.optional(),
+  shown: shownFilesSchema.optional(),
   file: z.strictObject({ path: z.string().min(1), ...diskStateFields }).optional(),
   timing: z.strictObject(toolMarks).optional(),
 };

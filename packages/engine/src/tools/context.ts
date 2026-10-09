@@ -1,7 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
+import { credentialPlaces, inCredentialPlace, isSecretPath, ruleHome, ruleText, type ApprovalRecord, type PathRule, type PathTool, type ChapterMark, type ShownFiles, type ChildNote, type Denial, type EditorAction, type PermissionHookAnswer, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type TurnEvent, type WakeArrival, type WidgetRef } from '@g-code/core';
 import type { Files } from '../files.js';
 import type { PermissionStore } from '../permissions.js';
 import { isMissing } from '../store.js';
@@ -107,6 +107,7 @@ export type ToolReply =
       readonly loaded?: readonly string[] | undefined;
       readonly spinoff?: SpinoffNote | undefined;
       readonly chapter?: ChapterMark | undefined;
+      readonly shown?: ShownFiles | undefined;
       /** The file a read showed or an edit wrote, as the model now knows it. */
       readonly file?: FileStamp | undefined;
     };

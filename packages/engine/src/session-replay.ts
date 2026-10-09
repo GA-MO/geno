@@ -32,6 +32,10 @@ import {
   SPAWN_TASK_TOOL,
   SPINOFF_META,
   CHAPTER_META,
+  SHOW_FILES_META,
+  SHOW_FILES_TOOL,
+  parseShowFilesInput,
+  showFilesTitle,
   chaptersOf,
   MARK_CHAPTER_TOOL,
   parseChapterMark,
@@ -125,6 +129,10 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseChapterMark(input);
     return parsed.ok ? `${MARK_CHAPTER_TOOL} ${parsed.value.title}` : MARK_CHAPTER_TOOL;
   },
+  [SHOW_FILES_TOOL]: (input) => {
+    const parsed = parseShowFilesInput(input);
+    return parsed.ok ? showFilesTitle(parsed.value) : SHOW_FILES_TOOL;
+  },
   [DISMISS_TASK_TOOL]: (input) => {
     const parsed = parseDismissTask(input);
     return parsed.ok ? `${DISMISS_TASK_TOOL} ${parsed.value}` : DISMISS_TASK_TOOL;
@@ -179,6 +187,7 @@ export const toolResultUpdate = (event: ToolResultEvent, meta: Record<string, un
     ...(event.editorAction === undefined ? {} : { [EDITOR_ACTION_META]: event.editorAction }),
     ...(event.todo === undefined ? {} : { [TODO_META]: { items: event.todo } }),
     ...(event.chapter === undefined || event.status !== 'ok' ? {} : { [CHAPTER_META]: event.chapter }),
+    ...(event.shown === undefined ? {} : { [SHOW_FILES_META]: event.shown }),
     ...meta,
   };
   return {

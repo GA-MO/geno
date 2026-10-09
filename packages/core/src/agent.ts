@@ -10,6 +10,7 @@ import { NOTEBOOK_EDIT_TOOL_DEFINITION } from './notebook.js';
 import { MONITOR_TOOL_DEFINITION, SCHEDULE_WAKEUP_TOOL_DEFINITION } from './wake.js';
 import { LIST_AGENTS_TOOL_DEFINITION, TASK_STOP_TOOL_DEFINITION } from './work.js';
 import { WATCH_PR_TOOL_DEFINITION } from './pr.js';
+import { SHOW_FILES_SPEC } from './show-files.js';
 import type { EditFormat } from './types.js';
 
 /** docs/e3-results.md: str_replace had the lowest first-try failure rate of the diff formats on Model Studio Qwen. */
@@ -18,7 +19,7 @@ export const AGENT_EDIT_FORMAT: EditFormat = 'str_replace';
 export const DEFAULT_BASH_TIMEOUT_SECONDS = 120;
 export const MAX_BASH_TIMEOUT_SECONDS = 600;
 
-export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', 'notebook_edit', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
+export const AGENT_TOOL_NAMES = ['bash', 'bash_output', 'check', 'edit', 'list_agents', 'monitor', 'notebook_edit', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'show_files', 'skill', 'task_stop', 'todo', 'watch_pr', ...TOOL_NAMES] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
 /** The tools that run a shell command: the model's own, the check command, a monitored command and a dev server. */
@@ -26,10 +27,10 @@ export const SHELL_TOOLS: readonly AgentToolName[] = ['bash', 'check', 'monitor'
 
 /**
  * What a subagent cannot use: it ends with its call, so it has no background command, dev server or subagent to run,
- * read, list or stop and is never woken; its own todo list would show nowhere; and its task comes from its parent,
+ * read, list or stop and is never woken; its own todo list and the files it shows would show nowhere; and its task comes from its parent,
  * which can recall for it.
  */
-const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'task_stop', 'todo', 'watch_pr']);
+const CHILD_LEAVES_OUT: ReadonlySet<AgentToolName> = new Set(['bash_output', 'list_agents', 'monitor', ...PREVIEW_TOOL_NAMES, 'recall', 'schedule_wakeup', 'show_files', 'task_stop', 'todo', 'watch_pr']);
 
 export const CHILD_TOOL_NAMES: readonly AgentToolName[] = AGENT_TOOL_NAMES.filter((name) => !CHILD_LEAVES_OUT.has(name));
 
@@ -110,6 +111,7 @@ Git:
   ...PREVIEW_TOOL_SPECS,
   recall: RECALL_SPEC,
   schedule_wakeup: SCHEDULE_WAKEUP_TOOL_DEFINITION,
+  show_files: SHOW_FILES_SPEC,
   task_stop: TASK_STOP_TOOL_DEFINITION,
   todo: TODO_SPEC,
   watch_pr: WATCH_PR_TOOL_DEFINITION,

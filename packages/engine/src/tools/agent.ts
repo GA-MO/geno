@@ -35,7 +35,9 @@ import {
   outsideReadDenial,
   filesRun,
   sessionEdits,
+  isSecretPath,
   pathRuleFor,
+  SHOW_FILES_TOOL,
   restoreHidden,
   STOP_AND_WAIT,
   DONT_ASK,
@@ -73,6 +75,7 @@ import type { Classify } from '../classifier.js';
 import type { WorkingDirectories } from '../directories.js';
 import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
+import { laneRecords, laneRepoOf } from '../lanes.js';
 import { readLaunchConfigs } from '../preview.js';
 import { membersOf, tail } from '../process.js';
 import type { PermissionStore, SessionPermissions } from '../permissions.js';
@@ -80,7 +83,10 @@ import type { Sandbox } from '../sandbox.js';
 import {
   displayPath,
   executor,
+  isSecret,
   missingPath,
+  pathRuleRefusal,
+  secretRefusal,
   optional,
   realOrUndefined,
   resolveInside,
@@ -102,6 +108,7 @@ import { EXECUTORS, type Executors } from './index.js';
 import { readTool, type SecretGate } from './read.js';
 import { withRuleAttachments, type RuleAttacher } from './rules.js';
 import { recallExecutor, type Recall } from './recall.js';
+import { showFilesExecutor, type ShowGate } from './show-files.js';
 import { skillExecutor } from './skill.js';
 import { wakeExecutors, type SessionWakes } from './wake.js';
 import { workExecutors, type SessionChildren } from './work.js';
@@ -604,7 +611,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
   };
 
   /** The question `cat` of the same path meets, which offers the directory for the session; a refusal throws, naming the readable directories. */
-  const askOutside = async (name: ReachTool, { target, directory }: Outside, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
+  const askOutside = async (name: ReachTool | typeof SHOW_FILES_TOOL, { target, directory }: Outside, ctx: ToolContext): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
     const denial = outsideReadDenial(`${name} ${target}`, target, directory, mode, ctx.credentialPlaces);
     if (denial === undefined) return undefined;
@@ -640,6 +647,38 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       return typeof reply === 'string' ? { text: reply, approval } : { approval, ...reply };
     },
   });
+
+  /** The lanes this session's subagents worked in, where their screenshots and reports are; none outside a git checkout. */
+  const childLanes = async (ctx: ToolContext): Promise<string[]> => {
+    const children = new Set<string>(ctx.events().flatMap((event) => (event.kind === 'child-start' ? [event.child] : [])));
+    if (children.size === 0) return [];
+    const repo = await laneRepoOf(ctx.workspace).catch(() => undefined);
+    if (repo === undefined) return [];
+    return (await laneRecords(repo)).flatMap((record) => (record.session !== null && children.has(record.session) ? [record.path] : []));
+  };
+
+  /**
+   * show_files: the workspace, the directories the read tools reach, the session's scratchpad and spill folder and its
+   * subagents' lanes show unasked; any other path meets the question a read outside meets. A credentials file and a
+   * Read deny refuse the file, and a Read ask rule asks first.
+   */
+  const showGate: ShowGate = async (ctx, given) => {
+    const lexical = path.resolve(ctx.workspace, given);
+    const real = await realOrUndefined(lexical);
+    if (real === undefined) throw missingPath(ctx, given);
+    const spill = await realOrUndefined(ctx.spillDir);
+    const scratch = await realOrUndefined(tools.scope.tempDir);
+    const own = [...(spill === undefined ? [] : [spill]), ...(scratch === undefined ? [] : [scratch]), ...tools.directories.readable(), ...(await childLanes(ctx))];
+    const reach: ToolContext = { ...ctx, readRoots: [...ctx.readRoots, ...own] };
+    const inside = [ctx.workspace, ctx.spillDir, ...reach.readRoots].some((root) => within(root, real));
+    if (isSecret(reach, lexical) || isSecret(reach, real) || (!inside && isSecretPath(real))) throw new ToolError(secretRefusal(SHOW_FILES_TOOL, given));
+    const rules = (await tools.permissions?.list()) ?? [];
+    const rule = pathRuleFor('read', lexical, rules, { ...scope(), workspace: ctx.workspace }) ?? pathRuleFor('read', real, rules, { ...scope(), workspace: ctx.workspace });
+    if (rule?.effect === 'deny') throw new ToolError(pathRuleRefusal(SHOW_FILES_TOOL, given, rule));
+    const ruled = rule === undefined ? undefined : await askPathRule('read', given, { ...reach, readRoots: [...reach.readRoots, path.dirname(real)], pathRule: () => rule });
+    if (inside) return { real, approval: ruled };
+    return { real, approval: ruled ?? (await askOutside(SHOW_FILES_TOOL, { target: real, directory: path.dirname(real) }, reach)) };
+  };
 
   /** An edit may also write in the directories the user added as writable. */
   const withWriteRoots = (inner: Executor): Executor => ({
@@ -799,6 +838,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     }),
     check,
     recall: recallExecutor(tools.recall),
+    show_files: showFilesExecutor(showGate),
     skill: skillExecutor(tools.commands, tools.children?.start, tools.skillNote),
     todo,
     watch_pr: watchPrExecutor(tools.wakes, tools.pr),
