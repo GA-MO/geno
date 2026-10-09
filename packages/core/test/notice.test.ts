@@ -12,6 +12,7 @@ import {
   type Notice,
   type Session,
   type TurnEvent,
+  USER_PROMPT_FOLLOWS,
 } from '../src/index.js';
 
 const session: Session = { id: asSessionId('s-1'), createdAt: '2026-10-08T03:00:00.000Z', workspace: '/ws', provider: 'modelstudio', model: 'qwen3.8-flash', effort: 'medium' };
@@ -85,9 +86,10 @@ describe('a notice in the conversation', () => {
       { kind: 'user', seq: 4, at, content: 'Also b.', steer: true },
       notice(5, { mode: 'plan' }),
     ];
-    const [result, told, steer] = texts(events, 2);
+    const [result, told, follows, steer] = texts(events, 2);
     expect(result).toBe('(result)');
     expect(told).toBe(MODE_NOTICES.plan);
+    expect(follows, 'the notes end before the user speaks (ISSUES.md G-02)').toBe(USER_PROMPT_FOLLOWS);
     expect(steer).toContain('Also b.');
   });
 
@@ -95,7 +97,7 @@ describe('a notice in the conversation', () => {
     const memory = { added: [note('2', 'Be brief.')], removed: [] };
     const refused: TurnEvent[] = [start(), prompt(1, 'Hi.'), notice(2, { memory }), { kind: 'error', seq: 3, at, error: 'refusal', message: 'no' }];
     expect(hasPendingPrompt(refused)).toBe(false);
-    const [told, asked] = texts([...refused, prompt(4, 'Again.')], 0);
+    const [told, , asked] = texts([...refused, prompt(4, 'Again.')], 0);
     expect(told!.startsWith(NOT_USER_LINE)).toBe(true);
     expect(told).toContain('<note scope="project">Be brief.</note>');
     expect(asked).toBe('Again.');
