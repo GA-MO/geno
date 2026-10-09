@@ -228,6 +228,7 @@ describe('gcode agent', () => {
       'gcloud projects list',
       'psql -c "select 1"',
       'cat .env',
+      'pkill -f gcode-e2e-no-such-process',
     ];
     const asked: string[] = [];
     const transport = fakeTransport([
@@ -256,6 +257,7 @@ describe('gcode agent', () => {
       'a cloud CLI',
       'a database CLI',
       'a credentials file such as .env',
+      'pkill',
     ]);
     expect(DENY_RULE_IDS.filter((rule) => DENY_RULES[rule].verdicts['non-interactive'] === 'deny')).toHaveLength(denied.length);
     const outside = results[denied.indexOf('cat /etc/hosts')]!;

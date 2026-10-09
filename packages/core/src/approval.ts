@@ -9,6 +9,8 @@ export type CommandScope = {
    * directories the user added, and those allowed for the session. Absent is none.
    */
   readonly directories?: readonly string[] | undefined;
+  /** The processes and process groups this session started that still run, which a kill may stop without a question. Absent is none. */
+  readonly processes?: ReadonlySet<number> | undefined;
 };
 
 export const DENY_RULE_IDS = [
@@ -22,6 +24,7 @@ export const DENY_RULE_IDS = [
   'cloud-cli',
   'database-cli',
   'secret-path',
+  'process-kill',
   'unlisted',
 ] as const;
 export type DenyRuleId = (typeof DENY_RULE_IDS)[number];
@@ -249,6 +252,34 @@ function gitSubcommand(args: readonly string[]): { readonly name: string | undef
 const always = () => true;
 
 /**
+ * What a kill sends its signal to: the words after its signal option, or undefined for `kill -l`, which only lists
+ * signals, and `kill -0`, which only checks a process is there. After the signal, `-123` names a process group.
+ */
+function killTargets(args: readonly string[]): readonly string[] | undefined {
+  if (['-l', '-L', '-0'].includes(args[0] ?? '')) return undefined;
+  const signalled = args[0] !== undefined && args[0].startsWith('-') && args[0] !== '--';
+  const rest = signalled ? args.slice(args[0] === '-s' || args[0] === '-n' ? 2 : 1) : args;
+  return rest[0] === '--' ? rest.slice(1) : rest;
+}
+
+// `$!` and a job spec such as `%1` name what the same command line started in the background.
+const startedHere = (target: string): boolean => target === '$!' || target.startsWith('%');
+
+const ownsTarget = (target: string, scope: CommandScope): boolean =>
+  target === '' || startedHere(target) || (/^-?\d+$/.test(target) && Number(target) !== 0 && scope.processes?.has(Math.abs(Number(target))) === true);
+
+/** A kill of only what this session started: its background commands, what its commands left running, or `$!`. */
+function killsOnlyOwn({ program, prefix, args }: SimpleCommand, scope: CommandScope): boolean {
+  if (program !== 'kill' || !prefix.every((word) => SAFE_PREFIXES.has(word))) return false;
+  const targets = killTargets(args);
+  return targets !== undefined && targets.length > 0 && targets.every((target) => ownsTarget(target, scope));
+}
+
+/** pkill and killall match by name, and xargs or a substitution hands kill PIDs nobody can see here. */
+const stopsOthers = (command: SimpleCommand, scope: CommandScope): boolean =>
+  ['pkill', 'killall'].includes(command.program) || (command.program === 'kill' && killTargets(command.args) !== undefined && !killsOnlyOwn(command, scope));
+
+/**
  * A git command that drops the user's uncommitted work or sets it aside where a failed step strands it, as Claude
  * Code's git safety protocol lists them: a stash, a clean that is not a dry run, a checkout or restore of files, a
  * forced checkout, a forced branch delete. git reset --hard has its own rule.
@@ -447,12 +478,18 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: ASK_OR_CLASSIFY,
     matches: ({ words }) => words.some((word) => SECRET_PATH.test(word) || HIDDEN_GLOB.test(word)),
   },
+  // Wherever the sandbox lets a signal through, a kill by name also reaches the user's own servers.
+  'process-kill': {
+    reason: 'pkill, killall, or a kill of a process this session did not start',
+    verdicts: ASK_OR_CLASSIFY,
+    matches: stopsOthers,
+  },
   // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. A run nobody can
   // ask runs it in the sandbox.
   unlisted: {
     reason: 'a command not on the safe list',
     verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
-    matches: (command) => !isClearlySafe(command),
+    matches: (command, scope) => !isClearlySafe(command) && !killsOnlyOwn(command, scope),
   },
 };
 
@@ -779,7 +816,7 @@ function bindings(commands: readonly (readonly string[])[], scope: CommandScope)
   const values = new Map<string, string[]>([['HOME', [scope.home]]]);
   const unknown = new Set(INHERITED);
   const bind = (name: string, value: string) => {
-    if (value.includes('`') || (value.includes('$') && !MKTEMP_DIR.test(value))) unknown.add(name);
+    if (value.includes('`') || (value.includes('$') && !MKTEMP_DIR.test(value) && value !== '$!')) unknown.add(name);
     // mktemp makes a new directory that nothing else owns, so it stands in as a child of the temp dir.
     const resolved = MKTEMP_DIR.test(value) ? path.join(scope.tempDir, 'mktemp') : value;
     values.set(name, [...(values.get(name) ?? ['']), resolved]);

@@ -13,11 +13,13 @@ import { homeOf } from '../../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../../src/tools/agent.js';
 import { runTool, type ToolContext } from '../../src/tools/index.js';
 import type { Resolve } from '../../src/tools/web.js';
+import type { ModelRequest } from '../fake-model.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
 import { rgCommand } from '../helpers.js';
-import { call as calls, say, scripted as scriptedWire, WIRES, type Turn as ModelTurn, type Wire } from './scripted.js';
+import { call as calls, say, scripted as scriptedWire, WIRES, type Wire } from './scripted.js';
 
-type Turn = { readonly calls: readonly FakeToolUse[] } | { readonly answer: string };
+/** A turn's calls, its calls made from what the model was last sent, or its answer. */
+type Turn = { readonly calls: readonly FakeToolUse[] } | { readonly reply: (request: ModelRequest) => readonly FakeToolUse[] } | { readonly answer: string };
 type ToolView = { readonly text: string; readonly error: boolean };
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -62,7 +64,11 @@ type Options = {
 /** `turns` may be built from the run's fake home, for calls that name a path in it. */
 async function scripted(wire: Wire, turns: readonly Turn[] | ((home: string) => readonly Turn[]), { files, mode, answers = [], web, rules = [], userSettings, homeFiles = {}, trusted, check, checkAfterEdit = false, classify, env: more = {}, sessionDirectories }: Options) {
   const { workspace, io: served, env, store, seen, more: serve } = await scriptedWire(wire, [], files);
-  serve(...(typeof turns === 'function' ? turns(env['HOME']!) : turns).map((t): ModelTurn => ('answer' in t ? say(t.answer) : calls('', t.calls))));
+  serve(
+    ...(typeof turns === 'function' ? turns(env['HOME']!) : turns).map((t) =>
+      'answer' in t ? say(t.answer) : 'reply' in t ? { answer: (request: ModelRequest) => calls('', t.reply(request)) } : calls('', t.calls),
+    ),
+  );
   const warnings: string[] = [];
   const io = { ...served, env: { ...served.env, ...more }, err: (line: string) => warnings.push(line) };
   for (const rule of rules) await permissionStore(homeOf(store), workspace).add(rule);
@@ -883,5 +889,43 @@ describe.each(WIRES)('T-PERM-03 denials nobody can answer on the %s wire', (wire
     for (const id of [push.id, secret.id, touch.id]) expect(said(id).text).not.toMatch(/find another way/i);
     expect(existsSync(path.join(run.workspace, 'made.txt'))).toBe(false);
     expect(run.sent()).not.toContain(SECRET);
+  });
+});
+
+describe.each(WIRES)('P-04 stopping processes on the %s wire', (wire) => {
+  const files = { 'a.ts': 'export const a = 1;\n' };
+  const load = (...names: string[]) => call('tool_search', { select: names });
+  const background = (command: string) => call('bash', { command, run_in_background: true });
+  // The fake model reads what it was sent, as the real one would read a job's pid or output file.
+  const sentText = (request: ModelRequest) => JSON.stringify(request.body);
+  // A name no process has, so the pkill stops nothing even if a rule let it run.
+  const PKILL = 'pkill -f gcode-conformance-no-such-process';
+
+  it('pkill -f asks in Ask mode, and nobody can be asked is refused with task_stop and the job id', async () => {
+    const asking = call('bash', { command: PKILL });
+    const ask = await scripted(wire, [{ calls: [asking] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
+    expect(ask.asked).toEqual([expect.objectContaining({ rule: 'process-kill', command: PKILL, verdict: 'ask', reason: 'pkill, killall, or a kill of a process this session did not start' })]);
+
+    const job = background('sleep 30');
+    const pkill = call('bash', { command: PKILL });
+    const stop = call('task_stop', { id: 'bg-1' });
+    const alone = await scripted(wire, [{ calls: [job, load('task_stop')] }, { calls: [pkill] }, { calls: [stop] }, { answer: 'Stopped it.' }], { files, mode: 'non-interactive' });
+    expect(alone.view().get(pkill.id)).toMatchObject({ error: true, text: expect.stringMatching(/^denied: `pkill -f gcode-conformance-no-such-process` uses pkill, killall, or a kill of a process this session did not start/) });
+    expect(alone.view().get(pkill.id)!.text).toContain('To stop a background command Geno started, call task_stop with its id: bg-1 (`sleep 30`).');
+    expect(alone.view().get(stop.id)).toMatchObject({ error: false, text: expect.stringMatching(/^Stopped background command bg-1/) });
+  });
+
+  it("a kill of the session's own background job runs in Ask mode without a question", async () => {
+    const job = background('sleep 30');
+    const status = call('bash_output', { id: 'bg-1', tail: 1 });
+    let kill!: FakeToolUse;
+    const reply = (request: ModelRequest) => {
+      kill = call('bash', { command: `kill ${/bg-1 is running \(pid (\d+)\)/.exec(sentText(request))![1]}` });
+      return [kill];
+    };
+    const run = await scripted(wire, [{ calls: [job, load('bash_output', 'task_stop')] }, { calls: [status] }, { reply }, { calls: [call('task_stop', { id: 'bg-1' })] }, { answer: 'Stopped it.' }], { files, mode: 'ask' });
+    expect(run.asked).toEqual([]);
+    // macOS's sandbox lets a call signal only what it started, so there the kill runs and fails, and the result names task_stop.
+    expect(run.view().get(kill.id)!.text).toMatch(/^\[exit code 0\]$|Operation not permitted\n\[exit code 1\]\n\[Geno\] The sandbox lets a command signal only what the same call started\. To stop a background command Geno started, call task_stop with its id: bg-1 \(`sleep 30`\)\.$/);
   });
 });
