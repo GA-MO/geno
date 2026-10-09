@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { call, fakeModel, lastUserText, say, type FakeModel, type ModelRequest } from './fake-model.js';
 import { makeRepo } from './git-fixture.js';
 import { rgCommand, runCli } from './helpers.js';
-import { requestKey } from './request-normal.js';
+import { requestKey, requestTurnKey, turnKey } from './request-normal.js';
 
 const WIRES = ['anthropic', 'openai'] as const;
 type Wire = (typeof WIRES)[number];
@@ -88,6 +88,25 @@ describe.each(WIRES)('the shared fake model on the %s wire', (wire: Wire) => {
     expect(model.misses[0]).toContain('Say goodbye.');
     expect(existsSync(path.join(dir, 'empty.json')), 'a replay writes nothing').toBe(false);
   });
+
+  it('replays a recording keyed by turn whatever the request around the prompt says, and names the refresh on a miss', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'recordings-'));
+    const refresh = 'pnpm tsx scripts/run-to-recording.ts <run>';
+    const entries = [
+      { key: turnKey('What is a?', 0), wire, asks: 'What is a?', answer: call('Reading.', [{ id: 'tu_1', name: 'read', input: { path: 'a.ts' } }]) },
+      { key: turnKey('What is a?', 1), wire, asks: 'What is a?', answer: say('a is 1.') },
+    ];
+    writeFileSync(path.join(dir, 'real.json'), JSON.stringify({ keyBy: 'turn', refresh, entries }));
+    const replay = fakeModel({ recording: 'real', dir });
+    const run = await agent(wire, 'What is a?', replay);
+    expect(replay.misses).toEqual([]);
+    expect(run.stdout).toContain('a is 1.');
+
+    const missed = fakeModel({ recording: 'real', dir });
+    expect((await agent(wire, 'What is b?', missed)).code).not.toBe(0);
+    expect(missed.misses[0]).toContain(turnKey('What is b?', 0));
+    expect(missed.misses[0]).toContain(refresh);
+  });
 });
 
 describe('the request key', () => {
@@ -109,5 +128,20 @@ describe('the request key', () => {
     const a = '1a95036b-3c9b-4d97-9817-e56f6e44c3ae';
     const b = '0f0f0f0f-1111-4222-8333-444455556666';
     expect(requestKey('anthropic', body(`${a} ${a}`, false))).not.toBe(requestKey('anthropic', body(`${a} ${b}`, false)));
+  });
+
+  it('keys a turn by the text that opened its conversation and the turns before it, not by the rest of the request', () => {
+    const opening = (prompt: string, system: string, turns: number) => ({
+      system,
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: '[Geno] The environment of this session' }, { type: 'text', text: prompt }] },
+        ...Array.from({ length: turns }, () => [{ role: 'assistant', content: [{ type: 'text', text: 'Reading.' }] }, { role: 'user', content: [{ type: 'text', text: 'a result' }] }]).flat(),
+      ],
+    });
+    expect(requestTurnKey(opening('Fix it.', 'You are Geno.', 2))).toBe(requestTurnKey(opening('Fix it.', 'You are Geno, rewritten.', 2)));
+    expect(requestTurnKey(opening('Fix it.', 'You are Geno.', 2))).toBe(turnKey('Fix it.', 2));
+    expect(requestTurnKey(opening('Fix it.', 'You are Geno.', 2))).not.toBe(requestTurnKey(opening('Fix it.', 'You are Geno.', 1)));
+    expect(requestTurnKey(opening('Fix it.', 'You are Geno.', 0))).not.toBe(requestTurnKey(opening('Find the callers.', 'You are Geno.', 0)));
+    expect(requestTurnKey({ messages: [{ role: 'system', content: 'You are Geno.' }, { role: 'user', content: 'Fix it.' }] }), 'Chat Completions').toBe(turnKey('Fix it.', 0));
   });
 });

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 import { chatAnswer, chatToolCall, type ChatReply } from './fake-openai.js';
 import { answer, replyResponse, toolCall, type FakeToolUse, type Reply } from './fake-transport.js';
-import { requestKey, type Wire } from './request-normal.js';
+import { requestKey, requestTurnKey, type Wire } from './request-normal.js';
 
 export type { FakeToolUse } from './fake-transport.js';
 export type { Wire } from './request-normal.js';
@@ -54,7 +54,11 @@ export type RecordMode = 'off' | 'script' | 'live';
 
 /** One answered request in a recording. `asks` is the end of its last user message, for a reader of the file. */
 type Entry = { readonly key: string; readonly wire: Wire; readonly asks: string; readonly answer: Answer };
-type Cassette = { readonly entries: Entry[] };
+/**
+ * A recording. Its entries are keyed by the whole request (`requestKey`), or, for one made from a real run, by the
+ * conversation and turn (`keyBy: 'turn'`, `requestTurnKey`), which `refresh` says how to make again.
+ */
+type Cassette = { readonly keyBy?: 'request' | 'turn'; readonly refresh?: string; readonly entries: Entry[] };
 
 export const RECORDINGS = fileURLToPath(new URL('./recordings/', import.meta.url));
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -194,10 +198,17 @@ function recorder(source: Extract<Source, { recording: string }>) {
   const mode: RecordMode = source.record ?? (env === 'live' ? 'live' : env === undefined || env === '' || env === '0' ? 'off' : 'script');
   const fallback = scriptOf([...(source.fallback ?? [])]);
   return async (request: ModelRequest): Promise<Answer> => {
-    const key = requestKey(request.wire, request.body);
-    const found = readCassette(file).entries.find((entry) => entry.key === key);
+    const cassette = readCassette(file);
+    const key = cassette.keyBy === 'turn' ? requestTurnKey(request.body) : requestKey(request.wire, request.body);
+    const found = cassette.entries.find((entry) => entry.key === key);
     if (found !== undefined) return found.answer;
     const asks = lastUserText(request.body).slice(-200);
+    if (cassette.keyBy === 'turn') {
+      throw new MissError(
+        `fake model: no recorded turn for ${request.wire} request ${request.index} (turn key ${key}) in ${file}. It asks: ${JSON.stringify(asks)}. ` +
+          `The engine now takes another turn, or opens a conversation with other text, than the real run did. Make the recording again from a new real run: ${cassette.refresh ?? 'see docs/testing.md'}.`,
+      );
+    }
     if (mode === 'off') {
       const test = path.relative(process.cwd(), expect.getState().testPath ?? '<the test file>');
       throw new MissError(
@@ -209,9 +220,9 @@ function recorder(source: Extract<Source, { recording: string }>) {
     const responder = mode === 'live' ? liveAnswer : fallback.next(request);
     if (responder === undefined) throw new MissError(`fake model: recording ${file} needs an answer for ${request.wire} request ${request.index}, and the fallback script has none left. It asks: ${JSON.stringify(asks)}`);
     const recorded = await respond(responder, request);
-    const cassette = readCassette(file);
+    const latest = readCassette(file);
     mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify({ entries: [...cassette.entries, { key, wire: request.wire, asks, answer: recorded }] }, null, 2)}\n`);
+    writeFileSync(file, `${JSON.stringify({ ...latest, entries: [...latest.entries, { key, wire: request.wire, asks, answer: recorded }] }, null, 2)}\n`);
     return recorded;
   };
 }
