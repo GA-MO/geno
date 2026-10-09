@@ -89,6 +89,7 @@ function transcript(spec, run, events) {
   for (const e of events) {
     if (e.kind === 'user') lines.push(`## User${e.from ? ` (${e.from})` : ''}`, '', e.content, '');
     if (e.kind === 'notice' && e.budget) lines.push(`> Geno budget notice: ${JSON.stringify(e.budget)}`, '');
+    if (e.kind === 'notice' && e.todo) lines.push(`> Geno todo notice (${e.todo.why}): ${e.todo.list.map((i) => `${i.status} ${i.text}`).join('; ')}`, '');
     if (/compact/.test(e.kind)) lines.push(`> Compaction (${e.trigger ?? e.kind}): ${e.tokensBefore ?? '?'} -> ${e.tokensAfter ?? '?'} tokens`, '');
     if (e.kind === 'error') lines.push(`> Error (${e.error}): ${short(e.message, 400)}`, '');
     if (e.kind === 'child-start') lines.push(`> Subagent ${e.role} started: ${e.child}`, '');

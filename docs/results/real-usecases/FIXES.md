@@ -145,3 +145,37 @@ The real-model check ran qwen3.8-flash on A12 and A19 twice each, labels `fix-r3
 - `PID=$(cat server.pid); kill $PID` still asks, because the engine cannot see the PID in the file. `PID=$!` in the same line runs.
 - A line whose first flagged command is unlisted, such as `lsof -t -i:3000 | xargs kill`, gets a merged question led by the unlisted rule. Its reason still names the kill, and a non-interactive run still denies it as `process-kill`.
 - The real model has not hit either refusal yet, so the wording of both hints is untested on qwen3.8-flash.
+
+# Round 4: a todo list that goes stale
+
+A user saw the same pinned card, "5 of 10 done" with step 4 spinning, on every prompt of a long session, including a bug report about something else. The panel pinned an earlier turn's unfinished list on each new turn as live progress, and nothing told the model the list had gone stale. Both changes follow Claude Code's harness design: a reminder that shows the list when it has not been touched for a while, sent as a message so the cached prefix holds.
+
+| Change | Commit | Evidence |
+|---|---|---|
+| A `todo` notice at the safe point shows the unfinished list and asks the model to mark it, or to clear it with an empty list if the new request moved on. It fires after 10 model calls without a todo call, again 10 after the last reminder, and at the first call of a prompt that follows a stopped or failed turn. It never goes out on a last call or in a run without `todo`. | 7e247651 | `core/test/todo-reminder.test.ts`. A conformance test on both wires: the notice reaches the eleventh request once, every request repeats the one before it, and the session log reads back. |
+| A turn capped by its limits counts as cut short. Such a turn ends with a report call with tools off, which logs no error. | b68b8d3e | Run fix-todo-1 below. A unit row and a conformance row on both wires for a capped turn that ends with a report. |
+| The panel shows an earlier turn's unfinished list as carried until this turn calls `todo`. The card is one muted, dashed line that reads "from an earlier turn", and nothing on it spins. The first todo call makes it the live card, and a cleared list shows nothing. The composer label names only the running turn's own item. | 709451e2 | `extension/test/todo.test.ts`, `webview/todo.webview.test.ts`, and gallery states `todo-carried` and `todo-carried-updated` in all 4 themes at 300px. |
+
+Claude Code's trigger values are not in research/claude-code-harness. Ten calls is the value commonly reported for its TodoWrite reminder, and it is small enough to catch a stale list within one long turn.
+
+Case A34-todo-stale runs a three-part task in `ts-lib` under a tight `--max-turns`, then asks an unrelated question. qwen3.8-flash ran it 8 times on engine b68b8d3e, except fix-todo-1, which ran on 709451e2. Each run had its own HOME. The prompt and the cap changed between runs, because the model often explored without writing a list. Only fix-todo-7 and fix-todo-8 match the case as committed, so only those two are archived. The other six are in the scratch campaign only.
+
+| Run | Cap | List left unfinished | Notice | What the model did |
+|---|---|---|---|---|
+| fix-todo-1 | 4 | yes | none | Nothing. The capped turn ended with a report and logged no error, so the reminder missed it. This led to b68b8d3e. |
+| fix-todo-2, -3 | 4 | no list | n/a | Explored and never called `todo`. |
+| fix-todo-4 | 5 | yes | stopped | Marked all 4 items done before answering. The suite in its workspace passes, so the marks were true. |
+| fix-todo-5, -6 | 5 | no list | n/a | Explored and never called `todo`. |
+| fix-todo-7 | 6 | no, all done | n/a | Marked the list done in its capped last call. Failed `dedicated-file-tools` on `find . -type f`, the round 2 gap. |
+| fix-todo-8 | 6 | yes | stopped | Answered the question and left the list as it was. The task was still open, so the list still applied, but item 1 was finished and stayed in progress. |
+
+Of the two runs where the notice fired, one updated the list and one ignored it. The panel change covers the second case. The list stays muted with no spinner until the model touches it. None of the 13 new archived files, gzipped ones included, holds `pstack model configuration`, `EXTREMELY_IMPORTANT` or `/Users/me`.
+
+| Batch | Runs | USD |
+|---|---|---|
+| fix-todo-1 to fix-todo-8 | 8 | 0.0831 of the $0.40 cap |
+
+## Left open after round 4
+
+- A turn that ended on its own with an unfinished list does not trigger the prompt reminder. Only the 10-call reminder covers it. Plan's all-pending list is the main case, and Start building now shows it as carried until the first todo call.
+- In fix-todo-8 the model left a finished item in progress after the reminder. The wording can say more firmly that finished items must be marked done even when the list still applies.

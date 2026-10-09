@@ -1,0 +1,92 @@
+{
+  "case": "A34-todo-stale",
+  "run": "fix-todo-7",
+  "session": "8ab0716c-8116-47e4-88e7-25c12bf201b1",
+  "passed": false,
+  "costUsd": 0.01290091,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 14,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 63444,
+    "cacheWrite": 10960,
+    "output": 2813,
+    "latencyMs": 52660
+  },
+  "errors": [
+    "max-turns: stopped after 6 model calls (--max-turns 6)"
+  ],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "find . -type f -not -path './.git/*' | head -50"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=738ch"
+    },
+    {
+      "id": "left-unfinished",
+      "pass": null,
+      "detail": "no unfinished list to go stale"
+    },
+    {
+      "id": "told-stale",
+      "pass": null,
+      "detail": "no unfinished list"
+    },
+    {
+      "id": "updates-or-clears",
+      "pass": null,
+      "detail": "no unfinished list"
+    },
+    {
+      "id": "answers",
+      "pass": true,
+      "detail": "**Run the tests:** `npm test` (which is just `node --test` — package.json:7). No build step, no test runner package; Node's built-in runner discovers `test/*.te"
+    }
+  ]
+}
