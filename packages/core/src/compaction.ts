@@ -347,21 +347,33 @@ export const SUMMARY_TOKENS = 2_000;
 export const plannedTokens = (plan: CompactPlan, tokensBefore: number): number =>
   tokensBefore - plan.regionTokens + textTokens(compactedText({ summary: '', kept: plan.kept })) + SUMMARY_TOKENS;
 
+/** Whether the context reached `compactAt` tokens and a model call ran since the last compaction. */
+function compactionDue(events: readonly TurnEvent[], compactAt: number | undefined): compactAt is number {
+  if (compactAt === undefined) return false;
+  const last = events.findLast((e) => e.kind === 'assistant' || e.kind === 'compact');
+  return last?.kind === 'assistant' && contextTokens(events) >= compactAt;
+}
+
 /**
  * The compaction to make before the next model call, if any: the context would reach `compactAt` tokens
  * (the user's setting, else the model's `compactAt`), a model call has run since the last compaction, and the plan,
- * with room for the files it may attach, would bring the context back under `compactAt`. One that cannot, because
- * the prompt, the tools or the newest round hold most of it, would run again before every call and pay for a summary
- * each time.
+ * with room for the files it may attach, would bring the context back under `compactAt`, or at least halve it. One
+ * that does neither, because the prompt, the tools or the newest round hold most of it, would run again before every
+ * call and pay for a summary each time; halving lets a threshold set below the fixed part of the context still compact
+ * as the context doubles (ISSUES.md G-08).
  */
 export function autoCompaction(events: readonly TurnEvent[], compactAt: number | undefined): CompactPlan | undefined {
-  if (compactAt === undefined) return undefined;
-  const last = events.findLast((e) => e.kind === 'assistant' || e.kind === 'compact');
+  if (!compactionDue(events, compactAt)) return undefined;
   const before = contextTokens(events);
-  if (last?.kind !== 'assistant' || before < compactAt) return undefined;
   const plan = planCompaction(events, keepTailTokens(compactAt));
-  return plan !== undefined && plannedTokens(plan, before) + attachBudget(compactAt) < compactAt ? plan : undefined;
+  if (plan === undefined) return undefined;
+  const after = plannedTokens(plan, before) + attachBudget(compactAt);
+  return after < compactAt || after <= before / 2 ? plan : undefined;
 }
+
+/** Compaction is due but no plan would help, so the caller can say so once rather than skip it in silence. */
+export const compactionStuck = (events: readonly TurnEvent[], compactAt: number | undefined): boolean =>
+  compactionDue(events, compactAt) && autoCompaction(events, compactAt) === undefined;
 
 /** The summary call's system prompt. Fixed, and different from the agent's, since the call does a different job. */
 export const SUMMARY_SYSTEM =

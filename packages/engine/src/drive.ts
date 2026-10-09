@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { budgetReminder, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
+import { budgetReminder, compactionStuck, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -399,9 +399,14 @@ export async function drive(
     if (outcome.kind === 'failed' && !signal.aborted) io.err(`compact: ${outcome.message}`);
     return false;
   };
+  let saidStuck = false;
   const callModel = async (): Promise<void> => {
     const due = autoCompaction(events, compactAt);
     if (due !== undefined) await compact('auto', due);
+    else if (!saidStuck && compactionStuck(events, compactAt)) {
+      saidStuck = true;
+      io.err(`compact: the context passed the ${compactAt}-token threshold, but the system prompt, the tools and the newest turns hold most of it, so a summary would not bring it under; Geno compacts once a summary would halve the context.`);
+    }
     const startAt = Date.now();
     let marks: StreamMarks | undefined;
     // A wait the log ends in was left by an engine that stopped mid-wait; this call takes it up.
