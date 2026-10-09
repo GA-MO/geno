@@ -27,6 +27,7 @@ import {
   type WorkflowOrigin,
   type Waiting,
   waitLabel,
+  claudeDirOf,
 } from '@g-code/core';
 import { checkId, singleId, UsageError, type Command, type Io } from './command.js';
 import { captureEnvironment, scratchpadOf } from './environment.js';
@@ -34,7 +35,6 @@ import { gatewayFor, type Gateway } from './gateway.js';
 import { homesOf, loadCommands, pluginLoader } from './commands.js';
 import { loadProjectContext } from './project-context.js';
 import { memoryStore } from './memory.js';
-import { claudeDirOf } from './plugins.js';
 import { loggedRequest, snapshotKeeper } from './snapshots.js';
 import { appendEvent, dropTornTail, readSessionLog, sessionFile, type SessionLog } from './sessions.js';
 import { homeOf, type Store } from './store.js';

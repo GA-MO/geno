@@ -4,6 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { EngineError } from './errors.js';
 import {
+  appHomeOf,
   asTaskId,
   asTripleId,
   TRIPLE_SCOPES,
@@ -64,8 +65,7 @@ export type Store = {
 };
 
 export function openStore(env: Readonly<Record<string, string | undefined>>): Store {
-  const home = env['GCODE_HOME'] || path.join(homedir(), '.g-code');
-  const root = path.resolve(home);
+  const root = appHomeOf(env, homedir());
   const evalsDir = path.join(root, 'evals');
   return {
     evalsDir,

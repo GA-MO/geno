@@ -72,6 +72,8 @@ import {
   type Waiter,
   withoutInstructions,
   ZERO_USAGE,
+  configPaths,
+  type ConfigHomes,
 } from '@g-code/core';
 import { formatCost, totalOf, type OpenSession } from './chat.js';
 import type { Io } from './command.js';
@@ -93,19 +95,7 @@ import type { Approval } from './tools/agent.js';
 import { rosterExecutors } from './tools/tool-search.js';
 import { executor, ToolError, ToolRejected, type Executor } from './tools/context.js';
 import type { Executors } from './tools/index.js';
-import type { Homes } from './commands.js';
 import type { HookAgent, SubagentHooks, ToolHooks } from './hooks.js';
-
-/**
- * In precedence order, as for commands: Geno's home, then Claude Code's, then the workspace's folders, then plugins,
- * then the built-ins. An undefined folder is left out.
- */
-const AGENT_FOLDERS: readonly { readonly source: AgentSource; readonly dir: (workspace: string, homes: Homes) => string | undefined }[] = [
-  { source: 'global', dir: (_, homes) => path.join(homes.app, 'agents') },
-  { source: 'global', dir: (_, homes) => (homes.claude === undefined ? undefined : path.join(homes.claude, 'agents')) },
-  { source: 'workspace', dir: (workspace) => path.join(workspace, '.agents', 'agents') },
-  { source: 'workspace', dir: (workspace) => path.join(workspace, '.claude', 'agents') },
-];
 
 /** Each problem names its file; a file that cannot be used is reported and skipped, never thrown. */
 export type AgentScan = { readonly agents: readonly AgentDefinition[]; readonly problems: readonly string[] };
@@ -135,14 +125,12 @@ async function loadAgentDir(dir: string, source: AgentSource, namespace: string,
  * The agents a session can start, with Claude Code plugins' agents read in place and named `<plugin>:<agent>`, and
  * each one's model resolved against `models`.
  */
-export async function loadAgents(workspace: string, homes: Homes, plugins: readonly InstalledPlugin[], models: SubagentModels): Promise<AgentScan> {
+export async function loadAgents(workspace: string, homes: ConfigHomes, plugins: readonly InstalledPlugin[], models: SubagentModels): Promise<AgentScan> {
   const problems: string[] = [];
   const load: DirLoad = { show: (file: string) => shownPath(workspace, file), problems, models };
   const groups = [];
-  for (const folder of AGENT_FOLDERS) {
-    const dir = folder.dir(workspace, homes);
-    if (dir !== undefined) groups.push(await loadAgentDir(dir, folder.source, '', load));
-  }
+  // In precedence order, as for commands: the user's folders, then the workspace's, then plugins, then the built-ins.
+  for (const root of configPaths(homes, workspace, 'agents')) groups.push(await loadAgentDir(root.path, root.place === 'user' ? 'global' : 'workspace', '', load));
   for (const plugin of plugins) groups.push(await loadAgentDir(path.join(plugin.root, 'agents'), 'plugin', `${plugin.name}:`, load));
   const agents = mergeAgents([...groups, builtinAgents(models)]);
   for (const agent of groups.flat()) {

@@ -15,7 +15,6 @@ import {
   replayedBeforeLive,
   startReplay,
   startWorkflow,
-  WORKFLOW_DIRS,
   WORKFLOW_LIMITS,
   WORKFLOW_TOOL,
   workflowList,
@@ -35,8 +34,9 @@ import {
   type WorkflowRun,
   type WorkflowSource,
   type WorkflowSpec,
+  configPaths,
+  type ConfigHomes,
 } from '@g-code/core';
-import type { Homes } from './commands.js';
 import type { Director } from './drive.js';
 import { readIfFile, shownPath, sortedEntries } from './project-context.js';
 import { isMissing, type Store } from './store.js';
@@ -46,20 +46,20 @@ import type { WorkflowTools } from './tools/workflow.js';
 /** Each problem names its file; a file that cannot be used is reported and skipped, never thrown. */
 export type WorkflowScan = { readonly specs: readonly WorkflowSpec[]; readonly problems: readonly string[] };
 
-const FOLDERS: readonly { readonly source: WorkflowSource; readonly dir: (workspace: string, homes: Homes) => string }[] = [
-  { source: 'workspace', dir: (workspace) => path.join(workspace, WORKFLOW_DIRS.workspace) },
-  { source: 'global', dir: (_, homes) => path.join(homes.app, WORKFLOW_DIRS.global) },
-];
+const folders = (workspace: string, homes: ConfigHomes): { readonly source: WorkflowSource; readonly dir: string }[] =>
+  configPaths(homes, workspace, 'workflows')
+    .map((root) => ({ source: root.place === 'user' ? ('global' as const) : ('workspace' as const), dir: root.path }))
+    .toReversed();
 
 /** The workspace's workflows, then Geno's home's; the first of a name wins. */
-export async function loadWorkflows(workspace: string, homes: Homes): Promise<WorkflowScan> {
+export async function loadWorkflows(workspace: string, homes: ConfigHomes): Promise<WorkflowScan> {
   const problems: string[] = [];
   const groups: WorkflowSpec[][] = [];
-  for (const folder of FOLDERS) {
+  for (const folder of folders(workspace, homes)) {
     const specs: WorkflowSpec[] = [];
-    for (const entry of await sortedEntries(folder.dir(workspace, homes))) {
+    for (const entry of await sortedEntries(folder.dir)) {
       if (!entry.name.endsWith('.json')) continue;
-      const file = path.join(folder.dir(workspace, homes), entry.name);
+      const file = path.join(folder.dir, entry.name);
       const shown = shownPath(workspace, file);
       const text = await readIfFile(file);
       if (text === undefined) continue;
@@ -191,7 +191,7 @@ export type EarlierRun = { readonly name: string | undefined; readonly input: st
 /** What the workflow tool needs of the session that starts a run, and of the engine that runs it. */
 export type WorkflowHost = {
   readonly workspace: string;
-  readonly homes: Homes;
+  readonly homes: ConfigHomes;
   readonly model: string;
   readonly rates: (model: string) => Rates | undefined;
   readonly mode: () => ApprovalMode;

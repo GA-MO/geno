@@ -263,6 +263,7 @@ import {
   DRAFT_METHOD,
   type WakeTrigger,
   subagentModelsOf,
+  claudeDirOf,
 } from '@g-code/core';
 import { runAgent } from './agent.js';
 import { Steers, steerRunning } from './steer.js';
@@ -321,7 +322,6 @@ import { Scheduler, ScheduleError, SYSTEM_CLOCK, type Clock, type ScheduleRunner
 import { pidAlive } from './wait-hooks.js';
 import { HookSessions } from './hooks.js';
 import { loadHookConfig } from './hook-config.js';
-import { claudeDirOf } from './plugins.js';
 
 const RESOURCE_NOT_FOUND = -32002;
 

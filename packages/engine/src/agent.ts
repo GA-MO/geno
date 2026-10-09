@@ -56,6 +56,7 @@ import {
   WORKFLOW_TOOL,
   workflowToolDefinitions,
   subagentModelsOf,
+  claudeDirOf,
 } from '@g-code/core';
 import { openSessionLog, type OpenSession } from './chat.js';
 import { takeCheckpoint, shadowRepoFor } from './checkpoints.js';
@@ -63,7 +64,6 @@ import { checkCommand, type CheckCommand } from './check-command.js';
 import { childEnv } from './child-env.js';
 import { globalSkillRoots, homeOf, homesOf, loadCommands, pluginLoader } from './commands.js';
 import { workspaceDir } from './workspace.js';
-import { claudeDirOf } from './plugins.js';
 import { commandClassifier } from './classifier.js';
 import { addedDirectories, settingDirectories, workingDirectories } from './directories.js';
 import { UsageError, type Command, type Io } from './command.js';

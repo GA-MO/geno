@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
-import { MCP_SOURCE_LABELS, MCP_SOURCES, SECRET_ENV_NAMES, type McpServerConfig, type McpSource, type McpTransport } from '@g-code/core';
+import { claudeDirOf, MCP_SOURCE_LABELS, MCP_SOURCES, SECRET_ENV_NAMES, type McpServerConfig, type McpSource, type McpTransport } from '@g-code/core';
 import type { Env } from '../child-env.js';
-import { claudeDirOf, loadPlugins, type InstalledPlugin } from '../plugins.js';
+import { loadPlugins, type InstalledPlugin } from '../plugins.js';
 import { isMissing, type Store } from '../store.js';
 
 /** Every server the session can use, one per name, and what was wrong with the files they came from. */

@@ -40,7 +40,7 @@ import {
   type SkillsResponse,
   NO_SUBAGENT_MODELS,
 } from '@g-code/core';
-import type { Homes } from './commands.js';
+import type { ConfigHomes } from '@g-code/core';
 import { loadCommands } from './commands.js';
 import { EngineError } from './errors.js';
 import { holdingLock } from './file-lock.js';
@@ -230,7 +230,7 @@ export type CatalogService = {
  * data, mode 0644, with no executable bit.
  */
 export function catalogService(
-  homes: Homes,
+  homes: ConfigHomes,
   workspaceOf: (cwd: string) => Promise<string>,
   plugins: (workspace: string) => Promise<readonly InstalledPlugin[]>,
   deps: CatalogDeps = {},

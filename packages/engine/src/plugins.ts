@@ -23,10 +23,6 @@ const installSchema = z.looseObject({ scope: z.string(), installPath: z.string()
 const installedSchema = z.looseObject({ plugins: z.record(z.string(), z.array(installSchema)) });
 const manifestSchema = z.looseObject({ name: z.string().min(1).optional() });
 
-/** Claude Code's config dir: CLAUDE_CONFIG_DIR, else `$HOME/.claude`; undefined when the environment names neither. */
-export const claudeDirOf = (env: Readonly<Record<string, string | undefined>>): string | undefined =>
-  env['CLAUDE_CONFIG_DIR'] || (env['HOME'] ? path.join(env['HOME'], '.claude') : undefined);
-
 const canonical = (file: string): Promise<string> => realpath(file).catch(() => file);
 
 export async function readJson(file: string): Promise<{ readonly kind: 'missing' } | { readonly kind: 'read'; readonly value: unknown } | { readonly kind: 'broken'; readonly reason: string }> {

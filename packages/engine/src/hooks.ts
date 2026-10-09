@@ -38,12 +38,13 @@ import {
   type ToolHookEvent,
   type ToolHookVerdict,
   type ToolStatus,
+  claudeDirOf,
 } from '@g-code/core';
 import type { OpenSession } from './chat.js';
 import { childEnv, type Env } from './child-env.js';
 import type { Io } from './command.js';
 import { loadHookConfig, runnableEntries } from './hook-config.js';
-import { claudeDirOf, loadPlugins } from './plugins.js';
+import { loadPlugins } from './plugins.js';
 import { runWithInput } from './process.js';
 import { openSandbox, sandboxPolicy, type Sandbox } from './sandbox.js';
 import { appendEvent } from './sessions.js';

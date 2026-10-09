@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { formatBytes } from './attachments.js';
+import { configPaths, type ConfigItem, type ConfigVendor } from './config-roots.js';
 import { webTargetOf } from './web.js';
 
 /**
@@ -158,11 +159,12 @@ export function matchesQuery(entry: Pick<CatalogEntry, 'name' | 'description'>, 
   return query.toLowerCase().split(/\s+/).filter(Boolean).every((word) => hay.includes(word));
 }
 
-/** Folders under the user's Geno home and under the workspace that Geno loads skills and agents from. */
-export const INSTALL_DIRS: Readonly<Record<InstallScope, Readonly<Record<CatalogKind, string>>>> = {
-  user: { skill: 'skills', agent: 'agents' },
-  project: { skill: path.join('.claude', 'skills'), agent: path.join('.claude', 'agents') },
-};
+/**
+ * The root an install goes to: Geno's home for the user, and the project's `.claude`, which Claude Code reads as well
+ * as Geno, so a teammate on either gets what the repository installed.
+ */
+const INSTALL_VENDORS: Readonly<Record<InstallScope, ConfigVendor>> = { user: 'geno', project: 'claude' };
+const INSTALL_ITEMS: Readonly<Record<CatalogKind, ConfigItem>> = { skill: 'skills', agent: 'agents' };
 
 /** `user` is Geno's home (`~/.g-code`), `project` the workspace. */
 export type InstallBases = { readonly user: string; readonly project: string };
@@ -172,7 +174,7 @@ export type InstallBases = { readonly user: string; readonly project: string };
  * and may remove once empty; an agent's file sits in a folder that others share, so it owns none.
  */
 export function installTargetOf(entry: Pick<CatalogEntry, 'kind' | 'name'>, scope: InstallScope, bases: InstallBases): { readonly dir: string; readonly target: string; readonly owns: string | undefined } {
-  const parent = path.join(bases[scope], INSTALL_DIRS[scope][entry.kind]);
+  const parent = configPaths({ app: bases.user, user: undefined }, bases.project, INSTALL_ITEMS[entry.kind]).find((root) => root.place === scope && root.vendor === INSTALL_VENDORS[scope])!.path;
   if (entry.kind === 'skill') {
     const dir = path.join(parent, entry.name);
     return { dir, target: dir, owns: dir };
