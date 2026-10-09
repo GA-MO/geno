@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 
 export type ShellOptions = {
   readonly cwd: string;
@@ -37,6 +37,21 @@ export function stopGroup(group: number): void {
   } catch {
     // The group is already gone.
   }
+}
+
+/** The groups with every process that runs in them now; the groups alone when ps cannot say. */
+export function membersOf(groups: ReadonlySet<number>): Promise<ReadonlySet<number>> {
+  return new Promise((resolve) => {
+    if (groups.size === 0) return resolve(groups);
+    execFile('ps', ['-A', '-o', 'pid=,pgid='], (error, stdout) => {
+      if (error !== null) return resolve(groups);
+      const members = stdout.split('\n').flatMap((line) => {
+        const [pid, group] = line.trim().split(/\s+/).map(Number);
+        return pid !== undefined && group !== undefined && groups.has(group) ? [pid] : [];
+      });
+      resolve(new Set([...groups, ...members]));
+    });
+  });
 }
 
 /** Whether any process of the group still runs. */

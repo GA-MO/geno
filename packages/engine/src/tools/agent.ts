@@ -74,7 +74,7 @@ import type { WorkingDirectories } from '../directories.js';
 import { diskStat, stampOf, type DiskStat } from '../file-tracker.js';
 import { applyEditToFile, type Files } from '../files.js';
 import { readLaunchConfigs } from '../preview.js';
-import { tail } from '../process.js';
+import { membersOf, tail } from '../process.js';
 import type { PermissionStore, SessionPermissions } from '../permissions.js';
 import type { Sandbox } from '../sandbox.js';
 import {
@@ -315,6 +315,9 @@ async function scriptsOf(workspace: string): Promise<Scripts> {
 }
 
 const LINGERING = '[Geno] A process this command started is still running. Geno stops it when this run ends.';
+// The sandbox lets a command signal only processes of its own call, so a kill of a background job fails.
+const SIGNAL_REFUSED = /not permitted|No such process/;
+const SIGNAL_NOTE = '[Geno] The sandbox lets a command signal only what the same call started.';
 const LINGERING_ADVICE = 'For a server or a watcher, use run_in_background instead: read it with bash_output and stop it with task_stop.';
 
 export type AgentToolEnv = {
@@ -641,6 +644,23 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     run: (raw, ctx) => inner.run(raw, { ...ctx, readRoots: [...ctx.readRoots, ...tools.directories.readable()], writeRoots: tools.directories.writable() }),
   });
 
+  // The process groups of commands that left something running, which a kill may stop as the background jobs' may.
+  const leftRunning = new Set<number>();
+  const ownProcesses = (): Promise<ReadonlySet<number>> => {
+    const jobs = tools.background === undefined ? [] : tools.background.jobs.jobs(tools.background.sessionId).filter((job) => job.state.status === 'running');
+    return membersOf(new Set([...leftRunning, ...jobs.map((job) => job.pid)]));
+  };
+  /** The scope a command line is judged in, with what the session started when the line may kill. */
+  const commandScope = async (command: string): Promise<CommandScope> => ({ ...scope(), ...(/\bkill\b/.test(command) ? { processes: await ownProcesses() } : {}) });
+  /** A refused kill names task_stop, which stops a background command without reaching anything else. */
+  const killHint = (): string => {
+    if (tools.background === undefined) return '';
+    const jobs = tools.background.jobs.running(tools.background.sessionId);
+    return jobs.length === 0
+      ? ' To stop a background command Geno started, call task_stop with its bg-N id; list_agents lists them.'
+      : ` To stop a background command Geno started, call task_stop with its id: ${jobs.map((job) => `${job.id} (\`${job.command}\`)`).join(', ')}.`;
+  };
+
   /** The lane check, rules, classifier and approval every command goes through, foreground or background; a refusal throws. */
   const approveCommand = async (command: string, ctx: ToolContext, background: boolean): Promise<ApprovalRecord | undefined> => {
     const mode = modeOf(tools.approval);
@@ -649,16 +669,20 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
     if (outOfLane !== undefined) throw new ToolError(laneDenialText(outOfLane));
     const { permissions } = tools;
     const rules = (await permissions?.list()) ?? [];
-    const ruled = ruledDenial(command, scope(), mode, rules, ctx.hookAllowed === true);
+    const judged = await commandScope(command);
+    const ruled = ruledDenial(command, judged, mode, rules, ctx.hookAllowed === true);
     // A run nobody can answer offers no rule to keep, so a PermissionRequest hook reads the one Ask's card would offer.
-    const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, scope(), 'ask', rules)?.offer;
+    const offer = ruled === undefined || mode !== 'non-interactive' || ctx.permissionRequest === undefined ? undefined : ruledDenial(command, judged, 'ask', rules)?.offer;
     const denial = ruled === undefined || offer === undefined ? ruled : { ...ruled, offer };
     const keep = async () => {
       if (denial?.offer !== undefined) await permissions?.add({ effect: 'allow', pattern: denial.offer as CommandPattern });
     };
     const approval =
       denial === undefined ? undefined : await settle(tools.approval, mode, denial, () => commandInputOf(ctx, command, denial), ctx, keep);
-    if (approval?.verdict === 'deny') throw approval.rule === 'path-outside-workspace' ? outsideRefusal(approval, readableDirs(ctx)) : refusalOf(approval);
+    if (approval?.verdict === 'deny') {
+      if (approval.rule === 'path-outside-workspace') throw outsideRefusal(approval, readableDirs(ctx));
+      throw approval.rule === 'process-kill' && approval.decidedBy !== 'user' ? refusalOf(approval, `${denialText(approval)}${killHint()}`) : refusalOf(approval);
+    }
     return approval;
   };
 
@@ -712,6 +736,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
         timeoutMs: timeout_seconds * 1000,
         signal: ctx.signal,
       });
+      if (result.lingering !== undefined) leftRunning.add(result.lingering);
       const killedAfter = result.timedOut ? timeout_seconds : undefined;
       const failure = commandFailureLine(result.code, killedAfter);
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
@@ -720,6 +745,7 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const notes = [
         ...(failure === undefined ? (tools.fileNotes?.take(fileToolsOf(command)) ?? []) : []),
         ...(result.lingering === undefined ? [] : [tools.background === undefined ? LINGERING : `${LINGERING} ${LINGERING_ADVICE}`]),
+        ...(failure !== undefined && tools.background !== undefined && /\bkill\b/.test(command) && SIGNAL_REFUSED.test(result.output) ? [`${SIGNAL_NOTE}${killHint()}`] : []),
       ];
       const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${reset}${commandStatusLine(result.code, killedAfter)}${notes.map((note) => `\n${note}`).join('')}`;
       return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };

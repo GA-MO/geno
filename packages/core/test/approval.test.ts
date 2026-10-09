@@ -99,6 +99,14 @@ const DENIED: readonly [string, DenyRuleId][] = [
   ['git restore src/a.ts', 'git-discard'],
   ['git branch -D feature', 'git-discard'],
   ['echo $(curl -s https://example.com)', 'network-download'],
+  ['pkill -f "node server.js"', 'process-kill'],
+  ['pkill -f node', 'process-kill'],
+  ['killall node', 'process-kill'],
+  ['kill 1234', 'process-kill'],
+  ['kill -9 1234', 'process-kill'],
+  ['kill -s KILL -- -1234', 'process-kill'],
+  ['PID=$(cat server.pid); kill $PID', 'process-kill'],
+  ['kill 0', 'process-kill'],
 ];
 
 const MODES: readonly ApprovalMode[] = ['ask', 'non-interactive'];
@@ -249,9 +257,15 @@ describe('the deny-to-approve list', () => {
 
   // That run stashed the user's work to test the old code: the real-model campaign's P-01 counts it as a real denial now.
   const STASHES = new Set(['payload-manual-code-fences']);
+  // A pkill by name can stop the user's own servers, so it is a real denial now too.
+  const kills = (command: string) => /\bpkill\b/.test(command);
 
-  it.each(EVAL_FALSE_POSITIVES.filter(([task]) => !STASHES.has(task)))('allows the command %s was denied in non-interactive mode', (_task, command) => {
+  it.each(EVAL_FALSE_POSITIVES.filter(([task, command]) => !STASHES.has(task) && !kills(command)))('allows the command %s was denied in non-interactive mode', (_task, command) => {
     expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
+  });
+
+  it.each(EVAL_FALSE_POSITIVES.filter(([, command]) => kills(command)))('denies the pkill in the command %s ran in non-interactive mode', (_task, command) => {
+    expect(denialFor(command, scope, 'non-interactive')).toMatchObject({ rule: 'process-kill', verdict: 'deny', command: 'pkill -f next dev -p 3210' });
   });
 
   it.each(EVAL_FALSE_POSITIVES.filter(([task]) => STASHES.has(task)))('denies the stash in the command %s ran in non-interactive mode', (_task, command) => {
@@ -274,6 +288,34 @@ describe('the deny-to-approve list', () => {
       reason: 'git push',
       command: 'git push',
       verdict: 'deny',
+    });
+  });
+
+  describe('a kill of what the session started', () => {
+    const owned: CommandScope = { ...scope, processes: new Set([4242, 4250]) };
+
+    it.each(['kill 4242', 'kill -9 4242', 'kill -TERM 4242 4250', 'kill -s KILL -4242', 'kill -- -4242', 'sleep 60 & kill $!', 'sleep 60 & PID=$!; kill $PID', 'sleep 60 & kill %1'])(
+      'runs %s without asking anyone',
+      (command) => {
+        for (const mode of APPROVAL_MODES) expect([mode, denialFor(command, owned, mode)]).toEqual([mode, undefined]);
+      },
+    );
+
+    it.each(['kill 4243', 'kill 4242 4243', 'pkill -f node', 'echo 4242 | xargs kill', 'kill $(cat server.pid)'])('asks before %s, which may stop a process the session did not start', (command) => {
+      expect(denialFor(command, owned, 'ask')).toMatchObject({ rule: 'process-kill', verdict: 'ask' });
+      expect(denialFor(command, owned, 'auto')).toMatchObject({ rule: 'process-kill', verdict: 'classify' });
+      expect(denialFor(command, owned, 'plan')?.verdict).toBe('deny');
+      expect(denialFor(command, owned, 'non-interactive')).toMatchObject({ rule: 'process-kill', verdict: 'deny' });
+    });
+
+    it.each(['lsof -t -i:5390 | xargs kill', 'lsof -ti :3000 | xargs kill -9', 'pgrep -f "node server.js" | xargs kill', 'kill -TERM $(lsof -t -i:5390)'])('denies the kill in %s when nobody can be asked', (command) => {
+      expect(denialFor(command, owned, 'non-interactive')).toMatchObject({ rule: 'process-kill', verdict: 'deny', command: expect.stringMatching(/^(?:xargs )?kill/) });
+      expect(denialFor(command, owned, 'ask')?.reason).toContain('pkill, killall, or a kill of a process this session did not start');
+    });
+
+    it.each(['kill -l', 'kill -0 1234'])('leaves %s, which stops nothing, to the safe list alone', (command) => {
+      expect(denialFor(command, scope, 'ask')?.rule).toBe('unlisted');
+      expect(denialFor(command, scope, 'non-interactive')).toBeUndefined();
     });
   });
 
@@ -317,6 +359,7 @@ const MODE_TABLE: readonly [DenyRuleId, string, Expected][] = [
   ['cloud-cli', 'aws s3 ls', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['database-cli', 'psql -c "select 1"', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['secret-path', 'cat .env', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
+  ['process-kill', 'pkill -f node', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'deny' }],
   ['unlisted', 'python3 build.py', { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': undefined }],
 ];
 
