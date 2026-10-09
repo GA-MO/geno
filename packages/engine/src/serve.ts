@@ -374,7 +374,7 @@ export const optionsFor = (denial: Denial): acp.PermissionOption[] =>
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {
   plan: { name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
-  ask: { name: 'Ask', description: 'Ask before risky commands.' },
+  ask: { name: 'Ask', description: 'Ask before commands off the safe list.' },
   auto: {
     name: 'Auto',
     description: 'Run safe commands on its own and let a classifier judge the rest, without asking. Asks before deleting the workspace or anything outside it, and once the classifier has blocked too many actions.',

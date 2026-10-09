@@ -367,7 +367,6 @@ describe('gcode agent --mode auto', () => {
       verdict('allow', 'harmless'),
       answer('Done.', usage),
       toolCall('Three.', [bash('node -e "3"')], usage),
-      answer('Done.', usage),
     ]);
     const first = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
     const id = sessionIdOf(first.stdout);
@@ -375,7 +374,8 @@ describe('gcode agent --mode auto', () => {
     expect(transport.requests.filter(isClassifierCall)).toHaveLength(2);
     expect((await runCli(['agent', '--session', id, '--mode', 'ask', 'Three'], env, { fetch: transport.fetch })).code).toBe(0);
     expect(transport.requests.filter(isClassifierCall)).toHaveLength(2);
-    expect(transport.requests).toHaveLength(8);
+    // Ask puts the command to the user, and with no terminal to answer, the refusal ends the turn.
+    expect(transport.requests).toHaveLength(7);
   });
 
   it('rejects an unknown mode', async () => {

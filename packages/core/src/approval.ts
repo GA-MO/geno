@@ -418,10 +418,11 @@ export const DENY_RULES: Readonly<Record<DenyRuleId, DenyRule>> = {
     verdicts: ASK_OR_CLASSIFY,
     matches: ({ words }) => words.some((word) => SECRET_PATH.test(word) || HIDDEN_GLOB.test(word)),
   },
-  // Plan and Auto act on this: Ask and non-interactive runs run what no other rule flags, as they always have.
+  // Ask asks as Claude Code's default mode does; the sandbox still holds whatever the user allows. A run nobody can
+  // ask runs it in the sandbox.
   unlisted: {
     reason: 'a command not on the safe list',
-    verdicts: { plan: 'deny', ask: 'allow', auto: 'classify', 'non-interactive': 'allow' },
+    verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' },
     matches: (command) => !isClearlySafe(command),
   },
 };
@@ -448,7 +449,7 @@ export type WorkspaceRuleId = (typeof WORKSPACE_RULE_IDS)[number];
 /** A command line judged whole, before its words (`lineRuleOf`). */
 export const LINE_RULE_IDS = ['long-command', 'unparsable-command'] as const;
 export type LineRuleId = (typeof LINE_RULE_IDS)[number];
-// As the unlisted rule: Ask asks where it would have run the line, and a run nobody can ask still runs it in the sandbox.
+// As the unlisted rule: Ask asks, and a run nobody can ask still runs it in the sandbox.
 const LINE_VERDICTS: Verdicts = { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' };
 export const LINE_RULES: Readonly<Record<LineRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
   'long-command': { reason: 'a command over 10,000 characters', verdicts: LINE_VERDICTS },
