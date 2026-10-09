@@ -1,0 +1,16 @@
+{
+  "case": "B02-ask-deny",
+  "layer": "B",
+  "run": "2",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "bef3dbc4-9c74-4034-b563-ddd7d2d941c5"
+  ],
+  "screenshots": [
+    "shots/r2/B02-after-deny.png",
+    "shots/r2/B02-card.png"
+  ],
+  "wire": "runs/B-panel/2/wire.jsonl.gz"
+}

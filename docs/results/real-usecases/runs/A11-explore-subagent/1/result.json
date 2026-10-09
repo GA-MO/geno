@@ -1,0 +1,85 @@
+{
+  "case": "A11-explore-subagent",
+  "run": 1,
+  "session": "c5a8eb1d-f397-48d8-b6de-61583a139bfa",
+  "passed": true,
+  "costUsd": 0.0142449075,
+  "classifierUsd": 0,
+  "modelCalls": 6,
+  "toolCalls": 6,
+  "tokens": {
+    "input": 72,
+    "cacheRead": 66682,
+    "cacheWrite": 16313,
+    "output": 2496,
+    "latencyMs": 91777
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=914ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "agent-called",
+      "pass": true,
+      "detail": "{\"agent\":\"explore\",\"task\":\"In this repository (a multi-package codebase, workspace root: /Users/sbpd; {\"agent\":\"explore\",\"task\":\"Search the repository at the workspace root for the identifier `getUser` "
+    },
+    {
+      "id": "lists-callers",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

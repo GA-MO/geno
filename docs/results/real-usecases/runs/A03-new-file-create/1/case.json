@@ -1,0 +1,24 @@
+{
+  "case": "A03-new-file-create",
+  "area": "editing",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add a clamp(value, min, max) helper in a new file src/clamp.ts, export it from src/index.ts, and add tests for it in test/clamp.test.ts.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "166c5f5579cee6882434baaaf29d4860c56ca6c5"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A03-new-file-create --run <n>"
+}

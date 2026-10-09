@@ -1,0 +1,24 @@
+{
+  "case": "A19-poteto-thai",
+  "area": "skills",
+  "layer": "A",
+  "run": 2,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "ใช้ poteto-mode ช่วยเพิ่มระบบคะแนน: เหรียญแต่ละเหรียญได้ 10 คะแนน และแสดงคะแนนมุมซ้ายบนของจอ พร้อมเทสของ logic",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.3,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "f02a00d5e5e705076305ccfb6410a5894c7f560e"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A19-poteto-thai --run <n>"
+}

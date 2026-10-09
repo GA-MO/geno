@@ -1,0 +1,26 @@
+{
+  "case": "A31-compaction-forced",
+  "area": "context",
+  "layer": "A",
+  "run": 2,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Rule for this whole task: never edit anything under legacy/. Read each file in src/shop/ with the read tool, one by one, and give me a table of every exported function whose doc comment lacks @returns. Then add the missing @returns lines with edit.",
+      "maxTurns": 60
+    }
+  ],
+  "maxCostUsd": 0.4,
+  "env": {
+    "GCODE_COMPACT_AT": "40000"
+  },
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "e974777813b3c9cdb719b949f0779148b259bf2b"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A31-compaction-forced --run <n>"
+}

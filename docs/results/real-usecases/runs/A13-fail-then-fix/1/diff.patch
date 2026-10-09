@@ -1,0 +1,24 @@
+diff --git a/src/duration.ts b/src/duration.ts
+index 261abb5..134cda7 100644
+--- a/src/duration.ts
++++ b/src/duration.ts
+@@ -1,4 +1,18 @@
++const UNIT_SECONDS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
++
+ /** Parses a duration such as "1h30m", "45s" or "2d" into seconds. Throws on anything else. */
+ export function parseDuration(text: string): number {
+-  throw new Error('not implemented');
++  const pattern = /\s*(\d+)([dhms])/g;
++  let total = 0;
++  let at = 0;
++  let match: RegExpExecArray | null;
++  while ((match = pattern.exec(text)) !== null) {
++    if (match.index !== at) break;
++    total += Number(match[1]) * UNIT_SECONDS[match[2]];
++    at = pattern.lastIndex;
++  }
++  if (match !== null || at === 0 || text.slice(at).trim() !== '') {
++    throw new Error(`invalid duration: ${text}`);
++  }
++  return total;
+ }

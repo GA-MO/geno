@@ -1,0 +1,90 @@
+{
+  "case": "A18-project-skill",
+  "run": 2,
+  "session": "c8d068c9-111a-4adf-bd14-2b81c78e7216",
+  "passed": false,
+  "costUsd": 0.0249980325,
+  "classifierUsd": 0,
+  "modelCalls": 14,
+  "toolCalls": 16,
+  "tokens": {
+    "input": 84,
+    "cacheRead": 148516,
+    "cacheWrite": 8863,
+    "output": 2226,
+    "latencyMs": 47089
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": false,
+      "detail": "skill at seq 27 before any load"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "grep -rn \"formatPrice\" --include=\"*.ts\" --include=\"*.js\" --include=\"*.md\" . ; ec"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=631ch"
+    },
+    {
+      "id": "skill-loaded",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "skill-format",
+      "pass": true,
+      "detail": "# Changelog\n\n## Unreleased\n\n- fix: made formatPrice always show two decimals (src/money.ts)\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n"
+    },
+    {
+      "id": "skill-quote",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "money-passes",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

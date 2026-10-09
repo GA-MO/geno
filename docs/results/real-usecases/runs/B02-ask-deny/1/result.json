@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-09T09:50:13.797Z",
+  "step": "B02-ask-deny",
+  "ok": false,
+  "detail": "card for null; rejected result at -1; model calls after the no 0; footer qwen3.8-flash24k in833 out$0.0041"
+}

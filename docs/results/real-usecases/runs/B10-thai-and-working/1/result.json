@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-09T09:49:36.041Z",
+  "step": "B10-thai-and-working",
+  "ok": false,
+  "detail": "thai share 0.46; peek states seen away; turn-meta seen working; stray cards ",
+  "answer": "tiny-shop — โปรเจกต์สาธิตขนาดเล็กมาก เป็น helper เรื่องราคา/ผู้ใช้ ไม่มีเซิร์ฟเวอร์จริง รันเทสต์ด้วย node --testโครงสร้าง:src/money.ts — formatPrice(cents)src/slug.ts — slugify(title)src/user.js — Map ผู้ใช้ใน-memory (มีแค่ Ada, id=1)src/routes.js / src/profile.js — ฝั่งที่เรียก getUserbuild/, dist/ — ไฟล์ artifact เก่า ว่างเปล่าแทบไม่มีเนื้อหา.vscode/mcp.json — ชี้ไป fake MCP server (wsfake) ที่อยู่นอก workspace นี้ ซึ่งยังไม่ได้ approve จึงใช้ไม่ได้เคสน่าสนใจที่เจอตอนลองรัน (ยังไม่ได้แก้โค้ด):เทสต์พังอยู่แล้ว — formatPrice ใช้ cents / 100 เฉยๆ ไม่มี toFixed(2) ดังนั้น formatPrice(1250) ได้ \""
+}

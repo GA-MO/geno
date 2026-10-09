@@ -1,0 +1,80 @@
+{
+  "case": "A10-plan-mode",
+  "run": 1,
+  "session": "ca1b7475-7f28-4cda-8f21-bd9f14aeb79e",
+  "passed": true,
+  "costUsd": 0.0123757925,
+  "classifierUsd": 0,
+  "modelCalls": 7,
+  "toolCalls": 7,
+  "tokens": {
+    "input": 42,
+    "cacheRead": 66420,
+    "cacheWrite": 6583,
+    "output": 2494,
+    "latencyMs": 48414
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=1634ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "plan-text",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-edit-attempt",
+      "pass": true,
+      "detail": "0 edit calls"
+    }
+  ]
+}

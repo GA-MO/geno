@@ -1,0 +1,90 @@
+{
+  "case": "A31-compaction-forced",
+  "run": 2,
+  "session": "2ba90b03-4ad7-4238-a0ed-f5143ebd6349",
+  "passed": false,
+  "costUsd": 0.10636871,
+  "classifierUsd": 0,
+  "modelCalls": 26,
+  "toolCalls": 61,
+  "tokens": {
+    "input": 156,
+    "cacheRead": 566810,
+    "cacheWrite": 89668,
+    "output": 9598,
+    "latencyMs": 141396
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "cd \"$OLDPWD\" 2>/dev/null; git -C . status --porcelain | sort && echo '---' && gr"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=822ch"
+    },
+    {
+      "id": "compacted",
+      "pass": true,
+      "detail": "session-start,hook-context,user,checkpoint,assistant,tool-result,compact"
+    },
+    {
+      "id": "legacy-untouched",
+      "pass": true,
+      "detail": " M src/shop/cart.ts\n M src/shop/checkout.ts\n M src/shop/coupon.ts\n M src/shop/discount.ts\n M src/shop/giftcard.ts\n M src/shop/inventory.ts\n M src/shop/invoice.ts\n M src/shop/ledger.ts\n M src/shop/loyalty.ts\n M src/shop/payout.ts\n M src/shop/pricing.ts\n M src/shop/receipt.ts\n M src/shop/refund.ts\n M src/shop/shipping.ts\n M src/shop/subscription.ts\n M src/shop/tax.ts\n M src/shop/wallet.ts\n M src/shop/warehouse.ts\n"
+    },
+    {
+      "id": "goal-kept",
+      "pass": true,
+      "detail": "compacted at seq 84"
+    },
+    {
+      "id": "all-documented",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

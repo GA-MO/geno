@@ -1,0 +1,24 @@
+{
+  "case": "A07-multi-step-todo",
+  "area": "planning",
+  "layer": "A",
+  "run": 2,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Rename getUser to fetchUser everywhere in the monorepo (core, api, web and their tests), make sure all tests still pass, and add a line about the rename under Unreleased in CHANGELOG.md.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "monorepo",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "519e1420ecab182a343454420a96f665a34415fd"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A07-multi-step-todo --run <n>"
+}

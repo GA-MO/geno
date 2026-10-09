@@ -1,0 +1,76 @@
+diff --git a/src/logic/score.js b/src/logic/score.js
+index 7d1a666..d0d8cc0 100644
+--- a/src/logic/score.js
++++ b/src/logic/score.js
+@@ -1,5 +1,9 @@
+-export const createState = () => ({ coins: 0, score: 0 });
++export const createState = () => ({ coins: 0, score: 0, paused: false });
+ 
+ export function collectCoin(state) {
+   return { ...state, coins: state.coins + 1 };
+ }
++
++export function togglePause(state) {
++  return { ...state, paused: !state.paused };
++}
+diff --git a/src/scenes/GameScene.js b/src/scenes/GameScene.js
+index 89f9851..f07a2c8 100644
+--- a/src/scenes/GameScene.js
++++ b/src/scenes/GameScene.js
+@@ -1,4 +1,4 @@
+-import { createState, collectCoin } from '../logic/score.js';
++import { createState, collectCoin, togglePause } from '../logic/score.js';
+ 
+ export class GameScene extends Phaser.Scene {
+   constructor() {
+@@ -12,15 +12,27 @@ export class GameScene extends Phaser.Scene {
+     this.coins = this.physics.add.group();
+     for (let i = 0; i < 8; i++) this.coins.add(this.add.circle(80 + i * 90, 120, 8, 0xffffff));
+     this.physics.add.overlap(this.player, this.coins, (_player, coin) => {
++      if (this.state.paused) return;
+       coin.destroy();
+       this.state = collectCoin(this.state);
+     });
+     this.cursors = this.input.keyboard.createCursorKeys();
++    this.pauseText = this.add.text(400, 300, 'PAUSED', { fontSize: '48px', color: '#ffffff' })
++      .setOrigin(0.5)
++      .setVisible(false);
++    this.input.keyboard.on('keydown-P', () => {
++      this.state = togglePause(this.state);
++      this.pauseText.setVisible(this.state.paused);
++    });
+   }
+ 
+   update() {
+-    const speed = 200;
+     const body = this.player.body;
++    if (this.state.paused) {
++      body.setVelocity(0);
++      return;
++    }
++    const speed = 200;
+     body.setVelocity(0);
+     if (this.cursors.left.isDown) body.setVelocityX(-speed);
+     if (this.cursors.right.isDown) body.setVelocityX(speed);
+diff --git a/test/score.test.js b/test/score.test.js
+index 9fe2f9e..7fa206c 100644
+--- a/test/score.test.js
++++ b/test/score.test.js
+@@ -1,7 +1,16 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { collectCoin, createState } from '../src/logic/score.js';
++import { collectCoin, createState, togglePause } from '../src/logic/score.js';
+ 
+ test('collecting a coin counts it', () => {
+   assert.equal(collectCoin(createState()).coins, 1);
+ });
++
++test('pause starts off and toggles on and off', () => {
++  let state = createState();
++  assert.equal(state.paused, false);
++  state = togglePause(state);
++  assert.equal(state.paused, true);
++  state = togglePause(state);
++  assert.equal(state.paused, false);
++});

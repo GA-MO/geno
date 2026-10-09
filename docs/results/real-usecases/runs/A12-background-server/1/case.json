@@ -1,0 +1,24 @@
+{
+  "case": "A12-background-server",
+  "area": "background",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Start the dev server (npm run dev), wait until it is listening, request http://localhost:5173/health and tell me the JSON it returns. Stop the server when you are done.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "febeb19210509d9f03430435fde14f20598c81ad"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A12-background-server --run <n>"
+}

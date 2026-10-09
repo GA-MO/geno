@@ -1,0 +1,82 @@
+{
+  "case": "A17-budget-reminder",
+  "run": 1,
+  "session": "449c5314-c6b1-41d4-90b2-a6851fd90a7e",
+  "passed": false,
+  "costUsd": 0.0115831375,
+  "classifierUsd": 0,
+  "modelCalls": 6,
+  "toolCalls": 6,
+  "tokens": {
+    "input": 36,
+    "cacheRead": 57049,
+    "cacheWrite": 8125,
+    "output": 3185,
+    "latencyMs": 57105
+  },
+  "errors": [
+    "max-turns: stopped after 6 model calls (--max-turns 6)"
+  ],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls src/shop/ 2>/dev/null && echo --- && git status --short && git log --oneline  | grep -c \"@returns\" src/shop/*.ts; echo ---; head -40 src/shop/cart.ts | grep -h '^/\\*\\*' src/shop/*.ts | sort | uniq -c | sort -rn; echo ---; grep -A1 ' | grep -h '@returns' src/shop/*.ts | sed -E 's/.*@returns //' | sort | uniq -c | h | grep -h '@returns' src/shop/*.ts | sort -u; echo ---; for f in src/shop/*.ts; do | perl -pi -e 's{^/\\*\\* Step (\\d+) of the (\\w+) flow\\. \\*/$}{/**\\n * Step $1 of th"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": false,
+      "detail": "stop=tool_use text=0ch"
+    },
+    {
+      "id": "reminded",
+      "pass": true,
+      "detail": "kind/seq/at/budget"
+    },
+    {
+      "id": "honest-partial",
+      "pass": false,
+      "detail": ""
+    }
+  ]
+}

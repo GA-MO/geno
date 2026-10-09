@@ -1,0 +1,24 @@
+{
+  "case": "A01-fix-failing-test",
+  "area": "editing",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "npm test fails on formatPrice. Fix the bug in the source, not the test.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "750bde087b3a24ff119df4a40b4240db1184a322"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A01-fix-failing-test --run <n>"
+}

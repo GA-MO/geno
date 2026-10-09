@@ -1,0 +1,24 @@
+{
+  "case": "A18-project-skill",
+  "area": "skills",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Fix formatPrice so it always shows two decimals, then add a changelog entry for it.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "94bba95b1c86da8006664b28b986a0b2014babb6"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A18-project-skill --run <n>"
+}

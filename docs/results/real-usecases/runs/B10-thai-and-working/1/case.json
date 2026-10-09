@@ -1,0 +1,16 @@
+{
+  "case": "B10-thai-and-working",
+  "layer": "B",
+  "run": "1",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "fc14809a-bc22-4485-a905-1adc115e43b0"
+  ],
+  "screenshots": [
+    "shots/r1/B10-thai-answer.png",
+    "shots/r1/B10-working-mid-turn.png"
+  ],
+  "wire": "runs/B-panel/1/wire.jsonl.gz"
+}

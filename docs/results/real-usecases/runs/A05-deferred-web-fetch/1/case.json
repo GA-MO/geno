@@ -1,0 +1,24 @@
+{
+  "case": "A05-deferred-web-fetch",
+  "area": "tools",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "What is the main heading on https://example.com ? Just tell me the heading text.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "a38a41145c736872dc52cd98f2ffbe39ee07cac7"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A05-deferred-web-fetch --run <n>"
+}

@@ -1,0 +1,80 @@
+{
+  "case": "A06-read-not-cat",
+  "run": 1,
+  "session": "62f0c746-6c13-40ea-94ac-01ba0a47dfed",
+  "passed": true,
+  "costUsd": 0.002966675,
+  "classifierUsd": 0,
+  "modelCalls": 2,
+  "toolCalls": 3,
+  "tokens": {
+    "input": 12,
+    "cacheRead": 14422,
+    "cacheWrite": 3498,
+    "output": 310,
+    "latencyMs": 6463
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=487ch"
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "used-dedicated",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

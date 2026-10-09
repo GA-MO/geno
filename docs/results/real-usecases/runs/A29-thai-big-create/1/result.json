@@ -1,0 +1,95 @@
+{
+  "case": "A29-thai-big-create",
+  "run": 1,
+  "session": "1583258a-1d61-4a61-bc46-397561e3f21b",
+  "passed": false,
+  "costUsd": 0.061075304999999996,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 12,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 117177,
+    "cacheWrite": 48106,
+    "output": 73344,
+    "latencyMs": 1310196
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": false,
+      "detail": "skill at seq 14 before any load"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "sed -n '1,120p' \"/Users/me/Development/g-code/.claude/worktrees/agent-a9"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": false,
+      "detail": "stop=tool_use text=0ch"
+    },
+    {
+      "id": "file-valid",
+      "pass": false,
+      "detail": "} /  / Node.js v22.23.2"
+    },
+    {
+      "id": "create-used",
+      "pass": false,
+      "detail": ""
+    },
+    {
+      "id": "recovers-bad-args",
+      "pass": null,
+      "detail": "no malformed call this run"
+    },
+    {
+      "id": "main-wired",
+      "pass": false,
+      "detail": ""
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": false,
+      "detail": "thai share 0.00"
+    }
+  ]
+}

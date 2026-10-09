@@ -1,0 +1,18 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index e883ff6..674251c 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -1 +1,10 @@
+-{"chat.disableAIFeatures":true,"workbench.secondarySideBar.defaultVisibility":"hidden","gcode.tasks.osNotifications":false,"gcode.approvalMode":"ask","gcode.chat.detail":"full","gcode.review.mode":"review","chat.mcp.enabled":false,"chat.mcp.access":"none","chat.mcp.autostart":"never"}
+\ No newline at end of file
++{
++    "chat.disableAIFeatures": true,
++    "workbench.secondarySideBar.defaultVisibility": "hidden",
++    "gcode.tasks.osNotifications": false,
++    "gcode.approvalMode": "ask",
++    "gcode.chat.detail": "full",
++    "gcode.review.mode": "review",
++    "chat.mcp.access": "none",
++    "chat.mcp.autostart": "never"
++}
+\ No newline at end of file

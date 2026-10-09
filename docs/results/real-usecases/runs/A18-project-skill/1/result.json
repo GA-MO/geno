@@ -1,0 +1,90 @@
+{
+  "case": "A18-project-skill",
+  "run": 1,
+  "session": "5f39ee2a-10c4-4423-bddb-54ad6d82e3b8",
+  "passed": false,
+  "costUsd": 0.010744725,
+  "classifierUsd": 0,
+  "modelCalls": 6,
+  "toolCalls": 10,
+  "tokens": {
+    "input": 36,
+    "cacheRead": 56505,
+    "cacheWrite": 7222,
+    "output": 1935,
+    "latencyMs": 36389
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "find . -type f -not -path './.git/*' | head -50"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=667ch"
+    },
+    {
+      "id": "skill-loaded",
+      "pass": false,
+      "detail": ""
+    },
+    {
+      "id": "skill-format",
+      "pass": true,
+      "detail": "# Changelog\n\n## Unreleased\n\n- fix: formatPrice always shows two decimals (src/money.ts)\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n"
+    },
+    {
+      "id": "skill-quote",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "money-passes",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

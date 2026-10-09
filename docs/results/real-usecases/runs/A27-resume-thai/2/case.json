@@ -1,0 +1,28 @@
+{
+  "case": "A27-resume-thai",
+  "area": "resume",
+  "layer": "A",
+  "run": 2,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Implement parseDuration in src/duration.ts so test/duration.test.ts passes, then fix formatPrice and slugify so the whole test suite is green.",
+      "maxTurns": 4
+    },
+    {
+      "prompt": "ถึงไหนแล้ว ทำต่อให้เสร็จด้วย",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "ts-lib",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "26ba80c4c46e4dd7e1039b4907ff2011e54e8a83"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A27-resume-thai --run <n>"
+}

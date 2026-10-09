@@ -1,0 +1,24 @@
+{
+  "case": "A25-game-feature",
+  "area": "editing",
+  "layer": "A",
+  "run": 1,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add a pause: pressing P toggles pause in the GameScene, freezing movement, and show \"PAUSED\" in the middle of the screen while paused. Keep the pause flag in the logic module with a test.",
+      "maxTurns": 40
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "game",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "476e2782ee2cb4e87453ead7c4cf1fc949698615"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A25-game-feature --run <n>"
+}

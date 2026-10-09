@@ -1,0 +1,24 @@
+{
+  "case": "A17-budget-reminder",
+  "area": "limits",
+  "layer": "A",
+  "run": 2,
+  "mode": "non-interactive",
+  "prompts": [
+    {
+      "prompt": "Add an @returns line to every exported function in src/shop/ whose doc comment lacks one.",
+      "maxTurns": 6
+    }
+  ],
+  "maxCostUsd": 0.2,
+  "env": {},
+  "settings": {},
+  "sibling": null,
+  "fixture": {
+    "name": "long-source",
+    "source": "scripts/real-usecases/fixtures.mjs",
+    "setup": null,
+    "initialCommit": "c4690c0deb06cd3c8dc889f1a28c14bf0d883d55"
+  },
+  "replay": "node scripts/real-usecases/run.mjs --case A17-budget-reminder --run <n>"
+}

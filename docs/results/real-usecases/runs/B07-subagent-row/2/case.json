@@ -1,0 +1,16 @@
+{
+  "case": "B07-subagent-row",
+  "layer": "B",
+  "run": "2",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "c55ae25b-d732-4a9d-b128-7e1891535012"
+  ],
+  "screenshots": [
+    "shots/r2/B07-after.png",
+    "shots/r2/B07-subagent-row.png"
+  ],
+  "wire": "runs/B-panel/2/wire.jsonl.gz"
+}

@@ -1,0 +1,85 @@
+{
+  "case": "A25-game-feature",
+  "run": 1,
+  "session": "9970ec38-3132-4f74-a2aa-15df7a0bd547",
+  "passed": false,
+  "costUsd": 0.02808783,
+  "classifierUsd": 0,
+  "modelCalls": 14,
+  "toolCalls": 19,
+  "tokens": {
+    "input": 84,
+    "cacheRead": 161758,
+    "cacheWrite": 9364,
+    "output": 4374,
+    "latencyMs": 79269
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "git log --oneline -5 && ls -la | find src test -type f | head -20 | node server.js & sleep 1; curl -s -o /dev/null -w \"index:%{http_code} \" http://l | SP=/private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/9970e"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": false,
+      "detail": "node --check src/scenes/GameScene.js && node --check src/logic/score.js && echo "
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": false,
+      "detail": "node server.js & sleep 1; curl -s -o /dev/null -w \"index:%{http_code} \" http://l | node server.js > /tmp/gcoin-server.log 2>&1 & SRV=$!; sleep 4; curl -s -o /dev/n | SP=/private/var/folders/zm/gknqmvqn6rb17486tnrgc3_40000gn/T/gcode-sessions/9970e"
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": false,
+      "detail": "bash node server.js > /tmp/gcoin-server.log 2>&1 & SRV=$!; sleep "
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=993ch"
+    },
+    {
+      "id": "tests-pass",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-install",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ui-unchecked-said",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "case": "A27-resume-thai",
+  "run": 1,
+  "session": "1c6726aa-1fc2-4b00-9cf7-1dd05f26988e",
+  "passed": false,
+  "costUsd": 0.0068514175,
+  "classifierUsd": 0,
+  "modelCalls": 4,
+  "toolCalls": 12,
+  "tokens": {
+    "input": 24,
+    "cacheRead": 34078,
+    "cacheWrite": 6329,
+    "output": 1169,
+    "latencyMs": 20792
+  },
+  "errors": [
+    "max-turns: stopped after 4 model calls (--max-turns 4)"
+  ],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": false,
+      "detail": "skill at seq 4 before any load"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": false,
+      "detail": "stop=tool_use text=0ch"
+    },
+    {
+      "id": "answers-in-thai",
+      "pass": false,
+      "detail": "thai share 0.00"
+    },
+    {
+      "id": "suite-green",
+      "pass": false,
+      "detail": "# skipped 0 / # todo 0 / # duration_ms 74.001917"
+    },
+    {
+      "id": "continues",
+      "pass": false,
+      "detail": ""
+    }
+  ]
+}

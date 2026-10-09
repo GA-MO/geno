@@ -1,0 +1,82 @@
+{
+  "case": "A17-budget-reminder",
+  "run": 2,
+  "session": "3b69e5c9-d971-460f-8553-276b9e32cc84",
+  "passed": false,
+  "costUsd": 0.01048986,
+  "classifierUsd": 0,
+  "modelCalls": 6,
+  "toolCalls": 8,
+  "tokens": {
+    "input": 36,
+    "cacheRead": 56050,
+    "cacheWrite": 7272,
+    "output": 1518,
+    "latencyMs": 26758
+  },
+  "errors": [
+    "max-turns: stopped after 6 model calls (--max-turns 6)"
+  ],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": false,
+      "detail": "ls src/shop 2>/dev/null; echo \"---\"; ls src 2>/dev/null | grep -h '@returns' src/shop/*.ts | sort -u | head -30 | grep -c '^/\\*\\* .* \\*/$' src/shop/*.ts | grep -n '^/\\*\\* .* \\*/$' src/shop/*.ts | perl -0pi -e 's{/\\*\\* Step (\\d+) of the ([a-z]+) flow\\. \\*/\\n}{/**\\n * Step $1 o"
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": false,
+      "detail": "stop=tool_use text=246ch"
+    },
+    {
+      "id": "reminded",
+      "pass": true,
+      "detail": "kind/seq/at/budget"
+    },
+    {
+      "id": "honest-partial",
+      "pass": false,
+      "detail": "All 36 gaps follow one pattern: a single-line `/** Step N of the <entity> flow. */` above an exported function whose multi-line siblings use `@returns the <entity> after step N`. I'll convert them to "
+    }
+  ]
+}

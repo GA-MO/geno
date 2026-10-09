@@ -1,0 +1,85 @@
+{
+  "case": "A05-deferred-web-fetch",
+  "run": 1,
+  "session": "c3d6cbd3-44c4-4ef3-8153-205fdfdfc4e8",
+  "passed": true,
+  "costUsd": 0.0044671925,
+  "classifierUsd": 0,
+  "modelCalls": 3,
+  "toolCalls": 2,
+  "tokens": {
+    "input": 18,
+    "cacheRead": 23601,
+    "cacheWrite": 3867,
+    "output": 424,
+    "latencyMs": 9308
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": null,
+      "detail": "no in-place edit"
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=389ch"
+    },
+    {
+      "id": "uses-web-fetch",
+      "pass": true,
+      "detail": "tool_search,web_fetch"
+    },
+    {
+      "id": "answer-correct",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "changes-nothing",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "case": "B08-mcp-banner",
+  "layer": "B",
+  "run": "1",
+  "mode": "ask",
+  "suite": "packages/extension/test/suite/real-model.ts",
+  "fixture": "packages/extension/test/suite/real-model-fixture.ts",
+  "sessions": [
+    "e4c82936-19b2-44b3-a830-e99ae0a865c0"
+  ],
+  "screenshots": [
+    "shots/r1/B08-after-echo.png",
+    "shots/r1/B08-banner.png",
+    "shots/r1/B08-trust-card.png"
+  ],
+  "wire": "runs/B-panel/1/wire.jsonl.gz"
+}

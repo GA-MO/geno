@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-09T09:56:06.455Z",
+  "step": "B09-stop-and-resume-thai",
+  "ok": false,
+  "detail": "threw: Error: timed out waiting for turn 2 to end"
+}
