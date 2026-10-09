@@ -653,8 +653,8 @@ export const REAL_SESSIONS: readonly RealSession[] = [
       {
         "type": "permission",
         "id": "0",
-        "command": "rm -rf build",
-        "reason": "rm -rf of a path inside the workspace",
+        "command": "rm -rf build && ls -d build 2>&1; echo \"exit: $?\"",
+        "reason": "rm -rf of a path inside the workspace; a command not on the safe list",
         "description": "Delete the build folder and confirm it is gone",
         "options": [
           {
@@ -668,18 +668,12 @@ export const REAL_SESSIONS: readonly RealSession[] = [
             "kind": "reject_once"
           },
           {
-            "optionId": "allow-workspace",
-            "name": "Always allow in this workspace",
-            "kind": "allow_always"
-          },
-          {
             "optionId": "reject-with-comment",
             "name": "No, and tell the agent…",
             "kind": "reject_once"
           }
         ],
-        "toolId": "toolu_761766a82c014da6b3562b66",
-        "rule": "rm -rf build"
+        "toolId": "toolu_761766a82c014da6b3562b66"
       }
     ]
   },
