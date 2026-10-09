@@ -20,7 +20,7 @@ import type { Reveal } from './lanes-model.js';
 import { NO_BACKGROUND, type Background } from './activity-model.js';
 import { arenaPanel } from './arena-panel.js';
 import { mcpPanel } from './mcp-panel.js';
-import { sendMenu } from './send-menu.js';
+import { isLaneKey, sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
 import { isWaiting, nodeOf, railOf, todoListOf, type Step } from './rail.js';
@@ -1099,6 +1099,11 @@ input.addEventListener('keyup', (event) => {
   slash.refresh();
 });
 input.addEventListener('keydown', (event) => {
+  if (isLaneKey(event) && !imeKey(event)) {
+    event.preventDefault();
+    runInLane();
+    return;
+  }
   if (slash.keydown(event)) return;
   if (completing !== undefined && completing.items.length > 0 && !imeKey(event)) {
     const move = MENU_KEYS[event.key];

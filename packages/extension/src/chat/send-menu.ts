@@ -1,5 +1,10 @@
 /// <reference lib="dom" />
-import { h, icon } from './dom.js';
+import { h, icon, MAC } from './dom.js';
+
+export const LANE_KEY = MAC ? '⌘⇧Enter' : 'Ctrl+Shift+Enter';
+
+/** Cmd+Shift+Enter on macOS, Ctrl+Shift+Enter elsewhere: run the draft in a new lane, as VS Code's chat sends to a new chat. */
+export const isLaneKey = (event: KeyboardEvent): boolean => event.key === 'Enter' && event.shiftKey && !event.altKey && (MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
 export type SendMenuHooks = {
   /** Sends the draft, or queues it while a turn runs. */
@@ -17,7 +22,7 @@ export type SendMenuHooks = {
 export function sendMenu(hooks: SendMenuHooks) {
   const button = h(
     'button',
-    { type: 'button', class: 'composer-icon send-more', title: 'More ways to send', 'aria-label': 'More ways to send', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'send-menu' },
+    { type: 'button', class: 'composer-icon send-more', title: `More ways to send (${LANE_KEY} runs in a new lane)`, 'aria-label': 'More ways to send', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'send-menu' },
     icon('chevron-up'),
   );
   const menu = h('ul', { class: 'model-menu send-menu', id: 'send-menu', role: 'menu', 'aria-label': 'Send', hidden: true });
@@ -46,7 +51,7 @@ export function sendMenu(hooks: SendMenuHooks) {
     const draft = hooks.hasDraft();
     menu.replaceChildren(
       option('send', hooks.running() ? 'Queue follow-up' : 'Send', 'Enter', draft, hooks.send),
-      option('lane', 'Run in a new lane', 'background', draft, hooks.runInLane),
+      option('lane', 'Run in a new lane', LANE_KEY, draft, hooks.runInLane),
       ...(draft ? [] : [h('li', { class: 'menu-note', role: 'presentation' }, 'Type a task first.')]),
     );
   }

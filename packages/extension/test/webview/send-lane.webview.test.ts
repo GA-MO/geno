@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ComposerFacts } from '../../src/chat/composer-model.js';
 import { fixtureOf, playFixture } from './gallery-stage.js';
-import { closeBrowser, type Panel } from './harness.js';
+import { closeBrowser, openPanel, type Panel } from './harness.js';
 
 afterAll(closeBrowser);
 
@@ -70,6 +70,48 @@ describe('the send menu chevron', () => {
       expect(row.squeezed, 'neither side of the row is cut off').toBe(false);
       expect(row.modelCost, 'the chevron takes no more of the model name than the 16px one did').toBeLessThanOrEqual(OLD_CHEVRON_COST);
     }
+    await panel.close();
+  });
+});
+
+const laneKeyOf = (panel: Panel) => panel.eval<string>(`/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘⇧Enter' : 'Ctrl+Shift+Enter'`);
+const lanesSent = (panel: Panel) => panel.host.received.flatMap((m) => (m.type === 'lane-new' ? [m.text] : []));
+const viewOf = (panel: Panel) => panel.eval<string>('doc.body.dataset.view');
+const draftOf = (panel: Panel) => panel.eval<string>('doc.querySelector("textarea").value');
+
+async function typeDraft(panel: Panel, text: string): Promise<void> {
+  await panel.click('textarea');
+  await panel.type(text);
+}
+
+describe('the run-in-a-lane shortcut', () => {
+  it('runs the draft in a new lane and opens the Lanes pane', async () => {
+    const panel = await openPanel({ width: 300 });
+    await typeDraft(panel, '  fix the flaky test  ');
+    await panel.press('ControlOrMeta+Shift+Enter');
+    await panel.waitFor('the Lanes pane', async () => (await viewOf(panel)) === 'lanes');
+    expect(lanesSent(panel), 'the trimmed draft went to one new lane').toEqual(['fix the flaky test']);
+    expect(await draftOf(panel), 'the draft is cleared').toBe('');
+    expect(panel.host.received.filter((m) => m.type === 'send'), 'nothing went to the chat').toEqual([]);
+    await panel.close();
+  });
+
+  it('does nothing without a draft', async () => {
+    const panel = await openPanel({ width: 300 });
+    await typeDraft(panel, '   ');
+    await panel.press('ControlOrMeta+Shift+Enter');
+    await panel.host.settled();
+    await panel.frame();
+    expect(lanesSent(panel), 'no lane').toEqual([]);
+    expect(await viewOf(panel), 'the chat stays').toBe('chat');
+    await panel.close();
+  });
+
+  it('shows in the menu item and on the chevron', async () => {
+    const panel = await playFixture(fixtureOf('composer-send-menu'));
+    const key = await laneKeyOf(panel);
+    expect(await panel.eval<string | null>(`doc.querySelector('#send-menu [data-action="lane"] .model-option-detail')?.textContent ?? null`), 'the item names the shortcut').toBe(key);
+    expect(await panel.eval<string>(`doc.querySelector('.send-more').title`), 'the chevron names it').toBe(`More ways to send (${key} runs in a new lane)`);
     await panel.close();
   });
 });
