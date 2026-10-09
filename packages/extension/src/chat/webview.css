@@ -1241,6 +1241,7 @@ body.diagram-tab {
 
 .hunk-lines {
   padding: 2px 0 6px;
+  overflow-x: auto;
   font-family: var(--vscode-editor-font-family);
   font-size: var(--code-size);
   line-height: 1.6;
@@ -1251,8 +1252,12 @@ body.diagram-tab {
   font-family: var(--vscode-font-family);
 }
 
+/* As wide as its longest line, so a changed line's background runs on under a sideways scroll. */
 .diff-line {
   display: flex;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
   padding-right: 12px;
 }
 
