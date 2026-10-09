@@ -119,7 +119,8 @@ tools:
         |
         | Waiting:
         | - Never end a command with & to run it in the background: use run_in_background, which Geno stops when the session ends.
-        | - To wait for a background server or build, call monitor with a pattern such as "listening" or "ready" (load it with tool_search first). Do not sleep between commands that can run at once, and do not poll or retry a command in a sleep loop.
+        | - To wait for a background server or build, call monitor with a pattern such as "listening" or "ready" (load it with tool_search first). Where monitor says nothing would wake the session, wait in one foreground command that ends when the condition holds, such as until curl -sf http://localhost:3000/health; do sleep 0.5; done, with timeout_seconds as its limit.
+        | - Do not sleep between commands that can run at once, and do not retry a failing command in a sleep loop: find the cause.
         |
         | Git:
         | - Interactive flags, such as git rebase -i or git add -i, do not work here.

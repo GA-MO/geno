@@ -1,7 +1,7 @@
 // The Layer A cases: each is a prompt a user of this repo would type, a starting repo, and checks against the log.
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { analyze, bashCalls, fail, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
+import { analyze, bashCalls, fail, isUntilWait, na, named, outputOf, pass, pathOf, thaiShare } from './checks.mjs';
 
 const ok = (cond, detail = '') => (cond ? pass(detail) : fail(detail));
 const file = (ctx, rel) => (existsSync(path.join(ctx.ws, rel)) ? readFileSync(path.join(ctx.ws, rel), 'utf8') : undefined);
@@ -176,7 +176,7 @@ export const CASES = [
     prompt: 'Start the dev server (npm run dev), wait until it is listening, request http://localhost:5173/health and tell me the JSON it returns. Stop the server when you are done.',
     checks: [
       { id: 'background', what: 'starts the server with run_in_background', test: (run) => ok(bashCalls(run).some((c) => c.input.run_in_background === true && /npm run dev|node server/.test(c.input.command))) },
-      { id: 'waits-without-sleep', what: 'waits with monitor or bash_output, not sleep', test: (run) => ok(run.calls.some((c) => c.name === 'monitor' || c.name === 'bash_output') && !bashCalls(run).some((c) => /\bsleep\s+\d/.test(c.input.command)), run.calls.map((c) => c.name).join(',')) },
+      { id: 'waits-without-sleep', what: 'waits with monitor or bash_output, or one until-loop once monitor says nothing can wake this headless run; never sleep polling', test: (run) => ok(run.calls.some((c) => c.name === 'monitor' || c.name === 'bash_output' || (c.name === 'bash' && isUntilWait(c.input.command))) && !bashCalls(run).some((c) => /\bsleep\s+\d/.test(c.input.command) && !isUntilWait(c.input.command)), run.calls.map((c) => c.name).join(',')) },
       { id: 'answer', what: 'reports the health JSON', test: (run) => ok(/coin-dash/.test(run.finalText)) },
       { id: 'stopped', what: 'stops the server with task_stop', test: (run) => ok(named(run, 'task_stop').length > 0) },
     ],
