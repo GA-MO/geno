@@ -142,7 +142,7 @@ export async function run(): Promise<void> {
   // The command's own step and its permission card can arrive in either order, so the steps are compared as a set.
   const running = await railOf('t1');
   check(
-    JSON.stringify({ ...running, steps: [...running.steps].sort() }) === JSON.stringify({ steps: ['calls', 'calls', 'fold', 'permission', 'text'], fold: '+7 earlier steps', open: 'false' }),
+    JSON.stringify({ ...running, steps: [...running.steps].sort() }) === JSON.stringify({ steps: ['asking', 'calls', 'fold', 'permission', 'text'], fold: '+7 earlier steps', open: 'false' }),
     'the running turn shows its last four steps, the approval card among them, and folds the rest',
     running,
   );

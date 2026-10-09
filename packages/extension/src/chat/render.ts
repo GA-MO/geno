@@ -243,6 +243,10 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
   );
 }
 
+/** A call that waits on its card, which shows what it asks: the step says only that it waits, with no spinner. */
+export const askingStep = (tool: ToolBlock): HTMLElement =>
+  h('div', { class: 'calls step-asking', 'data-step': tool.name, 'data-tool': tool.id }, h('div', { class: 'step-row' }, icon(KIND_ICONS[tool.toolKind], 'kind'), h('span', { class: 'step-verb' }, 'Waiting for you')));
+
 /** A bash call as one step: its title in plain words, then one box with the command in full and the first lines of its output. */
 function commandStep(tool: ToolBlock, ui: Ui, quiet: boolean): HTMLElement {
   const unfold = `out:${tool.id}`;
