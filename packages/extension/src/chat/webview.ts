@@ -16,7 +16,7 @@ import type { ChatDetail, FromView, Header, Modes, ToView, Transcript, Turn } fr
 import { memoryPanel, rulesPanel } from './context-panes.js';
 import { historyPanel } from './history.js';
 import { lanesPanel, tasksPanel } from './lanes-panel.js';
-import type { Reveal } from './lanes-model.js';
+import { LANE_USAGE, laneTask, type Reveal } from './lanes-model.js';
 import { NO_BACKGROUND, type Background } from './activity-model.js';
 import { arenaPanel } from './arena-panel.js';
 import { mcpPanel } from './mcp-panel.js';
@@ -269,6 +269,8 @@ document.body.append(header, mcp.notice, history.element, mcp.element, rules.ele
 const attachments = composerAttachments(form, (message) => host.postMessage(message), () => showTray());
 tray.insertBefore(attachments.element, chips);
 inputBox.insertBefore(attachments.note, input);
+const laneUsage = h('div', { class: 'lane-usage', role: 'status', hidden: true }, LANE_USAGE);
+inputBox.insertBefore(laneUsage, input);
 
 /** The tray shows while any chip is in it. */
 function showTray(): void {
@@ -1044,9 +1046,14 @@ function renderMenu(): void {
   input.setAttribute('aria-expanded', String(items.length > 0));
 }
 
-/** The send menu's Run in a new lane: the draft becomes a lane's task, which runs in the background, and the Lanes pane shows it. */
+/**
+ * Run in a new lane, from the send menu, its key or `/lane <task>`: the task runs in the background, and the Lanes pane
+ * shows it. A bare `/lane` stays in the draft with its usage.
+ */
 function runInLane(): void {
-  const text = input.value.trim();
+  const draft = input.value.trim();
+  const text = laneTask(draft) ?? draft;
+  laneUsage.hidden = text !== '' || draft === '';
   if (text === '') return;
   host.postMessage({ type: 'lane-new', text });
   peek.sent();
@@ -1056,6 +1063,7 @@ function runInLane(): void {
 
 /** Sends the draft, or while a turn runs queues it to send when the turn finishes; one follow-up waits at a time. */
 function submit(): void {
+  if (laneTask(input.value) !== undefined) return runInLane();
   const text = input.value.trim();
   const attached = attachments.ready();
   if ((text === '' && attached.length === 0) || attachments.busy()) return;
@@ -1083,6 +1091,7 @@ form.addEventListener('submit', (event) => {
   submit();
 });
 input.addEventListener('input', () => {
+  laneUsage.hidden = true;
   save({ ...state, draft: input.value });
   redraft();
   peek.typed(input.value);

@@ -1,7 +1,9 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ComposerFacts } from '../../src/chat/composer-model.js';
+import { BUILTIN_OPTIONS } from '../../src/chat/slash-route.js';
 import { fixtureOf, playFixture } from './gallery-stage.js';
 import { closeBrowser, openPanel, type Panel } from './harness.js';
+import { turnStart } from './turns.js';
 
 afterAll(closeBrowser);
 
@@ -112,6 +114,49 @@ describe('the run-in-a-lane shortcut', () => {
     const key = await laneKeyOf(panel);
     expect(await panel.eval<string | null>(`doc.querySelector('#send-menu [data-action="lane"] .model-option-detail')?.textContent ?? null`), 'the item names the shortcut').toBe(key);
     expect(await panel.eval<string>(`doc.querySelector('.send-more').title`), 'the chevron names it').toBe(`More ways to send (${key} runs in a new lane)`);
+    await panel.close();
+  });
+});
+
+const usageShown = (panel: Panel) => panel.eval<string | null>(`(() => { const note = doc.querySelector('.lane-usage'); return note && !note.hidden ? note.textContent : null; })()`);
+
+describe('/lane', () => {
+  it('runs its task in a new lane, as the menu item does, even while a turn runs', async () => {
+    const panel = await openPanel({ width: 300 });
+    await panel.host.act(turnStart('t0', 'Refactor the settings page'));
+    await typeDraft(panel, '/lane fix the flaky test');
+    await panel.press('Enter');
+    await panel.waitFor('the Lanes pane', async () => (await viewOf(panel)) === 'lanes');
+    expect(lanesSent(panel), 'the task alone went to one new lane').toEqual(['fix the flaky test']);
+    expect(await draftOf(panel), 'the draft is cleared').toBe('');
+    expect(await panel.count('.queued-chip:not([hidden])'), 'nothing waits as a follow-up').toBe(0);
+    expect(panel.host.received.filter((m) => m.type === 'send'), 'nothing went to the chat').toEqual([]);
+    await panel.close();
+  });
+
+  it('alone shows its usage and runs nothing', async () => {
+    const panel = await openPanel({ width: 300 });
+    await typeDraft(panel, '/lane');
+    await panel.press('Escape');
+    await panel.press('Enter');
+    await panel.waitFor('the usage', async () => (await usageShown(panel)) !== null);
+    expect(await usageShown(panel)).toBe('Type the task after /lane, such as /lane fix the flaky test.');
+    expect(lanesSent(panel), 'no lane').toEqual([]);
+    expect(panel.host.received.filter((m) => m.type === 'send'), 'nothing went to the chat').toEqual([]);
+    expect(await draftOf(panel), 'the draft stays to finish').toBe('/lane');
+    await panel.screenshot('lane-usage');
+    await panel.type(' x');
+    await panel.waitFor('the usage to go once the draft changes', async () => (await usageShown(panel)) === null);
+    await panel.close();
+  });
+
+  it('is in the slash menu with its hint', async () => {
+    const panel = await openPanel({ width: 300 });
+    await panel.host.post({ type: 'commands', commands: BUILTIN_OPTIONS });
+    await typeDraft(panel, '/la');
+    await panel.waitFor('the slash menu', async () => (await panel.count('#commands:not([hidden])')) > 0);
+    const row = await panel.eval<string | null>(`doc.querySelector('#commands [data-command="lane"]')?.textContent ?? null`);
+    expect(row).toBe('/lane<task>Run a task in a new lane, in the background');
     await panel.close();
   });
 });

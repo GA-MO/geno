@@ -11,6 +11,15 @@ import { clockOf, formatCost, formatDuration } from './format.js';
  * webview bundles this file, so it imports only types and other pure webview modules.
  */
 
+/** What a bare `/lane` says. */
+export const LANE_USAGE = 'Type the task after /lane, such as /lane fix the flaky test.';
+
+/** The task of a `/lane` draft: '' for a bare `/lane`, and undefined for a draft that is not `/lane`. */
+export function laneTask(draft: string): string | undefined {
+  const match = /^\/lane(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  return match === null ? undefined : (match[1] ?? '').trim();
+}
+
 /** What the Lanes pane shows: nothing yet, the engine's answer, or why it failed. */
 export type LanesListing = { readonly kind: 'loading' } | { readonly kind: 'loaded'; readonly lanes: readonly LaneInfo[] } | { readonly kind: 'failed'; readonly message: string };
 

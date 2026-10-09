@@ -381,6 +381,12 @@ body.vscode-high-contrast-light .button.danger {
   font-size: 12px;
 }
 
+.lane-usage {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
 .composer .send-menu {
   left: auto;
   right: var(--gap);

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { EXPANDED, SENT, THEMES } from './slash-fixture.js';
 import { SHOOTING } from './shooting.js';
 
-const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n', 'schedule', 'workflow'];
+const BUILTINS = ['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n', 'lane', 'schedule', 'workflow'];
 
 const model = () => process.env['GCODE_FAKE_MODEL']!;
 
