@@ -10,8 +10,8 @@ import type { AutoDecision, DiffHunk, ErrorBlock, FileDiff, FromView, Permission
 import { answerWords, settledLine } from './question-model.js';
 import { questionCard } from './question-view.js';
 import { workflowCardBody } from './workflow-view.js';
-import type { ChangedFile } from './fold.js';
-import { headerOf, type EditTool, type Step } from './rail.js';
+import { changedFiles, type ChangedFile } from './fold.js';
+import { byFile, headerOf, isEdit, type EditTool, type FileCalls, type Step } from './rail.js';
 import type { AttachmentView } from './attachment-model.js';
 import { markdownImage, sentAttachments, toolImages } from './images.js';
 import { commandContent } from './slash-view.js';
@@ -126,15 +126,32 @@ const basename = (file: string): string => file.slice(file.lastIndexOf('/') + 1)
 const lineCounts = ({ added, removed }: { readonly added: number; readonly removed: number }): HTMLElement =>
   h('span', { class: 'line-counts' }, h('span', { class: 'lines-added' }, `+${added}`), h('span', { class: 'lines-removed' }, `−${removed}`));
 
-/** A file a read or an edit touched, with an edit's line counts. */
-function fileChip(tool: ToolBlock): HTMLElement {
-  const file = tool.diff?.path ?? tool.target;
+/** A file's calls read as the first status here any of them has: one that still runs shows the file as running. */
+const CHIP_STATUSES: readonly ToolStatus[] = ['running', 'completed', 'failed', 'cancelled'];
+
+const statusOf = (tools: readonly ToolBlock[]): ToolStatus => CHIP_STATUSES.find((status) => tools.some((tool) => tool.status === status)) ?? 'completed';
+
+const callCount = (n: number, noun: string): Child => n > 1 && h('span', { class: 'call-count' }, `· ${n} ${noun}`);
+
+/** A file a step read or edited, once however many calls touched it: the edits' summed line counts, and the file's combined change on click. */
+function fileChip(name: string, { path, tools }: FileCalls, ui: Ui): HTMLElement {
+  const [changed] = changedFiles(tools.filter(isEdit));
+  const parts = [icon('file-code'), h('span', { class: 'chip-name' }, basename(path) || name), changed !== undefined && lineCounts(changed), callCount(tools.length, FILE_TOOLS[name] ?? 'calls')];
+  const look = `file-chip chip-${statusOf(tools)}`;
+  if (changed === undefined) return h('span', { class: look, title: path }, ...parts);
   return h(
-    'span',
-    { class: `file-chip chip-${tool.status}`, title: file },
-    icon('file-code'),
-    h('span', { class: 'chip-name' }, basename(file) || tool.name),
-    tool.diff !== undefined && lineCounts(counts(tool.diff)),
+    'button',
+    {
+      type: 'button',
+      class: look,
+      title: `Open ${path}`,
+      'data-focus': `chip:${changed.first}`,
+      onclick: (event) => {
+        event.stopPropagation();
+        ui.post(controls(ui).open(changed));
+      },
+    },
+    ...parts,
   );
 }
 
@@ -157,13 +174,14 @@ function autoNote(tool: ToolBlock & { readonly auto: AutoDecision }): HTMLElemen
 
 const isAuto = (tool: ToolBlock): tool is ToolBlock & { readonly auto: AutoDecision } => tool.auto !== undefined;
 
-/** Tools whose runs show as file chips rather than a target. */
-const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
+/** Tools whose runs show as file chips rather than a target, with what a chip counts when calls repeat a file. */
+const FILE_TOOLS: Readonly<Record<string, string | undefined>> = { read: 'reads', edit: 'edits' };
 
 /**
- * A run of calls as one step on the rail: reads and edits as file chips, any other call with its target.
+ * A run of calls as one step on the rail: reads and edits as one chip per file, any other call with its target.
  * Opening the step lists each call with its duration, and each call opens to its output. A `quiet` step, one of a
- * compact turn's recent steps, leaves out an MCP call's arguments and the quiet Auto badges.
+ * compact turn's recent steps, leaves out an MCP call's arguments and the quiet Auto badges. The row is not one
+ * button because an edit's chip is its own: the toggle carries the keyboard and the row takes the rest of the clicks.
  */
 export function callsStep(key: string, name: string, tools: readonly ToolBlock[], ui: Ui, quiet = false): HTMLElement {
   const first = tools[0]!;
@@ -176,12 +194,16 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
     'div',
     { class: 'calls', 'data-step': name },
     h(
-      'button',
-      { class: 'step-row', 'aria-expanded': String(open), 'data-focus': `step:${key}`, onclick: () => ui.toggle(key) },
-      icon(KIND_ICONS[first.toolKind], 'kind'),
-      mcpServerChip(name),
-      h('span', { class: 'step-verb' }, verbOf(name, running)),
-      FILE_TOOLS.has(name) ? h('span', { class: 'chips' }, ...tools.map(fileChip)) : target && h('code', { class: 'step-target' }, first.target),
+      'div',
+      { class: 'step-row', onclick: () => ui.toggle(key) },
+      h(
+        'button',
+        { type: 'button', class: 'step-toggle', 'aria-expanded': String(open), 'data-focus': `step:${key}` },
+        icon(KIND_ICONS[first.toolKind], 'kind'),
+        mcpServerChip(name),
+        h('span', { class: 'step-verb' }, verbOf(name, running)),
+      ),
+      FILE_TOOLS[name] !== undefined ? h('span', { class: 'chips' }, ...byFile(tools).map((file) => fileChip(name, file, ui))) : target && h('code', { class: 'step-target' }, first.target),
       h('span', { class: 'spacer' }),
       running && icon('loading', 'codicon-modifier-spin step-status'),
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),
@@ -320,35 +342,39 @@ function hunkView(hunk: DiffHunk, ui: Ui): HTMLElement {
   );
 }
 
-function editCard(tool: EditTool, ui: Ui): HTMLElement {
-  const { diff } = tool;
-  const slash = diff.path.lastIndexOf('/');
-  const dir = slash === -1 ? '' : diff.path.slice(0, slash);
-  const first = diff.hunks.find((hunk) => hunk.status === 'pending') ?? diff.hunks[0];
-  const file: OpenedFile = { path: diff.path, first: first?.id ?? '', checkpoint: { before: diff.change } };
+/** Every edit the turn made to one file: their summed counts, then each edit's hunks in the order they were made. */
+function editCard({ path, tools }: FileCalls<EditTool>, ui: Ui): HTMLElement {
+  const slash = path.lastIndexOf('/');
+  const dir = slash === -1 ? '' : path.slice(0, slash);
+  const hunks = tools.flatMap((tool) => tool.diff.hunks);
+  const first = hunks.find((hunk) => hunk.status === 'pending') ?? hunks[0];
+  const file: OpenedFile = { path, first: first?.id ?? '', checkpoint: { before: tools[0]!.diff.change } };
+  const status = statusOf(tools);
   return h(
     'section',
-    { class: 'edit-card', 'data-edit': tool.id, 'aria-label': `Edit to ${diff.path}` },
+    { class: 'edit-card', 'data-edit': tools[0]!.id, 'aria-label': `Edits to ${path}` },
     h(
       'div',
       { class: 'edit-head' },
       h(
         'button',
-        { class: 'link-button file-name', title: `Open ${diff.path}`, 'data-focus': `open:${tool.id}`, onclick: () => first !== undefined && ui.post(controls(ui).open(file)) },
-        basename(diff.path),
+        { class: 'link-button file-name', title: `Open ${path}`, 'data-focus': `open:${tools[0]!.id}`, onclick: () => first !== undefined && ui.post(controls(ui).open(file)) },
+        basename(path),
       ),
       dir !== '' && h('span', { class: 'file-dir' }, dir),
-      lineCounts(counts(diff)),
+      lineCounts(changedFiles(tools)[0]!),
+      callCount(tools.length, 'edits'),
       h('span', { class: 'spacer' }),
-      tool.status !== 'completed' && statusIcon(tool.status),
+      status !== 'completed' && statusIcon(status),
     ),
-    ...diff.hunks.map((hunk) => hunkView(hunk, ui)),
+    ...hunks.map((hunk) => hunkView(hunk, ui)),
   );
 }
 
-/** Every edit of a turn in one card at the end of its rail, with Keep all and Undo all while any hunk waits for review. */
+/** Every edit of a turn in one card at the end of its rail, one section per file, with Keep all and Undo all while any hunk waits for review. */
 export function changesCard(edits: readonly EditTool[], ui: Ui): HTMLElement {
-  const files = new Set(edits.map((tool) => tool.diff.path)).size;
+  const groups = byFile(edits);
+  const files = groups.length;
   const total = edits.map((tool) => counts(tool.diff)).reduce((a, b) => ({ added: a.added + b.added, removed: a.removed + b.removed }), { added: 0, removed: 0 });
   const pending = edits.flatMap((tool) => tool.diff.hunks.filter((hunk) => hunk.status === 'pending').map((hunk) => hunk.id));
   return h(
@@ -363,7 +389,7 @@ export function changesCard(edits: readonly EditTool[], ui: Ui): HTMLElement {
       h('span', { class: 'spacer' }),
       controls(ui).pending(pending, ui),
     ),
-    ...edits.map((tool) => editCard(tool, ui)),
+    ...groups.map((file) => editCard(file, ui)),
   );
 }
 

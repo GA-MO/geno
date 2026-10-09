@@ -48,7 +48,7 @@ export type SpinoffTool = ToolBlock & { readonly spinoff: NonNullable<ToolBlock[
 /** How a step's node on the rail reads: done, under way, waiting on the user, failed, or text. */
 export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
 
-/** Tools whose consecutive calls fold into one step, each call a file chip. */
+/** Tools whose consecutive calls fold into one step, each file one chip. */
 const FILE_TOOLS: ReadonlySet<string> = new Set(['read', 'edit']);
 
 /** The engine's tool that starts a subagent. */
@@ -57,6 +57,19 @@ export const AGENT_CALL = 'agent';
 export const childrenUnder = (turn: Turn, toolId: string): Child[] => Object.values(turn.children ?? {}).filter((child) => child.toolId === toolId);
 
 export const isEdit = (tool: ToolBlock): tool is EditTool => tool.diff !== undefined;
+
+/** A file's calls in a run, which one chip or one card shows together. */
+export type FileCalls<T extends ToolBlock = ToolBlock> = { readonly path: string; readonly tools: readonly T[] };
+
+/** The calls grouped by the file they touched, in the order each file first appears. */
+export function byFile<T extends ToolBlock>(tools: readonly T[]): FileCalls<T>[] {
+  const files = new Map<string, T[]>();
+  for (const tool of tools) {
+    const path = tool.diff?.path ?? tool.target;
+    files.set(path, [...(files.get(path) ?? []), tool]);
+  }
+  return [...files].map(([path, calls]) => ({ path, tools: calls }));
+}
 
 /** The list as the turn's last todo call left it; undefined when the turn set none. */
 export const todoListOf = (turn: Turn): TodoList | undefined => turn.blocks.findLast((block): block is ToolBlock => block.kind === 'tool' && block.todo !== undefined)?.todo;
