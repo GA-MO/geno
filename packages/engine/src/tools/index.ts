@@ -1,5 +1,5 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
+import { toolText, type ApprovalRecord, type ChapterMark, type EditorAction, type FileChange, type FileStamp, type ImageAttachment, type ShownFiles, type SpinoffNote, type TodoList, type ToolName, type ToolStatus, type WidgetRef } from '@g-code/core';
 import { ToolDenied, ToolError, ToolRejected, type Executor, type ToolContext } from './context.js';
 import { glob } from './glob.js';
 import { grep } from './grep.js';
@@ -24,6 +24,7 @@ export type ToolRun = {
   readonly loaded?: readonly string[] | undefined;
   readonly spinoff?: SpinoffNote | undefined;
   readonly chapter?: ChapterMark | undefined;
+  readonly shown?: ShownFiles | undefined;
   readonly file?: FileStamp | undefined;
 };
 

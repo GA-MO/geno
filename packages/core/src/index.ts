@@ -59,6 +59,7 @@ export * from './terminal.js';
 export * from './todo.js';
 export * from './spinoff.js';
 export * from './chapters.js';
+export * from './show-files.js';
 export * from './lanes.js';
 export * from './subagent.js';
 export * from './handback.js';

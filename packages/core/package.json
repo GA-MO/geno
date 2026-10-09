@@ -23,6 +23,7 @@
     "./todo": "./src/todo.ts",
     "./spinoff": "./src/spinoff.ts",
     "./chapters": "./src/chapters.ts",
+    "./show-files": "./src/show-files.ts",
     "./compact": "./src/compact.ts",
     "./schedule": "./src/schedule.ts",
     "./cron": "./src/cron.ts",

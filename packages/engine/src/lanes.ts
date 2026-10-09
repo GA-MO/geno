@@ -127,7 +127,7 @@ export async function requireLane(repo: LaneRepo, raw: string): Promise<LaneReco
   return record;
 }
 
-async function laneRecords(repo: LaneRepo): Promise<LaneRecord[]> {
+export async function laneRecords(repo: LaneRepo): Promise<LaneRecord[]> {
   let names: string[];
   try {
     names = (await readdir(recordsDir(repo))).filter((file) => file.endsWith('.json'));
