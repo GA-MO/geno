@@ -215,28 +215,30 @@ const isTodoReminder = (event: TurnEvent): boolean => event.kind === 'notice' &&
 const isTypedPrompt = (event: TurnEvent | undefined): boolean => event?.kind === 'user' && event.from === undefined && event.steer !== true;
 
 /**
- * Whether the log ends with a prompt the user typed after a turn that did not finish on its own: stopped, failed, or
- * capped by its run's limits, which ends on an error or on the last call the limits allow, a report with tools off.
+ * How the turn before the prompt the log ends with ended, when the user typed that prompt: `stopped` when it did not
+ * finish on its own (stopped, failed, or capped by its run's limits, which ends on an error or on the last call the
+ * limits allow, a report with tools off), `earlier` when it did. Undefined mid-turn.
  */
-function cutShort(events: readonly TurnEvent[]): boolean {
+function turnBefore(events: readonly TurnEvent[]): Extract<TodoReminder['why'], 'stopped' | 'earlier'> | undefined {
   const conversation = events.filter((e) => IN_CONVERSATION[e.kind] && e.kind !== 'session-start');
-  if (!isTypedPrompt(conversation.at(-1))) return false;
-  if (conversation.at(-2)?.kind === 'error') return true;
-  const prompt = events.lastIndexOf(conversation.at(-1)!);
-  const before = events.slice(0, prompt);
-  return before.slice(before.findLastIndex(isTypedPrompt) + 1).some((e) => e.kind === 'notice' && e.last === true);
+  if (!isTypedPrompt(conversation.at(-1))) return undefined;
+  if (conversation.at(-2)?.kind === 'error') return 'stopped';
+  const before = events.slice(0, events.lastIndexOf(conversation.at(-1)!));
+  return before.slice(before.findLastIndex(isTypedPrompt) + 1).some((e) => e.kind === 'notice' && e.last === true) ? 'stopped' : 'earlier';
 }
 
 /**
  * Whether to show the model its unfinished list before its next call. Read from the session as its cuts leave it, not
  * its context view, so a compaction neither hides the list nor restarts the count. Undefined when the list is empty or
- * done, and once told, until the model has called again (`stopped`) or made `TODO_REMINDER_CALLS` more calls (`idle`).
+ * done; at a prompt the user typed, once until the model has called again; mid-turn, after `TODO_REMINDER_CALLS` calls
+ * since the last todo call or reminder.
  */
 export function todoReminder(events: readonly TurnEvent[]): TodoReminder | undefined {
   const list = todoOf(events);
   if (!list.some((item) => item.status !== 'done')) return undefined;
   const toldSinceCall = events.slice(events.findLastIndex((e) => e.kind === 'assistant') + 1).some(isTodoReminder);
-  if (!toldSinceCall && cutShort(events)) return { why: 'stopped', list };
+  const prompted = turnBefore(events);
+  if (prompted !== undefined) return toldSinceCall ? undefined : { why: prompted, list };
   const since = events.slice(events.findLastIndex((e) => (e.kind === 'tool-result' && e.name === TODO_TOOL) || isTodoReminder(e)) + 1);
   const calls = since.filter((e) => e.kind === 'assistant' && e.issuedBy !== 'user').length;
   return calls >= TODO_REMINDER_CALLS ? { why: 'idle', list } : undefined;

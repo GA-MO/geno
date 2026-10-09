@@ -61,7 +61,17 @@ describe('the todo reminder', () => {
     expect(s.told()).toEqual({ why: 'stopped', list: list('done', 'in_progress', 'pending') });
     expect(s.told(), 'not again before the model answers').toBeUndefined();
     s.answer().prompt('And the tests?');
-    expect(s.told(), 'a turn that ended on its own is not a stopped one').toBeUndefined();
+    expect(s.told()?.why, 'a turn that ended on its own reminds too, in its own words').toBe('earlier');
+  });
+
+  it('fires once at each prompt that follows a turn which ended on its own with the list unfinished', () => {
+    const s = log().prompt().todo(list('done', 'in_progress', 'pending')).answer().prompt('Something else.');
+    expect(s.told()).toEqual({ why: 'earlier', list: list('done', 'in_progress', 'pending') });
+    expect(s.told(), 'once per prompt').toBeUndefined();
+    s.answer().prompt('And another thing.');
+    expect(s.told()?.why, 'the next prompt, while the list is still unfinished').toBe('earlier');
+    s.answer().todo([]).answer().prompt('Thanks.');
+    expect(s.told(), 'not once the model cleared it').toBeUndefined();
   });
 
   it('fires after a turn that failed at a limit', () => {
@@ -79,7 +89,7 @@ describe('the todo reminder', () => {
     const finished = log().prompt().todo(list('in_progress', 'pending', 'pending'));
     finished.events.push({ kind: 'notice', seq: 98, at, last: true });
     finished.answer().prompt('Next.').answer().prompt('And then?');
-    expect(finished.told(), 'only the prompt right after the capped turn').toBeUndefined();
+    expect(finished.told()?.why, 'the capped turn is two turns back; the last one ended on its own').toBe('earlier');
   });
 
   it('stays quiet with no list, a finished list, or a cleared one', () => {
@@ -87,6 +97,8 @@ describe('the todo reminder', () => {
     expect(log().prompt().todo(list('done', 'done', 'done')).reads(TODO_REMINDER_CALLS).told()).toBeUndefined();
     expect(log().prompt().todo(list('done', 'in_progress', 'pending')).todo([]).reads(TODO_REMINDER_CALLS).told()).toBeUndefined();
     expect(log().prompt().todo(list('done', 'done', 'done')).stop().prompt('More.').told()).toBeUndefined();
+    expect(log().prompt().todo(list('done', 'done', 'done')).answer().prompt('More.').told()).toBeUndefined();
+    expect(log().prompt().todo(list('done', 'in_progress')).todo([]).answer().prompt('More.').told()).toBeUndefined();
   });
 
   it('reaches the model as a notice with the list, before the prompt it goes with', () => {
@@ -96,6 +108,8 @@ describe('the todo reminder', () => {
     expect(noticeTexts({ todo })).toEqual([text]);
     expect(text).toContain('[x] 1: Read the code\n[~] 2: Write tests\n[ ] 3: Run them');
     expect(text).toMatch(/clear it by calling todo with an empty list/);
+    expect(text).toMatch(/Mark done every item you have already finished, even if the rest of the list still applies, and mark in_progress the one you are working on/);
+    expect(renderTodoReminder({ why: 'earlier', list: list('pending') })).toMatch(/^\[Geno\] Your todo list from earlier still has unfinished items:\n\[ \] 1: Read the code\n/);
     const last = replayMessages(s.events).at(-1)!;
     const blocks = typeof last.content === 'string' ? [] : last.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
     expect(blocks.indexOf(text)).toBeGreaterThanOrEqual(0);

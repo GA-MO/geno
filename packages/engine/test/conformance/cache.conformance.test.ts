@@ -107,9 +107,10 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
   });
 
   it.each([
-    ['stopped at its limit mid-call', ['--max-turns', '2'], [todo('tu_t'), read('tu_r')]],
-    ['capped by its limit with a closing report', ['--max-turns', '3'], [todo('tu_t'), read('tu_r'), say('I ran out of calls: a.ts is read, the change is still to do.')]],
-  ] as const)('a prompt after a turn %s shows the unfinished list before the prompt, and the prefix holds', async (_how, limit, first) => {
+    ['stopped at its limit mid-call', ['--max-turns', '2'], [todo('tu_t'), read('tu_r')], 'stopped'],
+    ['capped by its limit with a closing report', ['--max-turns', '3'], [todo('tu_t'), read('tu_r'), say('I ran out of calls: a.ts is read, the change is still to do.')], 'stopped'],
+    ['that ended on its own', [], [todo('tu_t'), read('tu_r'), say('a.ts is read; I will change it next.')], 'earlier'],
+  ] as const)('a prompt after a turn %s shows the unfinished list before the prompt, and the prefix holds', async (_how, limit, first, why) => {
     const { workspace, cli, bodies, events } = await scripted(wire, [...first, say('The build fails on a missing import.')]);
     const id = sessionIdOf((await cli(['agent', '--workspace', workspace, ...limit, 'Change a.ts'])).stdout);
     expect((await cli(['agent', '--session', id, 'Why does the build fail?'])).code).toBe(0);
@@ -117,9 +118,9 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
     const sent = bodies() as Body[];
     const asked = newestOf(sent.at(-1)!);
     expect(sent.slice(0, -1).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
-    expect(asked).toMatch(/last turn ended before your todo list was finished/);
+    expect(asked).toMatch(why === 'stopped' ? /last turn ended before your todo list was finished/ : /Your todo list from earlier still has unfinished items/);
     expect(asked.search(REMINDED), 'the list comes before the prompt').toBeLessThan(asked.indexOf('Why does the build fail?'));
     expectPrefix(sent.at(-2)!, sent.at(-1)!);
-    expect((await events(id)).find((e) => e.kind === 'notice' && e.todo !== undefined)).toMatchObject({ todo: { why: 'stopped', list: items } });
+    expect((await events(id)).find((e) => e.kind === 'notice' && e.todo !== undefined)).toMatchObject({ todo: { why, list: items } });
   });
 });
