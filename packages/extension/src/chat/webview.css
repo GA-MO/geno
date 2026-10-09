@@ -2153,6 +2153,45 @@ button.file-chip:hover {
   margin: 8px 0 0 var(--rail-indent);
 }
 
+/* Under a turn that ended with nothing to read: say so, and offer to go on or send the prompt again. */
+.no-reply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  min-width: 0;
+  margin: 8px 0 0 var(--rail-indent);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.no-reply-icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.no-reply-text {
+  display: flex;
+  flex: 1 1 10em;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.no-reply-title {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.no-reply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* What Auto settled without asking, with the classifier's reason, under the step it settled. */
 
 .auto-note {

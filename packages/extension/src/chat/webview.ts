@@ -23,7 +23,7 @@ import { mcpPanel } from './mcp-panel.js';
 import { isLaneKey, sendMenu } from './send-menu.js';
 import { settingsPanel } from './settings-panel.js';
 import { modePicker } from './modes.js';
-import { isWaiting, nodeOf, railOf, todoListOf, type Step } from './rail.js';
+import { isWaiting, missingReply, nodeOf, railOf, todoListOf, type Step } from './rail.js';
 import { todoOpen, todoStep } from './todo-view.js';
 import { openSpinoffs, spinoffCardOf, type SpinoffPending } from './spinoff-model.js';
 import { spinoffCard, type SpinoffUi } from './spinoff-view.js';
@@ -31,7 +31,7 @@ import { compactStep } from './compact-view.js';
 import type { TodoList } from '@g-code/core/todo';
 import { progressLabel } from '@g-code/core/call-progress';
 import { laneOffer } from './backend-model.js';
-import { applyLaneButton, askingStep, callsStep, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
+import { applyLaneButton, askingStep, callsStep, noReplyNotice, changesCard, errorBlock, filesRow, foldId, foldRow, permissionCard, startBuilding, textBlock, thinkingRow, turnChangesRow, turnFooter, turnHead, turnNotice, userMessage, type Ui } from './render.js';
 import { motionGate } from './motion.js';
 import { peek as peekOver } from './peek.js';
 import { slashPicker } from './slash-view.js';
@@ -420,9 +420,13 @@ function render(): void {
       const building = turn.status === 'done' && turn.mode === 'plan' && mode === 'plan' && last;
       const apply = last ? laneOffer(transcript) : undefined;
       const changes = turn.status === 'streaming' || reviewMode() === 'review' ? undefined : turnChangesOf(turn);
+      const reply = missingReply(turn);
+      // Only the latest turn offers to go on, and not while the composer holds a turn queued to send.
+      const offerAgain = last && followup === undefined;
       const later = changes !== undefined && transcript.turns.slice(i + 1).some((next) => turnChangesOf(next)?.undone === false);
       reconcile(shell.querySelector<HTMLElement>(':scope > .footer-slot')!, [
         ...(changes === undefined ? [] : [{ key: 'changes', deps: [JSON.stringify(changes), later], build: () => turnChangesRow(changes, later, ui) }]),
+        ...(reply === undefined ? [] : [{ key: 'no-reply', deps: [reply, offerAgain], build: () => noReplyNotice(reply, offerAgain ? turn.prompt : undefined, ui) }]),
         ...(turn.status === 'streaming' ? [] : [{ key: 'footer', deps: [turn.usage, turn.status, whole, transcript.backend?.plan, turn.seq, usage?.turn === turn.id], build: () => turnFooter(turn, whole, transcript.backend, breakdownOf(turn)) }]),
         ...(usage?.turn !== turn.id || turn.status === 'streaming' ? [] : [{ key: 'usage', deps: [usage, turn.seq, facts.bahtPerUsd], build: () => usageSlot(usage!, turn.seq) }]),
         ...(building ? [{ key: 'build', deps: [], build: () => startBuilding(ui) }] : []),

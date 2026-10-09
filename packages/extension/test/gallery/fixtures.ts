@@ -543,6 +543,16 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'no-reply',
+    group: 'Turns',
+    title: 'Ended with no reply',
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'สร้างเกม pacman ในไฟล์ game.html'));
+      await host.act(...ran('nr_r1', 'read', 'read', 'package.json', '{}'), ...ran('nr_r2', 'read', 'read', 'index.html', '<html>'), ...ran('nr_g', 'grep', 'search', 'canvas', 'index.html:4'));
+      await host.act(ended());
+    },
+  },
+  {
     id: 'tools-each-kind',
     group: 'Tools',
     title: 'Each tool kind',
