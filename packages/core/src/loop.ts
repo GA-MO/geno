@@ -1,7 +1,8 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { REPORT_TOOL, reportMessageOf, STRUCTURED_OUTPUT_TOOL } from './handback.js';
-import { BUDGET_REMINDER_SHARE, type BudgetLeft } from './notice.js';
+import { BUDGET_REMINDER_SHARE, TODO_REMINDER_CALLS, type BudgetLeft, type TodoReminder } from './notice.js';
 import { classifierCostOf, IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
+import { todoOf, TODO_TOOL } from './todo.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
 export type DoneReason = (typeof DONE_REASONS)[number];
@@ -209,6 +210,25 @@ export function lastCallDue(events: readonly TurnEvent[], run: Run): boolean {
 
 /** Whether this run already told the model its next call is its last. */
 export const toldLastCall = (events: readonly TurnEvent[], run: Run): boolean => thisRun(events, run).some((e) => e.kind === 'notice' && e.last === true);
+
+const isTodoReminder = (event: TurnEvent): boolean => event.kind === 'notice' && event.todo !== undefined;
+const isTypedPrompt = (event: TurnEvent | undefined): boolean => event?.kind === 'user' && event.from === undefined && event.steer !== true;
+
+/**
+ * Whether to show the model its unfinished list before its next call. Read from the session as its cuts leave it, not
+ * its context view, so a compaction neither hides the list nor restarts the count. Undefined when the list is empty or
+ * done, and once told, until the model has called again (`stopped`) or made `TODO_REMINDER_CALLS` more calls (`idle`).
+ */
+export function todoReminder(events: readonly TurnEvent[]): TodoReminder | undefined {
+  const list = todoOf(events);
+  if (!list.some((item) => item.status !== 'done')) return undefined;
+  const conversation = events.filter((e) => IN_CONVERSATION[e.kind] && e.kind !== 'session-start');
+  const toldSinceCall = events.slice(events.findLastIndex((e) => e.kind === 'assistant') + 1).some(isTodoReminder);
+  if (!toldSinceCall && isTypedPrompt(conversation.at(-1)) && conversation.at(-2)?.kind === 'error') return { why: 'stopped', list };
+  const since = events.slice(events.findLastIndex((e) => (e.kind === 'tool-result' && e.name === TODO_TOOL) || isTodoReminder(e)) + 1);
+  const calls = since.filter((e) => e.kind === 'assistant' && e.issuedBy !== 'user').length;
+  return calls >= TODO_REMINDER_CALLS ? { why: 'idle', list } : undefined;
+}
 
 const reported = (after: readonly TurnEvent[]): boolean => after.some((e) => e.kind === 'tool-result' && e.name === REPORT_TOOL && e.status === 'ok');
 

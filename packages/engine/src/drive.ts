@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import type { Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { budgetReminder, compactionStuck, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue } from '@g-code/core';
+import { budgetReminder, compactionStuck, spillLimitOf, lastCallDue, toldLastCall, REPORT_TOOL, capabilitiesOf, answerEvent, changesCourse, steerEvent, stoppedAnswers, DEFAULT_EFFORT_POLICY, EFFORT_POLICIES, holdsTurnOpen, loopStep, nextSeq, nextToolBatch, autoCompaction, type CompactPlan, type CompactTrigger, type DiskState, openWaitOf, withTurnEffort, type ApprovalRecord, type AssistantTurn, type EffortPolicy, type DoneReason, type InterruptedTool, type Notice, type Run, type Sha256, type StreamMarks, type ToolResultEvent, type ToolStatus, type TurnEvent, type Waiter, type Waiting, type TodoList, toolText, type PromptDecision, type CallProgress, finishedResponding, lastAssistantText, lastResponseText, modelEndedTurn, stopHookActive, stopMayContinue, TODO_TOOL, todoReminder } from '@g-code/core';
 import { attachmentsDir, loadAttachments } from './attachments.js';
 import { compactAtOf, compactContext } from './compact.js';
 import { EXIT_CODES, formatRetry, formatUsage, formatWait, resumeSession, startSession, totalOf, type OpenSession } from './chat.js';
@@ -464,16 +464,22 @@ export async function drive(
   const verified = new Map<string, DiskState>();
   // The one safe point: whatever reached the session from outside the loop, a background command's end or a steer, is
   // logged after the last tool results and before the model next sees the log, with a note for each file the model
-  // read that changed on disk, a notice of a mode switch or a memory change, and the budget reminder when the run's
-  // limits are near. True when anything arrived; a note or a notice alone does not hold back the model call.
+  // read that changed on disk, a notice of a mode switch or a memory change, the todo list when it has gone stale, and
+  // the budget reminder when the run's limits are near. True when anything arrived; a note or a notice alone does not hold back the model call.
   const deliver = async (): Promise<boolean> => {
     for (const { path, now, excerpt } of await changedOnDisk(events, verified)) {
       await record({ kind: 'file-changed', seq: 0, at: new Date().toISOString(), path, shown: displayPath(ctx, path), now, ...(excerpt === undefined ? {} : { excerpt }) });
     }
     const settings = await mode.notice?.(events);
     const budget = budgetReminder(events, run);
-    const last = mode.forced === undefined && lastCallDue(events, run) && !toldLastCall(events, run);
-    const notice = budget === undefined && !last ? settings : { ...settings, ...(budget === undefined ? {} : { budget }), ...(last ? { last: true as const } : {}) };
+    const lastCall = lastCallDue(events, run);
+    const last = mode.forced === undefined && lastCall && !toldLastCall(events, run);
+    // Asking for a todo call is moot on a call that cannot make one.
+    const todo = mode.forced === undefined && !lastCall && mode.tools.some((tool) => tool.name === TODO_TOOL) ? todoReminder(events) : undefined;
+    const notice =
+      budget === undefined && !last && todo === undefined
+        ? settings
+        : { ...settings, ...(todo === undefined ? {} : { todo }), ...(budget === undefined ? {} : { budget }), ...(last ? { last: true as const } : {}) };
     if (notice !== undefined) await record({ kind: 'notice', seq: nextSeq(events), at: new Date().toISOString(), ...notice });
     const arrived = mode.arrivals?.() ?? [];
     for (const arrival of arrived) {

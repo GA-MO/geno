@@ -103,6 +103,11 @@ export function todoLine(list: TodoList): string {
   return current === undefined ? `${done} of ${total} done` : `${done} of ${total} done · ${lowerFirst(current.text)}`;
 }
 
+const TODO_MARKS: Readonly<Record<TodoStatus, string>> = { pending: '[ ]', in_progress: '[~]', done: '[x]' };
+
+/** The list as the model reads it back, one item a line: "[~] 2: Write tests". */
+export const todoLines = (list: TodoList): string[] => list.map((item) => `${TODO_MARKS[item.status]} ${item.id}: ${item.text}`);
+
 export function todoResult(list: TodoList): string {
   if (list.length === 0) return 'Cleared the todo list.';
   const { done, total, current } = todoProgress(list);

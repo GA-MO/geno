@@ -1,7 +1,7 @@
 import { neutralize } from './fence.js';
 import type { TokenUsage, TurnEvent } from './session.js';
 import { fileLines, numberLines } from './str-replace.js';
-import type { TodoList, TodoStatus } from './todo.js';
+import { todoLines, type TodoList } from './todo.js';
 
 /**
  * Context compaction (U47): the data shape. A compaction is one `compact` event appended to the session log. Nothing
@@ -112,8 +112,6 @@ export function contextView(events: readonly TurnEvent[]): readonly TurnEvent[] 
   return [events[0]!, compact, ...events.slice(from).filter((event) => event.kind !== 'compact')];
 }
 
-const TODO_MARKS: Readonly<Record<TodoStatus, string>> = { pending: '[ ]', in_progress: '[~]', done: '[x]' };
-
 const MESSAGE_LABELS: Readonly<Record<KeptMessage['from'], (steer: boolean) => string>> = {
   user: (steer) => (steer ? 'The user, while you worked' : 'The user'),
   parent: () => 'The agent that started you, while you worked',
@@ -163,7 +161,7 @@ export function compactedText({ summary, kept }: Pick<CompactEvent, 'summary' | 
       : ['', `Files read: ${files.read.join(', ') || 'none'}`, `Files changed: ${files.changed.join(', ') || 'none'}`]),
     ...attachedLines(attached),
     ...skillLines(skills),
-    ...(todo.length === 0 ? [] : ['', 'Your todo list as it stood:', ...todo.map((item) => `${TODO_MARKS[item.status]} ${item.id}: ${item.text}`)]),
+    ...(todo.length === 0 ? [] : ['', 'Your todo list as it stood:', ...todoLines(todo)]),
     ...(tools.length === 0 ? [] : ['', 'Tools you loaded with tool_search, still callable without loading them again:', ...tools]),
     ...(chapters.length === 0 ? [] : ['', `Chapters you marked, oldest first; the session is in the last one: ${chapters.join(' | ')}`]),
     '</compacted_context>',

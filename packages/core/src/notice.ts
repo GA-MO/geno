@@ -4,6 +4,7 @@ import { GENO_NOTE } from './fence.js';
 import { mcpDelta, NO_MCP_BRIEFING, renderMcpDelta, withMcpDelta, type McpBriefing, type McpDelta } from './mcp-notice.js';
 import { memoryDelta, renderMemoryDelta, withDelta, type MemoryDelta, type MemoryEntry } from './memory.js';
 import type { TurnEvent } from './session.js';
+import { todoLines, type TodoList } from './todo.js';
 
 /**
  * What changed in the session's settings since the model was last told: the mode the user switched to, the memory
@@ -16,6 +17,7 @@ export type Notice = {
   readonly memory?: MemoryDelta | undefined;
   readonly mcp?: McpDelta | undefined;
   readonly budget?: BudgetLeft | undefined;
+  readonly todo?: TodoReminder | undefined;
   /** The next model call is the last the run's limits allow, and it goes out with the tools off. */
   readonly last?: true | undefined;
 };
@@ -49,6 +51,28 @@ export function renderBudgetLeft(left: BudgetLeft): string {
 }
 
 export const LAST_CALL_NOTE = `${GENO_NOTE} This is the last model call this run's limits allow, so tools are off for it and nothing runs after it. Do not call a tool. Write your report now: what you did, how you checked it, and what is still open.`;
+
+/**
+ * The todo list as it stands, when it has work left that the model may have let go stale: `idle` after
+ * `TODO_REMINDER_CALLS` model calls without a todo call, `stopped` at a prompt that follows a turn that was stopped or
+ * failed. Logged with the list, so a replay sends the same bytes.
+ */
+export type TodoReminder = { readonly why: 'idle' | 'stopped'; readonly list: TodoList };
+
+// Claude Code reminds after 10 assistant turns without a TodoWrite call, and again 10 after its last reminder.
+export const TODO_REMINDER_CALLS = 10;
+
+const TODO_REMINDER_OPENINGS: Readonly<Record<TodoReminder['why'], string>> = {
+  idle: `You have not updated your todo list in your last ${TODO_REMINDER_CALLS} model calls, and it still has unfinished items:`,
+  stopped: 'Your last turn ended before your todo list was finished, and the list still stands as it was then:',
+};
+
+export const renderTodoReminder = ({ why, list }: TodoReminder): string =>
+  [
+    `${GENO_NOTE} ${TODO_REMINDER_OPENINGS[why]}`,
+    ...todoLines(list),
+    "If you are still working through it, call todo with the whole list: the items you finished marked done and the one you are on in_progress. If the user's latest request moved on to something else and the list no longer applies, clear it by calling todo with an empty list. Do not mention this note to the user.",
+  ].join('\n');
 
 /**
  * The text each mode adds while it holds. The system prompt describes Ask; every mode is offered the same tools, and
@@ -100,11 +124,12 @@ export function noticeFor(events: readonly TurnEvent[], now: Now): Notice | unde
   return { ...(mode === undefined ? {} : { mode }), ...(memory === undefined ? {} : { memory }), ...(mcp === undefined ? {} : { mcp }) };
 }
 
-/** A notice as the model reads it: the mode's text, then the memory change, then the MCP change, then the budget. */
+/** A notice as the model reads it: the mode's text, then the memory change, then the MCP change, then the todo list, then the budget. */
 export const noticeTexts = (notice: Notice): string[] => [
   ...(notice.mode === undefined ? [] : [MODE_NOTICES[notice.mode]]),
   ...(notice.memory === undefined ? [] : [renderMemoryDelta(notice.memory)]),
   ...(notice.mcp === undefined ? [] : [renderMcpDelta(notice.mcp)]),
+  ...(notice.todo === undefined ? [] : [renderTodoReminder(notice.todo)]),
   ...(notice.budget === undefined ? [] : [renderBudgetLeft(notice.budget)]),
   ...(notice.last === true ? [LAST_CALL_NOTE] : []),
 ];
