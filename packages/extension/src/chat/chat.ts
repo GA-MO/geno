@@ -4,30 +4,20 @@ import * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import {
-  afterLines,
   DIAGNOSTICS_METHOD,
   EDITOR_ACTION_METHOD,
   READ_TERMINAL_METHOD,
   type ReadTerminalRequest,
   type ReadTerminalResponse,
-  HUNK_STATUSES,
-  hunkIdOf,
-  APPROVAL_META,
   askUserContent,
   ASK_USER_META,
   askUserTitle,
   parseAskUser,
   BROWSER_SERVER,
   INLINE_EDIT_META,
-  MEMORY_SCOPES,
-  REMEMBER_META,
-  WORKFLOW_META,
   RENAME_SESSION_METHOD,
   SEARCH_SESSIONS_METHOD,
   type SearchSessionsRequest,
-  REPLAYED_AT_META,
-  REPLAYED_CHANGE_META,
-  REPLAYED_TURN_META,
   WAKE_META,
   DRAFT_METHOD,
   type DraftNotice,
@@ -62,10 +52,6 @@ import {
   laneGraftPrompt,
   type DetachRequest,
   type TaskRecord,
-  WAIT_KINDS,
-  WAITING_META,
-  PROGRESS_META,
-  BACKGROUND_META,
   BACKGROUND_STOP_METHOD,
   isJobId,
   isWakeId,
@@ -85,16 +71,11 @@ import {
   type BackendsResponse,
   type ExternalBackendId,
   asSessionId,
-  parseSpinoffShown,
   SPINOFF_DISMISS_METHOD,
-  SPINOFF_META,
   SPINOFF_START_METHOD,
   type SpinoffRequest,
   type SpinoffResponse,
   CHAPTER_MARK_METHOD,
-  CHAPTER_META,
-  parseChapterMark,
-  type ChapterMark,
   type ChapterMarkRequest,
   type ChapterMarkResponse,
 } from '@g-code/core';
@@ -104,7 +85,7 @@ import { TOKENS_SETTING } from './tokens.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { currentBranch } from '../git-branch.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
-import { droppedUris, imagesOf, openTarget, pickFiles, promptBlocks, readForComposer, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
+import { droppedUris, openTarget, pickFiles, promptBlocks, readForComposer, sessionsDir, viewsOf, webviewRoots } from './attachments.js';
 import { diagnostics, readTextFile, unsavedBuffers, writeTextFile } from './bridge.js';
 import { openDiagram } from './diagram-tab.js';
 import { Engine, type Connection, type EngineSettings } from './engine.js';
@@ -122,16 +103,13 @@ import type { SeenStore } from './seen.js';
 import { LANE_USAGE } from './lanes-model.js';
 import { TaskHost } from './tasks-host.js';
 import { schedulesUpdate } from './schedule-wire.js';
-import { workflowPreviewWire } from './workflow-wire.js';
 import { ArenaHost, arenaUpdate } from './arena-host.js';
 import type { SettingsToView } from './settings-model.js';
 import { Mentions } from './context.js';
 import {
-  TOOL_KINDS,
   CHAT_DETAILS,
   UI_STYLES,
   type Action,
-  type FileDiff,
   type FromView,
   type Header,
   type HistoryHit,
@@ -139,8 +117,6 @@ import {
   type HistoryScope,
   type Modes,
   type ToView,
-  type ToolKind,
-  type ToolStatus,
   type Transcript,
   type TurnStatus,
   type ChatDetail,
@@ -153,17 +129,16 @@ import { BUILTIN_OPTIONS, commandOptions, routeText, type EditorAction } from '.
 import type { CommandOption, SentCommand } from './slash.js';
 import { isChildAction, subagentAction } from './subagent-host.js';
 import { SteerHost, steerActionOf } from './steer-host.js';
-import { agentChunkAction } from './compact-host.js';
+import { actionOf, diffOf, permissionAction, previewTag, replayedEnd, replayedTurnStart, timeOf, updateActions, waitingSchema, wakeMark } from './session-updates.js';
 import { RewindHost } from './rewind-host.js';
 import { UsageHost } from './usage-host.js';
 import { PrStatusHost } from './pr-status-host.js';
 import { childOf, emptyTranscript, reduce, totalsOf } from './transcript.js';
 import { widgetHost } from './widget-host.js';
 import { pageHost } from './page-host.js';
-import { widgetOf } from './widget-model.js';
-import { editorActionOf, editorActionRequest, runEditorAction } from './editor-actions.js';
+import { editorActionRequest } from './editor-action-wire.js';
+import { runEditorAction } from './editor-actions.js';
 import { readTerminalRequest } from './terminals.js';
-import { todoOfUpdate } from './todo-model.js';
 import { spinoffsIn } from './spinoff-model.js';
 
 export const CHAT_VIEW = 'gcode.chat';
@@ -209,58 +184,10 @@ export const reviewModeOf = (configuration: vscode.WorkspaceConfiguration): Revi
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
-// A subject this panel does not know reads as a command, so a newer engine's card still shows.
-const approvalSubject = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('read'), path: z.string() }),
-  z.object({ kind: z.literal('fetch'), url: z.string(), host: z.string() }),
-  z.object({ kind: z.literal('browse'), url: z.string(), host: z.string() }),
-  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string() }),
-]);
-const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional(), rule: z.string().optional(), subject: approvalSubject.optional().catch(undefined) });
 
-const bashInput = z.object({ description: z.string() });
-
-/** A bash call's description, from the model's own input; display only. */
-const descriptionOf = (name: string, rawInput: unknown): { readonly description?: string } => {
-  const input = name === 'bash' ? bashInput.safeParse(rawInput) : undefined;
-  return input?.success === true ? { description: input.data.description } : {};
-};
-const rememberInput = z.object({ text: z.string(), scope: z.enum(MEMORY_SCOPES) });
-const replayedTurn = z.object({
-  seq: z.number().int().optional(),
-  mode: z.string().optional(),
-  startedAt: z.number(),
-  endedAt: z.number(),
-  status: z.enum(['done', 'stopped', 'failed']),
-  usage: z.object({ model: z.string(), inputTokens: z.number(), outputTokens: z.number(), costUsd: z.number().nullable() }).nullable(),
-  command: z.object({ name: z.string(), args: z.string() }).optional(),
-});
-const replayedChange = z.object({
-  id: z.string(),
-  path: z.string(),
-  hunks: z.array(z.object({ startLine: z.number(), lineCount: z.number(), oldText: z.string(), newText: z.string(), status: z.enum(HUNK_STATUSES) })),
-});
 const sessionSummary = z.object({ turns: z.number(), costUsd: z.number().nullable(), forkedFrom: z.object({ sessionId: z.string(), title: z.string() }).optional() });
-const waitingSchema = z.object({ kind: z.enum(WAIT_KINDS), since: z.number(), retryAt: z.number().nullable(), resetAt: z.number().nullable(), message: z.string() });
-const writingSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('thinking') }),
-  z.object({ kind: z.literal('text') }),
-  z.object({ kind: z.literal('tool'), name: z.string(), target: z.string().optional() }),
-]);
-const progressSchema = z.object({ requestAt: z.number(), lastByteAt: z.number().nullable(), limitMs: z.number().nullable(), writing: writingSchema.nullable(), tokens: z.number() });
-const killCause = z.enum(['session-deleted', 'lane-discarded', 'engine-exit']);
-const stopBy = z.enum(['model', 'user']);
-const jobState = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('running'), ending: z.discriminatedUnion('kind', [z.object({ kind: z.literal('stop'), by: stopBy }), z.object({ kind: z.literal('kill'), cause: killCause })]).optional() }),
-  z.object({ status: z.literal('exited'), exitCode: z.number().nullable(), signal: z.string().nullable() }),
-  z.object({ status: z.literal('stopped'), by: stopBy }),
-  z.object({ status: z.literal('killed'), cause: killCause }),
-]);
-const previewTag = z.object({ name: z.string(), url: z.string() });
-const backgroundView = z.object({ id: z.string(), toolUseId: z.string(), command: z.string(), state: jobState, tail: z.string(), preview: previewTag.optional() });
 const taskJob = z.object({ id: z.string().refine(isJobId), command: z.string(), description: z.string().optional(), startedAt: z.number(), preview: previewTag.optional() });
 
-const wakeMark = z.object({ seq: z.number(), label: z.string() });
 const forkOrigin = z.object({ sessionId: z.string().transform(asSessionId), turnSeq: z.number(), title: z.string() });
 const searchHits = z.object({
   hits: z.array(
@@ -341,106 +268,10 @@ const ADOPTED_ENDS: Readonly<Record<TaskRecord['status'], Exclude<TurnStatus, 's
   stopped: 'stopped',
 };
 
-const approvalRecord = z.object({
-  decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
-  verdict: z.enum(['allow', 'deny']),
-  classifier: z.object({ reason: z.string() }).optional(),
-});
-
-/** A flagged command the classifier settled, which the step shows; one the user or a rule settled shows nothing more. */
-function autoOf(meta: Record<string, unknown> | null | undefined): Extract<Action, { type: 'tool' }>['auto'] {
-  const record = approvalRecord.safeParse(meta?.[APPROVAL_META]);
-  if (!record.success || record.data.decidedBy !== 'classifier' || record.data.classifier === undefined) return undefined;
-  return { verdict: record.data.verdict, reason: record.data.classifier.reason };
-}
-
-/** The classifier's reason in a permission question it would not answer itself, as the engine words it. */
-const classifierReasonOf = (title: string | null | undefined): string | undefined => /The classifier says: (.+)\.$/.exec(title ?? '')?.[1];
-
 const modesOf = (state: acp.SessionModeState | null | undefined): Modes | undefined =>
   state == null
     ? undefined
     : { current: state.currentModeId, available: state.availableModes.map(({ id, name, description }) => ({ id, name, description: description ?? undefined })) };
-
-const TOOL_STATUSES: Readonly<Record<acp.ToolCallStatus, ToolStatus>> = { pending: 'running', in_progress: 'running', completed: 'completed', failed: 'failed' };
-
-const kindOf = (kind: acp.ToolKind | null | undefined): ToolKind => ((TOOL_KINDS as readonly string[]).includes(kind ?? '') ? (kind as ToolKind) : 'other');
-
-/** The engine titles a call as the CLI shows it, `<tool> <target>`, as in `edit math.ts`. */
-function callOf(title: string): { readonly name: string; readonly target: string } {
-  const space = title.indexOf(' ');
-  return space === -1 ? { name: title, target: '' } : { name: title.slice(0, space), target: title.slice(space + 1) };
-}
-
-function outputOf(content: readonly acp.ToolCallContent[] | null | undefined): string | undefined {
-  const texts = (content ?? []).flatMap((c) => (c.type === 'content' && c.content.type === 'text' ? [c.content.text] : []));
-  return texts.length === 0 ? undefined : texts.join('\n');
-}
-
-type UpdateOf<K extends acp.SessionUpdate['sessionUpdate']> = Extract<acp.SessionUpdate, { sessionUpdate: K }>;
-
-const UPDATES: { readonly [K in acp.SessionUpdate['sessionUpdate']]?: (update: UpdateOf<K>, at: number) => Action | undefined } = {
-  user_message_chunk: (update) => steerActionOf(update),
-  agent_message_chunk: (update) => agentChunkAction(update),
-  notice: ({ title, _meta }, at) => {
-    if (_meta != null && PROGRESS_META in _meta) {
-      const progress = progressSchema.safeParse(_meta[PROGRESS_META]);
-      return progress.success ? { type: 'progress', progress: progress.data } : undefined;
-    }
-    if (_meta == null || !(WAITING_META in _meta)) return { type: 'notice', text: title };
-    const waiting = waitingSchema.nullable().safeParse(_meta[WAITING_META]);
-    return waiting.success ? { type: 'waiting', at, waiting: waiting.data } : undefined;
-  },
-  tool_call: ({ toolCallId, title, kind, status, rawInput }, at) => {
-    const call = callOf(title);
-    return { type: 'tool', id: toolCallId, at, ...call, ...descriptionOf(call.name, rawInput), toolKind: kindOf(kind), status: TOOL_STATUSES[status ?? 'pending'] };
-  },
-  tool_call_update: ({ toolCallId, title, status, content, _meta }, at) => {
-    const output = outputOf(content);
-    const images = imagesOf(content);
-    const auto = autoOf(_meta);
-    return {
-      type: 'tool',
-      id: toolCallId,
-      at,
-      ...(title == null ? {} : callOf(title)),
-      ...(status == null ? {} : { status: TOOL_STATUSES[status] }),
-      ...(output === undefined ? {} : { output }),
-      ...(images.length === 0 ? {} : { images }),
-      ...(auto === undefined ? {} : { auto }),
-    };
-  },
-};
-
-function actionOf<K extends acp.SessionUpdate['sessionUpdate']>(update: UpdateOf<K>, at: number): Action | undefined {
-  const action = (UPDATES[update.sessionUpdate] as ((u: UpdateOf<K>, at: number) => Action | undefined) | undefined)?.(update, at);
-  if (action?.type !== 'tool') return action;
-  const widget = widgetOf(update);
-  const editorAction = update.sessionUpdate === 'tool_call_update' ? editorActionOf(update._meta) : undefined;
-  const todo = todoOfUpdate(update);
-  const spinoff = update.sessionUpdate === 'tool_call_update' ? parseSpinoffShown(update._meta?.[SPINOFF_META]) : undefined;
-  const chapter = update.sessionUpdate === 'tool_call_update' ? chapterOf(update._meta) : undefined;
-  return {
-    ...action,
-    ...(widget === undefined ? {} : { widget }),
-    ...(editorAction === undefined ? {} : { editorAction }),
-    ...(todo === undefined ? {} : { todo }),
-    ...(spinoff === undefined ? {} : { spinoff }),
-    ...(chapter === undefined ? {} : { chapter }),
-  };
-}
-
-/** The chapter an update's `_meta` carries, checked, since it crossed the process boundary. */
-function chapterOf(meta: Record<string, unknown> | null | undefined): ChapterMark | undefined {
-  const parsed = meta?.[CHAPTER_META] === undefined ? undefined : parseChapterMark(meta[CHAPTER_META]);
-  return parsed?.ok === true ? parsed.value : undefined;
-}
-
-/** When an update happened: now, or for a replayed tool call, when it was logged. */
-const timeOf = (update: acp.SessionUpdate): number => {
-  const at = update._meta?.[REPLAYED_AT_META];
-  return typeof at === 'number' ? at : Date.now();
-};
 
 /** What to tell the user about a stop reason that is not a plain finish or stop. A model error is in the transcript already. */
 const STOP_MESSAGES: Readonly<Partial<Record<acp.StopReason, string>>> = {
@@ -465,28 +296,9 @@ function usageOf(response: acp.PromptResponse): Usage | undefined {
   return { model: meta.data.model, inputTokens: inputTokens + (cachedReadTokens ?? 0) + (cachedWriteTokens ?? 0), outputTokens, costUsd: meta.data.costUsd };
 }
 
-const linesOf = (text: string): string[] => (text === '' ? [] : text.replace(/\n$/, '').split('\n'));
-
-function diffOf(file: vscode.Uri, change: FileChange): FileDiff {
-  const lines = afterLines(change);
-  return {
-    path: vscode.workspace.asRelativePath(file),
-    change: change.id,
-    hunks: change.hunks.map((hunk, i) => ({ id: hunkIdOf(change, i), line: lines[i]!, removed: linesOf(hunk.oldText), added: linesOf(hunk.newText), status: hunk.status })),
-  };
-}
-
 async function headerOf(title: string | undefined): Promise<Header> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   return { project: folder?.name ?? 'No folder', title, branch: folder === undefined ? undefined : await currentBranch(folder.uri.fsPath) };
-}
-
-/** A replayed turn's end, which ACP has no update for: the engine sends it with the prompt that starts the turn. */
-function replayedEnd(update: acp.SessionUpdate): Action | undefined {
-  const turn = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
-  if (!turn.success) return undefined;
-  const { endedAt, status, usage } = turn.data;
-  return { type: 'turn-end', at: endedAt, status, usage: usage ?? undefined };
 }
 
 /**
@@ -800,7 +612,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
           this.onWrite(document, change);
           const toolId = params._meta?.[TOOL_CALL_META];
           if (typeof toolId !== 'string') return;
-          const diff = { type: 'diff', toolId, at: Date.now(), diff: diffOf(document.uri, change) } as const;
+          const diff = { type: 'diff', toolId, at: Date.now(), diff: diffOf(vscode.workspace.asRelativePath(document.uri), change) } as const;
           this.dispatch(childOf(this.transcript, params.sessionId) === undefined ? diff : { type: 'child', id: params.sessionId, action: diff });
         }),
       )
@@ -866,34 +678,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       if (this.replay === undefined && woke.success && sessionId === this.shown) return this.woken(sessionId, woke.data.label);
       if (this.replay === undefined || update.content.type !== 'text') return;
       if (this.replay.end !== undefined) this.dispatch(this.replay.end);
-      const start = replayedTurn.safeParse(update._meta?.[REPLAYED_TURN_META]);
-      this.dispatch({
-        type: 'turn-start',
-        id: `t${this.nextTurn++}`,
-        at: start.success ? start.data.startedAt : Date.now(),
-        prompt: update.content.text,
-        mode: start.success ? start.data.mode : undefined,
-        command: start.success ? this.sentCommand(start.data.command) : undefined,
-        // A woken turn has no message of the user's to rewind to.
-        seq: start.success && !woke.success ? start.data.seq : undefined,
-        wake: woke.success ? woke.data.label : undefined,
-        chapter: chapterOf(update._meta),
-      });
+      this.dispatch(replayedTurnStart(update, update.content.text, `t${this.nextTurn++}`, (command) => this.sentCommand(command)));
       this.replay.end = replayedEnd(update);
       return;
     }
-    const job = update.sessionUpdate === 'tool_call_update' ? backgroundView.safeParse(update._meta?.[BACKGROUND_META]) : undefined;
-    if (job?.success === true) {
-      const { id, state, tail, command, preview } = job.data;
-      return this.dispatch({ type: 'background', toolId: job.data.toolUseId, job: { id, state, tail, command, ...(preview === undefined ? {} : { preview }) } });
-    }
-    const at = timeOf(update);
-    const action = actionOf(update, at);
-    if (action !== undefined) this.dispatch(action);
-    const change = replayedChange.safeParse(update._meta?.[REPLAYED_CHANGE_META]);
-    if (update.sessionUpdate === 'tool_call_update' && change.success) {
-      this.dispatch({ type: 'diff', toolId: update.toolCallId, at, diff: diffOf(vscode.Uri.file(change.data.path), change.data) });
-    }
+    for (const action of updateActions(update, (file) => vscode.workspace.asRelativePath(vscode.Uri.file(file)))) this.dispatch(action);
   }
 
   /** Runs one agent turn and resolves with its stop reason. Its `@file` and `@selection` mentions and its attachments go along as context. */
@@ -1393,24 +1182,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const id = String(this.nextPermission++);
     const choice = await new Promise<Choice | undefined | typeof NOT_SHOWN>((resolve) => {
       this.permissions.set(id, resolve);
-      const input = permissionInput.safeParse(toolCall.rawInput);
-      const { command, reason, description, rule, subject } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined, subject: undefined };
-      const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
-      const workflow = workflowPreviewWire.safeParse(toolCall._meta?.[WORKFLOW_META]);
-      this.dispatch({
-        type: 'permission',
-        id,
-        command: memory.success ? memory.data.text : command,
-        reason,
-        ...(description === undefined ? {} : { description }),
-        options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),
-        classifier: classifierReasonOf(toolCall.title),
-        ...(memory.success ? { ask: { kind: 'memory', ...memory.data } } : workflow.success ? { ask: { kind: 'workflow', preview: workflow.data } } : {}),
-        toolId: toolCall.toolCallId,
-        ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
-        ...(rule === undefined ? {} : { rule }),
-        ...(subject === undefined ? {} : { subject }),
-      });
+      this.dispatch(permissionAction({ toolCall, options }, id));
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });
     this.permissions.delete(id);

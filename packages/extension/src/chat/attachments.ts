@@ -3,10 +3,10 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type * as acp from '@agentclientprotocol/sdk';
 import * as vscode from 'vscode';
-import { asSha256, ATTACHMENT_META, attachmentFileName, formatBytes, isImageMediaType } from '@g-code/core/attachments';
+import { asSha256, ATTACHMENT_META, attachmentFileName, formatBytes } from '@g-code/core/attachments';
 import { gcodeHome } from '../tab/log.js';
 import { viewOf, type AttachmentView, type OpenTarget, type OutgoingAttachment, type PickedFile, type Refused } from './attachment-model.js';
-import type { ToolImage, WebviewRoot } from './messages.js';
+import type { WebviewRoot } from './messages.js';
 
 const MAX_READ_BYTES = 64 * 1024 * 1024;
 
@@ -110,12 +110,3 @@ export const webviewRoots = (webview: vscode.Webview): WebviewRoot[] => [
   ...folderPaths().flatMap(({ folder, paths }) => paths.map((root) => ({ path: root, uri: webview.asWebviewUri(folder).toString() }))),
   { path: sessionsDir(), uri: webview.asWebviewUri(vscode.Uri.file(sessionsDir())).toString() },
 ];
-
-/** The image files a tool call's content links to, as the engine sends a read of an image. */
-export function imagesOf(content: readonly acp.ToolCallContent[] | null | undefined): ToolImage[] {
-  return (content ?? []).flatMap((c) =>
-    c.type === 'content' && c.content.type === 'resource_link' && c.content.uri.startsWith('file:') && isImageMediaType(c.content.mimeType ?? '')
-      ? [{ path: vscode.Uri.parse(c.content.uri).fsPath, name: c.content.name }]
-      : [],
-  );
-}
