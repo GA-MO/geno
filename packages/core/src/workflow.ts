@@ -27,9 +27,8 @@ export const WORKFLOWS_CAPABILITY = 'gcode/workflows';
 /** On the permission request that asks to run a workflow: its `WorkflowPreview`. */
 export const WORKFLOW_META = 'gcode/workflow';
 
-/** Relative to the workspace, then to Geno's home; a workspace file shadows a global one of the same name. */
-export const WORKFLOW_DIRS = { workspace: '.g-code/workflows', global: 'workflows' } as const;
-export type WorkflowSource = keyof typeof WORKFLOW_DIRS;
+/** A workspace file shadows a global one of the same name. */
+export type WorkflowSource = 'workspace' | 'global';
 
 export const WORKFLOW_LIMITS = {
   /** The most a whole run may be capped at, in US dollars. */

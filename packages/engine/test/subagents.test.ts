@@ -71,6 +71,24 @@ describe('loadAgents', () => {
     expect(problems).toEqual([`.claude/agents/reviewer.md: not loaded, because your own agent reviewer (${path.join(claude, 'reviewer.md')}) has its name`]);
   });
 
+  it("reads ~/.agents/agents between Geno's home and Claude Code's, and the workspace's .g-code/agents before its .agents and .claude", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-agents-')));
+    const workspace = path.join(root, 'ws');
+    const home = path.join(root, 'home');
+    const env = { HOME: home, GCODE_HOME: path.join(home, '.g-code') };
+    await write(path.join(home, '.agents', 'agents', 'tidy.md'), agentFile('agents tidy'));
+    await write(path.join(home, '.claude', 'agents', 'tidy.md'), agentFile('claude tidy'));
+    await write(path.join(workspace, '.g-code', 'agents', 'scout.md'), agentFile('geno scout'));
+    await write(path.join(workspace, '.agents', 'agents', 'scout.md'), agentFile('agents scout'));
+    await write(path.join(workspace, '.claude', 'agents', 'scout.md'), agentFile('claude scout'));
+
+    const { agents, problems } = await loadAgents(workspace, homesOf(openStore(env), env), [], NO_SUBAGENT_MODELS);
+
+    expect(agents.find((a) => a.name === 'tidy')).toMatchObject({ source: 'global', description: 'agents tidy', path: path.join(home, '.agents', 'agents', 'tidy.md') });
+    expect(agents.find((a) => a.name === 'scout')).toMatchObject({ source: 'workspace', description: 'geno scout', path: '.g-code/agents/scout.md' });
+    expect(problems).toEqual([]);
+  });
+
   it('gives the built-ins alone when no folder exists', async () => {
     const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-agents-')));
     const { agents, problems } = await loadAgents(path.join(root, 'ws'), { app: path.join(root, 'app'), user: undefined }, [], NO_SUBAGENT_MODELS);

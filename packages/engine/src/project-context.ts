@@ -28,7 +28,6 @@ const MAX_IMPORT_DEPTH = 4;
 const RULES_DIR = path.join('.cursor', 'rules');
 /** Listing the workspace for nested instruction files stops after this, so a huge tree outside a repository cannot stall a session's start. */
 const NESTED_SCAN_MS = 5_000;
-export const SKILL_ROOTS = [path.join('.agents', 'skills'), path.join('.claude', 'skills')] as const;
 
 const clean = (text: string): string => stripHidden(text.replace(/\r\n?/g, '\n'));
 

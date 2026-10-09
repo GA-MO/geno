@@ -74,7 +74,7 @@ describe('command discovery', () => {
     expect(of('background')).toMatchObject({ userInvocable: false, modelInvocable: true });
   });
 
-  it('reads ~/.claude/skills, after ~/.g-code and before ~/.agents', async () => {
+  it('reads ~/.claude/skills, after ~/.g-code and ~/.agents', async () => {
     const { workspace, home } = await tree({
       'home/skills/tidy/SKILL.md': skill('tidy', 'Geno tidy'),
       'claude/skills/tidy/SKILL.md': skill('tidy', 'Claude tidy'),
@@ -83,8 +83,25 @@ describe('command discovery', () => {
     });
     const root = path.dirname(home);
     const { commands, problems } = await loadCommands(workspace, { app: home, user: path.join(root, 'user'), claude: path.join(root, 'claude') }, []);
-    expect(summary(commands)).toEqual(['skill tidy global: Geno tidy', 'skill ship global: Claude ship']);
-    expect(commands.find((c) => c.name === 'ship')).toMatchObject({ path: path.join(root, 'claude', 'skills', 'ship', 'SKILL.md') });
+    expect(summary(commands)).toEqual(['skill tidy global: Geno tidy', 'skill ship global: Agents ship']);
+    expect(commands.find((c) => c.name === 'ship')).toMatchObject({ path: path.join(root, 'user', '.agents', 'skills', 'ship', 'SKILL.md') });
+    expect(problems).toEqual([]);
+  });
+
+  it('reads commands and skills from ~/.agents, ~/.claude/commands and the workspace\'s .g-code, Geno\'s own name first in each place', async () => {
+    const { workspace, home } = await tree({
+      'user/.agents/commands/standup.md': '---\ndescription: Agents standup\n---\nStandup.',
+      'claude/commands/standup.md': '---\ndescription: Claude standup\n---\nStandup.',
+      'claude/commands/retro.md': '---\ndescription: Claude retro\n---\nRetro.',
+      'ws/.g-code/commands/review.md': '---\ndescription: Geno review\n---\nReview.',
+      'ws/.agents/commands/review.md': '---\ndescription: Agents review\n---\nReview.',
+      'ws/.g-code/skills/lint/SKILL.md': skill('lint', 'Geno lint'),
+      'ws/.claude/skills/lint/SKILL.md': skill('lint', 'Claude lint'),
+    });
+    const root = path.dirname(home);
+    const { commands, problems } = await loadCommands(workspace, { app: home, user: path.join(root, 'user'), claude: path.join(root, 'claude') }, []);
+    expect(summary(commands)).toEqual(['prompt standup global: Agents standup', 'prompt retro global: Claude retro', 'prompt review workspace: Geno review', 'skill lint workspace: Geno lint']);
+    expect(commands.find((c) => c.name === 'lint')).toMatchObject({ path: '.g-code/skills/lint/SKILL.md' });
     expect(problems).toEqual([]);
   });
 

@@ -90,3 +90,4 @@ export * from './workflow.js';
 export * from './workflow-progress.js';
 export * from './hooks.js';
 export * from './claude-permissions.js';
+export * from './config-roots.js';

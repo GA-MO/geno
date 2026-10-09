@@ -1,6 +1,7 @@
 import type { Tool } from '@anthropic-ai/sdk/resources/messages/messages';
 import { jobEndText, type EndedJobState, type JobId, type JobState } from './background.js';
 import { isLocalHost } from './browser.js';
+import { projectItemFiles } from './config-roots.js';
 import { redactSecrets } from './redact.js';
 import { cleanTerminalOutput } from './terminal.js';
 
@@ -10,7 +11,7 @@ import { cleanTerminalOutput } from './terminal.js';
  */
 
 /** Where launch files live, workspace-relative. An entry in an earlier file wins over one of the same name in a later. */
-export const LAUNCH_FILES = ['.g-code/launch.json', '.claude/launch.json'] as const;
+export const LAUNCH_FILES = projectItemFiles('launch');
 
 /** One launch entry as the engine parsed it: what to run, where, and where it answers. */
 export type LaunchConfig = {
