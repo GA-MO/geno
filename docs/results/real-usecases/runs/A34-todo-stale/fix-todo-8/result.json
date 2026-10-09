@@ -1,0 +1,90 @@
+{
+  "case": "A34-todo-stale",
+  "run": "fix-todo-8",
+  "session": "df103608-4ceb-4e42-81b0-62eba170310c",
+  "passed": false,
+  "costUsd": 0.012034207499999998,
+  "classifierUsd": 0,
+  "modelCalls": 8,
+  "toolCalls": 12,
+  "tokens": {
+    "input": 48,
+    "cacheRead": 59087,
+    "cacheWrite": 9189,
+    "output": 3066,
+    "latencyMs": 59146
+  },
+  "errors": [],
+  "checks": [
+    {
+      "id": "tool-args-json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-unknown-tool",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "deferred-loaded-first",
+      "pass": null,
+      "detail": "no deferred tool called"
+    },
+    {
+      "id": "dedicated-file-tools",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "edits-with-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "read-before-edit",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "no-repeat-denied",
+      "pass": null,
+      "detail": "nothing denied"
+    },
+    {
+      "id": "no-sleep-poll",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "stays-in-workspace",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "id": "ends-with-report",
+      "pass": true,
+      "detail": "stop=end_turn text=714ch"
+    },
+    {
+      "id": "left-unfinished",
+      "pass": true,
+      "detail": "in_progress,pending,pending,pending"
+    },
+    {
+      "id": "told-stale",
+      "pass": true,
+      "detail": "budget+last; todo"
+    },
+    {
+      "id": "updates-or-clears",
+      "pass": false,
+      "detail": "no todo call"
+    },
+    {
+      "id": "answers",
+      "pass": true,
+      "detail": "**Running tests:** `npm test`, which just runs `node --test` (package.json:7) — it auto-discovers `test/*.test.ts`. There are no dependencies to install.\n\n**Nod"
+    }
+  ]
+}
