@@ -31,8 +31,11 @@ export type ToolRun = {
 const isFsError = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error && typeof (error as NodeJS.ErrnoException).code === 'string';
 
+/** A call's title starts with its tool's name; an input the tool cannot parse describes itself only as its JSON. */
+export const namedTitle = (name: string, said: string): string => (said === name || said.startsWith(`${name} `) ? said : `${name} ${said}`);
+
 export const describeCall = (use: ToolUseBlock, executors: Executors): string =>
-  Object.hasOwn(executors, use.name) ? executors[use.name]!.describe(use.input) : `${use.name} ${JSON.stringify(use.input)}`;
+  Object.hasOwn(executors, use.name) ? namedTitle(use.name, executors[use.name]!.describe(use.input)) : `${use.name} ${JSON.stringify(use.input)}`;
 
 /**
  * Runs one tool use. Anything the model got wrong comes back as an `error` result for it to read. Hidden characters in

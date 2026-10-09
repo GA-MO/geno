@@ -67,7 +67,7 @@ import {
   REPORT_TOOL,
 } from '@g-code/core';
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
-import { EXECUTORS } from './tools/index.js';
+import { EXECUTORS, namedTitle } from './tools/index.js';
 
 type EventOf<K extends TurnEvent['kind']> = Extract<TurnEvent, { kind: K }>;
 
@@ -164,7 +164,7 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
 };
 
 export const titleOf = (use: ToolUseBlock): string => {
-  if (Object.hasOwn(EXECUTORS, use.name)) return EXECUTORS[use.name as keyof typeof EXECUTORS].describe(use.input);
+  if (Object.hasOwn(EXECUTORS, use.name)) return namedTitle(use.name, EXECUTORS[use.name as keyof typeof EXECUTORS].describe(use.input));
   return AGENT_TITLES[use.name]?.((use.input ?? {}) as Record<string, unknown>) ?? use.name;
 };
 
