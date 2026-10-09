@@ -118,3 +118,30 @@ Read these as signs, not rates. Each step has 9 to 16 runs on six cases. The fir
 - A19 fix-s2-2 stopped its background server with `pkill -f "node server.js"` instead of `task_stop`. That pattern can kill the user's own processes. No refusal or note for `pkill -f` or `killall` exists yet.
 - A12 fix-s3-2 read its background job's output file with `tail`, and the read was denied as outside the workspace. The start line names that file, so either allow it or name `bash_output` there.
 - The note covers only lines that do nothing but read. Mixed lines such as `ls && node --test` or `git diff && cat notes/*` still fail `dedicated-file-tools`.
+
+# Round 3: process kills and job output reads
+
+Round 3 closes the first two open items of round 2. Both follow Claude Code's harness design: stop background work by its id, and read the output file that the start line names.
+
+| Change | Commit | Evidence |
+|---|---|---|
+| A `process-kill` rule in `core/src/approval.ts`. `pkill`, `killall`, a `kill` of a PID or name the session did not start, and a `kill` fed by `xargs` or a substitution ask in Ask, go to the classifier in Auto, and are denied in Plan and non-interactive runs. A `kill` of a running background job's process or group, of a group a command left running, or of `$!` or a job spec runs without a question. A refusal names `task_stop` with each running job's id. | 93de0094 | Unit rows in `approval.test.ts`. A conformance test on both wires: `pkill -f` asks in Ask, and a non-interactive run refuses it with ``call task_stop with its id: bg-1 (`sleep 30`)``. A `kill <pid>` of the session's own job asks nothing. |
+| Bash judges the session's spill folder, where background output goes, as readable. Every other path outside the workspace still asks. A refusal of a path that looks like a job output file names `bash_output`. | 8ee9a40f | A conformance test on both wires: `tail -n 20 <job output file>` and `read` of it run without a card in Ask. Another folder's `background/bg-3.log` is refused with the `bash_output` pointer. |
+
+The conformance runs found two facts about the macOS sandbox. Its profile allows a signal only within the same sandbox, and every bash call is its own sandbox. So on macOS a `kill` of a background job runs and then fails with "Operation not permitted". Its result now ends with one `[Geno]` line that names `task_stop` and the job id. The same profile blocks `pkill`'s process list: A19 fix-s2-2's `pkill -f "node server.js"` printed "Cannot get process list" and stopped nothing. On macOS the rule saves a wasted call and points the model at `task_stop`. Where the sandbox lets signals through, the rule keeps a kill away from the user's own processes.
+
+The bash description is unchanged, because Claude Code's Bash description has no line about process kills to mirror. No request golden changed.
+
+The real-model check ran qwen3.8-flash on A12 and A19 twice each, labels `fix-r3-1` and `fix-r3-2`, on engine 80cd85f4, with one fresh HOME per run. The case files record that commit. A later fixup added one row to `agent.e2e.test.ts` and left the engine source as it was, so 8ee9a40f runs the same code. All four runs started their server with `run_in_background`. Three stopped it with `task_stop`. A19 fix-r3-1 left it running, and the end of the run stopped it. No run used `pkill`, `kill` or `tail` of a job's output file, so neither change fired on the real model. Read these runs as a check for regressions, not as a measured effect. A12 passed both runs. A19 passed fix-r3-2 and failed fix-r3-1 on `dedicated-file-tools` alone (`ls src/logic src/scenes test && cat README.md`, the mixed-line gap above). After both batches nothing listened on 5173 or 3000. None of the 25 new archived files, gzipped ones included, holds `pstack model configuration`, `EXTREMELY_IMPORTANT` or `/Users/me`.
+
+| Batch | Runs | USD |
+|---|---|---|
+| fix-r3-1 | 2 | 0.0626 |
+| fix-r3-2 | 2 | 0.0563 |
+| **Total** | **4** | **0.1189** of the $0.40 cap |
+
+## Left open after round 3
+
+- `PID=$(cat server.pid); kill $PID` still asks, because the engine cannot see the PID in the file. `PID=$!` in the same line runs.
+- A line whose first flagged command is unlisted, such as `lsof -t -i:3000 | xargs kill`, gets a merged question led by the unlisted rule. Its reason still names the kill, and a non-interactive run still denies it as `process-kill`.
+- The real model has not hit either refusal yet, so the wording of both hints is untested on qwen3.8-flash.

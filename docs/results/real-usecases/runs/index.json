@@ -3411,5 +3411,101 @@
       "transcript": "transcript.md",
       "result": "result.json"
     }
+  },
+  {
+    "case": "A12-background-server",
+    "area": "background",
+    "layer": "A",
+    "run": "fix-r3-1",
+    "engineCommit": "80cd85f4",
+    "phase": "after",
+    "note": "after the fixes, on 80cd85f4; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T16:06:54.855Z",
+    "passed": true,
+    "costUsd": 0.007967,
+    "modelCalls": 6,
+    "goodExample": true,
+    "dir": "runs/A12-background-server/fix-r3-1",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A19-poteto-thai",
+    "area": "skills",
+    "layer": "A",
+    "run": "fix-r3-1",
+    "engineCommit": "80cd85f4",
+    "phase": "after",
+    "note": "after the fixes, on 80cd85f4; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T16:07:10.941Z",
+    "passed": false,
+    "costUsd": 0.05458,
+    "modelCalls": 16,
+    "goodExample": false,
+    "dir": "runs/A19-poteto-thai/fix-r3-1",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl.gz",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A12-background-server",
+    "area": "background",
+    "layer": "A",
+    "run": "fix-r3-2",
+    "engineCommit": "80cd85f4",
+    "phase": "after",
+    "note": "after the fixes, on 80cd85f4; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T16:09:09.409Z",
+    "passed": true,
+    "costUsd": 0.009229,
+    "modelCalls": 7,
+    "goodExample": true,
+    "dir": "runs/A12-background-server/fix-r3-2",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A19-poteto-thai",
+    "area": "skills",
+    "layer": "A",
+    "run": "fix-r3-2",
+    "engineCommit": "80cd85f4",
+    "phase": "after",
+    "note": "after the fixes, on 80cd85f4; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T16:09:41.048Z",
+    "passed": true,
+    "costUsd": 0.047113,
+    "modelCalls": 17,
+    "goodExample": false,
+    "dir": "runs/A19-poteto-thai/fix-r3-2",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl.gz",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
   }
 ]
