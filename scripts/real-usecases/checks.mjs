@@ -5,7 +5,7 @@ import path from 'node:path';
 /** A skill's own folder, which its text tells the model to read from. */
 const PLUGIN_SKILLS = path.join(homedir(), '.claude/plugins/');
 
-export const DEFERRED_HINT = new Set(['bash_output', 'list_agents', 'monitor', 'notebook_edit', 'preview_list', 'preview_logs', 'preview_start', 'preview_stop', 'recall', 'schedule_wakeup', 'skill', 'task_stop', 'watch_pr', 'web_fetch', 'message_agent']);
+export const DEFERRED_HINT = new Set(['bash_output', 'list_agents', 'monitor', 'notebook_edit', 'preview_list', 'preview_logs', 'preview_start', 'preview_stop', 'recall', 'schedule_wakeup', 'task_stop', 'watch_pr', 'web_fetch', 'message_agent']);
 
 /** One model call or one tool call with its result, in log order. */
 export function analyze(events) {
