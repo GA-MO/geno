@@ -585,7 +585,11 @@ export const FIXTURES: readonly Fixture[] = [
     look: { detail: 'full' },
     play: async ({ host }) => {
       await host.act(turnStart('t0', 'Run the tests'), { type: 'text', text: 'Running the suite.' }, toolStart('tu_t', { name: 'bash', input: { command: 'pnpm test', description: 'Run the tests' } }));
-      await host.act(toolEnd('tu_t', 'failed', 'FAIL src/login.test.ts\n  ✕ trims the email (4 ms)\n\nexpected "a@b.c" got "a@b.c "\n[exit code 1]'), { type: 'text', text: 'One test fails.' }, ended());
+      await host.act(
+        toolEnd('tu_t', 'failed', " RUN  v3.2.4 /Users/me/work/app\n ❯ src/login.test.ts (12 tests | 1 failed) 8ms\n   × login > trims the email 4ms\n FAIL  src/login.test.ts > login > trims the email\nAssertionError: expected 'a@b.c ' to be 'a@b.c'\n Tests  1 failed | 11 passed (12)\n[exit code 1]"),
+        { type: 'text', text: 'One test fails.' },
+        ended(),
+      );
     },
   },
   {

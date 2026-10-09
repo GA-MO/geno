@@ -20,7 +20,7 @@ const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`
 describe('a command step', () => {
   it('titles the step with the call’s description on one line, and keeps the command whole', () => {
     const step = commandStepOf(bash({ target: LONG_COMMAND, description: '  Show disk usage\n of each package  ' }), false);
-    expect(step).toEqual({ title: 'Show disk usage of each package', command: LONG_COMMAND, output: undefined, truncated: false, lines: 0, status: 'running' });
+    expect(step).toEqual({ title: 'Show disk usage of each package', command: LONG_COMMAND, output: undefined, truncated: false, fromEnd: false, lines: 0, status: 'running' });
   });
 
   it('falls back to a plain title without a description, by whether the command still runs', () => {
@@ -38,6 +38,12 @@ describe('a command step', () => {
     const tool = bash({ target: 'ls', description: 'List the files' }, { output: `${lines(9)}\n[exit code 0]\n` });
     expect(commandStepOf(tool, false)).toMatchObject({ output: lines(PREVIEW_LINES).split('\n'), truncated: true, lines: 9, status: 'completed' });
     expect(commandStepOf(tool, true)).toMatchObject({ output: lines(9).split('\n'), truncated: false, lines: 9 });
+  });
+
+  it('previews the last lines of a failed command, where its error is, and shows them all once expanded', () => {
+    const tool = bash({ target: 'pnpm test' }, { output: `${lines(9)}\n[exit code 1]\n`, status: 'failed' });
+    expect(commandStepOf(tool, false)).toMatchObject({ output: ['line 7', 'line 8', 'line 9', '[exit code 1]'], truncated: true, fromEnd: true, lines: 10 });
+    expect(commandStepOf(tool, true)).toMatchObject({ output: [...lines(9).split('\n'), '[exit code 1]'], truncated: false });
   });
 
   it('keeps a failing exit line once, at the end, and shows a short output whole', () => {
