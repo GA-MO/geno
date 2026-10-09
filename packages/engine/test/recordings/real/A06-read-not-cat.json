@@ -1,0 +1,76 @@
+{
+  "keyBy": "turn",
+  "refresh": "pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/A06-read-not-cat/1",
+  "run": {
+    "source": "docs/results/real-usecases/runs/A06-read-not-cat/1",
+    "case": "A06-read-not-cat",
+    "layer": "A",
+    "mode": "non-interactive",
+    "prompts": [
+      "Show me what the package.json scripts are, list the files under src, and tell me which test files exist."
+    ],
+    "files": {
+      "package.json": "{\n  \"name\": \"tiny-money\",\n  \"version\": \"0.3.1\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+      "README.md": "# tiny-money\n\nSmall helpers for prices and slugs. Run the tests with `npm test` (Node 22, no dependencies).\n",
+      "src/money.ts": "export type Currency = 'USD' | 'THB' | 'EUR';\n\nconst SYMBOLS: Record<Currency, string> = { USD: '$', THB: '฿', EUR: '€' };\n\n/** Formats an amount in cents, such as 1250 -> \"$12.50\". */\nexport function formatPrice(cents: number, currency: Currency = 'USD'): string {\n  const amount = cents / 100;\n  return `${SYMBOLS[currency]}${amount}`;\n}\n\nexport function sum(prices: readonly number[]): number {\n  return prices.reduce((total, price) => total + price, 0);\n}\n",
+      "src/slug.ts": "/** Turns a title into a URL slug: lower case, words joined by single dashes. */\nexport function slugify(title: string): string {\n  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');\n}\n",
+      "src/config.ts": "export const config = {\n\tretries: 3,\n\ttimeout: 1000,\n\tbaseUrl: 'http://localhost:8080',\n};\n",
+      "src/duration.ts": "/** Parses a duration such as \"1h30m\", \"45s\" or \"2d\" into seconds. Throws on anything else. */\nexport function parseDuration(text: string): number {\n  throw new Error('not implemented');\n}\n",
+      "src/index.ts": "export * from './money.ts';\nexport * from './slug.ts';\nexport * from './config.ts';\n",
+      "test/money.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { formatPrice, sum } from '../src/money.ts';\n\ntest('formats cents with two decimals', () => {\n  assert.equal(formatPrice(1250), '$12.50');\n  assert.equal(formatPrice(99900, 'THB'), '฿999.00');\n  assert.equal(formatPrice(5), '$0.05');\n});\n\ntest('sums prices', () => assert.equal(sum([100, 250]), 350));\n",
+      "test/slug.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { slugify } from '../src/slug.ts';\n\ntest('joins words with one dash', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n  assert.equal(slugify('  Hello   World  '), 'hello-world');\n  assert.equal(slugify('Rock & Roll!'), 'rock-roll');\n});\n",
+      "test/duration.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { parseDuration } from '../src/duration.ts';\n\ntest('single units', () => {\n  assert.equal(parseDuration('45s'), 45);\n  assert.equal(parseDuration('2h'), 7200);\n  assert.equal(parseDuration('90m'), 5400);\n  assert.equal(parseDuration('2d'), 172800);\n});\n\ntest('combined units', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n  assert.equal(parseDuration('1d2h3m4s'), 93784);\n  assert.equal(parseDuration('1h 30m'), 5400);\n});\n\ntest('rejects bad input', () => {\n  assert.throws(() => parseDuration(''));\n  assert.throws(() => parseDuration('abc'));\n  assert.throws(() => parseDuration('10'));\n  assert.throws(() => parseDuration('1x'));\n});\n",
+      "legacy/old-money.js": "// Kept for the v0 API. Do not edit: downstream code pins this file by hash.\nexports.price = (c) => \"$\" + c / 100;\n",
+      ".g-code/settings.json": "{\n  \"check\": \"node --test\"\n}\n",
+      ".agents/skills/changelog/SKILL.md": "---\nname: changelog\ndescription: Add an entry to CHANGELOG.md in this project's format. Use whenever the user asks for a changelog or release note.\n---\n\n# Changelog entries\n\n1. Read CHANGELOG.md first.\n2. Add the entry under the `## Unreleased` heading, creating it at the top if it is missing.\n3. Each entry is one line: `- <area>: <what changed, past tense> (<file>)`, where area is one of fix, feat, chore.\n4. End the turn by quoting the exact line you added, prefixed with `Changelog:`.\n",
+      "CHANGELOG.md": "# Changelog\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n",
+      ".gitignore": "node_modules/\n"
+    }
+  },
+  "entries": [
+    {
+      "key": "ec4ce829#0",
+      "wire": "anthropic",
+      "asks": "user turn 0: Show me what the package.json scripts are, list the files under src, and tell me which test files exist.",
+      "answer": {
+        "kind": "call",
+        "text": "I'll look at package.json, the src tree, and the test files.\n\n",
+        "uses": [
+          {
+            "id": "toolu_74c97054035d45e98709168f",
+            "name": "read",
+            "input": {
+              "path": "package.json"
+            }
+          },
+          {
+            "id": "toolu_f1b6fdd3dc64457090a5235d",
+            "name": "list",
+            "input": {
+              "directory": "src",
+              "depth": 3
+            }
+          },
+          {
+            "id": "toolu_b7cb311ab78c441889ff3b7f",
+            "name": "glob",
+            "input": {
+              "pattern": "**/*test*"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "ec4ce829#1",
+      "wire": "anthropic",
+      "asks": "user turn 1: Show me what the package.json scripts are, list the files under src, and tell me which test files exist.",
+      "answer": {
+        "kind": "say",
+        "text": "Here's what's in the repo:\n\n**package.json scripts** (`package.json:6-8`) — just one:\n- `test`: `node --test`\n\n**Files under `src/`** — five TypeScript modules:\n- `src/config.ts`\n- `src/duration.ts`\n- `src/index.ts`\n- `src/money.ts`\n- `src/slug.ts`\n\n**Test files** — three, all in `test/` (not `src/`), matching the `node --test` default lookup:\n- `test/duration.test.ts`\n- `test/money.test.ts`\n- `test/slug.test.ts`\n\nNote there's no test file covering `src/config.ts` or `src/index.ts`.",
+        "stop": "end_turn"
+      }
+    }
+  ]
+}

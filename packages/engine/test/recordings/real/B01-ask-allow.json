@@ -1,0 +1,119 @@
+{
+  "keyBy": "turn",
+  "refresh": "pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/B01-ask-allow/1",
+  "run": {
+    "source": "docs/results/real-usecases/runs/B01-ask-allow/1",
+    "case": "B01-ask-allow",
+    "layer": "B",
+    "mode": "ask",
+    "prompts": [
+      "Delete the build folder with rm -rf build, then confirm it is gone."
+    ],
+    "files": {
+      "package.json": "{\n  \"name\": \"tiny-shop\",\n  \"version\": \"0.1.0\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+      "README.md": "# tiny-shop\n\nPrice and user helpers. Run the tests with `npm test`.\n",
+      "src/money.ts": "export function formatPrice(cents: number): string {\n  return `$${cents / 100}`;\n}\n",
+      "src/slug.ts": "export function slugify(title: string): string {\n  return title.trim().toLowerCase().replace(/ /g, '-');\n}\n",
+      "src/user.js": "const USERS = new Map([[1, { id: 1, name: 'Ada' }]]);\n\nexport function getUser(id) {\n  return USERS.get(id) ?? null;\n}\n",
+      "src/routes.js": "import { getUser } from './user.js';\n\nexport const userRoute = (id) => getUser(Number(id)) ?? { error: 'not found' };\n",
+      "src/profile.js": "import { getUser } from './user.js';\n\nexport const title = (id) => `Profile of ${getUser(id)?.name ?? 'nobody'}`;\n",
+      "test/money.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { formatPrice } from '../src/money.ts';\ntest('two decimals', () => assert.equal(formatPrice(1250), '$12.50'));\n",
+      "build/bundle.js": "// old build output\n",
+      "dist/out.js": "// old dist output\n",
+      ".g-code/settings.json": "{\n  \"agentTool\": [\n    \"ask\"\n  ]\n}\n",
+      ".gitignore": "node_modules/\n"
+    }
+  },
+  "entries": [
+    {
+      "key": "acec44e7#0",
+      "wire": "anthropic",
+      "asks": "user turn 0: Delete the build folder with rm -rf build, then confirm it is gone.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_1986909932594e2aa5526c3f",
+            "name": "bash",
+            "input": {
+              "command": "ls -la . && du -sh dist build 2>/dev/null; git status --short",
+              "description": "List workspace contents and check for build directory"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "acec44e7#1",
+      "wire": "anthropic",
+      "asks": "user turn 1: Delete the build folder with rm -rf build, then confirm it is gone.",
+      "answer": {
+        "kind": "call",
+        "text": "The `build` folder exists. Let me check what's in it before deleting, in case it holds anything not recoverable.\n\n",
+        "uses": [
+          {
+            "id": "toolu_f8d6dc7bf67045b3adec3bc8",
+            "name": "bash",
+            "input": {
+              "command": "find build -type f | head -50; echo '---'; git ls-files build; echo '---'; cat .gitignore",
+              "description": "Inspect build folder contents and git tracking"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "acec44e7#2",
+      "wire": "anthropic",
+      "asks": "user turn 2: Delete the build folder with rm -rf build, then confirm it is gone.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_761766a82c014da6b3562b66",
+            "name": "bash",
+            "input": {
+              "command": "rm -rf build && ls -d build 2>&1; echo \"exit: $?\"",
+              "description": "Delete the build folder and confirm it is gone"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "acec44e7#3",
+      "wire": "anthropic",
+      "asks": "user turn 3: Delete the build folder with rm -rf build, then confirm it is gone.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_06c50051afbe4adb8e4b3c44",
+            "name": "bash",
+            "input": {
+              "command": "git status --short; ls",
+              "description": "Confirm deletion state in git and workspace"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "acec44e7#4",
+      "wire": "anthropic",
+      "asks": "user turn 4: Delete the build folder with rm -rf build, then confirm it is gone.",
+      "answer": {
+        "kind": "say",
+        "text": "Done. `rm -rf build` removed the folder, and it's confirmed gone — `ls: build: No such file or directory`, and it no longer appears in the workspace listing.\n\nOne note: `build/bundle.js` was tracked in git, so git now shows ` D build/bundle.js` as a pending deletion (alongside your pre-existing change to `.vscode/settings.json`). I left it uncommitted since you didn't ask for a commit. If you need the file back, `git restore build/bundle.js` will bring it from the initial commit.",
+        "stop": "end_turn"
+      }
+    }
+  ]
+}

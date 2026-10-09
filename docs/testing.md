@@ -57,6 +57,32 @@ GCODE_RECORD=live pnpm vitest run --project unit <file>                         
 - `GCODE_RECORD=live` sends each missing request to Model Studio's Anthropic endpoint and keeps the whole stream. It reads `DASHSCOPE_API_KEY` and `DASHSCOPE_BASE_URL` from the main checkout's `.env`. It never prints them, and a recording holds only the reply events, not the request headers. It speaks only the Anthropic wire.
 - Recording adds entries and keeps the old ones. To drop the entries a test no longer uses, delete the file and record again.
 
+### Recordings from real runs
+
+`packages/engine/test/real-runs.e2e.test.ts` runs the real engine through six runs of the real-model campaign (`docs/results/real-usecases/runs/`), with the model's own answers replayed, no network and no cost. Each recording is `packages/engine/test/recordings/real/<case>.json`:
+
+| Recording | Run | What the test checks |
+| --- | --- | --- |
+| `A13-fail-then-fix` | A code fix | Reads the stub and its test before the one edit, runs the test, and leaves the archived `diff.patch`. |
+| `A06-read-not-cat` | A search and read task | `read`, `list` and `glob` in one turn, no shell, no change. |
+| `A10-plan-mode` | A multi-step task in Plan | Searches, reads, read-only commands, one todo update with every item pending, no edit. |
+| `A02-thai-fix` | A Thai prompt | Reads before the edit, the slug test passes, the archived diff. |
+| `A11-explore-subagent` | Subagents | A capped explore subagent, a retried one that reports, each one's tool order, the parent's own grep. |
+| `B01-ask-allow` | An approval in Ask | Two looks, then one question for `rm -rf build`, which the test allows; `build/` is gone and `dist/` is not. |
+
+A real run cannot be recorded again without a model, and the engine's requests change whenever the system prompt, a tool or a notice does. So these recordings say `"keyBy": "turn"`, and the fake model answers each request by its turn key instead of the request key (`requestTurnKey` in `request-normal.ts`): 8 hex characters of the SHA-256 of the normalized text that opened the conversation, `#`, and how many assistant messages the request holds. The opening text is the last text block of the first user message: the user's prompt, or the task a subagent was given. A subagent's turns therefore stay apart from its parent's. A request that has no recorded turn fails, with the file, the key, and the command that makes the recording again. That happens when the engine takes a turn the real run did not take, or opens a conversation with other text.
+
+The file also keeps what the test needs to start the run again: the run's folder, its mode, its prompts, and the files its workspace started with. Paths into the run's workspace in the model's answers and in a subagent's task are written relative to the workspace, so they work in the test's own temp repository.
+
+To make a recording from a run, or from a new real run of the same case after the engine changed, convert its archived folder:
+
+```sh
+pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/A13-fail-then-fix/1
+pnpm vitest run --project unit packages/engine/test/real-runs.e2e.test.ts
+```
+
+The script reads `session.jsonl` and each `child-*.jsonl` of a Layer A run, or the `session-*.jsonl` files of a panel step, and writes one entry per assistant event, with thinking left out. A new real run comes from `node scripts/real-usecases/run.mjs --case <id>` and `node scripts/real-usecases/archive.mjs`, which costs money. A panel step starts from `packages/extension/test/suite/real-model-fixture.ts` alone, without the changes the steps before it made. A case with a sibling repository or a setup step is refused, since the recording does not carry them yet.
+
 ### Normalization
 
 `request-normal.ts` takes out the parts of a request that change from run to run. The key and the goldens below both use it:
