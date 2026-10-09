@@ -416,15 +416,11 @@ const WORKSPACE_OPTION = 'allow-workspace';
 /** The comment each open card's "No, and tell the agent…" field holds, kept across a rebuild of the step that holds it. */
 const comments = new Map<string, string>();
 
-/** Option ids, then kinds, as the panel names their buttons; the first allow is the default the card focuses. */
-const CHOICE_LABELS: Readonly<Record<string, string>> = {
-  [WORKSPACE_OPTION]: 'Always allow in this workspace',
-  [COMMENT_OPTION]: 'No, and tell the agent…',
-  allow_once: 'Allow',
-  allow_always: 'Always Allow',
-  reject_once: 'Deny',
-  reject_always: 'Always Deny',
-};
+/**
+ * The engine names every option by what it does; the panel shortens only its own once-only answers. Any other option
+ * id, such as "Allow this directory for the session", reads as the engine names it.
+ */
+const CHOICE_LABELS: Readonly<Record<string, string>> = { allow: 'Allow', reject: 'Deny' };
 
 const CHOICE_STYLES: Readonly<Record<string, string>> = {
   [WORKSPACE_OPTION]: 'button secondary',
@@ -455,7 +451,7 @@ function choiceButtons(block: PermissionBlock, ui: Ui, labels: Readonly<Record<s
             field.querySelector('textarea')?.focus();
           },
         },
-        labels[option.optionId] ?? labels[option.kind] ?? option.name,
+        labels[option.optionId] ?? option.name,
       ),
     ),
   );
@@ -525,9 +521,6 @@ const SCOPE_TEXT = {
   global: 'Geno will follow this note in every later chat, in every project.',
 } as const;
 
-const MEMORY_LABELS: Readonly<Record<string, string>> = { allow_once: 'Remember', reject_once: "Don't remember" };
-const WORKFLOW_LABELS: Readonly<Record<string, string>> = { allow_once: 'Run', reject_once: "Don't run" };
-
 /** How each kind of waiting card reads: a command to run, a note to keep, or a question to answer. */
 const COMMAND_FACE: CardFace = {
   label: 'Geno asks to run a command',
@@ -563,7 +556,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
       h('blockquote', { class: 'memory-text' }, block.command),
       h('p', { class: 'permission-reason' }, block.ask?.kind === 'memory' ? `${SCOPE_TEXT[block.ask.scope]} You can change or delete it in /memory.` : ''),
     ],
-    actions: (block, ui) => choiceButtons(block, ui, MEMORY_LABELS),
+    actions: (block, ui) => choiceButtons(block, ui, {}),
     settled: (block) => [
       block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Remembered') : outcomeLine(false, 'close', 'Not remembered'),
     ],
@@ -573,7 +566,7 @@ const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFac
     glyph: 'run-all',
     title: 'Run this workflow?',
     body: (block) => (block.ask?.kind === 'workflow' ? workflowCardBody(block.ask.preview) : []),
-    actions: (block, ui) => choiceButtons(block, ui, WORKFLOW_LABELS),
+    actions: (block, ui) => choiceButtons(block, ui, {}),
     settled: (block) => [
       block.outcome.kind === 'cancelled' ? outcomeLine(false, 'circle-slash', 'Cancelled') : allowedOf(block) ? outcomeLine(true, 'check', 'Started, in Tasks') : outcomeLine(false, 'close', 'Not run'),
     ],
