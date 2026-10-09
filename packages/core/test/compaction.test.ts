@@ -18,6 +18,7 @@ import {
   planCompaction,
   replayMessages,
   autoCompaction,
+  compactionStuck,
   plannedTokens,
   summarizeSession,
   summaryPrompt,
@@ -349,6 +350,15 @@ describe('when to compact', () => {
   it('keeps a quarter of the threshold verbatim on a small window', () => {
     expect(keepTailTokens(800_000)).toBe(KEEP_TAIL_TOKENS);
     expect(keepTailTokens(25_600)).toBe(6_400);
+  });
+
+  it('G-08 says when compaction is due and cannot help, and compacts below the fixed part once a summary would halve the context', () => {
+    expect(compactionStuck(log, 9_000)).toBe(true);
+    expect(compactionStuck(log, 12_800)).toBe(false);
+    const rounds = Array.from({ length: 8 }, (_, i) => [assistant(16 + 2 * i, 'Reading more.', [[`tu_more${i}`, 'read', { path: `b${i}.ts` }]], 13_000 + 6_000 * i), result(17 + 2 * i, `tu_more${i}`, big(6_000), 'read')]).flat();
+    const grown = [...log, ...rounds];
+    expect(autoCompaction(grown, 9_000)).toBeDefined();
+    expect(compactionStuck(grown, 9_000)).toBe(false);
   });
 
   it('waits for a model call after a compaction before compacting again', () => {

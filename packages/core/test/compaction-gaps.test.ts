@@ -182,7 +182,8 @@ describe('the changed files a compaction attaches', () => {
     const planned = plannedTokens(plan, before);
     expect(planned, 'the summary alone would fit').toBeLessThan(compactAt);
     expect(planned + attachBudget(compactAt), 'the attached files would not').toBeGreaterThanOrEqual(compactAt);
-    expect(autoCompaction(events, compactAt)).toBeUndefined();
+    expect(planned + attachBudget(compactAt), 'but both would halve the context').toBeLessThanOrEqual(before / 2);
+    expect(autoCompaction(events, compactAt), 'so it compacts though it cannot get under (ISSUES.md G-08)').toBeDefined();
     expect(autoCompaction(events, 6_000), 'with room for both it compacts').toBeDefined();
   });
 });
