@@ -208,6 +208,10 @@ export function denialText({ mode, rule, command, reason, classifier, decidedBy,
   if (decidedBy === 'classifier' && classifier?.verdict === 'ask') {
     return `denied: Auto mode blocked \`${command}\` without asking the user, because the safety classifier would not allow it: ${classifier.reason}. Do not retry it. Find another way, or say in your answer what you need the user to allow.`;
   }
+  // A path the user must allow is not a tool-specific block, so it gets no invitation to try another tool on it.
+  if (mode === 'non-interactive' && decidedBy === 'rule' && rule === 'path-outside-workspace') {
+    return `denied: \`${command}\` uses ${reason}, which needs the user's approval, and nobody can answer here. Do not reach that path another way; say in your answer what you need to read.`;
+  }
   if (mode === 'non-interactive' && decidedBy === 'rule') return `denied: \`${command}\` uses ${reason}, which needs the user's approval, and nobody can answer here. ${DONT_ASK}`;
   return `denied: \`${command}\` ${
     decidedBy === 'classifier'
@@ -234,7 +238,7 @@ export const outsideRefusal = (record: ApprovalRecord, readable: readonly string
     record,
     record.decidedBy === 'user'
       ? denialText(record)
-      : `${denialText(record)} Geno may read only in these directories in this session: ${readable.map((dir) => `'${dir}'`).join(', ')}. If the task needs another one, say so in your answer: the user can add it in gcode.additionalDirectories or allow it for the session.`,
+      : `${denialText(record)} Geno may read only in these directories in this session: ${readable.map((dir) => `'${dir}'`).join(', ')}. If the task needs another one, say so in your answer: the user can add it to permissions.additionalDirectories in .g-code/settings.json, or to the gcode.additionalDirectories setting in the editor.`,
   );
 
 /**
