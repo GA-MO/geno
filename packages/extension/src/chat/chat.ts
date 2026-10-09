@@ -208,7 +208,14 @@ export const reviewModeOf = (configuration: vscode.WorkspaceConfiguration): Revi
 const diagnosticsRequest = z.object({ sessionId: z.string(), paths: z.array(z.string()) });
 const unsavedBuffersRequest = z.object({ sessionId: z.string() });
 const turnUsage = z.object({ model: z.string(), costUsd: z.number().nullable() });
-const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional(), rule: z.string().optional() });
+// A subject this panel does not know reads as a command, so a newer engine's card still shows.
+const approvalSubject = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('read'), path: z.string() }),
+  z.object({ kind: z.literal('fetch'), url: z.string(), host: z.string() }),
+  z.object({ kind: z.literal('browse'), url: z.string(), host: z.string() }),
+  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string() }),
+]);
+const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional(), rule: z.string().optional(), subject: approvalSubject.optional().catch(undefined) });
 
 const bashInput = z.object({ description: z.string() });
 
@@ -1381,7 +1388,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     const choice = await new Promise<Choice | undefined | typeof NOT_SHOWN>((resolve) => {
       this.permissions.set(id, resolve);
       const input = permissionInput.safeParse(toolCall.rawInput);
-      const { command, reason, description, rule } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined };
+      const { command, reason, description, rule, subject } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined, subject: undefined };
       const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
       const workflow = workflowPreviewWire.safeParse(toolCall._meta?.[WORKFLOW_META]);
       this.dispatch({
@@ -1396,6 +1403,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
         toolId: toolCall.toolCallId,
         ...(toolCall.kind === 'edit' ? { toolKind: 'edit' as const } : {}),
         ...(rule === undefined ? {} : { rule }),
+        ...(subject === undefined ? {} : { subject }),
       });
       void vscode.commands.executeCommand(`${CHAT_VIEW}.focus`);
     });

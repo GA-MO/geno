@@ -83,6 +83,13 @@ type DenyRule = {
   matches(command: SimpleCommand, scope: CommandScope): boolean;
 };
 
+/** What a question asks about when it is not a command line, so its card can name it: a path, a host or an MCP tool. */
+export type ApprovalSubject =
+  | { readonly kind: 'read'; readonly path: string }
+  | { readonly kind: 'fetch'; readonly url: string; readonly host: string }
+  | { readonly kind: 'browse'; readonly url: string; readonly host: string }
+  | { readonly kind: 'mcp'; readonly server: string; readonly tool: string };
+
 export type Denial = {
   readonly rule: ApprovalRuleId;
   readonly reason: string;
@@ -94,7 +101,10 @@ export type Denial = {
   readonly keeps?: string;
   /** The directory "Allow this directory for the session" lets the session read, for a read outside every one it may. */
   readonly directory?: string;
+  readonly subject?: ApprovalSubject;
 };
+
+export const withSubject = (denial: Denial | undefined, subject: ApprovalSubject): Denial | undefined => (denial === undefined ? undefined : { ...denial, subject });
 
 // What cannot be undone: Auto still asks.
 const ALWAYS_ASK: Verdicts = { plan: 'deny', ask: 'ask', auto: 'ask', 'non-interactive': 'deny' };
@@ -864,7 +874,7 @@ export function outsideReadDenial(command: string, target: string, directory: st
   const { reason, verdicts } = DENY_RULES['path-outside-workspace'];
   const verdict = verdicts[mode];
   if (verdict === 'allow') return undefined;
-  return { rule: 'path-outside-workspace', reason, command, verdict, ...(isSecretPath(target) || inCredentialPlace(places, target) ? {} : { directory }) };
+  return { rule: 'path-outside-workspace', reason, command, verdict, ...(isSecretPath(target) || inCredentialPlace(places, target) ? {} : { directory }), subject: { kind: 'read', path: target } };
 }
 
 /** What the line rule that judges `command` whole does in this mode; undefined when none does, or it lets the line run. */

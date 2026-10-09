@@ -791,6 +791,7 @@ function editorTurn(
         reason: denial.reason,
         ...(description === undefined ? {} : { description }),
         ...(denial.offer === undefined ? (denial.keeps === undefined ? {} : { rule: denial.keeps }) : { rule: patternText(denial.offer) }),
+        ...(denial.subject === undefined ? {} : { subject: denial.subject }),
       };
       const title = `${asker === undefined ? '' : `[${asker.name}] `}${approvalQuestion(denial, classifier)}`;
       const toolCallId = running;

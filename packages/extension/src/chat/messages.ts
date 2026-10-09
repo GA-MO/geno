@@ -1,4 +1,4 @@
-import type { CallProgress, EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
+import type { ApprovalSubject, CallProgress, EditorAction, AppliedRule, Snippet, AskUserAnswer, BackendShown, ChildEnd, ChildStatus, AskUserAnswers, AskUserRequest, CheckpointRef, HunkStatus, JobState, MemoryEntry, PreviewTag, MemoryScope, Waiting, TodoList, WorkflowPreview } from '@g-code/core';
 import type { AttachmentView, OpenTarget, OutgoingAttachment, PickedFile, Refused } from './attachment-model.js';
 import type { ArenaFromView, ArenaToView } from './arena-model.js';
 import type { ComposerFromView, ComposerToView } from './composer-model.js';
@@ -223,6 +223,8 @@ export type PermissionBlock = {
   readonly toolKind?: ToolKind | undefined;
   /** The pattern "Always allow in this workspace" saves, when the engine offers one. */
   readonly rule?: string | undefined;
+  /** What the question asks about when it is not a command line: a path, a host or an MCP tool. */
+  readonly subject?: ApprovalSubject | undefined;
 };
 
 export type ErrorBlock = { readonly kind: 'error'; readonly id: string; readonly message: string };
@@ -300,6 +302,7 @@ export type Action =
       readonly toolId?: string | undefined;
       readonly toolKind?: ToolKind | undefined;
       readonly rule?: string | undefined;
+      readonly subject?: ApprovalSubject | undefined;
     }
   /** `answer` settles a question card; otherwise `optionId` is the choice, undefined when the request was cancelled. */
   | { readonly type: 'permission-done'; readonly id: string; readonly optionId: string | undefined; readonly answer?: AskUserAnswer | undefined; readonly comment?: string | undefined }

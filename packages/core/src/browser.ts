@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BROWSER_RULES, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
+import { BROWSER_RULES, withSubject, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
 import { MAX_LONG_SIDE } from './attachments.js';
 import { domainRuleFor, mcpCallDenial, toolRuleOutcome, type PermissionRule } from './permission-rules.js';
 
@@ -158,16 +158,23 @@ function ruleDenial(rule: BrowserRuleId, mode: ApprovalMode, command: string, re
  */
 export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
   const target = navigationTarget(call);
-  if (target !== undefined) {
-    const url = browserUrlOf(target, ctx.workspace);
-    const script = typeof call.args['initScript'] === 'string' && call.args['initScript'] !== '';
-    const command = `open ${url.url}${url.kind === 'remote' ? ` (host ${url.host})` : ''}${script ? ' with a script that runs on every page it loads' : ''}`;
-    const reason = url.kind === 'refused' ? `${BROWSER_RULES[URL_RULES.refused].reason}: ${url.why}` : undefined;
-    const risky = () => (script ? ruleDenial('browser-risky-tool', mode, command) : undefined);
-    const ruled = url.kind === 'refused' ? undefined : toolRuleOutcome(domainRuleFor('browser', new URL(url.url).hostname, ctx.rules ?? []), mode, command);
-    if (ruled !== undefined) return ruled.kind === 'allowed' ? risky() : ruled.denial;
-    return ruleDenial(URL_RULES[url.kind], mode, command, reason) ?? risky();
-  }
+  if (target === undefined) return withSubject(pageDenial(call, mode, ctx), { kind: 'mcp', server: BROWSER_SERVER, tool: call.tool });
+  const url = browserUrlOf(target, ctx.workspace);
+  const denial = navigationDenial(call, url, mode, ctx);
+  return url.kind === 'refused' ? denial : withSubject(denial, { kind: 'browse', url: url.url, host: new URL(url.url).hostname });
+}
+
+function navigationDenial(call: BrowserCall, url: BrowserUrl, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
+  const script = typeof call.args['initScript'] === 'string' && call.args['initScript'] !== '';
+  const command = `open ${url.url}${url.kind === 'remote' ? ` (host ${url.host})` : ''}${script ? ' with a script that runs on every page it loads' : ''}`;
+  const reason = url.kind === 'refused' ? `${BROWSER_RULES[URL_RULES.refused].reason}: ${url.why}` : undefined;
+  const risky = () => (script ? ruleDenial('browser-risky-tool', mode, command) : undefined);
+  const ruled = url.kind === 'refused' ? undefined : toolRuleOutcome(domainRuleFor('browser', new URL(url.url).hostname, ctx.rules ?? []), mode, command);
+  if (ruled !== undefined) return ruled.kind === 'allowed' ? risky() : ruled.denial;
+  return ruleDenial(URL_RULES[url.kind], mode, command, reason) ?? risky();
+}
+
+function pageDenial(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
   const readOnly = effectivelyReadOnly(call);
   const page = ctx.page;
   if (!readOnly && page !== undefined && page.url.kind !== 'local' && !page.approved) {

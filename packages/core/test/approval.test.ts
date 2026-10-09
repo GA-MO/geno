@@ -490,7 +490,7 @@ describe('P31 directories beyond the workspace', () => {
 
   it('T-PERM-04 a read outside meets the rule cat of the same path meets in each mode, and offers its directory', () => {
     expect(APPROVAL_MODES.map((mode) => outsideReadDenial('read /x/a.md', '/x/a.md', '/x', mode, [])?.verdict)).toEqual(APPROVAL_MODES.map((mode) => DENY_RULES['path-outside-workspace'].verdicts[mode]));
-    expect(outsideReadDenial('read /x/a.md', '/x/a.md', '/x', 'ask', [])).toEqual({ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: 'read /x/a.md', verdict: 'ask', directory: '/x' });
+    expect(outsideReadDenial('read /x/a.md', '/x/a.md', '/x', 'ask', [])).toEqual({ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: 'read /x/a.md', verdict: 'ask', directory: '/x', subject: { kind: 'read', path: '/x/a.md' } });
   });
 
   it('T-PERM-04 a read outside that names credentials offers no directory for the session', () => {
@@ -499,6 +499,7 @@ describe('P31 directories beyond the workspace', () => {
       reason: 'a path outside the workspace',
       command: 'read /Users/me/.ssh/config',
       verdict: 'classify',
+      subject: { kind: 'read', path: '/Users/me/.ssh/config' },
     });
   });
 

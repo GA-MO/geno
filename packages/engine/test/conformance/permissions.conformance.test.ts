@@ -260,7 +260,7 @@ describe.each(WIRES)('T-PERM-04 reads outside the workspace on the %s wire', (wi
     const dir = await sibling();
     const read = call('read', { path: path.join(dir, 'notes.md') });
     const asking = await scripted(wire, [{ calls: [read] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
-    expect(asking.asked).toEqual([{ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: `read ${path.join(dir, 'notes.md')}`, verdict: 'ask', directory: dir }]);
+    expect(asking.asked).toEqual([{ rule: 'path-outside-workspace', reason: 'a path outside the workspace', command: `read ${path.join(dir, 'notes.md')}`, verdict: 'ask', directory: dir, subject: { kind: 'read', path: path.join(dir, 'notes.md') } }]);
 
     const list = call('list', { directory: dir });
     const listing = await scripted(wire, [{ calls: [list] }, { answer: 'Stopped.' }], { files, mode: 'ask', answers: ['reject'] });
