@@ -22,6 +22,9 @@ function append(parent: Node, children: readonly Child[]): void {
   for (const child of children) if (child !== undefined && child !== false) parent.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
 }
 
+/** macOS takes Cmd where other platforms take Ctrl, and names its keys with symbols. */
+export const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
 export const icon = (name: string, extra = ''): HTMLSpanElement => h('span', { class: `codicon codicon-${name} ${extra}`.trim(), 'aria-hidden': 'true' });
 
 /** One child of a reconciled list: rebuilt only when a dependency changes identity. */

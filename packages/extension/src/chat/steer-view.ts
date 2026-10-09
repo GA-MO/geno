@@ -1,9 +1,8 @@
 /// <reference lib="dom" />
-import { h, icon, type Keyed } from './dom.js';
+import { h, icon, MAC, type Keyed } from './dom.js';
 import type { Child, FromView, SteerBlock } from './messages.js';
 import { fieldStatus, steerLook, targetKey, type SendNow, type SteerResult, type SteerTarget } from './steer-model.js';
 
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 export const SEND_NOW_KEY = MAC ? '⌘Enter' : 'Ctrl+Enter';
 
 /** Cmd+Enter on macOS, Ctrl+Enter elsewhere: send now rather than queue. */
