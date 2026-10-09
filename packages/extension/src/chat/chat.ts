@@ -100,6 +100,7 @@ import {
 } from '@g-code/core';
 import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, UNDO_COMMAND, UNDO_TURN_COMMAND } from '../review/controller.js';
 import { DEFAULT_REVIEW_MODE, REVIEW_MODE_SETTING, REVIEW_MODES, type ReviewMode } from '../review/mode.js';
+import { TOKENS_SETTING } from './tokens.js';
 import { REVEAL_COMMAND } from '../review/tree.js';
 import { currentBranch } from '../git-branch.js';
 import type { AttachmentView, OutgoingAttachment } from './attachment-model.js';
@@ -173,7 +174,7 @@ export const MCP_COMMAND = 'gcode.chat.mcp';
 export const LANES_COMMAND = 'gcode.chat.lanes';
 export const TASKS_COMMAND = 'gcode.chat.tasks';
 /** The settings the panel's look comes from. */
-export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail', REVIEW_MODE_SETTING] as const;
+export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail', REVIEW_MODE_SETTING, TOKENS_SETTING] as const;
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
 
 /** What Start building sends once the session has left Plan. */

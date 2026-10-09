@@ -322,6 +322,50 @@
           "default": "glass",
           "description": "How the chat panel looks. High contrast themes always use the native style."
         },
+        "gcode.appearance.tokens": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": false,
+          "properties": {
+            "dark": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^--(?!vscode-)[a-zA-Z][\\w-]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "light": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^--(?!vscode-)[a-zA-Z][\\w-]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "highContrast": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^--(?!vscode-)[a-zA-Z][\\w-]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "highContrastLight": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^--(?!vscode-)[a-zA-Z][\\w-]*$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "markdownDescription": "A theme for the chat panel: Geno's own tokens, such as `--muted` or `--glass-base`, set to CSS values for each kind of color theme, as in `{ \"dark\": { \"--glass-base\": \"#101418\" } }`. A high contrast kind changes only when you name it. Unknown tokens are ignored with a warning, and VS Code's `--vscode-*` variables stay the color theme's. The UI gallery (`pnpm ui`) exports this object."
+        },
         "gcode.chat.detail": {
           "type": "string",
           "enum": [
