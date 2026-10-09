@@ -39,6 +39,14 @@ The design-system page reads the panel's stylesheet as the page loaded it. It sh
 
 ![The design-system page](ui-gallery/design-dark.png)
 
+Noodle, the dinosaur, walks, runs and thinks on four legs. To hold or work something, it sits up on its haunches and uses its front legs: it reads a notebook, types on a laptop, writes on a pad and ticks a clipboard. It stands on its hind legs to flex. Over the composer it peeks with both front paws hooked over the edge. Every pose and peek move, frame by frame, at 4×:
+
+![Every Noodle frame](ui-gallery/noodle-after.png)
+
+![Noodle peeking over the composer in Dark and Light](ui-gallery/noodle-peek.png)
+
+![Noodle at work beside a running turn and a subagent in Dark and Light](ui-gallery/noodle-working.png)
+
 ## Add a state
 
 Every state is one entry in `FIXTURES` in `packages/extension/test/gallery/fixtures.ts`:
