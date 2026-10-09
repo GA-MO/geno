@@ -369,7 +369,7 @@ const choicesFor = (denial: Denial): acp.PermissionOption[] => {
   if (isMcpRule(denial.rule)) return keeps ? MCP_RULE_PERMISSION_OPTIONS : MCP_PERMISSION_OPTIONS;
   return keeps ? RULE_PERMISSION_OPTIONS : PERMISSION_OPTIONS;
 };
-const optionsFor = (denial: Denial): acp.PermissionOption[] =>
+export const optionsFor = (denial: Denial): acp.PermissionOption[] =>
   (EXTERNAL_RULE_IDS as readonly string[]).includes(denial.rule) ? choicesFor(denial) : [...choicesFor(denial), COMMENT_PERMISSION_OPTION];
 
 const SESSION_MODE_INFO: Readonly<Record<SessionMode, Omit<acp.SessionMode, 'id'>>> = {

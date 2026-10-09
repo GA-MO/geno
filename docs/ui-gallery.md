@@ -72,6 +72,27 @@ The state then appears in the gallery and in `packages/extension/test/webview/ga
 pnpm vitest run --project webview packages/extension/test/webview/gallery.webview.test.ts
 ```
 
+## Real sessions
+
+The **Real sessions** group plays sessions from the real-model campaign (`docs/results/real-usecases/runs/`) as the panel showed them:
+
+| State | Run | What it shows |
+| --- | --- | --- |
+| `real-code-fix` | A13 run 1 | A finished code fix with its diff, in full detail. |
+| `real-plan-todo` | A10 run 1 | A Plan run that ends with a todo list and a plan. |
+| `real-subagent` | B07 run 2 | An explore subagent's row under its `agent` call, and the parent's own check. |
+| `real-approval` | B01 run 1 | The card Ask showed for `rm -rf build`, with the turn still running. |
+| `real-thai` | A02 run 1 | A Thai prompt, the Thai answer and the edit. |
+
+No action in them is written by hand. `scripts/run-to-gallery.ts` reads each run's `session.jsonl`, replays it with the engine's own `replayUpdates` (what a session load sends), and turns each update into the panel's actions with the extension's own mapping in `src/chat/session-updates.ts`, which `ChatProvider` uses for the same updates. A subagent's start and end are its `child-start` and `child-end` events as the engine's subagent notice carries them, with the child's own log replayed under it. The approval card is the request the engine's `approve` would send for the command today, from `ruledDenial` and `optionsFor`, and the script fails if today's rule differs from the one the run logged. Paths into the run's workspace are written relative to it, and the gallery moves the times so each session ends when the state plays.
+
+The script writes `packages/extension/test/gallery/real-sessions.ts`. `scripts/run-to-gallery.test.ts` fails when the file differs from what the script makes today, so a change to the replay or the mapping shows up as a diff to review. To add a state, add the run to `STATES` in the script, then:
+
+```sh
+pnpm tsx scripts/run-to-gallery.ts
+pnpm vitest run --project webview packages/extension/test/webview/gallery.webview.test.ts -t real-
+```
+
 ## Make a theme
 
 1. Click **Tokens**. The token panel lists every Geno custom property, grouped by prefix. Each row shows the value the panel computes in the current theme.
