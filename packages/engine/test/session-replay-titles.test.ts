@@ -13,6 +13,7 @@ describe('a replayed call', () => {
     [use('agent', { agent: 'explore', task: 'Find the callers of getUser.\nList each file.' }), 'agent explore: Find the callers of getUser.'],
     [use('monitor', { background_job_id: 'bg-1', pattern: 'ready' }), 'monitor bg-1 for /ready/'],
     [use('remember', { text: 'Use pnpm.', scope: 'project' }), 'remember project'],
+    [use('grep', { pattern: 'x', path: '' }), 'grep {"pattern":"x","path":""}'],
   ])('is titled with its target, as the live call is: %#', (call, title) => {
     expect(titleOf(call)).toBe(title);
   });

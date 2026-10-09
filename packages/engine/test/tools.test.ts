@@ -257,7 +257,7 @@ describe('the tool table', () => {
     expect(describeCall(use('read', { path: 'a.ts', start_line: 3, end_line: 9 }), EXECUTORS)).toBe('read a.ts:3-9');
     expect(describeCall(use('list', {}), EXECUTORS)).toBe('list .');
     expect(describeCall(use('glob', { pattern: '*.md' }), EXECUTORS)).toBe('glob "*.md"');
-    expect(describeCall(use('read', { nope: 1 }), EXECUTORS)).toBe('{"nope":1}');
+    expect(describeCall(use('read', { nope: 1 }), EXECUTORS)).toBe('read {"nope":1}');
   });
 
   it('parses exactly the fields each published schema declares', () => {
