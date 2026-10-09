@@ -40,6 +40,8 @@ export type TurnInput = {
   readonly system?: string;
   /** The one tool the model must call. */
   readonly forced?: string | undefined;
+  /** The run's last call: the tools stay offered, but the model may call none. */
+  readonly toolsOff?: true | undefined;
   /** The bytes of the attachments the events reference; none when the conversation has no attachments. */
   readonly stored?: StoredAttachments;
   readonly signal: AbortSignal;
@@ -161,14 +163,14 @@ export function gatewayFor(
   const { sessionHeader, adapter } = specOf(providerName);
 
   // A try whose response goes silent past its limit is aborted and thrown as StreamStalled.
-  async function call({ session, events, tools, system, stored, forced, signal, onText, onToolInput, onProgress, snapshot }: TurnInput, clock: StreamClock): Promise<TurnResult> {
+  async function call({ session, events, tools, system, stored, forced, toolsOff, signal, onText, onToolInput, onProgress, snapshot }: TurnInput, clock: StreamClock): Promise<TurnResult> {
     const started = performance.now();
     const drafts = new Map<number, ToolInputDraft>();
     const draft = (index: number, next: ToolInputDraft) => {
       drafts.set(index, next);
       onToolInput?.(next);
     };
-    const request = buildRequest(session, events, tools, system, stored, forced);
+    const request = buildRequest(session, events, tools, system, stored, forced, toolsOff);
     const kept = await snapshot?.(request);
     const watch = watchStream(limits, onProgress ?? (() => {}));
     const message = await wire.stream(request, {
