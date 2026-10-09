@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { NOT_USER_LINE } from '@g-code/core';
+import { NOT_USER_LINE, TODO_REMINDER_CALLS, type TodoList } from '@g-code/core';
 import { memoryStore } from '../../src/memory.js';
 import { homeOf } from '../../src/store.js';
 import { call, say, scripted, sessionIdOf, WIRES, type Wire } from './scripted.js';
@@ -81,5 +81,42 @@ describe.each(WIRES)('cache-stable session text on the %s wire', (wire: Wire) =>
     expect(result).toMatchObject({ id: 'tu_edit', error: true });
     expect(result!.text).toContain('edit is not available: Plan mode is read-only');
     expect(readFileSync(path.join(workspace, 'a.ts'), 'utf8')).toBe('export const a = 1;\n');
+  });
+
+  const items: TodoList = [
+    { id: '1', text: 'Read a.ts', status: 'done' },
+    { id: '2', text: 'Change it', status: 'in_progress' },
+    { id: '3', text: 'Run the tests', status: 'pending' },
+  ];
+  const todo = (id: string) => call('Planning.', [{ id, name: 'todo', input: { items } }]);
+  const read = (id: string) => call('Reading.', [{ id, name: 'read', input: { path: 'a.ts' } }]);
+  const REMINDED = /\[~\] 2: Change it[\s\S]*clear it by calling todo with an empty list/;
+
+  it(`a list left alone for ${TODO_REMINDER_CALLS} calls comes back once as a notice, and the prefix holds`, async () => {
+    const reads = Array.from({ length: TODO_REMINDER_CALLS + 1 }, (_, i) => read(`tu_r${i}`));
+    const { workspace, cli, bodies, log } = await scripted(wire, [todo('tu_t'), ...reads, say('Done.')]);
+    const result = await cli(['agent', '--workspace', workspace, '--max-turns', '40', 'Change a.ts']);
+    expect(result.code).toBe(0);
+
+    const sent = bodies() as Body[];
+    const reminded = sent.flatMap((body, i) => (REMINDED.test(newestOf(body)) ? [i] : []));
+    expect(reminded, 'once, on the call after the tenth without a todo call').toEqual([TODO_REMINDER_CALLS + 1]);
+    expect(newestOf(sent[TODO_REMINDER_CALLS + 1]!)).toMatch(/not updated your todo list in your last 10 model calls/);
+    for (let i = 1; i < sent.length; i++) expectPrefix(sent[i - 1]!, sent[i]!);
+    expect((await log(result.stdout)).filter((e) => e.kind === 'notice' && e.todo !== undefined)).toHaveLength(1);
+  });
+
+  it('a prompt after a turn that stopped at its limit shows the unfinished list before the prompt, and the prefix holds', async () => {
+    const { workspace, cli, bodies, events } = await scripted(wire, [todo('tu_t'), read('tu_r'), say('The build fails on a missing import.')]);
+    const id = sessionIdOf((await cli(['agent', '--workspace', workspace, '--max-turns', '2', 'Change a.ts'])).stdout);
+    expect((await cli(['agent', '--session', id, 'Why does the build fail?'])).code).toBe(0);
+
+    const sent = bodies() as Body[];
+    expect(sent.slice(0, 2).some((body) => REMINDED.test(newestOf(body))), 'not while the first turn runs').toBe(false);
+    const asked = newestOf(sent[2]!);
+    expect(asked).toMatch(/last turn ended before your todo list was finished/);
+    expect(asked.search(REMINDED), 'the list comes before the prompt').toBeLessThan(asked.indexOf('Why does the build fail?'));
+    expectPrefix(sent[1]!, sent[2]!);
+    expect((await events(id)).find((e) => e.kind === 'notice' && e.todo !== undefined)).toMatchObject({ todo: { why: 'stopped', list: items } });
   });
 });
