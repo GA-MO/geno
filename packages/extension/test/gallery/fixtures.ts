@@ -768,6 +768,21 @@ export const FIXTURES: readonly Fixture[] = [
     },
   },
   {
+    id: 'turn-limit',
+    group: 'Errors, stalls and retries',
+    title: 'Reached the turn limit, after notes for the model',
+    look: { detail: 'full' },
+    play: async ({ host }) => {
+      await host.act(turnStart('t0', 'Find where the email is trimmed and run the tests'), { type: 'text', text: 'Searching the sources.' });
+      await host.act(
+        ...ran('h_grep', 'bash', 'execute', 'grep -rn trim src', 'src/login.ts:4:  return raw.trim();\n[exit code 0]\n[Geno] Next time, search file contents with the grep tool, not grep -r or rg.', { description: 'Search the sources for trim' }),
+      );
+      await host.act(toolStart('h_test', { name: 'bash', input: { command: 'pnpm test --run', description: 'Run the tests' } }));
+      await host.act(toolEnd('h_test', 'failed', 'Exit code 2\n ERR_PNPM_NO_SCRIPT  Missing script: test\n[exit code 2]'));
+      await host.act({ type: 'error', message: 'stopped after 6 model calls (--max-turns 6)', error: 'max-turns' }, ended('failed'));
+    },
+  },
+  {
     id: 'no-response',
     group: 'Errors, stalls and retries',
     title: 'No response from the model',

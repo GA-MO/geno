@@ -37,9 +37,9 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       expect(await panel.count('.step-failed'), 'nothing reads as failed').toBe(0);
       expect(await panel.count('.node-failed'), 'no red node on the rail').toBe(0);
       expect(await visibleText(panel)).not.toContain('STOP what you are doing');
-      await panel.click('[data-denial="d_rm"] .denial-toggle', 'Show details');
-      await panel.waitFor('the details', async () => (await panel.count('.denial-details')) === 1);
-      expect(await texts(panel, '.denial-details')).toEqual(['The user rejected `rm -rf build`, so it did not run. STOP what you are doing and wait for the user to tell you how to proceed.']);
+      await panel.click('[data-denial="d_rm"] .details-toggle', 'Show details');
+      await panel.waitFor('the details', async () => (await panel.count('.model-details')) === 1);
+      expect(await texts(panel, '.model-details')).toEqual(['The user rejected `rm -rf build`, so it did not run. STOP what you are doing and wait for the user to tell you how to proceed.']);
       expect(await panel.page.evaluate(overflowing as () => string[]), 'the details fit too').toEqual([]);
     }));
 
@@ -63,6 +63,23 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       expect((await texts(panel, '.command-step .show-all'))[0]).toMatch(/^Show all \d+ lines$/);
       await panel.click('.command-step .show-all');
       await panel.waitFor('every line', async () => (await panel.eval<string>(`doc.querySelector('.command-output').textContent`)).includes('RUN  v3.2.4'));
+    }));
+
+  it('a turn at its limit and a command with notes for the model show plain words, an exit badge, and the notes behind Show details', () =>
+    at('turn-limit', width, async (panel) => {
+      const shown = await visibleText(panel);
+      for (const harness of ['[exit code', '[Geno]', '[max-turns]', '--max-turns']) expect(shown, `no "${harness}" in view`).not.toContain(harness);
+      expect(await texts(panel, '.turn-limit')).toEqual(['Reached the turn limit (6)']);
+      expect(await texts(panel, '.command-exit')).toEqual(['exit 2']);
+      expect(await texts(panel, '.command-output')).toEqual(['src/login.ts:4:  return raw.trim();', 'ERR_PNPM_NO_SCRIPT  Missing script: test']);
+      await panel.click('[data-tool="h_grep"] .details-toggle', 'Show details');
+      await panel.waitFor('the note', async () => (await texts(panel, '.model-details')).length === 1);
+      expect(await texts(panel, '.model-details')).toEqual(['[Geno] Next time, search file contents with the grep tool, not grep -r or rg.']);
+    }));
+
+  it('a turn the user stopped says so in plain words', () =>
+    at('stopped', width, async (panel) => {
+      expect(await texts(panel, '.turn-footer .ending')).toEqual(['Stopped by you']);
     }));
 
   it('a command Auto refused reads as denied by Auto, not failed', () =>

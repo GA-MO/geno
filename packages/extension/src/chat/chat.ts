@@ -762,7 +762,9 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       stopped = status === 'stopped';
       if (left()) return response.stopReason;
       const message = STOP_MESSAGES[response.stopReason];
-      if (message !== undefined) this.dispatch({ type: 'error', message });
+      // The engine's own error for the turn says why it stopped, in more detail than the stop reason.
+      const told = this.transcript.turns.at(-1)?.blocks.some((block) => block.kind === 'error' && block.error !== undefined) === true;
+      if (message !== undefined && !told) this.dispatch({ type: 'error', message });
       const seq = response._meta?.[TURN_SEQ_META];
       this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response), seq: typeof seq === 'number' ? seq : undefined });
       return response.stopReason;

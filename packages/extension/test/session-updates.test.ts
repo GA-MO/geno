@@ -1,5 +1,5 @@
 import type * as acp from '@agentclientprotocol/sdk';
-import { APPROVAL_META } from '@g-code/core';
+import { APPROVAL_META, TURN_ERROR_META } from '@g-code/core';
 import { describe, expect, it } from 'vitest';
 import type { Action } from '../src/chat/messages.js';
 import { actionOf } from '../src/chat/session-updates.js';
@@ -16,6 +16,18 @@ const closing = (approval: Record, output = 'text for the model'): Extract<acp.S
 });
 
 const RM = { mode: 'ask', rule: 'rm-rf-in-workspace', reason: 'rm -rf of a path inside the workspace', command: 'rm -rf build' } as const;
+
+describe("a turn's error", () => {
+  const chunk = (error: string, message: string): acp.SessionUpdate => ({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `\n\n[${error}] ${message}` }, _meta: { [TURN_ERROR_META]: { error, message } } });
+
+  it('is an error the panel words itself, not text with the engine tag', () => {
+    expect(actionOf(chunk('max-turns', 'stopped after 6 model calls (--max-turns 6)'), 1)).toEqual({ type: 'error', message: 'stopped after 6 model calls (--max-turns 6)', error: 'max-turns' });
+  });
+
+  it("is nothing for the user's own stop, which the turn's end already says", () => {
+    expect(actionOf(chunk('abort', 'interrupted by the user'), 1)).toBeUndefined();
+  });
+});
 
 describe('a refused call', () => {
   it.each([

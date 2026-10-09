@@ -6,11 +6,14 @@ export const PREVIEW_LINES = 4;
 
 const TITLE_MAX = 100;
 
-/** The engine ends a command's output with its exit line; a clean exit says nothing the step's status does not. */
-const CLEAN_EXIT = '[exit code 0]';
+/** The engine ends a command's output with how it exited, for the model; the step shows a failed exit as a badge. */
+const EXIT_LINE = /^\[(?:exit code (\S+)|killed after (\d+) seconds)\]$/;
 
-/** A failed command's output also starts with its exit, for the model; the step keeps only the line at the end. */
+/** A failed command's output also starts with its exit, for the model. */
 const FAILURE_HEAD = /^(?:Exit code \S+|Killed after \d+ seconds)$/;
+
+/** Lines the engine adds for the model, not the command's own output: Geno's notes and where the shell's cwd went back to. */
+const MODEL_NOTE = /^(?:\[Geno\] |Shell cwd was reset to )/;
 
 /**
  * A bash call as its step draws it: a title in plain words, the command in full, and the first lines of its
@@ -23,6 +26,10 @@ export type CommandStep = {
   readonly output: readonly string[] | undefined;
   readonly truncated: boolean;
   readonly fromEnd: boolean;
+  /** How a command that did not exit cleanly ended, as its badge says it: `exit 1`, `killed after 30s`. */
+  readonly exit: string | undefined;
+  /** What the engine told the model besides the output, which the step keeps behind Show details. */
+  readonly notes: readonly string[];
   /** Every output line, for the button that shows them all. */
   readonly lines: number;
   readonly status: ToolStatus;
@@ -55,19 +62,27 @@ function titleOf(tool: ToolBlock): string {
   return description.length <= TITLE_MAX ? description : `${description.slice(0, TITLE_MAX - 1).trimEnd()}…`;
 }
 
-/** A refused command never ran, so it has no output; what the model was told shows behind its denial. */
-function outputLines(output: string | undefined, status: ToolStatus): readonly string[] | undefined {
-  if (output === undefined || status === 'denied') return undefined;
-  const lines = output.replace(/\s+$/, '').split('\n');
+type Output = { readonly lines: readonly string[] | undefined; readonly exit: string | undefined; readonly notes: readonly string[] };
+
+const NO_OUTPUT: Output = { lines: undefined, exit: undefined, notes: [] };
+
+/** A command's own output, split from the lines the engine wrote for the model. A refused command never ran, so it has none. */
+function outputOf(output: string | undefined, status: ToolStatus): Output {
+  if (output === undefined || status === 'denied') return NO_OUTPUT;
+  const all = output.replace(/\s+$/, '').split('\n');
+  const notes = all.filter((line) => MODEL_NOTE.test(line));
+  const lines = all.filter((line) => !MODEL_NOTE.test(line));
   if (status === 'failed' && lines.length > 1 && FAILURE_HEAD.test(lines[0]!)) lines.shift();
-  if (lines.at(-1) === CLEAN_EXIT) lines.pop();
+  const ended = EXIT_LINE.exec(lines.at(-1) ?? '');
+  if (ended !== null) lines.pop();
   while (lines.length > 0 && lines.at(-1)!.trim() === '') lines.pop();
-  return lines;
+  const exit = ended === null ? undefined : ended[2] !== undefined ? `killed after ${ended[2]}s` : ended[1] === '0' ? undefined : `exit ${ended[1]}`;
+  return { lines, exit, notes };
 }
 
 export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
   const { background } = tool;
-  const lines = background === undefined ? outputLines(tool.output, tool.status) : background.tail === '' ? [] : background.tail.split('\n');
+  const { lines, exit, notes } = background === undefined ? outputOf(tool.output, tool.status) : { ...NO_OUTPUT, lines: background.tail === '' ? [] : background.tail.split('\n') };
   const truncated = !expanded && lines !== undefined && lines.length > PREVIEW_LINES;
   const fromEnd = background !== undefined || tool.status === 'failed';
   const shown = lines === undefined || !truncated ? lines : fromEnd ? lines.slice(-PREVIEW_LINES) : lines.slice(0, PREVIEW_LINES);
@@ -77,6 +92,8 @@ export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
     output: shown,
     truncated,
     fromEnd,
+    exit,
+    notes,
     lines: lines?.length ?? 0,
     status: tool.status,
     job: background === undefined ? undefined : jobOf(background),
