@@ -218,14 +218,15 @@ export function renderLoadedContext(context: LoadedContext): string | undefined 
             .join('\n')}`,
         ]),
     ...skillsSection(context.skills ?? []),
-    ...listingSection(context.skillListing),
   ];
+  // The listing heads itself and is mostly the user's installed skills, so it stays out from under the repository's preamble.
+  const listing = listingSection(context.skillListing);
   const user = context.user ?? [];
   if (user.length > 0) {
-    return [USER_PREAMBLE, ...user.map((file) => fenced('global_instructions', file)), ...(project.length === 0 ? [] : [PREAMBLE, ...project])].join('\n\n');
+    return [USER_PREAMBLE, ...user.map((file) => fenced('global_instructions', file)), ...(project.length === 0 ? [] : [PREAMBLE, ...project]), ...listing].join('\n\n');
   }
-  if (context.global !== undefined) return [GLOBAL_PREAMBLE, globalBlock(context.global.path, neutralize(context.global.text)), ...project].join('\n\n');
-  return [PREAMBLE, ...project].join('\n\n');
+  if (context.global !== undefined) return [GLOBAL_PREAMBLE, globalBlock(context.global.path, neutralize(context.global.text)), ...project, ...listing].join('\n\n');
+  return [...(project.length === 0 ? [] : [PREAMBLE, ...project]), ...listing].join('\n\n');
 }
 
 const posixMatches = (file: string, glob: string): boolean => {
