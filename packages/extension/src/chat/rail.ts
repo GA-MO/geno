@@ -176,6 +176,24 @@ export function nodeOf(step: Step): NodeState {
   }
 }
 
+const LIMIT_ERRORS: ReadonlySet<string> = new Set(['max-turns', 'budget']);
+
+/**
+ * Why a finished turn has no answer to show, when it has none: no text after its last step. Undefined for a turn
+ * that answered, that runs, or whose error already says what went wrong.
+ */
+export function missingReply(turn: Turn): string | undefined {
+  if (turn.status === 'streaming') return undefined;
+  const last = turn.blocks.findLastIndex((block) => block.kind !== 'text' && block.kind !== 'steer');
+  if (turn.blocks.slice(last + 1).some((block) => block.kind === 'text' && block.text.trim() !== '')) return undefined;
+  const errors = turn.blocks.filter((block): block is ErrorBlock => block.kind === 'error');
+  if (errors.some((block) => LIMIT_ERRORS.has(block.error ?? ''))) return 'It reached its limit before it answered.';
+  if (errors.length > 0) return undefined;
+  if (turn.status === 'stopped') return 'You stopped it before it answered.';
+  const denied = turn.blocks.findLast((block): block is ToolBlock => block.kind === 'tool')?.status === 'denied';
+  return denied ? 'It stopped at the call that was denied.' : 'Its last reply had no text.';
+}
+
 const WAIT_HEADERS: Readonly<Record<WaitKind, string>> = { offline: 'waiting for the network', limited: 'waiting for the rate limit' };
 
 /** The line beside the avatar: what the turn is doing now, or how long it worked, its waits left out. */

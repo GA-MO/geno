@@ -803,6 +803,29 @@ const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { read
   failed: { icon: 'error', label: 'Failed' },
 };
 
+/** The follow-up Continue sends to a turn that stopped without a reply. */
+export const CONTINUE_PROMPT = 'Continue where you stopped, and finish with your answer.';
+
+/**
+ * Under a finished turn with no answer to show: that Geno stopped without one, and why. The latest turn offers
+ * Continue, which asks Geno to go on, and Retry, which sends its prompt again.
+ */
+export function noReplyNotice(reason: string, prompt: string | undefined, ui: Ui): HTMLElement {
+  return h(
+    'div',
+    { class: 'no-reply', role: 'status' },
+    icon('info', 'no-reply-icon'),
+    h('div', { class: 'no-reply-text' }, h('span', { class: 'no-reply-title' }, 'Geno stopped without a reply'), h('span', { class: 'no-reply-reason' }, reason)),
+    prompt !== undefined &&
+      h(
+        'div',
+        { class: 'no-reply-actions' },
+        h('button', { type: 'button', class: 'button secondary small', 'data-focus': 'no-reply-continue', title: CONTINUE_PROMPT, onclick: () => ui.post({ type: 'send', text: CONTINUE_PROMPT }) }, 'Continue'),
+        h('button', { type: 'button', class: 'button ghost small', 'data-focus': 'no-reply-retry', title: 'Send the same message again', onclick: () => ui.post({ type: 'send', text: prompt }) }, 'Retry'),
+      ),
+  );
+}
+
 /** Under an external agent's turn that left changes in its lane: bring them into the main checkout. */
 export const applyLaneButton = (lane: string, ui: Ui): HTMLElement =>
   h(

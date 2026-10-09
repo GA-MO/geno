@@ -93,6 +93,22 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       expect(await texts(panel, '[data-step="web_fetch"] .step-verb, [data-step="web_fetch"] .step-target')).toEqual(['Fetched', 'example.com']);
     }));
 
+  it('a turn that ends with no reply says so, and Continue and Retry send a follow-up and the prompt again', () =>
+    at('no-reply', width, async (panel) => {
+      expect(await texts(panel, '.no-reply-title, .no-reply-reason')).toEqual(['Geno stopped without a reply', 'Its last reply had no text.']);
+      const continued = panel.host.next('send');
+      await panel.click('.no-reply-actions button', 'Continue');
+      expect((await continued).text).toBe('Continue where you stopped, and finish with your answer.');
+      const retried = panel.host.next('send');
+      await panel.click('.no-reply-actions button', 'Retry');
+      expect((await retried).text).toBe('สร้างเกม pacman ในไฟล์ game.html');
+    }));
+
+  it('a capped turn with nothing said gives the limit as the reason', () =>
+    at('turn-limit', width, async (panel) => {
+      expect(await texts(panel, '.no-reply-reason')).toEqual(['It reached its limit before it answered.']);
+    }));
+
   it('a command Auto refused reads as denied by Auto, not failed', () =>
     at('auto-decision', width, async (panel) => {
       expect(await texts(panel, '.step-denied')).toEqual(['Denied by Auto']);

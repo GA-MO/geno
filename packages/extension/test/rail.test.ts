@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatDuration } from '../src/chat/format.js';
 import type { Action, FileDiff, Transcript } from '../src/chat/messages.js';
-import { headerOf, nodeOf, railOf } from '../src/chat/rail.js';
+import { headerOf, missingReply, nodeOf, railOf } from '../src/chat/rail.js';
 import { emptyTranscript, reduce } from '../src/chat/transcript.js';
 
 const run = (actions: readonly Action[], start: Transcript = emptyTranscript('qwen3.8-flash')): Transcript => actions.reduce(reduce, start);
@@ -74,5 +74,28 @@ describe('the rail a turn draws', () => {
   it('marks a step failed when any of its calls failed', () => {
     const rail = railOf(turnOf([tool('r1', 'read', 'a.ts'), tool('r2', 'read', 'gone.ts', 'failed'), { type: 'text', text: 'x' }]));
     expect(nodeOf(rail[0]!)).toBe('failed');
+  });
+});
+
+describe('a turn with no reply', () => {
+  const end = (status: 'done' | 'stopped' | 'failed' = 'done'): Action => ({ type: 'turn-end', at: 9000, status, usage: undefined });
+  const denied: Action = { type: 'tool', id: 'b', at: 2000, name: 'bash', target: 'rm -rf build', toolKind: 'execute', status: 'denied', denial: { by: 'you', reason: 'It did not run.' } };
+
+  it.each<[string, Action[], string]>([
+    ['ends on a step with no text after it', [{ type: 'text', text: 'Reading first.' }, tool('r', 'read', 'a.ts'), end()], 'Its last reply had no text.'],
+    ['ends on blank text', [tool('r', 'read', 'a.ts'), { type: 'text', text: '\n\n' }, end()], 'Its last reply had no text.'],
+    ['was stopped', [tool('r', 'read', 'a.ts'), end('stopped')], 'You stopped it before it answered.'],
+    ['reached its limit', [tool('r', 'read', 'a.ts'), { type: 'error', message: 'stopped after 6 model calls (--max-turns 6)', error: 'max-turns' }, end('failed')], 'It reached its limit before it answered.'],
+    ['ends on a denied call', [denied, end()], 'It stopped at the call that was denied.'],
+  ])('says why when it %s', (_case, actions, reason) => {
+    expect(missingReply(turnOf(actions))).toBe(reason);
+  });
+
+  it.each<[string, Action[]]>([
+    ['answered after its last step', [tool('r', 'read', 'a.ts'), { type: 'text', text: 'Done.' }, end()]],
+    ['still runs', [tool('r', 'read', 'a.ts')]],
+    ['failed with an error that says why', [{ type: 'error', message: 'The model call failed: 401' }, end('failed')]],
+  ])('says nothing when it %s', (_case, actions) => {
+    expect(missingReply(turnOf(actions))).toBeUndefined();
   });
 });
