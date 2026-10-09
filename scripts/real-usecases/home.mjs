@@ -22,7 +22,7 @@ const PRINCIPLES = [
 
 function potetoSkill() {
   const sections = [];
-  for (let round = 1; round <= 9; round++) {
+  for (let round = 1; round <= 12; round++) {
     for (const [name, rule] of PRINCIPLES) {
       sections.push(`### ${name} (${round})\n\n${rule} Apply it at every step of the playbook below, and name it in your reply when it changed a decision. When the task is small, keep the reply small too; a long survey is not a better answer. Use the Agent tool for a parallel search, TaskCreate for the todo list, and AskUserQuestion only for a real product choice.\n`);
     }
