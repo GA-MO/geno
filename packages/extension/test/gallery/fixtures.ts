@@ -140,7 +140,7 @@ async function settings(stage: Stage): Promise<void> {
   const { host } = stage;
   await host.post({ type: 'show-settings' });
   await host.post({ type: 'settings', listing: SETTINGS });
-  await host.post({ type: 'permissions', listing: { kind: 'loaded', workspace: WORKSPACE, rules: [{ id: 'r1', effect: 'allow', text: 'Bash(pnpm test:*)' }, { id: 'r2', effect: 'ask', text: 'Bash(git push:*)' }, { id: 'r3', effect: 'deny', text: 'Read(./secrets/**)' }] } });
+  await host.post({ type: 'permissions', listing: { kind: 'loaded', workspace: WORKSPACE, rules: [{ id: 'r1', effect: 'allow', text: 'Bash(pnpm test:*)' }, { id: 'r2', effect: 'ask', text: 'Bash(git push:*)' }, { id: 'r3', effect: 'deny', text: 'Read(./secrets/**)' }], imported: [{ effect: 'deny', text: 'Bash(git push --force:*)', source: '.g-code/settings.json' }, { effect: 'allow', text: 'Bash(pnpm lint)', source: '.agents/settings.json' }, { effect: 'ask', text: 'WebFetch(domain:docs.example.com)', source: '~/.claude/settings.json' }] } });
   await host.post({
     type: 'hooks',
     listing: {
