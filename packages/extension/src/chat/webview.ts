@@ -324,7 +324,7 @@ function stepContent(turn: Turn, step: Step, last: boolean, quiet: boolean): { r
     case 'editor':
       return { deps: [step.tool.editorAction], build: () => editorStep(step.tool, ui) };
     case 'todo':
-      return { deps: [step.list, step.pinned, todoOpen(step, ui)], build: () => todoStep(step, ui) };
+      return { deps: [step.list, step.place, todoOpen(step, ui)], build: () => todoStep(step, ui) };
     case 'spinoff': {
       const card = spinoffCardOf(step.tool.spinoff, spinoffPending);
       return { deps: [JSON.stringify(card)], build: () => (card.kind === 'hidden' ? h('div', { hidden: true }) : spinoffCard(card, spinoffUi, 'turn')) };

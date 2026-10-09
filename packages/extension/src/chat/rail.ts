@@ -31,8 +31,8 @@ export type Step =
   | { readonly kind: 'spinoff'; readonly key: string; readonly tool: SpinoffTool }
   /** Where the agent started a chapter: a thin divider with its title. */
   | { readonly kind: 'chapter'; readonly key: string; readonly tool: ChapterTool }
-  /** The todo list: pinned above a running turn's latest step, and once the turn ends, where it last changed. */
-  | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly pinned: boolean }
+  /** The todo list: above a running turn's latest step, and once the turn ends, where it last changed. */
+  | { readonly kind: 'todo'; readonly key: 'todo'; readonly turn: string; readonly list: TodoList; readonly place: TodoPlace }
   | { readonly kind: 'notice'; readonly key: 'notice'; readonly text: string }
   | { readonly kind: 'thinking'; readonly key: 'thinking'; readonly progress: CallProgress | undefined }
   | { readonly kind: 'changes'; readonly key: 'changes'; readonly edits: readonly EditTool[] }
@@ -44,6 +44,13 @@ export type Step =
 export type EditTool = ToolBlock & { readonly diff: NonNullable<ToolBlock['diff']> };
 export type WidgetTool = ToolBlock & { readonly widget: NonNullable<ToolBlock['widget']> };
 export type SpinoffTool = ToolBlock & { readonly spinoff: NonNullable<ToolBlock['spinoff']> };
+
+/**
+ * Where a list stands: `live`, the running turn's own, which it last set; `carried`, an earlier turn's unfinished list
+ * on a running turn that has not touched it yet, which is history until it does; `kept`, a finished turn's list where it
+ * last changed.
+ */
+export type TodoPlace = 'live' | 'carried' | 'kept';
 
 /** How a step's node on the rail reads: done, under way, waiting on the user, failed, or text. */
 export type NodeState = 'done' | 'live' | 'wait' | 'failed' | 'text';
@@ -78,13 +85,13 @@ export const todoListOf = (turn: Turn): TodoList | undefined => turn.blocks.find
 const isTodoCall = (block: ToolBlock): boolean => block.name === TODO_TOOL && block.status !== 'failed';
 
 /**
- * A running turn pins the list it set, or the one it started with while that has work left; a finished list from an
- * earlier turn is history, not progress.
+ * A running turn pins the list it set, or the one it started with while that has work left, as carried until the turn
+ * sets its own; a cleared list shows nothing, and a finished one from an earlier turn stays in that turn.
  */
-function pinnedList(turn: Turn, carried: TodoList): TodoList | undefined {
+function pinnedList(turn: Turn, carried: TodoList): { readonly list: TodoList; readonly place: TodoPlace } | undefined {
   const own = todoListOf(turn);
-  if (own !== undefined) return own.length === 0 ? undefined : own;
-  return carried.some((item) => item.status !== 'done') ? carried : undefined;
+  if (own !== undefined) return own.length === 0 ? undefined : { list: own, place: 'live' };
+  return carried.some((item) => item.status !== 'done') ? { list: carried, place: 'carried' } : undefined;
 }
 
 /** `carried` is the list the turn starts with: the latest an earlier turn set, as Plan's is when Start building runs. */
@@ -95,7 +102,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
   for (const block of turn.blocks) {
     const last = steps.at(-1);
     if (block.kind === 'tool' && isTodoCall(block)) {
-      if (!streaming && block === lastSet && block.todo!.length > 0) steps.push({ kind: 'todo', key: 'todo', turn: turn.id, list: block.todo!, pinned: false });
+      if (!streaming && block === lastSet && block.todo!.length > 0) steps.push({ kind: 'todo', key: 'todo', turn: turn.id, list: block.todo!, place: 'kept' });
     } else if (block.kind === 'tool' && block.name === SPAWN_TASK_TOOL && block.spinoff !== undefined) {
       if (block.spinoff.state.kind === 'offered' || block.spinoff.state.kind === 'started') steps.push({ kind: 'spinoff', key: `spinoff:${block.id}`, tool: block as SpinoffTool });
     } else if (block.kind === 'tool' && isChapterCall(block)) steps.push({ kind: 'chapter', key: `chapter:${block.id}`, tool: block });
@@ -113,7 +120,7 @@ export function railOf(turn: Turn, carried: TodoList = []): Step[] {
   if (turn.notice !== undefined) steps.push({ kind: 'notice', key: 'notice', text: turn.notice });
   else if (isThinking(turn)) steps.push({ kind: 'thinking', key: 'thinking', progress: turn.progress });
   const pinned = streaming ? pinnedList(turn, carried) : undefined;
-  if (pinned !== undefined) steps.splice(Math.max(0, steps.length - 1), 0, { kind: 'todo', key: 'todo', turn: turn.id, list: pinned, pinned: true });
+  if (pinned !== undefined) steps.splice(Math.max(0, steps.length - 1), 0, { kind: 'todo', key: 'todo', turn: turn.id, ...pinned });
   const edits = turn.blocks.flatMap((b) => (b.kind === 'tool' && isEdit(b) ? [b] : []));
   if (edits.length > 0) steps.push({ kind: 'changes', key: 'changes', edits });
   return steps;
@@ -148,7 +155,7 @@ export function nodeOf(step: Step): NodeState {
     case 'widget':
       return step.tool.status === 'running' ? 'live' : step.tool.status === 'failed' ? 'failed' : 'done';
     case 'todo':
-      return step.pinned ? 'live' : 'done';
+      return step.place === 'live' ? 'live' : 'done';
     case 'agent':
       if (step.tool.status === 'running' || step.children.some((child) => child.status.kind === 'running')) return 'live';
       return step.tool.status === 'failed' ? 'failed' : 'done';
