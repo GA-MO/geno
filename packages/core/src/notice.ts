@@ -59,7 +59,8 @@ export const LAST_CALL_NOTE = `${GENO_NOTE} This is the last model call this run
  */
 export type TodoReminder = { readonly why: 'idle' | 'stopped'; readonly list: TodoList };
 
-// Claude Code reminds after 10 assistant turns without a TodoWrite call, and again 10 after its last reminder.
+// The value commonly reported for Claude Code's TodoWrite reminder, which research/claude-code-harness does not record:
+// 10 assistant turns since the last write, and 10 between reminders.
 export const TODO_REMINDER_CALLS = 10;
 
 const TODO_REMINDER_OPENINGS: Readonly<Record<TodoReminder['why'], string>> = {
