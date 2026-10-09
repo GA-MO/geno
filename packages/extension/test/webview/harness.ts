@@ -6,26 +6,16 @@ import path from 'node:path';
 import { build } from 'esbuild';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { BUNDLES } from '../../build.mjs';
-import type { FromView, Look, Modes, ToView, Transcript } from '../../src/chat/messages.js';
+import type { FromView, Look, ToView, Transcript } from '../../src/chat/messages.js';
 import { pageMarkup } from '../../src/chat/page-markup.js';
-import { FakeHost } from './host.js';
+import { answerReady, DEFAULT_LOOK, FakeHost } from './host.js';
 import { applyTheme, themedPage, themeOf, type ThemeSlug } from './theme.js';
 
 // Vitest runs from the repository root.
 const DIST = path.resolve('packages/extension/dist');
 const ORIGIN = 'https://webview.test';
 
-/** The modes the engine offers a session, as its new-session response names them. */
-export const MODES: Modes = {
-  current: 'ask',
-  available: [
-    { id: 'plan', name: 'Plan', description: 'Read the code and plan the change without changing anything.' },
-    { id: 'ask', name: 'Ask', description: 'Ask before risky commands.' },
-    { id: 'auto', name: 'Auto', description: 'Run safe commands on its own and let a classifier judge the rest, without asking.' },
-  ],
-};
-
-export const DEFAULT_LOOK: Look = { style: 'glass', detail: 'compact', review: 'auto' };
+export { DEFAULT_LOOK, MODES } from './host.js';
 
 let built: Promise<string> | undefined;
 
@@ -64,11 +54,13 @@ export async function closeBrowser(): Promise<void> {
   await (await open)?.close();
 }
 
-export type PanelOptions = { readonly theme?: ThemeSlug; readonly look?: Look; readonly model?: string; readonly focused?: boolean };
+export type PanelOptions = { readonly theme?: ThemeSlug; readonly look?: Look; readonly model?: string; readonly focused?: boolean; readonly width?: number };
 
 export type Panel = {
   readonly page: Page;
   readonly host: FakeHost;
+  /** What the page logged as errors so far, CSP refusals among them. */
+  readonly consoleErrors: readonly string[];
   /** Evaluates `expression` over the panel's document, bound as `doc`, as the VS Code suites' `panel()` does. */
   eval<T>(expression: string): Promise<T>;
   count(selector: string): Promise<number>;
@@ -101,29 +93,24 @@ const backdropOf = (htmlStyle: string) => hexToRgba(/--vscode-sideBar-background
  * The chat webview in a headless browser, as VS Code would show it: the built page under its own CSP, the theme's
  * variables, and a FakeHost on the other side of `acquireVsCodeApi`, which answers `ready` as the extension does.
  */
-export async function openPanel({ theme = 'dark', look = DEFAULT_LOOK, model = 'qwen3.8-flash', focused = true }: PanelOptions = {}): Promise<Panel> {
+export async function openPanel({ theme = 'dark', look = DEFAULT_LOOK, model = 'qwen3.8-flash', focused = true, width }: PanelOptions = {}): Promise<Panel> {
   const out = await buildPanel();
   const dump = themeOf(theme);
-  const context = await (await browserOf()).newContext({ viewport: { width: dump.viewport.width, height: dump.viewport.height }, deviceScaleFactor: dump.viewport.deviceScaleFactor });
+  const context = await (await browserOf()).newContext({ viewport: { width: width ?? dump.viewport.width, height: dump.viewport.height }, deviceScaleFactor: dump.viewport.deviceScaleFactor });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send('Emulation.setDefaultBackgroundColorOverride', { color: backdropOf(dump.htmlStyle) });
 
   // Console errors are not failures: DOMPurify's parse of each diagram reports a refused style element, in VS Code too.
   const errors: string[] = [];
+  const consoleErrors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => void (message.type() === 'error' && consoleErrors.push(message.text())));
 
   const deliver = (message: ToView) => page.evaluate((data) => void window.dispatchEvent(new MessageEvent('message', { data })), message);
   const transcript: Transcript = { model, turns: [] };
   const host = new FakeHost(deliver, transcript);
-  host.on('ready', async () => {
-    await host.post({ type: 'roots', roots: [] });
-    await host.act({ type: 'reset', transcript: host.transcript });
-    await host.post({ type: 'header', header: { project: 'workspace', title: undefined, branch: undefined } });
-    await host.post({ type: 'window-focus', focused });
-    await host.post({ type: 'modes', modes: MODES });
-    await host.post({ type: 'commands', commands: [] });
-  });
+  host.on('ready', () => answerReady(host, focused));
   await page.exposeFunction('__gcodeFromView', (message: FromView) => host.receive(message));
   await page.addInitScript(() => {
     let state: unknown;
@@ -146,6 +133,7 @@ export async function openPanel({ theme = 'dark', look = DEFAULT_LOOK, model = '
   const panel: Panel = {
     page,
     host,
+    consoleErrors,
     eval: (expression) => page.evaluate(`(() => { const doc = document; return (${expression}); })()`),
     count: (selector) => page.evaluate((s) => document.querySelectorAll(s).length, selector),
     click: async (selector, text) => {
