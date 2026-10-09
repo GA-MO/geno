@@ -63,6 +63,32 @@ const sorted = (value: unknown): unknown =>
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => [k, sorted(v)]))
       : value;
 
+type Message = { readonly role: string; readonly content: unknown };
+
+/** The last text of a message's content on either wire: the prompt that opens a conversation, after Geno's own blocks. */
+function lastText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  return (Array.isArray(content) ? (content as { type?: string; text?: string }[]) : []).findLast((b) => b.type === 'text')?.text ?? '';
+}
+
+/**
+ * The key of one model turn of a conversation: 8 hex characters of the SHA-256 of the normalized text that opened it
+ * (the user's prompt, or a subagent's task), then `#` and how many model turns came before it. A recording made from
+ * a real run answers by this key, so a change to the system prompt, the tools or Geno's notices still replays it, and
+ * a subagent's turns stay apart from its parent's however they interleave.
+ */
+export function turnKey(opening: string, turn: number): string {
+  const text = normalizeRequest(opening) as string;
+  return `${createHash('sha256').update(text).digest('hex').slice(0, 8)}#${turn}`;
+}
+
+/** The turn key of a request body on either wire. */
+export function requestTurnKey(body: { readonly messages?: readonly Message[] }): string {
+  const messages = body.messages ?? [];
+  const opening = messages.find((m) => m.role === 'user');
+  return turnKey(lastText(opening?.content), messages.filter((m) => m.role === 'assistant').length);
+}
+
 /** The stable key of a request on `wire`: 16 hex characters of the SHA-256 of its normalized body, keys sorted. */
 export function requestKey(wire: Wire, body: unknown): string {
   return createHash('sha256').update(JSON.stringify(sorted({ wire, body: normalizeRequest(body) }))).digest('hex').slice(0, 16);
