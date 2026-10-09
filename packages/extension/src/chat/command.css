@@ -99,7 +99,7 @@ body[data-style='glass']:not(.vscode-high-contrast, .vscode-high-contrast-light)
   background: var(--glass-well);
 }
 
-/* A background command keeps its newest lines when folded, so the fade sits at the top. */
+/* A background or failed command keeps its last lines when folded, so the fade sits at the top. */
 .command-output.truncated.from-end {
   -webkit-mask-image: linear-gradient(to top, #000 40%, transparent);
   mask-image: linear-gradient(to top, #000 40%, transparent);

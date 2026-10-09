@@ -54,6 +54,17 @@ describe.each(WIDTHS)('at %ipx', (width) => {
       await panel.waitFor('the allowed step to show its command', async () => (await panel.count('.step-asking')) === 0 && (await texts(panel, '.command-in, .step-target')).includes(command));
     }));
 
+  it('a failed command previews its last lines, where the error is, with the first ones behind Show all', () =>
+    at('tool-failed', width, async (panel) => {
+      const output = await panel.eval<string>(`doc.querySelector('.command-output').textContent`);
+      expect(output).toContain("AssertionError: expected 'a@b.c ' to be 'a@b.c'");
+      expect(output).not.toContain('RUN  v3.2.4');
+      expect(await panel.count('.command-output.truncated.from-end'), 'the fade sits at the top').toBe(1);
+      expect((await texts(panel, '.command-step .show-all'))[0]).toMatch(/^Show all \d+ lines$/);
+      await panel.click('.command-step .show-all');
+      await panel.waitFor('every line', async () => (await panel.eval<string>(`doc.querySelector('.command-output').textContent`)).includes('RUN  v3.2.4'));
+    }));
+
   it('a command Auto refused reads as denied by Auto, not failed', () =>
     at('auto-decision', width, async (panel) => {
       expect(await texts(panel, '.step-denied')).toEqual(['Denied by Auto']);

@@ -15,12 +15,14 @@ const FAILURE_HEAD = /^(?:Exit code \S+|Killed after \d+ seconds)$/;
 /**
  * A bash call as its step draws it: a title in plain words, the command in full, and the first lines of its
  * output. `output` is undefined until the command has any; `truncated` says lines past the preview are hidden.
+ * `fromEnd`: the preview keeps the last lines instead, as a live tail does and where a failed command says why.
  */
 export type CommandStep = {
   readonly title: string;
   readonly command: string;
   readonly output: readonly string[] | undefined;
   readonly truncated: boolean;
+  readonly fromEnd: boolean;
   /** Every output line, for the button that shows them all. */
   readonly lines: number;
   readonly status: ToolStatus;
@@ -28,11 +30,8 @@ export type CommandStep = {
   readonly job?: CommandJob | undefined;
 };
 
-/**
- * A background command on its step. `running` offers Stop; once it ended, `line` is the notice of how it ended.
- * `fromEnd`: the folded output keeps the newest lines, as a live tail does.
- */
-export type CommandJob = { readonly id: string; readonly running: boolean; readonly line: string; readonly tone: JobTone; readonly fromEnd: true };
+/** A background command on its step. `running` offers Stop; once it ended, `line` is the notice of how it ended. */
+export type CommandJob = { readonly id: string; readonly running: boolean; readonly line: string; readonly tone: JobTone };
 
 export type JobTone = 'running' | 'ended' | 'failed' | 'stopped';
 
@@ -44,7 +43,7 @@ function jobOf(job: BackgroundStep): CommandJob {
   const running = state.status === 'running';
   const runs = job.preview === undefined ? `Running in background as ${job.id}` : `Serving ${job.preview.url} as ${job.id}`;
   const line = running ? (state.ending === undefined ? runs : `Stopping ${job.id}…`) : `${job.id} ${jobEndText(state)}`;
-  return { id: job.id, running, line, tone: toneOf(state), fromEnd: true };
+  return { id: job.id, running, line, tone: toneOf(state) };
 }
 
 /** The model's description, on one line and short enough for a title, or the plain fallback. */
@@ -70,12 +69,14 @@ export function commandStepOf(tool: ToolBlock, expanded: boolean): CommandStep {
   const { background } = tool;
   const lines = background === undefined ? outputLines(tool.output, tool.status) : background.tail === '' ? [] : background.tail.split('\n');
   const truncated = !expanded && lines !== undefined && lines.length > PREVIEW_LINES;
-  const shown = lines === undefined || !truncated ? lines : background === undefined ? lines.slice(0, PREVIEW_LINES) : lines.slice(-PREVIEW_LINES);
+  const fromEnd = background !== undefined || tool.status === 'failed';
+  const shown = lines === undefined || !truncated ? lines : fromEnd ? lines.slice(-PREVIEW_LINES) : lines.slice(0, PREVIEW_LINES);
   return {
     title: titleOf(tool),
     command: background?.command ?? tool.target,
     output: shown,
     truncated,
+    fromEnd,
     lines: lines?.length ?? 0,
     status: tool.status,
     job: background === undefined ? undefined : jobOf(background),
