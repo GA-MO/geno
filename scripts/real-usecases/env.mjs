@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
@@ -10,6 +10,9 @@ export const SCRATCH = path.resolve(REPO, process.env.GCODE_CAMPAIGN_SCRATCH ?? 
 /** The checkout whose engine the cases run, so a before run can use the base commit's engine with this runner. */
 export const ENGINE = path.resolve(process.env.GCODE_CAMPAIGN_ENGINE ?? REPO);
 export const HOME = path.join(SCRATCH, 'home');
+/** One run's own HOME (home.mjs); its GCODE_HOME is `.gcode` inside it. The first campaign's runs shared HOME above. */
+export const runHome = (id, run) => path.join(SCRATCH, 'homes', `${id}-r${run}`);
+export const sessionsOf = (id, run) => (existsSync(runHome(id, run)) ? path.join(runHome(id, run), '.gcode', 'sessions') : path.join(HOME, 'sessions'));
 export const FIXTURES = path.join(REPO, 'scripts/real-usecases/fixtures');
 
 /** The main checkout's .env: a worktree has none, and the key must never be copied or printed. */

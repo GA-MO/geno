@@ -268,6 +268,7 @@ export const CASES = [
     area: 'skills',
     lang: 'th',
     fixture: 'game',
+    plugins: ['pstack'],
     maxCost: 0.3,
     prompt: 'ใช้ poteto-mode ช่วยเพิ่มระบบคะแนน: เหรียญแต่ละเหรียญได้ 10 คะแนน และแสดงคะแนนมุมซ้ายบนของจอ พร้อมเทสของ logic',
     checks: [

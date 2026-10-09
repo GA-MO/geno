@@ -6,7 +6,8 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { CASES } from './cases.mjs';
 import { analyze, checksFor } from './checks.mjs';
-import { campaignEnv, ENGINE, HOME, REPO, SCRATCH } from './env.mjs';
+import { campaignEnv, ENGINE, REPO, runHome, SCRATCH } from './env.mjs';
+import { prepareHome } from './home.mjs';
 import { FIXTURES, SIBLINGS } from './fixtures.mjs';
 
 const { values } = parseArgs({ options: { case: { type: 'string', multiple: true }, all: { type: 'boolean' }, run: { type: 'string', default: '1' }, cap: { type: 'string', default: '2.80' } } });
@@ -53,13 +54,15 @@ function gcode(cwd, args, extraEnv, timeoutMs = AGENT_TIMEOUT_MS) {
 /** `gcode usage` leaves out the Auto classifier's calls, which the log keeps on each judged tool result. */
 export const classifierCost = (events) => events.reduce((sum, e) => sum + (e.kind === 'tool-result' ? (e.approval?.classifier?.costUsd ?? 0) : 0), 0);
 
-function costOf(session, events) {
-  const usage = JSON.parse(gcode(REPO, ['usage', '--session', session, '--json']).stdout);
+function costOf(session, events, homeEnv) {
+  const usage = JSON.parse(gcode(REPO, ['usage', '--session', session, '--json'], homeEnv).stdout);
   return (usage.costUsd ?? 0) + (usage.childrenCostUsd ?? 0) + classifierCost(events);
 }
 
 function runCase(spec, runNo) {
   const ws = prepare(spec, runNo);
+  const home = runHome(spec.id, runNo);
+  const homeEnv = prepareHome(home, spec);
   rmSync(path.join(SCRATCH, "wire", `${spec.id}-r${runNo}.jsonl`), { force: true });
   const steps = spec.steps ?? [{ prompt: spec.prompt }];
   const outFile = path.join(SCRATCH, 'out', `${spec.id}-r${runNo}.txt`);
@@ -70,21 +73,21 @@ function runCase(spec, runNo) {
   for (const step of steps) {
     const mode = spec.mode === undefined ? ['--non-interactive'] : ['--mode', spec.mode];
     const args = ['agent', ...(session ? [] : ['--workspace', ws]), ...mode, '--max-turns', String(step.maxTurns ?? spec.maxTurns ?? 40), '--max-cost', String(spec.maxCost ?? 0.2), ...(session ? ['--session', session] : []), step.prompt];
-    const result = gcode(ws, args, { ...(spec.env ?? {}), GCODE_WIRE_LOG: path.join(SCRATCH, "wire", `${spec.id}-r${runNo}.jsonl`) }, (spec.timeoutMin ?? 20) * 60_000);
+    const result = gcode(ws, args, { ...homeEnv, ...(spec.env ?? {}), GCODE_WIRE_LOG: path.join(SCRATCH, "wire", `${spec.id}-r${runNo}.jsonl`) }, (spec.timeoutMin ?? 20) * 60_000);
     appendFileSync(outFile, `$ gcode ${args.slice(0, -1).join(' ')} <prompt>\n${result.stdout}\n--- stderr ---\n${result.stderr}\n--- exit ${result.status} signal ${result.signal}\n\n`);
     session ??= /session: ([0-9a-f-]{36})/.exec(result.stdout)?.[1];
     if (session === undefined) break;
   }
   const ms = Date.now() - started;
   if (session === undefined) return { case: spec.id, run: runNo, error: `no session; see ${outFile}`, costUsd: 0 };
-  const logFile = path.join(HOME, 'sessions', `${session}.jsonl`);
+  const logFile = path.join(homeEnv.GCODE_HOME, 'sessions', `${session}.jsonl`);
   const kept = path.join(SCRATCH, 'logs', `${spec.id}-r${runNo}.jsonl`);
   mkdirSync(path.dirname(kept), { recursive: true });
   copyFileSync(logFile, kept);
   const events = readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   const run = analyze(events);
   const scratchpad = events[0]?.environment?.scratchpad;
-  const ctx = { ws, scratchpad, home: HOME, gitStatus: execFileSync('git', ['status', '--porcelain'], { cwd: ws, encoding: 'utf8' }) };
+  const ctx = { ws, scratchpad, home, gitStatus: execFileSync('git', ['status', '--porcelain'], { cwd: ws, encoding: 'utf8' }) };
   const checks = checksFor(spec).map((check) => {
     try {
       if (check.verify !== undefined) {
@@ -97,8 +100,15 @@ function runCase(spec, runNo) {
       return { id: check.id, what: check.what, pass: false, detail: `check threw: ${error.message}` };
     }
   });
-  const costUsd = costOf(session, events);
-  return { case: spec.id, area: spec.area, run: runNo, session, costUsd, ms, modelCalls: run.assistants.length, toolCalls: run.calls.length, errors: run.errors.map((e) => `${e.error}: ${e.message.slice(0, 120)}`), checks };
+  const costUsd = costOf(session, events, homeEnv);
+  return { case: spec.id, area: spec.area, run: runNo, engine: engineCommit(), session, costUsd, ms, modelCalls: run.assistants.length, toolCalls: run.calls.length, errors: run.errors.map((e) => `${e.error}: ${e.message.slice(0, 120)}`), checks };
+}
+
+/** The commit whose engine ran: a checkout's HEAD, marked dirty when it has changes, or an exported tree's .engine-commit. */
+function engineCommit() {
+  if (existsSync(path.join(ENGINE, '.engine-commit'))) return readFileSync(path.join(ENGINE, '.engine-commit'), 'utf8').trim();
+  const head = git(ENGINE, 'rev-parse', '--short=8', 'HEAD').trim();
+  return git(ENGINE, 'status', '--porcelain', '--', 'packages').trim() === '' ? head : `${head}+dirty`;
 }
 
 const cap = Number(values.cap);
