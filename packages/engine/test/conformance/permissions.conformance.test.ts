@@ -928,4 +928,29 @@ describe.each(WIRES)('P-04 stopping processes on the %s wire', (wire) => {
     // macOS's sandbox lets a call signal only what it started, so there the kill runs and fails, and the result names task_stop.
     expect(run.view().get(kill.id)!.text).toMatch(/^\[exit code 0\]$|Operation not permitted\n\[exit code 1\]\n\[Geno\] The sandbox lets a command signal only what the same call started\. To stop a background command Geno started, call task_stop with its id: bg-1 \(`sleep 30`\)\.$/);
   });
+
+  it("tail and read of the job's output file run without a question; another session's output file names bash_output", async () => {
+    const job = background('echo hello-from-job');
+    const pause = call('read', { path: 'a.ts' });
+    let tail!: FakeToolUse;
+    let read!: FakeToolUse;
+    const reply = (request: ModelRequest) => {
+      const file = /goes to (\S+bg-1\.log)\./.exec(sentText(request))![1]!;
+      tail = call('bash', { command: `tail -n 20 ${file}` });
+      read = call('read', { path: file });
+      return [tail, read];
+    };
+    const run = await scripted(wire, [{ calls: [job] }, { calls: [pause] }, { reply }, { answer: 'Read it.' }], { files, mode: 'ask' });
+    expect(run.asked).toEqual([]);
+    expect(run.view().get(tail.id)).toMatchObject({ error: false, text: expect.stringMatching(/^hello-from-job\n\[exit code 0\]/) });
+    expect(run.view().get(read.id)).toEqual({ error: false, text: '1\thello-from-job' });
+
+    const other = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-other-spill-')));
+    await mkdir(path.join(other, 'background'));
+    await writeFile(path.join(other, 'background', 'bg-3.log'), 'not yours\n');
+    const elsewhere = call('bash', { command: `tail -n 20 ${path.join(other, 'background', 'bg-3.log')}` });
+    const alone = await scripted(wire, [{ calls: [elsewhere] }, { answer: 'I cannot.' }], { files, mode: 'non-interactive' });
+    expect(alone.view().get(elsewhere.id)).toMatchObject({ error: true, text: expect.stringContaining("read this session's background commands with bash_output and their bg-N id") });
+    expect(alone.sent()).not.toContain('not yours');
+  });
 });
