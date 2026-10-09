@@ -343,6 +343,22 @@ const userText = (request: { body: { messages: { content: { text: string }[] }[]
   request.body.messages[0]!.content.map((block) => block.text).join('');
 
 describe('gcode agent --mode auto', () => {
+  it('G-09 counts the classifier calls in the run cost and in gcode usage', async () => {
+    const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([toolCall('One.', [bash('node -e "1"')], usage), verdict('allow', 'harmless'), answer('Done.', usage)]);
+    const ran = await runCli(['agent', '--workspace', workspace, '--mode', 'auto', 'One'], env, { fetch: transport.fetch });
+    expect(ran.code, ran.stderr).toBe(0);
+    const id = sessionIdOf(ran.stdout);
+    const events = (await readSessionLog(sessionFile(store, asSessionId(id)))).events;
+    const classifier = ofKind(events, 'tool-result').reduce((sum, e) => sum + (e.approval?.classifier?.costUsd ?? 0), 0);
+    const models = ofKind(events, 'assistant').reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
+    expect(classifier).toBeGreaterThan(0);
+    const spend = JSON.parse((await runCli(['usage', '--session', id, '--json'], env)).stdout) as { costUsd: number; classifierCostUsd: number };
+    expect(spend.classifierCostUsd).toBeCloseTo(classifier, 10);
+    expect(spend.costUsd).toBeCloseTo(models + classifier, 10);
+    expect(ran.stdout).toContain(`cost=$${(models + classifier).toFixed(6)}`);
+  });
+
   it('runs safe commands, lets the classifier judge the gray ones, blocks what it will not allow without asking, asks before what rules keep, and logs each decision', async () => {
     const { workspace, env, store } = await setup({ 'a.ts': 'export const a = 1;\n', 'node_modules/pkg/index.js': 'module.exports = 1;\n' });
     const asked: string[] = [];

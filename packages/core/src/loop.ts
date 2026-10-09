@@ -1,7 +1,7 @@
 import type { StopReason, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages/messages';
 import { REPORT_TOOL, reportMessageOf, STRUCTURED_OUTPUT_TOOL } from './handback.js';
 import { BUDGET_REMINDER_SHARE, type BudgetLeft } from './notice.js';
-import { IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
+import { classifierCostOf, IN_CONVERSATION, KEEPS_PENDING_PROMPT, spendOf, toolUsesOf, type ToolResultEvent, type TurnErrorKind, type TurnEvent } from './session.js';
 
 export const DONE_REASONS = ['end_turn', 'max-turns', 'budget', 'refusal', 'error'] as const;
 export type DoneReason = (typeof DONE_REASONS)[number];
@@ -164,10 +164,10 @@ function cutTwice(events: readonly TurnEvent[], run: Run): boolean {
 
 const thisRun = (events: readonly TurnEvent[], run: Run): readonly TurnEvent[] => events.filter((e) => e.kind !== 'session-start' && e.seq !== undefined && e.seq >= run.firstSeq);
 
-// A compaction's summary call counts toward the budget, not the turns. An unpriced call counts as free here; its usage line still prints cost=unknown.
+// A compaction's summary call counts toward the budget, not the turns, and so do the Auto classifier's calls. An unpriced call counts as free here; its usage line still prints cost=unknown.
 function spent(events: readonly TurnEvent[], run: Run): { readonly calls: number; readonly costUsd: number } {
   const ran = thisRun(events, run);
-  return { calls: ran.filter((e) => e.kind === 'assistant').length, costUsd: ran.reduce((sum, e) => sum + (spendOf(e)?.costUsd ?? 0), 0) };
+  return { calls: ran.filter((e) => e.kind === 'assistant').length, costUsd: ran.reduce((sum, e) => sum + (spendOf(e)?.costUsd ?? 0) + classifierCostOf(e), 0) };
 }
 
 function limitReached(events: readonly TurnEvent[], run: Run): LoopStep | undefined {

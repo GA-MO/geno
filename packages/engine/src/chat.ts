@@ -14,6 +14,7 @@ import {
   type BackendBinding,
   specOf,
   nextSeq,
+  classifierCostOf,
   spendOf,
   toolUsesOf,
   type ApprovalRecord,
@@ -260,7 +261,7 @@ export function totalOf(events: readonly TurnEvent[]): Totals {
   return {
     turns: answers.length,
     usage: { input: sum((u) => u.input), cacheRead: sum((u) => u.cacheRead), cacheWrite: sum((u) => u.cacheWrite), output: sum((u) => u.output) },
-    costUsd: spends.some((s) => s.costUsd === null) ? null : spends.reduce((n, s) => n + (s.costUsd ?? 0), 0),
+    costUsd: spends.some((s) => s.costUsd === null) ? null : spends.reduce((n, s) => n + (s.costUsd ?? 0), 0) + events.reduce((n, e) => n + classifierCostOf(e), 0),
     latencyMs: answers.reduce((n, e) => n + e.latencyMs, 0),
   };
 }
