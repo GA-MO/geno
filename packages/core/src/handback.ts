@@ -23,13 +23,21 @@ export const REPORT_TOOL_DEFINITION: Tool = {
   },
 };
 
-/** The nudge as the child's log records it; the request renders its text, so the log holds no copy of it. */
-export type ReportNudgeEvent = { readonly kind: 'report-nudge'; readonly seq: number; readonly at: string };
+/**
+ * A nudge as the log records it; the request renders its text, so the log holds no copy of it. `empty` is the one a
+ * run gets when its model ended a turn with no text and no tool call; without it, a child was nudged to report.
+ */
+export type ReportNudgeEvent = { readonly kind: 'report-nudge'; readonly seq: number; readonly at: string; readonly empty?: true | undefined };
 
 export const REPORT_DELIVERED = 'Report delivered to the agent that started you.';
 
 /** The one nudge a child gets when it ends its turn without calling report, worded after Claude Code's `[handback-send-enforce]`. */
 export const REPORT_NUDGE = `${GENO_NOTE} Your report has not been delivered. Call ${REPORT_TOOL}({message: <your full report>}) now; the call ends your run.`;
+
+/** The one nudge after a turn that ended with nothing the user can see, such as thinking alone. */
+export const EMPTY_TURN_NUDGE = `${GENO_NOTE} Your last response ended with no text and no tool call, so the user saw nothing and the task is not done. Continue from where you stopped: make the tool call you planned, or write your answer.`;
+
+export const nudgeText = (event: ReportNudgeEvent): string => (event.empty === true ? EMPTY_TURN_NUDGE : REPORT_NUDGE);
 
 /** A report call's message, which the user sees as the child's text; undefined for any other call. */
 export function reportMessageOf(use: Pick<ToolUseBlock, 'name' | 'input'>): string | undefined {

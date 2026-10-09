@@ -398,7 +398,7 @@ const turnEventSchema = z.union([
       ),
       ...(['PostToolBatch', 'Stop', 'SubagentStart', 'SubagentStop'] as const).map((event) => z.strictObject({ kind: z.literal('hook-context'), ...seqFields, event: z.literal(event), notes: hookNotesSchema })),
     ]),
-    z.strictObject({ kind: z.literal('report-nudge'), ...seqFields }),
+    z.strictObject({ kind: z.literal('report-nudge'), ...seqFields, empty: z.literal(true).optional() }),
     z.strictObject({ kind: z.literal('effort'), seq: seqFields.seq.optional(), at: seqFields.at, effort: z.enum(EFFORTS) }),
     z.strictObject({ kind: z.literal('title'), ...seqFields, title: z.string().min(1) }),
     z.strictObject({

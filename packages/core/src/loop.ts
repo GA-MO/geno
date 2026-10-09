@@ -13,8 +13,8 @@ export type LoopStep =
   | { readonly kind: 'call-model' }
   | { readonly kind: 'run-tools'; readonly toolUses: readonly ToolUseBlock[] }
   | { readonly kind: 'answer-tools'; readonly answers: readonly ToolAnswer[] }
-  /** A child ended its turn without calling report: log the nudge, then call the model again. */
-  | { readonly kind: 'nudge' }
+  /** A child ended its turn without calling report, or a model ended one with nothing to show: log the nudge, then call the model again. */
+  | { readonly kind: 'nudge'; readonly empty?: true | undefined }
   | { readonly kind: 'done'; readonly reason: DoneReason };
 
 /** What a call the user turned down tells the model, as Claude Code's rejection does. */
@@ -198,6 +198,12 @@ export function budgetReminder(events: readonly TurnEvent[], run: Run): BudgetLe
 
 const reported = (after: readonly TurnEvent[]): boolean => after.some((e) => e.kind === 'tool-result' && e.name === REPORT_TOOL && e.status === 'ok');
 
+/** A turn with no text and no tool call, such as thinking alone: the user would see nothing. */
+const answerless = (turn: AssistantEvent): boolean => !turn.content.some((block) => block.type === 'tool_use' || (block.type === 'text' && block.text.trim() !== ''));
+
+/** The conversation event before the newest one, which tells a second empty turn from a first. */
+const beforeLast = (events: readonly TurnEvent[]): TurnEvent | undefined => events.filter(isConversation).at(-2);
+
 /** A handback run's model ended its turn without a report: nudged once while a call is left, then the run ends. */
 const nudgeDue = (events: readonly TurnEvent[], run: Run): boolean =>
   !thisRun(events, run).some((e) => e.kind === 'report-nudge') && limitReached(events, run) === undefined;
@@ -218,6 +224,12 @@ export function loopStep(events: readonly TurnEvent[], run: Run): LoopStep {
   if (last.kind === 'tool-result' && last.name === STRUCTURED_OUTPUT_TOOL) return done('end_turn');
   const step = after(last);
   if (run.handback === true && last.kind === 'assistant' && step.kind === 'done' && step.reason === 'end_turn' && nudgeDue(events, run)) return { kind: 'nudge' };
+  // An empty end is not an answer, so the run goes on once; a second in a row ends it as an error, never as done.
+  if (last.kind === 'assistant' && step.kind === 'done' && step.reason === 'end_turn' && answerless(last)) {
+    const prior = beforeLast(events);
+    if (prior?.kind === 'report-nudge' && prior.empty === true) return done('error');
+    return limitReached(events, run) ?? { kind: 'nudge', empty: true };
+  }
   if (step.kind !== 'call-model') return step;
   return cutTwice(events, run) ? done('error') : (limitReached(events, run) ?? step);
 }
