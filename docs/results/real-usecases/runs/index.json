@@ -3555,5 +3555,53 @@
       "transcript": "transcript.md",
       "result": "result.json"
     }
+  },
+  {
+    "case": "A34-todo-stale",
+    "area": "todo",
+    "layer": "A",
+    "run": "fix-todo-9",
+    "engineCommit": "4b539b26",
+    "phase": "after",
+    "note": "after the fixes, on 4b539b26; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T17:52:07.633Z",
+    "passed": true,
+    "costUsd": 0.014696,
+    "modelCalls": 9,
+    "goodExample": false,
+    "dir": "runs/A34-todo-stale/fix-todo-9",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl.gz",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
+  },
+  {
+    "case": "A34-todo-stale",
+    "area": "todo",
+    "layer": "A",
+    "run": "fix-todo-10",
+    "engineCommit": "4b539b26",
+    "phase": "after",
+    "note": "after the fixes, on 4b539b26; see FIXES.md",
+    "model": "qwen3.8-flash",
+    "date": "2026-10-09T17:53:07.430Z",
+    "passed": false,
+    "costUsd": 0.013158,
+    "modelCalls": 8,
+    "goodExample": false,
+    "dir": "runs/A34-todo-stale/fix-todo-10",
+    "files": {
+      "case": "case.json",
+      "session": "session.jsonl",
+      "wire": "wire.jsonl.gz",
+      "diff": "diff.patch",
+      "transcript": "transcript.md",
+      "result": "result.json"
+    }
   }
 ]
