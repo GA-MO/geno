@@ -281,7 +281,7 @@ import { commandClassifier } from './classifier.js';
 import { catalogService } from './catalog.js';
 import { homeOf, homesOf, pluginLoader, runBuiltin, sessionCommands } from './commands.js';
 import { MemoryError, memoryStore } from './memory.js';
-import { permissionStore, rulesWorkspace } from './permissions.js';
+import { importedRules, layeredPermissions, permissionStore, rulesWorkspace } from './permissions.js';
 import { ensureGlobalRules, globalRulesFile } from './project-context.js';
 import { UsageError, type Io } from './command.js';
 import type { Director, Limits, Surface } from './drive.js';
@@ -1295,7 +1295,13 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     const home = io.env['HOME'] || homedir();
     const rules = permissionStore(homeOf(store), await rulesWorkspace(workspace, home));
     const scope = { workspace: rules.workspace, tempDir: tmpdir(), home };
-    const answer = async (list: Promise<readonly PermissionRule[]>): Promise<PermissionsResponse> => ({ workspace: rules.workspace, rules: await list });
+    // Settings is not a session, so the warnings a session prints are left to the session.
+    const layered = layeredPermissions(rules, { homes: homesOf(store, io.env), trusted: peer.trusted }, scope, () => {});
+    const answer = async (list: Promise<readonly PermissionRule[]>): Promise<PermissionsResponse> => {
+      const own = await list;
+      const imported = importedRules(await layered.imported());
+      return { workspace: rules.workspace, rules: own, ...(imported.length === 0 ? {} : { imported }) };
+    };
     return { rules, scope, answer };
   };
   const refusedMemory =
