@@ -18,7 +18,8 @@
     "gcode": "tsx packages/engine/src/cli.ts",
     "tab:bench": "tsx scripts/tab-bench.mjs",
     "test:affected": "tsx scripts/test-affected.ts",
-    "test:golden": "vitest run --project unit packages/engine/test/golden"
+    "test:golden": "vitest run --project unit packages/engine/test/golden",
+    "ui": "tsx packages/extension/test/gallery/server.mts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
