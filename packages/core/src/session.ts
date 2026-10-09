@@ -29,7 +29,7 @@ import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
-import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
+import { arrivalText, GENO_NOTE, USER_PROMPT_FOLLOWS, userSteerText } from './fence.js';
 import { nudgeText, type ReportNudgeEvent } from './handback.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
@@ -416,17 +416,21 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
   let opening: TextBlockParam[] = [];
   // Notices too: a refused prompt leaves the mode it was sent in. They go out only with something to answer.
   let notices: TextBlockParam[] = [];
+  // Whether the prompts hold one the user wrote, which the notices must not seem to cover.
+  let typed = false;
   // Before a model turn the opening goes out even alone: a compaction can keep from the middle of a turn.
   const flush = (beforeTurn: boolean) => {
     const answers = toolUses.flatMap((use) => results.get(use.id) ?? []);
     if (answers.length + prompts.length > 0 || (beforeTurn && opening.length + notices.length > 0)) {
-      messages.push({ role: 'user', content: [...opening, ...answers, ...notices, ...prompts] });
+      const follows = notices.length > 0 && typed ? [{ type: 'text' as const, text: USER_PROMPT_FOLLOWS }] : [];
+      messages.push({ role: 'user', content: [...opening, ...answers, ...notices, ...follows, ...prompts] });
       opening = [];
       notices = [];
     }
     toolUses = [];
     results = new Map();
     prompts = [];
+    typed = false;
   };
   for (const event of contextView(events)) {
     if (event.kind === 'session-start') {
@@ -449,7 +453,10 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
       }
     }
     if (event.kind === 'notice') notices.push(...noticeTexts(event).map((text) => ({ type: 'text' as const, text })));
-    if (event.kind === 'user') prompts.push(...userBlocks(event, stored, workspace));
+    if (event.kind === 'user') {
+      prompts.push(...userBlocks(event, stored, workspace));
+      typed ||= event.from === undefined;
+    }
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
@@ -457,7 +464,10 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'file-changed') prompts.push({ type: 'text', text: changedOnDiskNote(event.shown, event.excerpt) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
     if (noted !== undefined) prompts.push({ type: 'text', text: noted });
-    if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) prompts = [];
+    if (event.kind === 'error' && !KEEPS_PENDING_PROMPT[event.error]) {
+      prompts = [];
+      typed = false;
+    }
     if (event.kind === 'tool-result') results.set(event.toolUseId, toolResultBlock(event, stored));
     if (event.kind === 'assistant') {
       flush(true);

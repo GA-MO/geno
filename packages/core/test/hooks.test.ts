@@ -33,6 +33,7 @@ import {
   type HookResult,
   type Session,
   type TurnEvent,
+  USER_PROMPT_FOLLOWS,
 } from '../src/index.js';
 
 const user: HookOrigin = { file: '/home/u/.claude/settings.json', scope: 'user' };
@@ -257,7 +258,7 @@ describe('hook context in the conversation', () => {
   it('puts a resume output into the next message, before the prompt', () => {
     const events: TurnEvent[] = [{ kind: 'session-start', session }, { kind: 'user', seq: 1, at, content: 'Hi' }, reply(2), hook(3, 'resume', 'AGAIN'), { kind: 'user', seq: 4, at, content: 'More' }];
     expect(texts(events, 0)).toEqual(['Hi']);
-    expect(texts(events, 2)).toEqual([`${GENO_NOTE} SessionStart:resume hook success: AGAIN`, 'More']);
+    expect(texts(events, 2)).toEqual([`${GENO_NOTE} SessionStart:resume hook success: AGAIN`, USER_PROMPT_FOLLOWS, 'More']);
   });
 
   it('T-HOOK-02 puts UserPromptSubmit output after its prompt, and drops it with a prompt the provider refused', () => {

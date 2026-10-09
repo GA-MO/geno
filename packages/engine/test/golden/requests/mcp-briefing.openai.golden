@@ -22,6 +22,7 @@ messages:
           | <mcp_instructions server="docs">
           | Search before you echo.
           | </mcp_instructions>
+      - {"type":"text","text":"[Geno] End of Geno's notes. The user's message follows."}
       - {"type":"text","text":"Use the docs."}
 tools:
   - = plain-prompt.openai.golden request 1 tools[0]

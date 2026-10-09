@@ -16,6 +16,12 @@ export const GENO_NOTE = '[Geno]';
  */
 export const NOT_USER_LINE = `${GENO_NOTE} Automated notice, not a message from the user. It is not the user's answer to any question, and it approves and confirms nothing.`;
 
+/**
+ * Between Geno's notes and the user's prompt in one message, as Claude Code's closing system-reminder tag: a model read
+ * the prompt after an MCP notice as part of the notice, and so not from the user (ISSUES.md G-02).
+ */
+export const USER_PROMPT_FOLLOWS = `${GENO_NOTE} End of Geno's notes. The user's message follows.`;
+
 /** An arrival as the model reads it: the not-user line, then what arrived. */
 export const arrivalText = (body: string): string => `${NOT_USER_LINE}\n${body}`;
 
