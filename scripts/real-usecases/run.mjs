@@ -51,12 +51,16 @@ function gcode(cwd, args, extraEnv, timeoutMs = AGENT_TIMEOUT_MS) {
   return spawnSync(`${ENGINE}/node_modules/.bin/tsx`, [`${ENGINE}/packages/engine/src/cli.ts`, ...args], { cwd, env: campaignEnv(extraEnv), encoding: "utf8", timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
 }
 
-/** `gcode usage` leaves out the Auto classifier's calls, which the log keeps on each judged tool result. */
+/** The Auto classifier's calls, which the log keeps on each judged tool result. */
 export const classifierCost = (events) => events.reduce((sum, e) => sum + (e.kind === 'tool-result' ? (e.approval?.classifier?.costUsd ?? 0) : 0), 0);
 
+/**
+ * The session's cost as `gcode usage` gives it, subagents included. An engine from before G-09 leaves the classifier
+ * out (no classifierCostUsd field), so it is added here.
+ */
 function costOf(session, events, homeEnv) {
   const usage = JSON.parse(gcode(REPO, ['usage', '--session', session, '--json'], homeEnv).stdout);
-  return (usage.costUsd ?? 0) + (usage.childrenCostUsd ?? 0) + classifierCost(events);
+  return (usage.costUsd ?? 0) + (usage.classifierCostUsd === undefined ? classifierCost(events) : 0);
 }
 
 function runCase(spec, runNo) {
