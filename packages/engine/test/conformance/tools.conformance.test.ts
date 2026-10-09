@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { capabilitiesOf, READER_SYSTEM, WEB_LIMITS, type TurnEvent } from '@g-code/core';
+import { capabilitiesOf, FILE_TOOL_NOTES, READER_SYSTEM, WEB_LIMITS, type TurnEvent } from '@g-code/core';
 import { twoColorPng } from '../../../core/test/png.js';
 import { loadTools, type FakeToolUse } from '../fake-transport.js';
 import { call, say, scripted, sessionIdOf, WIRES, type SeenResult, type Wire } from './scripted.js';
@@ -11,7 +11,7 @@ import { call, say, scripted, sessionIdOf, WIRES, type SeenResult, type Wire } f
 const A_TS = { 'a.ts': 'export const a = 1;\n' };
 const NOTEBOOKS = path.join(import.meta.dirname, '..', 'fixtures', 'notebooks');
 
-const COMMANDS = { failing: 'cat missing.txt', passing: 'cat a.ts' } as const;
+const COMMANDS = { failing: 'cat missing.txt', passing: "printf 'export const a = 1;\\n'" } as const;
 
 /** Runs one non-interactive turn in which the model calls bash with `command`, and returns the result it got back. */
 async function bashResult(wire: Wire, command: string): Promise<SeenResult> {
@@ -161,6 +161,18 @@ describe.each(WIRES)('tools on the %s wire', (wire) => {
     const { result, workspace } = await session(wire, { 'sub/x.txt': 'x\n' }, () => [[into], [after]]);
     expect(result(into)).toEqual({ id: into.id, error: false, text: `${path.join(workspace, 'sub')}\nShell cwd was reset to ${workspace}\n[exit code 0]` });
     expect(result(after)).toEqual({ id: after.id, error: false, text: `${workspace}\n[exit code 0]` });
+  });
+
+  it('a command that only reads a file runs, and its result names the read tool once a session', async () => {
+    const first = use('bash', { command: 'cat a.ts' });
+    const again = use('bash', { command: 'head -1 a.ts' });
+    const listed = use('bash', { command: 'ls' });
+    const piped = use('bash', { command: 'cat a.ts | wc -l' });
+    const { result } = await session(wire, A_TS, () => [[first], [again], [listed], [piped]]);
+    expect(result(first)).toMatchObject({ error: false, text: `export const a = 1;\n[exit code 0]\n${FILE_TOOL_NOTES.read}` });
+    expect(result(again)).toMatchObject({ error: false, text: 'export const a = 1;\n[exit code 0]' });
+    expect(result(listed).text.endsWith(`[exit code 0]\n${FILE_TOOL_NOTES.list}`)).toBe(true);
+    expect(result(piped).text).not.toMatch(/\[Geno\]/);
   });
 
   it('T-TOOL-08 a foreground command that starts with a long sleep is refused unrun, with a pointer to monitor and run_in_background', async () => {

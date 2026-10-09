@@ -9,6 +9,8 @@ import {
   AGENT_TOOL_DEFINITIONS,
   approvalQuestion,
   capabilitiesOf,
+  fileToolNoter,
+  toolResultText,
   DEFERRED_TOOLS_NOTE,
   describeServerState,
   editorActionToolDefinitions,
@@ -259,6 +261,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
       readonly diagnostics: Diagnostics | undefined;
     };
     const here: Place = { sandbox, workspace, lane: lane?.bounds, check, diagnostics: options.diagnostics };
+    const fileNotes = fileToolNoter(opened.log.events.flatMap((e) => (e.kind === 'tool-result' ? [toolResultText(e)] : [])));
     const executorsFor = (approval: Approval, own = false, place: Place = here) =>
       agentExecutors({
         sandbox: place.sandbox,
@@ -269,6 +272,7 @@ export async function runAgent(io: Io, store: Store, opened: OpenSession, prompt
         approval,
         diagnostics: place.diagnostics,
         rules: ruleAttacher(opened.log.events),
+        fileNotes: own ? fileNotes : undefined,
         commands,
         // Read at each call: the mapping's file is written once the run's tools are known.
         skillNote: (name: string) => (genoTools !== undefined && name.startsWith('pstack:') ? pstackMap(genoTools, { subagents: own && agentTool }) : undefined),
