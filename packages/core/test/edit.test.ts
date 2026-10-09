@@ -4,6 +4,14 @@ import { baseOf, hunksBetween, proposeChange, strReplace, type EditFormat } from
 const file = ['function add(a, b) {', '  return a - b;', '}', '', 'function sub(a, b) {', '  return a - b;', '}', ''].join('\n');
 
 describe('strReplace', () => {
+  it('P-05 says how to match a hidden character when the closest text holds one', () => {
+    const hidden = 'export const config = {\n\tretries:​ 3,\n};\n';
+    const outcome = strReplace('config.ts', hidden, '\tretries: 3,', '\tretries: 7,');
+    expect(outcome.kind === 'failed' && outcome.detail).toContain('A [U+XXXX] there is a hidden character');
+    const plain = strReplace('config.ts', hidden.replace('​', ''), '\tretries: 9,', 'x');
+    expect(plain.kind === 'failed' && plain.detail).not.toContain('hidden character');
+  });
+
   it('replaces an exact unique match', () => {
     expect(strReplace('m.js', file, 'add(a, b) {\n  return a - b;', 'add(a, b) {\n  return a + b;')).toEqual({
       kind: 'applied',
