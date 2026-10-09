@@ -146,11 +146,11 @@ describe('planInstall', () => {
     ]);
   });
 
-  it('writes a project agent as one file in the workspace, owning no folder', () => {
+  it("writes a project agent as one file in the workspace's .g-code, owning no folder", () => {
     const plan = planOf(agent('reviewer'), { scope: 'project' });
-    expect(plan.target).toBe('/Users/me/ws/.claude/agents/reviewer.md');
+    expect(plan.target).toBe('/Users/me/ws/.g-code/agents/reviewer.md');
     expect(plan.owns).toBeUndefined();
-    expect(plan.writes.map((w) => w.dest)).toEqual(['/Users/me/ws/.claude/agents/reviewer.md']);
+    expect(plan.writes.map((w) => w.dest)).toEqual(['/Users/me/ws/.g-code/agents/reviewer.md']);
   });
 
   it('refuses a name another skill already has, wherever it is', () => {
@@ -172,6 +172,18 @@ describe('planInstall', () => {
     expect(planInstall(input(next, { records: [record], occupied: true }))).toEqual({
       kind: 'refused',
       why: 'deploy 1.0.0 from ~/catalogs/team is already installed at /Users/me/.g-code/skills/deploy; uninstall it first',
+    });
+  });
+
+  it("finds a project install an older Geno made in .claude: the same entry is done, another version names where it is", () => {
+    const entry = skill('deploy');
+    const old = '/Users/me/ws/.claude/skills/deploy';
+    const record: InstallRecord = { ...recordOf(planOf(entry, { scope: 'project' }), 'i0', new Date('2026-10-07T00:00:00Z')), target: old, owns: old, files: [{ path: `${old}/SKILL.md`, sha256: sha256Hex(bytes('SKILL.md\n')) }] };
+    const existing = [{ kind: 'skill' as const, name: 'deploy', path: '.claude/skills/deploy/SKILL.md' }];
+    expect(planInstall(input(entry, { scope: 'project', records: [record], existing }))).toEqual({ kind: 'installed', record });
+    expect(planInstall(input(skill('deploy', [fileOf('SKILL.md', 'v2\n')], '2.0.0'), { scope: 'project', records: [record], existing }))).toEqual({
+      kind: 'refused',
+      why: `deploy 1.0.0 from ~/catalogs/team is already installed at ${old}; uninstall it first`,
     });
   });
 
@@ -197,9 +209,9 @@ describe('planInstall', () => {
       scope: 'project',
       workspace: '/Users/me/ws',
       catalog: '~/catalogs/team',
-      target: '/Users/me/ws/.claude/skills/deploy',
-      owns: '/Users/me/ws/.claude/skills/deploy',
-      files: [{ path: '/Users/me/ws/.claude/skills/deploy/SKILL.md', sha256: sha256Hex(bytes('SKILL.md\n')) }],
+      target: '/Users/me/ws/.g-code/skills/deploy',
+      owns: '/Users/me/ws/.g-code/skills/deploy',
+      files: [{ path: '/Users/me/ws/.g-code/skills/deploy/SKILL.md', sha256: sha256Hex(bytes('SKILL.md\n')) }],
       installedAt: '2026-10-07T00:00:00.000Z',
     });
   });
@@ -227,7 +239,7 @@ describe('planUninstall', () => {
   it('removes an agent file but never its shared folder', () => {
     const one = recordOf(planOf(agent('reviewer')), 'i3', new Date());
     expect(planUninstall(one, [{ path: one.target, state: 'same' }])).toEqual({ remove: [one.target], keep: [], dirs: [] });
-    const forged: InstallRecord = { ...one, files: [...one.files, { path: '/Users/me/ws/.claude/agents/other.md', sha256: 'x' }] };
+    const forged: InstallRecord = { ...one, files: [...one.files, { path: '/Users/me/ws/.g-code/agents/other.md', sha256: 'x' }] };
     expect(planUninstall(forged, forged.files.map((f) => ({ path: f.path, state: 'same' as const }))).remove).toEqual([one.target]);
   });
 });

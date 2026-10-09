@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readdir, readFile, realpath, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -139,7 +139,7 @@ describe('skills and agents from a catalog, through gcode serve', () => {
     const replies = [toolCall('', [loadTools('skill')], usage), toolCall('Loading it.', [use('skill', { name: 'deploy-notes' })], usage), answer('Loaded.', usage)];
     const { workspace, home, catalogDir, marker, transport, connect, api, refusal } = await setup(replies);
     const userSkill = path.join(home, 'skills', 'deploy-notes');
-    const projectAgent = path.join(workspace, '.claude', 'agents', 'reviewer.md');
+    const projectAgent = path.join(workspace, '.g-code', 'agents', 'reviewer.md');
 
     await connect(async (ctx) => {
       const cat = api(ctx);
@@ -204,7 +204,7 @@ describe('skills and agents from a catalog, through gcode serve', () => {
 
       const agent = await cat.install('agent', 'reviewer', 'project');
       expect(await readFile(projectAgent, 'utf8')).toBe(AGENT);
-      expect(agent.skills.items).toContainEqual(expect.objectContaining({ kind: 'agent', name: 'reviewer', where: 'workspace', path: '.claude/agents/reviewer.md', loads: true }));
+      expect(agent.skills.items).toContainEqual(expect.objectContaining({ kind: 'agent', name: 'reviewer', where: 'workspace', path: '.g-code/agents/reviewer.md', loads: true }));
       expect((await cat.search('reviewer')).hits[0]!.installed).toEqual(['project']);
 
       const sessionId = (await ctx.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] })).sessionId;
@@ -242,9 +242,43 @@ describe('skills and agents from a catalog, through gcode serve', () => {
       expect(await refusal(cat.install('skill', 'escape', 'user'))).toBe('escape: ../../.zshrc: the path has a ".." segment');
       expect(await refusal(cat.install('skill', 'missing', 'user'))).toMatch(/has no skill named missing$/);
     });
-    expect(await filesUnder(path.join(workspace, '.claude'))).toEqual([]);
+    expect(await filesUnder(path.join(workspace, '.g-code'))).toEqual([]);
     expect(await filesUnder(home)).toEqual([]);
     expect(existsSync(path.join(root, '.zshrc'))).toBe(false);
+  });
+
+  it("installs for the project into .g-code, and still lists, finds and removes a project install an older Geno made in .claude", async () => {
+    const { workspace, home, connect, api } = await setup();
+    const manifestFile = path.join(home, 'catalog', 'installs.json');
+    const genoSkill = path.join(workspace, '.g-code', 'skills', 'deploy-notes');
+    const claudeSkill = path.join(workspace, '.claude', 'skills', 'deploy-notes');
+    await connect(async (ctx) => {
+      const cat = api(ctx);
+      const installed = await cat.install('skill', 'deploy-notes', 'project');
+      expect(installed.record.target).toBe(genoSkill);
+      expect(await filesUnder(genoSkill)).toEqual(['SKILL.md', 'install.sh', 'package.json', 'references/steps.md']);
+      expect(existsSync(path.join(workspace, '.claude')), 'nothing lands in .claude').toBe(false);
+      expect(installed.skills.items).toContainEqual(expect.objectContaining({ name: 'deploy-notes', where: 'workspace', path: '.g-code/skills/deploy-notes/SKILL.md', loads: true }));
+
+      await mkdir(path.dirname(claudeSkill), { recursive: true });
+      await rename(genoSkill, claudeSkill);
+      const manifest = await readFile(manifestFile, 'utf8');
+      await writeFile(manifestFile, manifest.replaceAll(`${path.sep}.g-code${path.sep}`, `${path.sep}.claude${path.sep}`));
+
+      const listed = (await cat.skills()).items.filter((item) => item.name === 'deploy-notes');
+      expect(listed).toEqual([expect.objectContaining({ where: 'workspace', path: '.claude/skills/deploy-notes/SKILL.md', install: { id: installed.record.id, version: '1.0.0', catalog: installed.record.catalog }, loads: true })]);
+      expect((await cat.search('deploy-notes')).hits[0]!.installed).toEqual(['project']);
+      const again = await cat.install('skill', 'deploy-notes', 'project');
+      expect(again.already, 'the install in .claude counts as this one').toBe(true);
+      expect(again.record.target).toBe(claudeSkill);
+      expect(existsSync(genoSkill)).toBe(false);
+
+      const removed = await cat.uninstall(installed.record.id);
+      expect(removed.kept).toEqual([]);
+      expect(existsSync(claudeSkill), 'uninstall removes it from .claude, where it is').toBe(false);
+      expect(removed.skills.items.some((item) => item.name === 'deploy-notes')).toBe(false);
+    });
+    expect(JSON.parse(await readFile(manifestFile, 'utf8'))).toEqual({ version: 1, installs: [] });
   });
 
   it('reports a catalog it cannot use beside the hits of the others', async () => {
