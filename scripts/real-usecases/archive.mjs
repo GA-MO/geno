@@ -1,14 +1,18 @@
 // Saves every Layer A run's full input and output under docs/results/real-usecases/runs/<case>/<run>/, for reuse as
 // recordings for the shared fake model, regression evals and example docs, and writes runs/index.json.
-// Run it after scripts/real-usecases/rescore.mjs. usage: node scripts/real-usecases/archive.mjs
+// Run it after scripts/real-usecases/rescore.mjs. usage: node scripts/real-usecases/archive.mjs [--append]
+// --append adds a later round's Layer A runs (GCODE_CAMPAIGN_SCRATCH) as new folders and index entries, and never
+// rewrites a folder that exists.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { CASES } from './cases.mjs';
 import { analyze, outputOf } from './checks.mjs';
-import { campaignEnv, HOME, REPO, SCRATCH } from './env.mjs';
+import { campaignEnv, HOME, REPO, SCRATCH, sessionsOf } from './env.mjs';
+
+const APPEND = process.argv.includes('--append');
 
 const RUNS = path.join(REPO, 'docs/results/real-usecases/runs');
 const GZIP_OVER = 200 * 1024;
@@ -16,9 +20,13 @@ const env = campaignEnv();
 const SECRETS = [env.DASHSCOPE_API_KEY, env.OPENROUTER_API_KEY].filter((v) => v !== undefined && v.length >= 8);
 const BASE_URL = env.DASHSCOPE_BASE_URL;
 
-/** Takes every key, the Model Studio workspace URL and any Authorization header out of a text before it is written. */
+/**
+ * Takes every key, the Model Studio workspace URL and any Authorization header out of a text before it is written. An
+ * appended run also loses this checkout's path and the user's home, which every workspace path holds.
+ */
 export function redact(text) {
   let out = text;
+  if (APPEND) out = out.split(REPO).join('<repo>').split(homedir()).join('<home>');
   for (const secret of SECRETS) out = out.split(secret).join('<redacted-key>');
   if (BASE_URL) out = out.split(BASE_URL.replace(/\/$/, '')).join('<DASHSCOPE_BASE_URL>');
   return out.replace(/("?authorization"?\s*[:=]\s*"?)(Bearer\s+)?[^"\s,}]+/gi, '$1<redacted>').replace(/sk-[A-Za-z0-9]{20,}/g, '<redacted-key>');
@@ -134,20 +142,24 @@ function rebuild(session, events) {
 
 const scores = JSON.parse(readFileSync(path.join(SCRATCH, 'scores.json'), 'utf8'));
 const index = [];
+const added = [];
 for (const score of scores) {
   const spec = CASES.find((c) => c.id === score.case);
   const runDir = path.join(RUNS, score.case, String(score.run));
+  if (APPEND && existsSync(runDir)) throw new Error(`${runDir} exists; --append never rewrites a run`);
   rmSync(runDir, { recursive: true, force: true });
   mkdirSync(runDir, { recursive: true });
+  added.push(runDir);
   const ws = path.join(SCRATCH, 'ws', `${score.case}-r${score.run}`, 'repo');
-  const sessions = family(score.session);
+  const sessions = family(score.session, sessionsOf(score.case, score.run));
   const [main] = sessions;
   const files = {};
 
   files.case = write(runDir, 'case.json', `${JSON.stringify({
     case: spec.id, area: spec.area, layer: 'A', run: score.run, mode: spec.mode ?? 'non-interactive',
     prompts: (spec.steps ?? [{ prompt: spec.prompt }]).map((s) => ({ prompt: s.prompt, maxTurns: s.maxTurns ?? spec.maxTurns ?? 40 })),
-    maxCostUsd: spec.maxCost ?? 0.2, env: spec.env ?? {}, settings: spec.settings ?? {}, sibling: spec.sibling ?? null,
+    maxCostUsd: spec.maxCost ?? 0.2, env: spec.env ?? {}, settings: spec.settings ?? {}, sibling: spec.sibling ?? null, plugins: spec.plugins ?? [],
+    ...(score.engine === undefined ? {} : { engineCommit: score.engine, home: 'a fresh HOME, CLAUDE_CONFIG_DIR and GCODE_HOME per run (scripts/real-usecases/home.mjs)' }),
     fixture: { name: spec.fixture, source: 'scripts/real-usecases/fixtures.mjs', setup: spec.setup ? spec.setup.toString() : null, initialCommit: existsSync(ws) ? execFileSync('git', ['rev-list', '--max-parents=0', 'HEAD'], { cwd: ws, encoding: 'utf8' }).trim() : null },
     replay: `node scripts/real-usecases/run.mjs --case ${spec.id} --run <n>`,
   }, null, 2)}\n`);
@@ -176,7 +188,8 @@ for (const score of scores) {
   // A run that stashes the user's work (ISSUES.md P-01) is not an example to copy, whatever its checks say.
   const stashes = run.calls.some((c) => c.name === 'bash' && /git stash(?!\s+(list|show))/.test(String(c.input.command)));
   const goodExample = passed && !stashes && run.calls.length <= 10 && run.errors.length === 0;
-  index.push({ case: score.case, area: score.area, layer: 'A', run: score.run, model: main.events[0]?.session?.model, date: main.events[0]?.session?.createdAt, passed, costUsd: Number(cost.toFixed(6)), modelCalls: run.assistants.length, goodExample, dir: path.relative(path.join(REPO, 'docs/results/real-usecases'), runDir), files });
+  const round = score.engine === undefined ? {} : { engineCommit: score.engine, phase: /^fix-b/.test(String(score.run)) ? 'before' : 'after', note: /^fix-b/.test(String(score.run)) ? `before the fixes, on ${score.engine}` : `after the fixes, on ${score.engine}; see FIXES.md` };
+  index.push({ case: score.case, area: score.area, layer: 'A', run: score.run, ...round, model: main.events[0]?.session?.model, date: main.events[0]?.session?.createdAt, passed, costUsd: Number(cost.toFixed(6)), modelCalls: run.assistants.length, goodExample, dir: path.relative(path.join(REPO, 'docs/results/real-usecases'), runDir), files });
 }
 
 // Layer B: each UI step's chat is a session of the run's extension host, found by the prompt the step sent.
@@ -191,7 +204,7 @@ const STEP_PROMPTS = {
   'B08-mcp-banner': 'MCP server\'s echo tool',
   'B09-stop-and-resume-thai': 'Read every file in this repository',
 };
-const reportsB = existsSync(path.join(SCRATCH, 'layer-b.jsonl')) ? readLog(path.join(SCRATCH, 'layer-b.jsonl')) : [];
+const reportsB = !APPEND && existsSync(path.join(SCRATCH, 'layer-b.jsonl')) ? readLog(path.join(SCRATCH, 'layer-b.jsonl')) : [];
 for (const runNo of [...new Set(reportsB.map((r) => r.run ?? '1'))]) {
   const kept = path.join(SCRATCH, `layer-b-r${runNo}`);
   const sessionsDir = path.join(kept, 'sessions');
@@ -227,7 +240,19 @@ for (const runNo of [...new Set(reportsB.map((r) => r.run ?? '1'))]) {
     index.push({ case: report.step, area: 'ui', layer: 'B', run: Number(runNo), model: 'qwen3.8-flash', date: report.at, passed: report.ok === true, costUsd: Number(costUsd.toFixed(6)), modelCalls: hits.reduce((n, h) => n + analyze(h.events).assistants.length, 0), goodExample: report.ok === true && turns.length <= 10, dir: path.relative(path.join(REPO, 'docs/results/real-usecases'), stepDir), files: { ...files, screenshots: shots } });
   }
 }
-writeFileSync(path.join(RUNS, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
+const kept = APPEND ? JSON.parse(readFileSync(path.join(RUNS, 'index.json'), 'utf8')) : [];
+writeFileSync(path.join(RUNS, 'index.json'), `${JSON.stringify([...kept, ...index], null, 2)}\n`);
+
+// The user's own files must never reach an archived request: their CLAUDE.md, a SessionStart hook, or their paths.
+const USER_MARKERS = ['pstack model configuration', 'EXTREMELY_IMPORTANT', homedir()];
+for (const dir of APPEND ? added : []) {
+  for (const f of readdirSync(dir)) {
+    const file = path.join(dir, f);
+    const text = f.endsWith('.gz') ? gunzipSync(readFileSync(file)).toString('utf8') : readFileSync(file, 'utf8');
+    const found = USER_MARKERS.filter((m) => text.includes(m));
+    if (found.length > 0) throw new Error(`${file} holds ${found.join(', ')}`);
+  }
+}
 
 const leaks = SECRETS.flatMap((secret) => {
   const r = spawnSync('grep', ['-rlF', secret, RUNS], { encoding: 'utf8' });
