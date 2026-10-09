@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
-import { mkdtemp, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import * as acp from '@agentclientprotocol/sdk';
@@ -233,5 +233,20 @@ describe('remembered permission rules', () => {
     ]);
     expect(results().get(first.id)).toBe('1\tfirst note');
     expect(results().get(second.id)).toBe('1\tsecond note');
+  });
+});
+
+describe('the rules of the settings files in Settings', () => {
+  it("lists each settings file's rule read-only with its file, and leaves out an allow that waits for trust", async () => {
+    const { workspace, home, sessionless } = await setup([]);
+    await mkdir(path.join(workspace, '.agents'), { recursive: true });
+    await writeFile(path.join(workspace, '.agents', 'settings.json'), JSON.stringify({ permissions: { deny: ['Bash(touch:*)'], allow: ['Bash(curl -s https://a.invalid/x:*)'] } }));
+    await writeFile(path.join(home, 'settings.json'), JSON.stringify({ permissions: { deny: ['WebFetch'] } }));
+    const listed = await sessionless((ctx) => list(ctx, workspace));
+    expect(listed.rules).toEqual([]);
+    expect(listed.imported).toEqual([
+      { effect: 'deny', text: 'touch', source: '.agents/settings.json' },
+      { effect: 'deny', text: 'WebFetch', source: path.join(home, 'settings.json') },
+    ]);
   });
 });

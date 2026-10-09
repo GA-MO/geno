@@ -13,10 +13,12 @@ import {
   PATH_EFFECTS,
   PATH_TOOLS,
   RULE_EFFECTS,
+  ruleText,
   settingsFiles,
   type CommandScope,
   type ConfigHomes,
   type DeniedTool,
+  type ImportedRule,
   type NewRule,
   type PermissionRule,
   type PermissionsFile,
@@ -133,6 +135,12 @@ export type SourcedDeniedTool = DeniedTool & { readonly source: string };
 
 /** What the settings files add beneath Geno's own store, each naming the file it came from. */
 export type ImportedPermissions = { readonly rules: readonly PermissionRule[]; readonly deniedTools: readonly SourcedDeniedTool[]; readonly directories: readonly AddedDirectory[] };
+
+/** What Settings lists of the settings files' rules: each as the user would type it, with its file. */
+export const importedRules = ({ rules, deniedTools }: ImportedPermissions): ImportedRule[] => [
+  ...rules.map((rule) => ({ effect: rule.effect, text: ruleText(rule), source: rule.source ?? '' })),
+  ...deniedTools.flatMap((denied, i) => (deniedTools.findIndex((other) => other.text === denied.text && other.source === denied.source) === i ? [{ effect: 'deny' as const, text: denied.text, source: denied.source }] : [])),
+];
 
 /**
  * A workspace's rules with the settings files' beneath them, the tools a settings file denies by name, and the

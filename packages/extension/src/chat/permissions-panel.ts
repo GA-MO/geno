@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { h, icon, reconcile } from './dom.js';
-import type { PermissionRuleView, PermissionsFromView, PermissionsListing, RuleEffectView } from './permissions-model.js';
+import type { ImportedRuleView, PermissionRuleView, PermissionsFromView, PermissionsListing, RuleEffectView } from './permissions-model.js';
 
 const EFFECT_LABELS: Readonly<Record<RuleEffectView, { readonly label: string; readonly tone: string }>> = {
   allow: { label: 'Allow', tone: 'tone-ok' },
@@ -23,12 +23,26 @@ function ruleRow(rule: PermissionRuleView, post: (message: PermissionsFromView) 
   );
 }
 
+/** A settings file's rule: edited in its file, so the row names the file and has no Remove. */
+function importedRow(rule: ImportedRuleView): HTMLElement {
+  const { label, tone } = EFFECT_LABELS[rule.effect];
+  return h(
+    'li',
+    { class: 'perm-row perm-imported', 'data-effect': rule.effect },
+    h('span', { class: `perm-effect mcp-state ${tone}` }, label),
+    h('code', { class: 'perm-pattern' }, rule.text),
+    h('span', { class: 'provider-note perm-source' }, rule.source),
+  );
+}
+
 /**
  * Settings' Permissions section: the workspace's allow and deny rules, each removable, and a form to add one. The
  * engine keeps them; the page only shows the last listing it heard.
  */
 export function permissionsSection(post: (message: PermissionsFromView) => void) {
   const list = h('ul', { class: 'perm-list', 'aria-label': 'Permission rules' });
+  const importedHeading = h('h4', { class: 'settings-heading perm-imported-heading', hidden: true }, 'From settings files');
+  const importedList = h('ul', { class: 'perm-list', 'aria-label': 'Rules from settings files', hidden: true });
   const note = h('p', { class: 'provider-note perm-note' }, 'Loading…');
   const refused = h('p', { class: 'provider-test perm-refused', 'data-tone': 'failed', role: 'alert', hidden: true });
   const effect = h('select', { class: 'role-provider perm-choice', 'aria-label': 'Rule effect' }, h('option', { value: 'allow' }, 'Allow'), h('option', { value: 'ask' }, 'Ask'), h('option', { value: 'deny' }, 'Deny'));
@@ -54,12 +68,14 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
     h(
       'p',
       { class: 'settings-intro' },
-      'Commands Geno runs in this workspace without asking, commands it always asks about, even in Auto, and commands it never runs there. A command matches when it starts with the rule’s words, except an allow typed as Bash(words), which matches only those words. A deny wins, then an ask. Read(path) and Edit(path) ask about or deny files in .gitignore syntax, and a Read deny also keeps commands from reading them. WebFetch(domain:example.com) and Browser(domain:example.com) cover a host, and *.example.com its subdomains; a deny or an ask covers both tools. mcp__server__tool covers one MCP tool, and mcp__server every tool of that server. Geno keeps the rules in its own folder, never in the repository. It also follows the permissions in Claude Code’s settings files, and an allow from the repository’s .claude folder only in a trusted workspace. It still asks before a forced push, deleting outside the workspace, or touching credentials.',
+      'Commands Geno runs in this workspace without asking, commands it always asks about, even in Auto, and commands it never runs there. A command matches when it starts with the rule’s words, except an allow typed as Bash(words), which matches only those words. A deny wins, then an ask. Read(path) and Edit(path) ask about or deny files in .gitignore syntax, and a Read deny also keeps commands from reading them. WebFetch(domain:example.com) and Browser(domain:example.com) cover a host, and *.example.com its subdomains; a deny or an ask covers both tools. mcp__server__tool covers one MCP tool, and mcp__server every tool of that server. Geno keeps the rules in its own folder, never in the repository. It also follows the permissions in the settings files of .g-code, .agents and .claude, listed below, and an allow from the repository’s files only in a trusted workspace. It still asks before a forced push, deleting outside the workspace, or touching credentials.',
     ),
     note,
     list,
     form,
     refused,
+    importedHeading,
+    importedList,
   );
   return {
     element,
@@ -69,8 +85,12 @@ export function permissionsSection(post: (message: PermissionsFromView) => void)
         note.hidden = false;
         note.textContent = listing.kind === 'loading' ? 'Loading…' : listing.message;
         reconcile(list, []);
+        reconcile(importedList, []);
+        importedHeading.hidden = importedList.hidden = true;
         return;
       }
+      importedHeading.hidden = importedList.hidden = listing.imported.length === 0;
+      reconcile(importedList, listing.imported.map((rule, i) => ({ key: `${rule.source}#${i}`, deps: [rule.effect, rule.text, rule.source], build: () => importedRow(rule) })));
       note.hidden = listing.rules.length > 0;
       note.textContent = 'No rules yet. Choose Always allow in this workspace on a command’s card, or add one here.';
       reconcile(list, listing.rules.map((rule) => ({ key: rule.id, deps: [rule.effect, rule.text], build: () => ruleRow(rule, post) })));

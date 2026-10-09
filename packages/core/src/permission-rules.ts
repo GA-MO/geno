@@ -592,4 +592,7 @@ export type PermissionsRequest = { readonly cwd: string };
 /** `text` is a command, `Read(path)`, `Edit(path)`, `WebFetch(domain:host)`, `Browser(domain:host)` or an MCP tool's name. */
 export type PermissionAddRequest = { readonly cwd: string; readonly effect: RuleEffect; readonly text: string };
 export type PermissionRemoveRequest = { readonly cwd: string; readonly id: string };
-export type PermissionsResponse = { readonly workspace: string; readonly rules: readonly PermissionRule[] };
+/** A rule a settings file holds, which Settings lists read-only beside the file it came from. */
+export type ImportedRule = { readonly effect: RuleEffect; readonly text: string; readonly source: string };
+/** `imported` is left out when no settings file holds a rule that applies. */
+export type PermissionsResponse = { readonly workspace: string; readonly rules: readonly PermissionRule[]; readonly imported?: readonly ImportedRule[] | undefined };
