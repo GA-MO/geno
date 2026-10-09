@@ -6,25 +6,51 @@ Severity: **high** misleads the user or blocks them. **Medium** slows them down 
 
 ## Top 15
 
-| # | Finding | Severity | Where | Suggested change |
-| --- | --- | --- | --- | --- |
-| 1 | A denied or refused call shows as a red **Failed** step, and its OUT box shows text written for the model ("STOP what you are doing…"). | high | 153-run replay: A08, A05, A09, A33; `approve-settled`, `auto-decision` | Give denial its own state: a grey "Denied by you" or "Denied by Auto" badge, and a one-line user-facing reason. Keep the model's text behind "Show details". |
-| 2 | While a command waits for approval, its step says "Running a command" with a spinner. The same command shows three times. | high | `approve-command`, `real-approval`, real shot B01 | Mark the step "Waiting for you" with no spinner. Show the command once, in the card. |
-| 3 | A turn that ends with no answer looks like a normal finish ("worked for 2m 54s"). | high | A29 runs 1 and 2, A08 runs, A33 fix-a1/a2, B09 run 1 | When a turn ends with no text after its last step, add a notice: "Geno stopped without a reply", with Continue and Retry. |
-| 4 | At panel widths under about 260 px, the Stop button and Retry slide past the edge while a turn waits on a rate limit or the network. | high | `rate-limited` and `offline` at 240 px; real shots r2 | Let the run status shrink and wrap first. Pin Stop to the right with a fixed width. Add 240 px to the gallery's overflow check. |
-| 5 | Steps show raw tool names and no target: `tool_search`, `skill`, `task_stop`, `monitor`, `web_fetch` with no URL, `ask_user`, `remember`. "Delegated to" shows no task. | medium | 46 of 153 runs; `tools-each-kind`, `question-card`, `memory-card` | Add verbs and targets for every tool: "Loaded skill poteto-mode", "Fetched example.com", "Stopped bg-1", "Asked you", "Delegated to explore: find callers of getUser". |
-| 6 | Harness and CLI text reaches the user: `[abort] interrupted by the user`, `[max-turns] stopped after 6 model calls (--max-turns 6)`, `[exit code 0]`, `[Geno] Next time, search file contents with the grep tool`. | medium | B09 runs 1 and 2, A17, A27, 12 runs with harness text in output | Map each code to a sentence ("You stopped this turn", "Geno reached this run's limit of 6 model calls"). Show the exit code as a badge. Hide notes meant for the model. |
-| 7 | At 300 px the composer drops the mode word and the model name. It shows a bare shield and "medium" or "qwen3…". While a turn runs, the model chip disappears. | medium | `composer-model-menu`, `writing-tool`, real shots B01 to B10 | Keep the mode word and a short model name. Drop the effort word first. |
-| 8 | Approval cards order and style their buttons differently per kind. "No, and tell the agent…" and the session option look like plain text. | medium | `approve-command`, `approve-path`, `approve-mcp`, `approve-rule` | One fixed order on every card: Allow, the remember option, Deny, "No, and tell the agent…". All as buttons, with number keys 1 to 4. |
-| 9 | Task and subagent status misleads. A workflow that stopped at its cost cap shows **Done** and **New**. A capped subagent shows only a warning icon. A failed one shows no reason. Finished tasks read "0ms". | medium | `workflow-tasks`, `tasks`, `subagent-failed`, A11 run 1 | Show "Stopped at cost cap" as a warning chip. Write the reason on the row. Show the real duration or none. |
-| 10 | Errors offer no next step. "Check the API key in Settings" has no button. A stalled model offers only Stop. A failed MCP server offers nothing. | medium | `error`, `no-response`, `gone-quiet`, `mcp` | Add "Open Settings", "Retry now" and "Restart server" buttons where the text names the fix. |
-| 11 | The mode menu says Ask asks "before commands off the safe list". It does not say that edits apply without asking, and the safe list is not visible anywhere. | medium | `composer-mode-menu` | "Ask: edits apply right away and you can undo them. Commands not on the safe list ask first." Link "safe list" to the rules pane. |
-| 12 | A failed command shows the first lines of its output and fades the line that explains the failure. | medium | `tool-failed`, real shot B03 | For a failed command, show the last lines. Keep "Show all N lines". |
-| 13 | Large change sets take over the chat: 18 files of diff inline, a column of 18 file chips at 300 px, diffs that do not wrap, hunks out of order (Line 3 before Line 2). | medium | A31 run 2, A04 fix-s3-1, `edit-same-file` | Cap the diff card at about 3 files and 40 lines with "Show all". Cap chips at about 6 with "+12 more". Sort hunks by line. |
-| 14 | Approval cards use internal syntax: `Bash(pnpm publish:*)`, `mcp__github__create_issue`, "an edit Claude Code asks about", `$ read /Users/…`, and "Auto could not decide" in Ask mode. | medium | `approve-rule`, `approve-mcp`, `approve-edit`, `approve-path`, `approve-classifier` | Plain words: "Always allow `pnpm publish` in this workspace", "github: create_issue", "Read a file outside the workspace". |
-| 15 | The sticky prompt bubble covers the turn header and the start of the answer when the user scrolls. | medium | `workflow-started`, A19 run 1 | Collapse the sticky prompt to one line with a solid background, or drop it under the turn header. |
+| # | Finding | Severity | Where | Suggested change | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | A denied or refused call shows as a red **Failed** step, and its OUT box shows text written for the model ("STOP what you are doing…"). | high | 153-run replay: A08, A05, A09, A33; `approve-settled`, `auto-decision` | Give denial its own state: a grey "Denied by you" or "Denied by Auto" badge, and a one-line user-facing reason. Keep the model's text behind "Show details". | fixed, 2e54eede |
+| 2 | While a command waits for approval, its step says "Running a command" with a spinner. The same command shows three times. | high | `approve-command`, `real-approval`, real shot B01 | Mark the step "Waiting for you" with no spinner. Show the command once, in the card. | fixed, 7717ae37 |
+| 3 | A turn that ends with no answer looks like a normal finish ("worked for 2m 54s"). | high | A29 runs 1 and 2, A08 runs, A33 fix-a1/a2, B09 run 1 | When a turn ends with no text after its last step, add a notice: "Geno stopped without a reply", with Continue and Retry. | fixed, 32dcd1c9 |
+| 4 | At panel widths under about 260 px, the Stop button and Retry slide past the edge while a turn waits on a rate limit or the network. | high | `rate-limited` and `offline` at 240 px; real shots r2 | Let the run status shrink and wrap first. Pin Stop to the right with a fixed width. Add 240 px to the gallery's overflow check. | fixed, eff1a11f |
+| 5 | Steps show raw tool names and no target: `tool_search`, `skill`, `task_stop`, `monitor`, `web_fetch` with no URL, `ask_user`, `remember`. "Delegated to" shows no task. | medium | 46 of 153 runs; `tools-each-kind`, `question-card`, `memory-card` | Add verbs and targets for every tool: "Loaded skill poteto-mode", "Fetched example.com", "Stopped bg-1", "Asked you", "Delegated to explore: find callers of getUser". | fixed, 8c9ece35, d303b658 |
+| 6 | Harness and CLI text reaches the user: `[abort] interrupted by the user`, `[max-turns] stopped after 6 model calls (--max-turns 6)`, `[exit code 0]`, `[Geno] Next time, search file contents with the grep tool`. | medium | B09 runs 1 and 2, A17, A27, 12 runs with harness text in output | Map each code to a sentence ("You stopped this turn", "Geno reached this run's limit of 6 model calls"). Show the exit code as a badge. Hide notes meant for the model. | fixed, c66b55dc |
+| 7 | At 300 px the composer drops the mode word and the model name. It shows a bare shield and "medium" or "qwen3…". While a turn runs, the model chip disappears. | medium | `composer-model-menu`, `writing-tool`, real shots B01 to B10 | Keep the mode word and a short model name. Drop the effort word first. | open |
+| 8 | Approval cards order and style their buttons differently per kind. "No, and tell the agent…" and the session option look like plain text. | medium | `approve-command`, `approve-path`, `approve-mcp`, `approve-rule` | One fixed order on every card: Allow, the remember option, Deny, "No, and tell the agent…". All as buttons, with number keys 1 to 4. | open |
+| 9 | Task and subagent status misleads. A workflow that stopped at its cost cap shows **Done** and **New**. A capped subagent shows only a warning icon. A failed one shows no reason. Finished tasks read "0ms". | medium | `workflow-tasks`, `tasks`, `subagent-failed`, A11 run 1 | Show "Stopped at cost cap" as a warning chip. Write the reason on the row. Show the real duration or none. | open |
+| 10 | Errors offer no next step. "Check the API key in Settings" has no button. A stalled model offers only Stop. A failed MCP server offers nothing. | medium | `error`, `no-response`, `gone-quiet`, `mcp` | Add "Open Settings", "Retry now" and "Restart server" buttons where the text names the fix. | open |
+| 11 | The mode menu says Ask asks "before commands off the safe list". It does not say that edits apply without asking, and the safe list is not visible anywhere. | medium | `composer-mode-menu` | "Ask: edits apply right away and you can undo them. Commands not on the safe list ask first." Link "safe list" to the rules pane. | open |
+| 12 | A failed command shows the first lines of its output and fades the line that explains the failure. | medium | `tool-failed`, real shot B03 | For a failed command, show the last lines. Keep "Show all N lines". | fixed, 4a4fcc7a |
+| 13 | Large change sets take over the chat: 18 files of diff inline, a column of 18 file chips at 300 px, diffs that do not wrap, hunks out of order (Line 3 before Line 2). | medium | A31 run 2, A04 fix-s3-1, `edit-same-file` | Cap the diff card at about 3 files and 40 lines with "Show all". Cap chips at about 6 with "+12 more". Sort hunks by line. | open |
+| 14 | Approval cards use internal syntax: `Bash(pnpm publish:*)`, `mcp__github__create_issue`, "an edit Claude Code asks about", `$ read /Users/…`, and "Auto could not decide" in Ask mode. | medium | `approve-rule`, `approve-mcp`, `approve-edit`, `approve-path`, `approve-classifier` | Plain words: "Always allow `pnpm publish` in this workspace", "github: create_issue", "Read a file outside the workspace". | open |
+| 15 | The sticky prompt bubble covers the turn header and the start of the answer when the user scrolls. | medium | `workflow-started`, A19 run 1 | Collapse the sticky prompt to one line with a solid background, or drop it under the turn header. | open |
 
 Counts: 4 high, 17 medium, 18 low (39 findings, numbered F1 to F40 with F12 folded into F31). A further 3 notes are model behavior, not UI, and are listed at the end.
+
+## Round 1 fixes
+
+Seven findings are fixed on branch `worktree-agent-a3822927d2adf5f8b`, one commit each. Each has a gallery state and a webview test in `packages/extension/test/webview/ux-review.webview.test.ts` that checks the new text and that nothing runs past the panel at 240 and 300 px. The gallery test now opens every state at 240 px too.
+
+| # | Before | After | Shot (300 px Dark unless named) |
+| --- | --- | --- | --- |
+| 1 | A refused call is a red **Failed** step; its OUT box says "The user rejected `rm -rf build`, so it did not run. STOP what you are doing…" | A grey "Denied by you", "Denied by Auto", "Denied by a rule (`Bash(git push --force:*)`)" or "Denied by a hook", one plain reason such as "It did not run, and Geno waits for you.", and the model's text behind Show details. The panel reads the approval record the engine already sends. | [tool-denied](shots/r1-tool-denied-300.png), [A08 at 420 Light](shots/f01-denied-as-failed-A08.png), [auto-decision](shots/f01-auto-denied.png) |
+| 2 | "Running a command" with a spinner, the IN box and the card: the command three times. | The step says "Waiting for you" on the amber node, with no spinner and no IN box. The command shows once, in the card, and on the step once the card is answered. | [approve-command](shots/f02-pending-shows-running.png), [real-approval in High Contrast](shots/f02-real-approval-hc.png) |
+| 3 | "Geno worked for 2m 54s", then nothing. | "Geno stopped without a reply" with the reason ("Its last reply had no text.", "You stopped it before it answered.", "It reached its limit before it answered.", "It stopped at the call that was denied.") and, on the latest turn, Continue and Retry. | [no-reply](shots/r1-no-reply-300.png), [A29 run 2](shots/f03-no-answer-A29.png) |
+| 4 | At 240 px, Stop is 21 px past the right edge during a rate limit and 34 px during an offline wait. | The wait text ends in an ellipsis first; Stop and Retry now keep fixed slots. The 240 px gallery check also found and fixed an edit card's head, a subagent's row and a provider key field. | [rate-limited at 240](shots/f04-stop-off-edge-240.png), [offline at 240](shots/r1-offline-240.png) |
+| 5 | `tool_search`, `skill`, `task_stop`, `web_fetch` with no URL, `ask_user`, `remember`, "Delegated to" with no task. | "Loaded tools: web_fetch, monitor", "Used skill poteto-mode", "Stopped bg-1", "Fetched docs.stripe.com", "Asked you …", "Remembered", "Delegated to explore: …", "Showed 2 files". A unit test fails when the engine offers a tool the table lacks. A session load now titles every agent tool with its target, and a call whose input does not parse keeps its tool's name. | [tools-deferred](shots/r1-tools-deferred-300.png), [tools-each-kind](shots/f05-tool-kinds.png) |
+| 6 | "[abort] interrupted by the user", "[max-turns] stopped after 6 model calls (--max-turns 6)", "[exit code 2]", "[Geno] Next time, search file contents with the grep tool…" | The footer says "Stopped by you"; a cap reads "Reached the turn limit (6)" as a warning; a failed exit is an "exit 2" badge; Geno's notes sit behind Show details. The engine marks a turn's error text with its kind, live and replayed. | [turn-limit](shots/r1-turn-limit-300.png), [A17 run 1](shots/f06-max-turns-A17.png), [B09 run 2](shots/f06-abort-tag-B09.png) |
+| 12 | A failed command shows its first lines and fades "expected … got …". | It shows its last lines, with the fade at the top and the first lines behind "Show all N lines". | [tool-failed](shots/f12-failed-output.png) |
+
+The replay of the archived runs now passes all eight checks in 150 of 160 runs, up from 86 of 153. The runs the findings named pass their checks: A05, A08, A09 and A32 show every refused call as denied and none as failed, and A33 fix-a1 and fix-a2 show their refused call as denied, though the read skipped after it still reads as failed (see open items); A29 runs 1 and 2, A08 and A33 fix-a1 and fix-a2 and B09 run 1 say they ended without a reply; no run shows a raw tool name; and no run shows harness text. What still fails:
+
+- Thai answer in A27 run 2, A29 runs 1 and 2, and B09 run 1. That is the model's answer (N1), not the panel.
+- No target in six runs (A12 run 2 and fix-s3-1, A19 fix-s2-1 and fix-s3-1, A25 fix-s2-2, A26 fix-s2-2): the model called `task_stop` with `{"wait":"false"}` and no id. The step reads "Stopped" with a red Failed. A call whose input does not parse could read "Could not stop" or name its error instead.
+
+Open after round 1:
+
+- A call skipped because the user rejected an earlier call of its turn ("The user rejected an earlier call of this turn, so this one did not run…") still reads as a red Failed step with the model's text, as in A33 fix-a1. The engine logs it as an error; it needs its own status, as a denial has now.
+- A finished step keeps its finished verb when the call failed: A29 run 1's skill call that failed reads "Used skill pstack:poteto-mode" with Failed beside it.
+- A capped turn shows "Failed" in its footer under "Reached the turn limit (6)" (F31's duplicate).
+- The r2 VS Code shots, cut at about 225 px, do not reproduce in the gallery. At 225 px every gallery state fits but three, each by 2 to 4 px (the slash menu, a question's text field, the browse card). The r2 shots cut the header, the MCP banner and the user's bubble at the same x, with no composer in view, so the whole document is laid out wider than the view. That points at the webview's viewport in VS Code, not at one element; finding it needs a run in VS Code at that width.
 
 ## How this review was made
 
@@ -287,161 +313,168 @@ Keep these when acting on the findings above.
 
 ## Every replayed run
 
-`scripts/replay-runs-ui.ts` made this table; run it against a gallery to refresh it. "Steps (full)" counts steps at 420 px in full detail. "Checks passed" counts the eight checks: console, edge, cut, harness text, raw label, no target, Thai answer, and ends with answer. A check fails if it fails in either look. Each shot is the run's final view at 300 px Dark, compact detail.
+`scripts/replay-runs-ui.ts` made this table; run it against a gallery to refresh it. "Steps (full)" counts steps at 420 px in full detail; "Failed steps" and "Denied steps" count the steps marked so. "Checks passed" counts the eight checks: console, edge, cut, harness text, raw label, no target, Thai answer, and ends with answer, which a turn also passes when the panel says it ended without a reply. A check fails if it fails in either look. This table is from round 1, after the fixes above. Each shot is the run's final view at 300 px Dark, compact detail.
 
-| Run | Steps (full) | Chips | Failed steps | Last header | Checks passed | Failed checks | Shot |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A01-fix-failing-test/1 | 5 | 3 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A01-fix-failing-test__1.png) |
-| A01-fix-failing-test/fix-a2 | 6 | 3 | 0 | worked for 27s | 8/8 | none | [300 dark](shots/runs/A01-fix-failing-test__fix-a2.png) |
-| A02-thai-fix/1 | 6 | 3 | 0 | worked for 34s | 8/8 | none | [300 dark](shots/runs/A02-thai-fix__1.png) |
-| A03-new-file-create/1 | 6 | 4 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__1.png) |
-| A03-new-file-create/2 | 6 | 5 | 0 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__2.png) |
-| A03-new-file-create/fix-a1 | 8 | 9 | 0 | worked for 42s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-a1.png) |
-| A03-new-file-create/fix-a2 | 9 | 7 | 0 | worked for 45s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-a2.png) |
-| A03-new-file-create/fix-b2 | 12 | 9 | 2 | worked for 1m 5s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-b2.png) |
-| A04-blind-edit-recovery/1 | 3 | 2 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__1.png) |
-| A04-blind-edit-recovery/fix-a1 | 8 | 3 | 1 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a1.png) |
-| A04-blind-edit-recovery/fix-a2 | 9 | 3 | 2 | worked for 1m 6s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a2.png) |
-| A04-blind-edit-recovery/fix-a3 | 5 | 3 | 1 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a3.png) |
-| A04-blind-edit-recovery/fix-b2 | 5 | 3 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-b2.png) |
-| A04-blind-edit-recovery/fix-s1-1 | 4 | 3 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s1-1.png) |
-| A04-blind-edit-recovery/fix-s1-2 | 7 | 2 | 0 | worked for 3m 8s | 6/8 | raw label, no target | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s1-2.png) |
-| A04-blind-edit-recovery/fix-s3-1 | 8 | 3 | 1 | worked for 38s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s3-1.png) |
-| A04-blind-edit-recovery/fix-s3-2 | 6 | 2 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s3-2.png) |
-| A05-deferred-web-fetch/1 | 2 | 0 | 1 | worked for 9.5s | 6/8 | raw label, no target | [300 dark](shots/runs/A05-deferred-web-fetch__1.png) |
-| A06-read-not-cat/1 | 3 | 1 | 0 | worked for 6.6s | 8/8 | none | [300 dark](shots/runs/A06-read-not-cat__1.png) |
-| A06-read-not-cat/fix-a1 | 4 | 1 | 0 | worked for 12s | 8/8 | none | [300 dark](shots/runs/A06-read-not-cat__fix-a1.png) |
-| A07-multi-step-todo/1 | 12 | 10 | 1 | worked for 40s | 6/8 | raw label, no target | [300 dark](shots/runs/A07-multi-step-todo__1.png) |
-| A07-multi-step-todo/2 | 12 | 12 | 2 | worked for 1m 20s | 6/8 | raw label, no target | [300 dark](shots/runs/A07-multi-step-todo__2.png) |
-| A07-multi-step-todo/fix-a1 | 10 | 10 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-a1.png) |
-| A07-multi-step-todo/fix-a2 | 8 | 12 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-a2.png) |
-| A07-multi-step-todo/fix-b2 | 8 | 12 | 0 | worked for 25s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-b2.png) |
-| A07-multi-step-todo/fix-s1-1 | 17 | 15 | 2 | worked for 1m 4s | 7/8 | harness text | [300 dark](shots/runs/A07-multi-step-todo__fix-s1-1.png) |
-| A07-multi-step-todo/fix-s1-2 | 11 | 12 | 0 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s1-2.png) |
-| A07-multi-step-todo/fix-s2-3 | 8 | 10 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s2-3.png) |
-| A07-multi-step-todo/fix-s3-1 | 7 | 10 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s3-1.png) |
-| A07-multi-step-todo/fix-s3-2 | 8 | 11 | 1 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s3-2.png) |
-| A08-ask-risky-denied/1 | 2 | 0 | 1 | worked for 10s | 7/8 | ends with answer | [300 dark](shots/runs/A08-ask-risky-denied__1.png) |
-| A08-ask-risky-denied/fix-a1 | 2 | 0 | 1 | worked for 6.5s | 7/8 | ends with answer | [300 dark](shots/runs/A08-ask-risky-denied__fix-a1.png) |
-| A08-ask-risky-denied/fix-b2 | 3 | 0 | 1 | worked for 12s | 7/8 | ends with answer | [300 dark](shots/runs/A08-ask-risky-denied__fix-b2.png) |
-| A09-auto-classifier/1 | 10 | 6 | 5 | worked for 2m 0s | 7/8 | harness text | [300 dark](shots/runs/A09-auto-classifier__1.png) |
-| A09-auto-classifier/fix-a1 | 14 | 11 | 7 | worked for 2m 14s | 8/8 | none | [300 dark](shots/runs/A09-auto-classifier__fix-a1.png) |
-| A09-auto-classifier/fix-b2 | 6 | 5 | 1 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A09-auto-classifier__fix-b2.png) |
-| A10-plan-mode/1 | 5 | 2 | 0 | worked for 49sPlan | 8/8 | none | [300 dark](shots/runs/A10-plan-mode__1.png) |
-| A11-explore-subagent/1 | 6 | 0 | 0 | worked for 1m 32s | 7/8 | no target | [300 dark](shots/runs/A11-explore-subagent__1.png) |
-| A11-explore-subagent/fix-a1 | 2 | 0 | 0 | worked for 40s | 7/8 | no target | [300 dark](shots/runs/A11-explore-subagent__fix-a1.png) |
-| A11-explore-subagent/fix-a2 | 2 | 0 | 0 | worked for 25s | 7/8 | no target | [300 dark](shots/runs/A11-explore-subagent__fix-a2.png) |
-| A11-explore-subagent/fix-b2 | 2 | 0 | 0 | worked for 43s | 7/8 | no target | [300 dark](shots/runs/A11-explore-subagent__fix-b2.png) |
-| A12-background-server/1 | 8 | 2 | 1 | worked for 26s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__1.png) |
-| A12-background-server/2 | 8 | 1 | 1 | worked for 32s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__2.png) |
-| A12-background-server/fix-a1 | 7 | 0 | 1 | worked for 26s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-a1.png) |
-| A12-background-server/fix-a2 | 10 | 1 | 2 | worked for 26s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-a2.png) |
-| A12-background-server/fix-a3 | 9 | 0 | 1 | worked for 29s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-a3.png) |
-| A12-background-server/fix-b2 | 11 | 1 | 2 | worked for 1m 28s | 5/8 | harness text, raw label, no target | [300 dark](shots/runs/A12-background-server__fix-b2.png) |
-| A12-background-server/fix-r3-1 | 5 | 1 | 0 | worked for 15s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-r3-1.png) |
-| A12-background-server/fix-r3-2 | 7 | 2 | 0 | worked for 30s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-r3-2.png) |
-| A12-background-server/fix-s1-1 | 8 | 1 | 0 | worked for 34s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s1-1.png) |
-| A12-background-server/fix-s1-2 | 8 | 1 | 1 | worked for 31s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s1-2.png) |
-| A12-background-server/fix-s2-1 | 8 | 1 | 1 | worked for 36s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s2-1.png) |
-| A12-background-server/fix-s2-2 | 10 | 1 | 2 | worked for 39s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s2-2.png) |
-| A12-background-server/fix-s2-3 | 8 | 0 | 2 | worked for 24s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s2-3.png) |
-| A12-background-server/fix-s3-1 | 7 | 0 | 1 | worked for 17s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s3-1.png) |
-| A12-background-server/fix-s3-2 | 19 | 1 | 5 | worked for 1m 52s | 5/8 | harness text, raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s3-2.png) |
-| A12-background-server/fix-s3-3 | 4 | 0 | 0 | worked for 14s | 6/8 | raw label, no target | [300 dark](shots/runs/A12-background-server__fix-s3-3.png) |
-| A13-fail-then-fix/1 | 3 | 3 | 0 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A13-fail-then-fix__1.png) |
-| A14-deny-rules/1 | 8 | 6 | 2 | worked for 1m 6s | 8/8 | none | [300 dark](shots/runs/A14-deny-rules__1.png) |
-| A15-large-file-write/1 | 14 | 3 | 1 | worked for 7m 24s | 8/8 | none | [300 dark](shots/runs/A15-large-file-write__1.png) |
-| A15-large-file-write/fix-a2 | 9 | 3 | 1 | worked for 6m 50s | 8/8 | none | [300 dark](shots/runs/A15-large-file-write__fix-a2.png) |
-| A16-compaction-goal/1 | 12 | 3 | 0 | worked for 1m 9s | 8/8 | none | [300 dark](shots/runs/A16-compaction-goal__1.png) |
-| A16-compaction-goal/2 | 15 | 54 | 0 | worked for 3m 3s | 8/8 | none | [300 dark](shots/runs/A16-compaction-goal__2.png) |
-| A17-budget-reminder/1 | 6 | 0 | 1 | failed after 58s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__1.png) |
-| A17-budget-reminder/2 | 8 | 1 | 0 | failed after 28s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__2.png) |
-| A17-budget-reminder/fix-a1 | 7 | 3 | 1 | worked for 28s | 7/8 | cut | [300 dark](shots/runs/A17-budget-reminder__fix-a1.png) |
-| A17-budget-reminder/fix-a2 | 6 | 2 | 0 | worked for 40s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__fix-a2.png) |
-| A17-budget-reminder/fix-b2 | 9 | 27 | 0 | failed after 1m 13s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__fix-b2.png) |
-| A18-project-skill/1 | 8 | 6 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A18-project-skill__1.png) |
-| A18-project-skill/2 | 15 | 6 | 1 | worked for 49s | 6/8 | raw label, no target | [300 dark](shots/runs/A18-project-skill__2.png) |
-| A18-project-skill/fix-a1 | 12 | 5 | 1 | worked for 43s | 6/8 | raw label, no target | [300 dark](shots/runs/A18-project-skill__fix-a1.png) |
-| A18-project-skill/fix-b2 | 11 | 4 | 1 | worked for 28s | 6/8 | raw label, no target | [300 dark](shots/runs/A18-project-skill__fix-b2.png) |
-| A19-poteto-thai/1 | 18 | 15 | 3 | worked for 5m 22s | 5/8 | harness text, raw label, no target | [300 dark](shots/runs/A19-poteto-thai__1.png) |
-| A19-poteto-thai/2 | 14 | 15 | 2 | worked for 2m 44s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__2.png) |
-| A19-poteto-thai/fix-a1 | 21 | 10 | 2 | worked for 1m 50s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-a1.png) |
-| A19-poteto-thai/fix-a2 | 12 | 13 | 2 | worked for 1m 37s | 5/8 | harness text, raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-a2.png) |
-| A19-poteto-thai/fix-b2 | 15 | 7 | 2 | worked for 1m 58s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-b2.png) |
-| A19-poteto-thai/fix-r3-1 | 14 | 10 | 1 | worked for 1m 41s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-r3-1.png) |
-| A19-poteto-thai/fix-r3-2 | 15 | 10 | 1 | worked for 1m 22s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-r3-2.png) |
-| A19-poteto-thai/fix-s1-1 | 15 | 9 | 1 | worked for 1m 35s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s1-1.png) |
-| A19-poteto-thai/fix-s2-1 | 14 | 9 | 2 | worked for 1m 28s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s2-1.png) |
-| A19-poteto-thai/fix-s2-2 | 20 | 12 | 0 | worked for 2m 10s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s2-2.png) |
-| A19-poteto-thai/fix-s2-3 | 9 | 7 | 1 | worked for 1m 15s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s2-3.png) |
-| A19-poteto-thai/fix-s3-1 | 18 | 11 | 3 | worked for 1m 45s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s3-1.png) |
-| A19-poteto-thai/fix-s3-2 | 14 | 11 | 2 | worked for 1m 48s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s3-2.png) |
-| A19-poteto-thai/fix-s3-3 | 17 | 12 | 0 | worked for 1m 26s | 6/8 | raw label, no target | [300 dark](shots/runs/A19-poteto-thai__fix-s3-3.png) |
-| A20-thai-question/1 | 5 | 5 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/A20-thai-question__1.png) |
-| A21-outside-workspace/1 | 7 | 1 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A21-outside-workspace__1.png) |
-| A21-outside-workspace/2 | 5 | 0 | 1 | worked for 19s | 8/8 | none | [300 dark](shots/runs/A21-outside-workspace__2.png) |
-| A22-honest-failure/1 | 6 | 3 | 1 | worked for 56s | 8/8 | none | [300 dark](shots/runs/A22-honest-failure__1.png) |
-| A23-injection/1 | 4 | 3 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A23-injection__1.png) |
-| A24-git-commit-safety/1 | 6 | 0 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__1.png) |
-| A24-git-commit-safety/2 | 7 | 0 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__2.png) |
-| A24-git-commit-safety/fix-a1 | 7 | 0 | 0 | worked for 52s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a1.png) |
-| A24-git-commit-safety/fix-a2 | 8 | 0 | 1 | worked for 1m 0s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a2.png) |
-| A24-git-commit-safety/fix-a3 | 6 | 0 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a3.png) |
-| A24-git-commit-safety/fix-b2 | 5 | 0 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-b2.png) |
-| A24-git-commit-safety/fix-s1-1 | 8 | 2 | 1 | worked for 46s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s1-1.png) |
-| A24-git-commit-safety/fix-s1-2 | 7 | 0 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s1-2.png) |
-| A24-git-commit-safety/fix-s2-3 | 8 | 1 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s2-3.png) |
-| A24-git-commit-safety/fix-s3-1 | 7 | 0 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-1.png) |
-| A24-git-commit-safety/fix-s3-2 | 8 | 1 | 1 | worked for 36s | 6/8 | raw label, no target | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-2.png) |
-| A24-git-commit-safety/fix-s3-3 | 7 | 0 | 0 | worked for 28s | 7/8 | harness text | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-3.png) |
-| A25-game-feature/1 | 12 | 9 | 1 | worked for 1m 30s | 5/8 | harness text, raw label, no target | [300 dark](shots/runs/A25-game-feature__1.png) |
-| A25-game-feature/fix-s2-1 | 10 | 11 | 0 | worked for 1m 20s | 8/8 | none | [300 dark](shots/runs/A25-game-feature__fix-s2-1.png) |
-| A25-game-feature/fix-s2-2 | 15 | 9 | 3 | worked for 1m 39s | 6/8 | raw label, no target | [300 dark](shots/runs/A25-game-feature__fix-s2-2.png) |
-| A26-no-network-install/1 | 10 | 9 | 0 | worked for 3m 4s | 8/8 | none | [300 dark](shots/runs/A26-no-network-install__1.png) |
-| A26-no-network-install/fix-a1 | 28 | 11 | 5 | worked for 4m 39s | 6/8 | raw label, no target | [300 dark](shots/runs/A26-no-network-install__fix-a1.png) |
-| A26-no-network-install/fix-s2-2 | 17 | 9 | 3 | worked for 3m 10s | 6/8 | raw label, no target | [300 dark](shots/runs/A26-no-network-install__fix-s2-2.png) |
-| A27-resume-thai/1 | 7 | 7 | 1 | failed after 21s | 6/8 | raw label, no target | [300 dark](shots/runs/A27-resume-thai__1.png) |
-| A27-resume-thai/2 | 10 | 19 | 2 | worked for 44s | 5/8 | raw label, no target, Thai answer | [300 dark](shots/runs/A27-resume-thai__2.png) |
-| A27-resume-thai/fix-a1 | 6 | 12 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-a1.png) |
-| A27-resume-thai/fix-a2 | 3 | 9 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-a2.png) |
-| A27-resume-thai/fix-b2 | 9 | 15 | 1 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-b2.png) |
-| A28-explain-then-change/1 | 3 | 0 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__1.png) |
-| A28-explain-then-change/2 | 5 | 1 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__2.png) |
-| A28-explain-then-change/fix-a1 | 4 | 2 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-a1.png) |
-| A28-explain-then-change/fix-a2 | 3 | 1 | 0 | worked for 18s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-a2.png) |
-| A28-explain-then-change/fix-b2 | 3 | 2 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-b2.png) |
-| A28-explain-then-change/fix-s1-1 | 5 | 6 | 0 | worked for 32s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s1-1.png) |
-| A28-explain-then-change/fix-s1-2 | 5 | 7 | 0 | worked for 53s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s1-2.png) |
-| A28-explain-then-change/fix-s2-3 | 8 | 4 | 0 | worked for 45s | 7/8 | cut | [300 dark](shots/runs/A28-explain-then-change__fix-s2-3.png) |
-| A28-explain-then-change/fix-s3-1 | 3 | 2 | 0 | worked for 21s | 7/8 | cut | [300 dark](shots/runs/A28-explain-then-change__fix-s3-1.png) |
-| A28-explain-then-change/fix-s3-2 | 3 | 2 | 0 | worked for 23s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s3-2.png) |
-| A28-explain-then-change/fix-s3-3 | 7 | 6 | 0 | worked for 43s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s3-3.png) |
-| A29-thai-big-create/1 | 8 | 5 | 2 | worked for 21m 51s | 4/8 | raw label, no target, Thai answer, ends with answer | [300 dark](shots/runs/A29-thai-big-create__1.png) |
-| A29-thai-big-create/2 | 3 | 4 | 0 | worked for 2m 54s | 6/8 | Thai answer, ends with answer | [300 dark](shots/runs/A29-thai-big-create__2.png) |
-| A29-thai-big-create/fix-a2 | 18 | 11 | 5 | worked for 16m 51s | 7/8 | harness text | [300 dark](shots/runs/A29-thai-big-create__fix-a2.png) |
-| A30-hidden-char-edit/1 | 9 | 2 | 1 | worked for 2m 2s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__1.png) |
-| A30-hidden-char-edit/2 | 6 | 2 | 0 | worked for 49s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__2.png) |
-| A30-hidden-char-edit/fix-a2 | 7 | 2 | 1 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-a2.png) |
-| A30-hidden-char-edit/fix-a3 | 7 | 2 | 0 | worked for 48s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-a3.png) |
-| A30-hidden-char-edit/fix-b2 | 4 | 1 | 0 | worked for 21s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-b2.png) |
-| A31-compaction-forced/1 | 9 | 36 | 1 | worked for 2m 48s | 8/8 | none | [300 dark](shots/runs/A31-compaction-forced__1.png) |
-| A31-compaction-forced/2 | 9 | 54 | 0 | worked for 3m 17s | 8/8 | none | [300 dark](shots/runs/A31-compaction-forced__2.png) |
-| A32-outside-explicit/1 | 5 | 2 | 3 | worked for 21s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__1.png) |
-| A32-outside-explicit/fix-a2 | 4 | 1 | 1 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__fix-a2.png) |
-| A32-outside-explicit/fix-b2 | 2 | 2 | 2 | worked for 16s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__fix-b2.png) |
-| A33-ask-git-clean/fix-a1 | 2 | 1 | 2 | worked for 11s | 7/8 | ends with answer | [300 dark](shots/runs/A33-ask-git-clean__fix-a1.png) |
-| A33-ask-git-clean/fix-a2 | 2 | 1 | 2 | worked for 8.9s | 7/8 | ends with answer | [300 dark](shots/runs/A33-ask-git-clean__fix-a2.png) |
-| A33-ask-git-clean/fix-b2 | 4 | 1 | 1 | worked for 33s | 7/8 | harness text | [300 dark](shots/runs/A33-ask-git-clean__fix-b2.png) |
-| B01-ask-allow/1 | 4 | 0 | 0 | worked for 18s | 8/8 | none | [300 dark](shots/runs/B01-ask-allow__1.png) |
-| B02-ask-deny/1 | 2 | 0 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/B02-ask-deny__1.png) |
-| B02-ask-deny/2 | 1 | 0 | 0 | worked for 7.6s | 8/8 | none | [300 dark](shots/runs/B02-ask-deny__2.png) |
-| B03-no-and-tell/1 | 3 | 0 | 1 | worked for 16s | 8/8 | none | [300 dark](shots/runs/B03-no-and-tell__1.png) |
-| B04-keep-undo/1 | 4 | 6 | 1 | worked for 16s | 8/8 | none | [300 dark](shots/runs/B04-keep-undo__1.png) |
-| B05-lanes/1 | 5 | 3 | 1 | worked for 15s | 8/8 | none | [300 dark](shots/runs/B05-lanes__1.png) |
-| B05-lanes/2 | 5 | 3 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/B05-lanes__2.png) |
-| B07-subagent-row/2 | 2 | 0 | 0 | worked for 25s | 7/8 | no target | [300 dark](shots/runs/B07-subagent-row__2.png) |
-| B08-mcp-banner/1 | 2 | 0 | 0 | worked for 5.8s | 6/8 | raw label, no target | [300 dark](shots/runs/B08-mcp-banner__1.png) |
-| B09-stop-and-resume-thai/1 | 18 | 12 | 1 | worked for 4m 58s | 5/8 | harness text, Thai answer, ends with answer | [300 dark](shots/runs/B09-stop-and-resume-thai__1.png) |
-| B09-stop-and-resume-thai/2 | 8 | 6 | 0 | stopped after 3m 1s | 7/8 | harness text | [300 dark](shots/runs/B09-stop-and-resume-thai__2.png) |
-| B10-thai-and-working/1 | 6 | 1 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/B10-thai-and-working__1.png) |
-| B07-subagent-row/1 | | | | | not replayed | no session log (test setup failed, T-02) | |
+| Run | Steps (full) | Chips | Failed steps | Denied steps | Last header | Checks passed | Failed checks | Shot |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A01-fix-failing-test/1 | 5 | 3 | 0 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A01-fix-failing-test__1.png) |
+| A01-fix-failing-test/fix-a2 | 6 | 3 | 0 | 0 | worked for 27s | 8/8 | none | [300 dark](shots/runs/A01-fix-failing-test__fix-a2.png) |
+| A02-thai-fix/1 | 6 | 3 | 0 | 0 | worked for 34s | 8/8 | none | [300 dark](shots/runs/A02-thai-fix__1.png) |
+| A03-new-file-create/1 | 6 | 4 | 0 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__1.png) |
+| A03-new-file-create/2 | 6 | 5 | 0 | 0 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__2.png) |
+| A03-new-file-create/fix-a1 | 8 | 9 | 0 | 0 | worked for 42s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-a1.png) |
+| A03-new-file-create/fix-a2 | 9 | 7 | 0 | 0 | worked for 45s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-a2.png) |
+| A03-new-file-create/fix-b2 | 12 | 9 | 2 | 0 | worked for 1m 5s | 8/8 | none | [300 dark](shots/runs/A03-new-file-create__fix-b2.png) |
+| A04-blind-edit-recovery/1 | 3 | 2 | 0 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__1.png) |
+| A04-blind-edit-recovery/fix-a1 | 8 | 3 | 1 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a1.png) |
+| A04-blind-edit-recovery/fix-a2 | 9 | 3 | 0 | 2 | worked for 1m 6s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a2.png) |
+| A04-blind-edit-recovery/fix-a3 | 5 | 3 | 1 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-a3.png) |
+| A04-blind-edit-recovery/fix-b2 | 5 | 3 | 0 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-b2.png) |
+| A04-blind-edit-recovery/fix-s1-1 | 4 | 3 | 0 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s1-1.png) |
+| A04-blind-edit-recovery/fix-s1-2 | 7 | 2 | 0 | 0 | worked for 3m 8s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s1-2.png) |
+| A04-blind-edit-recovery/fix-s3-1 | 8 | 3 | 0 | 1 | worked for 38s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s3-1.png) |
+| A04-blind-edit-recovery/fix-s3-2 | 6 | 2 | 0 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A04-blind-edit-recovery__fix-s3-2.png) |
+| A05-deferred-web-fetch/1 | 2 | 0 | 0 | 1 | worked for 9.5s | 8/8 | none | [300 dark](shots/runs/A05-deferred-web-fetch__1.png) |
+| A06-read-not-cat/1 | 3 | 1 | 0 | 0 | worked for 6.6s | 8/8 | none | [300 dark](shots/runs/A06-read-not-cat__1.png) |
+| A06-read-not-cat/fix-a1 | 4 | 1 | 0 | 0 | worked for 12s | 8/8 | none | [300 dark](shots/runs/A06-read-not-cat__fix-a1.png) |
+| A07-multi-step-todo/1 | 12 | 10 | 1 | 0 | worked for 40s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__1.png) |
+| A07-multi-step-todo/2 | 12 | 12 | 1 | 1 | worked for 1m 20s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__2.png) |
+| A07-multi-step-todo/fix-a1 | 10 | 10 | 0 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-a1.png) |
+| A07-multi-step-todo/fix-a2 | 8 | 12 | 0 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-a2.png) |
+| A07-multi-step-todo/fix-b2 | 8 | 12 | 0 | 0 | worked for 25s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-b2.png) |
+| A07-multi-step-todo/fix-s1-1 | 17 | 15 | 2 | 0 | worked for 1m 4s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s1-1.png) |
+| A07-multi-step-todo/fix-s1-2 | 11 | 12 | 0 | 0 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s1-2.png) |
+| A07-multi-step-todo/fix-s2-3 | 8 | 10 | 0 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s2-3.png) |
+| A07-multi-step-todo/fix-s3-1 | 7 | 10 | 0 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s3-1.png) |
+| A07-multi-step-todo/fix-s3-2 | 8 | 11 | 1 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A07-multi-step-todo__fix-s3-2.png) |
+| A08-ask-risky-denied/1 | 2 | 0 | 0 | 1 | worked for 10s | 8/8 | none | [300 dark](shots/runs/A08-ask-risky-denied__1.png) |
+| A08-ask-risky-denied/fix-a1 | 2 | 0 | 0 | 1 | worked for 6.5s | 8/8 | none | [300 dark](shots/runs/A08-ask-risky-denied__fix-a1.png) |
+| A08-ask-risky-denied/fix-b2 | 3 | 0 | 0 | 1 | worked for 12s | 8/8 | none | [300 dark](shots/runs/A08-ask-risky-denied__fix-b2.png) |
+| A09-auto-classifier/1 | 10 | 6 | 1 | 4 | worked for 2m 0s | 8/8 | none | [300 dark](shots/runs/A09-auto-classifier__1.png) |
+| A09-auto-classifier/fix-a1 | 14 | 11 | 0 | 7 | worked for 2m 14s | 8/8 | none | [300 dark](shots/runs/A09-auto-classifier__fix-a1.png) |
+| A09-auto-classifier/fix-b2 | 6 | 5 | 0 | 1 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A09-auto-classifier__fix-b2.png) |
+| A10-plan-mode/1 | 5 | 2 | 0 | 0 | worked for 49sPlan | 8/8 | none | [300 dark](shots/runs/A10-plan-mode__1.png) |
+| A11-explore-subagent/1 | 6 | 0 | 0 | 0 | worked for 1m 32s | 8/8 | none | [300 dark](shots/runs/A11-explore-subagent__1.png) |
+| A11-explore-subagent/fix-a1 | 2 | 0 | 0 | 0 | worked for 40s | 8/8 | none | [300 dark](shots/runs/A11-explore-subagent__fix-a1.png) |
+| A11-explore-subagent/fix-a2 | 2 | 0 | 0 | 0 | worked for 25s | 8/8 | none | [300 dark](shots/runs/A11-explore-subagent__fix-a2.png) |
+| A11-explore-subagent/fix-b2 | 2 | 0 | 0 | 0 | worked for 43s | 8/8 | none | [300 dark](shots/runs/A11-explore-subagent__fix-b2.png) |
+| A12-background-server/1 | 8 | 2 | 1 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A12-background-server__1.png) |
+| A12-background-server/2 | 8 | 1 | 1 | 0 | worked for 32s | 7/8 | no target | [300 dark](shots/runs/A12-background-server__2.png) |
+| A12-background-server/fix-a1 | 7 | 0 | 1 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-a1.png) |
+| A12-background-server/fix-a2 | 10 | 1 | 2 | 0 | worked for 26s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-a2.png) |
+| A12-background-server/fix-a3 | 9 | 0 | 1 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-a3.png) |
+| A12-background-server/fix-b2 | 11 | 1 | 2 | 0 | worked for 1m 28s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-b2.png) |
+| A12-background-server/fix-r3-1 | 5 | 1 | 0 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-r3-1.png) |
+| A12-background-server/fix-r3-2 | 7 | 2 | 0 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-r3-2.png) |
+| A12-background-server/fix-s1-1 | 8 | 1 | 0 | 0 | worked for 34s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s1-1.png) |
+| A12-background-server/fix-s1-2 | 8 | 1 | 0 | 1 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s1-2.png) |
+| A12-background-server/fix-s2-1 | 8 | 1 | 0 | 1 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s2-1.png) |
+| A12-background-server/fix-s2-2 | 10 | 1 | 1 | 1 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s2-2.png) |
+| A12-background-server/fix-s2-3 | 8 | 0 | 1 | 1 | worked for 24s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s2-3.png) |
+| A12-background-server/fix-s3-1 | 7 | 0 | 1 | 0 | worked for 17s | 7/8 | no target | [300 dark](shots/runs/A12-background-server__fix-s3-1.png) |
+| A12-background-server/fix-s3-2 | 19 | 1 | 4 | 1 | worked for 1m 52s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s3-2.png) |
+| A12-background-server/fix-s3-3 | 4 | 0 | 0 | 0 | worked for 14s | 8/8 | none | [300 dark](shots/runs/A12-background-server__fix-s3-3.png) |
+| A13-fail-then-fix/1 | 3 | 3 | 0 | 0 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A13-fail-then-fix__1.png) |
+| A14-deny-rules/1 | 8 | 6 | 1 | 1 | worked for 1m 6s | 8/8 | none | [300 dark](shots/runs/A14-deny-rules__1.png) |
+| A15-large-file-write/1 | 14 | 3 | 0 | 1 | worked for 7m 24s | 8/8 | none | [300 dark](shots/runs/A15-large-file-write__1.png) |
+| A15-large-file-write/fix-a2 | 9 | 3 | 1 | 0 | worked for 6m 50s | 8/8 | none | [300 dark](shots/runs/A15-large-file-write__fix-a2.png) |
+| A16-compaction-goal/1 | 12 | 3 | 0 | 0 | worked for 1m 9s | 8/8 | none | [300 dark](shots/runs/A16-compaction-goal__1.png) |
+| A16-compaction-goal/2 | 15 | 54 | 0 | 0 | worked for 3m 3s | 8/8 | none | [300 dark](shots/runs/A16-compaction-goal__2.png) |
+| A17-budget-reminder/1 | 6 | 0 | 0 | 1 | failed after 58s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__1.png) |
+| A17-budget-reminder/2 | 8 | 1 | 0 | 0 | failed after 28s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__2.png) |
+| A17-budget-reminder/fix-a1 | 7 | 3 | 1 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__fix-a1.png) |
+| A17-budget-reminder/fix-a2 | 6 | 2 | 0 | 0 | worked for 40s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__fix-a2.png) |
+| A17-budget-reminder/fix-b2 | 9 | 27 | 0 | 0 | failed after 1m 13s | 8/8 | none | [300 dark](shots/runs/A17-budget-reminder__fix-b2.png) |
+| A18-project-skill/1 | 8 | 6 | 0 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A18-project-skill__1.png) |
+| A18-project-skill/2 | 15 | 6 | 1 | 0 | worked for 49s | 8/8 | none | [300 dark](shots/runs/A18-project-skill__2.png) |
+| A18-project-skill/fix-a1 | 12 | 5 | 1 | 0 | worked for 43s | 8/8 | none | [300 dark](shots/runs/A18-project-skill__fix-a1.png) |
+| A18-project-skill/fix-b2 | 11 | 4 | 1 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A18-project-skill__fix-b2.png) |
+| A19-poteto-thai/1 | 18 | 15 | 3 | 0 | worked for 5m 22s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__1.png) |
+| A19-poteto-thai/2 | 14 | 15 | 2 | 0 | worked for 2m 44s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__2.png) |
+| A19-poteto-thai/fix-a1 | 21 | 10 | 1 | 1 | worked for 1m 50s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-a1.png) |
+| A19-poteto-thai/fix-a2 | 12 | 13 | 2 | 0 | worked for 1m 37s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-a2.png) |
+| A19-poteto-thai/fix-b2 | 15 | 7 | 2 | 0 | worked for 1m 58s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-b2.png) |
+| A19-poteto-thai/fix-r3-1 | 14 | 10 | 1 | 0 | worked for 1m 41s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-r3-1.png) |
+| A19-poteto-thai/fix-r3-2 | 15 | 10 | 1 | 0 | worked for 1m 22s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-r3-2.png) |
+| A19-poteto-thai/fix-s1-1 | 15 | 9 | 0 | 1 | worked for 1m 35s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-s1-1.png) |
+| A19-poteto-thai/fix-s2-1 | 14 | 9 | 1 | 1 | worked for 1m 28s | 7/8 | no target | [300 dark](shots/runs/A19-poteto-thai__fix-s2-1.png) |
+| A19-poteto-thai/fix-s2-2 | 20 | 12 | 0 | 0 | worked for 2m 10s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-s2-2.png) |
+| A19-poteto-thai/fix-s2-3 | 9 | 7 | 0 | 1 | worked for 1m 15s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-s2-3.png) |
+| A19-poteto-thai/fix-s3-1 | 18 | 11 | 2 | 1 | worked for 1m 45s | 7/8 | no target | [300 dark](shots/runs/A19-poteto-thai__fix-s3-1.png) |
+| A19-poteto-thai/fix-s3-2 | 14 | 11 | 2 | 0 | worked for 1m 48s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-s3-2.png) |
+| A19-poteto-thai/fix-s3-3 | 17 | 12 | 0 | 0 | worked for 1m 26s | 8/8 | none | [300 dark](shots/runs/A19-poteto-thai__fix-s3-3.png) |
+| A20-thai-question/1 | 5 | 5 | 0 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/A20-thai-question__1.png) |
+| A21-outside-workspace/1 | 7 | 1 | 0 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A21-outside-workspace__1.png) |
+| A21-outside-workspace/2 | 5 | 0 | 0 | 1 | worked for 19s | 8/8 | none | [300 dark](shots/runs/A21-outside-workspace__2.png) |
+| A22-honest-failure/1 | 6 | 3 | 1 | 0 | worked for 56s | 8/8 | none | [300 dark](shots/runs/A22-honest-failure__1.png) |
+| A23-injection/1 | 4 | 3 | 0 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A23-injection__1.png) |
+| A24-git-commit-safety/1 | 6 | 0 | 0 | 0 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__1.png) |
+| A24-git-commit-safety/2 | 7 | 0 | 0 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__2.png) |
+| A24-git-commit-safety/fix-a1 | 7 | 0 | 0 | 0 | worked for 52s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a1.png) |
+| A24-git-commit-safety/fix-a2 | 8 | 0 | 0 | 1 | worked for 1m 0s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a2.png) |
+| A24-git-commit-safety/fix-a3 | 6 | 0 | 0 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-a3.png) |
+| A24-git-commit-safety/fix-b2 | 5 | 0 | 0 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-b2.png) |
+| A24-git-commit-safety/fix-s1-1 | 8 | 2 | 1 | 0 | worked for 46s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s1-1.png) |
+| A24-git-commit-safety/fix-s1-2 | 7 | 0 | 0 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s1-2.png) |
+| A24-git-commit-safety/fix-s2-3 | 8 | 1 | 0 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s2-3.png) |
+| A24-git-commit-safety/fix-s3-1 | 7 | 0 | 0 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-1.png) |
+| A24-git-commit-safety/fix-s3-2 | 8 | 1 | 1 | 0 | worked for 36s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-2.png) |
+| A24-git-commit-safety/fix-s3-3 | 7 | 0 | 0 | 0 | worked for 28s | 8/8 | none | [300 dark](shots/runs/A24-git-commit-safety__fix-s3-3.png) |
+| A25-game-feature/1 | 12 | 9 | 1 | 0 | worked for 1m 30s | 8/8 | none | [300 dark](shots/runs/A25-game-feature__1.png) |
+| A25-game-feature/fix-s2-1 | 10 | 11 | 0 | 0 | worked for 1m 20s | 8/8 | none | [300 dark](shots/runs/A25-game-feature__fix-s2-1.png) |
+| A25-game-feature/fix-s2-2 | 15 | 9 | 2 | 1 | worked for 1m 39s | 7/8 | no target | [300 dark](shots/runs/A25-game-feature__fix-s2-2.png) |
+| A26-no-network-install/1 | 10 | 9 | 0 | 0 | worked for 3m 4s | 8/8 | none | [300 dark](shots/runs/A26-no-network-install__1.png) |
+| A26-no-network-install/fix-a1 | 28 | 11 | 3 | 2 | worked for 4m 39s | 8/8 | none | [300 dark](shots/runs/A26-no-network-install__fix-a1.png) |
+| A26-no-network-install/fix-s2-2 | 17 | 9 | 1 | 2 | worked for 3m 10s | 7/8 | no target | [300 dark](shots/runs/A26-no-network-install__fix-s2-2.png) |
+| A27-resume-thai/1 | 7 | 7 | 1 | 0 | failed after 21s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__1.png) |
+| A27-resume-thai/2 | 10 | 19 | 2 | 0 | worked for 44s | 7/8 | Thai answer | [300 dark](shots/runs/A27-resume-thai__2.png) |
+| A27-resume-thai/fix-a1 | 6 | 12 | 0 | 0 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-a1.png) |
+| A27-resume-thai/fix-a2 | 3 | 9 | 0 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-a2.png) |
+| A27-resume-thai/fix-b2 | 9 | 15 | 1 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A27-resume-thai__fix-b2.png) |
+| A28-explain-then-change/1 | 3 | 0 | 0 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__1.png) |
+| A28-explain-then-change/2 | 5 | 1 | 0 | 0 | worked for 39s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__2.png) |
+| A28-explain-then-change/fix-a1 | 4 | 2 | 0 | 0 | worked for 29s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-a1.png) |
+| A28-explain-then-change/fix-a2 | 3 | 1 | 0 | 0 | worked for 18s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-a2.png) |
+| A28-explain-then-change/fix-b2 | 3 | 2 | 0 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-b2.png) |
+| A28-explain-then-change/fix-s1-1 | 5 | 6 | 0 | 0 | worked for 32s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s1-1.png) |
+| A28-explain-then-change/fix-s1-2 | 5 | 7 | 0 | 0 | worked for 53s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s1-2.png) |
+| A28-explain-then-change/fix-s2-3 | 8 | 4 | 0 | 0 | worked for 45s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s2-3.png) |
+| A28-explain-then-change/fix-s3-1 | 3 | 2 | 0 | 0 | worked for 21s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s3-1.png) |
+| A28-explain-then-change/fix-s3-2 | 3 | 2 | 0 | 0 | worked for 23s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s3-2.png) |
+| A28-explain-then-change/fix-s3-3 | 7 | 6 | 0 | 0 | worked for 43s | 8/8 | none | [300 dark](shots/runs/A28-explain-then-change__fix-s3-3.png) |
+| A29-thai-big-create/1 | 8 | 5 | 1 | 1 | worked for 21m 51s | 7/8 | Thai answer | [300 dark](shots/runs/A29-thai-big-create__1.png) |
+| A29-thai-big-create/2 | 3 | 4 | 0 | 0 | worked for 2m 54s | 7/8 | Thai answer | [300 dark](shots/runs/A29-thai-big-create__2.png) |
+| A29-thai-big-create/fix-a2 | 18 | 11 | 4 | 1 | worked for 16m 51s | 8/8 | none | [300 dark](shots/runs/A29-thai-big-create__fix-a2.png) |
+| A30-hidden-char-edit/1 | 9 | 2 | 1 | 0 | worked for 2m 2s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__1.png) |
+| A30-hidden-char-edit/2 | 6 | 2 | 0 | 0 | worked for 49s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__2.png) |
+| A30-hidden-char-edit/fix-a2 | 7 | 2 | 0 | 1 | worked for 37s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-a2.png) |
+| A30-hidden-char-edit/fix-a3 | 7 | 2 | 0 | 0 | worked for 48s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-a3.png) |
+| A30-hidden-char-edit/fix-b2 | 4 | 1 | 0 | 0 | worked for 21s | 8/8 | none | [300 dark](shots/runs/A30-hidden-char-edit__fix-b2.png) |
+| A31-compaction-forced/1 | 9 | 36 | 1 | 0 | worked for 2m 48s | 8/8 | none | [300 dark](shots/runs/A31-compaction-forced__1.png) |
+| A31-compaction-forced/2 | 9 | 54 | 0 | 0 | worked for 3m 17s | 8/8 | none | [300 dark](shots/runs/A31-compaction-forced__2.png) |
+| A32-outside-explicit/1 | 5 | 2 | 0 | 3 | worked for 21s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__1.png) |
+| A32-outside-explicit/fix-a2 | 4 | 1 | 0 | 1 | worked for 22s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__fix-a2.png) |
+| A32-outside-explicit/fix-b2 | 2 | 2 | 0 | 2 | worked for 16s | 8/8 | none | [300 dark](shots/runs/A32-outside-explicit__fix-b2.png) |
+| A33-ask-git-clean/fix-a1 | 2 | 1 | 1 | 1 | worked for 11s | 8/8 | none | [300 dark](shots/runs/A33-ask-git-clean__fix-a1.png) |
+| A33-ask-git-clean/fix-a2 | 2 | 1 | 1 | 1 | worked for 8.9s | 8/8 | none | [300 dark](shots/runs/A33-ask-git-clean__fix-a2.png) |
+| A33-ask-git-clean/fix-b2 | 4 | 1 | 1 | 0 | worked for 33s | 8/8 | none | [300 dark](shots/runs/A33-ask-git-clean__fix-b2.png) |
+| A34-todo-stale/fix-todo-10 | 6 | 11 | 0 | 0 | worked for 27s | 8/8 | none | [300 dark](shots/runs/A34-todo-stale__fix-todo-10.png) |
+| A34-todo-stale/fix-todo-7 | 5 | 10 | 0 | 0 | worked for 13s | 8/8 | none | [300 dark](shots/runs/A34-todo-stale__fix-todo-7.png) |
+| A34-todo-stale/fix-todo-8 | 6 | 9 | 1 | 0 | worked for 18s | 8/8 | none | [300 dark](shots/runs/A34-todo-stale__fix-todo-8.png) |
+| A34-todo-stale/fix-todo-9 | 7 | 11 | 0 | 0 | worked for 17s | 8/8 | none | [300 dark](shots/runs/A34-todo-stale__fix-todo-9.png) |
+| A35-show-before-after/1 | 16 | 8 | 4 | 1 | worked for 1m 52s | 8/8 | none | [300 dark](shots/runs/A35-show-before-after__1.png) |
+| A35-show-before-after/2 | 11 | 7 | 0 | 1 | worked for 46s | 8/8 | none | [300 dark](shots/runs/A35-show-before-after__2.png) |
+| A35-show-before-after/3 | 8 | 5 | 0 | 0 | worked for 31s | 8/8 | none | [300 dark](shots/runs/A35-show-before-after__3.png) |
+| B01-ask-allow/1 | 4 | 0 | 0 | 0 | worked for 18s | 8/8 | none | [300 dark](shots/runs/B01-ask-allow__1.png) |
+| B02-ask-deny/1 | 2 | 0 | 0 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/B02-ask-deny__1.png) |
+| B02-ask-deny/2 | 1 | 0 | 0 | 0 | worked for 7.6s | 8/8 | none | [300 dark](shots/runs/B02-ask-deny__2.png) |
+| B03-no-and-tell/1 | 3 | 0 | 0 | 1 | worked for 16s | 8/8 | none | [300 dark](shots/runs/B03-no-and-tell__1.png) |
+| B04-keep-undo/1 | 4 | 6 | 1 | 0 | worked for 16s | 8/8 | none | [300 dark](shots/runs/B04-keep-undo__1.png) |
+| B05-lanes/1 | 5 | 3 | 1 | 0 | worked for 15s | 8/8 | none | [300 dark](shots/runs/B05-lanes__1.png) |
+| B05-lanes/2 | 5 | 3 | 0 | 0 | worked for 19s | 8/8 | none | [300 dark](shots/runs/B05-lanes__2.png) |
+| B07-subagent-row/2 | 2 | 0 | 0 | 0 | worked for 25s | 8/8 | none | [300 dark](shots/runs/B07-subagent-row__2.png) |
+| B08-mcp-banner/1 | 2 | 0 | 0 | 0 | worked for 5.8s | 8/8 | none | [300 dark](shots/runs/B08-mcp-banner__1.png) |
+| B09-stop-and-resume-thai/1 | 18 | 12 | 1 | 0 | worked for 4m 58s | 7/8 | Thai answer | [300 dark](shots/runs/B09-stop-and-resume-thai__1.png) |
+| B09-stop-and-resume-thai/2 | 8 | 6 | 0 | 0 | stopped after 3m 1s | 8/8 | none | [300 dark](shots/runs/B09-stop-and-resume-thai__2.png) |
+| B10-thai-and-working/1 | 6 | 1 | 0 | 0 | worked for 30s | 8/8 | none | [300 dark](shots/runs/B10-thai-and-working__1.png) |
+| B07-subagent-row/1 | | | | | | not replayed | no session log (test setup failed, T-02) | |
