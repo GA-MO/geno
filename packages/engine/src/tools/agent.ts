@@ -17,6 +17,7 @@ import {
   commandStatusLine,
   cwdResetLine,
   DEFAULT_BASH_TIMEOUT_SECONDS,
+  fileToolsOf,
   formatDiagnostics,
   hashText,
   hookMayAnswer,
@@ -57,6 +58,7 @@ import {
   type CommandScope,
   type Denial,
   type EditorDiagnostic,
+  type FileToolNoter,
   type LaneBounds,
   type PathTool,
   type SessionMode,
@@ -308,6 +310,8 @@ export type AgentToolEnv = {
   /** Stands in for the check command when the workspace has none and an editor is attached. */
   readonly diagnostics: Diagnostics | undefined;
   readonly rules: RuleAttacher;
+  /** Hands out the note that names a dedicated tool for a command that only read files; undefined gives none. */
+  readonly fileNotes?: FileToolNoter | undefined;
   /** The slash commands as discovered now, for the skill tool. */
   readonly commands: () => Promise<readonly SlashCommand[]>;
   /** What the skill tool adds after a skill's body, such as the tool mapping for a pstack skill. */
@@ -691,7 +695,8 @@ export function agentExecutors(tools: AgentToolEnv): Readonly<Record<AgentToolNa
       const truncated = result.truncated ? '[earlier output dropped]\n' : '';
       const output = `${neutralizeNoticeLines(result.output)}${result.output === '' || result.output.endsWith('\n') ? '' : '\n'}`;
       const reset = changesDirectory(command) ? `${cwdResetLine(ctx.workspace)}\n` : '';
-      const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${reset}${commandStatusLine(result.code, killedAfter)}`;
+      const notes = failure === undefined ? (tools.fileNotes?.take(fileToolsOf(command)) ?? []) : [];
+      const text = `${failure === undefined ? '' : `${failure}\n`}${truncated}${output}${reset}${commandStatusLine(result.code, killedAfter)}${notes.map((note) => `\n${note}`).join('')}`;
       return { text, approval, ...(failure === undefined ? {} : { status: 'error' }) };
     },
   });

@@ -31,6 +31,7 @@ export * from './patch.js';
 export * from './edit.js';
 export * from './model-applier.js';
 export * from './approval.js';
+export * from './shell-intent.js';
 export * from './permission-rules.js';
 export * from './classifier.js';
 export * from './auto.js';
