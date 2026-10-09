@@ -10,7 +10,7 @@ import type { ToolBlock, Turn, TurnStatus } from './messages.js';
  * modules.
  */
 
-/** What the user asked for. An undefined variety leaves it to the workspace's `.gcode.json`, else seeds. */
+/** What the user asked for. An undefined variety leaves it to `arena` in Geno's settings files (docs/config.md), else seeds. */
 export type ArenaAsk = { readonly task: string; readonly n: ArenaSize; readonly variety: Variety | undefined };
 
 /** The card before anything starts. Nothing spends until Start, which moves it to `starting`. */
