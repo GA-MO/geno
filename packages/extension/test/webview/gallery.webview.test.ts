@@ -10,6 +10,18 @@ const DIAGRAM_REFUSAL = /(Refused to apply|Applying) inline style .*violates the
 
 afterAll(closeBrowser);
 
+/** VS Code lets a side bar shrink well below 300px; a wait's Stop once fell off the panel at 240. Overflow does not change with the theme. */
+const NARROW = 240;
+
+describe(`every gallery state at ${NARROW}px`, () => {
+  it.each(FIXTURES.map((fixture) => [fixture.id, fixture] as const))('%s has nothing past the panel edge', async (_id, fixture) => {
+    const panel = await playFixture(fixture, 'dark', NARROW);
+    await panel.screenshot(`gallery-${fixture.id}-${NARROW}`);
+    expect(await panel.page.evaluate(overflowing as () => string[]), `nothing runs past the ${NARROW}px panel`).toEqual([]);
+    await panel.close();
+  });
+});
+
 describe.each(THEME_SLUGS)('every gallery state in %s', (theme) => {
   it.each(FIXTURES.map((fixture) => [fixture.id, fixture] as const))('%s draws at 300px with no error and nothing past the panel edge', async (_id, fixture) => {
     const panel = await playFixture(fixture, theme);
