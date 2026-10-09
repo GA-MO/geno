@@ -105,6 +105,12 @@ const mounted = new Map<HTMLIFrameElement, Mounted>();
 
 const lookFor = (fixture: Fixture | undefined): Look => ({ style: controls.style, detail: controls.detail, review: controls.review, ...fixture?.look, tokens: controls.tokens });
 
+/** A redrawn field gets the focus back with the caret at the end, or each keystroke would land before the last one. */
+const refocus = (field: HTMLInputElement, at: number): void => {
+  field.focus();
+  field.setSelectionRange(at, at);
+};
+
 const frameQuery = (look: Look) => new URLSearchParams({ theme: controls.theme, style: look.style, detail: look.detail, review: look.review, ...(controls.reduced ? { motion: 'reduce' } : {}) }).toString();
 
 /** Delivers `message` into the frame as VS Code does, cloned into the frame's own realm. */
@@ -293,9 +299,13 @@ function setWidth(width: number): void {
   if (designFrame !== undefined) designFrame.style.width = `${Math.max(width, 600)}px`;
 }
 
+/** Made once, so typing never loses the caret or the focus to a redraw; only the list below it is redrawn. */
+const search = h('input', { type: 'search', placeholder: 'Find a state', value: controls.query, 'aria-label': 'Find a state', oninput: (event: Event) => set({ query: (event.target as HTMLInputElement).value }, { remount: false }) });
+const stateList = h('div', { class: 'state-list' });
+sidebar.replaceChildren(h('div', { class: 'brand' }, h('strong', {}, 'Geno'), ' UI gallery'), search, stateList);
+
 function renderSidebar(): void {
   const query = controls.query.toLowerCase();
-  const search = h('input', { type: 'search', placeholder: 'Find a state', value: controls.query, 'aria-label': 'Find a state', oninput: (event: Event) => set({ query: (event.target as HTMLInputElement).value }, { remount: false }) });
   const groups = GROUPS.map((group) => {
     const states = FIXTURES.filter((f) => f.group === group && (query === '' || `${f.title} ${f.id}`.toLowerCase().includes(query)));
     if (states.length === 0) return undefined;
@@ -306,14 +316,10 @@ function renderSidebar(): void {
       h('ul', {}, ...states.map((f) => h('li', {}, h('button', { type: 'button', 'aria-current': String(controls.view === 'states' && controls.mode === 'single' && controls.selected === f.id), onclick: () => set({ view: 'states', mode: 'single', selected: f.id }) }, f.title)))),
     );
   });
-  sidebar.replaceChildren(
-    h('div', { class: 'brand' }, h('strong', {}, 'Geno'), ' UI gallery'),
-    search,
+  stateList.replaceChildren(
     h('button', { type: 'button', class: 'group-name all', 'aria-current': String(controls.view === 'states' && controls.mode === 'grid' && controls.group === undefined), onclick: () => set({ view: 'states', mode: 'grid', group: undefined }) }, 'Every state', h('span', { class: 'count' }, String(FIXTURES.length))),
     ...groups.filter((g) => g !== undefined),
   );
-  // Keeping the field's focus across a rerender lets the search filter as the user types.
-  if (document.activeElement === document.body && controls.query !== '') search.focus();
 }
 
 let lazy: IntersectionObserver | undefined;
@@ -492,7 +498,7 @@ const tokenPanel = (() => {
       ...groups.map((group) => h('section', { class: 'token-group' }, h('h3', {}, group), h('ul', {}, ...shown.filter((n) => groupOf(n) === group).map((n) => row(n, doc))))),
     );
     const field = drawer.querySelector<HTMLInputElement>('.token-filter');
-    if (filter !== '') field?.focus();
+    if (filter !== '' && field !== null) refocus(field, filter.length);
   }
 
   return {
