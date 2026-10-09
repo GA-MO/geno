@@ -119,6 +119,7 @@ import type { McpTokenStore } from './mcp-tokens.js';
 import { setRole, type SettingsPage } from './settings-host.js';
 import { ComposerHost } from './composer-host.js';
 import type { SeenStore } from './seen.js';
+import { LANE_USAGE } from './lanes-model.js';
 import { TaskHost } from './tasks-host.js';
 import { schedulesUpdate } from './schedule-wire.js';
 import { workflowPreviewWire } from './workflow-wire.js';
@@ -915,6 +916,11 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
     rules: async () => void this.view?.webview.postMessage({ type: 'show-rules' } satisfies ToView),
     memory: async () => void this.view?.webview.postMessage({ type: 'show-memory' } satisfies ToView),
     'best-of-n': (args) => this.arena.begin(args),
+    lane: async (task) => {
+      if (task === '') return void vscode.window.showInformationMessage(LANE_USAGE);
+      this.background.handlers['lane-new']({ type: 'lane-new', text: task });
+      this.showPane('show-lanes');
+    },
   };
 
   /** A logged command as its chip shows it; a command no longer listed shows as a prompt template. */

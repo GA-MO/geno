@@ -98,7 +98,7 @@ describe('invocations', () => {
 
 describe('the command table', () => {
   it('holds the built-ins, each marked as a client or an engine action', () => {
-    expect(Object.keys(BUILTIN_COMMANDS)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n', 'schedule', 'workflow']);
+    expect(Object.keys(BUILTIN_COMMANDS)).toEqual(['new', 'history', 'mode', 'model', 'clear', 'compact', 'rules', 'memory', 'init', 'best-of-n', 'lane', 'schedule', 'workflow']);
     expect(Object.fromEntries(Object.entries(BUILTIN_COMMANDS).map(([name, spec]) => [name, spec.runs]))).toEqual({
       new: 'client',
       history: 'client',
@@ -110,6 +110,7 @@ describe('the command table', () => {
       memory: 'client',
       init: 'engine',
       'best-of-n': 'client',
+      lane: 'client',
       schedule: 'engine',
       workflow: 'engine',
     });

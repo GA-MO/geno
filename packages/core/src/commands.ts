@@ -48,6 +48,7 @@ export const BUILTIN_COMMANDS = {
   memory: { description: 'Show what Geno remembers', runs: 'client' },
   init: { description: 'Create or update AGENTS.md for this project', runs: 'engine', turn: initPrompt },
   'best-of-n': { description: 'Run a task in 2 to 4 lanes and pick the best; --vary seeds, effort or models', hint: '<2-4> <task>', runs: 'client' },
+  lane: { description: 'Run a task in a new lane, in the background', hint: '<task>', runs: 'client' },
   schedule: { description: 'Run a prompt later or on a schedule, as a background task', hint: '<when> [--edits] <prompt>', runs: 'engine' },
   workflow: { description: 'Run a workflow from .g-code/workflows in the background, after its cost preview', hint: '<name> [--resume <run>] [input]', runs: 'engine', turn: workflowPrompt },
 } as const satisfies Record<string, BuiltinSpec>;

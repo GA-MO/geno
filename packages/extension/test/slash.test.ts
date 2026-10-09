@@ -69,6 +69,7 @@ describe('routing a sent / command', () => {
     expect(routeText(BUILTIN_OPTIONS, '/rules')).toEqual({ kind: 'editor', action: 'rules', args: '' });
     expect(routeText(BUILTIN_OPTIONS, '/memory')).toEqual({ kind: 'editor', action: 'memory', args: '' });
     expect(routeText(BUILTIN_OPTIONS, '/best-of-n 3 --vary effort Make two loud')).toEqual({ kind: 'editor', action: 'best-of-n', args: '3 --vary effort Make two loud' });
+    expect(routeText(BUILTIN_OPTIONS, '/lane fix the flaky test')).toEqual({ kind: 'editor', action: 'lane', args: 'fix the flaky test' });
     expect(routeText(BUILTIN_OPTIONS, '/init')).toEqual({ kind: 'prompt', command: { name: 'init', args: '', route: 'engine' } });
   });
 
