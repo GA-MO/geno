@@ -39,7 +39,28 @@ const bash = (command: string) => use('bash', { command });
 const toolResult = (body: { messages: { content: { type: string; content?: string }[] }[] }): string =>
   body.messages.at(-1)!.content.find((block) => block.type === 'tool_result')!.content!;
 
+/** A turn that ends with thinking alone, no text and no tool call (ISSUES.md G-03). */
+const thinkingOnly = () => ({ events: answer('', usage).events.filter((e) => e['index'] !== 1) });
+
 describe('gcode agent', () => {
+  it('G-03 nudges once after a turn that ends with thinking alone, then takes the answer', async () => {
+    const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([thinkingOnly(), answer('a is 1.', usage)]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'What is a?'], env, { fetch: transport.fetch });
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('a is 1.');
+    expect(JSON.stringify(transport.requests[1]!.body.messages.at(-1))).toContain('ended with no text and no tool call');
+  });
+
+  it('G-03 ends the run as an error when the turn after the nudge is empty too', async () => {
+    const { workspace, env } = await setup({ 'a.ts': 'export const a = 1;\n' });
+    const transport = fakeTransport([thinkingOnly(), thinkingOnly()]);
+    const result = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'What is a?'], env, { fetch: transport.fetch });
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('ended its turn twice with no text and no tool call');
+    expect(transport.requests).toHaveLength(2);
+  });
+
   it('sends the project context loaded at session start, unchanged after the files change, on every turn', async () => {
     const { workspace, env, store } = await setup({
       'AGENTS.md': 'Run tests with pnpm test.\n',

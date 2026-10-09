@@ -529,7 +529,7 @@ export async function drive(
         io.err('abort: interrupted by the user');
       }
     } else if (step.kind === 'nudge') {
-      await record({ kind: 'report-nudge', seq: nextSeq(events), at: new Date().toISOString() });
+      await record({ kind: 'report-nudge', seq: nextSeq(events), at: new Date().toISOString(), ...(step.empty === true ? { empty: true as const } : {}) });
     } else if (step.kind === 'answer-tools') {
       const at = new Date().toISOString();
       for (const answer of step.answers) {
@@ -578,7 +578,8 @@ async function finish(
   } else if (reason === 'error' && last?.kind !== 'error') {
     // The newest turn's stop ended the run, even when the answer to a call it cut short was logged after it.
     const turn = events.findLast((e) => e.kind === 'assistant');
-    if (turn?.kind === 'assistant') io.err(`error: the model stopped with ${turn.stopReason ?? 'no stop reason'}`);
+    if (turn?.kind === 'assistant' && turn.stopReason === 'end_turn') io.err('error: the model ended its turn twice with no text and no tool call, so this run has no answer');
+    else if (turn?.kind === 'assistant') io.err(`error: the model stopped with ${turn.stopReason ?? 'no stop reason'}`);
   }
   io.out(`usage: ${formatUsage(total.usage, total.costUsd)} turns=${total.turns}`);
   const final = events.at(-1);

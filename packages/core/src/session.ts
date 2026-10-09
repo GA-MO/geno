@@ -30,7 +30,7 @@ import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
 import { arrivalText, GENO_NOTE, userSteerText } from './fence.js';
-import { REPORT_NUDGE, type ReportNudgeEvent } from './handback.js';
+import { nudgeText, type ReportNudgeEvent } from './handback.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
 import { isMcpToolName, MCP_SPILL_NOTE } from './mcp-notice.js';
@@ -450,7 +450,7 @@ export function replayMessages(events: readonly TurnEvent[], stored: StoredAttac
     if (event.kind === 'compact') opening.push({ type: 'text', text: compactedText(event) });
     if (event.kind === 'restored') prompts.push({ type: 'text', text: restoredNotice(event) });
     if (event.kind === 'background-end') prompts.push({ type: 'text', text: backgroundEndNotice(event) });
-    if (event.kind === 'report-nudge') prompts.push({ type: 'text', text: REPORT_NUDGE });
+    if (event.kind === 'report-nudge') prompts.push({ type: 'text', text: nudgeText(event) });
     if (event.kind === 'file-changed') prompts.push({ type: 'text', text: changedOnDiskNote(event.shown, event.excerpt) });
     const noted = event.kind === 'wake' ? wakeNoteText(event.note) : undefined;
     if (noted !== undefined) prompts.push({ type: 'text', text: noted });

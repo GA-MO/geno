@@ -19,7 +19,7 @@ const assistant = (seq: number, stopReason: StopReason | null, toolIds: string[]
   kind: 'assistant',
   seq,
   at,
-  content: toolIds.map((id) => ({ type: 'tool_use', id, name: 'grep', input: {}, caller: { type: 'direct' } })),
+  content: toolIds.length === 0 ? [{ type: 'text', text: 'Done.', citations: null }] : toolIds.map((id) => ({ type: 'tool_use', id, name: 'grep', input: {}, caller: { type: 'direct' } })),
   stopReason,
   usage: { input: 1, cacheRead: 0, cacheWrite: 0, output: 1 },
   costUsd,
@@ -207,6 +207,9 @@ const reportCall = (seq: number, id: string, extra: string[] = []): TurnEvent =>
 };
 const reported = (seq: number, id: string, status: 'ok' | 'error' = 'ok'): TurnEvent => ({ ...result(seq, id), name: 'report', status } as TurnEvent);
 const nudge = (seq: number): TurnEvent => ({ kind: 'report-nudge', seq, at });
+const emptyNudge = (seq: number): TurnEvent => ({ kind: 'report-nudge', seq, at, empty: true });
+/** A turn that ended with thinking alone, as qwen3.8-flash's did in the real-model campaign (ISSUES.md G-03). */
+const thinkingOnly = (seq: number): TurnEvent => ({ ...(assistant(seq, 'end_turn') as Extract<TurnEvent, { kind: 'assistant' }>), content: [{ type: 'thinking', thinking: 'Now I write the file.', signature: '' }] });
 const NUDGE: LoopStep = { kind: 'nudge' };
 
 const handbackCases: [name: string, events: TurnEvent[], expected: unknown, run?: Run][] = [
@@ -221,6 +224,11 @@ const handbackCases: [name: string, events: TurnEvent[], expected: unknown, run?
   ['an earlier run\'s nudge does not count toward this run\'s', [start, user(1), assistant(2, 'end_turn'), nudge(3), assistant(4, 'end_turn'), user(5), assistant(6, 'end_turn')], NUDGE, { ...handback, firstSeq: 5 }],
   ['a refusal is not nudged', [start, user(1), assistant(2, 'refusal')], done('refusal'), handback],
   ['a run without handback is not nudged', [start, user(1), assistant(2, 'end_turn')], done('end_turn')],
+  ['a turn that ends with thinking alone is nudged', [start, user(1), thinkingOnly(2)], { kind: 'nudge', empty: true }],
+  ['the empty-turn nudge calls the model', [start, user(1), thinkingOnly(2), emptyNudge(3)], CALL],
+  ['a second empty turn in a row ends the run as an error', [start, user(1), thinkingOnly(2), emptyNudge(3), thinkingOnly(4)], done('error')],
+  ['an answer after the empty-turn nudge ends the turn', [start, user(1), thinkingOnly(2), emptyNudge(3), assistant(4, 'end_turn')], done('end_turn')],
+  ['an empty turn at the turn cap ends the run at the cap', [start, user(1), thinkingOnly(2)], done('max-turns'), { ...run, maxTurns: 1 }],
   ['a report call outside a handback run does not end it', [start, user(1), reportCall(2, 'r'), reported(3, 'r')], CALL],
 ];
 
