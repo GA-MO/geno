@@ -1,0 +1,153 @@
+{
+  "keyBy": "turn",
+  "refresh": "pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/A02-thai-fix/1",
+  "run": {
+    "source": "docs/results/real-usecases/runs/A02-thai-fix/1",
+    "case": "A02-thai-fix",
+    "layer": "A",
+    "mode": "non-interactive",
+    "prompts": [
+      "เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร"
+    ],
+    "files": {
+      "package.json": "{\n  \"name\": \"tiny-money\",\n  \"version\": \"0.3.1\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+      "README.md": "# tiny-money\n\nSmall helpers for prices and slugs. Run the tests with `npm test` (Node 22, no dependencies).\n",
+      "src/money.ts": "export type Currency = 'USD' | 'THB' | 'EUR';\n\nconst SYMBOLS: Record<Currency, string> = { USD: '$', THB: '฿', EUR: '€' };\n\n/** Formats an amount in cents, such as 1250 -> \"$12.50\". */\nexport function formatPrice(cents: number, currency: Currency = 'USD'): string {\n  const amount = cents / 100;\n  return `${SYMBOLS[currency]}${amount}`;\n}\n\nexport function sum(prices: readonly number[]): number {\n  return prices.reduce((total, price) => total + price, 0);\n}\n",
+      "src/slug.ts": "/** Turns a title into a URL slug: lower case, words joined by single dashes. */\nexport function slugify(title: string): string {\n  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');\n}\n",
+      "src/config.ts": "export const config = {\n\tretries: 3,\n\ttimeout: 1000,\n\tbaseUrl: 'http://localhost:8080',\n};\n",
+      "src/duration.ts": "/** Parses a duration such as \"1h30m\", \"45s\" or \"2d\" into seconds. Throws on anything else. */\nexport function parseDuration(text: string): number {\n  throw new Error('not implemented');\n}\n",
+      "src/index.ts": "export * from './money.ts';\nexport * from './slug.ts';\nexport * from './config.ts';\n",
+      "test/money.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { formatPrice, sum } from '../src/money.ts';\n\ntest('formats cents with two decimals', () => {\n  assert.equal(formatPrice(1250), '$12.50');\n  assert.equal(formatPrice(99900, 'THB'), '฿999.00');\n  assert.equal(formatPrice(5), '$0.05');\n});\n\ntest('sums prices', () => assert.equal(sum([100, 250]), 350));\n",
+      "test/slug.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { slugify } from '../src/slug.ts';\n\ntest('joins words with one dash', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n  assert.equal(slugify('  Hello   World  '), 'hello-world');\n  assert.equal(slugify('Rock & Roll!'), 'rock-roll');\n});\n",
+      "test/duration.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { parseDuration } from '../src/duration.ts';\n\ntest('single units', () => {\n  assert.equal(parseDuration('45s'), 45);\n  assert.equal(parseDuration('2h'), 7200);\n  assert.equal(parseDuration('90m'), 5400);\n  assert.equal(parseDuration('2d'), 172800);\n});\n\ntest('combined units', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n  assert.equal(parseDuration('1d2h3m4s'), 93784);\n  assert.equal(parseDuration('1h 30m'), 5400);\n});\n\ntest('rejects bad input', () => {\n  assert.throws(() => parseDuration(''));\n  assert.throws(() => parseDuration('abc'));\n  assert.throws(() => parseDuration('10'));\n  assert.throws(() => parseDuration('1x'));\n});\n",
+      "legacy/old-money.js": "// Kept for the v0 API. Do not edit: downstream code pins this file by hash.\nexports.price = (c) => \"$\" + c / 100;\n",
+      ".g-code/settings.json": "{\n  \"check\": \"node --test\"\n}\n",
+      ".agents/skills/changelog/SKILL.md": "---\nname: changelog\ndescription: Add an entry to CHANGELOG.md in this project's format. Use whenever the user asks for a changelog or release note.\n---\n\n# Changelog entries\n\n1. Read CHANGELOG.md first.\n2. Add the entry under the `## Unreleased` heading, creating it at the top if it is missing.\n3. Each entry is one line: `- <area>: <what changed, past tense> (<file>)`, where area is one of fix, feat, chore.\n4. End the turn by quoting the exact line you added, prefixed with `Changelog:`.\n",
+      "CHANGELOG.md": "# Changelog\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n",
+      ".gitignore": "node_modules/\n"
+    }
+  },
+  "entries": [
+    {
+      "key": "2735eabe#0",
+      "wire": "anthropic",
+      "asks": "user turn 0: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "call",
+        "text": "ดูโค้ดและเทสของ slugify ก่อนครับ\n\n",
+        "uses": [
+          {
+            "id": "toolu_d150454f0ceb4258ad2b87ec",
+            "name": "grep",
+            "input": {
+              "pattern": "slugify"
+            }
+          },
+          {
+            "id": "toolu_5fa9a9e0d0d54ee095bc1342",
+            "name": "list",
+            "input": {}
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "2735eabe#1",
+      "wire": "anthropic",
+      "asks": "user turn 1: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_05e68ab5b9fa4b67a0dc21d3",
+            "name": "read",
+            "input": {
+              "path": "src/slug.ts"
+            }
+          },
+          {
+            "id": "toolu_819164c1fc7b425e86389cc0",
+            "name": "read",
+            "input": {
+              "path": "test/slug.test.ts"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "2735eabe#2",
+      "wire": "anthropic",
+      "asks": "user turn 2: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "call",
+        "text": "The bug is clear: `.replace(/ /g, '-')` replaces each single space individually, so consecutive spaces become multiple hyphens, and when you remove symbols like `&` or `!`, the spaces get left behind. Let's run the tests first to see what the actual failures look like.\n\n",
+        "uses": [
+          {
+            "id": "toolu_96d2348efe3a4e07b342d01b",
+            "name": "bash",
+            "input": {
+              "command": "node --test test/slug.test.ts 2>&1 | tail -20",
+              "description": "Run the slugify test to confirm failure"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "2735eabe#3",
+      "wire": "anthropic",
+      "asks": "user turn 3: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "call",
+        "text": "ตรงคาด แก้ให้ collapses ช่องว่างหลายตัวเป็นขีดเดียว และจัด trim ใหม่อีกทีครับ\n\n",
+        "uses": [
+          {
+            "id": "toolu_41849ab53b5b4504b175d6e1",
+            "name": "edit",
+            "input": {
+              "path": "src/slug.ts",
+              "old_str": "  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');",
+              "new_str": "  return title\n    .toLowerCase()\n    .replace(/[^a-z0-9 ]+/g, ' ')\n    .trim()\n    .replace(/ +/g, '-');"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "2735eabe#4",
+      "wire": "anthropic",
+      "asks": "user turn 4: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_b3a7bcebcd5542a5ad8a8f45",
+            "name": "bash",
+            "input": {
+              "command": "node --test test/slug.test.ts 2>&1 | tail -8 && git stash -q && node --test test/money.test.ts 2>&1 | grep -E '^# (pass|fail)'; git stash pop -q",
+              "description": "Run slug test; confirm money failure predates my change"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "2735eabe#5",
+      "wire": "anthropic",
+      "asks": "user turn 5: เทสของ slugify พังอยู่ ช่วยแก้โค้ดให้ผ่านหน่อย แล้วสรุปสั้นๆ ว่าแก้อะไร",
+      "answer": {
+        "kind": "say",
+        "text": "แก้เสร็จแล้ว — เทส slugify ผ่าน\n\n**สิ่งที่แก้** (`src/slug.ts:3`): ตัวเดิมใช้ `.replace(/ /g, '-')` ซึ่งแปลงช่องว่างทีละตัว ทำให้ `'  Hello   World  '` ได้ `hello---world` (ช่องซ้ำกลายเป็นขีดซ้ำ) และ `'Rock & Roll!'` ได้ `rock--roll-` (ลบ `&` `!` แล้วช่องว่างที่เหลือไม่ถูกยุบ) โค้ดใหม่:\n\n```ts\nreturn title\n  .toLowerCase()\n  .replace(/[^a-z0-9 ]+/g, ' ')  // ยุบอักขระที่ไม่ใช้ทุกชนิดรวมกัน เป็นช่องเดียว\n  .trim()\n  .replace(/ +/g, '-');          // ยุบช่องว่างติดกันเป็นขีดเดียว\n```\n\n**หมายเหตุ:** `test/money.test.ts` ยังพังอยู่ 1 เคส (`formatMoney` คืน `$12.5` แทน `$12.50`) — ผมเช็คด้วย git stash แล้วว่าพังมาก่อนที่ผมแตะโค้ด ไม่ได้แก้ให้เพราะอยู่นอกขอบเขตที่สั่ง ถ้าต้องการให้แก้ด้วยบอกได้ครับ",
+        "stop": "end_turn"
+      }
+    }
+  ]
+}

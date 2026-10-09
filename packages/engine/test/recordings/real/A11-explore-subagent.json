@@ -1,0 +1,295 @@
+{
+  "keyBy": "turn",
+  "refresh": "pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/A11-explore-subagent/1",
+  "run": {
+    "source": "docs/results/real-usecases/runs/A11-explore-subagent/1",
+    "case": "A11-explore-subagent",
+    "layer": "A",
+    "mode": "non-interactive",
+    "prompts": [
+      "Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line. Do not change anything."
+    ],
+    "files": {
+      "package.json": "{\n  \"name\": \"shop-monorepo\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"workspaces\": [\n    \"packages/*\"\n  ],\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+      "README.md": "# shop-monorepo\n\nPackages: `core` (domain), `api` (routes), `web` (views). Shared compiler settings live in the sibling repo `../shared-config`.\n",
+      "tsconfig.json": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"strict\": true\n  }\n}\n",
+      "CHANGELOG.md": "# Changelog\n\n## Unreleased\n",
+      "packages/core/src/user.js": "const USERS = new Map([[1, { id: 1, name: 'Ada' }], [2, { id: 2, name: 'Grace' }]]);\n\nexport function getUser(id) {\n  return USERS.get(id) ?? null;\n}\n\nexport function listUsers() {\n  return [...USERS.values()];\n}\n",
+      "packages/core/test/user.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { getUser } from '../src/user.js';\ntest('finds a user', () => assert.equal(getUser(1).name, 'Ada'));\ntest('misses a user', () => assert.equal(getUser(9), null));\n",
+      "packages/api/src/routes.js": "import { getUser } from '../../core/src/user.js';\n\nexport function userRoute(params) {\n  const user = getUser(Number(params.id));\n  return user ? { status: 200, body: user } : { status: 404, body: { error: 'not found' } };\n}\n",
+      "packages/api/test/routes.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { userRoute } from '../src/routes.js';\ntest('404s a missing user', () => assert.equal(userRoute({ id: '7' }).status, 404));\n",
+      "packages/web/src/profile.js": "import { getUser } from '../../core/src/user.js';\n\nexport const profileTitle = (id) => `Profile of ${getUser(id)?.name ?? 'nobody'}`;\n",
+      "packages/web/test/profile.test.js": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { profileTitle } from '../src/profile.js';\ntest('titles a profile', () => assert.equal(profileTitle(2), 'Profile of Grace'));\n",
+      ".g-code/settings.json": "{\n  \"agentTool\": [\n    \"non-interactive\"\n  ]\n}\n",
+      ".gitignore": "node_modules/\n"
+    }
+  },
+  "entries": [
+    {
+      "key": "67148562#0",
+      "wire": "anthropic",
+      "asks": "user turn 0: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "call",
+        "text": "I'll dispatch an explore subagent to find every `getUser` call site across the packages.\n\n",
+        "uses": [
+          {
+            "id": "toolu_39e3c965c11e4f0fb74d3ca4",
+            "name": "agent",
+            "input": {
+              "agent": "explore",
+              "task": "In this repository (a multi-package codebase, workspace root: .), find every place the function named `getUser` is CALLED (invoked) across all packages. For each hit, report file:line plus the surrounding call expression (one line of context), and note whether the call is a direct invocation (e.g. getUser(...), obj.getUser(...)) or something else like passing it as a reference. Also list separately where `getUser` is DEFINED/exported, so call sites can be distinguished from declarations. Search thoroughly across all package directories, including any naming variants that show up (e.g. get_user, GetUser) only if they are clearly the same function — but focus on exact `getUser`. Do not modify any files; this is a read-only survey. Return the complete list of call sites as file:line citations."
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "67148562#1",
+      "wire": "anthropic",
+      "asks": "user turn 1: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_a35070a689914ede8b64e0a4",
+            "name": "list",
+            "input": {
+              "directory": "."
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "67148562#2",
+      "wire": "anthropic",
+      "asks": "user turn 2: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "call",
+        "text": "The subagent came back capped with no report. I'll retry it with a tighter task, and check the package layout myself to verify its findings.\n\n",
+        "uses": [
+          {
+            "id": "toolu_90e52dad9d4e440cbc5042ce",
+            "name": "agent",
+            "input": {
+              "agent": "explore",
+              "task": "Search the repository at the workspace root for the identifier `getUser` in all source files (grep for \"getUser\"). Report, as plain file:line citations: (1) every line where getUser is called/used, (2) every line where it is defined or exported. Keep your final report short: just the lists, one line per hit. Do not modify files."
+            }
+          },
+          {
+            "id": "toolu_ec084d5ec69144c698a77ca5",
+            "name": "glob",
+            "input": {
+              "pattern": "**/*.{js,ts,mjs,cjs}"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "67148562#3",
+      "wire": "anthropic",
+      "asks": "user turn 3: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "call",
+        "text": "The subagent finished this time. I'll verify its list against the actual files before reporting.\n\n",
+        "uses": [
+          {
+            "id": "toolu_cb6cbd826ea446338a673663",
+            "name": "grep",
+            "input": {
+              "pattern": "getUser",
+              "path": "packages"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "67148562#4",
+      "wire": "anthropic",
+      "asks": "user turn 4: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "call",
+        "text": "My grep confirms the subagent's list exactly. One last check for hits outside `packages/` (e.g. docs):\n\n",
+        "uses": [
+          {
+            "id": "toolu_fdc6f5628f2a47f88df6230b",
+            "name": "grep",
+            "input": {
+              "pattern": "getUser"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "67148562#5",
+      "wire": "anthropic",
+      "asks": "user turn 5: Use an explore subagent to find every place getUser is called across the packages, then give me the list with file:line.",
+      "answer": {
+        "kind": "say",
+        "text": "Done — found via an explore subagent (its first run hit a turn cap with no output; the retry returned a full report), and I verified every line against my own grep. Nothing was changed.\n\n**Definition**\n- `packages/core/src/user.js:3` — `export function getUser(id) {`\n\n**Call sites**\n- `packages/api/src/routes.js:4` — `const user = getUser(Number(params.id));`\n- `packages/core/test/user.test.js:4` — `assert.equal(getUser(1).name, 'Ada')`\n- `packages/core/test/user.test.js:5` — `assert.equal(getUser(9), null)`\n- `packages/web/src/profile.js:3` — ``getUser(id)?.name ?? 'nobody'`` inside `profileTitle`\n\n**Import sites** (references, not calls)\n- `packages/api/src/routes.js:1`\n- `packages/core/test/user.test.js:3`\n- `packages/web/src/profile.js:1`\n\nAll three packages import `getUser` directly from `packages/core/src/user.js` by relative path; there are no other occurrences of the name anywhere in the repo.",
+        "stop": "end_turn"
+      }
+    },
+    {
+      "key": "34685948#0",
+      "wire": "anthropic",
+      "asks": "subagent turn 0: In this repository (a multi-package codebase, workspace root: .), find every place the function named `getUser` is CALLE",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_a13a17dd4dc34a0ab635fa53",
+            "name": "grep",
+            "input": {
+              "pattern": "getUser",
+              "ignore_case": false
+            }
+          },
+          {
+            "id": "toolu_661db5d18572434b8b2a0e7d",
+            "name": "grep",
+            "input": {
+              "pattern": "get_user|GetUser|getuser|GETUSER"
+            }
+          },
+          {
+            "id": "toolu_46483073c426434ca277ffc5",
+            "name": "list",
+            "input": {
+              "depth": 2
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "34685948#1",
+      "wire": "anthropic",
+      "asks": "subagent turn 1: In this repository (a multi-package codebase, workspace root: .), find every place the function named `getUser` is CALLE",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_40ce0afca74645868fa739e6",
+            "name": "read",
+            "input": {
+              "path": "packages/api/src/routes.js"
+            }
+          },
+          {
+            "id": "toolu_7e01349b91e04859aa3f3663",
+            "name": "read",
+            "input": {
+              "path": "packages/web/src/profile.js"
+            }
+          },
+          {
+            "id": "toolu_9e839775201f436c89f9aa44",
+            "name": "read",
+            "input": {
+              "path": "packages/core/src/user.js"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "34685948#2",
+      "wire": "anthropic",
+      "asks": "subagent turn 2: In this repository (a multi-package codebase, workspace root: .), find every place the function named `getUser` is CALLE",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_73a9f48657f74d95b0019c91",
+            "name": "list",
+            "input": {
+              "directory": "packages",
+              "depth": 3
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "34685948#3",
+      "wire": "anthropic",
+      "asks": "subagent turn 3: In this repository (a multi-package codebase, workspace root: .), find every place the function named `getUser` is CALLE",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_fb4456d4eb7f4f3dad14e99c",
+            "name": "read",
+            "input": {
+              "path": "packages/api/test/routes.test.js"
+            }
+          },
+          {
+            "id": "toolu_11c97885bb6144c286889487",
+            "name": "read",
+            "input": {
+              "path": "packages/web/test/profile.test.js"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "81935f38#0",
+      "wire": "anthropic",
+      "asks": "subagent turn 0: Search the repository at the workspace root for the identifier `getUser` in all source files (grep for \"getUser\"). Repor",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_ee5b28c3b9bc442fbdfc283b",
+            "name": "grep",
+            "input": {
+              "pattern": "getUser"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "81935f38#1",
+      "wire": "anthropic",
+      "asks": "subagent turn 1: Search the repository at the workspace root for the identifier `getUser` in all source files (grep for \"getUser\"). Repor",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_309b56deebfc4309883400a3",
+            "name": "report",
+            "input": {
+              "message": "(1) Called/used (including imports):\n- packages/api/src/routes.js:1 — import { getUser } from '../../core/src/user.js'\n- packages/api/src/routes.js:4 — const user = getUser(Number(params.id));\n- packages/core/test/user.test.js:3 — import { getUser } from '../src/user.js'\n- packages/core/test/user.test.js:4 — assert.equal(getUser(1).name, 'Ada')\n- packages/core/test/user.test.js:5 — assert.equal(getUser(9), null)\n- packages/web/src/profile.js:1 — import { getUser } from '../../core/src/user.js'\n- packages/web/src/profile.js:3 — getUser(id)?.name in profileTitle\n\n(2) Defined/exported:\n- packages/core/src/user.js:3 — export function getUser(id) { (single definition; also the source the imports resolve to)\n\nNo other occurrences of \"getUser\" exist in the repo."
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    }
+  ]
+}

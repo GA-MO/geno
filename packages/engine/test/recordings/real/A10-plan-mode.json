@@ -1,0 +1,181 @@
+{
+  "keyBy": "turn",
+  "refresh": "pnpm tsx scripts/run-to-recording.ts docs/results/real-usecases/runs/A10-plan-mode/1",
+  "run": {
+    "source": "docs/results/real-usecases/runs/A10-plan-mode/1",
+    "case": "A10-plan-mode",
+    "layer": "A",
+    "mode": "plan",
+    "prompts": [
+      "Make formatPrice support negative amounts like -$12.50 and add a test for it."
+    ],
+    "files": {
+      "package.json": "{\n  \"name\": \"tiny-money\",\n  \"version\": \"0.3.1\",\n  \"type\": \"module\",\n  \"private\": true,\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+      "README.md": "# tiny-money\n\nSmall helpers for prices and slugs. Run the tests with `npm test` (Node 22, no dependencies).\n",
+      "src/money.ts": "export type Currency = 'USD' | 'THB' | 'EUR';\n\nconst SYMBOLS: Record<Currency, string> = { USD: '$', THB: '฿', EUR: '€' };\n\n/** Formats an amount in cents, such as 1250 -> \"$12.50\". */\nexport function formatPrice(cents: number, currency: Currency = 'USD'): string {\n  const amount = cents / 100;\n  return `${SYMBOLS[currency]}${amount}`;\n}\n\nexport function sum(prices: readonly number[]): number {\n  return prices.reduce((total, price) => total + price, 0);\n}\n",
+      "src/slug.ts": "/** Turns a title into a URL slug: lower case, words joined by single dashes. */\nexport function slugify(title: string): string {\n  return title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/ /g, '-');\n}\n",
+      "src/config.ts": "export const config = {\n\tretries: 3,\n\ttimeout: 1000,\n\tbaseUrl: 'http://localhost:8080',\n};\n",
+      "src/duration.ts": "/** Parses a duration such as \"1h30m\", \"45s\" or \"2d\" into seconds. Throws on anything else. */\nexport function parseDuration(text: string): number {\n  throw new Error('not implemented');\n}\n",
+      "src/index.ts": "export * from './money.ts';\nexport * from './slug.ts';\nexport * from './config.ts';\n",
+      "test/money.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { formatPrice, sum } from '../src/money.ts';\n\ntest('formats cents with two decimals', () => {\n  assert.equal(formatPrice(1250), '$12.50');\n  assert.equal(formatPrice(99900, 'THB'), '฿999.00');\n  assert.equal(formatPrice(5), '$0.05');\n});\n\ntest('sums prices', () => assert.equal(sum([100, 250]), 350));\n",
+      "test/slug.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { slugify } from '../src/slug.ts';\n\ntest('joins words with one dash', () => {\n  assert.equal(slugify('Hello World'), 'hello-world');\n  assert.equal(slugify('  Hello   World  '), 'hello-world');\n  assert.equal(slugify('Rock & Roll!'), 'rock-roll');\n});\n",
+      "test/duration.test.ts": "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { parseDuration } from '../src/duration.ts';\n\ntest('single units', () => {\n  assert.equal(parseDuration('45s'), 45);\n  assert.equal(parseDuration('2h'), 7200);\n  assert.equal(parseDuration('90m'), 5400);\n  assert.equal(parseDuration('2d'), 172800);\n});\n\ntest('combined units', () => {\n  assert.equal(parseDuration('1h30m'), 5400);\n  assert.equal(parseDuration('1d2h3m4s'), 93784);\n  assert.equal(parseDuration('1h 30m'), 5400);\n});\n\ntest('rejects bad input', () => {\n  assert.throws(() => parseDuration(''));\n  assert.throws(() => parseDuration('abc'));\n  assert.throws(() => parseDuration('10'));\n  assert.throws(() => parseDuration('1x'));\n});\n",
+      "legacy/old-money.js": "// Kept for the v0 API. Do not edit: downstream code pins this file by hash.\nexports.price = (c) => \"$\" + c / 100;\n",
+      ".g-code/settings.json": "{\n  \"check\": \"node --test\"\n}\n",
+      ".agents/skills/changelog/SKILL.md": "---\nname: changelog\ndescription: Add an entry to CHANGELOG.md in this project's format. Use whenever the user asks for a changelog or release note.\n---\n\n# Changelog entries\n\n1. Read CHANGELOG.md first.\n2. Add the entry under the `## Unreleased` heading, creating it at the top if it is missing.\n3. Each entry is one line: `- <area>: <what changed, past tense> (<file>)`, where area is one of fix, feat, chore.\n4. End the turn by quoting the exact line you added, prefixed with `Changelog:`.\n",
+      "CHANGELOG.md": "# Changelog\n\n## 0.3.1\n\n- fix: sum ignores empty lists (src/money.ts)\n",
+      ".gitignore": "node_modules/\n"
+    }
+  },
+  "entries": [
+    {
+      "key": "a229d688#0",
+      "wire": "anthropic",
+      "asks": "user turn 0: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "I'll find `formatPrice` and see how it handles input today.\n\n",
+        "uses": [
+          {
+            "id": "toolu_7f749fe57c4341a29048bf5b",
+            "name": "grep",
+            "input": {
+              "pattern": "formatPrice"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#1",
+      "wire": "anthropic",
+      "asks": "user turn 1: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_0c8b8f4b12754f7eb0ad07b0",
+            "name": "read",
+            "input": {
+              "path": "src/money.ts"
+            }
+          },
+          {
+            "id": "toolu_27f3b09051f44e249d864ef2",
+            "name": "read",
+            "input": {
+              "path": "test/money.test.ts"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#2",
+      "wire": "anthropic",
+      "asks": "user turn 2: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "The implementation looks like it wouldn't even produce the two-decimal output the existing tests expect — I'll run the test suite to see the current state.\n\n",
+        "uses": [
+          {
+            "id": "toolu_594c3526dade46b49c282d7d",
+            "name": "bash",
+            "input": {
+              "command": "npm test 2>&1 | tail -30",
+              "description": "Run existing tests to check current pass/fail state"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#3",
+      "wire": "anthropic",
+      "asks": "user turn 3: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "Several tests were already failing before my task. Let me see which ones.\n\n",
+        "uses": [
+          {
+            "id": "toolu_11d081489340491abfbeb7fe",
+            "name": "bash",
+            "input": {
+              "command": "npm test 2>&1 | grep -E '^# (tests|pass|fail)|not ok|failureType' | head -20",
+              "description": "List which tests fail"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#4",
+      "wire": "anthropic",
+      "asks": "user turn 4: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "",
+        "uses": [
+          {
+            "id": "toolu_d29e6d72da2d4040abcd3569",
+            "name": "list",
+            "input": {
+              "directory": "src"
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#5",
+      "wire": "anthropic",
+      "asks": "user turn 5: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "call",
+        "text": "I've read the code and run the tests. Two things stand out:\n\n1. `formatPrice` at src/money.ts:6 returns `${SYMBOLS[currency]}${cents / 100}` — no fixed decimals and no sign handling. For `-1250` it produces `$-12.5`; the target is `-$12.50`.\n2. The existing test `formats cents with two decimals` **already fails** before any change (`formatPrice(1250)` → `$12.5`, expected `$12.50`). Producing `-$12.50` requires two-decimal formatting anyway, so the plan fixes that in the same edit. (`test/slug.test.ts` and a `units` test also fail, but they're unrelated — I'll leave them alone.)\n\n",
+        "uses": [
+          {
+            "id": "toolu_12940838a97d4443bd8e490a",
+            "name": "todo",
+            "input": {
+              "items": [
+                {
+                  "id": "1",
+                  "text": "Rework formatPrice in src/money.ts: sign before symbol, Math.abs, toFixed(2)",
+                  "status": "pending"
+                },
+                {
+                  "id": "2",
+                  "text": "Add negative-amount tests to test/money.test.ts",
+                  "status": "pending"
+                },
+                {
+                  "id": "3",
+                  "text": "Run npm test; confirm money tests pass (pre-existing slug/units failures remain)",
+                  "status": "pending"
+                }
+              ]
+            }
+          }
+        ],
+        "cutOff": false
+      }
+    },
+    {
+      "key": "a229d688#6",
+      "wire": "anthropic",
+      "asks": "user turn 6: Make formatPrice support negative amounts like -$12.50 and add a test for it.",
+      "answer": {
+        "kind": "say",
+        "text": "## Plan\n\n**1. Rewrite `formatPrice` in src/money.ts:6**\n\n```ts\n/** Formats an amount in cents, such as 1250 -> \"$12.50\" and -1250 -> \"-$12.50\". */\nexport function formatPrice(cents: number, currency: Currency = 'USD'): string {\n  const sign = cents < 0 ? '-' : '';\n  const amount = (Math.abs(cents) / 100).toFixed(2);\n  return `${sign}${SYMBOLS[currency]}${amount}`;\n}\n```\n\nThe minus goes before the currency symbol, matching your `-$12.50` example. Taking the absolute value first keeps the sign out of the middle (`$-12.50`), and `toFixed(2)` gives the two decimals the existing test already expects. `sum` and types are untouched.\n\n**2. Add a test in test/money.test.ts**\n\n```ts\ntest('formats negative cents with leading minus', () => {\n  assert.equal(formatPrice(-1250), '-$12.50');\n  assert.equal(formatPrice(-99900, 'THB'), '-฿999.00');\n  assert.equal(formatPrice(-5), '-$0.05');\n});\n```\n\n**3. Verify** with `npm test`: both money tests must pass.\n\n## Risks and open questions\n\n- **Sign placement convention**: some locales write `$-12.50` or `-$ 12.50`. I chose the leading `-$` from your example; if you need locale-correct output, the real fix is `Intl.NumberFormat` — say so and I'd change step 1.\n- **Existing failing test**: `formats cents with two decimals` fails today on the positive path. The `toFixed(2)` above fixes it as a side effect; it's not a new regression.\n- **Non-integer cent inputs**: `toFixed(2)` rounds them (e.g. `formatPrice(0.005)` → `$0.01`). Callers pass integers today, so no extra guard.\n- **Out of scope**: `test/slug.test.ts` and the `units` tests fail for unrelated reasons; I won't touch them.",
+        "stop": "end_turn"
+      }
+    }
+  ]
+}
