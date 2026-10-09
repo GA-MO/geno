@@ -42,6 +42,7 @@ import {
   secretReadDenial,
   sleepRefusal,
   staleBaseDetail,
+  trackedFiles,
   trustedDomains,
   ruleDenial,
   userRuleDenial,
@@ -343,6 +344,17 @@ async function runCheck(tools: AgentToolEnv, ctx: ToolContext): Promise<CheckRes
 
 const currentBase = async (ctx: ToolContext, file: string): Promise<BaseRead> => baseOf(await ctx.files.read(file), null);
 
+/**
+ * What the model last saw of a file: this engine's own record, or else the log's last stamp of it, so a session resumed
+ * in a new engine keeps the reads it made before (ISSUES.md G-05). The edit still refuses when the disk moved since.
+ */
+function lastSeen(reads: ReadonlyMap<string, BaseRead>, ctx: ToolContext, file: string): BaseRead | undefined {
+  const known = reads.get(file);
+  if (known !== undefined) return known;
+  const stamped = trackedFiles(ctx.events()).get(file);
+  return stamped === undefined ? undefined : { hash: stamped.hash, mtimeMs: null };
+}
+
 /** An edit's result, for a file it made or one it changed. The model knows the file as it wrote it, as Claude Code's result says. */
 const editedText = (shown: string, made: boolean): string => `${made ? 'Created' : 'Edited'} ${shown}. The file state is current in your context; no need to read it back.`;
 
@@ -357,7 +369,7 @@ export function editExecutor(reads: Map<string, BaseRead>, afterEdit: (ctx: Tool
     async run(input, ctx) {
       const file = await resolveWritable(ctx, input.path);
       const current = await currentBase(ctx, file);
-      const base = current.hash === null ? current : reads.get(file);
+      const base = current.hash === null ? current : lastSeen(reads, ctx, file);
       if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);
       // read showed hidden characters as escapes, so an edit written from what it showed gets them back.
       const raw = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, typeof value === 'string' && key !== 'path' ? restoreHidden(value) : value]));
@@ -424,7 +436,7 @@ export function notebookEditExecutor(reads: Map<string, BaseRead>, newId?: (take
       const file = await resolveWritable(ctx, shown);
       const current = await ctx.files.read(file);
       if (current === null) throw missingPath(ctx, shown);
-      const base = reads.get(file);
+      const base = lastSeen(reads, ctx, file);
       if (base === undefined) throw new ToolError(`read ${shown} before editing it`);
       if (hashText(current) !== base.hash) throw new ToolError(staleBaseDetail(shown));
       let done: CellEdited;
