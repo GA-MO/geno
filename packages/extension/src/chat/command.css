@@ -2,6 +2,7 @@
 
 .command-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   min-height: 24px;
@@ -15,7 +16,8 @@
 }
 
 .command-title {
-  flex: 1;
+  /* A badge beside the title wraps under it before the title shrinks to a column. */
+  flex: 1 1 8em;
   min-width: 0;
   color: var(--vscode-foreground);
   overflow-wrap: anywhere;

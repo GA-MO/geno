@@ -21,9 +21,9 @@ export const fixtureOf = (id: string): Fixture => {
   return fixture;
 };
 
-/** The panel at 300px with `fixture` played and drawn, as the gallery test opens it. */
-export async function playFixture(fixture: Fixture, theme: ThemeSlug = 'dark'): Promise<Panel> {
-  const panel = await openPanel({ theme, look: { ...DEFAULT_LOOK, ...fixture.look }, focused: fixture.focused ?? true, width: 300 });
+/** The panel at `width` with `fixture` played and drawn, as the gallery test opens it. */
+export async function playFixture(fixture: Fixture, theme: ThemeSlug = 'dark', width = 300): Promise<Panel> {
+  const panel = await openPanel({ theme, look: { ...DEFAULT_LOOK, ...fixture.look }, focused: fixture.focused ?? true, width });
   await fixture.play(stageOf(panel));
   await panel.host.settled();
   await panel.frame();

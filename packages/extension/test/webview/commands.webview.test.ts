@@ -73,7 +73,7 @@ function playTurns(panel: Panel): void {
     await host.act({ type: 'text', text: remove.narration }, toolStart('tu_rm', remove));
     await host.act({ type: 'permission', id: '0', command, reason: 'deletes files', description: String(remove.input['description']), options: PERMISSION_OPTIONS, toolId: 'tu_rm' });
     const { optionId } = await host.next('permission');
-    await host.act({ type: 'permission-done', id: '0', optionId }, toolEnd('tu_rm', 'failed', `denied: \`${command}\` was refused by the user.`));
+    await host.act({ type: 'permission-done', id: '0', optionId }, { type: 'tool', id: 'tu_rm', at: Date.now(), status: 'denied', output: `The user rejected \`${command}\`, so it did not run.`, denial: { by: 'you', reason: 'It did not run, and Geno waits for you.' } });
     await host.act({ type: 'text', text: ANSWERS.remove }, { type: 'turn-end', at: Date.now(), status: 'done', usage: usageOf(MODEL, 2000, 60) });
   });
 }
@@ -139,8 +139,9 @@ describe('command steps in the chat webview', () => {
     await panel.waitFor('the denied turn to finish', async () => (await panel.count('.turn-footer')) === 2);
     const denied = (await steps(panel)).at(-1)!;
     expect(denied.title, 'the denied step keeps its title').toBe(REMOVE[0]!.input['description']);
-    expect(denied.output?.startsWith('denied:'), 'the denied step says it was denied').toBe(true);
-    expect(await textOf(panel, '[data-turn="t1"] .command-step .step-failed'), 'and shows that it failed').toBe('Failed');
+    expect(denied.output, 'the denied step shows no output, since it never ran').toBeNull();
+    expect(await textOf(panel, '[data-turn="t1"] .command-step .step-denied'), 'and says the user denied it').toBe('Denied by you');
+    expect(await panel.count('[data-turn="t1"] .command-step .step-failed'), 'not that it failed').toBe(0);
     await panel.close();
   });
 });

@@ -149,8 +149,9 @@ export async function run(): Promise<void> {
   await click('.permission-open button', 'Deny');
   await waitFor('the denied turn to finish', async () => (await count('.turn-footer')) === 2);
   const denied = (await steps()).at(-1)!;
-  check(denied.title === REMOVE[0]!.input['description'] && denied.output?.startsWith('The user rejected') === true, 'the denied step keeps its title and says the user rejected it', denied);
-  check((await textOf('[data-turn="t1"] .command-step .step-failed')) === 'Failed', 'and shows that it failed', await textOf('[data-turn="t1"] .command-step .step-failed'));
+  check(denied.title === REMOVE[0]!.input['description'] && denied.output === null, 'the denied step keeps its title and shows no output, since it never ran', denied);
+  check((await textOf('[data-turn="t1"] .command-step .step-denied')) === 'Denied by you', 'and says the user denied it', await textOf('[data-turn="t1"] .command-step .step-denied'));
+  check((await count('[data-turn="t1"] .command-step .step-failed')) === 0, 'not that it failed');
 
   await vscode.workspace.getConfiguration('gcode').update('chat.detail', undefined, vscode.ConfigurationTarget.Global);
 }

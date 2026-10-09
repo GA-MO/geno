@@ -2181,8 +2181,64 @@ button.file-chip:hover {
   color: var(--ok);
 }
 
-.auto-deny .auto-badge {
-  color: var(--vscode-errorForeground);
+/* A call the user, Auto, a rule or a hook refused: grey, since nothing broke, with the reason in plain words. */
+
+.step-denied {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.step-denied .codicon {
+  flex: none;
+}
+
+.step-denied-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-denied > .node {
+  border-color: var(--muted);
+  background: var(--muted);
+  transform: scale(0.85);
+}
+
+.denial-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  margin: 2px 0 2px 22px;
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+.command-step .denial-note {
+  margin-left: 0;
+}
+
+.denial-reason {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.denial-details {
+  flex-basis: 100%;
+  min-width: 0;
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-family: var(--vscode-editor-font-family);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .auto-reason {

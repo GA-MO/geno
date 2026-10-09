@@ -56,8 +56,9 @@ function titleOf(tool: ToolBlock): string {
   return description.length <= TITLE_MAX ? description : `${description.slice(0, TITLE_MAX - 1).trimEnd()}…`;
 }
 
+/** A refused command never ran, so it has no output; what the model was told shows behind its denial. */
 function outputLines(output: string | undefined, status: ToolStatus): readonly string[] | undefined {
-  if (output === undefined) return undefined;
+  if (output === undefined || status === 'denied') return undefined;
   const lines = output.replace(/\s+$/, '').split('\n');
   if (status === 'failed' && lines.length > 1 && FAILURE_HEAD.test(lines[0]!)) lines.shift();
   if (lines.at(-1) === CLEAN_EXIT) lines.pop();
