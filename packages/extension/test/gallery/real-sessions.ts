@@ -350,7 +350,7 @@ export const REAL_SESSIONS: readonly RealSession[] = [
         "id": "toolu_71c84f99cff741dab0ae7e33",
         "at": 1791540222175,
         "name": "agent",
-        "target": "",
+        "target": "explore: In the repository at ., find every file that calls the function getUser (including possible methods like userSvc.getUser or similar, and both direct calls and references). Report each occurrence as path:line with a one-line context, and list the distinct files that call it. This is read-only; do not modify anything. If getUser does not exist anywhere, also check for close variants (get_user, GetUser, fetchUser) and report what you find.",
         "toolKind": "other",
         "status": "running"
       },

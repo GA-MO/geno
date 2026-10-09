@@ -18,7 +18,7 @@ import { showFilesStep } from './show-files.js';
 import { commandContent } from './slash-view.js';
 import type { SentCommand } from './slash.js';
 import { mcpCall } from './mcp-model.js';
-import { verbOf } from './verbs.js';
+import { targetOf, verbOf } from './verbs.js';
 import { commandStepOf, type CommandJob } from './command-step.js';
 import type { ReviewMode } from '../review/mode.js';
 import { changesLine, type TurnChanges } from '../review/summary.js';
@@ -102,7 +102,7 @@ export function toolRow(tool: ToolBlock, ui: Ui): HTMLElement {
     },
     statusIcon(tool.status),
     h('span', { class: 'tool-label' }, verbOf(tool.name, tool.status === 'running')),
-    h('code', { class: 'tool-target' }, tool.target),
+    h('code', { class: 'tool-target' }, targetOf(tool.name, tool.target)),
     h('span', { class: 'tool-duration' }, durationOf(tool) ?? ''),
     icon(open ? 'chevron-down' : 'chevron-right', expandable ? 'chevron' : 'chevron hidden'),
   );
@@ -204,7 +204,8 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
   const first = tools[0]!;
   if (name === 'bash' || (name === 'preview_start' && first.background !== undefined)) return commandStep(first, ui, quiet);
   if (first.shown !== undefined) return showFilesStep({ ...first, shown: first.shown }, (target) => ui.post({ type: 'open', target }));
-  const target = first.target !== '' && !(quiet && mcpCall(name) !== undefined);
+  const shown = targetOf(name, first.target);
+  const target = shown !== '' && !(quiet && mcpCall(name) !== undefined);
   const running = tools.some((t) => t.status === 'running');
   const failed = tools.filter((t) => t.status === 'failed').length;
   const denied = tools.filter(isDenied);
@@ -222,13 +223,13 @@ export function callsStep(key: string, name: string, tools: readonly ToolBlock[]
           class: 'step-toggle',
           'aria-expanded': String(open),
           'data-focus': `step:${key}`,
-          'aria-label': [verbOf(name, running), ...(FILE_TOOLS[name] !== undefined ? byFile(tools).map((file) => file.path) : target ? [first.target] : [])].join(' '),
+          'aria-label': [verbOf(name, running), ...(FILE_TOOLS[name] !== undefined ? byFile(tools).map((file) => file.path) : target ? [shown] : [])].join(' '),
         },
         icon(KIND_ICONS[first.toolKind], 'kind'),
         mcpServerChip(name),
         h('span', { class: 'step-verb' }, verbOf(name, running)),
       ),
-      FILE_TOOLS[name] !== undefined ? h('span', { class: 'chips' }, ...byFile(tools).map((file) => fileChip(name, file, ui))) : target && h('code', { class: 'step-target' }, first.target),
+      FILE_TOOLS[name] !== undefined ? h('span', { class: 'chips' }, ...byFile(tools).map((file) => fileChip(name, file, ui))) : target && h('code', { class: 'step-target', title: first.target }, shown),
       h('span', { class: 'spacer' }),
       running && icon('loading', 'codicon-modifier-spin step-status'),
       failed > 0 && h('span', { class: 'step-failed' }, icon('error'), failed === tools.length ? 'Failed' : `${failed} failed`),

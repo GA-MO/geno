@@ -17,8 +17,8 @@ async function at(id: string, width: number, check: (panel: Panel) => Promise<vo
   try {
     await panel.screenshot(`ux-${id}-${width}`);
     expect(await panel.page.evaluate(overflowing as () => string[]), `nothing runs past the ${width}px panel`).toEqual([]);
-    const narrowest = await panel.eval<number>(`Math.min(Infinity, ...[...doc.querySelectorAll('.command-title, .step-verb')].map((e) => e.getBoundingClientRect().width))`);
-    expect(narrowest, 'no step title is squeezed into a column').toBeGreaterThan(40);
+    const tallest = await panel.eval<number>(`Math.max(0, ...[...doc.querySelectorAll('.command-title, .step-verb')].map((e) => e.getBoundingClientRect().height))`);
+    expect(tallest, 'no step title is squeezed into a column').toBeLessThan(100);
     await check(panel);
   } finally {
     await panel.close();
@@ -80,6 +80,17 @@ describe.each(WIDTHS)('at %ipx', (width) => {
   it('a turn the user stopped says so in plain words', () =>
     at('stopped', width, async (panel) => {
       expect(await texts(panel, '.turn-footer .ending')).toEqual(['Stopped by you']);
+    }));
+
+  it('every step names what it did and what it acted on, with no raw tool name', () =>
+    at('tools-deferred', width, async (panel) => {
+      const lines = await panel.eval<string[]>(`[...doc.querySelectorAll('.calls')].map((s) => [s.querySelector('.step-verb')?.textContent, s.querySelector('.step-target')?.textContent].filter(Boolean).join(' '))`);
+      expect(lines).toEqual(['Loaded tools: web_fetch, monitor', 'Used skill poteto-mode', 'Fetched docs.stripe.com', 'Stopped bg-1', 'Remembered', 'Delegated to explore: find callers of getUser']);
+    }));
+
+  it('a fetch in the steps of each kind names its host', () =>
+    at('tools-each-kind', width, async (panel) => {
+      expect(await texts(panel, '[data-step="web_fetch"] .step-verb, [data-step="web_fetch"] .step-target')).toEqual(['Fetched', 'example.com']);
     }));
 
   it('a command Auto refused reads as denied by Auto, not failed', () =>

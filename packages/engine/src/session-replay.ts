@@ -108,6 +108,9 @@ const ERROR_STATUS: Readonly<Record<TurnErrorKind, ReplayedTurn['status']>> = {
   overflow: 'done',
 };
 
+/** A title of the tool's name and the input's words it names, skipping any the model left out. */
+const titled = (name: string, ...words: readonly unknown[]): string => [name, ...words.flatMap((word) => (typeof word === 'string' || typeof word === 'number' ? [String(word)] : []))].join(' ');
+
 /** The agent tools' own titles, which need their executors' environment, as they read live. */
 const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => string>> = {
   edit: ({ path }) => `edit ${String(path)}`,
@@ -142,6 +145,22 @@ const AGENT_TITLES: Readonly<Record<string, (input: Record<string, unknown>) => 
     const parsed = parseAskUser(input);
     return parsed.ok ? `ask_user ${askUserTitle(parsed.value)}` : 'ask_user';
   },
+  remember: ({ scope }) => titled('remember', scope),
+  skill: ({ name, args }) => titled('skill', name, args),
+  tool_search: ({ select, query }) => titled('tool_search', ...(Array.isArray(select) ? select : []), ...(typeof query === 'string' ? [JSON.stringify(query)] : [])),
+  task_stop: ({ id }) => titled('task_stop', id),
+  bash_output: ({ id }) => titled('bash_output', id),
+  monitor: ({ command, background_job_id, pattern }) => `monitor ${typeof command === 'string' ? command : String(background_job_id ?? '')} for /${String(pattern)}/`,
+  schedule_wakeup: ({ delay_s, reason }) => `schedule_wakeup in ${String(delay_s)}s: ${String(reason)}`,
+  web_fetch: ({ url }) => titled('web_fetch', url),
+  web_search: ({ query }) => titled('web_search', query),
+  agent: ({ agent, task }) => (typeof agent === 'string' && typeof task === 'string' ? `agent ${agent}: ${task.split('\n')[0]}` : 'agent'),
+  message_agent: ({ agent_session, text }) => (typeof agent_session === 'string' && typeof text === 'string' ? `message_agent ${agent_session}: ${text.split('\n')[0]}` : 'message_agent'),
+  notebook_edit: ({ notebook_path, cell_id, edit_mode }) => titled('notebook_edit', notebook_path, edit_mode ?? 'replace', cell_id),
+  preview_start: ({ name }) => titled('preview_start', name),
+  preview_stop: ({ name }) => titled('preview_stop', name),
+  read_terminal: ({ terminal }) => titled('read_terminal', terminal),
+  workflow: ({ name, input }) => (typeof name === 'string' ? `workflow ${name}${typeof input === 'string' && input !== '' ? `: ${input.split('\n')[0]}` : ''}` : 'workflow list'),
 };
 
 export const titleOf = (use: ToolUseBlock): string => {
