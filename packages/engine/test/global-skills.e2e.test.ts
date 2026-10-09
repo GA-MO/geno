@@ -66,4 +66,31 @@ describe('a skill in ~/.agents/skills through gcode agent', () => {
     expect(edit).toMatchObject({ name: 'edit', status: 'error' });
     expect(existsSync(created)).toBe(false);
   });
+
+  it('G-06 returns a skill longer than the spill limit whole, not as a spill file', async () => {
+    const workspace = await realpath(makeRepo('ws', [{ message: 'start', files: { 'a.ts': 'export const a = 1;\n' } }]));
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'gcode-global-skills-')));
+    const folder = path.join(root, 'user', '.agents', 'skills', 'deploy');
+    await mkdir(folder, { recursive: true });
+    const steps = Array.from({ length: 600 }, (_, i) => `${i + 1}. Check step ${i + 1} of the deploy before the next one.`).join('\n');
+    await writeFile(path.join(folder, 'SKILL.md'), `${DEPLOY}\n${steps}\nLast line of the skill.\n`);
+    const env = {
+      HOME: path.join(root, 'user'),
+      GCODE_HOME: path.join(root, 'gcode-home'),
+      CLAUDE_CONFIG_DIR: path.join(root, 'claude'),
+      GCODE_PROVIDER: 'modelstudio',
+      DASHSCOPE_API_KEY: 'sk-fake',
+      DASHSCOPE_BASE_URL: 'https://ws-1.example.com/apps/anthropic',
+      GCODE_RG: rgCommand(),
+      PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    };
+    const transport = fakeTransport([toolCall('', [loadTools('skill')], usage), toolCall('Loading the skill.', [use('skill', { name: 'deploy' })], usage), answer('Done.', usage)]);
+    const run = await runCli(['agent', '--workspace', workspace, '--non-interactive', 'Deploy with the deploy skill'], env, { fetch: transport.fetch });
+    expect(run.code, run.stderr).toBe(0);
+    const log = await readSessionLog(sessionFile(openStore(env), asSessionId(sessionIdOf(run.stdout))));
+    const loaded = log.events.find((e): e is Extract<TurnEvent, { kind: 'tool-result' }> => e.kind === 'tool-result' && e.name === 'skill')!;
+    expect(steps.length).toBeGreaterThan(24_000);
+    expect('spill' in loaded, 'no spill file').toBe(false);
+    expect(toolResultText(loaded)).toContain('Last line of the skill.');
+  });
 });
