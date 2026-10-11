@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { admit, sessionCookie, type Gate } from './security.js';
-import { browserPage, type Theme } from './page.js';
+import { browserPage } from './page.js';
 import type { Note, Page, UiAnswer, UiRequest } from './vscode-shim.js';
 import { webviews } from './vscode-shim.js';
 
@@ -78,7 +78,6 @@ export class WebServer implements Page {
   constructor(
     private readonly token: string,
     private readonly client: string,
-    private readonly theme: Theme,
   ) {}
 
   get origin(): string {
@@ -87,7 +86,9 @@ export class WebServer implements Page {
   }
 
   async listen(port = 0): Promise<number> {
-    const server = createServer((req, res) => void this.handle(req, res).catch((error: unknown) => send(res, 500, 'text/plain', error instanceof Error ? error.message : String(error))));
+    const server = createServer((req, res) =>
+      void this.handle(req, res).catch((error: unknown) => (res.headersSent ? res.end() : send(res, 500, 'text/plain', error instanceof Error ? error.message : String(error)))),
+    );
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
       server.listen(port, '127.0.0.1', resolve);
@@ -156,8 +157,8 @@ export class WebServer implements Page {
     if (req.method === 'GET' && url.pathname === '/events') return this.events(req, res, url.searchParams.get('view') ?? 'chat');
     if (req.method === 'POST' && url.pathname === '/message') return this.message(req, res, url.searchParams.get('view') ?? 'chat');
     if (req.method === 'POST' && url.pathname === '/answer') {
-      const body = (await bodyOf(req)) as { id?: unknown; answer?: unknown };
-      if (typeof body.id !== 'string' || !isAnswer(body.answer)) return send(res, 400, 'text/plain', 'not an answer');
+      const body = (await bodyOf(req)) as { id?: unknown; answer?: unknown } | null;
+      if (typeof body?.id !== 'string' || !isAnswer(body.answer)) return send(res, 400, 'text/plain', 'not an answer');
       this.answer(body.id, body.answer);
       return send(res, 204, 'text/plain', '');
     }
@@ -169,7 +170,7 @@ export class WebServer implements Page {
     const webview = webviews.get(view);
     if (webview === undefined || webview.html === '') return send(res, 404, 'text/plain', 'That view is closed.');
     const nonce = randomBytes(16).toString('base64');
-    send(res, 200, 'text/html', browserPage({ html: webview.html, nonce, origin: this.origin, view, theme: theme === 'light' ? 'light' : this.theme }));
+    send(res, 200, 'text/html', browserPage({ html: webview.html, nonce, origin: this.origin, view, theme: theme === 'light' ? 'light' : 'dark' }));
   }
 
   private events(req: IncomingMessage, res: ServerResponse, view: string): void {
