@@ -1,0 +1,79 @@
+---
+import { codeSegments, endText, PARTY_LABELS, TURN_END_LABELS } from '../scenario/labels';
+import type { OutlineItem, Scenario } from '../scenario/model';
+import { briefOf } from '../scenario/tour';
+
+/** Every step in narrative order; a fork nests one list per option, so each branch prints once, in place. */
+interface Props {
+  scenario: Scenario;
+  items: readonly OutlineItem[];
+  parts: Readonly<Record<string, string>>;
+}
+const { scenario, items, parts } = Astro.props;
+const laneOf = (column: number) => scenario.columns[column]!.label;
+---
+
+<ol class="tour-steps">
+  {
+    items.map((item) => {
+      const step = scenario.steps[item.step]!;
+      return (
+        <li id={`step-${step.id}`} class={`party-${step.party}`}>
+          <p class="tour-step-head">
+            <a class="tour-step-link" href={`#at=${step.id}`} title="เดินทัวร์จากขั้นนี้">
+              {PARTY_LABELS[step.party]}
+            </a>
+            <span>
+              {laneOf(step.column)}
+              {parts[step.part] === undefined ? '' : ` · ${parts[step.part]}`}
+            </span>
+          </p>
+          <p>{codeSegments(step.does).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</p>
+          {step.sees !== undefined && (
+            <blockquote class="tour-sees">
+              <span>ผู้ใช้เห็น</span> {codeSegments(step.sees).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}
+            </blockquote>
+          )}
+          {(step.emits.length > 0 || step.ref !== undefined) && (
+            <p class="tour-step-foot">
+              {step.emits.length > 0 && <span class="tour-emits">ส่งออก {step.emits.map((name) => <code>{name}</code>)}</span>}
+              {step.ref !== undefined && (
+                <a class="tour-ref" href={step.ref.url}>
+                  {step.ref.path}:{step.ref.line}
+                </a>
+              )}
+            </p>
+          )}
+          {step.flow.kind === 'end' && (
+            <p class={`tour-ending turn-${step.flow.end.turn}`}>
+              {TURN_END_LABELS[step.flow.end.turn]}: <code>{endText(step.flow.end)}</code>
+            </p>
+          )}
+          {step.flow.kind === 'leave' && (
+            <p class="tour-ending">
+              ไปต่อที่ {step.flow.to.href === undefined ? step.flow.to.title : <a href={step.flow.to.href}>{step.flow.to.title}</a>}
+            </p>
+          )}
+          {step.flow.kind === 'fork' && (
+            <div class="tour-arms">
+              <p>
+                <strong>{step.flow.ask}</strong>
+              </p>
+              {item.arms?.map((arm) => (
+                <section class="tour-arm">
+                  <h4>ถ้าเลือก “{arm.label}”</h4>
+                  <Astro.self scenario={scenario} items={arm.items} parts={parts} />
+                  {arm.rejoins !== undefined && (
+                    <p class="tour-rejoin">
+                      แล้วเดินต่อที่ขั้น <a href={`#step-${arm.rejoins}`}>{briefOf(scenario.steps[arm.rejoins]!.does).replace(/`/g, '')}</a>
+                    </p>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+        </li>
+      );
+    })
+  }
+</ol>

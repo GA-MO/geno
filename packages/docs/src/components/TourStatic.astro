@@ -1,0 +1,133 @@
+---
+import { codeSegments, PARTY_LABELS } from '../scenario/labels';
+import type { Scenario } from '../scenario/model';
+import { briefOf, layoutWalk, walk } from '../scenario/tour';
+import StepList from './StepList.astro';
+
+/**
+ * Always in the HTML, for readers without JS, print and search: the default walk as an SVG swimlane on the same
+ * grid the island draws, then every step and branch as a nested list. The island hides the SVG once it runs.
+ */
+interface Props {
+  scenario: Scenario;
+  parts: Readonly<Record<string, string>>;
+}
+const { scenario, parts } = Astro.props;
+const COLUMN = 176;
+const ROW = 70;
+const HEADER = 40;
+const BOX = { w: 160, h: 54 };
+const path = walk(scenario, scenario.defaults);
+const grid = layoutWalk(scenario, path);
+const cellOf = new Map(grid.cells.map((cell, i) => [cell.step, { ...cell, number: i + 1 }]));
+const xOf = (column: number) => column * COLUMN + (COLUMN - BOX.w) / 2;
+const yOf = (row: number) => HEADER + row * ROW + (ROW - BOX.h) / 2;
+const width = grid.columns * COLUMN;
+const height = HEADER + grid.rows * ROW;
+const forks = path.flatMap((id) => {
+  const flow = scenario.steps[id]!.flow;
+  return flow.kind === 'fork' ? [`“${flow.options.find((option) => option.id === scenario.defaults[id])?.label}”`] : [];
+});
+---
+
+<div class="tour-static">
+  <dl class="tour-given">
+    {
+      scenario.given.length > 0 && (
+        <>
+          <dt>ก่อนเริ่ม</dt>
+          <dd>
+            <ul>
+              {scenario.given.map((line) => (
+                <li>{codeSegments(line).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</li>
+              ))}
+            </ul>
+          </dd>
+        </>
+      )
+    }
+    <dt>จุดเริ่ม</dt>
+    <dd>{codeSegments(scenario.trigger).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</dd>
+    <dt>ครอบคลุม</dt>
+    <dd>{scenario.covers.map((link) => <span class="tour-cover"><code>{link.id}</code> {link.title}</span>)}</dd>
+  </dl>
+
+  <slot />
+
+  <figure class="tour-static-svg">
+    <svg viewBox={`0 0 ${width} ${height}`} width={width} role="img" aria-label={`แผนภาพของทางหลัก ${path.length} ขั้น`}>
+      <defs>
+        <marker id={`arrow-${scenario.id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L8,4 L0,8 z" class="tour-svg-arrow"></path>
+        </marker>
+      </defs>
+      {
+        scenario.columns.map((column, i) => (
+          <g class={`party-${column.party}`}>
+            <rect class="tour-svg-lane" x={i * COLUMN + 2} y="0" width={COLUMN - 4} height={height} rx="8"></rect>
+            <text class="tour-svg-lane-label" x={i * COLUMN + COLUMN / 2} y="24" text-anchor="middle">{column.label}</text>
+          </g>
+        ))
+      }
+      {
+        grid.edges.map((edge) => {
+          const from = cellOf.get(edge.from)!;
+          const to = cellOf.get(edge.to)!;
+          const sameRow = from.row === to.row;
+          const x1 = xOf(from.column) + (sameRow ? (to.column > from.column ? BOX.w : 0) : BOX.w / 2);
+          const y1 = yOf(from.row) + (sameRow ? BOX.h / 2 : BOX.h);
+          const x2 = xOf(to.column) + (sameRow ? (to.column > from.column ? 0 : BOX.w) : BOX.w / 2);
+          const y2 = yOf(to.row) + (sameRow ? BOX.h / 2 : 0);
+          const mid = (y1 + y2) / 2;
+          const d = sameRow ? `M${x1},${y1} L${x2},${y2}` : `M${x1},${y1} L${x1},${mid} L${x2},${mid} L${x2},${y2}`;
+          return <path class={`tour-svg-edge${edge.crossing ? ' crossing' : ''}`} d={d} marker-end={`url(#arrow-${scenario.id})`}></path>;
+        })
+      }
+      {
+        grid.cells.map((cell, i) => {
+          const step = scenario.steps[cell.step]!;
+          return (
+            <g class={`tour-svg-step party-${step.party}`}>
+              <title>{`${i + 1}. ${PARTY_LABELS[step.party]}: ${step.does.replace(/`/g, '')}`}</title>
+              <rect x={xOf(cell.column)} y={yOf(cell.row)} width={BOX.w} height={BOX.h} rx="6"></rect>
+              <foreignObject x={xOf(cell.column) + 4} y={yOf(cell.row) + 3} width={BOX.w - 8} height={BOX.h - 6}>
+                <div class="tour-svg-text">
+                  <b>{i + 1}</b> {briefOf(step.does).replace(/`/g, '')}
+                </div>
+              </foreignObject>
+            </g>
+          );
+        })
+      }
+    </svg>
+    <figcaption>
+      ทางหลัก {path.length} ขั้น{forks.length > 0 && <> ที่ทางแยกเลือก {forks.join(', ')}</>} ทางอื่นอยู่ในรายการด้านล่าง
+    </figcaption>
+  </figure>
+
+  <div class="scenario-prose"><slot name="prose" /></div>
+
+  <h2 id="ทุกขั้น">ทุกขั้นและทุกทางแยก</h2>
+  <StepList scenario={scenario} items={scenario.outline} parts={parts} />
+
+  {
+    scenario.related.length > 0 && (
+      <>
+        <h2 id="อ่านต่อ">อ่านต่อ</h2>
+        <ul class="tour-related">
+          {scenario.related.map((link) => (
+            <li>
+              {link.href === undefined ? (
+                <>
+                  {link.title} <span class="tour-missing">ยังไม่มีหน้า</span>
+                </>
+              ) : (
+                <a href={link.href}>{link.title}</a>
+              )}
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+</div>

@@ -177,7 +177,12 @@ function visitsOf(scenarios: Readonly<Record<string, Scenario>>): Record<PartKey
   return visits;
 }
 
-let memo: { readonly key: string; readonly site: Site } | undefined;
+/** `lane.part` -> the part's Thai label, for the tour's lane line. */
+export function partLabels(lanes: LanesIn): Record<string, string> {
+  return Object.fromEntries(lanes.lanes.flatMap((lane) => lane.parts.map((part) => [`${lane.id}.${part.id}`, part.label])));
+}
+
+let memo:{ readonly key: string; readonly site: Site } | undefined;
 
 /** The options the site runs with: astro.config.ts sets GDOCS_ROOT, because bundled pages lose their own path. */
 export function siteOptions(docsRoot = process.env['GDOCS_ROOT'] ?? process.cwd()): SiteOptions {

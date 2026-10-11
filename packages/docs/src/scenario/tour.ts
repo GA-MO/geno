@@ -32,7 +32,7 @@ export function walk(scenario: Scenario, choices: Choices): StepId[] {
     const flow: Step['flow'] = scenario.steps[at]!.flow;
     if (flow.kind === 'next') at = flow.to;
     else if (flow.kind === 'fork') {
-      const chosen = choices[at] ?? scenario.defaults[at];
+      const chosen: OptionId | undefined = choices[at] ?? scenario.defaults[at];
       at = flow.options.find((option) => option.id === chosen)?.to ?? flow.options[0]?.to;
     } else at = undefined;
   }

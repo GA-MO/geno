@@ -1,6 +1,7 @@
 ---
 title: โมเดลเรียกเครื่องมือแล้วตอบ
 description: โมเดลขออ่านไฟล์และค้นข้อความ harness รันทั้งสองพร้อมกัน ส่งผลกลับ แล้วโมเดลตอบจนจบ turn
+tableOfContents: false
 sidebar:
   order: 2
 scenario:
