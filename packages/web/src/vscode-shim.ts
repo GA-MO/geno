@@ -672,6 +672,8 @@ export class WebviewChannel {
   options: vscode.WebviewOptions = {};
   private readonly received = new EventEmitter<unknown>();
   readonly onDidReceiveMessage = this.received.event;
+  /** Disposes the view or tab this webview belongs to, as closing it in VS Code would. */
+  close: () => void = () => {};
   constructor(readonly id: string) {}
   get cspSource(): string {
     return the().page.origin;
@@ -696,6 +698,11 @@ export function webviewView(id: string) {
   const webview = new WebviewChannel(id);
   webviews.set(id, webview);
   const disposed = new EventEmitter<void>();
+  const dispose = () => {
+    webviews.delete(id);
+    disposed.fire();
+  };
+  webview.close = dispose;
   return {
     webview,
     viewType: id,
@@ -706,10 +713,7 @@ export function webviewView(id: string) {
     onDidChangeVisibility: never<void>(),
     onDidDispose: disposed.event,
     show: () => {},
-    dispose: () => {
-      webviews.delete(id);
-      disposed.fire();
-    },
+    dispose,
   };
 }
 

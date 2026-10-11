@@ -24,6 +24,9 @@ const TYPES: Readonly<Record<string, string>> = {
   '.txt': 'text/plain',
 };
 
+/** How long a tab's page may be gone before its panel counts as closed. */
+const CLOSED_AFTER_MS = 10_000;
+
 /** A pasted screenshot rides in a `send` as base64, so a message may be large; anything past this is refused. */
 const MAX_BODY = 64 * 1024 * 1024;
 
@@ -173,6 +176,8 @@ export class WebServer implements Page {
     req.on('close', () => {
       clearInterval(ping);
       this.clients.delete(client);
+      // A tab's page that stays gone was closed, so its panel is disposed; a reload comes back well within this.
+      if (view !== 'chat') setTimeout(() => [...this.clients].some((c) => c.view === view) || webviews.get(view)?.close(), CLOSED_AFTER_MS).unref();
     });
   }
 

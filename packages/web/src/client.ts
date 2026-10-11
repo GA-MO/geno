@@ -100,7 +100,9 @@ function noted(note: Note): void {
   if (note.kind === 'toast') return void toast(note.text, note.link);
   if (note.kind === 'clipboard') return void navigator.clipboard.writeText(note.text).catch(() => toast('Could not copy: the page needs focus.'));
   // A browser blocks a window it did not see the user ask for; the link stays in a toast for that case.
-  if (window.open(note.url, '_blank', 'noopener') === null) void toast(`Open ${note.url}`, { label: 'Open', url: note.url });
+  const opened = window.open(note.url, '_blank');
+  if (opened === null) void toast(`Open ${note.url}`, { label: 'Open', url: note.url });
+  else opened.opener = null;
 }
 
 const answer = (id: string, reply: UiAnswer): void => {
