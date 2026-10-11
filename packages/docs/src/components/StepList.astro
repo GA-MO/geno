@@ -3,7 +3,6 @@ import { codeSegments, endText, PARTY_LABELS, TURN_END_LABELS } from '../scenari
 import type { OutlineItem, Scenario } from '../scenario/model';
 import { briefOf } from '../scenario/tour';
 
-/** Every step in narrative order; a fork nests one list per option, so each branch prints once, in place. */
 interface Props {
   scenario: Scenario;
   items: readonly OutlineItem[];

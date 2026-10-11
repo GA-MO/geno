@@ -4,10 +4,6 @@ import Tour from '../components/Tour';
 import TourStatic from '../components/TourStatic.astro';
 import { partLabels, scenarioFor, siteFor } from '../scenario/site';
 
-/**
- * Every docs page renders through here. A page with `scenario:` frontmatter gets the tour, its static fallback and
- * the full step list around the author's prose; any other page renders as Starlight's default.
- */
 const { entry } = Astro.locals.starlightRoute;
 const scenario = entry.data.scenario === undefined || entry.filePath === undefined ? undefined : scenarioFor(entry.filePath);
 const parts = partLabels(siteFor().lanes);

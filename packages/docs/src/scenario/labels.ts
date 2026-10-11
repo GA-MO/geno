@@ -1,8 +1,6 @@
 import type { TurnEnd } from './model.js';
 import type { Party, Phase } from './schema.js';
 
-/** Thai words the tour shows. Records over the enums, so a new phase or party fails typecheck until it has a label. */
-
 export const PARTY_LABELS: Readonly<Record<Party, string>> = { user: 'ผู้ใช้', ai: 'AI', harness: 'harness', outside: 'ระบบภายนอก' };
 
 export const WHOSE_MOVE: Readonly<Record<Party, string>> = {
@@ -33,10 +31,8 @@ export const TURN_END_LABELS: Readonly<Record<TurnEnd['turn'], string>> = {
   none: 'ไม่มี turn',
 };
 
-/** `done (end_turn)`: the end as the code names it. */
 export const endText = (end: TurnEnd): string => (end.reason === undefined ? end.turn : `${end.turn} (${end.reason})`);
 
-/** Splits authored text on backticks, so `code` renders as code in Astro and in React alike. */
 export function codeSegments(text: string): { readonly code: boolean; readonly text: string }[] {
   return text
     .split('`')

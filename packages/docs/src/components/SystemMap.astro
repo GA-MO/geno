@@ -4,7 +4,6 @@ import { deriveMap, layoutMap } from '../map/map';
 import { siteFor } from '../scenario/site';
 import SystemMapFlow from './SystemMapFlow';
 
-/** `<SystemMap />` on the map page: the island, a static copy of the same layout, and the same map as nested lists. */
 const site = siteFor();
 const map = await layoutMap(deriveMap(site), site);
 const top = 44;

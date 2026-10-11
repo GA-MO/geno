@@ -1,39 +1,15 @@
 import { z } from 'astro/zod';
 
-/**
- * What an author types: a scenario page's `scenario:` frontmatter, a fragment file, lanes.yaml and catalog.yaml.
- * This is the boundary. compile.ts turns these into the domain types in model.ts, and nothing past it re-checks shape.
- */
-
 const PARTIES = ['user', 'ai', 'harness', 'outside'] as const;
 const SURFACES = ['vscode', 'cli', 'acp-editor'] as const;
-/** What a step in a lane adds to the progress counters. Lanes and parts carry it, so no component names a lane. */
 const COUNTS = ['model-call', 'tool-run'] as const;
 
-const PHASES = [
-  'idle', // no turn is running
-  'starting', // the server took the prompt and is opening the run
-  'calling-model', // a model request is being built, sent or streamed
-  'running-tools', // a batch runs, including the policy checks before each call
-  'waiting-user', // a permission card or ask_user question is open
-  'waiting-retry', // gateway backoff, offline or rate-limit wait
-  'compacting',
-  'held', // the turn waits for a background child's report
-  'ending', // the loop said done; Stop hook, usage, task end
-] as const;
+const PHASES = ['idle', 'starting', 'calling-model', 'running-tools', 'waiting-user', 'waiting-retry', 'compacting', 'held', 'ending'] as const;
 
-export const TURN_ENDS = [
-  'done', // the task ends done; `reason` names the loop's DoneReason (end_turn, ...)
-  'failed',
-  'stopped', // the user or the engine stopped it
-  'waits', // parked on something outside the turn (a held child, a paused wake)
-  'continues', // the scenario stops here but the turn goes on
-  'none', // the scenario has no turn (an API key, Tab)
-] as const;
+export const TURN_ENDS = ['done', 'failed', 'stopped', 'waits', 'continues', 'none'] as const;
 
 const id = z.string().regex(/^[a-z][a-z0-9-]*$/, 'lowercase letters, digits and hyphens');
 const stepRef = z.string().regex(/^[a-z0-9][a-z0-9.-]*$/, 'a step id, scoped ids allowed');
-/** A catalog id such as `turn.text-answer`. */
 const catalogId = z.string().regex(/^[a-z]+\.[a-z0-9-]+$/, 'a catalog id such as turn.text-answer');
 /** `lane` or `lane@session`: the session gives a child its own column (`child@explore`). */
 const laneKey = z.string().regex(/^[a-z][a-z-]*(@[a-z0-9][a-z0-9-]*)?$/, 'a lane id, or lane@session');

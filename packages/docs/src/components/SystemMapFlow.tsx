@@ -9,10 +9,8 @@ type Part = PositionedMap['nodes'][number];
 type Hop = PositionedMap['edges'][number];
 type Look = 'selected' | 'near' | 'dim' | 'plain';
 const BAND_TOP = -44;
-/** Below this the Thai labels stop reading; a narrow screen pans instead of shrinking further. */
 const READABLE_ZOOM = 0.8;
 
-/** A part the selected one hands to or takes from, with the hop each way if there is one. */
 interface Neighbor {
   readonly part: Part;
   readonly out?: Hop;
@@ -46,7 +44,6 @@ function PartNode({ data }: NodeProps<Node<{ part: Part; look: Look; focus: bool
   );
 }
 
-/** A hop drawn from the build-time boxes, so it needs no measuring and matches the static map. */
 function HopEdge({ data, style, markerEnd }: EdgeProps<Edge<{ d: string; title: string }, 'hop'>>) {
   return (
     <g>
@@ -65,10 +62,8 @@ const BandNode = ({ data }: NodeProps<Node<{ label: string }, 'band'>>) => (
 const NODE_TYPES = { part: PartNode, lane: LaneNode, band: BandNode };
 const EDGE_TYPES = { hop: HopEdge };
 
-/** The map island: build-time positions from elkjs, React Flow for pan, zoom and picking a part. */
 export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) {
   const [selected, setSelected] = useState<string | undefined>();
-  /** The neighbor whose hops are open in the panel; a hover on the canvas or a click in the panel sets it. */
   const [hop, setHop] = useState<string | undefined>();
   const [hover, setHover] = useState<string | undefined>();
   const root = useRef<HTMLDivElement>(null);
@@ -183,7 +178,6 @@ function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly 
   const width = useStore((store) => store.width);
   useEffect(() => {
     if (width === 0) return;
-    // The whole map at full size when it fits; otherwise the readable size, panned to where the process order starts.
     const zoom = Math.min(1, Math.max((width - 16) / map.width, READABLE_ZOOM));
     const x = map.width * zoom <= width ? (width - map.width * zoom) / 2 : 8;
     void flow.setViewport({ x, y: -BAND_TOP * zoom + 8, zoom });
@@ -193,7 +187,6 @@ function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly 
   const boxes = new Map(map.nodes.map((node) => [node.key, node]));
   const lookOf = (key: string): Look => (selected === undefined ? 'plain' : key === selected ? 'selected' : near.has(key) ? 'near' : 'dim');
   const shown = map.edges.filter((edge) => (selected === undefined ? edge.backbone : edge.from === selected || edge.to === selected));
-  // One scale for every selection, so a rare part's hops look rare.
   const maxWeight = Math.max(...map.edges.map((edge) => edge.visits.length));
 
   const nodes: Node[] = [
@@ -252,7 +245,6 @@ function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly 
       onNodeMouseEnter={(_, node) => near.has(node.id) && setHop(node.id)}
       onEdgeMouseEnter={(_, edge) => selected !== undefined && setHop(edge.source === selected ? edge.target : edge.source)}
       onEdgeClick={(_, edge) => {
-        // A backbone hop clicked with nothing picked opens from its source, with the hop itself in focus.
         if (selected === undefined) select(edge.source);
         setHop(edge.target === selected ? edge.source : edge.target);
       }}

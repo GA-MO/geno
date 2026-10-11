@@ -1,11 +1,6 @@
 import type { Choices, Link, OptionId, Scenario, Step, StepId, TurnEnd } from './model.js';
 import type { Party, Phase } from './schema.js';
 
-/**
- * The player as pure functions over a compiled scenario. The island and the static fallback both use them.
- * Nothing here is stored: the diagram, the progress panel, the narration and the URL hash all derive from TourState.
- */
-
 export interface TourState {
   readonly choices: Choices;
   readonly index: number;
@@ -21,10 +16,8 @@ export type TourAction =
   | { readonly type: 'choose'; readonly fork: StepId; readonly option: OptionId }
   | { readonly type: 'play' }
   | { readonly type: 'pause' }
-  /** The play timer: steps on, and stops at a fork or the end. */
   | { readonly type: 'tick' };
 
-/** The path from the start under `choices` (defaults where a fork is not chosen), to an end or a goto. */
 export function walk(scenario: Scenario, choices: Choices): StepId[] {
   const path: StepId[] = [];
   for (let at: StepId | undefined = scenario.start; at !== undefined && !path.includes(at); ) {
@@ -89,7 +82,6 @@ export interface Progress {
   readonly step: Step;
   readonly whoseMove: Party;
   readonly phase: Phase;
-  /** Where the turn stands once this step is done: still running, ended, or handed to another scenario. */
   readonly turn: { readonly kind: 'running' } | { readonly kind: 'end'; readonly end: TurnEnd } | { readonly kind: 'leave'; readonly to: Link };
   readonly position: { readonly at: number; readonly of: number };
   readonly modelCalls: number;
@@ -99,18 +91,12 @@ export interface Progress {
   readonly user: readonly Moment[];
 }
 
-/** The first sentence of a step's text, for the running lists. */
 export function briefOf(does: string): string {
   const flat = does.replace(/\s+/g, ' ').trim();
   const sentence = /^(.+?[.!?])(\s|$)/.exec(flat)?.[1] ?? flat;
   return sentence.length > 110 ? `${sentence.slice(0, 108)}…` : sentence;
 }
 
-/**
- * Model calls and tool calls over a walk. A model call is a run of model-call steps in one column (one session).
- * A tool call is counted at the first tool-run step after a model call, unless a step says how many it `runs`;
- * any authored count closes the batch, so later tool-run steps add nothing until the next model call.
- */
 function tally(done: readonly Step[]): { readonly modelCalls: number; readonly toolRuns: number } {
   let modelCalls = 0;
   let toolRuns = 0;
@@ -128,7 +114,6 @@ function tally(done: readonly Step[]): { readonly modelCalls: number; readonly t
   return { modelCalls, toolRuns };
 }
 
-/** A fold over the walk up to `index`. */
 export function progressAt(scenario: Scenario, path: readonly StepId[], index: number): Progress {
   const done = path.slice(0, index + 1).map((id) => scenario.steps[id]!);
   const step = done.at(-1)!;
@@ -158,7 +143,6 @@ export interface Edge {
   readonly from: StepId;
   readonly to: StepId;
   readonly kind: 'next' | 'again';
-  /** The two lanes live in different processes: an ACP message, a postMessage, an HTTPS call. */
   readonly crossing: boolean;
 }
 export interface Grid {
@@ -168,7 +152,6 @@ export interface Grid {
   readonly rows: number;
 }
 
-/** Column = the step's lane, row = its place on the walk (an `alongside` step shares the row before it). */
 export function layoutWalk(scenario: Scenario, path: readonly StepId[]): Grid {
   let row = -1;
   const cells = path.map((id, i) => {
@@ -185,7 +168,6 @@ export function layoutWalk(scenario: Scenario, path: readonly StepId[]): Grid {
   return { cells, edges, columns: scenario.columns.length, rows: row + 1 };
 }
 
-/** `#at=<step>`, plus `&c=<fork>:<option>,…` for choices the step's own `via` does not imply. */
 export function hashOf(scenario: Scenario, state: TourState): string {
   const at = walk(scenario, state.choices)[state.index]!;
   const implied = { ...scenario.defaults, ...scenario.via[at] };
@@ -193,7 +175,6 @@ export function hashOf(scenario: Scenario, state: TourState): string {
   return `#at=${at}${extra.length === 0 ? '' : `&c=${extra.map(([fork, option]) => `${fork}:${option}`).join(',')}`}`;
 }
 
-/** Unknown steps or options fall back to the start; a bad link never throws. */
 export function stateFromHash(scenario: Scenario, hash: string): TourState {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const at = params.get('at') ?? '';

@@ -1,7 +1,6 @@
 ---
 import { siteFor } from '../scenario/site';
 
-/** `<ScenarioIndex />`: every catalog row by chapter, linked where a page covers it, so coverage shows as it is. */
 const site = siteFor();
 const covered = Object.values(site.links).filter((link) => link.href !== undefined).length;
 ---

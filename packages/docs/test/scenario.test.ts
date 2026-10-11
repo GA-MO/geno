@@ -15,7 +15,6 @@ const DOCS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(DOCS, '../..');
 const lanes = lanesSchema.parse(parse(readFileSync(path.join(DOCS, 'src/data/lanes.yaml'), 'utf8')));
 
-/** Every ref resolves to line 1 unless it names `missing`; every emitted name exists. */
 const fakeSource: SourceIndex = {
   resolve: (ref) => (ref.includes('missing') ? `${ref}: no declaration named missing` : { path: ref.split('#')[0]!, anchor: ref.split('#')[1]!, line: 1, url: 'vscode://file/x:1' }),
   literalExists: () => true,

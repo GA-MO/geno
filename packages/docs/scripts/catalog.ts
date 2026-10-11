@@ -4,10 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 import type { CatalogIn } from '../src/scenario/schema.js';
 
-/**
- * `pnpm --filter @g-code/docs catalog <catalog.md>`: turns the explorers' deduplicated catalog into
- * src/data/catalog.yaml. Run once per catalog revision; the YAML is what the site and `docs:check` read.
- */
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/data/catalog.yaml');
 
 const CHAPTER = /^## (\d+)\. (.+): \d+$/;
@@ -15,7 +11,6 @@ const NAMED = /^(.+?) \((.+)\)$/;
 
 const cellsOf = (line: string): string[] => line.slice(1, -1).split('|').map((cell) => cell.trim());
 const unticked = (cell: string): string => cell.replace(/^`|`$/g, '');
-/** One row may list two ids (`a` / `b`); its Thai and English names split the same way when they can. */
 const split = (cell: string, count: number): string[] => {
   const parts = cell.split(' / ');
   return parts.length === count ? parts : Array.from({ length: count }, () => cell);
