@@ -97,19 +97,27 @@ export function briefOf(does: string): string {
   return sentence.length > 110 ? `${sentence.slice(0, 108)}…` : sentence;
 }
 
+type Batch = 'uncounted' | 'counted';
+
+function runsOf(step: Step, batch: Batch): { readonly runs: number; readonly batch: Batch } {
+  if (step.runs !== undefined) return { runs: step.runs, batch: 'counted' };
+  if (step.counts === 'tool-run' && batch === 'uncounted') return { runs: 1, batch: 'counted' };
+  return { runs: 0, batch };
+}
+
 function tally(done: readonly Step[]): { readonly modelCalls: number; readonly toolRuns: number } {
   let modelCalls = 0;
   let toolRuns = 0;
-  let batchCounted = false;
+  let batch: Batch = 'uncounted';
   done.forEach((step, i) => {
     const previous = done[i - 1];
     if (step.counts === 'model-call' && !(previous?.counts === 'model-call' && previous.column === step.column)) {
       modelCalls += 1;
-      batchCounted = false;
+      batch = 'uncounted';
     }
-    const runs = step.runs ?? (step.counts === 'tool-run' && !batchCounted ? 1 : 0);
-    if (step.runs !== undefined || runs > 0) batchCounted = true;
-    toolRuns += runs;
+    const counted = runsOf(step, batch);
+    toolRuns += counted.runs;
+    batch = counted.batch;
   });
   return { modelCalls, toolRuns };
 }
@@ -143,7 +151,7 @@ export interface Edge {
   readonly from: StepId;
   readonly to: StepId;
   readonly kind: 'next' | 'again';
-  readonly crossing: boolean;
+  readonly crossesProcess: boolean;
 }
 export interface Grid {
   readonly cells: readonly Cell[];
@@ -160,10 +168,10 @@ export function layoutWalk(scenario: Scenario, path: readonly StepId[]): Grid {
     return { step: id, column: step.column, row };
   });
   const processOf = (id: StepId): string => scenario.columns[scenario.steps[id]!.column]!.process;
-  const edges: Edge[] = path.slice(1).map((to, i) => ({ from: path[i]!, to, kind: 'next', crossing: processOf(path[i]!) !== processOf(to) }));
+  const edges: Edge[] = path.slice(1).map((to, i) => ({ from: path[i]!, to, kind: 'next', crossesProcess: processOf(path[i]!) !== processOf(to) }));
   for (const id of path) {
     const again = scenario.steps[id]!.again;
-    if (again !== undefined && path.includes(again)) edges.push({ from: id, to: again, kind: 'again', crossing: false });
+    if (again !== undefined && path.includes(again)) edges.push({ from: id, to: again, kind: 'again', crossesProcess: false });
   }
   return { cells, edges, columns: scenario.columns.length, rows: row + 1 };
 }
@@ -171,23 +179,23 @@ export function layoutWalk(scenario: Scenario, path: readonly StepId[]): Grid {
 export function hashOf(scenario: Scenario, state: TourState): string {
   const at = walk(scenario, state.choices)[state.index]!;
   const implied = { ...scenario.defaults, ...scenario.via[at] };
-  const extra = Object.entries(state.choices).filter(([fork, option]) => implied[fork] !== option);
+  const extra = (Object.entries(state.choices) as [StepId, OptionId][]).filter(([fork, option]) => implied[fork] !== option);
   return `#at=${at}${extra.length === 0 ? '' : `&c=${extra.map(([fork, option]) => `${fork}:${option}`).join(',')}`}`;
 }
 
 export function stateFromHash(scenario: Scenario, hash: string): TourState {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
-  const at = params.get('at') ?? '';
+  const at = (params.get('at') ?? '') as StepId;
   const extra = Object.fromEntries(
     (params.get('c') ?? '')
       .split(',')
-      .map((pair) => pair.split(':') as [string, string])
+      .map((pair) => pair.split(':') as [StepId, OptionId])
       .filter(([fork, option]) => {
         const flow = scenario.steps[fork]?.flow;
         return flow?.kind === 'fork' && flow.options.some((candidate) => candidate.id === option);
       }),
   ) as Choices;
   const choices = { ...scenario.defaults, ...extra, ...scenario.via[at] };
-  const index = walk(scenario, choices).indexOf(at as StepId);
+  const index = walk(scenario, choices).indexOf(at);
   return index === -1 ? initialState(scenario) : { choices, index, playing: false };
 }

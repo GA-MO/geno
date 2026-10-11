@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse, YAMLParseError } from 'yaml';
 import type { z } from 'astro/zod';
 import { compileScenario } from './compile.js';
-import type { CodeRef, Link, PartKey, Problem, Scenario, StepId } from './model.js';
+import { partKeyOf, type CodeRef, type Link, type PartKey, type Problem, type Scenario, type StepId } from './model.js';
 import { sourceIndex } from './refs.js';
 import { catalogSchema, fragmentSchema, isUse, lanesSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
 
@@ -24,8 +24,8 @@ export interface Site {
   readonly catalog: CatalogIn;
   readonly scenarios: Readonly<Record<string, Scenario>>;
   readonly links: Readonly<Record<string, Link>>;
-  readonly partRefs: Readonly<Record<string, CodeRef>>;
-  readonly visits: Readonly<Record<string, readonly Visit[]>>;
+  readonly partRefs: Readonly<Record<PartKey, CodeRef>>;
+  readonly visits: Readonly<Record<PartKey, readonly Visit[]>>;
   readonly problems: readonly Problem[];
 }
 
@@ -134,12 +134,12 @@ export function loadSite(options: SiteOptions): Site {
   );
 
   const source = sourceIndex(options.repoRoot);
-  const partRefs: Record<string, CodeRef> = {};
+  const partRefs: Record<PartKey, CodeRef> = {};
   lanes.lanes.forEach((lane, i) =>
     lane.parts.forEach((part, j) => {
       const resolved = source.resolve(part.ref);
-      if (typeof resolved === 'string') problems.push({ level: 'error', file: `${DATA}/lanes.yaml`, path: `lanes[${i}].parts[${j}].ref`, message: resolved });
-      else partRefs[`${lane.id}.${part.id}`] = resolved;
+      if (resolved.ok) partRefs[partKeyOf(lane.id, part.id)] = resolved.ref;
+      else problems.push({ level: 'error', file: `${DATA}/lanes.yaml`, path: `lanes[${i}].parts[${j}].ref`, message: resolved.reason });
     }),
   );
   const scenarios: Record<string, Scenario> = {};
@@ -164,10 +164,10 @@ function usesOf(steps: readonly StepIn[]): string[] {
 }
 
 function visitsOf(scenarios: Readonly<Record<string, Scenario>>): Record<PartKey, Visit[]> {
-  const visits: Record<string, Visit[]> = {};
+  const visits: Record<PartKey, Visit[]> = {};
   for (const scenario of Object.values(scenarios)) {
-    const seen = new Set<string>();
-    for (const id of Object.keys(scenario.via)) {
+    const seen = new Set<PartKey>();
+    for (const id of Object.keys(scenario.via) as StepId[]) {
       const step = scenario.steps[id]!;
       if (seen.has(step.part)) continue;
       seen.add(step.part);
@@ -177,8 +177,8 @@ function visitsOf(scenarios: Readonly<Record<string, Scenario>>): Record<PartKey
   return visits;
 }
 
-export function partLabels(lanes: LanesIn): Record<string, string> {
-  return Object.fromEntries(lanes.lanes.flatMap((lane) => lane.parts.map((part) => [`${lane.id}.${part.id}`, part.label])));
+export function partLabels(lanes: LanesIn): Record<PartKey, string> {
+  return Object.fromEntries(lanes.lanes.flatMap((lane) => lane.parts.map((part) => [partKeyOf(lane.id, part.id), part.label])));
 }
 
 let memo: { readonly key: string; readonly site: Site } | undefined;
