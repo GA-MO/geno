@@ -1,0 +1,128 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import ts from 'typescript';
+import type { CodeRef } from './model.js';
+
+/** Resolves code refs against the source tree. A string result is the reason the ref does not resolve. */
+export interface SourceIndex {
+  resolve(ref: string): CodeRef | string;
+  /** True when `text` appears anywhere in the engine's, core's or extension's sources. A floor, not proof. */
+  literalExists(text: string): boolean;
+}
+
+interface Declaration {
+  readonly name: string;
+  /** Names of the declarations around this one, outermost first: `ChatProvider` for its `askPermission`. */
+  readonly within: readonly string[];
+  readonly line: number;
+  readonly overload: boolean;
+}
+
+const LITERAL_SOURCES = ['packages/core/src', 'packages/engine/src', 'packages/extension/src'];
+
+function nameOf(node: ts.Node): string | undefined {
+  if (
+    ts.isFunctionDeclaration(node) ||
+    ts.isClassDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isEnumDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isMethodSignature(node) ||
+    ts.isPropertyDeclaration(node) ||
+    ts.isPropertySignature(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isPropertyAssignment(node) ||
+    ts.isVariableDeclaration(node)
+  ) {
+    return node.name !== undefined && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) ? node.name.text : undefined;
+  }
+  return undefined;
+}
+
+/** Every named declaration in a file at any depth: functions, consts, classes, types, members, object keys. */
+export function declarationsOf(file: string, text: string): Declaration[] {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const found: Declaration[] = [];
+  const visit = (node: ts.Node, within: readonly string[]): void => {
+    const name = nameOf(node);
+    if (name !== undefined) {
+      const at = (node as ts.NamedDeclaration).name ?? node;
+      const overload = ts.isFunctionDeclaration(node) && node.body === undefined;
+      found.push({ name, within, line: source.getLineAndCharacterOfPosition(at.getStart(source)).line + 1, overload });
+    }
+    const inner = name === undefined ? within : [...within, name];
+    ts.forEachChild(node, (child) => visit(child, inner));
+  };
+  visit(source, []);
+  return found;
+}
+
+/** True when `outer` appears in `within` in order, gaps allowed. */
+const nestedIn = (within: readonly string[], outer: readonly string[]): boolean => {
+  let at = 0;
+  for (const name of within) if (name === outer[at]) at += 1;
+  return at === outer.length;
+};
+
+/**
+ * `a.b.c` names `c` declared somewhere inside `b`, itself inside `a`. The shallowest match wins, so a bare
+ * name is the top-level declaration and `Class.member` the member, not a same-named local inside it.
+ * Two matches at the same depth are ambiguous.
+ */
+export function findDeclaration(declarations: readonly Declaration[], dotted: string): number | string {
+  const names = dotted.split('.');
+  const name = names.pop()!;
+  const candidates = declarations.filter((declaration) => declaration.name === name && nestedIn(declaration.within, names));
+  // Overload signatures and their implementation are one function; the implementation stands for it.
+  const bodies = candidates.filter((declaration) => !declaration.overload);
+  const distinct = bodies.length > 0 ? bodies : candidates;
+  const shallowest = Math.min(...distinct.map((declaration) => declaration.within.length));
+  const chosen = distinct.filter((declaration) => declaration.within.length === shallowest);
+  if (chosen.length === 1) return chosen[0]!.line;
+  if (chosen.length === 0) return `no declaration named ${dotted}`;
+  return `${dotted} is declared ${chosen.length} times (lines ${chosen.map((declaration) => declaration.line).join(', ')}); qualify it as Outer.${name} or quote a line`;
+}
+
+export function sourceIndex(repoRoot: string): SourceIndex {
+  const texts = new Map<string, string | undefined>();
+  const declarations = new Map<string, Declaration[]>();
+  let corpus: string | undefined;
+
+  const textOf = (file: string): string | undefined => {
+    if (!texts.has(file)) {
+      const absolute = path.join(repoRoot, file);
+      texts.set(file, existsSync(absolute) ? readFileSync(absolute, 'utf8') : undefined);
+    }
+    return texts.get(file);
+  };
+
+  return {
+    resolve(ref) {
+      const hash = ref.indexOf('#');
+      const file = ref.slice(0, hash);
+      const anchor = ref.slice(hash + 1);
+      const text = textOf(file);
+      if (text === undefined) return `${file} does not exist`;
+      let line: number | string;
+      if (anchor.startsWith('"')) {
+        const literal = anchor.slice(1, -1);
+        const hits = text.split('\n').flatMap((content, i) => (content.includes(literal) ? [i + 1] : []));
+        line = hits.length === 1 ? hits[0]! : hits.length === 0 ? `no line contains ${anchor}` : `${anchor} is on ${hits.length} lines (${hits.join(', ')}); quote more of the line`;
+      } else {
+        if (!declarations.has(file)) declarations.set(file, declarationsOf(file, text));
+        line = findDeclaration(declarations.get(file)!, anchor);
+      }
+      if (typeof line === 'string') return `${file}: ${line}`;
+      return { path: file, anchor, line, url: `vscode://file${path.join(repoRoot, file)}:${line}` };
+    },
+    literalExists(text) {
+      corpus ??= LITERAL_SOURCES.flatMap((dir) =>
+        readdirSync(path.join(repoRoot, dir), { recursive: true, withFileTypes: true })
+          .filter((entry) => entry.isFile() && /\.(m?ts|tsx|js)$/.test(entry.name))
+          .map((entry) => readFileSync(path.join(entry.parentPath, entry.name), 'utf8')),
+      ).join('\n');
+      return corpus.includes(text);
+    },
+  };
+}

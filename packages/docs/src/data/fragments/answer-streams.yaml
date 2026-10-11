@@ -1,0 +1,36 @@
+# The model's text on its way to the screen while it streams, then the answer logged.
+# The first three steps are alongside: they happen in the same moment as the model step before them.
+- id: relay
+  lane: server
+  at: updates
+  alongside: true
+  do: >-
+    `editorTurn` ส่งข้อความแต่ละส่วนที่ได้รับเป็น `session/update` ชนิด `agent_message_chunk`
+  ref: packages/engine/src/serve.ts#editorTurn
+  emits: [agent_message_chunk]
+
+- id: dispatch
+  lane: editor
+  at: chat
+  alongside: true
+  do: >-
+    `Chat.updated` รับอัปเดตของ session ที่แผงนี้แสดงอยู่ แปลงเป็น action ด้วย `updateActions` แล้วส่งต่อให้ webview
+  ref: packages/extension/src/chat/chat.ts#Chat.updated
+
+- id: shown
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    `render()` วาดบทสนทนาใหม่ทุกครั้งที่มี action ข้อความจึงค่อยๆ ปรากฏ
+  sees: ข้อความของ Geno ขึ้นทีละส่วนพร้อมเคอร์เซอร์ หัวข้อยังเป็น "working"
+  ref: packages/extension/src/chat/webview.ts#render
+
+- id: logged
+  lane: loop
+  at: drive
+  do: >-
+    เมื่อ stream จบ `drive` บันทึก event `assistant` พร้อม usage ค่าใช้จ่ายและเวลา
+    แล้ว server ส่ง `usage_update` ให้วงแหวน context ในช่องพิมพ์
+  ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn\""
+  emits: [assistant, usage_update]

@@ -1,0 +1,44 @@
+# The model said end_turn and nothing keeps the turn open: the loop ends done, and the panel shows it.
+- id: done
+  lane: loop
+  at: step
+  do: >-
+    `loopStep` เห็นว่าคำตอบล่าสุดจบด้วย `end_turn` ตาราง `AFTER_STOP` จึงให้ `done(end_turn)`
+  ref: packages/core/src/loop.ts#AFTER_STOP
+  emits: [end_turn]
+  phase: ending
+
+- id: stop-hook
+  lane: policy
+  at: hooks
+  do: >-
+    Stop hook (`stopKeepsGoing`) ได้ตัดสินก่อนจบ ถ้า hook บล็อก loop จะเรียกโมเดลอีกรอบ (ได้ครั้งเดียวติดกัน)
+    เมื่อไม่มี hook turn ก็จบ
+  ref: packages/engine/src/drive.ts#stopKeepsGoing
+
+- id: response
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` แปลงผลด้วย `TURN_ENDS`: ACP ได้ `stopReason: end_turn` และ `_meta` บอกว่างานจบแบบ `done`
+    แล้วปิดงานในแผง Tasks และปลด lock ของ session
+  ref: packages/engine/src/serve.ts#TURN_ENDS
+  emits: [TURN_END_META]
+
+- id: turn-end
+  lane: editor
+  at: chat
+  do: >-
+    คำขอ `session/prompt` ได้คำตอบ `turnEndOf` อ่านผลจริงจาก meta แล้วส่ง action `turn-end` สถานะ `done`
+  ref: packages/extension/src/chat/chat.ts#turnEndOf
+  emits: [turn-end]
+
+- id: footer
+  lane: panel
+  at: rail
+  do: >-
+    `headerOf` เปลี่ยนหัวข้อเป็นเวลาที่ทำงาน ท้าย turn ขึ้นรุ่นโมเดล จำนวน token และค่าใช้จ่าย
+    ถ้ามีข้อความรอในคิว `sendQueued` ส่งต่อทันที
+  sees: หัวข้อ "worked for 8s" ปุ่ม Send กลับมาแทน Stop และท้ายคำตอบมีแถวสรุปโมเดล token และค่าใช้จ่าย
+  ref: packages/extension/src/chat/rail.ts#headerOf
+  end: { turn: done, reason: end_turn }

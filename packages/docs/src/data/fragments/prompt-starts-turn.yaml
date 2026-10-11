@@ -1,0 +1,86 @@
+# From Enter in the VS Code panel to the prompt sitting in the session log. `- use: prompt-starts-turn` splices
+# these steps in; their ids become prompt-starts-turn.<id>. A fragment cannot use another fragment.
+- id: type
+  lane: user
+  do: >-
+    ผู้ใช้พิมพ์คำถามในช่องพิมพ์แล้วกด Enter ขณะที่ session นี้ไม่มี turn ทำงานอยู่
+  phase: idle
+
+- id: send
+  lane: panel
+  at: composer
+  do: >-
+    `submit()` เห็นว่าไม่มี turn ทำงานอยู่ จึงโพสต์ข้อความ `send` พร้อมข้อความและไฟล์แนบไปให้ extension host
+    (ถ้ามี turn ทำงานอยู่ ข้อความจะเข้าคิวรอแทน)
+  ref: packages/extension/src/chat/webview.ts#submit
+  emits: [send]
+
+- id: route
+  lane: editor
+  at: chat
+  do: >-
+    `Chat.send` ตรวจก่อนว่าเป็นคำสั่งที่ editor ทำเองหรือไม่ เช่น `/new` หรือ `/model`
+    ข้อความธรรมดาจึงส่งต่อให้ `prompt()`
+  ref: "packages/extension/src/chat/chat.ts#\"async send(text: string, attachments\""
+
+- id: turn-start
+  lane: editor
+  at: chat
+  do: >-
+    `prompt()` ส่ง action `turn-start` ไปที่แผงแชตทันที ก่อนจะติดต่อ engine ด้วยซ้ำ
+  sees: >-
+    บับเบิลข้อความของผู้ใช้ หัวข้อข้างโลโก้เป็น "working" แถว "Thinking" กะพริบ และปุ่ม Stop มาแทนปุ่ม Send
+  ref: packages/extension/src/chat/chat.ts#Chat.prompt
+  emits: [turn-start]
+
+- id: request
+  lane: editor
+  at: engine-link
+  do: >-
+    `link()` ต่อ Unix socket ของ engine (เปิด engine ขึ้นมาก่อนถ้ายังไม่มี) แล้วส่งคำขอ ACP `session/prompt`
+    คำขอนี้ค้างอยู่จนกว่า turn จะจบ
+  ref: packages/extension/src/chat/chat.ts#Chat.link
+
+- id: accept
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` ปฏิเสธถ้า session นี้มี turn ทำงานอยู่แล้วหรือ prompt ว่าง
+    จากนั้นลงทะเบียน `AbortController` ไว้ใน `turns` ให้ปุ่ม Stop ใช้ และเริ่มงานในแผง Tasks
+  ref: packages/engine/src/serve.ts#runTurn
+  phase: starting
+
+- id: lock
+  lane: server
+  at: turns
+  do: >-
+    ภายใน `serially` ซึ่งเป็น lock ต่อ session `resumeSession` อ่าน log ของ session
+    prompt แรกของแชตได้ชื่อแชตผ่าน `session_info_update` แล้วจึงเรียก `runAgent`
+  ref: "packages/engine/src/serve.ts#\"const ran = await serially(sessionId\""
+  emits: [session_info_update]
+
+- id: build
+  lane: loop
+  at: agent
+  do: >-
+    `runAgent` ประกอบการทำงานรอบนี้: กฎสิทธิ์ sandbox ชุดเครื่องมือ system prompt และ hooks
+    ทุกโหมดได้เครื่องมือและ system prompt ชุดเดียวกัน prompt cache จึงไม่หลุดเมื่อสลับโหมด
+  ref: packages/engine/src/agent.ts#runAgent
+
+- id: record
+  lane: loop
+  at: drive
+  do: >-
+    `drive` บันทึก event `user` ต่อท้าย log ของ session (ไฟล์ JSONL บรรทัดละ event)
+    log นี้คือสถานะทั้งหมดของ turn ไม่มีสถานะที่อยู่แค่ในหน่วยความจำ
+  ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
+  emits: [user]
+
+- id: submit-hooks
+  lane: policy
+  at: hooks
+  do: >-
+    UserPromptSubmit hooks (`submitted()`) ได้อ่าน prompt ก่อนโมเดล ถ้า hook บล็อก turn จะจบด้วย error `blocked`
+    และโมเดลไม่เห็น prompt นี้ เมื่อไม่มี hook ก็ผ่านไป
+  ref: packages/engine/src/drive.ts#submitted
+  emits: [UserPromptSubmit]

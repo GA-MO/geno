@@ -1,0 +1,50 @@
+# The opening of every tool scenario: from a logged tool_use to the call showing as running in the panel.
+- id: decide
+  lane: loop
+  at: step
+  do: >-
+    `loopStep` เห็น `tool_use` ที่ยังไม่มีผล และไม่มี call ใดที่ต้องตอบโดยไม่รัน จึงตัดสินว่า `run-tools`
+  ref: packages/core/src/loop.ts#loopStep
+  emits: [run-tools]
+  phase: running-tools
+
+- id: pre-hooks
+  lane: policy
+  at: hooks
+  do: >-
+    PreToolUse hooks ตัดสินทุก call ของเทิร์นก่อน call แรกจะเริ่ม เมื่อไม่มี hook ทุก call ได้ผล `run`
+  ref: "packages/engine/src/drive.ts#\"steps = await hooks?.decide(toolUses\""
+  emits: [PreToolUse]
+
+- id: batch
+  lane: loop
+  at: tools
+  do: >-
+    `nextToolBatch` จัด call เป็นชุด: การอ่านที่ไม่ต้องขอสิทธิ์รันพร้อมกันได้ถึง 8 ตัว
+    ส่วน `bash` `edit` และ call ที่อาจต้องถามผู้ใช้ รันทีละตัว
+  ref: packages/core/src/tool-batch.ts#nextToolBatch
+
+- id: started
+  lane: server
+  at: updates
+  do: >-
+    `watcher.toolStart` ส่ง `session/update` ชนิด `tool_call` สถานะ `in_progress` หนึ่งครั้งต่อ call
+  ref: packages/engine/src/serve.ts#editorTurn
+  emits: [tool_call, in_progress]
+
+- id: relay
+  lane: editor
+  at: chat
+  alongside: true
+  do: >-
+    `updateActions` แปลง `tool_call` เป็น action ของขั้นใหม่ แล้วส่งต่อให้ webview
+  ref: packages/extension/src/chat/session-updates.ts#updateActions
+
+- id: shown
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    บทสนทนาขึ้นขั้นใหม่ ชื่อขั้นมาจาก `describeCall`
+  sees: ชิปของ call เช่น "read package.json" พร้อมจุดที่กำลังหมุน
+  ref: packages/extension/src/chat/webview.ts#render
