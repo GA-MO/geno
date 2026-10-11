@@ -1,0 +1,46 @@
+# Something a session waited on arrived while no turn runs: it is logged, the gate opens, and a woken turn starts.
+# The arrival itself (a report, a command's end, a monitor's line, a due wake-up, a PR's checks) is the page's step before.
+- id: logged
+  lane: server
+  at: wakes
+  do: >-
+    สิ่งที่มาถึงเข้ากล่องข้อความของ session ไม่มี turn รันอยู่ `inbox.arrived` จึงให้ `logArrivals` บันทึกลง log ทันที
+    แล้ว `wakes.soon` ให้ตัวปลุกดูประตู
+  ref: packages/engine/src/background-hooks.ts#logArrivals
+  emits: [wake]
+
+- id: gate
+  lane: server
+  at: wakes
+  do: >-
+    `WakeDriver.look` ข้าม session ของลูกและของ agent ภายนอก แล้วถาม `wakeGate`: การปลุกเปิดอยู่ไหม มี turn รัน
+    การปลุกถูกพัก การ์ดค้าง หรือผู้ใช้กำลังพิมพ์ไหม รอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว และต้องมีหน้าต่างที่ต่ออยู่
+  ref: packages/core/src/wake.ts#wakeGate
+
+- id: wake
+  lane: server
+  at: wakes
+  do: >-
+    ประตูตอบ `wake` `WakeDriver` เลือกหน้าต่างที่แสดง session นี้ให้รัน `wakeTurn` ซึ่งเรียก `runTurn` แบบ `wake`
+    `logWake` บันทึกข้อความแรกของ turn จาก engine (`from: 'wake'`) และขีดจำกัดของ turn นับต่อจาก prompt ล่าสุดของผู้ใช้
+  ref: packages/engine/src/serve.ts#logWake
+  emits: [wake, user_message_chunk, WAKE_META]
+  phase: starting
+
+- id: adopt
+  lane: editor
+  at: chat
+  do: >-
+    `user_message_chunk` ที่มี `WAKE_META` ทำให้ `woken` เปิด turn ใหม่ในแผงโดยไม่มีข้อความของผู้ใช้ และรับ turn นี้เป็นของตัว
+    ปุ่ม Stop ใช้ได้เหมือน turn ที่ผู้ใช้ส่งเอง
+  ref: packages/extension/src/chat/chat.ts#Chat.woken
+  emits: [turn-start]
+
+- id: head
+  lane: panel
+  at: rail
+  alongside: true
+  do: หัวของ turn ใหม่มีไอคอนกระดิ่งกับเหตุที่ปลุกแทนข้อความของผู้ใช้
+  sees: >-
+    กระดิ่งกับป้ายจาก `wakeLabel` เช่น "woke: monitor matched" หัวข้อเป็น "working" และปุ่ม Stop
+  ref: packages/extension/src/chat/render.ts#turnHead
