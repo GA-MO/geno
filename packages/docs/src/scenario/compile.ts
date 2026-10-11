@@ -21,6 +21,8 @@ interface Node {
   readonly step: ActingStepIn;
   readonly path: string;
   readonly arms: readonly Arm[];
+  /** Spliced into its list by `use:`, so it is the fragment's step, not the list's own. */
+  readonly spliced: boolean;
 }
 interface Arm {
   readonly option: OptionIn;
@@ -117,7 +119,7 @@ function expand(list: readonly StepIn[], scope: string, path: string, inFragment
       if (inFragment || fragment === undefined) return [];
       const nth = (uses.get(step.use) ?? 0) + 1;
       uses.set(step.use, nth);
-      return expand(fragment, `${scope}${step.use}${nth === 1 ? '' : `-${nth}`}.`, `${at}>${step.use}`, true, ctx, problem);
+      return expand(fragment, `${scope}${step.use}${nth === 1 ? '' : `-${nth}`}.`, `${at}>${step.use}`, true, ctx, problem).map((node) => ({ ...node, spliced: true }));
     }
     const id = `${scope}${step.id ?? i + 1}` as StepId;
     const arms = (step.fork?.options ?? []).map((option, o) => ({
@@ -125,7 +127,7 @@ function expand(list: readonly StepIn[], scope: string, path: string, inFragment
       path: `${at}.fork.options[${o}]`,
       nodes: expand(option.steps ?? [], `${id}.${option.id}.`, `${at}.fork.options[${o}].steps`, inFragment, ctx, problem),
     }));
-    return [{ id, step, path: at, arms }];
+    return [{ id, step, path: at, arms, spliced: false }];
   });
 }
 
@@ -135,7 +137,6 @@ function allNodes(list: readonly Node[]): Node[] {
 
 /** Gives every node exactly one flow. `after` is where the list continues when it runs out. */
 function link(list: readonly Node[], after: StepId | undefined, ctx: CompileContext, flows: Map<StepId, Flow>, problem: (path: string, message: string) => void): OutlineItem[] {
-  const named = new Map(list.flatMap((node) => (node.step.id === undefined ? [] : [[node.step.id, node.id] as const])));
   return list.map((node, i) => {
     const next = list[i + 1]?.id ?? after;
     const { step } = node;
@@ -144,11 +145,12 @@ function link(list: readonly Node[], after: StepId | undefined, ctx: CompileCont
 
     if (step.fork !== undefined) {
       const arms = node.arms.map((arm) => {
-        const rejoin = arm.option.then === undefined ? next : named.get(arm.option.then);
-        if (arm.option.then !== undefined && rejoin === undefined) problem(`${arm.path}.then`, `no step "${arm.option.then}" in the list that holds this fork`);
+        const target = arm.option.then === undefined ? next : rejoinOf(arm.option.then, list);
+        if (typeof target === 'object') problem(`${arm.path}.then`, target.problem);
+        const rejoin = typeof target === 'object' ? undefined : target;
         const items = link(arm.nodes, rejoin, ctx, flows, problem);
         const to = arm.nodes[0]?.id ?? rejoin;
-        if (to === undefined) problem(arm.path, `option "${arm.option.id}" has no steps and nothing after the fork: this path never ends`);
+        if (to === undefined && typeof target !== 'object') problem(arm.path, `option "${arm.option.id}" has no steps and nothing after the fork: this path never ends`);
         const last = arm.nodes.at(-1)?.step;
         const fallsThrough = last === undefined || (last.end === undefined && last.goto === undefined && last.fork === undefined);
         return { option: arm.option, items, to, rejoins: fallsThrough ? rejoin : undefined };
@@ -172,6 +174,20 @@ function link(list: readonly Node[], after: StepId | undefined, ctx: CompileCont
     else problem(node.path, `the walk stops at "${node.id}" without end, goto or a rejoin: this path never ends`);
     return { step: node.id };
   });
+}
+
+/**
+ * A rejoin names a step of the list that holds the fork: its own step by id, or any step by scoped id.
+ * A bare id that a spliced fragment also uses is ambiguous, so the author writes the scoped id.
+ */
+function rejoinOf(then: string, list: readonly Node[]): StepId | { readonly problem: string } {
+  const exact = list.find((node) => node.id === then);
+  if (exact !== undefined) return exact.id;
+  const named = list.filter((node) => node.step.id === then);
+  if (named.length === 1 && !named[0]!.spliced) return named[0]!.id;
+  if (named.length === 0) return { problem: `no step "${then}" in the list that holds this fork` };
+  const which = named.map((node) => `${node.id}${node.spliced ? ' (inside a fragment)' : ''}`).join(', ');
+  return { problem: `"${then}" names ${named.length === 1 ? 'a step inside a fragment' : `${named.length} steps`}: ${which}; write the scoped id of the one to rejoin at` };
 }
 
 function laneOf(key: string, lanes: LanesIn): { readonly lane: LaneIn | undefined; readonly session: string | undefined } {

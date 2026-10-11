@@ -32,6 +32,7 @@ export const TURN_ENDS = [
 ] as const;
 
 const id = z.string().regex(/^[a-z][a-z0-9-]*$/, 'lowercase letters, digits and hyphens');
+const stepRef = z.string().regex(/^[a-z0-9][a-z0-9.-]*$/, 'a step id, scoped ids allowed');
 /** A catalog id such as `turn.text-answer`. */
 const catalogId = z.string().regex(/^[a-z]+\.[a-z0-9-]+$/, 'a catalog id such as turn.text-answer');
 /** `lane` or `lane@session`: the session gives a child its own column (`child@explore`). */
@@ -93,7 +94,7 @@ export interface OptionIn {
 export const isUse = (step: StepIn): step is UseStepIn => 'use' in step;
 
 const optionSchema: z.ZodType<OptionIn> = z.lazy(() =>
-  z.object({ id, label: z.string().min(1), then: id.optional(), steps: z.array(stepSchema).optional() }).strict(),
+  z.object({ id, label: z.string().min(1), then: stepRef.optional(), steps: z.array(stepSchema).optional() }).strict(),
 );
 
 const actingSchema: z.ZodType<ActingStepIn> = z.lazy(() =>
@@ -108,7 +109,7 @@ const actingSchema: z.ZodType<ActingStepIn> = z.lazy(() =>
       ref: codeRef.optional(),
       phase: z.enum(PHASES).optional(),
       alongside: z.boolean().optional(),
-      again: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/, 'a step id, scoped ids allowed').optional(),
+      again: stepRef.optional(),
       goto: catalogId.optional(),
       end: endIn.optional(),
       fork: z.object({ ask: z.string().min(1), options: z.array(optionSchema).min(2) }).strict().optional(),
