@@ -11,8 +11,8 @@ scenario:
     - ไม่มี hook ที่ตั้งไว้ และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
     โมเดลขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` ซึ่งไม่อยู่ใน safe list
-  covers: [perm.auto-classifier-allows, perm.auto-classifier-denies, perm.auto-classifier-blocks]
-  related: [perm.ask-allow, tool.bash-safe-runs, perm.auto-paused-asks-user, perm.classifier-unavailable]
+  covers: [perm.auto-classifier-allows, perm.auto-classifier-denies, perm.auto-classifier-blocks, perm.classifier-unavailable]
+  related: [perm.ask-allow, tool.bash-safe-runs, perm.auto-paused-asks-user, perm.auto-hard-ask]
   steps:
     - id: asks
       lane: model
@@ -156,6 +156,40 @@ scenario:
                 emits: [call-model]
                 phase: calling-model
                 end: { turn: continues, reason: call-model }
+          - id: unavailable
+            label: ตอบไม่ได้ (ปิด ไม่มี key หรือช้าเกิน)
+            steps:
+              - lane: policy
+                at: classifier
+                do: >-
+                  `commandClassifier` ไม่ได้คำตัดสินจริง: `GCODE_CLASSIFIER_MODEL=off`, ผู้ให้บริการของ classifier ไม่มี key,
+                  เกิน 8 วินาที, ผู้ให้บริการปฏิเสธ หรือคำตอบผิดรูป ทุกกรณีคืน `ask` พร้อมเหตุผลว่าอะไรล้ม
+                  เช่น "the classifier is off" หรือ "the classifier timed out after 8s" ไม่มีการเดาว่าคำสั่งปลอดภัย
+                ref: "packages/engine/src/classifier.ts#\"if (model === 'off') return always('the classifier is off');\""
+                emits: [the classifier is off]
+              - lane: policy
+                at: settle
+                do: >-
+                  `ask` ระหว่างที่ Auto ยังไม่พักเป็น `block` เหมือนคำตอบ `ask` จริง คำสั่งถูกปฏิเสธเป็น `ToolDenied` และนับการบล็อก
+                  classifier ที่ปิดอยู่บล็อกทุกคำสั่งนอก safe list ครั้งที่สามติดกันทำให้ Auto พัก
+                ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
+                emits: [ToolDenied]
+              - use: tool-result-returns
+              - lane: panel
+                at: rail
+                do: >-
+                  ป้ายปฏิเสธของ Auto แสดงเหตุผลของความล้มเหลวแทนเหตุผลของ classifier
+                sees: '"Denied by Auto" ตามด้วย "the classifier is off"'
+                ref: packages/extension/src/chat/session-updates.ts#denialOf
+              - lane: loop
+                at: step
+                do: >-
+                  `loopStep` ตัดสิน `call-model` turn ทำงานต่อ เมื่อ Auto พักแล้ว คำสั่งถัดไปที่ได้ `ask` จะขึ้นการ์ดถามผู้ใช้
+                  พร้อมบรรทัด "Auto could not decide: the classifier is off."
+                ref: packages/core/src/loop.ts#loopStep
+                emits: [call-model]
+                phase: calling-model
+                goto: perm.auto-paused-asks-user
 ---
 
 โหมด Auto ไม่ได้แปลว่าทุกอย่างผ่าน มันแปลว่า**ไม่มีใครถูกถาม** สำหรับคำสั่งกลุ่มที่ classifier ตัดสินได้
