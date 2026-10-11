@@ -1,0 +1,74 @@
+# A model call that will not be tried again: the error logged, shown as the turn's error, and the turn ended failed.
+# Used after the gateway returns an error result (transport or overflow), so it starts in the loop.
+- id: logged
+  lane: loop
+  at: model-call
+  do: >-
+    `callModel` ได้ผลเป็น error จึงบันทึก event `error` (ชนิด `transport` หรือ `overflow`) พร้อมข้อความจากผู้ให้บริการ
+    ไม่มี event `assistant` ของการเรียกนี้ ข้อความที่ stream มาแล้วบางส่วน (ถ้ามี) ไม่ถูกบันทึก
+  ref: "packages/engine/src/drive.ts#\"await record({ kind: 'error', seq: nextSeq(events), at, error: result.error\""
+  emits: [error]
+
+- id: update
+  lane: server
+  at: updates
+  do: >-
+    `watcher.logged` แปลง event ด้วย `errorUpdate` เป็น `session/update` ชนิด `agent_message_chunk`
+    ข้อความเป็น `[transport] ...` สำหรับ client ทั่วไป และ `_meta` ใต้ `TURN_ERROR_META` บอกชนิดกับข้อความจริง
+  ref: packages/engine/src/session-replay.ts#errorUpdate
+  emits: [agent_message_chunk, TURN_ERROR_META]
+
+- id: relay
+  lane: editor
+  at: chat
+  alongside: true
+  do: >-
+    `agentChunkAction` เห็น `TURN_ERROR_META` จึงไม่ใส่ข้อความลงคำตอบ แต่ส่ง action `error` ให้ webview แทน
+  ref: packages/extension/src/chat/compact-host.ts#agentChunkAction
+
+- id: shown
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    `errorBlock` วาดแถบ error สีแดงท้าย turn ด้วยข้อความของผู้ให้บริการ (ตัวอักษรแรกเป็นตัวใหญ่)
+  sees: แถบ error สีแดงพร้อมไอคอน เช่น "529 {"type":"error","error":{"type":"overloaded_error",...}}"
+  ref: packages/extension/src/chat/render.ts#errorBlock
+
+- id: done
+  lane: loop
+  at: step
+  do: >-
+    `loopStep` เห็นว่า event ล่าสุดคือ `error` ตาราง `ERROR_REASON` แปลง `transport` และ `overflow` เป็น `done(error)`
+    Stop hook ไม่ทำงานในทางนี้ prompt ที่ยังไม่ได้คำตอบยังอยู่ใน log ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งสองข้อความ
+  ref: packages/core/src/loop.ts#ERROR_REASON
+  emits: [error]
+  phase: ending
+
+- id: response
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` แปลงผลด้วย `TURN_ENDS.error`: ACP ได้ `stopReason: end_turn` (ACP ไม่มี stop reason สำหรับ error)
+    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ lock ของ session ถูกปลด
+  ref: packages/engine/src/serve.ts#TURN_ENDS
+  emits: [TURN_END_META, failed]
+
+- id: turn-end
+  lane: editor
+  at: chat
+  do: >-
+    `turnEndOf` เชื่อ `TURN_END_META` มากกว่า `stopReason` จึงส่ง action `turn-end` สถานะ `failed`
+    `end_turn` ไม่มีข้อความใน `STOP_MESSAGES` แถบ error จาก engine จึงเป็นคำอธิบายเดียวของ turn นี้
+  ref: packages/extension/src/chat/chat.ts#turnEndOf
+  emits: [turn-end]
+
+- id: footer
+  lane: panel
+  at: rail
+  do: >-
+    `headerOf` เปลี่ยนหัวข้อเป็น "failed after ..." `missingReply` เห็นแถบ error อยู่แล้วจึงไม่แสดงประกาศ Continue และ Retry
+    ถ้ามีข้อความรอในคิว ข้อความนั้นกลับไปอยู่ในช่องพิมพ์แทนที่จะถูกส่ง
+  sees: หัวข้อ "failed after 41s" ปุ่ม Send กลับมาแทน Stop และแถบ error ยังอยู่ท้าย turn
+  ref: packages/extension/src/chat/rail.ts#headerOf
+  end: { turn: failed, reason: error }

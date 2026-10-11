@@ -1,0 +1,172 @@
+---
+title: ผู้ให้บริการล้มชั่วคราว Geno ลองใหม่เอง
+description: การเรียกโมเดลได้ 529 หรือโมเดลเงียบไป gateway ลองใหม่เองพร้อมแจ้งในแผงแชต ส่วนเครดิตหมดหรือคีย์ผิดจบ turn ทันที
+tableOfContents: false
+sidebar:
+  order: 1
+scenario:
+  surface: vscode
+  given:
+    - เปิด Geno ในแผงแชตของ VS Code มี turn ทำงานอยู่
+    - เครือข่ายใช้ได้ แต่ฝั่งผู้ให้บริการมีปัญหา
+  trigger: >-
+    loop ส่งคำขอโมเดล แต่ผู้ให้บริการตอบกลับด้วย error แทนคำตอบ
+  covers: [err.transient-retried, err.quota-or-fatal, err.stream-stalled]
+  related: [err.offline-wait, err.rate-limited, ctx.overflow-compact-resend, turn.text-answer]
+  steps:
+    - use: model-call
+
+    - id: fails
+      lane: model
+      do: >-
+        ผู้ให้บริการไม่ส่งคำตอบ แต่ตอบเป็น error หรือเงียบไปเฉยๆ wire ของ SDK ไม่ลองใหม่เอง (`maxRetries: 0`)
+        การลองใหม่ทั้งหมดเป็นงานของ gateway
+      ref: packages/engine/src/wire.ts#anthropicWire
+
+    - id: kind
+      lane: loop
+      at: gateway
+      do: >-
+        `gatewayFor.turn` จับ error แล้วถามว่าเป็นแบบไหน
+      ref: packages/engine/src/gateway.ts#gatewayFor.turn
+      fork:
+        ask: ผู้ให้บริการตอบอะไร
+        options:
+          - id: overloaded
+            label: 529 overloaded
+            then: retry
+            steps:
+              - lane: loop
+                at: gateway
+                do: >-
+                  `classifyFailure` เทียบกับตาราง `RULES` ตามลำดับ ข้อความไม่ได้พูดถึงโควตา rate limit หรือ context
+                  สถานะ 529 จึงตรงกฎ 408 และ 5xx ได้ชนิด `transient` ซึ่งลองใหม่ได้
+                  `retryDelayMs` ให้รอ 1 วินาทีก่อนครั้งที่สอง (ถ้าเซิร์ฟเวอร์ส่ง `retry-after` มาไม่เกิน 20 วินาที ใช้ค่านั้นแทน)
+                ref: packages/core/src/model-error.ts#RULES
+                emits: [transient]
+
+          - id: stalled
+            label: โมเดลเงียบ 180 วินาที
+            then: retry
+            steps:
+              - lane: loop
+                at: gateway
+                do: >-
+                  ตัวเฝ้า stream นับ byte ที่เข้ามา ไม่มี byte เลย 180 วินาที (ก่อน byte แรก หรือระหว่าง byte)
+                  จึงยกเลิกการเรียกนี้ด้วย `StreamStalled` gateway ให้โอกาสลองใหม่ได้ครั้งเดียว (`STALL_RETRIES`)
+                ref: packages/engine/src/stream-watch.ts#StreamStalled
+                emits: [StreamStalled]
+
+          - id: quota
+            label: 402 เครดิตหมด หรือ 4xx อื่น
+            steps:
+              - lane: loop
+                at: gateway
+                do: >-
+                  `classifyFailure` ได้ `quota` (402 หรือข้อความเรื่อง billing) หรือ `fatal` (สถานะอื่น เช่น 401 คีย์ผิด)
+                  สองชนิดนี้ไม่ลองใหม่ ลองไปก็ได้ผลเดิม gateway คืนผลเป็น error ชนิด `transport` พร้อมข้อความของผู้ให้บริการ
+                  ที่ลบคีย์ออกแล้ว
+                ref: packages/core/src/model-error.ts#TURN_ERROR_OF
+                emits: [quota, fatal, transport]
+              - use: err-turn-fails
+
+    - id: retry
+      lane: loop
+      at: model-call
+      do: >-
+        `onRetry` บันทึก event `retry` (ครั้งที่ เวลาที่จะรอ และข้อความ) ลง log ก่อนเริ่มรอ
+      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'retry', seq: nextSeq(events)\""
+      emits: [retry]
+      phase: waiting-retry
+
+    - id: notice
+      lane: server
+      at: updates
+      do: >-
+        `LOGGED.retry` แปลง event เป็น `session/update` ชนิด `notice` ระดับ warning หัวข้อสั้นๆ จาก `retryReason`
+        ข้อความเต็มของผู้ให้บริการอยู่ใน description
+      ref: packages/engine/src/serve.ts#LOGGED.retry
+      emits: [notice, Retrying in]
+
+    - id: relay
+      lane: editor
+      at: chat
+      alongside: true
+      do: >-
+        `UPDATES.notice` เห็นว่าไม่มี `_meta` ของ progress หรือ wait จึงส่ง action `notice` ให้ webview
+      ref: packages/extension/src/chat/session-updates.ts#UPDATES.notice
+
+    - id: shown
+      lane: panel
+      at: rail
+      alongside: true
+      do: >-
+        ท้าย turn ขึ้นแถวประกาศพร้อมไอคอนหมุน แทนแถว "Thinking"
+      sees: >-
+        "Retrying in 1s (model overloaded)" หรือ "Retrying in 1s (the model went quiet)"
+      ref: packages/extension/src/chat/render.ts#turnNotice
+
+    - id: backoff
+      lane: loop
+      at: gateway
+      do: >-
+        gateway นอนรอตามเวลาแล้วเรียกใหม่ เวลารอเพิ่มเป็น 1, 2 และ 4 วินาที ถ้าผู้ใช้กด Stop ระหว่างรอ
+        การนอนถูกยกเลิกทันทีและ turn จบแบบ stopped
+      ref: "packages/engine/src/gateway.ts#\"const backOff = async (delayMs: number): Promise<boolean> => {\""
+      fork:
+        ask: การลองใหม่ได้ผลไหม
+        options:
+          - id: ok
+            label: ครั้งถัดไปได้คำตอบ
+            steps:
+              - lane: model
+                do: >-
+                  ผู้ให้บริการตอบตามปกติ stream คำตอบออกมาแล้วจบด้วย `stop_reason: end_turn`
+                ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+                emits: [end_turn]
+                phase: calling-model
+              - lane: panel
+                at: rail
+                alongside: true
+                do: >-
+                  byte แรกของการเรียกใหม่มาเป็น action `progress` ซึ่งลบแถวประกาศ Retrying ออก แล้วแถว "Thinking" กลับมา
+                sees: แถว Retrying หายไป แถว "Thinking" ขึ้นแทน
+                ref: "packages/extension/src/chat/transcript.ts#\"progress: (transcript, { progress }) =>\""
+              - use: answer-streams
+              - use: turn-ends
+
+          - id: give-up
+            label: ยังล้มจนหมดสิทธิ์ลอง
+            steps:
+              - lane: loop
+                at: gateway
+                do: >-
+                  ล้มอีกจนครบ: ชนิด `transient` ลองใหม่ได้ 3 ครั้ง (`RETRY_POLICY`) โมเดลเงียบลองได้ครั้งเดียว
+                  `retryDelayMs` คืน undefined gateway จึงคืนผลเป็น error ชนิด `transport`
+                  สำหรับโมเดลเงียบ ข้อความบอกตัวแปร `GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS` หรือ `GCODE_STREAM_IDLE_TIMEOUT_MS` ที่ตั้งให้รอนานขึ้นได้
+                ref: packages/core/src/model-error.ts#retryDelayMs
+                emits: [transport]
+              - use: err-turn-fails
+---
+
+gateway แยก error ของผู้ให้บริการเป็นหกชนิดด้วยตาราง `RULES` ใน `model-error.ts` แล้วแต่ละชนิดมีทางของตัวเอง
+หน้านี้คือสามชนิดที่ไม่ต้องรอนาน: ลองใหม่เร็วๆ หรือเลิกทันที
+
+| ชนิด | ตัวอย่าง | ทำอะไร |
+| --- | --- | --- |
+| `transient` | 408, 5xx, 529, ข้อความ "overloaded" | ลองใหม่ 3 ครั้ง รอ 1, 2, 4 วินาที |
+| โมเดลเงียบ | ไม่มี byte 180 วินาที | ลองใหม่ 1 ครั้ง |
+| `quota`, `fatal` | 402, 401, 400 อื่น | ไม่ลอง จบ turn แบบ failed |
+| `offline`, `limited` | เชื่อมต่อไม่ได้, 429 | รอนานกว่า ดู [เครือข่ายหลุด หรือถูกจำกัดอัตรา](/scenarios/err/offline-wait/) |
+| `overflow` | "prompt is too long" | สรุปบริบทแล้วส่งใหม่ ดู [สรุปบริบทระหว่าง turn](/scenarios/ctx/compaction-auto/) |
+
+สิ่งที่ควรสังเกต
+
+- **การลองใหม่อยู่ใน log แต่ไม่กินขีดจำกัด** event `retry` ถูกบันทึกทุกครั้ง แต่ขีดจำกัด 40 ครั้งของรอบนับเฉพาะ event `assistant`
+  การเรียกที่ล้มแล้วลองใหม่จนสำเร็จจึงนับเป็นหนึ่งครั้ง
+- **ข้อความที่ stream มาแล้วหายได้** ถ้าการเรียกล้มกลางทาง ข้อความที่ผู้ใช้เห็นไปแล้วไม่ถูกบันทึก
+  เพราะ log บันทึกคำตอบเป็น event `assistant` ตอนจบการเรียกเท่านั้น
+- **prompt ที่ยังไม่ได้คำตอบยังค้างอยู่** error ชนิด `transport` ไม่ทิ้ง prompt (`KEEPS_PENDING_PROMPT`)
+  ข้อความถัดไปที่ผู้ใช้ส่งจึงไปพร้อม prompt เดิมในข้อความเดียวกัน
+- **แถบ error ไม่มีปุ่ม Retry** `missingReply` ไม่แสดงประกาศ Continue และ Retry เมื่อ turn มีแถบ error อยู่แล้ว
+  ผู้ใช้ต้องส่งข้อความใหม่เอง
