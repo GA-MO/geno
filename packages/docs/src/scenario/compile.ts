@@ -2,7 +2,6 @@ import type { Choices, CodeRef, Flow, LaneColumn, Link, OptionId, OutlineItem, P
 import type { SourceIndex } from './refs.js';
 import { isUse, type ActingStepIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
 
-/** Everything compile needs from outside, so compile itself stays pure and testable with fakes. */
 export interface CompileContext {
   readonly file: string;
   readonly id: string;
@@ -11,17 +10,14 @@ export interface CompileContext {
   readonly lanes: LanesIn;
   readonly fragments: Readonly<Record<string, readonly StepIn[]>>;
   readonly source: SourceIndex;
-  /** Every catalog id, linked to the page that covers it when there is one. */
   readonly catalog: Readonly<Record<string, Link>>;
 }
 
-/** An authored step after fragments are spliced in and every step has its scoped id. */
 interface Node {
   readonly id: StepId;
   readonly step: ActingStepIn;
   readonly path: string;
   readonly arms: readonly Arm[];
-  /** Spliced into its list by `use:`, so it is the fragment's step, not the list's own. */
   readonly spliced: boolean;
 }
 interface Arm {
@@ -35,14 +31,8 @@ interface Walk {
   readonly path: readonly StepId[];
 }
 
-/** Enough to list every branch of a scenario with a few forks; past this a scenario should be split. */
 const MAX_WALKS = 256;
 
-/**
- * Authored scenario -> compiled Scenario, in passes: expand fragments and name steps, link each step to exactly
- * one flow, check lanes and refs, enumerate every walk (reachability, termination), then derive phase, `via`
- * and defaults. Problems accumulate, so one run names every broken ref and link in the file.
- */
 export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Result<Scenario> {
   const problems: Problem[] = [];
   const problem = (path: string, message: string): void => void problems.push({ level: 'error', file: ctx.file, path, message });
@@ -107,7 +97,6 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   };
 }
 
-/** Splices fragments in and names every step. A fragment used again in the same list is scoped `name-2.`, `name-3.`. */
 function expand(list: readonly StepIn[], scope: string, path: string, inFragment: boolean, ctx: CompileContext, problem: (path: string, message: string) => void): Node[] {
   const uses = new Map<string, number>();
   return list.flatMap((step, i): Node[] => {
@@ -135,7 +124,6 @@ function allNodes(list: readonly Node[]): Node[] {
   return list.flatMap((node) => [node, ...node.arms.flatMap((arm) => allNodes(arm.nodes))]);
 }
 
-/** Gives every node exactly one flow. `after` is where the list continues when it runs out. */
 function link(list: readonly Node[], after: StepId | undefined, ctx: CompileContext, flows: Map<StepId, Flow>, problem: (path: string, message: string) => void): OutlineItem[] {
   return list.map((node, i) => {
     const next = list[i + 1]?.id ?? after;
@@ -176,10 +164,6 @@ function link(list: readonly Node[], after: StepId | undefined, ctx: CompileCont
   });
 }
 
-/**
- * A rejoin names a step of the list that holds the fork: its own step by id, or any step by scoped id.
- * A bare id that a spliced fragment also uses is ambiguous, so the author writes the scoped id.
- */
 function rejoinOf(then: string, list: readonly Node[]): StepId | { readonly problem: string } {
   const exact = list.find((node) => node.id === then);
   if (exact !== undefined) return exact.id;
@@ -195,7 +179,6 @@ function laneOf(key: string, lanes: LanesIn): { readonly lane: LaneIn | undefine
   return { lane: lanes.lanes.find((lane) => lane.id === id), session };
 }
 
-/** Used lanes in registry order; a lane's sessions follow it in the order they first appear. */
 function columnsOf(keys: readonly string[], lanes: LanesIn): LaneColumn[] {
   const unique = [...new Set(keys)];
   const rank = (key: string): number => lanes.lanes.findIndex((lane) => lane.id === key.split('@')[0]);
@@ -269,7 +252,6 @@ function reach(start: StepId, flows: ReadonlyMap<StepId, Flow>): Set<StepId> {
   return seen;
 }
 
-/** Every walk from the start under every combination of choices, default options first. */
 function enumerate(start: StepId, flows: ReadonlyMap<StepId, Flow>, problem: (at: StepId, message: string) => void): Walk[] {
   const walks: Walk[] = [];
   const explore = (from: StepId, choices: Choices, before: readonly StepId[]): void => {
@@ -314,7 +296,6 @@ function phasesOf(walks: readonly Walk[], nodes: ReadonlyMap<StepId, Node>, prob
   return phases;
 }
 
-/** For each step, the choices made before it on the first walk that reaches it. */
 function viaOf(walks: readonly Walk[]): Record<string, Choices> {
   const via: Record<string, Choices> = {};
   for (const walk of walks) {

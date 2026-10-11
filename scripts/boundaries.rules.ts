@@ -35,7 +35,6 @@ export const BOUNDARIES: Boundaries = {
     },
     { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/docs'] },
     { name: 'extension-without-docs', from: 'packages/extension', mayNotImport: ['packages/docs'] },
-    // The docs read the other packages' sources as text to resolve code refs; importing them would run them in the site.
     { name: 'docs-stand-alone', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension'] },
   ],
   gates: [

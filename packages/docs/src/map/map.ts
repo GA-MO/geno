@@ -4,12 +4,6 @@ import type { Party } from '../scenario/schema.js';
 import type { Site, Visit } from '../scenario/site.js';
 import type { Box } from './hop.js';
 
-/**
- * The system map, derived: nodes are the lanes' parts (a lane without parts is one node), edges are the hops
- * between parts that any scenario makes. Nobody draws map edges, so the map cannot disagree with the scenarios.
- * elkjs lays it out once at build as one column per lane in process order; the browser gets positions only.
- */
-
 export interface MapNode {
   readonly key: string;
   readonly label: string;
@@ -24,9 +18,7 @@ export interface MapNode {
 export interface MapEdge {
   readonly from: string;
   readonly to: string;
-  /** The scenarios that make this hop, each at the step where it leaves `from`. */
   readonly visits: readonly Visit[];
-  /** Taken by at least a third of all scenarios: the hops every kind of turn shares, drawn before anything is picked. */
   readonly backbone: boolean;
 }
 export interface PositionedMap {
@@ -66,7 +58,6 @@ export function deriveMap(site: Site): { readonly nodes: readonly MapNode[]; rea
   return { nodes, edges };
 }
 
-/** Every step-to-step hand-on in a scenario, in the order the site lists visits; instanced sessions fold into their lane's parts. */
 function hopsOf(scenario: Scenario): [Visit['step'], string, string][] {
   return Object.keys(scenario.via).flatMap((id) => {
     const step = scenario.steps[id]!;
@@ -76,7 +67,6 @@ function hopsOf(scenario: Scenario): [Visit['step'], string, string][] {
   });
 }
 
-/** Rendered width of text at the map's 13px, close enough: Thai vowels and tone marks stack and take no width. */
 const widthOf = (text: string): number => [...text.replace(/[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]/g, '')].reduce((sum, char) => sum + (char === ' ' ? SPACE : char.charCodeAt(0) >= 0x0e00 ? 7.1 : 6.8), 0);
 const textOf = (node: MapNode): string => `${node.label} ${node.visits.length}`;
 const SPACE = 3.4;
@@ -85,7 +75,6 @@ const LINE = 17;
 const MIN_TEXT = 64;
 const MAX_TEXT = 100;
 
-/** Lines a label takes wrapping at spaces as the browser does; a word wider than the box breaks inside it. */
 function linesOf(text: string, inner: number): number {
   let lines = 0;
   let used = inner;
@@ -99,11 +88,9 @@ function linesOf(text: string, inner: number): number {
   return lines;
 }
 
-/** A lane is as wide as its longest part needs to fit in two lines, within bounds that keep ten columns on a laptop screen. */
 function laneWidth(parts: readonly MapNode[]): number {
   return Math.round(Math.min(MAX_TEXT, Math.max(MIN_TEXT, Math.max(...parts.map((part) => widthOf(textOf(part)))) / 2 + 8))) + PADDING;
 }
-// The estimate runs a little short of the browser, so wrapping assumes a slightly narrower box.
 const partHeight = (part: MapNode, width: number): number => 10 + LINE * linesOf(textOf(part), (width - PADDING) * 0.94);
 
 export async function layoutMap(graph: ReturnType<typeof deriveMap>, site: Site): Promise<PositionedMap> {

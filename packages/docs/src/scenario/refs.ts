@@ -3,16 +3,13 @@ import path from 'node:path';
 import ts from 'typescript';
 import type { CodeRef } from './model.js';
 
-/** Resolves code refs against the source tree. A string result is the reason the ref does not resolve. */
 export interface SourceIndex {
   resolve(ref: string): CodeRef | string;
-  /** True when `text` appears anywhere in the engine's, core's or extension's sources. A floor, not proof. */
   literalExists(text: string): boolean;
 }
 
 interface Declaration {
   readonly name: string;
-  /** Names of the declarations around this one, outermost first: `ChatProvider` for its `askPermission`. */
   readonly within: readonly string[];
   readonly line: number;
   readonly overload: boolean;
@@ -40,7 +37,6 @@ function nameOf(node: ts.Node): ts.Identifier | ts.StringLiteral | undefined {
   return undefined;
 }
 
-/** Every named declaration in a file at any depth: functions, consts, classes, types, members, object keys. */
 function declarationsOf(file: string, text: string): Declaration[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: Declaration[] = [];
@@ -57,23 +53,16 @@ function declarationsOf(file: string, text: string): Declaration[] {
   return found;
 }
 
-/** True when `outer` appears in `within` in order, gaps allowed. */
 const nestedIn = (within: readonly string[], outer: readonly string[]): boolean => {
   let at = 0;
   for (const name of within) if (name === outer[at]) at += 1;
   return at === outer.length;
 };
 
-/**
- * `a.b.c` names `c` declared somewhere inside `b`, itself inside `a`. The shallowest match wins, so a bare
- * name is the top-level declaration and `Class.member` the member, not a same-named local inside it.
- * Two matches at the same depth are ambiguous.
- */
 function findDeclaration(declarations: readonly Declaration[], dotted: string): number | string {
   const names = dotted.split('.');
   const name = names.pop()!;
   const candidates = declarations.filter((declaration) => declaration.name === name && nestedIn(declaration.within, names));
-  // Overload signatures and their implementation are one function; the implementation stands for it.
   const bodies = candidates.filter((declaration) => !declaration.overload);
   const distinct = bodies.length > 0 ? bodies : candidates;
   const shallowest = Math.min(...distinct.map((declaration) => declaration.within.length));

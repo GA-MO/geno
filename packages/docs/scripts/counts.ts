@@ -4,11 +4,6 @@ import type { Choices, Scenario, StepId } from '../src/scenario/model.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
 import { progressAt, walk } from '../src/scenario/tour.js';
 
-/**
- * `pnpm --filter @g-code/docs counts [filter] [--steps]`: the progress counters at the end of every walk of every
- * scenario, one line per walk: page, fork choices, model calls, tool runs. `filter` keeps pages whose href contains it.
- * `--steps` adds the walk with `M:` where a model call begins and `T<n>:` where n tool runs are counted, to check `runs:`.
- */
 function* walks(scenario: Scenario, choices: Choices = {}): Generator<{ choices: Choices; path: StepId[] }> {
   const path = walk(scenario, choices);
   const open = path.find((id) => scenario.steps[id]!.flow.kind === 'fork' && choices[id] === undefined);

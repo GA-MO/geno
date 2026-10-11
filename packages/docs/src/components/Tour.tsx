@@ -7,11 +7,9 @@ import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFro
 
 export interface TourProps {
   readonly scenario: Scenario;
-  /** `lane.part` -> its Thai label, from lanes.yaml. */
   readonly parts: Readonly<Record<string, string>>;
 }
 
-// Narrow lanes, so the eight lanes of a long scenario fit beside the progress panel at 1440px; the narration row carries the full text.
 const COLUMN = 108;
 const ROW = 100;
 const NODE = 100;
@@ -21,7 +19,6 @@ const READABLE_ZOOM = 0.85;
 const MOMENTS_SHOWN = 4;
 
 type Action = TourAction | { readonly type: 'restore'; readonly state: TourState };
-/** `follow` keeps every lane in view and scrolls with the current step; `whole` fits the entire walk. */
 type View = 'follow' | 'whole';
 type Place = 'past' | 'current' | 'future';
 type StepNodeData = { step: Step; place: Place; number: number; chosen?: OptionId; choose: (fork: StepId, option: OptionId) => void };
@@ -70,7 +67,6 @@ function LaneNode({ data }: NodeProps<Node<LaneNodeData, 'lane'>>) {
 
 const NODE_TYPES = { step: StepNode, lane: LaneNode };
 
-/** The latest few moments, numbered from the start of the walk; the rest open on request instead of scrolling inside the panel. */
 function Moments({ title, moments, current }: { readonly title: string; readonly moments: readonly Moment[]; readonly current: StepId }) {
   const [all, setAll] = useState(false);
   const shown = all ? moments : moments.slice(-MOMENTS_SHOWN);
@@ -166,12 +162,10 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
       void flow.fitView({ padding: 0.04, duration });
       return;
     }
-    // Every lane fits when the width allows it at a size the text still reads; a narrow screen pans sideways to the current lane instead.
     const span = grid.columns * COLUMN;
     const zoom = Math.min(1, Math.max(width / (span + 16), READABLE_ZOOM));
     const half = width / (2 * zoom);
     const x = span <= 2 * half ? span / 2 : Math.min(Math.max(current.column * COLUMN + COLUMN / 2, half), span - half);
-    // The current step sits a third of the way down, so the steps that led to it stay in view above.
     const y = Math.max(HEADER + current.row * ROW + ROW / 2 + height / (6 * zoom), height / (2 * zoom));
     void flow.setCenter(x, y, { zoom, duration });
   }, [view, current?.step, current?.column, current?.row, grid.columns, grid.rows, width, height]);
@@ -198,14 +192,12 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
 const minimapClass = (node: TourNode): string => (node.type === 'step' ? node.data.place : 'lane');
 const minimapColor = (node: TourNode): string => (node.type === 'step' ? `var(--party-${node.data.step.party})` : 'transparent');
 
-/** Lane names pinned to the top of the diagram, following its pan and zoom sideways, so a deep step still says whose lane it is. */
 function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
   const [x, , zoom] = useStore((store) => store.transform);
   return (
     <div className="tour-lane-heads" aria-hidden="true">
       {scenario.columns.map((column, i) => (
         <span key={column.key} className={`party-${column.party}`} style={{ left: x + i * COLUMN * zoom, width: (COLUMN - 8) * zoom }}>
-          {/* Zoomed out to the whole walk, a squeezed name reads worse than none; the lane keeps its color. */}
           {COLUMN * zoom < 64 ? null : column.label}
         </span>
       ))}
@@ -307,7 +299,6 @@ export default function Tour({ scenario, parts }: TourProps) {
           </div>
 
           <aside className="tour-progress" aria-label="ความคืบหน้าของ turn">
-            {/* Beside the diagram rather than over it, so the overview never hides a step. */}
             <MiniMap<TourNode> className="tour-minimap" pannable zoomable ariaLabel="ภาพย่อของทั้งเส้นทาง" nodeClassName={minimapClass} nodeColor={minimapColor} nodeBorderRadius={6} style={{ width: 224, height: 190 }} />
             <p className={`tour-whose party-${progress.whoseMove}`}>{WHOSE_MOVE[progress.whoseMove]}</p>
             <dl>

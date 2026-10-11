@@ -4,10 +4,6 @@ import type { Scenario } from '../scenario/model';
 import { briefOf, layoutWalk, walk } from '../scenario/tour';
 import StepList from './StepList.astro';
 
-/**
- * Always in the HTML, for readers without JS, print and search: the default walk as an SVG swimlane on the same
- * grid the island draws, then every step and branch as a nested list. The island hides the SVG once it runs.
- */
 interface Props {
   scenario: Scenario;
   parts: Readonly<Record<string, string>>;

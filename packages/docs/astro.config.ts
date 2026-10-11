@@ -21,7 +21,6 @@ const THAI_FONT = ['400', '600'].map((weight) => pathToFileURL(createRequire(imp
 const catalog = catalogSchema.parse(parse(readFileSync(path.join(root, 'src/data/catalog.yaml'), 'utf8')));
 const pagesIn = (dir: string): boolean => existsSync(dir) && readdirSync(dir).some((name) => /\.mdx?$/.test(name));
 
-/** One sidebar group per catalog chapter; a chapter with no pages yet links to its rows in the index. */
 const chapters = catalog.chapters.map((chapter) => {
   const label = `${chapter.number}. ${chapter.thai}`;
   const directory = `scenarios/${chapter.prefix}`;
@@ -30,7 +29,6 @@ const chapters = catalog.chapters.map((chapter) => {
     : { label, collapsed: true, items: [{ label: 'ยังไม่มีหน้า ดูในดัชนี', link: `/scenarios/#ch-${chapter.number}` }] };
 });
 
-/** The build fails on the same problems `pnpm docs:check` reports. */
 const scenarioGate = (): AstroIntegration => ({
   name: 'scenario-gate',
   hooks: {

@@ -1,5 +1,3 @@
-/** Kept apart from map.ts so the island draws hops without bundling elkjs. */
-
 export interface Box {
   readonly x: number;
   readonly y: number;
@@ -7,10 +5,6 @@ export interface Box {
   readonly h: number;
 }
 
-/**
- * The curve for a hop: side to side between columns, out and back on the right within one lane. A hop and its
- * reverse leave from slightly different heights so both stay visible.
- */
 export function hopPath(from: Box, to: Box): string {
   const rightward = to.x > from.x;
   const nudge = rightward ? -4 : 4;

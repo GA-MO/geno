@@ -7,16 +7,8 @@ import type { CodeRef, Link, PartKey, Problem, Scenario, StepId } from './model.
 import { sourceIndex } from './refs.js';
 import { catalogSchema, fragmentSchema, isUse, lanesSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
 
-/**
- * The one loader, Node only. Reads lanes.yaml, catalog.yaml, the fragments and every page with `scenario:`
- * frontmatter, then compiles each scenario against the source tree. The pages, the build gate and
- * `pnpm docs:check` all call it, so the build and the check cannot disagree.
- */
-
 export interface SiteOptions {
-  /** packages/docs */
   readonly docsRoot: string;
-  /** The monorepo root, where packages/ lives. */
   readonly repoRoot: string;
 }
 
@@ -24,7 +16,6 @@ export interface Visit {
   readonly scenario: string;
   readonly title: string;
   readonly href: string;
-  /** The first step of the scenario's walks at this part. */
   readonly step: StepId;
 }
 
@@ -32,11 +23,8 @@ export interface Site {
   readonly lanes: LanesIn;
   readonly catalog: CatalogIn;
   readonly scenarios: Readonly<Record<string, Scenario>>;
-  /** Catalog id -> its title and the page that covers it, if any. */
   readonly links: Readonly<Record<string, Link>>;
-  /** `lane.part` -> where the part lives in the code. */
   readonly partRefs: Readonly<Record<string, CodeRef>>;
-  /** System-map node -> the scenarios that pass through it. */
   readonly visits: Readonly<Record<string, readonly Visit[]>>;
   readonly problems: readonly Problem[];
 }
@@ -62,7 +50,6 @@ function filesUnder(dir: string, pattern: RegExp): string[] {
     .sort();
 }
 
-/** zod issues as Problems whose path reads like the YAML: `scenario.steps[3].lane`. */
 function issuesOf(file: string, error: z.ZodError, prefix = ''): Problem[] {
   return error.issues.map((issue) => ({
     level: 'error',
@@ -72,7 +59,6 @@ function issuesOf(file: string, error: z.ZodError, prefix = ''): Problem[] {
   }));
 }
 
-/** Parsed YAML, or a Problem on the file's own line when it does not parse. `offset` counts lines before the YAML. */
 function yamlOf(file: string, text: string, problems: Problem[], offset = 0): { readonly value: unknown } | undefined {
   try {
     return { value: parse(text) };
@@ -191,19 +177,16 @@ function visitsOf(scenarios: Readonly<Record<string, Scenario>>): Record<PartKey
   return visits;
 }
 
-/** `lane.part` -> the part's Thai label, for the tour's lane line. */
 export function partLabels(lanes: LanesIn): Record<string, string> {
   return Object.fromEntries(lanes.lanes.flatMap((lane) => lane.parts.map((part) => [`${lane.id}.${part.id}`, part.label])));
 }
 
 let memo: { readonly key: string; readonly site: Site } | undefined;
 
-/** The options the site runs with: astro.config.ts sets GDOCS_ROOT, because bundled pages lose their own path. */
 export function siteOptions(docsRoot = process.env['GDOCS_ROOT'] ?? process.cwd()): SiteOptions {
   return { docsRoot, repoRoot: path.resolve(docsRoot, '../..') };
 }
 
-/** loadSite, reused until an input file changes, so every page of one build shares one load. */
 export function siteFor(options = siteOptions()): Site {
   const inputs = [...filesUnder(path.join(options.docsRoot, DATA), /\.yaml$/), ...filesUnder(path.join(options.docsRoot, PAGES), /\.mdx?$/)];
   const key = inputs.map((file) => `${file}:${statSync(file).mtimeMs}`).join('|');
@@ -211,7 +194,6 @@ export function siteFor(options = siteOptions()): Site {
   return memo.site;
 }
 
-/** The compiled scenario behind a page, or an error naming every problem in it. */
 export function scenarioFor(file: string): Scenario {
   const site = siteFor();
   const scenario = Object.values(site.scenarios).find((candidate) => candidate.file === file);
