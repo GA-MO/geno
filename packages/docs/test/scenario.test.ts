@@ -21,14 +21,14 @@ const fakeSource: SourceIndex = {
   literalExists: () => true,
 };
 
-function compile(steps: unknown[], source = fakeSource) {
+function compile(steps: unknown[], source = fakeSource, fragments: CompileContext['fragments'] = {}) {
   const ctx: CompileContext = {
     file: 'test.md',
     id: 'test',
     href: '/test/',
     title: 'test',
     lanes,
-    fragments: {},
+    fragments,
     source,
     catalog: { 'turn.text-answer': { id: 'turn.text-answer', title: 'ถามแล้วได้คำตอบ' } },
   };
@@ -118,6 +118,37 @@ describe('compile rejects', () => {
   });
 });
 
+describe('a rejoin', () => {
+  const inner = { inner: [{ id: 'run', lane: 'user', do: 'inner run', ...ends }] } as unknown as CompileContext['fragments'];
+  const pick = (then: string) => ({ lane: 'user', do: 'pick', fork: { ask: '?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B', then }] } });
+  const rejoinOf = (result: ReturnType<typeof compile>) => {
+    const flow = result.ok ? result.value.steps['1']!.flow : undefined;
+    return flow?.kind === 'fork' ? flow.options.find((option) => option.id === 'b')?.to : undefined;
+  };
+
+  test('targets the scenario\'s own step, not a same-named step inside a fragment spliced after it', () => {
+    const result = compile([pick('run'), { id: 'run', lane: 'user', do: 'own run' }, { use: 'inner' }], fakeSource, inner);
+    expect(rejoinOf(result)).toBe('run');
+  });
+
+  test('reaches into a fragment only by its scoped id', () => {
+    expect(rejoinOf(compile([pick('inner.run'), { use: 'inner' }], fakeSource, inner))).toBe('inner.run');
+  });
+
+  test('to a step only a fragment has fails, naming the scoped candidate', () => {
+    const result = compile([pick('run'), { use: 'inner' }], fakeSource, inner);
+    expect(!result.ok && result.problems).toEqual([expect.objectContaining({ path: 'steps[0].fork.options[1].then', message: expect.stringContaining('inner.run') })]);
+  });
+
+  test('that matches an own step and a fragment step inside an arm fails, naming both', () => {
+    const arm = { id: 'x', label: 'X', steps: [pick('run'), { id: 'run', lane: 'user', do: 'own run', ...ends }, { use: 'inner' }] };
+    const result = compile([{ lane: 'user', do: 'outer', fork: { ask: '?', options: [arm, { id: 'y', label: 'Y', steps: [{ lane: 'user', do: 'y', ...ends }] }] } }], fakeSource, inner);
+    expect(!result.ok && result.problems).toEqual([
+      expect.objectContaining({ path: 'steps[0].fork.options[0].steps[0].fork.options[1].then', message: expect.stringMatching(/1\.x\.run.*1\.x\.inner\.run/) }),
+    ]);
+  });
+});
+
 describe('refs through the TypeScript compiler', () => {
   const index = sourceIndex(REPO);
   const lineOf = (file: string, text: string) => readFileSync(path.join(REPO, file), 'utf8').split('\n').findIndex((line) => line.includes(text)) + 1;
@@ -158,6 +189,24 @@ describe('the site', () => {
     );
     const errors = loadSite({ docsRoot: root, repoRoot: REPO }).problems.filter((problem) => problem.level === 'error');
     expect(errors).toEqual([expect.objectContaining({ path: 'scenario.covers[0]', message: expect.stringContaining('not in the catalog') })]);
+  });
+
+  test('a YAML syntax error in frontmatter or a fragment is a problem on its file and line, and the other pages still load', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'gdocs-'));
+    cpSync(path.join(DOCS, 'src/data'), path.join(root, 'src/data'), { recursive: true });
+    writeFileSync(path.join(root, 'src/data/fragments/broken.yaml'), '- id: a\n  lane: user\n   do: [x\n');
+    mkdirSync(path.join(root, 'src/content/docs'), { recursive: true });
+    writeFileSync(path.join(root, 'src/content/docs/bad.md'), `---\ntitle: Bad\nscenario:\n  surface: vscode\n  steps: [\n---\n`);
+    writeFileSync(
+      path.join(root, 'src/content/docs/good.md'),
+      `---\ntitle: Good\nscenario:\n  surface: vscode\n  trigger: t\n  covers: [turn.text-answer]\n  steps:\n    - { lane: user, do: x, end: { turn: none } }\n---\n`,
+    );
+    const site = loadSite({ docsRoot: root, repoRoot: REPO });
+    expect(site.problems.filter((problem) => problem.level === 'error')).toEqual([
+      { level: 'error', file: 'src/data/fragments/broken.yaml', path: 'line 2', message: expect.not.stringContaining('\n') },
+      { level: 'error', file: 'src/content/docs/bad.md', path: 'line 5', message: expect.not.stringContaining('\n') },
+    ]);
+    expect(Object.keys(site.scenarios)).toEqual(['good']);
   });
 });
 

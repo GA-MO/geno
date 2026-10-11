@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { parse } from 'yaml';
+import { parse, YAMLParseError } from 'yaml';
 import type { z } from 'astro/zod';
 import { compileScenario } from './compile.js';
 import type { CodeRef, Link, PartKey, Problem, Scenario, StepId } from './model.js';
@@ -72,15 +72,27 @@ function issuesOf(file: string, error: z.ZodError, prefix = ''): Problem[] {
   }));
 }
 
-function frontmatterOf(text: string): Record<string, unknown> {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  return match === null ? {} : ((parse(match[1]!) as Record<string, unknown> | null) ?? {});
+/** Parsed YAML, or a Problem on the file's own line when it does not parse. `offset` counts lines before the YAML. */
+function yamlOf(file: string, text: string, problems: Problem[], offset = 0): { readonly value: unknown } | undefined {
+  try {
+    return { value: parse(text) };
+  } catch (error) {
+    if (!(error instanceof YAMLParseError)) throw error;
+    const line = (error.linePos?.[0].line ?? 1) + offset;
+    problems.push({ level: 'error', file, path: `line ${line}`, message: error.message.split(' at line ')[0]! });
+    return undefined;
+  }
 }
 
-function pagesOf(options: SiteOptions): Page[] {
+function frontmatterOf(file: string, text: string, problems: Problem[]): Record<string, unknown> {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  return match === null ? {} : (((yamlOf(file, match[1]!, problems, 1)?.value ?? null) as Record<string, unknown> | null) ?? {});
+}
+
+function pagesOf(options: SiteOptions, problems: Problem[]): Page[] {
   const root = path.join(options.docsRoot, PAGES);
   return filesUnder(root, /\.mdx?$/).flatMap((file) => {
-    const data = frontmatterOf(readFileSync(file, 'utf8'));
+    const data = frontmatterOf(relative(options, file), readFileSync(file, 'utf8'), problems);
     if (data['scenario'] === undefined) return [];
     const slug = path.relative(root, file).split(path.sep).join('/').replace(/\.mdx?$/, '').replace(/(^|\/)index$/, '');
     return [{ file: relative(options, file), id: path.basename(slug), href: `/${slug}/`, title: String(data['title'] ?? slug), scenario: data['scenario'] }];
@@ -90,7 +102,9 @@ function pagesOf(options: SiteOptions): Page[] {
 export function loadSite(options: SiteOptions): Site {
   const problems: Problem[] = [];
   const read = <T>(file: string, schema: z.ZodType<T>, prefix = ''): T | undefined => {
-    const parsed = schema.safeParse(parse(readFileSync(path.join(options.docsRoot, file), 'utf8')));
+    const yaml = yamlOf(file, readFileSync(path.join(options.docsRoot, file), 'utf8'), problems);
+    if (yaml === undefined) return undefined;
+    const parsed = schema.safeParse(yaml.value);
     if (!parsed.success) problems.push(...issuesOf(file, parsed.error, prefix));
     return parsed.success ? parsed.data : undefined;
   };
@@ -104,7 +118,7 @@ export function loadSite(options: SiteOptions): Site {
     if (steps !== undefined) fragments[path.basename(file, '.yaml')] = steps;
   }
 
-  const pages = pagesOf(options);
+  const pages = pagesOf(options, problems);
   const known = new Set(catalog.scenarios.map((row) => row.id));
   const coveredBy = new Map<string, Page>();
   const seenIds = new Map<string, Page>();
