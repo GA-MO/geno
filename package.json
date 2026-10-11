@@ -19,7 +19,8 @@
     "tab:bench": "tsx scripts/tab-bench.mjs",
     "test:affected": "tsx scripts/test-affected.ts",
     "test:golden": "vitest run --project unit packages/engine/test/golden",
-    "ui": "tsx packages/extension/test/gallery/server.mts"
+    "ui": "tsx packages/extension/test/gallery/server.mts",
+    "web": "pnpm --filter ./packages/extension build && pnpm --filter ./packages/web build && node packages/web/dist/main.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
