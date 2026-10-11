@@ -76,7 +76,7 @@ scenario:
         แผงแชตแสดงการ์ดขออนุญาตพร้อมคำสั่ง เหตุผล และปุ่มให้เลือก หัวข้อเปลี่ยนเป็น "waiting for you"
       sees: >-
         Allow `pnpm add zod`? It uses a command not on the safe list.
-        [Allow once] [Reject] [Always allow in this workspace] [No, and tell the agent…]
+        [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: choice
@@ -86,7 +86,7 @@ scenario:
         ask: ผู้ใช้กดปุ่มไหน
         options:
           - id: allow
-            label: Allow once
+            label: Allow
             then: run
             steps:
               - lane: editor
@@ -132,7 +132,7 @@ scenario:
                 phase: running-tools
 
           - id: reject
-            label: Reject
+            label: Deny
             steps:
               - lane: editor
                 at: chat
@@ -295,10 +295,13 @@ scenario:
 
 | ปุ่ม | ผลต่อคำสั่ง | ผลต่อ turn |
 | --- | --- | --- |
-| **Allow once** | รัน | ทำต่อ โมเดลได้อ่านผล |
+| **Allow** | รัน | ทำต่อ โมเดลได้อ่านผล |
 | **Always allow in this workspace** | รัน และบันทึกกฎ `pnpm add` | ทำต่อ ครั้งหน้าไม่ถามอีก |
-| **Reject** | ไม่รัน (`ToolRejected`) | จบทันทีแบบ `done (end_turn)` และรอผู้ใช้ |
+| **Deny** | ไม่รัน (`ToolRejected`) | จบทันทีแบบ `done (end_turn)` และรอผู้ใช้ |
 | **No, and tell the agent…** | ไม่รัน (`ToolDenied`) | ทำต่อ โมเดลได้อ่านคำแนะนำของผู้ใช้ |
 
-ความต่างระหว่าง Reject กับ "No, and tell the agent…" อยู่ที่ชนิดของ error:
+ความต่างระหว่าง Deny กับ "No, and tell the agent…" อยู่ที่ชนิดของ error:
 `ToolRejected` ทำให้ batch หยุดและ turn จบ ส่วน `ToolDenied` เป็นผลธรรมดาที่โมเดลอ่านแล้วหาทางอื่นต่อ
+
+engine ตั้งชื่อสองตัวเลือกแรกว่า "Allow once" และ "Reject" (`PERMISSION_OPTIONS` ใน `serve.ts`)
+แต่แผงแชตแสดงเป็น **Allow** และ **Deny** ตาม `CHOICE_LABELS` ใน `render.ts`
