@@ -40,6 +40,8 @@ lanes:
       - { id: card, label: การ์ดขออนุญาต, ref: packages/extension/src/chat/render.ts#permissionCard }
       - { id: terminal, label: เทอร์มินัล (CLI), ref: packages/engine/src/drive.ts#terminalSurface }
       - { id: settings, label: หน้า Settings, ref: packages/extension/src/chat/settings-panel.ts#settingsPanel }
+      - { id: tasks, label: แผง Tasks, ref: packages/extension/src/chat/lanes-panel.ts#tasksPanel }
+      - { id: lanes, label: แผง Lanes, ref: packages/extension/src/chat/lanes-panel.ts#lanesPanel }
 
   - id: editor
     label: VS Code
