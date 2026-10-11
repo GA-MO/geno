@@ -53,6 +53,8 @@ lanes:
       - { id: chat, label: Chat (ตัวกลางแผงกับ engine), ref: packages/extension/src/chat/chat.ts#Chat }
       - { id: engine-link, label: ตัวเชื่อม engine, ref: packages/extension/src/chat/engine.ts#Engine }
       - { id: bridge, label: เขียนไฟล์ลง buffer, ref: packages/extension/src/chat/bridge.ts#writeTextFile }
+      - { id: vscode-ui, label: "หน้าจอของ VS Code (toast, quick pick, modal)", ref: packages/extension/src/extension.ts#registerChat }
+      - { id: review, label: Review และ Undo, ref: packages/extension/src/review/controller.ts#ReviewController }
 
   - id: server
     label: เซิร์ฟเวอร์ engine
@@ -64,6 +66,7 @@ lanes:
     process: engine
     surfaces: [vscode, acp-editor]
     parts:
+      - { id: sessions, label: สร้าง โหลด และเล่นซ้ำ session, ref: packages/engine/src/chat.ts#startSession }
       - { id: turns, label: รับ prompt และถือ turn, ref: packages/engine/src/serve.ts#runTurn }
       - { id: updates, label: ส่งอัปเดตให้ editor, ref: packages/engine/src/serve.ts#editorTurn }
       - { id: approvals, label: สะพานขออนุญาต, ref: packages/engine/src/serve.ts#editorTurn.approve }
