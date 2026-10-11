@@ -61,7 +61,9 @@
 .tour .tour-pill { border-radius: 99rem; font-size: 0.8rem; border-style: dashed; }
 
 .tour-body { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; min-height: 34rem; }
-.tour-diagram { height: 34rem; border-right: 1px solid var(--tour-line); background: var(--sl-color-bg); }
+.tour-diagram { position: relative; height: 34rem; border-right: 1px solid var(--tour-line); background: var(--sl-color-bg); }
+.tour-lane-heads { position: absolute; inset: 0 0 auto 0; height: 2.1rem; z-index: 5; pointer-events: none; background: color-mix(in srgb, var(--sl-color-bg) 88%, transparent); border-bottom: 1px solid var(--tour-line); overflow: hidden; }
+.tour-lane-heads span { position: absolute; top: 0; line-height: 2.1rem; text-align: center; font-size: 0.8rem; font-weight: 600; color: var(--party); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tour-progress { padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.875rem; max-height: 34rem; overflow: auto; }
 .tour-progress dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.7rem; margin: 0; }
 .tour-progress dt { color: var(--tour-muted); }

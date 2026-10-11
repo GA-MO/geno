@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { unified } from '@astrojs/markdown-remark';
 import react from '@astrojs/react';
 import starlight from '@astrojs/starlight';
@@ -14,6 +15,8 @@ import { loadSite, siteOptions } from './src/scenario/site';
 const root = path.dirname(fileURLToPath(import.meta.url));
 // Bundled pages lose their own path, so site.ts finds the package through this.
 process.env['GDOCS_ROOT'] = root;
+
+const THAI_FONT = ['400', '600'].map((weight) => pathToFileURL(createRequire(import.meta.url).resolve(`@fontsource/noto-sans-thai/${weight}.css`)));
 
 const catalog = parse(readFileSync(path.join(root, 'src/data/catalog.yaml'), 'utf8')) as CatalogIn;
 const pagesIn = (dir: string): boolean => existsSync(dir) && readdirSync(dir).some((name) => /\.mdx?$/.test(name));
@@ -45,7 +48,10 @@ export default defineConfig({
   markdown: {
     // Mermaid fences skip Expressive Code and become inline SVG at build, so they read with JS off and in print.
     syntaxHighlight: { type: 'shiki', excludeLangs: ['mermaid'] },
-    processor: unified({ rehypePlugins: [[rehypeMermaid, { strategy: 'inline-svg', mermaidConfig: { fontFamily: '"Noto Sans Thai", sans-serif', theme: 'neutral' } }]] }),
+    // The renderer loads the page's Thai font too: measured in a fallback font, labels come out clipped.
+    processor: unified({
+      rehypePlugins: [[rehypeMermaid, { strategy: 'inline-svg', css: THAI_FONT, mermaidConfig: { fontFamily: '"Noto Sans Thai", sans-serif', theme: 'neutral', htmlLabels: false, flowchart: { htmlLabels: false } } }]],
+    }),
   },
   integrations: [
     starlight({
