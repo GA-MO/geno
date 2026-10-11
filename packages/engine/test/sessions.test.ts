@@ -78,6 +78,21 @@ describe('session log', () => {
     await expect(readSessionLog(file)).rejects.toThrow(`${file}: line 4`);
   });
 
+  it('reads back a denial that carries what the user told the agent', async () => {
+    const denied: TurnEvent = {
+      kind: 'tool-result',
+      seq: 1,
+      at,
+      toolUseId: 'tu_1',
+      name: 'bash',
+      status: 'denied',
+      output: 'denied',
+      approval: { mode: 'ask', rule: 'unlisted', reason: 'a command not on the safe list', command: 'node -e 1', decidedBy: 'user', verdict: 'deny', comment: 'use grep instead' },
+    };
+    const file = await logWith([start, denied]);
+    expect((await readSessionLog(file)).events).toEqual([start, denied]);
+  });
+
   it('fails on a schema violation even on the last line', async () => {
     const file = await logWith([start]);
     await appendFile(file, `${JSON.stringify({ kind: 'user', seq: 0, at, content: 'x' })}\n`);
