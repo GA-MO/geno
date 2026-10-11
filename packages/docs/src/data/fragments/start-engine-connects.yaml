@@ -1,0 +1,35 @@
+# The window reaches the engine: the settings check, the socket, and ACP initialize. The first call to
+# Engine.connection() runs these once; every later call reuses the connection until it closes.
+- id: settings
+  lane: editor
+  at: engine-link
+  do: >-
+    `Engine.start` เรียก `engineSettings` ซึ่งอ่าน provider โมเดล และคีย์จาก SecretStorage แล้วให้ `setupProblem` ตรวจว่าครบหรือไม่
+    รอบนี้ครบ จึงคำนวณที่อยู่ socket จาก hash ของโฟลเดอร์และการตั้งค่า (คีย์เข้าไปในรูป hash เท่านั้น)
+  ref: packages/extension/src/chat/engine.ts#Engine.start
+
+- id: dial
+  lane: editor
+  at: engine-link
+  do: >-
+    ต่อ Unix socket ของ engine ที่ใช้การตั้งค่าชุดนี้ ถ้ายังไม่มี engine ฟังอยู่ `launch` เปิด `gcode serve --socket`
+    เป็น process แยกที่อยู่ต่อแม้หน้าต่างปิด แล้วลองต่อใหม่ทุก 50 ms นานสุด 20 วินาที
+    stderr ของ engine ไหลเข้า output channel ชื่อ "Geno engine"
+  ref: packages/extension/src/chat/engine.ts#Engine.launch
+
+- id: initialize
+  lane: editor
+  at: engine-link
+  do: >-
+    ส่งคำขอ ACP `initialize` พร้อมความสามารถของ editor: อ่านเขียนไฟล์ผ่าน buffer, notice, ฟอร์มคำถาม, subagent,
+    Tasks และสถานะ trust ของ workspace
+  ref: "packages/extension/src/chat/engine.ts#\"await agent.request(acp.methods.agent.initialize, {\""
+  emits: [initialize]
+
+- id: peer
+  lane: server
+  at: sessions
+  do: >-
+    engine จดความสามารถของ editor นี้เป็น `peer` ซึ่งกำหนดว่า turn ของหน้าต่างนี้ได้เครื่องมือชุดไหน
+    ถ้าเป็นการเชื่อมต่อแรกของ process `takeUpWaits` จะรับช่วงงานที่ engine ตัวก่อนค้างไว้ในเบื้องหลัง
+  ref: "packages/engine/src/serve.ts#\".onRequest(acp.methods.agent.initialize, ({ params }) => {\""
