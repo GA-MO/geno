@@ -1,4 +1,4 @@
-import { BaseEdge, Handle, Position, ReactFlow, type Edge, type EdgeProps, type Node, type NodeProps } from '@xyflow/react';
+import { BaseEdge, Controls, Handle, MiniMap, Position, ReactFlow, type Edge, type EdgeProps, type Node, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useRef, useState } from 'react';
 import type { PositionedMap } from '../map/map.js';
@@ -25,8 +25,9 @@ function RoutedEdge({ data, style }: EdgeProps<Edge<{ points: PositionedMap['edg
   return <BaseEdge path={path} {...(style === undefined ? {} : { style })} />;
 }
 
-const LaneNode =({ data }: NodeProps<Node<{ label: string; party: string }, 'lane'>>) => <div className={`map-lane party-${data.party}`}>{data.label}</div>;
+const LaneNode = ({ data }: NodeProps<Node<{ label: string; party: string }, 'lane'>>) => <div className={`map-lane party-${data.party}`}>{data.label}</div>;
 const BandNode = ({ data }: NodeProps<Node<{ label: string }, 'band'>>) => <div className="map-band">{data.label}</div>;
+const minimapColor = (node: Node): string => (node.type === 'part' ? `var(--party-${(node.data as { part: Part }).part.party})` : node.type === 'lane' ? 'color-mix(in srgb, var(--sl-color-gray-5) 30%, transparent)' : 'transparent');
 const NODE_TYPES = { part: PartNode, lane: LaneNode, band: BandNode };
 const EDGE_TYPES = { routed: RoutedEdge };
 
@@ -45,6 +46,9 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
       position: { x: band.x - 6, y: BAND_TOP },
       data: { label: band.label },
       style: { width: band.w + 12, height: map.height - BAND_TOP + 8 },
+      // The MiniMap draws only nodes with a known size, and a controlled node never receives its measured one.
+      initialWidth: band.w + 12,
+      initialHeight: map.height - BAND_TOP + 8,
       selectable: false,
       zIndex: -2,
     })),
@@ -54,6 +58,8 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
       position: { x: lane.x, y: lane.y },
       data: { label: lane.label, party: lane.party },
       style: { width: lane.w, height: lane.h },
+      initialWidth: lane.w,
+      initialHeight: lane.h,
       selectable: false,
       zIndex: -1,
     })),
@@ -63,6 +69,8 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
       position: { x: node.x, y: node.y },
       data: { part: node, selected: node.key === selected, dim: selected !== undefined && !touches.has(node.key) && node.key !== selected },
       style: { width: node.w, height: node.h },
+      initialWidth: node.w,
+      initialHeight: node.h,
     })),
   ];
   const edges: Edge[] = map.edges.map((edge) => ({
@@ -88,10 +96,14 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
           nodesConnectable={false}
           edgeTypes={EDGE_TYPES}
           fitView
-          fitViewOptions={{ padding: 0.04, minZoom: 0.7 }}
-          minZoom={0.25}
-          proOptions={{ hideAttribution: true }}
-        />
+          fitViewOptions={{ padding: 0.03 }}
+          minZoom={0.1}
+          maxZoom={2}
+          attributionPosition="bottom-left"
+        >
+          <Controls showInteractive={false} position="top-left" />
+          <MiniMap pannable zoomable ariaLabel="ภาพย่อของแผนที่" nodeColor={minimapColor} nodeBorderRadius={4} style={{ width: 200, height: 72 }} />
+        </ReactFlow>
       </div>
       <aside className="map-panel" aria-live="polite">
         {part === undefined ? (
