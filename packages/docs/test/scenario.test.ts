@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 import { compileScenario, type CompileContext } from '../src/scenario/compile.js';
 import type { OptionId, StepId } from '../src/scenario/model.js';
 import { sourceIndex, type SourceIndex } from '../src/scenario/refs.js';
-import { lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
+import { fragmentSchema, lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
 import { progressAt, reduce, stateFromHash, walk } from '../src/scenario/tour.js';
 
@@ -119,7 +119,7 @@ describe('compile rejects', () => {
 });
 
 describe('a rejoin', () => {
-  const inner = { inner: [{ id: 'run', lane: 'user', do: 'inner run', ...ends }] } as unknown as CompileContext['fragments'];
+  const inner = { inner: fragmentSchema.parse([{ id: 'run', lane: 'user', do: 'inner run', ...ends }]) };
   const pick = (then: string) => ({ lane: 'user', do: 'pick', fork: { ask: '?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B', then }] } });
   const rejoinOf = (result: ReturnType<typeof compile>) => {
     const flow = result.ok ? result.value.steps['1']!.flow : undefined;

@@ -5,12 +5,12 @@ import { z } from 'astro/zod';
  * This is the boundary. compile.ts turns these into the domain types in model.ts, and nothing past it re-checks shape.
  */
 
-export const PARTIES = ['user', 'ai', 'harness', 'outside'] as const;
-export const SURFACES = ['vscode', 'cli', 'acp-editor'] as const;
+const PARTIES = ['user', 'ai', 'harness', 'outside'] as const;
+const SURFACES = ['vscode', 'cli', 'acp-editor'] as const;
 /** What a step in a lane adds to the progress counters. Lanes and parts carry it, so no component names a lane. */
-export const COUNTS = ['model-call', 'tool-run'] as const;
+const COUNTS = ['model-call', 'tool-run'] as const;
 
-export const PHASES = [
+const PHASES = [
   'idle', // no turn is running
   'starting', // the server took the prompt and is opening the run
   'calling-model', // a model request is being built, sent or streamed
@@ -123,7 +123,7 @@ const actingSchema: z.ZodType<ActingStepIn> = z.lazy(() =>
     .strict(),
 );
 
-export const stepSchema: z.ZodType<StepIn> = z.lazy(() => z.union([z.object({ use: id }).strict(), actingSchema]));
+const stepSchema: z.ZodType<StepIn> = z.lazy(() => z.union([z.object({ use: id }).strict(), actingSchema]));
 
 export const scenarioSchema = z
   .object({
@@ -200,4 +200,3 @@ export const catalogSchema = z
   })
   .strict();
 export type CatalogIn = z.infer<typeof catalogSchema>;
-export type CatalogRow = CatalogIn['scenarios'][number];

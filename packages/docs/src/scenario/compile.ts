@@ -78,7 +78,7 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
     const again = node.step.again;
     if (again === undefined) continue;
     const walk = walks.find((candidate) => candidate.path.includes(node.id))!;
-    const target = nodes.has(again as StepId) ? (again as StepId) : [...nodes.values()].find((other) => other.step.id === again)?.id;
+    const target = (nodes.get(again as StepId) ?? [...nodes.values()].find((other) => other.step.id === again))?.id;
     if (target === undefined || walk.path.indexOf(target) >= walk.path.indexOf(node.id)) problem(`${node.path}.again`, `"${again}" is not an earlier step on this walk`);
   }
   if (problems.length > 0) return { ok: false, problems };
@@ -196,7 +196,7 @@ function laneOf(key: string, lanes: LanesIn): { readonly lane: LaneIn | undefine
 }
 
 /** Used lanes in registry order; a lane's sessions follow it in the order they first appear. */
-export function columnsOf(keys: readonly string[], lanes: LanesIn): LaneColumn[] {
+function columnsOf(keys: readonly string[], lanes: LanesIn): LaneColumn[] {
   const unique = [...new Set(keys)];
   const rank = (key: string): number => lanes.lanes.findIndex((lane) => lane.id === key.split('@')[0]);
   return unique

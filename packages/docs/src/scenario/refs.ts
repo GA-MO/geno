@@ -20,7 +20,7 @@ interface Declaration {
 
 const LITERAL_SOURCES = ['packages/core/src', 'packages/engine/src', 'packages/extension/src'];
 
-function nameOf(node: ts.Node): string | undefined {
+function nameOf(node: ts.Node): ts.Identifier | ts.StringLiteral | undefined {
   if (
     ts.isFunctionDeclaration(node) ||
     ts.isClassDeclaration(node) ||
@@ -35,23 +35,22 @@ function nameOf(node: ts.Node): string | undefined {
     ts.isPropertyAssignment(node) ||
     ts.isVariableDeclaration(node)
   ) {
-    return node.name !== undefined && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) ? node.name.text : undefined;
+    return node.name !== undefined && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) ? node.name : undefined;
   }
   return undefined;
 }
 
 /** Every named declaration in a file at any depth: functions, consts, classes, types, members, object keys. */
-export function declarationsOf(file: string, text: string): Declaration[] {
+function declarationsOf(file: string, text: string): Declaration[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: Declaration[] = [];
   const visit = (node: ts.Node, within: readonly string[]): void => {
     const name = nameOf(node);
     if (name !== undefined) {
-      const at = (node as ts.NamedDeclaration).name ?? node;
       const overload = ts.isFunctionDeclaration(node) && node.body === undefined;
-      found.push({ name, within, line: source.getLineAndCharacterOfPosition(at.getStart(source)).line + 1, overload });
+      found.push({ name: name.text, within, line: source.getLineAndCharacterOfPosition(name.getStart(source)).line + 1, overload });
     }
-    const inner = name === undefined ? within : [...within, name];
+    const inner = name === undefined ? within : [...within, name.text];
     ts.forEachChild(node, (child) => visit(child, inner));
   };
   visit(source, []);
@@ -70,7 +69,7 @@ const nestedIn = (within: readonly string[], outer: readonly string[]): boolean 
  * name is the top-level declaration and `Class.member` the member, not a same-named local inside it.
  * Two matches at the same depth are ambiguous.
  */
-export function findDeclaration(declarations: readonly Declaration[], dotted: string): number | string {
+function findDeclaration(declarations: readonly Declaration[], dotted: string): number | string {
   const names = dotted.split('.');
   const name = names.pop()!;
   const candidates = declarations.filter((declaration) => declaration.name === name && nestedIn(declaration.within, names));
