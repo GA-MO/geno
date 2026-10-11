@@ -1,6 +1,6 @@
 ---
 title: ย้อนไฟล์และ/หรือบทสนทนา
-description: ผู้ใช้เปิดเมนูบนข้อความหนึ่งแล้วเลือกย้อนไฟล์ ย้อนบทสนทนา หรือทั้งสองอย่าง engine คืนไฟล์จาก checkpoint ก่อนข้อความนั้น ตัดบทสนทนาด้วย event cut และคืนข้อความกลับไปที่ช่องพิมพ์
+description: ผู้ใช้เปิดเมนูบนข้อความหนึ่งแล้วเลือกย้อนไฟล์ ย้อนบทสนทนา ทั้งสองอย่าง หรือ fork เป็นแชตใหม่ engine คืนไฟล์จาก checkpoint ก่อนข้อความนั้น ตัดบทสนทนาด้วย event cut และคืนข้อความกลับไปที่ช่องพิมพ์
 tableOfContents: false
 sidebar:
   order: 5
@@ -11,7 +11,7 @@ scenario:
     - turn ที่สองแก้ `src/date.ts` และ `src/date.test.ts` ก่อนหน้านั้น engine เก็บ checkpoint ของ workspace ไว้แล้ว
   trigger: >-
     ผู้ใช้ชี้ที่บับเบิลข้อความของ turn ที่สอง แล้วคลิกปุ่ม "Rewind, fork or mark a chapter"
-  covers: [sess.rewind]
+  covers: [sess.rewind, sess.fork]
   related: [ed.review-auto-undo, sess.open-history, sess.new-chat]
   steps:
     - id: menu
@@ -117,6 +117,40 @@ scenario:
                 sees: บทสนทนาเหลือแค่ turn แรก และช่องพิมพ์มีข้อความของ turn ที่สอง
                 ref: "packages/extension/src/chat/webview.ts#\"if (message.type === 'rewind-prompt') return edit(message.text, undefined);\""
                 end: { turn: none }
+          - id: fork
+            label: Fork from here
+            steps:
+              - lane: editor
+                at: chat
+                do: >-
+                  `RewindHost` แสดง "Forking…" ใต้ข้อความ แล้วส่งคำขอ ACP `session/fork` พร้อมเลขลำดับของข้อความใน `_meta` ใต้ `gcode/forkAt`
+                ref: packages/extension/src/chat/rewind-host.ts#RewindHost
+                emits: [session/fork, gcode/forkAt]
+              - lane: server
+                at: sessions
+                do: >-
+                  engine ปฏิเสธถ้ามี turn รันอยู่ หรือถ้าเป็น session ของ agent ภายนอกหรือของเอเจนต์ลูก
+                  `forkSession` เขียน log ใหม่: `session-start` ที่มี `fork` ชี้กลับมาที่แชตเดิม แล้วบทสนทนาตามที่เห็นหลัง cut ทั้งหมด
+                  จนจบ turn ของข้อความนั้น (รวมคำตอบของมัน) การรอและการปลุกที่ค้างไม่ถูกคัดลอก โฟลเดอร์ของ session (ไฟล์แนบ ผลที่ยาว) ถูกคัดลอกไปด้วย
+                ref: packages/core/src/rewind.ts#forkEvents
+                emits: [session-start, fork]
+              - lane: server
+                at: sessions
+                do: >-
+                  engine ลงทะเบียนโหมดและ MCP ของ session ใหม่ แล้วตอบด้วย session id ใหม่ แชตเดิมไม่ถูกแตะ
+                ref: packages/engine/src/rewind.ts#forkSession
+              - lane: editor
+                at: chat
+                do: >-
+                  ส่วนขยายเปิด session ใหม่ในแผงแทนแชตเดิม engine เล่นซ้ำ log ของมันให้แผง
+                ref: packages/extension/src/chat/rewind-host.ts#RewindHost
+              - lane: panel
+                at: rail
+                do: >-
+                  แผงแสดงแชตใหม่ที่มีบทสนทนาจนถึงคำตอบของข้อความที่เลือก ใน History และแผง Tasks แชตใหม่มีบรรทัดบอกที่มา
+                sees: แชตใหม่ที่จบที่คำตอบของข้อความนั้น และบรรทัด "Forked from <ชื่อแชตเดิม>" ใน History
+                ref: packages/extension/src/chat/history.ts#historyPanel
+                end: { turn: none }
 ---
 
 Rewind ใช้สองอย่างที่ engine เก็บไว้อยู่แล้ว: checkpoint ของ workspace ที่ถ่ายก่อนการเรียกโมเดลทุกครั้ง
@@ -127,6 +161,7 @@ Rewind ใช้สองอย่างที่ engine เก็บไว้�
 | Restore files | คืนจาก checkpoint | อยู่ครบ | ไม่เปลี่ยน |
 | Restore conversation | ไม่แตะ | ตัดตั้งแต่ข้อความนั้น | กลับไปที่ช่องพิมพ์ |
 | Restore both | คืนจาก checkpoint | ตัดตั้งแต่ข้อความนั้น | กลับไปที่ช่องพิมพ์ |
+| Fork from here | ไม่แตะ | แชตใหม่ที่ลอกถึงคำตอบของข้อความนั้น แชตเดิมอยู่ครบ | ไม่เปลี่ยน |
 
 สิ่งที่ควรสังเกต
 
@@ -134,3 +169,5 @@ Rewind ใช้สองอย่างที่ engine เก็บไว้�
   turn ที่ไม่เคยถึงโมเดล เช่นถูกหยุดก่อน จึงไม่มี checkpoint ให้ย้อน
 - **ไฟล์ก่อน บทสนทนาทีหลัง** Restore both บันทึก `restored` ก่อน `cut` ประกาศเรื่องไฟล์จึงถูกตัดไปพร้อมกับ turn ที่มันพูดถึง
 - **การแก้ของผู้ใช้หลัง checkpoint ล่าสุดหายได้** กล่องยืนยันบอกไฟล์เหล่านั้นก่อน และให้แป้นพิมพ์เริ่มที่ Cancel
+- **Fork ลอกคำตอบด้วย** รายการในเมนูบอกว่า "A new chat with the conversation up to this message" แต่ `forkEvents` ลอกจนจบ turn ของข้อความนั้น
+  แชตใหม่จึงมีคำตอบของข้อความที่เลือกด้วย ไม่ได้หยุดก่อนข้อความ
