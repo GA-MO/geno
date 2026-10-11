@@ -1,6 +1,6 @@
 ---
 title: PreToolUse ตัดสิน call ก่อนรัน
-description: hook ที่ตั้งไว้ได้ดู call ทุกตัวก่อนรัน มันปฏิเสธ call อนุญาตพร้อมแก้ input หรือหยุดทั้ง turn ก็ได้
+description: hook ที่ตั้งไว้ได้ดู call ทุกตัวก่อนรัน มันปฏิเสธ call อนุญาตพร้อมแก้ input ขอให้ถามผู้ใช้ หรือหยุดทั้ง turn ก็ได้
 tableOfContents: false
 sidebar:
   order: 2
@@ -11,8 +11,8 @@ scenario:
     - เปิด Geno ในโหมด Ask มี turn ทำงานอยู่
   trigger: >-
     โมเดลขอรัน `bash` ด้วยคำสั่ง `pnpm deploy --prod`
-  covers: [hook.pretooluse-deny, hook.pretooluse-allow-rewrite, hook.pretooluse-continue-false]
-  related: [hook.pretooluse-ask, hook.permission-request, hook.user-prompt-submit, perm.ask-allow]
+  covers: [hook.pretooluse-deny, hook.pretooluse-ask, hook.pretooluse-allow-rewrite, hook.pretooluse-continue-false]
+  related: [hook.permission-request, hook.user-prompt-submit, perm.ask-allow]
   steps:
     - id: wants
       lane: model
@@ -110,6 +110,82 @@ scenario:
                 phase: calling-model
                 end: { turn: continues, reason: call-model }
 
+          - id: ask
+            label: ขอให้ถามผู้ใช้
+            steps:
+              - lane: policy
+                at: hooks
+                do: >-
+                  สคริปต์พิมพ์ JSON `permissionDecision: "ask"` พร้อม `permissionDecisionReason: "touches production"`
+                  call ได้ขั้น `ask` ที่ถือคำถามจาก `hookAskDenial`: "A PreToolUse hook [settings] asks first: touches production."
+                  call ที่รอคำตอบไม่รันพร้อม call อื่น
+                ref: packages/core/src/approval.ts#hookAskDenial
+                emits: [hook-ask]
+              - lane: loop
+                at: tools
+                do: >-
+                  `asking` ห่อ executor ของ `bash` ไว้: ก่อนการตรวจของ `bash` เอง `toolHooks.confirm` ส่งคำถามของ hook ให้ `settle`
+                ref: "packages/engine/src/drive.ts#\"const approval = await mode.toolHooks!.confirm(step.question, toolCtx);\""
+              - lane: policy
+                at: settle
+                do: >-
+                  คำถามของ hook มี verdict `ask` ไม่ใช่ `classify` จึงไม่ผ่าน classifier แม้ในโหมด Auto
+                  PermissionRequest hook (ถ้ามี) ได้ตอบก่อน เมื่อไม่มีก็ส่งต่อให้ผู้ใช้ผ่าน `approval.approve`
+                ref: packages/engine/src/tools/agent.ts#settle
+              - lane: server
+                at: approvals
+                do: >-
+                  `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` ที่มีเหตุผลของ hook เป็น `reason`
+                  งานในแผง Tasks เปลี่ยนเป็น `needs-input`
+                ref: packages/engine/src/serve.ts#editorTurn.approve
+                emits: [requestPermission, needs-input]
+                phase: waiting-user
+              - lane: editor
+                at: chat
+                do: >-
+                  `askPermission` ส่ง action `permission` ให้ webview และโฟกัสแผงแชต
+                ref: packages/extension/src/chat/chat.ts#Chat.askPermission
+                emits: [permission]
+              - lane: panel
+                at: card
+                do: >-
+                  แผงแชตแสดงการ์ดคำสั่ง เหตุผลบนการ์ดคือข้อความของ hook ต่อท้ายวลี "Geno asks because it uses"
+                sees: >-
+                  การ์ด "Run this command?" คำสั่ง `pnpm deploy --prod`
+                  และบรรทัด "Geno asks because it uses A PreToolUse hook [settings] asks first: touches production.."
+                  ปุ่ม [Allow] [Deny] [No, and tell the agent…]
+                ref: packages/extension/src/chat/render.ts#COMMAND_FACE
+              - lane: user
+                do: ผู้ใช้อ่านแล้วกด Allow
+              - lane: editor
+                at: chat
+                do: >-
+                  การ์ดย่อเหลือ Allowed แล้ว `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
+                ref: packages/extension/src/chat/chat.ts#Chat.askPermission
+                emits: [permission-done]
+              - lane: policy
+                at: settle
+                do: >-
+                  `settle` บันทึก `decidedBy: user, verdict: allow` แล้ว executor ของ `bash` รันด้วย `hookAllowed`
+                  การตรวจของ `bash` เองจึงไม่ถามซ้ำ แต่กฎ deny ของ workspace และคำสั่งที่ต้องถามเสมอยังมีผล
+                ref: "packages/engine/src/drive.ts#\"const reply = await own.run(raw, { ...toolCtx, hookAllowed: true });\""
+                phase: running-tools
+              - lane: tool
+                at: shell
+                do: >-
+                  `bash` รัน `pnpm deploy --prod` ใน sandbox
+                ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
+              - use: tool-result-returns
+              - lane: loop
+                at: step
+                do: >-
+                  `loopStep` ตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
+                  (ถ้าผู้ใช้กด Deny call ได้ `ToolRejected` และ turn จบแบบ `done (end_turn)` เหมือนการ์ดของโหมด Ask)
+                ref: packages/core/src/loop.ts#loopStep
+                emits: [call-model]
+                phase: calling-model
+                end: { turn: continues, reason: call-model }
+
           - id: stop
             label: หยุดทั้ง turn
             steps:
@@ -168,7 +244,7 @@ PreToolUse ทำงานก่อนการตรวจสิทธิ์ข
 | --- | --- | --- |
 | deny (exit 2 หรือ `permissionDecision: "deny"`) | ไม่รัน ผล `denied` | ทำต่อ โมเดลอ่านเหตุผล |
 | allow + `updatedInput` | รันด้วย input ใหม่ ไม่ถามผู้ใช้ | ทำต่อ |
-| ask | ขึ้นการ์ดถามผู้ใช้ก่อนการตรวจของ Geno | ตามคำตอบ ดู [โหมด Ask ขออนุญาต](/scenarios/perm/ask-mode-bash-approval/) |
+| ask | ขึ้นการ์ดถามผู้ใช้ก่อนการตรวจของ Geno ทุกโหมด รวมถึง Auto | ตามคำตอบ เหมือน [โหมด Ask ขออนุญาต](/scenarios/perm/ask-mode-bash-approval/) |
 | defer หรือไม่ตอบ | ไปตามการตรวจของ Geno | ตามปกติ |
 | `continue: false` | ไม่รัน | จบแบบ failed หลังชุดนี้ |
 
@@ -177,3 +253,5 @@ PreToolUse ทำงานก่อนการตรวจสิทธิ์ข
 - **การปฏิเสธของ hook ต่างจาก Reject ของผู้ใช้** ผลเป็น `denied` (`ToolDenied`) ไม่ใช่ `rejected` ชุดถัดไปจึงยังรัน และ turn ไม่จบ
 - **hook allow ไม่ข้ามกฎ deny** กฎ deny ของ workspace และคำสั่งที่ต้องถามเสมอยังมีผล การอนุญาตของ hook แค่ตอบคำถามแทนผู้ใช้
 - **log เก็บสิ่งที่โมเดลขอ** `updatedInput` ไม่ได้แก้ `tool_use` ใน log การเล่นซ้ำจึงเห็นคำสั่งเดิมของโมเดล
+- **การ์ดของ hook ask อ่านแปลก** (อ่านจากโค้ด) การ์ดคำสั่งเติมเหตุผลต่อท้าย "Geno asks because it uses" เสมอ
+  แต่เหตุผลของ `hook-ask` เป็นประโยคเต็ม ("A PreToolUse hook [settings] asks first: ...") ผู้ใช้จึงเห็นประโยคซ้อนกันและจุดสองตัวท้ายบรรทัด
