@@ -1,0 +1,35 @@
+# One trip to the model, up to the request going out: the decision, the safe point, the checkpoint, the gateway.
+- id: decide
+  lane: loop
+  at: step
+  do: >-
+    `loopStep` อ่าน log แล้วตัดสินว่าขั้นต่อไปคือ `call-model`
+    ก่อนทุกครั้งที่เรียกโมเดลจะตรวจขีดจำกัดของรอบ (40 ครั้ง และ $0.40)
+  ref: packages/core/src/loop.ts#loopStep
+  emits: [call-model]
+  phase: calling-model
+
+- id: deliver
+  lane: loop
+  at: drive
+  do: >-
+    จุดปลอดภัย `deliver()` เป็นที่เดียวที่ steer รายงานจากงานเบื้องหลัง โน้ตไฟล์ที่ถูกแก้ และ notice เข้าสู่ log
+    รอบนี้ไม่มีอะไรมาถึง จึงเรียกโมเดลต่อได้เลย
+  ref: packages/engine/src/drive.ts#deliver
+
+- id: request
+  lane: loop
+  at: model-call
+  do: >-
+    `callModel` ตรวจว่าถึงเวลา compaction หรือยัง บันทึก `checkpoint` (commit ใน shadow git ไว้ให้ Undo และ Rewind)
+    แล้วประกอบคำขอด้วย `buildRequest` โดย system prompt เป็นบล็อกเดียวที่ cache ไว้
+  ref: packages/engine/src/drive.ts#callModel
+  emits: [checkpoint]
+
+- id: send
+  lane: loop
+  at: gateway
+  do: >-
+    gateway จอง slot ของผู้ให้บริการ (4 คำขอพร้อมกันต่อผู้ให้บริการ) แล้ว stream คำขอผ่าน wire
+    ถ้าล้มเหลวชั่วคราวจะลองใหม่เองหลัง 1, 2 และ 4 วินาที
+  ref: packages/engine/src/gateway.ts#gatewayFor.turn

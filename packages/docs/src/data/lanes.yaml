@@ -1,0 +1,147 @@
+# The lane registry: the ten lanes of every scenario diagram, left to right from the person to the outside world.
+# Lanes are data. No component, layout or check names a lane id; they read party, process, counts and parts here.
+#
+# party     whose move a step in this lane is (user | ai | harness | outside). A part may override it.
+# process   the OS process the lane lives in. The system map orders its columns by process.
+# surfaces  where the lane exists. A scenario's surface must be in every lane it uses.
+# instanced the lane repeats per session, written child@explore.
+# counts    what a step here adds to the progress panel: model-call or tool-run.
+# parts     the pieces inside a lane, each a node on the system map. A step on a lane with parts names one with at:.
+
+processes:
+  - { id: person, label: คน }
+  - { id: webview, label: แผงแชท (webview หรือเทอร์มินัล) }
+  - { id: ext-host, label: Extension host ของ VS Code }
+  - { id: engine, label: Engine daemon (gcode serve) }
+  - { id: provider, label: ผู้ให้บริการโมเดล }
+  - { id: outside, label: ระบบภายนอก }
+
+lanes:
+  - id: user
+    label: ผู้ใช้
+    english: User
+    about: คนที่พิมพ์ คลิก ตอบการ์ด และกด Stop
+    party: user
+    process: person
+    surfaces: [vscode, cli, acp-editor]
+
+  - id: panel
+    label: แผงแชท
+    english: Chat panel
+    about: >-
+      หน้าบทสนทนาที่ผู้ใช้อ่านและพิมพ์ ใน VS Code คือ webview (ช่องพิมพ์ บทสนทนา การ์ด ปุ่ม Stop)
+      ใน CLI คือเทอร์มินัล
+    party: harness
+    process: webview
+    surfaces: [vscode, cli, acp-editor]
+    parts:
+      - { id: composer, label: ช่องพิมพ์, ref: packages/extension/src/chat/webview.ts#submit }
+      - { id: rail, label: บทสนทนาและขั้นตอน, ref: packages/extension/src/chat/webview.ts#render }
+      - { id: card, label: การ์ดขออนุญาต, ref: packages/extension/src/chat/render.ts#permissionCard }
+      - { id: terminal, label: เทอร์มินัล (CLI), ref: packages/engine/src/drive.ts#terminalSurface }
+
+  - id: editor
+    label: VS Code
+    english: VS Code (extension host)
+    about: >-
+      process ของ extension host กับหน้าจอของ VS Code เอง (toast, quick pick, CodeLens, status bar, buffer)
+      แปลงข้อความจากแผงแชทเป็นคำขอ ACP และแปลงอัปเดตจาก engine กลับเป็น action
+    party: harness
+    process: ext-host
+    surfaces: [vscode]
+    parts:
+      - { id: chat, label: Chat (ตัวกลางแผงกับ engine), ref: packages/extension/src/chat/chat.ts#Chat }
+      - { id: engine-link, label: ตัวเชื่อม engine, ref: packages/extension/src/chat/engine.ts#Engine }
+      - { id: bridge, label: เขียนไฟล์ลง buffer, ref: packages/extension/src/chat/bridge.ts#writeTextFile }
+
+  - id: server
+    label: เซิร์ฟเวอร์ engine
+    english: Engine server
+    about: >-
+      ฝั่ง ACP ของ engine daemon ถือสถานะที่ทุกหน้าต่างใช้ร่วมกัน: ทะเบียน turn, lock ต่อ session,
+      steer และคิว, การเล่นซ้ำ, งานใน Tasks, การปลุก และการส่งคำขออนุญาตไปหา editor
+    party: harness
+    process: engine
+    surfaces: [vscode, acp-editor]
+    parts:
+      - { id: turns, label: รับ prompt และถือ turn, ref: packages/engine/src/serve.ts#runTurn }
+      - { id: updates, label: ส่งอัปเดตให้ editor, ref: packages/engine/src/serve.ts#editorTurn }
+      - { id: approvals, label: สะพานขออนุญาต, ref: packages/engine/src/serve.ts#editorTurn.approve }
+      - { id: tasks, label: แผง Tasks, ref: packages/engine/src/tasks.ts#Tasks }
+      - { id: wakes, label: ตัวปลุก, ref: packages/engine/src/wakes.ts#Wakes }
+
+  - id: loop
+    label: ลูปเอเจนต์
+    english: Agent loop
+    about: >-
+      การทำงานหนึ่งรอบของเอเจนต์: runAgent ประกอบโหมด drive บันทึก event loopStep ตัดสินใจ
+      deliver() คือจุดปลอดภัย gateway เรียกโมเดลพร้อม retry และ runTools รันเครื่องมือเป็นชุด
+    party: harness
+    process: engine
+    surfaces: [vscode, cli, acp-editor]
+    parts:
+      - { id: agent, label: ประกอบการทำงาน (runAgent), ref: packages/engine/src/agent.ts#runAgent }
+      - { id: drive, label: บันทึก event (drive), ref: packages/engine/src/drive.ts#drive }
+      - { id: step, label: ตัดสินใจขั้นต่อไป (loopStep), ref: packages/core/src/loop.ts#loopStep }
+      - { id: model-call, label: เตรียมและส่งคำขอโมเดล, ref: packages/engine/src/drive.ts#callModel }
+      - { id: gateway, label: Gateway (retry และรอ), ref: packages/engine/src/gateway.ts#gatewayFor }
+      - { id: tools, label: รันเครื่องมือเป็นชุด, ref: packages/engine/src/drive.ts#runTools }
+
+  - id: child
+    label: เอเจนต์ลูก
+    english: Child session
+    about: >-
+      ลูปอีกตัวที่ทำงานพร้อมกันใน session ของตัวเอง: subagent, workflow, arena lane
+      การเรียกโมเดลของลูกวาดอยู่ใน lane นี้
+    party: harness
+    process: engine
+    surfaces: [vscode, cli, acp-editor]
+    instanced: true
+    parts:
+      - { id: loop, label: ลูปของลูก, ref: packages/engine/src/subagents.ts#launch }
+      - { id: model, label: โมเดลของลูก, party: ai, counts: model-call, ref: packages/engine/src/gateway.ts#gatewayFor }
+
+  - id: model
+    label: โมเดล
+    english: Model
+    about: LLM ที่ตอบคำขอ (stream ข้อความ tool_use และ stop reason) รวมถึงการสรุปตอน compaction และ llama-server ของ Tab
+    party: ai
+    process: provider
+    surfaces: [vscode, cli, acp-editor]
+    counts: model-call
+
+  - id: tool
+    label: เครื่องมือ
+    english: Tool
+    about: ตัวเครื่องมือและสิ่งที่มันแตะโดยตรง เช่น shell ใน sandbox ไฟล์ งานเบื้องหลัง
+    party: harness
+    process: engine
+    surfaces: [vscode, cli, acp-editor]
+    counts: tool-run
+    parts:
+      - { id: executor, label: ตัวรันเครื่องมือ, ref: packages/engine/src/tools/index.ts#runExecutor }
+      - { id: shell, label: Shell ใน sandbox, ref: packages/engine/src/process.ts#runShell }
+      - { id: sandbox, label: Sandbox, ref: packages/engine/src/sandbox.ts#openSandbox }
+
+  - id: policy
+    label: นโยบาย
+    english: Policy
+    about: >-
+      ทุกการตัดสิน allow, ask, deny หรือ classify และสิ่งที่ทำให้เกิด: โหมด กฎ settle
+      สถานะ Auto classifier และ hook ทุกชนิด
+    party: harness
+    process: engine
+    surfaces: [vscode, cli, acp-editor]
+    parts:
+      - { id: hooks, label: Hooks, ref: packages/engine/src/hooks.ts#HookSessions }
+      - { id: rules, label: กฎคำสั่ง, ref: packages/core/src/permission-rules.ts#ruledDenial }
+      - { id: settle, label: ตัดสินคำขอ (settle), ref: packages/engine/src/tools/agent.ts#settle }
+      - { id: classifier, label: Auto classifier, ref: packages/engine/src/classifier.ts#commandClassifier }
+
+  - id: external
+    label: ระบบภายนอก
+    english: External
+    about: ระบบนอก Geno ที่ผลลัพธ์กลับมาเป็นข้อมูล เช่น MCP server เว็บ gh และ GitHub การแจ้งเตือนของ OS
+    party: outside
+    process: outside
+    surfaces: [vscode, cli, acp-editor]
