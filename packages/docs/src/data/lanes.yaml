@@ -42,6 +42,7 @@ lanes:
       - { id: settings, label: หน้า Settings, ref: packages/extension/src/chat/settings-panel.ts#settingsPanel }
       - { id: tasks, label: แผง Tasks, ref: packages/extension/src/chat/lanes-panel.ts#tasksPanel }
       - { id: lanes, label: แผง Lanes, ref: packages/extension/src/chat/lanes-panel.ts#lanesPanel }
+      - { id: arena, label: แผง Arena, ref: packages/extension/src/chat/arena-panel.ts#arenaPanel }
 
   - id: editor
     label: VS Code
