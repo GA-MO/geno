@@ -21,13 +21,14 @@ const split = (cell: string, count: number): string[] => {
   return parts.length === count ? parts : Array.from({ length: count }, () => cell);
 };
 
-export function parseCatalog(markdown: string): CatalogIn {
+function parseCatalog(markdown: string): CatalogIn {
   const catalog: CatalogIn = { chapters: [], scenarios: [] };
   for (const line of markdown.split('\n')) {
     const heading = CHAPTER.exec(line);
     if (line.startsWith('## ') && heading === null && catalog.chapters.length > 0) break;
     if (heading !== null) {
-      const [, number, title] = heading as unknown as [string, string, string];
+      const number = heading[1]!;
+      const title = heading[2]!;
       const named = NAMED.exec(title);
       catalog.chapters.push({ number: Number(number), prefix: '', thai: named?.[1] ?? title, english: named?.[2] ?? title });
       continue;

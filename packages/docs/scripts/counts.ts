@@ -12,7 +12,10 @@ import { progressAt, walk } from '../src/scenario/tour.js';
 function* walks(scenario: Scenario, choices: Choices = {}): Generator<{ choices: Choices; path: StepId[] }> {
   const path = walk(scenario, choices);
   const open = path.find((id) => scenario.steps[id]!.flow.kind === 'fork' && choices[id] === undefined);
-  if (open === undefined) return yield { choices, path };
+  if (open === undefined) {
+    yield { choices, path };
+    return;
+  }
   const flow = scenario.steps[open]!.flow;
   if (flow.kind === 'fork') for (const option of flow.options) yield* walks(scenario, { ...choices, [open]: option.id });
 }

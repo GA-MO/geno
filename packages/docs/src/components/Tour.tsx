@@ -2,7 +2,7 @@ import { Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useReactFlow, 
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, TURN_END_LABELS, WHOSE_MOVE } from '../scenario/labels.js';
-import type { ForkOption, OptionId, Scenario, Step, StepId } from '../scenario/model.js';
+import type { OptionId, Scenario, Step, StepId } from '../scenario/model.js';
 import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFromHash, walk, type Moment, type TourAction, type TourState } from '../scenario/tour.js';
 
 export interface TourProps {
@@ -26,6 +26,7 @@ type View = 'follow' | 'whole';
 type Place = 'past' | 'current' | 'future';
 type StepNodeData = { step: Step; place: Place; number: number; chosen?: OptionId; choose: (fork: StepId, option: OptionId) => void };
 type LaneNodeData = { party: string };
+type TourNode = Node<StepNodeData, 'step'> | Node<LaneNodeData, 'lane'>;
 
 const Code = ({ text }: { readonly text: string }): ReactNode =>
   codeSegments(text).map((segment, i) => (segment.code ? <code key={i}>{segment.text}</code> : <span key={i}>{segment.text}</span>));
@@ -34,7 +35,7 @@ function ForkButtons({ step, chosen, choose }: { readonly step: Step; readonly c
   if (step.flow.kind !== 'fork') return null;
   return (
     <div className="tour-fork" role="group" aria-label={step.flow.ask}>
-      {step.flow.options.map((option: ForkOption) => (
+      {step.flow.options.map((option) => (
         <button key={option.id} type="button" className="nodrag" aria-pressed={option.id === chosen} onClick={() => choose(step.id, option.id)}>
           {option.label}
         </button>
@@ -107,10 +108,10 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
   const choose = (fork: StepId, option: OptionId) => dispatch({ type: 'choose', fork, option });
   const rows = new Map(grid.cells.map((cell) => [cell.step, cell]));
 
-  const nodes: Node[] = [
+  const nodes: TourNode[] = [
     ...scenario.columns.map((column, i) => ({
       id: `lane:${column.key}`,
-      type: 'lane',
+      type: 'lane' as const,
       position: { x: i * COLUMN, y: 0 },
       data: { party: column.party },
       style: { width: COLUMN - 8, height: HEADER + grid.rows * ROW },
@@ -123,7 +124,7 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
     })),
     ...grid.cells.map((cell, i) => ({
       id: cell.step,
-      type: 'step',
+      type: 'step' as const,
       position: { x: cell.column * COLUMN + (COLUMN - 8 - NODE) / 2, y: HEADER + cell.row * ROW + 12 },
       data: {
         step: scenario.steps[cell.step]!,
@@ -194,8 +195,8 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
   );
 }
 
-const minimapClass = (node: Node): string => (node.type === 'step' ? (node.data as StepNodeData).place : 'lane');
-const minimapColor = (node: Node): string => (node.type === 'step' ? `var(--party-${(node.data as StepNodeData).step.party})` : 'transparent');
+const minimapClass = (node: TourNode): string => (node.type === 'step' ? node.data.place : 'lane');
+const minimapColor = (node: TourNode): string => (node.type === 'step' ? `var(--party-${node.data.step.party})` : 'transparent');
 
 /** Lane names pinned to the top of the diagram, following its pan and zoom sideways, so a deep step still says whose lane it is. */
 function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
@@ -307,7 +308,7 @@ export default function Tour({ scenario, parts }: TourProps) {
 
           <aside className="tour-progress" aria-label="ความคืบหน้าของ turn">
             {/* Beside the diagram rather than over it, so the overview never hides a step. */}
-            <MiniMap className="tour-minimap" pannable zoomable ariaLabel="ภาพย่อของทั้งเส้นทาง" nodeClassName={minimapClass} nodeColor={minimapColor} nodeBorderRadius={6} style={{ width: 224, height: 190 }} />
+            <MiniMap<TourNode> className="tour-minimap" pannable zoomable ariaLabel="ภาพย่อของทั้งเส้นทาง" nodeClassName={minimapClass} nodeColor={minimapColor} nodeBorderRadius={6} style={{ width: 224, height: 190 }} />
             <p className={`tour-whose party-${progress.whoseMove}`}>{WHOSE_MOVE[progress.whoseMove]}</p>
             <dl>
               <dt>ช่วงของ turn</dt>

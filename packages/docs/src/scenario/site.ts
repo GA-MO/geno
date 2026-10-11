@@ -86,7 +86,7 @@ function yamlOf(file: string, text: string, problems: Problem[], offset = 0): { 
 
 function frontmatterOf(file: string, text: string, problems: Problem[]): Record<string, unknown> {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  return match === null ? {} : (((yamlOf(file, match[1]!, problems, 1)?.value ?? null) as Record<string, unknown> | null) ?? {});
+  return match === null ? {} : ((yamlOf(file, match[1]!, problems, 1)?.value ?? {}) as Record<string, unknown>);
 }
 
 function pagesOf(options: SiteOptions, problems: Problem[]): Page[] {
@@ -196,7 +196,7 @@ export function partLabels(lanes: LanesIn): Record<string, string> {
   return Object.fromEntries(lanes.lanes.flatMap((lane) => lane.parts.map((part) => [`${lane.id}.${part.id}`, part.label])));
 }
 
-let memo:{ readonly key: string; readonly site: Site } | undefined;
+let memo: { readonly key: string; readonly site: Site } | undefined;
 
 /** The options the site runs with: astro.config.ts sets GDOCS_ROOT, because bundled pages lose their own path. */
 export function siteOptions(docsRoot = process.env['GDOCS_ROOT'] ?? process.cwd()): SiteOptions {

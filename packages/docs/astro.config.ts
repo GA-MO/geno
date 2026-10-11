@@ -9,7 +9,7 @@ import type { AstroIntegration } from 'astro';
 import { defineConfig } from 'astro/config';
 import rehypeMermaid from 'rehype-mermaid';
 import { parse } from 'yaml';
-import type { CatalogIn } from './src/scenario/schema';
+import { catalogSchema } from './src/scenario/schema';
 import { loadSite, siteOptions } from './src/scenario/site';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +18,7 @@ process.env['GDOCS_ROOT'] = root;
 
 const THAI_FONT = ['400', '600'].map((weight) => pathToFileURL(createRequire(import.meta.url).resolve(`@fontsource/noto-sans-thai/${weight}.css`)));
 
-const catalog = parse(readFileSync(path.join(root, 'src/data/catalog.yaml'), 'utf8')) as CatalogIn;
+const catalog = catalogSchema.parse(parse(readFileSync(path.join(root, 'src/data/catalog.yaml'), 'utf8')));
 const pagesIn = (dir: string): boolean => existsSync(dir) && readdirSync(dir).some((name) => /\.mdx?$/.test(name));
 
 /** One sidebar group per catalog chapter; a chapter with no pages yet links to its rows in the index. */
