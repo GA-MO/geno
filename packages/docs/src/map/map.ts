@@ -91,8 +91,9 @@ export async function layoutMap(graph: ReturnType<typeof deriveMap>, site: Site)
       'elk.partitioning.activate': 'true',
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       'elk.edgeRouting': 'ORTHOGONAL',
-      'elk.spacing.nodeNode': '18',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '56',
+      'elk.spacing.nodeNode': '14',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '28',
+      'elk.layered.spacing.edgeNodeBetweenLayers': '12',
     },
     children: laneNodes.map((lane) => ({
       id: `lane:${lane.id}`,

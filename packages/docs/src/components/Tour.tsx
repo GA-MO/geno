@@ -1,4 +1,4 @@
-import { Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, TURN_END_LABELS, WHOSE_MOVE } from '../scenario/labels.js';
@@ -16,6 +16,7 @@ const ROW = 112;
 const NODE = 204;
 const HEADER = 48;
 const PLAY_MS = 1700;
+const READABLE_ZOOM = 0.9;
 
 type Action = TourAction | { readonly type: 'restore'; readonly state: TourState };
 type Place = 'past' | 'current' | 'future';
@@ -69,7 +70,8 @@ const NODE_TYPES = { step: StepNode, lane: LaneNode };
 function Moments({ title, moments, current }: { readonly title: string; readonly moments: readonly Moment[]; readonly current: StepId }) {
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
-    list.current?.lastElementChild?.scrollIntoView({ block: 'nearest' });
+    // scrollIntoView would scroll the page too; only the list moves.
+    if (list.current !== null) list.current.scrollTop = list.current.scrollHeight;
   }, [moments.length]);
   return (
     <section className="tour-moments">
@@ -141,11 +143,16 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
   });
 
   const current = grid.cells[index];
+  const height = useStore((store) => store.height);
   useEffect(() => {
-    if (current === undefined) return;
+    if (current === undefined || height === 0) return;
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    void flow.setCenter(current.column * COLUMN + COLUMN / 2, HEADER + current.row * ROW + ROW / 2, { zoom: flow.getZoom() < 0.5 ? 0.8 : flow.getZoom(), duration: still ? 0 : 400 });
-  }, [current?.step, current?.column, current?.row]);
+    // Moving keeps a reader's zoom, but never below the size at which a step's text reads.
+    const zoom = Math.max(flow.getZoom(), READABLE_ZOOM);
+    // The current step sits a third of the way down, so the steps that led to it stay in view above.
+    const y = Math.max(HEADER + current.row * ROW + ROW / 2 + height / (6 * zoom), height / (2 * zoom));
+    void flow.setCenter(current.column * COLUMN + COLUMN / 2, y, { zoom, duration: still ? 0 : 400 });
+  }, [current?.step, current?.column, current?.row, height]);
 
   return (
     <ReactFlow
@@ -156,11 +163,27 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
-      defaultViewport={{ x: 24, y: 8, zoom: 0.8 }}
+      defaultViewport={{ x: 24, y: 8, zoom: READABLE_ZOOM }}
       minZoom={0.3}
       maxZoom={1.4}
       proOptions={{ hideAttribution: true }}
-    />
+    >
+      <LaneHeads scenario={scenario} />
+    </ReactFlow>
+  );
+}
+
+/** Lane names pinned to the top of the diagram, following its pan and zoom sideways, so a deep step still says whose lane it is. */
+function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
+  const [x, , zoom] = useStore((store) => store.transform);
+  return (
+    <div className="tour-lane-heads" aria-hidden="true">
+      {scenario.columns.map((column, i) => (
+        <span key={column.key} className={`party-${column.party}`} style={{ left: x + i * COLUMN * zoom, width: (COLUMN - 8) * zoom }}>
+          {column.label}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -194,8 +217,8 @@ export default function Tour({ scenario, parts }: TourProps) {
   useEffect(() => {
     const keys: Readonly<Record<string, Action>> = { ArrowRight: { type: 'next' }, ArrowLeft: { type: 'back' }, Home: { type: 'first' }, End: { type: 'last' } };
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (event.altKey || event.ctrlKey || event.metaKey || target?.closest('input, textarea, select, [contenteditable]')) return;
+      const typing = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]') !== null;
+      if (event.altKey || event.ctrlKey || event.metaKey || typing) return;
       const action = event.key === ' ' ? ({ type: state.playing ? 'pause' : 'play' } as const) : keys[event.key];
       if (action === undefined) return;
       event.preventDefault();

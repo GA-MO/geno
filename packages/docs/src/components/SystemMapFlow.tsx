@@ -1,4 +1,4 @@
-import { Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import { BaseEdge, Handle, Position, ReactFlow, type Edge, type EdgeProps, type Node, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useRef, useState } from 'react';
 import type { PositionedMap } from '../map/map.js';
@@ -19,9 +19,16 @@ function PartNode({ data }: NodeProps<Node<{ part: Part; selected: boolean; dim:
   );
 }
 
-const LaneNode = ({ data }: NodeProps<Node<{ label: string; party: string }, 'lane'>>) => <div className={`map-lane party-${data.party}`}>{data.label}</div>;
+/** An edge along the route elkjs computed, rather than one React Flow reroutes around nothing. */
+function RoutedEdge({ data, style }: EdgeProps<Edge<{ points: PositionedMap['edges'][number]['points'] }, 'routed'>>) {
+  const path = (data?.points ?? []).map((point, i) => `${i === 0 ? 'M' : 'L'}${point.x},${point.y}`).join(' ');
+  return <BaseEdge path={path} {...(style === undefined ? {} : { style })} />;
+}
+
+const LaneNode =({ data }: NodeProps<Node<{ label: string; party: string }, 'lane'>>) => <div className={`map-lane party-${data.party}`}>{data.label}</div>;
 const BandNode = ({ data }: NodeProps<Node<{ label: string }, 'band'>>) => <div className="map-band">{data.label}</div>;
 const NODE_TYPES = { part: PartNode, lane: LaneNode, band: BandNode };
+const EDGE_TYPES = { routed: RoutedEdge };
 
 /** The map island: build-time positions from elkjs, React Flow for pan, zoom and picking a part. */
 export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) {
@@ -62,7 +69,8 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
     id: `${edge.from}>${edge.to}`,
     source: edge.from,
     target: edge.to,
-    type: 'smoothstep',
+    type: 'routed',
+    data: { points: edge.points },
     className: `map-edge${edge.crossing ? ' crossing' : ''}${selected !== undefined && (edge.from === selected || edge.to === selected) ? ' lit' : ''}`,
     style: { strokeWidth: 1 + Math.min(edge.weight, 4) },
   }));
@@ -78,8 +86,9 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
           onPaneClick={() => setSelected(undefined)}
           nodesDraggable={false}
           nodesConnectable={false}
+          edgeTypes={EDGE_TYPES}
           fitView
-          fitViewOptions={{ padding: 0.06 }}
+          fitViewOptions={{ padding: 0.04, minZoom: 0.7 }}
           minZoom={0.25}
           proOptions={{ hideAttribution: true }}
         />
