@@ -1,0 +1,114 @@
+---
+title: เปลี่ยน effort หรือเปลี่ยนโมเดล
+description: เมนูโมเดลในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วนโมเดลเป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
+tableOfContents: false
+sidebar:
+  order: 6
+scenario:
+  surface: vscode
+  given:
+    - แชตนี้มี turn ที่จบแล้ว และไม่มี turn ทำงาน
+    - provider ของแชตคือ Model Studio และมีอีกโมเดลของ provider เดียวกันพร้อมใช้
+  trigger: >-
+    ผู้ใช้คลิกปุ่มชื่อโมเดลในช่องพิมพ์ เมนูแสดง backend โมเดลของ provider ที่พร้อมใช้ และระดับ effort
+  covers: [sess.effort-change, sess.model-change]
+  related: [perm.mode-switch-mid-turn, start.set-api-key, sess.new-chat]
+  steps:
+    - id: menu
+      lane: panel
+      at: composer
+      do: >-
+        เมนูโมเดลรวมสามเรื่องไว้ที่เดียว: backend ที่ใช้คุยกับแชต โมเดลของ Geno และ effort ของ session
+      ref: packages/extension/src/chat/composer-view.ts#modelMenu
+      phase: idle
+
+    - id: pick
+      lane: user
+      do: ผู้ใช้เลือกรายการหนึ่งในเมนู
+      fork:
+        ask: ผู้ใช้เลือกอะไร
+        options:
+          - id: effort
+            label: effort high
+            steps:
+              - lane: panel
+                at: composer
+                do: เมนูโพสต์ `set-effort` พร้อมค่า `high`
+                ref: "packages/extension/src/chat/composer-view.ts#\"if (!e.current) post({ type: 'set-effort', value: e.value });\""
+                emits: [set-effort]
+              - lane: editor
+                at: chat
+                do: >-
+                  `ComposerHost` ส่งคำขอ ACP `session/set_config_option` ที่มี `configId` ของ effort ไปที่ engine
+                ref: "packages/extension/src/chat/composer-host.ts#\"const { configOptions } = await connection.agent.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: EFFORT_CONFIG_ID, value });\""
+              - lane: server
+                at: sessions
+                do: >-
+                  engine บันทึก event `effort` ลง log ของ session (ถ้า turn ทำงานอยู่ บันทึกข้าง turn นั้น)
+                  แล้วตอบด้วยตัวเลือก effort ชุดใหม่
+                ref: "packages/engine/src/serve.ts#\"await logSetting(sessionId, { kind: 'effort', effort });\""
+                emits: [effort]
+              - lane: panel
+                at: composer
+                alongside: true
+                do: ช่องพิมพ์แสดง effort ใหม่ข้างชื่อโมเดล
+                sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
+                ref: packages/extension/src/chat/composer-view.ts#modelMenu
+              - lane: loop
+                at: model-call
+                do: >-
+                  ตั้งแต่รอบถัดไป ทุกการเรียกโมเดลอ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` แล้วส่งเป็น `output_config.effort`
+                  สำหรับโมเดลที่รองรับ effort
+                ref: packages/core/src/effort.ts#withTurnEffort
+                end: { turn: none }
+          - id: model
+            label: โมเดลอื่นของ provider เดียวกัน
+            steps:
+              - lane: panel
+                at: composer
+                do: เมนูโพสต์ `set-model` พร้อม provider และโมเดล
+                ref: "packages/extension/src/chat/composer-view.ts#\"if (!m.current) post(m.pick.kind === 'geno' ? { type: 'set-model', provider: m.pick.provider, model: m.pick.model } : { type: 'set-agent-model', value: m.pick.value });\""
+                emits: [set-model]
+              - lane: editor
+                at: vscode-ui
+                do: >-
+                  `setRole` เขียนการตั้งค่า `gcode.provider` และ `gcode.model` ระดับผู้ใช้ ไม่ได้ส่งอะไรถึง engine
+                ref: packages/extension/src/chat/settings-host.ts#setRole
+              - lane: editor
+                at: engine-link
+                do: >-
+                  การตั้งค่าที่ engine ใช้เปลี่ยน `resetEngine` จึงตัดการเชื่อมต่อ socket ครั้งต่อไปที่ต้องใช้ engine
+                  ส่วนขยายคำนวณที่อยู่ socket ใหม่จาก hash ของการตั้งค่าชุดใหม่ และเปิด engine ตัวใหม่ถ้ายังไม่มี
+                ref: packages/extension/src/chat/chat.ts#Chat.resetEngine
+              - lane: panel
+                at: composer
+                alongside: true
+                do: แผงได้ action `model` ที่มีชื่อโมเดลใหม่
+                sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
+                ref: packages/extension/src/chat/composer-view.ts#modelMenu
+              - lane: server
+                at: sessions
+                do: >-
+                  engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวเองหลังว่างและไม่มีการเชื่อมต่อ 10 วินาที
+                  engine ตัวใหม่รับแชตที่เปิดอยู่ด้วย `session/resume` แต่ provider และโมเดลของ session อ่านจาก `session-start` ใน log
+                  แชตนี้จึงยังใช้โมเดลเดิม โมเดลใหม่มีผลกับแชตที่สร้างหลังจากนี้
+                ref: packages/engine/src/chat.ts#resumeSession
+                end: { turn: none }
+---
+
+สองตัวเลือกในเมนูเดียวกันเก็บไว้คนละที่ จึงมีผลต่างกัน
+
+| เปลี่ยน | เก็บที่ | มีผลกับ | เมื่อไร |
+| --- | --- | --- | --- |
+| effort | event `effort` ใน log ของ session | แชตนี้ | รอบถัดไป |
+| โมเดล | การตั้งค่า `gcode.model` ของ VS Code | แชตใหม่ | หลัง engine ตัวใหม่เริ่ม |
+
+สิ่งที่ควรสังเกต
+
+- **effort ระหว่าง turn ไม่มีผลกับ turn นั้น** engine บันทึก effort ข้าง turn ที่ทำงานทันที แต่ `drive` ทำงานกับสำเนาของ event
+  ที่อ่านตอนเริ่มรอบ การเรียกโมเดลที่เหลือของ turn นั้นจึงใช้ effort เดิม ต่างจากโหมดที่มีผลกับ call ถัดไปทันที
+- **ชื่อในช่องพิมพ์ไม่ตรงกับโมเดลของแชตที่เปิดอยู่** หลังเปลี่ยนโมเดล ปุ่มแสดงชื่อโมเดลใหม่
+  แต่ turn ถัดไปของแชตที่เปิดอยู่ยังเรียกโมเดลเดิมที่บันทึกไว้ตอนสร้าง session ผู้ใช้ต้องเปิดแชตใหม่จึงได้โมเดลใหม่
+- **เปลี่ยน provider อาจทำให้แชตเดิมใช้ไม่ได้** engine ตัวใหม่ได้คีย์ของ provider ที่เลือกใหม่ (และของบทบาทอื่นที่ตั้งไว้)
+  ถ้าแชตเดิมใช้ provider อื่น ตามโค้ด `resumeSession` จะหาคีย์ของ provider เดิมไม่พบในสภาพแวดล้อมของ engine ตัวใหม่
+  ทัวร์นี้เลือกโมเดลของ provider เดียวกันจึงไม่เจอกรณีนี้
