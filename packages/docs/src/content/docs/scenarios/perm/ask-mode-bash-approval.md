@@ -1,6 +1,7 @@
 ---
 title: โหมด Ask ขออนุญาตก่อนรันคำสั่ง
 description: โมเดลขอรันคำสั่งที่ไม่อยู่ใน safe list Geno หยุดถามผู้ใช้ก่อน และผู้ใช้เลือกได้สี่ทาง
+tableOfContents: false
 sidebar:
   order: 1
 scenario:

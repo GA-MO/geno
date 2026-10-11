@@ -52,7 +52,7 @@ describe('the ask-mode example scenario', () => {
     for (const option of ['allow', 'allow-workspace']) {
       const path = choose(option);
       expect(path).toContain('run');
-      expect(path.indexOf('run')).toBeGreaterThan(path.indexOf(`choice.${option}.3` as StepId));
+      expect(path.indexOf('run' as StepId)).toBeGreaterThan(path.indexOf(`choice.${option}.3` as StepId));
       expect(endOf(path).turn).toEqual({ kind: 'end', end: { turn: 'continues', reason: 'call-model' } });
       expect(endOf(path).toolRuns).toBe(1);
     }

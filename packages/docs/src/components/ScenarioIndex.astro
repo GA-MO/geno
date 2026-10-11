@@ -1,0 +1,58 @@
+---
+import { siteFor } from '../scenario/site';
+
+/** `<ScenarioIndex />`: every catalog row by chapter, linked where a page covers it, so coverage shows as it is. */
+const site = siteFor();
+const covered = Object.values(site.links).filter((link) => link.href !== undefined).length;
+---
+
+<p class="index-summary not-content">
+  มีหน้าแล้ว <strong>{covered}</strong> จาก <strong>{site.catalog.scenarios.length}</strong> สถานการณ์ใน catalog
+  แถวที่ยังไม่มีหน้าแสดงไว้ตรงๆ เพื่อให้เห็นว่าเหลืออะไรบ้าง
+</p>
+
+{
+  site.catalog.chapters.map((chapter) => {
+    const rows = site.catalog.scenarios.filter((row) => row.chapter === chapter.number);
+    const done = rows.filter((row) => site.links[row.id]?.href !== undefined).length;
+    return (
+      <section class="index-chapter">
+        <h2 id={`ch-${chapter.number}`}>
+          {chapter.number}. {chapter.thai}
+          <span class="index-count">
+            {done}/{rows.length}
+          </span>
+        </h2>
+        <table>
+          <thead>
+            <tr>
+              <th>สถานการณ์</th>
+              <th>ระดับ</th>
+              <th>จบแบบ</th>
+              <th>หน้า</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const href = site.links[row.id]?.href;
+              return (
+                <tr class={href === undefined ? 'index-missing' : undefined}>
+                  <td>
+                    {href === undefined ? row.thai : <a href={href}>{row.thai}</a>}
+                    <br />
+                    <code>{row.id}</code>
+                  </td>
+                  <td>
+                    <span class={`index-priority ${row.priority}`}>{row.priority}</span>
+                  </td>
+                  <td>{row.terminal.replace(/`/g, '')}</td>
+                  <td>{href === undefined ? <span class="tour-missing">ยังไม่มีหน้า</span> : <a href={href}>อ่าน</a>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    );
+  })
+}

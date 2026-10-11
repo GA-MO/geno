@@ -25,15 +25,18 @@ const webviewEntries = BUNDLES.filter((bundle) => bundle.platform === 'browser')
 );
 
 export const BOUNDARIES: Boundaries = {
-  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src'],
+  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src', 'packages/docs/src'],
   layers: [
     {
       name: 'core-is-pure',
       from: 'packages/core',
-      mayNotImport: ['packages/engine', 'packages/extension'],
+      mayNotImport: ['packages/engine', 'packages/extension', 'packages/docs'],
       nodeBuiltins: ['path', 'crypto'],
     },
-    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension'] },
+    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/docs'] },
+    { name: 'extension-without-docs', from: 'packages/extension', mayNotImport: ['packages/docs'] },
+    // The docs read the other packages' sources as text to resolve code refs; importing them would run them in the site.
+    { name: 'docs-stand-alone', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension'] },
   ],
   gates: [
     {

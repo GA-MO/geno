@@ -1,6 +1,7 @@
 ---
 title: ถามแล้วได้คำตอบเป็นข้อความ
 description: ผู้ใช้ส่งคำถามหนึ่งข้อ โมเดลตอบเป็นข้อความโดยไม่เรียกเครื่องมือ แล้ว turn จบแบบ done
+tableOfContents: false
 sidebar:
   order: 1
 scenario:

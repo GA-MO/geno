@@ -1,0 +1,249 @@
+/* Thai first: a Thai face for body and UI, generous line height for stacked vowels and tone marks. */
+:root {
+  --sl-font: 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  --sl-line-height: 1.8;
+
+  --party-ai: #7c3aed;
+  --party-harness: #0e7490;
+  --party-user: #b45309;
+  --party-outside: #64748b;
+  --tour-surface: var(--sl-color-bg-nav);
+  --tour-line: var(--sl-color-hairline);
+  --tour-muted: var(--sl-color-gray-3);
+}
+:root[data-theme='dark'] {
+  --party-ai: #a78bfa;
+  --party-harness: #22d3ee;
+  --party-user: #fbbf24;
+  --party-outside: #94a3b8;
+}
+.party-ai { --party: var(--party-ai); }
+.party-harness { --party: var(--party-harness); }
+.party-user { --party: var(--party-user); }
+.party-outside { --party: var(--party-outside); }
+
+/* Tours and the map need the room the table of contents would take. */
+:root:has(.tour-static, .map) { --sl-content-width: 78rem; }
+
+/* ---------- The tour island ---------- */
+
+.tour {
+  margin-block: 1.5rem;
+  border: 1px solid var(--tour-line);
+  border-radius: 0.9rem;
+  background: var(--tour-surface);
+  overflow: hidden;
+}
+.tour-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--tour-line);
+}
+.tour button {
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--tour-line);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-white);
+  cursor: pointer;
+}
+.tour button:hover:not(:disabled) { border-color: var(--sl-color-accent); }
+.tour button:disabled { opacity: 0.4; cursor: default; }
+.tour button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 1px; }
+.tour .tour-play { min-width: 5.5rem; background: var(--sl-color-accent); color: var(--sl-color-black); border-color: transparent; font-weight: 600; }
+.tour-position { margin-inline: 0.5rem; font-variant-numeric: tabular-nums; color: var(--tour-muted); font-size: 0.875rem; }
+.tour .tour-pill { border-radius: 99rem; font-size: 0.8rem; border-style: dashed; }
+
+.tour-body { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; min-height: 34rem; }
+.tour-diagram { height: 34rem; border-right: 1px solid var(--tour-line); background: var(--sl-color-bg); }
+.tour-progress { padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.875rem; max-height: 34rem; overflow: auto; }
+.tour-progress dl { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.7rem; margin: 0; }
+.tour-progress dt { color: var(--tour-muted); }
+.tour-progress dd { margin: 0; }
+.tour-progress code, .tour-narration code, .tour-steps code, .tour-moments code { font-size: 0.85em; }
+.tour-whose {
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.6rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--party);
+  background: color-mix(in srgb, var(--party) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--party) 45%, transparent);
+}
+.tour-running { margin: 0; color: var(--tour-muted); }
+.tour-ending { margin: 0; padding: 0.45rem 0.7rem; border-radius: 0.5rem; font-weight: 600; background: color-mix(in srgb, var(--sl-color-green) 16%, transparent); }
+.tour-ending.turn-continues { background: color-mix(in srgb, var(--sl-color-blue) 16%, transparent); }
+.tour-ending.turn-failed, .tour-ending.turn-stopped { background: color-mix(in srgb, var(--sl-color-red) 16%, transparent); }
+.tour-moments h4 { margin: 0 0 0.2rem; font-size: 0.8rem; color: var(--tour-muted); font-weight: 600; }
+.tour-moments h4 span { font-variant-numeric: tabular-nums; }
+.tour-moments ol { margin: 0; padding-inline-start: 1.3rem; max-height: 9.5rem; overflow: auto; font-size: 0.8rem; line-height: 1.55; }
+.tour-moments li { color: var(--tour-muted); margin: 0.15rem 0; }
+.tour-moments li.now { color: var(--sl-color-white); font-weight: 600; }
+.tour-empty { margin: 0; color: var(--tour-muted); font-size: 0.8rem; }
+
+.tour-narration {
+  padding: 0.9rem 1.1rem 1rem;
+  border-top: 1px solid var(--tour-line);
+  border-left: 4px solid var(--party);
+  min-height: 9rem;
+}
+.tour-narration header { display: flex; gap: 0.6rem; align-items: baseline; }
+.tour-badge { font-size: 0.75rem; font-weight: 600; padding: 0.05rem 0.5rem; border-radius: 99rem; color: var(--party); border: 1px solid var(--party); }
+.tour-lane-name { color: var(--tour-muted); font-size: 0.875rem; }
+.tour-does { margin: 0.4rem 0 0; font-size: 1.02rem; }
+.tour-sees { margin: 0.6rem 0 0; padding: 0.4rem 0.8rem; border-left: 3px solid var(--sl-color-accent); background: var(--sl-color-bg); font-size: 0.9rem; }
+.tour-sees > span:first-child { font-size: 0.75rem; color: var(--tour-muted); margin-inline-end: 0.3rem; }
+.tour-narration footer, .tour-step-foot { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; margin-top: 0.6rem; font-size: 0.8rem; color: var(--tour-muted); }
+.tour-emits code { margin-inline-start: 0.3rem; }
+.tour-ref { font-family: var(--__sl-font-mono, monospace); font-size: 0.8rem; }
+.tour-ask { margin-top: 0.7rem; }
+.tour-ask p { margin: 0 0 0.4rem; }
+.tour-fork { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.tour-fork button[aria-pressed='true'] { background: var(--party-user); color: var(--sl-color-black); border-color: transparent; font-weight: 600; }
+
+/* Swimlane nodes inside React Flow. */
+.tour-lane { width: 100%; height: 100%; border-radius: 0.6rem; background: color-mix(in srgb, var(--party) 5%, transparent); border: 1px solid color-mix(in srgb, var(--party) 18%, transparent); }
+.tour-lane span { display: block; padding: 0.7rem 0.6rem; font-size: 0.95rem; font-weight: 600; color: var(--party); text-align: center; border-bottom: 1px solid color-mix(in srgb, var(--party) 18%, transparent); }
+.tour-node {
+  width: 204px;
+  min-height: 70px;
+  padding: 0.4rem 0.55rem 0.45rem;
+  border-radius: 0.55rem;
+  border: 1.5px solid color-mix(in srgb, var(--party) 55%, transparent);
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-white);
+  font-family: var(--sl-font);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: opacity 160ms, box-shadow 160ms;
+}
+.tour-node.future { opacity: 0.38; }
+.tour-node.past { background: color-mix(in srgb, var(--party) 10%, var(--sl-color-bg-nav)); }
+.tour-node.current { border-color: var(--party); box-shadow: 0 0 0 3px color-mix(in srgb, var(--party) 35%, transparent), 0 8px 24px rgb(0 0 0 / 0.25); }
+.tour-node.fork { border-style: double; border-width: 3px; }
+.tour-node-number { float: left; margin-inline-end: 0.35rem; font-weight: 700; color: var(--party); font-variant-numeric: tabular-nums; }
+.tour-node-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tour-node .tour-fork { margin-top: 0.4rem; }
+.tour-node .tour-fork button { font-size: 10.5px; padding: 0.15rem 0.45rem; }
+.tour-node-end { display: inline-block; margin-top: 0.3rem; font-weight: 600; font-size: 10.5px; padding: 0 0.4rem; border-radius: 99rem; background: color-mix(in srgb, var(--sl-color-green) 25%, transparent); }
+.tour .react-flow__handle { opacity: 0; pointer-events: none; }
+.tour .react-flow__edge-path { stroke: var(--sl-color-gray-5); stroke-width: 1.4; }
+.tour .tour-edge.done .react-flow__edge-path { stroke: var(--sl-color-gray-2); stroke-width: 1.8; }
+.tour .tour-edge.crossing .react-flow__edge-path { stroke-dasharray: 5 4; }
+.tour .tour-edge.again .react-flow__edge-path { stroke-dasharray: 2 4; }
+.tour .react-flow__node-lane { pointer-events: none; }
+
+/* Hydrated: the island replaces the static diagram; the step list stays as the transcript. */
+.tour-static:has(.tour[data-hydrated]) .tour-static-svg { display: none; }
+
+/* ---------- Static fallback ---------- */
+
+.tour-given { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1rem; font-size: 0.95rem; }
+.tour-given dt { color: var(--tour-muted); font-weight: 600; }
+.tour-given dd { margin: 0; }
+.tour-given ul { margin: 0; padding-inline-start: 1.1rem; }
+.tour-cover { display: inline-block; margin-inline-end: 0.8rem; }
+.tour-static-svg { margin: 1.5rem 0; overflow-x: auto; }
+.tour-static-svg svg { max-width: none; height: auto; }
+.tour-static-svg figcaption { font-size: 0.85rem; color: var(--tour-muted); }
+.tour-svg-lane { fill: color-mix(in srgb, var(--party) 6%, transparent); stroke: color-mix(in srgb, var(--party) 25%, transparent); }
+.tour-svg-lane-label { fill: var(--party); font-size: 13px; font-weight: 600; }
+.tour-svg-step rect { fill: var(--sl-color-bg-nav); stroke: var(--party); stroke-width: 1.4; }
+.tour-svg-text { font-size: 10px; line-height: 1.45; color: var(--sl-color-white); overflow: hidden; height: 100%; }
+.tour-svg-text b { color: var(--party); }
+.tour-svg-edge { fill: none; stroke: var(--sl-color-gray-4); stroke-width: 1.3; }
+.tour-svg-edge.crossing { stroke-dasharray: 5 4; }
+.tour-svg-arrow { fill: var(--sl-color-gray-4); }
+
+.tour-steps { padding-inline-start: 1.6rem; }
+.tour-steps > li { margin-block: 0.9rem; padding-inline-start: 0.6rem; border-left: 3px solid var(--party); }
+.tour-steps > li::marker { color: var(--party); font-weight: 700; }
+.tour-steps p { margin: 0.15rem 0; }
+.tour-step-head { display: flex; gap: 0.6rem; align-items: baseline; font-size: 0.85rem; color: var(--tour-muted); }
+.tour-step-link { font-weight: 600; color: var(--party); text-decoration: none; }
+.tour-arms { margin-top: 0.6rem; }
+.tour-arm { margin: 0.6rem 0 0.6rem 0.4rem; padding: 0.5rem 0.8rem; border: 1px dashed var(--tour-line); border-radius: 0.6rem; }
+.tour-arm h4 { margin: 0; font-size: 0.95rem; }
+.tour-rejoin { font-size: 0.85rem; color: var(--tour-muted); }
+.tour-missing { font-size: 0.75rem; padding: 0 0.45rem; border-radius: 99rem; border: 1px solid var(--tour-line); color: var(--tour-muted); white-space: nowrap; }
+
+/* ---------- System map ---------- */
+
+.map-island { display: grid; grid-template-columns: minmax(0, 1fr) 18rem; border: 1px solid var(--tour-line); border-radius: 0.9rem; overflow: hidden; background: var(--tour-surface); margin-block: 1rem; }
+.map-canvas { height: 40rem; background: var(--sl-color-bg); }
+.map-panel { padding: 1rem; border-left: 1px solid var(--tour-line); font-size: 0.9rem; overflow: auto; max-height: 40rem; }
+.map-panel h3 { margin: 0.1rem 0 0.4rem; font-size: 1.15rem; }
+.map-panel h4 { margin: 1rem 0 0.3rem; font-size: 0.85rem; color: var(--tour-muted); }
+.map-panel-lane, .map-hint { margin: 0; color: var(--tour-muted); }
+.map-part {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+  padding: 0 0.6rem;
+  font: inherit;
+  font-family: var(--sl-font);
+  font-size: 12px;
+  border-radius: 0.5rem;
+  border: 1.5px solid color-mix(in srgb, var(--party) 60%, transparent);
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-white);
+  cursor: pointer;
+}
+.map-part small { font-weight: 700; color: var(--party); }
+.map-part.unvisited { border-style: dashed; opacity: 0.7; }
+.map-part.selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--party) 40%, transparent); border-color: var(--party); }
+.map-part.dim { opacity: 0.3; }
+.map-lane { width: 100%; height: 100%; border-radius: 0.6rem; padding: 0.4rem 0.6rem; font-size: 12px; font-weight: 600; color: var(--party); background: color-mix(in srgb, var(--party) 6%, transparent); border: 1px solid color-mix(in srgb, var(--party) 25%, transparent); }
+.map-band { width: 100%; height: 100%; border-radius: 0.8rem; padding: 0.5rem 0.7rem; font-size: 12px; color: var(--tour-muted); background: color-mix(in srgb, var(--sl-color-gray-5) 12%, transparent); }
+.map .react-flow__handle { opacity: 0; pointer-events: none; }
+.map .react-flow__node-lane, .map .react-flow__node-band { pointer-events: none; }
+.map .map-edge .react-flow__edge-path { stroke: var(--sl-color-gray-4); opacity: 0.55; }
+.map .map-edge.crossing .react-flow__edge-path { stroke-dasharray: 6 4; }
+.map .map-edge.lit .react-flow__edge-path { stroke: var(--sl-color-accent); opacity: 1; }
+.map:has(.map-island[data-hydrated]) .map-static-svg { display: none; }
+.map-static-svg { overflow-x: auto; }
+.map-static-svg svg { max-width: none; height: auto; }
+.map-svg-band { fill: color-mix(in srgb, var(--sl-color-gray-5) 12%, transparent); }
+.map-svg-band-label { fill: var(--tour-muted); font-size: 12px; }
+.map-svg-lane { fill: color-mix(in srgb, var(--party) 6%, transparent); stroke: color-mix(in srgb, var(--party) 25%, transparent); }
+.map-svg-lane-label { fill: var(--party); font-size: 12px; font-weight: 600; }
+.map-svg-part { fill: var(--sl-color-bg-nav); stroke: var(--party); }
+.map-svg-part-label { fill: var(--sl-color-white); font-size: 12px; }
+.map-svg-edge { fill: none; stroke: var(--sl-color-gray-4); stroke-width: 1.2; }
+.map-svg-edge.crossing { stroke-dasharray: 6 4; }
+
+/* ---------- Scenario index ---------- */
+
+.index-summary { font-size: 1rem; }
+.index-chapter h2 { display: flex; align-items: baseline; gap: 0.7rem; }
+.index-count { font-size: 0.85rem; color: var(--tour-muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+.index-missing td:first-child { color: var(--tour-muted); }
+.index-priority { font-size: 0.75rem; font-weight: 700; padding: 0 0.4rem; border-radius: 0.3rem; border: 1px solid currentColor; }
+.index-priority.P1 { color: var(--sl-color-red); }
+.index-priority.P2 { color: var(--sl-color-orange); }
+.index-priority.P3 { color: var(--tour-muted); }
+
+/* Mermaid SVGs inline at build: let wide diagrams scroll rather than shrink unreadably. */
+.sl-markdown-content svg[id^='mermaid'] { max-width: 100%; height: auto; }
+
+@media (max-width: 60rem) {
+  .tour-body, .map-island { grid-template-columns: 1fr; }
+  .tour-diagram { border-right: 0; border-bottom: 1px solid var(--tour-line); height: 26rem; }
+  .map-panel { border-left: 0; border-top: 1px solid var(--tour-line); }
+}
+
+@media print {
+  .tour, .map-island { display: none; }
+  .tour-static-svg, .map-static-svg { display: block !important; }
+}
