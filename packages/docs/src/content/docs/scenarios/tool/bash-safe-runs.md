@@ -1,6 +1,6 @@
 ---
 title: คำสั่งปลอดภัยรันโดยไม่ถาม
-description: โมเดลขอรัน pnpm test ซึ่งอยู่ใน safe list Geno รันใน sandbox ทันทีโดยไม่ถาม แล้วส่งผลกลับ ไม่ว่าคำสั่งจะผ่านหรือล้มเหลว
+description: โมเดลขอรัน pnpm test ซึ่งอยู่ใน safe list Geno รันใน sandbox ทันทีโดยไม่ถาม แล้วส่งผลกลับ ไม่ว่าคำสั่งจะผ่าน ล้มเหลว หรือเกินเวลา
 tableOfContents: false
 sidebar:
   order: 2
@@ -11,7 +11,7 @@ scenario:
     - ไม่มี hook ที่ตั้งไว้ และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
     โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm test`
-  covers: [tool.bash-safe-runs, tool.bash-nonzero-exit]
+  covers: [tool.bash-safe-runs, tool.bash-nonzero-exit, tool.bash-timeout]
   related: [perm.ask-allow, perm.auto-classifier-allows, tool.parallel-read-batch, sec.sandbox-blocks-network]
   steps:
     - id: asks
@@ -60,10 +60,10 @@ scenario:
     - id: exit
       lane: tool
       at: shell
-      do: คำสั่งจบ `runShell` เก็บ output ท้ายสุดไม่เกิน 4 MB และ exit code
+      do: คำสั่งจบเอง หรือถูกฆ่าเมื่อครบเวลา `runShell` เก็บ output ท้ายสุดไม่เกิน 4 MB และ exit code
       ref: packages/engine/src/process.ts#runShell
       fork:
-        ask: คำสั่งจบด้วย exit code อะไร
+        ask: คำสั่งจบอย่างไร
         options:
           - id: zero
             label: 0 (เทสต์ผ่าน)
@@ -95,6 +95,28 @@ scenario:
                   PostToolUseFailure hooks ได้อ่านข้อความผลเป็น `error` ก่อน call ถัดไปเริ่ม เมื่อไม่มี hook ก็ผ่านไป
                 ref: packages/engine/src/hooks.ts#AFTER_TOOL_EVENT
                 emits: [PostToolUseFailure]
+          - id: timeout
+            label: เกิน 120 วินาที
+            steps:
+              - lane: tool
+                at: shell
+                do: >-
+                  เทสต์ค้างจนครบ `timeout_seconds` (ค่าเริ่มต้น 120 วินาที โมเดลขอได้ถึง 600) timer ของ `runShell` ส่ง SIGKILL
+                  ให้ทั้ง process group คำสั่งลูกที่มันเปิดไว้จึงจบไปด้วย
+                ref: "packages/engine/src/process.ts#\"options.timeoutMs === undefined\""
+              - lane: tool
+                at: executor
+                do: >-
+                  ข้อความผลขึ้นต้นด้วย `Killed after 120 seconds` ตามด้วย output ที่ได้ก่อนถูกฆ่า และปิดท้ายด้วย `[killed after 120 seconds]`
+                  สถานะเป็น `error` เหมือนคำสั่งที่ล้มเหลว
+                ref: packages/core/src/tools.ts#commandFailureLine
+                emits: [Killed after]
+              - lane: policy
+                at: hooks
+                do: >-
+                  PostToolUseFailure hooks ได้อ่านผลก่อน call ถัดไปเริ่ม เมื่อไม่มี hook ก็ผ่านไป
+                ref: packages/engine/src/hooks.ts#AFTER_TOOL_EVENT
+                emits: [PostToolUseFailure]
 
     - use: tool-result-returns
 
@@ -122,3 +144,5 @@ safe list มีโปรแกรมอ่านอย่างเดียว 
 - **sandbox ไม่มี event ของตัวเอง** ถ้าคำสั่งพยายามเขียนนอก workspace หรือต่อเครือข่าย มันล้มเหลวภายในคำสั่งเอง
   โมเดลเห็นเป็น exit code ที่ไม่ใช่ 0 ธรรมดา
 - **hook หลังรันขึ้นกับสถานะ** สถานะ `ok` เรียก PostToolUse สถานะ `error` เรียก PostToolUseFailure คำสั่งที่ถูกปฏิเสธไม่เรียกทั้งสองแบบ
+- **เกินเวลาก็เป็นแค่ผลที่ล้มเหลว** การฆ่าเมื่อครบเวลาไม่หยุด turn โมเดลอ่าน "Killed after 120 seconds" แล้วเลือกเองว่าจะขอเวลามากขึ้น
+  ด้วย `timeout_seconds` หรือรันเป็นงานเบื้องหลัง
