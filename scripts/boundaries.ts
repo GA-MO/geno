@@ -140,9 +140,10 @@ export function checkBoundaries(edges: readonly Edge[]): Violation[] {
   for (const bundle of rules.bundles) {
     const files = reachable(edges, bundle.entries);
     for (const edge of edges) {
-      if (files.has(edge.from) && (edge.to === 'vscode' || isNodeBuiltin(edge.to))) {
-        crossing(bundle.name, edge, `it runs in the ${bundle.runsIn}, which has no ${edge.to}`);
-      }
+      if (!files.has(edge.from)) continue;
+      if (edge.to === 'vscode' || isNodeBuiltin(edge.to)) crossing(bundle.name, edge, `it runs in the ${bundle.runsIn}, which has no ${edge.to}`);
+      const left = bundle.leavesOut?.packages.find((name) => edge.to === name || under(edge.to, name));
+      if (left !== undefined) crossing(bundle.name, edge, `it runs in the ${bundle.runsIn}, which leaves out ${left}: ${bundle.leavesOut!.why}`);
     }
   }
 

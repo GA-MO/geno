@@ -59,6 +59,20 @@ describe('boundaries', () => {
     expect(rulesHit([value('packages/extension/src/chat/chat.ts', 'vscode')])).toEqual([]);
   });
 
+  it('keeps elkjs out of every file the docs islands reach, so it stays in the build', () => {
+    const island = 'packages/docs/src/components/SystemMapFlow.tsx';
+    expect(BOUNDARIES.bundles[1]?.entries).toContain(island);
+    expect(BOUNDARIES.bundles[1]?.entries).toContain('packages/docs/src/components/Tour.tsx');
+    expect(rulesHit([value(island, 'packages/docs/src/map/map.ts'), value('packages/docs/src/map/map.ts', 'elkjs/lib/elk.bundled.js')])).toEqual(['docs-islands-without-elk']);
+    expect(rulesHit([value(island, 'elkjs')])).toEqual(['docs-islands-without-elk']);
+    expect(rulesHit([type(island, 'packages/docs/src/map/map.ts'), value('packages/docs/src/map/map.ts', 'elkjs/lib/elk.bundled.js')])).toEqual([]);
+    expect(rulesHit([value(island, 'packages/docs/src/map/hop.ts')])).toEqual([]);
+  });
+
+  it('keeps the docs off the packages whose sources they read as text', () => {
+    expect(rulesHit([value('packages/docs/src/scenario/refs.ts', 'packages/engine/src/serve.ts')])).toEqual(['docs-read-sources-as-text']);
+  });
+
   it('finds value import cycles inside a package, and no type-only ones', () => {
     const a = 'packages/engine/src/a.ts';
     const b = 'packages/engine/src/b.ts';

@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUNDLES } from '../packages/extension/build.mjs';
@@ -12,8 +13,16 @@ export type Boundaries = {
   readonly layers: readonly { readonly name: string; readonly from: string; readonly mayNotImport: readonly string[]; readonly nodeBuiltins?: readonly string[] }[];
   /** Code under `inside` reaches the rest of `within` only through the files in `through`. */
   readonly gates: readonly { readonly name: string; readonly inside: string; readonly within: string; readonly through: readonly string[] }[];
-  /** Every file a bundle's entries reach by value imports runs in a browser, so it imports neither `vscode` nor Node. */
-  readonly bundles: readonly { readonly name: string; readonly runsIn: string; readonly entries: readonly string[] }[];
+  /**
+   * Every file a bundle's entries reach by value imports runs in a browser, so it imports neither `vscode` nor Node,
+   * nor the packages in `leavesOut`.
+   */
+  readonly bundles: readonly {
+    readonly name: string;
+    readonly runsIn: string;
+    readonly entries: readonly string[];
+    readonly leavesOut?: { readonly packages: readonly string[]; readonly why: string };
+  }[];
   /** Single imports allowed across a rule, each with the reason a fix is not small. */
   readonly exceptions: readonly { readonly from: string; readonly to: string; readonly reason: string }[];
 };
@@ -23,6 +32,11 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const webviewEntries = BUNDLES.filter((bundle) => bundle.platform === 'browser').flatMap((bundle) =>
   Object.values(bundle.entryPoints ?? {}).map((entry) => path.relative(repo, typeof entry === 'string' ? entry : entry.in).split(path.sep).join('/')),
 );
+
+const DOCS_ISLANDS = 'packages/docs/src/components';
+const docsIslandEntries = readdirSync(path.join(repo, DOCS_ISLANDS))
+  .filter((name) => name.endsWith('.tsx'))
+  .map((name) => `${DOCS_ISLANDS}/${name}`);
 
 export const BOUNDARIES: Boundaries = {
   sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src', 'packages/docs/src'],
@@ -35,7 +49,7 @@ export const BOUNDARIES: Boundaries = {
     },
     { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/docs'] },
     { name: 'extension-without-docs', from: 'packages/extension', mayNotImport: ['packages/docs'] },
-    { name: 'docs-stand-alone', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension'] },
+    { name: 'docs-read-sources-as-text', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension'] },
   ],
   gates: [
     {
@@ -60,7 +74,15 @@ export const BOUNDARIES: Boundaries = {
       ],
     },
   ],
-  bundles: [{ name: 'webview-in-browser', runsIn: 'webview', entries: webviewEntries }],
+  bundles: [
+    { name: 'webview-in-browser', runsIn: 'webview', entries: webviewEntries },
+    {
+      name: 'docs-islands-without-elk',
+      runsIn: "reader's browser",
+      entries: docsIslandEntries,
+      leavesOut: { packages: ['elkjs'], why: 'the build lays the system map out, so the page ships without the layout engine' },
+    },
+  ],
   exceptions: [
     {
       from: 'packages/core/src/browser.ts',
