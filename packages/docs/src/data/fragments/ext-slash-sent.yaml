@@ -1,0 +1,48 @@
+# A `/name args` the user sends with no turn running, up to the engine reading what the command is.
+# Commands the editor runs itself (/new, /model, ...) stop at `route`; see ext.slash-builtin-editor.
+- id: type
+  lane: user
+  do: >-
+    ผู้ใช้พิมพ์ `/` เลือกคำสั่งจากรายการ (รายการมาจาก engine ผ่าน `available_commands_update`) ใส่อาร์กิวเมนต์ แล้วกด Enter
+  phase: idle
+
+- id: send
+  lane: panel
+  at: composer
+  do: >-
+    `submit()` เห็นว่าไม่มี turn ทำงานอยู่ จึงโพสต์ข้อความ `send` พร้อมข้อความทั้งบรรทัดไปให้ extension host
+  ref: packages/extension/src/chat/webview.ts#submit
+  emits: [send]
+
+- id: route
+  lane: editor
+  at: chat
+  do: >-
+    `routeText` หาคำสั่งในรายการ คำสั่งนี้ไม่ใช่คำสั่งที่ editor ทำเอง จึงได้ `prompt` พร้อมชื่อคำสั่งกับอาร์กิวเมนต์
+  ref: packages/extension/src/chat/slash-route.ts#routeText
+
+- id: turn-start
+  lane: editor
+  at: chat
+  do: >-
+    `prompt()` ส่ง action `turn-start` ที่มีคำสั่งติดไปด้วย แผงแชตจึงแสดงข้อความของผู้ใช้เป็นชิปของคำสั่ง
+  sees: บับเบิลข้อความที่ขึ้นต้นด้วยชิปชื่อคำสั่ง หัวข้อเป็น "working" และปุ่ม Stop มาแทน Send
+  ref: packages/extension/src/chat/chat.ts#Chat.prompt
+  emits: [turn-start]
+
+- id: request
+  lane: editor
+  at: engine-link
+  do: >-
+    `link()` ต่อ engine แล้วส่งคำขอ ACP `session/prompt` ข้อความยังเป็น `/name args` ตามที่พิมพ์ การแปลงคำสั่งเป็นงานของ engine
+  ref: packages/extension/src/chat/chat.ts#Chat.link
+  emits: [session/prompt]
+
+- id: expand
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` ตรวจว่าไม่มี turn ทำงานอยู่ แล้ว `commands.expand` อ่านโฟลเดอร์คำสั่งตามที่เป็นตอนนี้และแปลงข้อความ
+    ผลเป็นหนึ่งในสองแบบ: `builtin` ที่ engine ทำเองโดยไม่เปิด loop หรือ `message` ที่กลายเป็น prompt ของ turn ปกติ
+  ref: "packages/engine/src/serve.ts#\"const slash = target === undefined && rawLane === undefined\""
+  phase: starting

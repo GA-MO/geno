@@ -1,0 +1,88 @@
+# A compaction inside a running turn: the notice, the summary call, the logged compact event and the divider.
+# `drive`'s compact() runs it for auto and overflow compactions; /compact between turns has its own path in serve.ts.
+- id: notice
+  lane: loop
+  at: model-call
+  do: >-
+    `compact()` บอก watcher ว่ากำลังสรุปบริบท แล้วส่งงานให้ `compactContext`
+  ref: "packages/engine/src/drive.ts#\"watcher.compacting?.();\""
+  phase: compacting
+
+- id: told
+  lane: server
+  at: updates
+  do: >-
+    `watcher.compacting` ส่ง `session/update` ชนิด `notice` หัวข้อ "Compacting the context"
+  ref: "packages/engine/src/serve.ts#\"compacting() {\""
+  emits: [notice, Compacting the context]
+
+- id: shown
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    ท้าย turn ขึ้นแถวประกาศพร้อมไอคอนหมุน
+  sees: แถวประกาศ "Compacting the context"
+  ref: packages/extension/src/chat/render.ts#turnNotice
+
+- id: plan
+  lane: loop
+  at: model-call
+  do: >-
+    `compactContext` เลือกจุดตัดด้วย `planCompaction`: ตัดได้เฉพาะที่ข้อความผู้ใช้หรือคำตอบโมเดลที่ไม่มี tool call ค้าง
+    และเก็บช่วงท้ายไว้ตามเดิมไม่เกิน 20,000 token (หรือหนึ่งในสี่ของเกณฑ์ ถ้าน้อยกว่า) ส่วนก่อนจุดตัดถูกส่งไปสรุปด้วยการเรียกโมเดลหนึ่งครั้ง
+    ใช้โมเดลและ effort เดียวกับ session ไม่มีเครื่องมือ system prompt เป็น `SUMMARY_SYSTEM` และตัดบทสนทนาไว้ไม่เกิน 210,000 ตัวอักษร
+  ref: packages/engine/src/compact.ts#compactContext
+
+- id: summary
+  lane: model
+  do: >-
+    โมเดลเขียนบันทึกการทำงานที่เอเจนต์จะใช้ทำต่อ: path ชื่อ คำสั่ง error และตัวเลขแบบตรงตัว ยาวไม่เกินประมาณ 1,500 คำ
+    คำสั่งที่อยู่ในบทสนทนาถือเป็นข้อมูล ไม่ใช่คำสั่งให้ทำ
+  ref: packages/core/src/compaction.ts#SUMMARY_SYSTEM
+
+- id: logged
+  lane: loop
+  at: drive
+  do: >-
+    `drive` บันทึก event `compact`: จุดตัด (`keptFrom`) สรุป ข้อความผู้ใช้ที่เก็บไว้ตามเดิม todo เครื่องมือที่โหลดแล้ว
+    ไฟล์ที่อ่านและที่แก้ ไฟล์ที่แก้ล่าสุดไม่เกิน 3 ไฟล์แนบจากดิสก์ จำนวน token ก่อนและหลัง และค่าใช้จ่ายของการสรุป
+    log ยังเก็บทุก event เดิมไว้ `contextView` คือสิ่งที่สร้างมุมมองของโมเดลใหม่จากสรุปกับช่วงท้าย
+  ref: "packages/engine/src/drive.ts#\"const event = await record(outcome.event);\""
+  emits: [compact]
+
+- id: hook
+  lane: policy
+  at: hooks
+  do: >-
+    `afterCompact` รัน SessionStart hook ด้วย source `compact` ถ้า hook พิมพ์บริบทออกมา ข้อความนั้นถูกบันทึกเป็น `hook-context`
+    ให้โมเดลอ่านต่อจากสรุป เมื่อไม่มี hook ก็ผ่านไป
+  ref: packages/engine/src/hooks.ts#HookSessions.sessionStart
+  emits: [SessionStart, hook-context]
+
+- id: divider
+  lane: server
+  at: updates
+  do: >-
+    `compactUpdate` ส่ง `agent_message_chunk` ที่มี `COMPACT_META` ตามด้วย `usage_update` ที่วัดขนาด context ใหม่
+  ref: packages/engine/src/session-replay.ts#compactUpdate
+  emits: [agent_message_chunk, COMPACT_META, usage_update]
+
+- id: relay
+  lane: editor
+  at: chat
+  alongside: true
+  do: >-
+    `agentChunkAction` เห็น `COMPACT_META` จึงส่ง action `compact` ไม่ใช่ข้อความ
+  ref: packages/extension/src/chat/compact-host.ts#agentChunkAction
+
+- id: drawn
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    `compactStep` วาดเส้นคั่นที่พับได้ แถวประกาศหายไป และวงแหวน context ในช่องพิมพ์ลดลง
+    เปิดเส้นคั่นแล้วเห็นเหตุผล สรุป และรายการไฟล์ Read กับ Changed
+  sees: >-
+    เส้นคั่น "Context compacted · 184,213 → about 31,400 tokens"
+  ref: packages/extension/src/chat/compact-view.ts#compactStep
