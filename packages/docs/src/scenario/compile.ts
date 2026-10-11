@@ -60,6 +60,7 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   const reachable = reach(start, flows);
   for (const node of nodes.values()) if (!reachable.has(node.id)) problem(node.path, `step "${node.id}" is unreachable: no walk from the start gets here`);
   const walks = enumerate(start, flows, (id, message) => problem(nodes.get(id)?.path ?? 'steps', message));
+  if (walks.length > MAX_WALKS) problem('steps', `scenario "${ctx.id}" has more than ${MAX_WALKS} walks, and walks past the ${MAX_WALKS}th go unchecked: split it into smaller scenarios`);
   if (problems.length > 0) return { ok: false, problems };
 
   const phases = phasesOf(walks, nodes, problem);
@@ -257,7 +258,7 @@ function enumerate(start: StepId, flows: ReadonlyMap<StepId, Flow>, problem: (at
   const explore = (from: StepId, choices: Choices, before: readonly StepId[]): void => {
     const path = [...before];
     for (let at: StepId | undefined = from; at !== undefined; ) {
-      if (walks.length >= MAX_WALKS) return;
+      if (walks.length > MAX_WALKS) return;
       if (path.includes(at)) {
         const chosen = Object.entries(choices).map(([fork, option]) => `${fork}=${option}`).join(', ');
         problem(at, `a walk never ends: ${chosen === '' ? 'the default walk' : `choosing ${chosen}`} comes back to "${at}"`);

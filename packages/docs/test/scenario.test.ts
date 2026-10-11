@@ -115,6 +115,16 @@ describe('compile rejects', () => {
     ]);
     expect(!result.ok && result.problems).toEqual([expect.objectContaining({ message: expect.stringContaining('a walk never ends: choosing 2=b') })]);
   });
+
+  test('a scenario with more walks than the checker follows, naming the scenario', () => {
+    const forks = (count: number) => [
+      ...Array.from({ length: count }, () => ({ lane: 'user', do: 'pick', fork: { ask: '?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] } })),
+      { lane: 'user', do: 'last', ...ends },
+    ];
+    expect(compile(forks(8)).ok).toBe(true);
+    const result = compile(forks(9));
+    expect(!result.ok && result.problems).toEqual([expect.objectContaining({ level: 'error', path: 'steps', message: expect.stringContaining('scenario "test" has more than 256 walks') })]);
+  });
 });
 
 describe('a rejoin', () => {
