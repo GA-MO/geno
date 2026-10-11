@@ -21,12 +21,10 @@ const laneOf = (column: number) => scenario.columns[column]!.label;
         <li id={`step-${step.id}`} class={`party-${step.party}`}>
           <p class="tour-step-head">
             <a class="tour-step-link" href={`#at=${step.id}`} title="เดินทัวร์จากขั้นนี้">
-              {PARTY_LABELS[step.party]}
-            </a>
-            <span>
               {laneOf(step.column)}
-              {parts[step.part] === undefined ? '' : ` · ${parts[step.part]}`}
-            </span>
+            </a>
+            {PARTY_LABELS[step.party] !== laneOf(step.column) && <span class="tour-badge">{PARTY_LABELS[step.party]}</span>}
+            {parts[step.part] !== undefined && <span>{parts[step.part]}</span>}
           </p>
           <p>{codeSegments(step.does).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</p>
           {step.sees !== undefined && (

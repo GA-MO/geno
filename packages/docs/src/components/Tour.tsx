@@ -1,6 +1,6 @@
-import { Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, TURN_END_LABELS, WHOSE_MOVE } from '../scenario/labels.js';
 import type { ForkOption, OptionId, Scenario, Step, StepId } from '../scenario/model.js';
 import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFromHash, walk, type Moment, type TourAction, type TourState } from '../scenario/tour.js';
@@ -11,17 +11,21 @@ export interface TourProps {
   readonly parts: Readonly<Record<string, string>>;
 }
 
-const COLUMN = 232;
-const ROW = 112;
-const NODE = 204;
-const HEADER = 48;
+// Narrow lanes, so the eight lanes of a long scenario fit beside the progress panel at 1440px; the narration row carries the full text.
+const COLUMN = 108;
+const ROW = 100;
+const NODE = 100;
+const HEADER = 40;
 const PLAY_MS = 1700;
-const READABLE_ZOOM = 0.9;
+const READABLE_ZOOM = 0.85;
+const MOMENTS_SHOWN = 4;
 
 type Action = TourAction | { readonly type: 'restore'; readonly state: TourState };
+/** `follow` keeps every lane in view and scrolls with the current step; `whole` fits the entire walk. */
+type View = 'follow' | 'whole';
 type Place = 'past' | 'current' | 'future';
 type StepNodeData = { step: Step; place: Place; number: number; chosen?: OptionId; choose: (fork: StepId, option: OptionId) => void };
-type LaneNodeData = { label: string; party: string };
+type LaneNodeData = { party: string };
 
 const Code = ({ text }: { readonly text: string }): ReactNode =>
   codeSegments(text).map((segment, i) => (segment.code ? <code key={i}>{segment.text}</code> : <span key={i}>{segment.text}</span>));
@@ -59,20 +63,17 @@ function StepNode({ data }: NodeProps<Node<StepNodeData, 'step'>>) {
 
 function LaneNode({ data }: NodeProps<Node<LaneNodeData, 'lane'>>) {
   return (
-    <div className={`tour-lane party-${data.party}`}>
-      <span>{data.label}</span>
-    </div>
+    <div className={`tour-lane party-${data.party}`} />
   );
 }
 
 const NODE_TYPES = { step: StepNode, lane: LaneNode };
 
+/** The latest few moments, numbered from the start of the walk; the rest open on request instead of scrolling inside the panel. */
 function Moments({ title, moments, current }: { readonly title: string; readonly moments: readonly Moment[]; readonly current: StepId }) {
-  const list = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    // scrollIntoView would scroll the page too; only the list moves.
-    if (list.current !== null) list.current.scrollTop = list.current.scrollHeight;
-  }, [moments.length]);
+  const [all, setAll] = useState(false);
+  const shown = all ? moments : moments.slice(-MOMENTS_SHOWN);
+  const hidden = moments.length - shown.length;
   return (
     <section className="tour-moments">
       <h4>
@@ -81,19 +82,26 @@ function Moments({ title, moments, current }: { readonly title: string; readonly
       {moments.length === 0 ? (
         <p className="tour-empty">ยังไม่มี</p>
       ) : (
-        <ol ref={list}>
-          {moments.map((moment) => (
-            <li key={moment.step} className={moment.step === current ? 'now' : undefined}>
-              <Code text={moment.text} />
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol start={hidden + 1}>
+            {shown.map((moment) => (
+              <li key={moment.step} className={moment.step === current ? 'now' : undefined}>
+                <Code text={moment.text} />
+              </li>
+            ))}
+          </ol>
+          {moments.length > MOMENTS_SHOWN ? (
+            <button type="button" className="tour-more" aria-expanded={all} onClick={() => setAll(!all)}>
+              {all ? 'ย่อให้เหลือล่าสุด' : `ดูทั้งหมด ${moments.length} รายการ`}
+            </button>
+          ) : null}
+        </>
       )}
     </section>
   );
 }
 
-function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenario: Scenario; readonly path: readonly StepId[]; readonly index: number; readonly choices: TourState['choices']; readonly dispatch: (action: Action) => void }) {
+function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly scenario: Scenario; readonly path: readonly StepId[]; readonly index: number; readonly choices: TourState['choices']; readonly view: View; readonly dispatch: (action: Action) => void }) {
   const flow = useReactFlow();
   const grid = useMemo(() => layoutWalk(scenario, path), [scenario, path]);
   const choose = (fork: StepId, option: OptionId) => dispatch({ type: 'choose', fork, option });
@@ -104,8 +112,11 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
       id: `lane:${column.key}`,
       type: 'lane',
       position: { x: i * COLUMN, y: 0 },
-      data: { label: column.label, party: column.party },
+      data: { party: column.party },
       style: { width: COLUMN - 8, height: HEADER + grid.rows * ROW },
+      // The MiniMap draws only nodes with a known size, and a controlled node never receives its measured one.
+      initialWidth: COLUMN - 8,
+      initialHeight: HEADER + grid.rows * ROW,
       selectable: false,
       draggable: false,
       zIndex: -1,
@@ -121,6 +132,8 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
         ...(choices[cell.step] === undefined ? {} : { chosen: choices[cell.step] }),
         choose,
       } satisfies StepNodeData,
+      initialWidth: NODE,
+      initialHeight: ROW - 24,
       draggable: false,
       zIndex: i === index ? 10 : 1,
     })),
@@ -143,16 +156,24 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
   });
 
   const current = grid.cells[index];
+  const width = useStore((store) => store.width);
   const height = useStore((store) => store.height);
   useEffect(() => {
-    if (current === undefined || height === 0) return;
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Moving keeps a reader's zoom, but never below the size at which a step's text reads.
-    const zoom = Math.max(flow.getZoom(), READABLE_ZOOM);
+    if (current === undefined || width === 0 || height === 0) return;
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400;
+    if (view === 'whole') {
+      void flow.fitView({ padding: 0.04, duration });
+      return;
+    }
+    // Every lane fits when the width allows it at a size the text still reads; a narrow screen pans sideways to the current lane instead.
+    const span = grid.columns * COLUMN;
+    const zoom = Math.min(1, Math.max(width / (span + 16), READABLE_ZOOM));
+    const half = width / (2 * zoom);
+    const x = span <= 2 * half ? span / 2 : Math.min(Math.max(current.column * COLUMN + COLUMN / 2, half), span - half);
     // The current step sits a third of the way down, so the steps that led to it stay in view above.
     const y = Math.max(HEADER + current.row * ROW + ROW / 2 + height / (6 * zoom), height / (2 * zoom));
-    void flow.setCenter(current.column * COLUMN + COLUMN / 2, y, { zoom, duration: still ? 0 : 400 });
-  }, [current?.step, current?.column, current?.row, height]);
+    void flow.setCenter(x, y, { zoom, duration });
+  }, [view, current?.step, current?.column, current?.row, grid.columns, grid.rows, width, height]);
 
   return (
     <ReactFlow
@@ -163,15 +184,18 @@ function Diagram({ scenario, path, index, choices, dispatch }: { readonly scenar
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
-      defaultViewport={{ x: 24, y: 8, zoom: READABLE_ZOOM }}
-      minZoom={0.3}
-      maxZoom={1.4}
-      proOptions={{ hideAttribution: true }}
+      defaultViewport={{ x: 8, y: 8, zoom: 1 }}
+      minZoom={0.1}
+      maxZoom={1.6}
+      attributionPosition="bottom-left"
     >
       <LaneHeads scenario={scenario} />
     </ReactFlow>
   );
 }
+
+const minimapClass = (node: Node): string => (node.type === 'step' ? (node.data as StepNodeData).place : 'lane');
+const minimapColor = (node: Node): string => (node.type === 'step' ? `var(--party-${(node.data as StepNodeData).step.party})` : 'transparent');
 
 /** Lane names pinned to the top of the diagram, following its pan and zoom sideways, so a deep step still says whose lane it is. */
 function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
@@ -180,7 +204,8 @@ function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
     <div className="tour-lane-heads" aria-hidden="true">
       {scenario.columns.map((column, i) => (
         <span key={column.key} className={`party-${column.party}`} style={{ left: x + i * COLUMN * zoom, width: (COLUMN - 8) * zoom }}>
-          {column.label}
+          {/* Zoomed out to the whole walk, a squeezed name reads worse than none; the lane keeps its color. */}
+          {COLUMN * zoom < 64 ? null : column.label}
         </span>
       ))}
     </div>
@@ -189,6 +214,7 @@ function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
 
 export default function Tour({ scenario, parts }: TourProps) {
   const [state, dispatch] = useReducer((current: TourState, action: Action) => (action.type === 'restore' ? action.state : reduce(scenario, current, action)), scenario, initialState);
+  const [view, setView] = useState<View>('follow');
   const root = useRef<HTMLDivElement>(null);
   const path = useMemo(() => walk(scenario, state.choices), [scenario, state.choices]);
   const progress = progressAt(scenario, path, state.index);
@@ -263,46 +289,56 @@ export default function Tour({ scenario, parts }: TourProps) {
             ทางแยก: {fork.label}
           </button>
         ))}
-      </div>
-
-      <div className="tour-body">
-        <div className="tour-diagram">
-          <ReactFlowProvider>
-            <Diagram scenario={scenario} path={path} index={state.index} choices={state.choices} dispatch={dispatch} />
-          </ReactFlowProvider>
+        <div className="tour-view" role="group" aria-label="มุมมองแผนภาพ">
+          <button type="button" aria-pressed={view === 'follow'} onClick={() => setView('follow')}>
+            ตามขั้นปัจจุบัน
+          </button>
+          <button type="button" aria-pressed={view === 'whole'} onClick={() => setView('whole')}>
+            ดูทั้งเส้นทาง
+          </button>
         </div>
-
-        <aside className="tour-progress" aria-label="ความคืบหน้าของ turn">
-          <p className={`tour-whose party-${progress.whoseMove}`}>{WHOSE_MOVE[progress.whoseMove]}</p>
-          <dl>
-            <dt>ช่วงของ turn</dt>
-            <dd>
-              {PHASE_LABELS[progress.phase]} <code>{progress.phase}</code>
-            </dd>
-            <dt>ความคืบหน้า</dt>
-            <dd>
-              ขั้นที่ {progress.position.at} จาก {progress.position.of}
-            </dd>
-            <dt>นับแล้ว</dt>
-            <dd>
-              เรียกโมเดล <strong>{progress.modelCalls}</strong> ครั้ง · รันเครื่องมือ <strong>{progress.toolRuns}</strong> ครั้ง
-            </dd>
-          </dl>
-          {progress.turn.kind === 'end' ? (
-            <p className={`tour-ending turn-${progress.turn.end.turn}`}>
-              {TURN_END_LABELS[progress.turn.end.turn]}: <code>{endText(progress.turn.end)}</code>
-            </p>
-          ) : progress.turn.kind === 'leave' ? (
-            <p className="tour-ending">
-              ไปต่อที่ {progress.turn.to.href === undefined ? progress.turn.to.title : <a href={progress.turn.to.href}>{progress.turn.to.title}</a>}
-            </p>
-          ) : (
-            <p className="tour-running">turn กำลังทำงาน</p>
-          )}
-          <Moments title="AI ทำอะไรไปแล้ว" moments={progress.ai} current={step.id} />
-          <Moments title="harness ทำอะไรไปแล้ว" moments={progress.harness} current={step.id} />
-        </aside>
       </div>
+
+      <ReactFlowProvider>
+        <div className="tour-body">
+          <div className="tour-diagram">
+            <Diagram scenario={scenario} path={path} index={state.index} choices={state.choices} view={view} dispatch={dispatch} />
+          </div>
+
+          <aside className="tour-progress" aria-label="ความคืบหน้าของ turn">
+            {/* Beside the diagram rather than over it, so the overview never hides a step. */}
+            <MiniMap className="tour-minimap" pannable zoomable ariaLabel="ภาพย่อของทั้งเส้นทาง" nodeClassName={minimapClass} nodeColor={minimapColor} nodeBorderRadius={6} style={{ width: 224, height: 190 }} />
+            <p className={`tour-whose party-${progress.whoseMove}`}>{WHOSE_MOVE[progress.whoseMove]}</p>
+            <dl>
+              <dt>ช่วงของ turn</dt>
+              <dd>
+                {PHASE_LABELS[progress.phase]} <code>{progress.phase}</code>
+              </dd>
+              <dt>ความคืบหน้า</dt>
+              <dd>
+                ขั้นที่ {progress.position.at} จาก {progress.position.of}
+              </dd>
+              <dt>นับแล้ว</dt>
+              <dd>
+                เรียกโมเดล <strong>{progress.modelCalls}</strong> ครั้ง · รันเครื่องมือ <strong>{progress.toolRuns}</strong> ครั้ง
+              </dd>
+            </dl>
+            {progress.turn.kind === 'end' ? (
+              <p className={`tour-ending turn-${progress.turn.end.turn}`}>
+                {TURN_END_LABELS[progress.turn.end.turn]}: <code>{endText(progress.turn.end)}</code>
+              </p>
+            ) : progress.turn.kind === 'leave' ? (
+              <p className="tour-ending">
+                ไปต่อที่ {progress.turn.to.href === undefined ? progress.turn.to.title : <a href={progress.turn.to.href}>{progress.turn.to.title}</a>}
+              </p>
+            ) : (
+              <p className="tour-running">turn กำลังทำงาน</p>
+            )}
+            <Moments title="AI ทำอะไรไปแล้ว" moments={progress.ai} current={step.id} />
+            <Moments title="harness ทำอะไรไปแล้ว" moments={progress.harness} current={step.id} />
+          </aside>
+        </div>
+      </ReactFlowProvider>
 
       <section className={`tour-narration party-${step.party}`} aria-live="polite">
         <header>
