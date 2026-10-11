@@ -5,9 +5,11 @@ export interface Box {
   readonly h: number;
 }
 
+const DIRECTION_OFFSET = 4;
+
 export function hopPath(from: Box, to: Box): string {
   const rightward = to.x > from.x;
-  const nudge = rightward ? -4 : 4;
+  const nudge = rightward ? -DIRECTION_OFFSET : DIRECTION_OFFSET;
   const y1 = from.y + from.h / 2 + nudge;
   const y2 = to.y + to.h / 2 + nudge;
   if (from.x === to.x) {
