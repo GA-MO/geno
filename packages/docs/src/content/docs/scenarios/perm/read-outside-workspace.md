@@ -35,6 +35,7 @@ scenario:
     - id: outside
       lane: tool
       at: executor
+      runs: 0
       do: >-
         `read` ถูกห่อด้วย `withReach` ซึ่งรันมันตัวเดียวในชุดเพราะ path อาจออกนอก workspace
         `outsideOf` หา path จริงแล้วพบว่าไม่อยู่ใน workspace ที่เก็บผลยาว หรือโฟลเดอร์ที่อ่านได้ใดๆ ไม่มีกฎ Read deny ตรง จึงต้องถาม
@@ -159,6 +160,7 @@ scenario:
     - id: read
       lane: tool
       at: executor
+      runs: 1
       do: >-
         `read` อ่านไฟล์โดยให้ราก filesystem เป็นโฟลเดอร์ที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
         ผลมีบันทึกว่าผู้ใช้อนุญาต

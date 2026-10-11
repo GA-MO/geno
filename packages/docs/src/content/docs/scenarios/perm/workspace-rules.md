@@ -86,6 +86,7 @@ scenario:
                 emits: [ToolDenied]
               - lane: tool
                 at: executor
+                runs: 0
                 do: >-
                   คำสั่งไม่ได้รัน ข้อความผลบอกโมเดลว่าอย่าลองซ้ำ ("denied: `git push origin main` matches the workspace rule
                   that denies `git push`, ... Do not retry it; find another way, or say in your answer that the rule stops you.")

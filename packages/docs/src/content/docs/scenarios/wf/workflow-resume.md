@@ -83,6 +83,7 @@ scenario:
     - id: start
       lane: server
       at: sessions
+      runs: 1
       do: >-
         `runWorkflow` เปิด session ใหม่ของ workflow ที่จด `resumes` ไว้ใน `session-start` ข้อความแรกบอกว่ารอบนี้ resume รอบเก่า
       ref: packages/engine/src/serve.ts#runWorkflow

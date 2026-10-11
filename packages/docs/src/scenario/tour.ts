@@ -106,11 +106,32 @@ export function briefOf(does: string): string {
   return sentence.length > 110 ? `${sentence.slice(0, 108)}…` : sentence;
 }
 
-/** A fold over the walk up to `index`. A counter rises when a run of its steps begins. */
+/**
+ * Model calls and tool calls over a walk. A model call is a run of model-call steps in one column (one session).
+ * A tool call is counted at the first tool-run step after a model call, unless a step says how many it `runs`;
+ * any authored count closes the batch, so later tool-run steps add nothing until the next model call.
+ */
+function tally(done: readonly Step[]): { readonly modelCalls: number; readonly toolRuns: number } {
+  let modelCalls = 0;
+  let toolRuns = 0;
+  let batchCounted = false;
+  done.forEach((step, i) => {
+    const previous = done[i - 1];
+    if (step.counts === 'model-call' && !(previous?.counts === 'model-call' && previous.column === step.column)) {
+      modelCalls += 1;
+      batchCounted = false;
+    }
+    const runs = step.runs ?? (step.counts === 'tool-run' && !batchCounted ? 1 : 0);
+    if (step.runs !== undefined || runs > 0) batchCounted = true;
+    toolRuns += runs;
+  });
+  return { modelCalls, toolRuns };
+}
+
+/** A fold over the walk up to `index`. */
 export function progressAt(scenario: Scenario, path: readonly StepId[], index: number): Progress {
   const done = path.slice(0, index + 1).map((id) => scenario.steps[id]!);
   const step = done.at(-1)!;
-  const runsOf = (counts: Step['counts']): number => done.filter((current, i) => current.counts === counts && done[i - 1]?.counts !== counts).length;
   const momentsOf = (party: Party): Moment[] => done.filter((current) => current.party === party).map((current) => ({ step: current.id, lane: current.lane, text: briefOf(current.does) }));
   const last = index === path.length - 1;
   const turn: Progress['turn'] =
@@ -121,8 +142,7 @@ export function progressAt(scenario: Scenario, path: readonly StepId[], index: n
     phase: step.phase,
     turn,
     position: { at: index + 1, of: path.length },
-    modelCalls: runsOf('model-call'),
-    toolRuns: runsOf('tool-run'),
+    ...tally(done),
     ai: momentsOf('ai'),
     harness: momentsOf('harness'),
     user: momentsOf('user'),

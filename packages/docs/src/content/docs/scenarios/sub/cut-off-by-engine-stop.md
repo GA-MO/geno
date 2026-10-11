@@ -121,6 +121,7 @@ scenario:
     - id: reopen
       lane: child@worker
       at: loop
+      runs: 1
       do: >-
         `resumable` เห็นว่า run ล่าสุดของลูกจบแบบ `interrupted` จึงต่อ log ของลูกด้วยข้อความจากแม่ที่มีหมายเหตุว่า
         Geno หยุดระหว่างที่ลูกทำงาน call ที่ค้างไม่มีผล ให้ทำต่อจากที่ transcript จบ ลูกได้เพดานชุดใหม่

@@ -67,6 +67,11 @@ export interface ActingStepIn {
   readonly phase?: Phase | undefined;
   /** Draw in the same row as the previous step: two actors at once. */
   readonly alongside?: boolean | undefined;
+  /**
+   * Tool calls this step runs. Default: one at the first tool-run step after a model call. Say it where that is wrong:
+   * a step that stands for several calls, a second batch, or a call the tool refuses before doing its work (`runs: 0`).
+   */
+  readonly runs?: number | undefined;
   /** A drawn loop-back to an earlier step that the walk does not follow. */
   readonly again?: string | undefined;
   /** Leave for another scenario, by catalog id. */
@@ -109,6 +114,7 @@ const actingSchema: z.ZodType<ActingStepIn> = z.lazy(() =>
       ref: codeRef.optional(),
       phase: z.enum(PHASES).optional(),
       alongside: z.boolean().optional(),
+      runs: z.number().int().min(0).optional(),
       again: stepRef.optional(),
       goto: catalogId.optional(),
       end: endIn.optional(),

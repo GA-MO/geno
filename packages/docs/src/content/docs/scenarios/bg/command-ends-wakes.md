@@ -103,6 +103,7 @@ scenario:
                 phase: idle
               - lane: tool
                 at: shell
+                runs: 0
                 do: >-
                   หลายนาทีต่อมา build จบด้วย exit code 0 งานส่ง `background-end` เข้ากล่องข้อความของ session
                 ref: packages/core/src/background.ts#TELLS_MODEL

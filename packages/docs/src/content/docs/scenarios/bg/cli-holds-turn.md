@@ -34,6 +34,7 @@ scenario:
     - id: launch
       lane: loop
       at: tools
+      runs: 1
       do: >-
         `launch` เริ่มลูกโดยไม่รอ session ของแม่ติดหนี้รายงานหนึ่งฉบับ (`owe()`) CLI ไม่มีตัวปลุก จึงไม่มีการรอใน Tasks
         ผลของ call คือ "Started explore in the background as subagent session ... Its report arrives as a message from Geno when it finishes"

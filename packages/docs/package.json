@@ -8,6 +8,7 @@
     "site": "astro build",
     "check": "tsx scripts/check.ts",
     "catalog": "tsx scripts/catalog.ts",
+    "counts": "tsx scripts/counts.ts",
     "typecheck": "astro check"
   },
   "dependencies": {

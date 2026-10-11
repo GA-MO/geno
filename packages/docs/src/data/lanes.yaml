@@ -5,7 +5,8 @@
 # process   the OS process the lane lives in. The system map orders its columns by process.
 # surfaces  where the lane exists. A scenario's surface must be in every lane it uses.
 # instanced the lane repeats per session, written child@explore.
-# counts    what a step here adds to the progress panel: model-call or tool-run.
+# counts    which progress counter a step here feeds: model-call or tool-run. tour.ts#tally counts them; a step
+#           overrides the tool count with runs: n.
 # parts     the pieces inside a lane, each a node on the system map. A step on a lane with parts names one with at:.
 
 processes:

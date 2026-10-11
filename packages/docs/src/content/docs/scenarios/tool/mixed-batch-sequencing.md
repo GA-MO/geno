@@ -43,6 +43,7 @@ scenario:
     - id: reads
       lane: tool
       at: executor
+      runs: 2
       do: >-
         `read` ทั้งสองอ่านไฟล์พร้อมกัน แต่ละตัวส่งสถานะจบให้แผงทันทีที่เสร็จ
       ref: packages/engine/src/tools/read.ts#readTool
@@ -131,6 +132,7 @@ scenario:
                 phase: running-tools
               - lane: tool
                 at: shell
+                runs: 1
                 do: >-
                   `bash` รัน `pnpm add zod` ใน sandbox จนจบ `pnpm-lock.yaml` เปลี่ยนก่อนที่ `read` ตัวสุดท้ายจะเริ่ม
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
@@ -210,6 +212,7 @@ scenario:
     - id: last-read
       lane: tool
       at: executor
+      runs: 1
       do: >-
         `read` อ่าน `pnpm-lock.yaml` ฉบับที่ `pnpm add` เพิ่งเขียน
       ref: packages/engine/src/tools/read.ts#readTool

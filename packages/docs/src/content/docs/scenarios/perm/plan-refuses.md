@@ -36,6 +36,7 @@ scenario:
     - id: which
       lane: tool
       at: executor
+      runs: 0
       do: >-
         executor อ่านโหมดของ session ตอน call รัน ได้ `plan`
       ref: packages/engine/src/tools/agent.ts#inMode

@@ -154,6 +154,7 @@ scenario:
     - id: review
       lane: child@review
       at: model
+      runs: 1
       do: >-
         `reviewArena` เปิด session ของ checkout หลักแบบไม่มีใครตอบการ์ด แล้วออก call `agent: review` ในนามผู้ใช้
         พร้อม diff ของทุก lane ที่ผ่าน review จัดอันดับและให้เหตุผล `parseRanking` อ่านอันดับจากรายงาน

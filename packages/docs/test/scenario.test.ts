@@ -210,3 +210,45 @@ describe('the site', () => {
   });
 });
 
+describe('the progress counters count calls, not steps', () => {
+  const site = loadSite(siteOptions(DOCS));
+  const endOf = (id: string, choices: Record<string, string>) => {
+    const scenario = site.scenarios[id]!;
+    const path = walk(scenario, { ...scenario.defaults, ...choices } as Record<string, OptionId>);
+    return progressAt(scenario, path, path.length - 1);
+  };
+  const tallyOf = (steps: unknown[]) => {
+    const result = compile(steps);
+    if (!result.ok) throw new Error(JSON.stringify(result.problems));
+    const path = walk(result.value, {});
+    return progressAt(result.value, path, path.length - 1);
+  };
+  const model = { lane: 'model', do: 'asks', ref: REF };
+  const tool = (extra = {}) => ({ lane: 'tool', at: 'executor', do: 'runs', ref: REF, ...extra });
+  const policy = { lane: 'policy', at: 'rules', do: 'allows', ref: REF };
+
+  test('one bash call drawn as several tool steps is one run on every arm of bash-safe-runs', () => {
+    for (const exit of ['zero', 'nonzero', 'timeout']) expect(endOf('bash-safe-runs', { exit })).toMatchObject({ modelCalls: 1, toolRuns: 1 });
+  });
+
+  test('a step that stands for two parallel reads counts two', () => {
+    expect(tallyOf([model, tool({ runs: 2 }), { ...policy, ...ends }]).toolRuns).toBe(2);
+    expect(endOf('mixed-batch-sequencing', { choice: 'allow' }).toolRuns).toBe(4);
+    expect(endOf('mixed-batch-sequencing', { choice: 'reject' }).toolRuns).toBe(2);
+  });
+
+  test('tool steps split by a policy step are one call, and the next model call opens a new batch', () => {
+    expect(tallyOf([model, tool(), policy, tool(), { ...model, ...ends }]).toolRuns).toBe(1);
+    expect(tallyOf([model, tool(), model, tool(ends)])).toMatchObject({ modelCalls: 2, toolRuns: 2 });
+  });
+
+  test('a call refused before the tool does its work counts nothing', () => {
+    expect(tallyOf([model, tool({ runs: 0 }), tool(ends)]).toolRuns).toBe(0);
+    expect(endOf('plan-refuses', { which: 'edit' }).toolRuns).toBe(0);
+  });
+
+  test('model steps of parallel sessions are separate calls', () => {
+    expect(endOf('arena-best-of-n', { 'race-c': 'wait', rank: 'two-plus', choose: 'pick' }).modelCalls).toBe(4);
+  });
+});
+
