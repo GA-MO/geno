@@ -12,8 +12,8 @@ scenario:
     - คำสั่งนี้ไม่ตรงกับกฎของ workspace และไม่อยู่ใน safe list
   trigger: >-
     โมเดลจบคำตอบด้วย `stop_reason: tool_use` พร้อมบล็อก `tool_use` ของ `bash`
-  covers: [perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-with-comment, perm.always-allow-workspace]
-  related: [turn.with-tools, tool.bash-safe-runs, perm.auto-classifier-allows, ctl.stop-at-card]
+  covers: [perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-with-comment, perm.always-allow-workspace, ctl.stop-at-card]
+  related: [turn.with-tools, tool.bash-safe-runs, perm.auto-classifier-allows, ctl.stop-while-tools-run]
   steps:
     - id: wants
       lane: model
@@ -271,6 +271,71 @@ scenario:
                 phase: calling-model
                 end: { turn: continues, reason: call-model }
 
+          - id: stop
+            label: กด Stop แทน
+            steps:
+              - lane: panel
+                at: composer
+                do: ผู้ใช้ไม่ตอบการ์ด แต่กด Stop ปุ่ม Stop โพสต์ข้อความ `stop` ไปให้ extension host
+                ref: "packages/extension/src/chat/webview.ts#\"stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));\""
+                emits: [stop]
+              - lane: editor
+                at: chat
+                do: >-
+                  `Chat.stop` ตอบการ์ดที่เปิดอยู่ว่าไม่ได้เลือกอะไร ตามที่ ACP กำหนดให้ client ที่ยกเลิก turn ตอบคำขอที่ค้าง
+                  แล้วส่ง notification ACP `session/cancel` ทันที `askPermission` จึงตอบ engine ว่า `cancelled`
+                ref: packages/extension/src/chat/chat.ts#Chat.stop
+                emits: [cancelled]
+              - lane: panel
+                at: card
+                alongside: true
+                do: การ์ดย่อเหลือบรรทัดเดียวว่า Cancelled
+                sees: "Cancelled"
+                ref: packages/extension/src/chat/render.ts#permissionCard
+              - lane: server
+                at: turns
+                do: >-
+                  engine หา `AbortController` ของ turn ใน `turns` แล้วสั่ง abort
+                  คำตอบ `cancelled` ของการ์ดแปลงเป็น `reject` แต่ไม่มีใครใช้ผลนั้นแล้ว
+                ref: "packages/engine/src/serve.ts#\".onNotification(acp.methods.agent.session.cancel, ({ params }) => {\""
+              - lane: loop
+                at: tools
+                do: >-
+                  `unlessAborted` ของ batch จบทันทีที่ abort call ของ `bash` เริ่มแล้ว (มันรอการ์ดอยู่ภายใน executor)
+                  จึงได้คำตอบ `UNRUN_TEXTS.stopped` ว่าผู้ใช้หยุดมันระหว่างรันและมันอาจรันไปบางส่วน ทั้งที่คำสั่งไม่เคยเริ่ม
+                ref: packages/core/src/loop.ts#stoppedAnswers
+                emits: [tool-result]
+                phase: running-tools
+              - lane: loop
+                at: drive
+                do: >-
+                  `drive` บันทึก event `error` ชนิด `abort` ตามหลังผลนั้น extension ทิ้ง error ชนิดนี้ แผงไม่ขึ้นบล็อก error
+                ref: "packages/engine/src/drive.ts#\"error: 'abort', message: 'interrupted by the user', tools: interrupted\""
+                emits: [error, abort]
+              - lane: loop
+                at: step
+                do: >-
+                  `loopStep` เห็น error `abort` จึงได้ `done(error)` แล้ว `runTurn` เห็นว่าสัญญาณถูก abort จึงตอบ ACP ว่า
+                  `stopReason: cancelled` และงานจบแบบ `stopped`
+                ref: packages/core/src/loop.ts#ERROR_REASON
+                emits: [stopped]
+                phase: ending
+              - lane: editor
+                at: chat
+                do: >-
+                  `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end` สถานะ `stopped`
+                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                emits: [turn-end]
+              - lane: panel
+                at: rail
+                do: >-
+                  ขั้นของคำสั่งขึ้นเป็นล้มเหลวพร้อมข้อความว่าผู้ใช้หยุด `missingReply` เห็นว่า turn ถูกหยุดโดยไม่มีคำตอบ
+                sees: >-
+                  หัวข้อ "stopped after 40s" กล่อง "Geno stopped without a reply · You stopped it before it answered."
+                  ปุ่ม [Continue] [Retry] และท้าย turn ขึ้น "Stopped by you"
+                ref: packages/extension/src/chat/rail.ts#missingReply
+                end: { turn: stopped, reason: cancelled }
+
     - id: run
       lane: tool
       at: shell
@@ -293,7 +358,7 @@ scenario:
 ---
 
 การ์ดนี้คือจุดเดียวในโหมด Ask ที่ Geno หยุดรอคนระหว่างที่ turn ยังไม่จบ
-ทางแยกทั้งสี่ต่างกันที่ผลต่อ turn
+ทางแยกทั้งห้าต่างกันที่ผลต่อ turn
 
 | ปุ่ม | ผลต่อคำสั่ง | ผลต่อ turn |
 | --- | --- | --- |
@@ -301,9 +366,15 @@ scenario:
 | **Always allow in this workspace** | รัน และบันทึกกฎ `pnpm add` | ทำต่อ ครั้งหน้าไม่ถามอีก |
 | **Deny** | ไม่รัน (`ToolRejected`) | จบทันทีแบบ `done (end_turn)` และรอผู้ใช้ |
 | **No, and tell the agent…** | ไม่รัน (`ToolDenied`) | ทำต่อ โมเดลได้อ่านคำแนะนำของผู้ใช้ |
+| **Stop** (ไม่ตอบการ์ด) | ไม่รัน แต่โมเดลได้ยินว่า "may have partly run" | จบแบบ `stopped (cancelled)` |
 
 ความต่างระหว่าง Deny กับ "No, and tell the agent…" อยู่ที่ชนิดของ error:
 `ToolRejected` ทำให้ batch หยุดและ turn จบ ส่วน `ToolDenied` เป็นผลธรรมดาที่โมเดลอ่านแล้วหาทางอื่นต่อ
 
 engine ตั้งชื่อสองตัวเลือกแรกว่า "Allow once" และ "Reject" (`PERMISSION_OPTIONS` ใน `serve.ts`)
 แต่แผงแชตแสดงเป็น **Allow** และ **Deny** ตาม `CHOICE_LABELS` ใน `render.ts`
+
+กด Stop ขณะการ์ดรออยู่ `Chat.stop` ส่งสองข้อความเกือบพร้อมกัน: คำตอบ `cancelled` ของการ์ด และ `session/cancel`
+ทัวร์เดินตามลำดับที่ `Chat.stop` เรียก คือ abort ไปถึง batch ก่อน call จึงถูกตอบว่าถูกหยุดระหว่างรัน
+ถ้าคำตอบของการ์ดไปถึงก่อน `settle` จะบันทึก call เป็น `rejected` เหมือนกด Deny แทน ทั้งสองทาง turn จบแบบ `stopped`
+และคำสั่งไม่ได้รัน แต่ในทางแรกข้อความที่โมเดลได้อ่านบอกว่าคำสั่ง "may have partly run" ซึ่งไม่ตรงกับที่เกิดขึ้น
