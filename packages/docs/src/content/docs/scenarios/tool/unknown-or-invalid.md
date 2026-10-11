@@ -27,6 +27,7 @@ scenario:
     - id: lookup
       lane: tool
       at: executor
+      runs: 0
       do: >-
         `runExecutor` หา executor ตามชื่อ แล้วให้ executor ตรวจ input ด้วย zod schema ของมันก่อนทำอะไร
       ref: packages/engine/src/tools/index.ts#runExecutor

@@ -35,6 +35,7 @@ scenario:
     - id: launch
       lane: loop
       at: tools
+      runs: 1
       do: >-
         executor ของ `agent` เรียก `launch` แบบ `start: 'fork'` `plan` อ่านอย่างเดียว จึงรันพร้อมลูกอ่านอย่างเดียวตัวอื่นได้
         `runChild` ตั้งเพดาน 12 รอบ และ $0.05 แต่ไม่เกินงบที่รอบของแม่ยังเหลือให้ลูก

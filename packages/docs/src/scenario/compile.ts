@@ -241,6 +241,7 @@ function stepOf(node: Node, flow: Flow | undefined, surface: Surface, columns: r
     part: (part === undefined ? lane.id : `${lane.id}.${part.id}`) as PartKey,
     party,
     ...(counts === undefined ? {} : { counts }),
+    ...(step.runs === undefined ? {} : { runs: step.runs }),
     does: step.do.trim(),
     ...(step.sees === undefined ? {} : { sees: step.sees.trim() }),
     emits: step.emits ?? [],

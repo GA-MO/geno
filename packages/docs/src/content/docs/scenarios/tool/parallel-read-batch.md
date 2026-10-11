@@ -45,6 +45,7 @@ scenario:
     - id: read
       lane: tool
       at: executor
+      runs: 3
       do: >-
         `read` แต่ละตัวอ่านผ่าน `editorFiles` เมื่อมี editor ที่อ่านไฟล์ได้แสดง session นี้อยู่ engine จึงส่งคำขอ ACP
         `fs/readTextFile` แทนการอ่านดิสก์เอง
@@ -61,6 +62,7 @@ scenario:
     - id: search
       lane: tool
       at: executor
+      runs: 2
       alongside: true
       do: >-
         `grep` และ `glob` รัน ripgrep บนดิสก์ใน process ของ engine ก่อนค้นจะขอ buffer ที่ยังไม่บันทึกจาก editor

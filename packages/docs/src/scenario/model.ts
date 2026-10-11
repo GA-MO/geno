@@ -65,6 +65,8 @@ export interface Step {
   /** From the lane or its part, never authored: "whose move" cannot be written wrong. */
   readonly party: Party;
   readonly counts?: Counts;
+  /** Authored tool calls this step runs; without it tour.ts derives the count. */
+  readonly runs?: number;
   readonly does: string;
   readonly sees?: string;
   readonly emits: readonly string[];

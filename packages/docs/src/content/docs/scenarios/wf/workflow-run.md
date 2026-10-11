@@ -107,6 +107,7 @@ scenario:
     - id: start
       lane: server
       at: sessions
+      runs: 1
       do: >-
         `runWorkflow` เปิด session เบื้องหลังชื่อ "Workflow fix-bug" ในโหมดเดียวกับแชตนี้ งบของ session คืองบรวมของ workflow
         director ของ session คือ `workflowDriver` แชตนี้ติดหนี้รายงานหนึ่งฉบับ และตัวปลุกจดว่ารอ workflow นี้

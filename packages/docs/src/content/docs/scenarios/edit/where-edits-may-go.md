@@ -40,6 +40,7 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                runs: 0
                 do: >-
                   `resolveWritable` เห็นว่า path ไม่อยู่ใน workspace และไม่อยู่ในโฟลเดอร์ที่ `additionalDirectories` ตั้งให้เขียนได้
                   จึงโยน `ToolError` "/etc/hosts is outside the workspace" symlink ที่ชี้ออกไปนอก workspace ก็ถูกจับแบบเดียวกัน
@@ -118,6 +119,7 @@ scenario:
     - id: refused
       lane: tool
       at: executor
+      runs: 0
       do: >-
         ไม่มีอะไรถูกเขียน ไฟล์ไม่ถูกอ่านผ่าน editor ด้วยซ้ำ ผลของ call เป็น `error` (นอก workspace) หรือ `denied` (กฎ deny)
       ref: packages/engine/src/tools/index.ts#runExecutor

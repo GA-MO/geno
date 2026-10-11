@@ -36,6 +36,7 @@ scenario:
     - id: mode
       lane: tool
       at: executor
+      runs: 0
       do: >-
         `ask_user` ถูกห่อด้วย `inMode` ซึ่งอ่านโหมดของ session ตอนที่ call รัน ไม่ใช่ตอนที่ turn เริ่ม
         แล้ว `parseAskUser` ตรวจคำถามและตัวเลือกตามขีดจำกัด
@@ -61,6 +62,7 @@ scenario:
     - id: elicit
       lane: server
       at: approvals
+      runs: 1
       do: >-
         `editorUser.ask_user` ส่งอัปเดตที่ค้างออกไปก่อน แล้วส่งคำขอ ACP `elicitation/create` แบบฟอร์ม
         พร้อมคำถามตัวจริงใน `_meta` ใต้ `ASK_USER_META` งานในแผง Tasks เปลี่ยนเป็น `needs-input`

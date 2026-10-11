@@ -28,6 +28,7 @@ scenario:
     - id: which
       lane: tool
       at: executor
+      runs: 0
       do: >-
         ทุก executor ของ session ถูกห่อด้วย `withPermissions` ซึ่งดูรายการเครื่องมือที่ถูกห้ามก่อนเรียกตัวเครื่องมือ
       ref: packages/engine/src/tools/agent.ts#withPermissions

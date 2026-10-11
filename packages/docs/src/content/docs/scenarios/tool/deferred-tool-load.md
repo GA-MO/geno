@@ -37,6 +37,7 @@ scenario:
               - use: tool-call-opens
               - lane: tool
                 at: executor
+                runs: 0
                 do: >-
                   executor ของ `monitor` ถูกห่อด้วย `gate` ซึ่งอ่าน log ด้วย `loadedTools` แล้วไม่พบว่าเคยโหลด
                   จึงโยน `ToolError` จาก `unloadedCallError` ("monitor is a deferred tool and is not loaded yet. Call tool_search with select: [\"monitor\"] first, ...")

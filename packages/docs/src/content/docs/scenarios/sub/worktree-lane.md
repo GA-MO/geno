@@ -35,6 +35,7 @@ scenario:
     - id: want
       lane: loop
       at: tools
+      runs: 1
       do: >-
         `laneWant` เห็น `isolation: "worktree"` จึงขอ lane ของลูกเอง ชื่อ `worker-<8 ตัวแรกของ session id>`
         ลูกที่อยู่ใน lane ของตัวเองไม่แตะ checkout หลัก จึงรันพร้อมลูกอื่นได้ (ช่องขนาน 4 ช่อง) แทนที่จะรอคิว writer
