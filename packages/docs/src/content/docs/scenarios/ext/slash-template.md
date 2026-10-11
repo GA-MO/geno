@@ -1,0 +1,108 @@
+---
+title: คำสั่ง / ที่กลายเป็น prompt
+description: ผู้ใช้พิมพ์ /ชื่อ ตามด้วยอาร์กิวเมนต์ engine แปลงเป็นข้อความจากไฟล์คำสั่ง หรือแนบ SKILL.md ไปกับข้อความ แล้ว turn เดินตามปกติ
+tableOfContents: false
+sidebar:
+  order: 1
+scenario:
+  surface: vscode
+  given:
+    - workspace มีไฟล์ `.claude/commands/fix-issue.md` เนื้อหา "Read issue #$1 with gh, find the cause, and fix it."
+    - ติดตั้ง plugin pstack ไว้ จึงมีสกิล `pstack:how` ให้เลือกในรายการ `/`
+    - session นี้ไม่มี turn ทำงานอยู่
+  trigger: >-
+    ผู้ใช้พิมพ์ `/fix-issue 42` หรือ `/pstack:how loop ทำงานอย่างไร` แล้วกด Enter
+  covers: [ext.slash-template, ext.skill-typed]
+  related: [ext.slash-builtin-engine, ext.slash-builtin-editor, ext.skill-by-model, turn.text-answer]
+  steps:
+    - use: ext-slash-sent
+
+    - id: kind
+      lane: server
+      at: turns
+      do: >-
+        `expandInvocation` หาคำสั่งด้วยชื่อ คำสั่งที่ไม่ใช่ builtin กลายเป็น `message` เสมอ
+      ref: packages/core/src/commands.ts#expandInvocation
+      fork:
+        ask: คำสั่งนี้มาจากไหน
+        options:
+          - id: template
+            label: ไฟล์คำสั่ง (prompt template)
+            then: prompt-logged
+            steps:
+              - lane: server
+                at: turns
+                do: >-
+                  `/fix-issue` มาจากไฟล์ใน `commands/` `expandTemplate` แทน `$1` ด้วย `42` ข้อความของ turn จึงเป็น
+                  "Read issue #42 with gh, find the cause, and fix it." ถ้าแม่แบบไม่มีตัวแทนเลย อาร์กิวเมนต์จะต่อท้ายเป็น `ARGUMENTS: ...`
+                ref: packages/core/src/commands.ts#expandTemplate
+                emits: [ARGUMENTS]
+
+          - id: skill
+            label: สกิล
+            then: prompt-logged
+            steps:
+              - lane: server
+                at: turns
+                do: >-
+                  `/pstack:how` เป็นสกิล ข้อความของ turn ยังเป็นสิ่งที่ผู้ใช้พิมพ์ทั้งบรรทัด และเนื้อหา `SKILL.md` ไปเป็น context item
+                  ชนิด `skill` ค่า `context: fork` ในสกิลไม่มีผลในทางนี้ สกิลไม่ถูกแยกไปรันเป็นเอเจนต์ลูก
+                ref: "packages/core/src/commands.ts#\"skill: ({ name, path, text: skill }, text, args) => ({\""
+                emits: [skill]
+
+    - id: prompt-logged
+      lane: server
+      at: turns
+      do: >-
+        ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความที่แปลงแล้ว ชื่อคำสั่งกับอาร์กิวเมนต์
+        และ context item ของสกิล (ถ้ามี) แล้วเรียก `runAgent` ด้วย prompt ว่าง ให้ loop ใช้ prompt ที่อยู่ใน log
+      ref: packages/engine/src/serve.ts#logPrompt
+      emits: [user]
+
+    - id: build
+      lane: loop
+      at: agent
+      do: >-
+        `runAgent` ประกอบรอบนี้ตามปกติ ชุดเครื่องมือและ system prompt เหมือน turn อื่นทุกอย่าง
+      ref: packages/engine/src/agent.ts#runAgent
+
+    - id: submit-hooks
+      lane: policy
+      at: hooks
+      do: >-
+        `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงให้ UserPromptSubmit hook อ่านข้อความที่แปลงแล้วก่อนโมเดล
+        เมื่อไม่มี hook ก็ผ่านไป
+      ref: packages/engine/src/drive.ts#submitted
+      emits: [UserPromptSubmit]
+
+    - use: model-call
+
+    - id: answer
+      lane: model
+      do: >-
+        โมเดลเห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
+        ต่อจากข้อความของผู้ใช้ แล้วทำงานตามนั้น ในตัวอย่างนี้ตอบเป็นข้อความโดยไม่เรียกเครื่องมือ จบด้วย `stop_reason: end_turn`
+      ref: packages/core/src/context.ts#ITEM_RENDER
+      emits: [end_turn]
+
+    - use: answer-streams
+    - use: turn-ends
+---
+
+คำสั่งทั้งสองแบบไม่มีทางเฉพาะของตัวเองหลังจาก engine แปลงเสร็จ ทุกอย่างหลัง `logPrompt` คือ
+[ถามแล้วได้คำตอบเป็นข้อความ](/scenarios/turn/text-answer/) หรือ turn ที่มีเครื่องมือตามปกติ
+
+| | prompt template | สกิล |
+| --- | --- | --- |
+| ไฟล์ | `commands/<name>.md` | `skills/<name>/SKILL.md` |
+| ข้อความของ turn | แม่แบบที่แทนอาร์กิวเมนต์แล้ว | สิ่งที่ผู้ใช้พิมพ์ |
+| ไปกับ prompt | ไม่มีอะไรเพิ่ม | `SKILL.md` เป็น context item |
+| `context: fork` | ไม่มี | ไม่มีผลเมื่อผู้ใช้พิมพ์เอง |
+
+สิ่งที่ควรสังเกต
+
+- **engine อ่านโฟลเดอร์ตอนส่ง** `commands.expand` โหลดคำสั่งใหม่ทุกครั้ง ไฟล์ที่แก้ล่าสุดจึงมีผลทันที
+  ส่วนรายการใน `/` ของแผงอัปเดตผ่าน `available_commands_update` เมื่อโฟลเดอร์เปลี่ยน
+- **แม่แบบที่แปลงแล้วว่างถูกปฏิเสธ** `runTurn` ตอบ "/name expands to no text" และไม่เปิด turn
+- **ชิปในบับเบิลมาจาก log** event `user` เก็บชื่อคำสั่งไว้ การเปิด session ซ้ำจึงยังแสดงชิปของคำสั่ง ไม่ใช่ข้อความที่แปลงแล้ว
+- **คำสั่งที่ไม่รู้จักไปเป็นข้อความธรรมดา** `/อะไรก็ได้` ที่ไม่ตรงกับคำสั่งใด ถูกส่งให้โมเดลตามที่พิมพ์

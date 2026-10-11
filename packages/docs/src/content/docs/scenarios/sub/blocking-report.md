@@ -124,9 +124,11 @@ scenario:
       lane: panel
       at: card
       do: >-
-        การ์ดขออนุญาตขึ้นในบทสนทนาของแม่ หัวข้อบอกว่าลูกตัวไหนเป็นคนขอ
+        การ์ดขออนุญาตขึ้นในบทสนทนาของแม่ หัวข้อของคำขอ ACP ขึ้นต้นด้วย `[worker]` แต่การ์ดใช้หัวข้อของตัวเอง
+        จึงไม่บอกว่าลูกตัวไหนเป็นคนขอ
       sees: >-
-        "[worker] Allow `pnpm add -D vitest`? ..." [Allow once] [Reject] [Always allow in this workspace] [No, and tell the agent…]
+        "Run this command?" คำสั่ง `pnpm add -D vitest` และ "Geno asks because it uses ..."
+        [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: answer
@@ -136,7 +138,7 @@ scenario:
         ask: ผู้ใช้ตอบอะไร
         options:
           - id: allow
-            label: Allow once
+            label: Allow
             then: report
             steps:
               - lane: editor
@@ -158,7 +160,7 @@ scenario:
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
 
           - id: reject
-            label: Reject
+            label: Deny
             steps:
               - lane: editor
                 at: chat
@@ -279,7 +281,9 @@ scenario:
 - **ลูกสร้างลูกต่อไม่ได้** `agent` ไม่อยู่ในชุดเครื่องมือของลูก และ executor ของลูกไม่มีตัวสร้างลูก
 - **รายงานเป็นข้อมูล** `childReport` ล้อมรั้ว เยื้องทุกบรรทัด และทำให้บรรทัดที่หน้าตาเหมือนโน้ตของ Geno ไม่มีผล
   ข้อความที่ลูกไปเจอในไฟล์หรือเว็บจึงปลอมเป็น Geno หรือผู้ใช้ไม่ได้
-- **ปฏิเสธลูกคือปฏิเสธแม่** Reject บนการ์ดของลูกจบทั้ง turn ของแม่ ส่วน "No, and tell the agent…" ส่งความเห็นไปให้ลูก และลูกทำต่อได้
-- **ประกาศหลัง Reject ไม่ตรงกับเหตุ** ผล `rejected` ของ call `agent` ไม่มีบันทึกการอนุญาตติดมา แผงแชตจึงไม่ขึ้นป้าย
+- **การ์ดไม่บอกชื่อลูก** engine ใส่ `[worker]` ไว้หน้าหัวข้อของ `session/request_permission` แต่ `permissionCard` ใช้หัวข้อ "Run this command?"
+  ของตัวเอง ผู้ใช้จึงไม่รู้จากการ์ดว่าแม่หรือลูกตัวไหนเป็นคนขอ
+- **ปฏิเสธลูกคือปฏิเสธแม่** Deny บนการ์ดของลูกจบทั้ง turn ของแม่ ส่วน "No, and tell the agent…" ส่งความเห็นไปให้ลูก และลูกทำต่อได้
+- **ประกาศหลัง Deny ไม่ตรงกับเหตุ** ผล `rejected` ของ call `agent` ไม่มีบันทึกการอนุญาตติดมา แผงแชตจึงไม่ขึ้นป้าย
   "Denied by you" และ `missingReply` แสดง "Its last reply had no text." แทน "It stopped at the call that was denied."
 - **ลูกที่จบโดยไม่เรียก `report`** ได้ข้อความเตือนหนึ่งครั้ง และการเรียกครั้งสุดท้ายที่เพดานยอมให้ถูกบังคับให้เป็น `report`
