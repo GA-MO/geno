@@ -184,6 +184,7 @@ const approvalSchema = z.strictObject({
     .optional(),
   decidedBy: z.enum(['rule', 'classifier', 'user', 'hook']),
   verdict: verdict.exclude(['ask']),
+  comment: z.string().optional(),
   message: z.string().optional(),
   interrupt: z.literal(true).optional(),
 });
