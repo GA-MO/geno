@@ -1,6 +1,6 @@
-import { BaseEdge, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type EdgeProps, type Node, type NodeProps } from '@xyflow/react';
+import { BaseEdge, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type EdgeProps, type Node, type NodeProps, type Viewport } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { hopPath } from '../map/hop.js';
 import type { PositionedMap } from '../map/map.js';
 import { codeSegments } from '../scenario/labels.js';
@@ -10,6 +10,40 @@ type Hop = PositionedMap['edges'][number];
 type Look = 'selected' | 'near' | 'dim' | 'plain';
 const BAND_TOP = -44;
 const READABLE_ZOOM = 0.8;
+
+interface MapView {
+  readonly selected: string | undefined;
+  readonly openNeighbor: string | undefined;
+  readonly hover: string | undefined;
+}
+
+type MapAction =
+  | { readonly type: 'select'; readonly part: string | undefined }
+  | { readonly type: 'open'; readonly neighbor: string | undefined }
+  | { readonly type: 'hover'; readonly neighbor: string | undefined }
+  | { readonly type: 'follow-hop'; readonly from: string; readonly to: string };
+
+const NOTHING_SELECTED: MapView = { selected: undefined, openNeighbor: undefined, hover: undefined };
+
+function nextView(view: MapView, action: MapAction): MapView {
+  switch (action.type) {
+    case 'select':
+      return { ...NOTHING_SELECTED, selected: action.part };
+    case 'open':
+      return { ...view, openNeighbor: action.neighbor };
+    case 'hover':
+      return { ...view, hover: action.neighbor };
+    case 'follow-hop':
+      if (view.selected === undefined) return { ...NOTHING_SELECTED, selected: action.from, openNeighbor: action.to };
+      return { ...view, openNeighbor: action.to === view.selected ? action.from : action.to };
+  }
+}
+
+function fittedViewport(mapWidth: number, width: number): Viewport {
+  const zoom = Math.min(1, Math.max((width - 16) / mapWidth, READABLE_ZOOM));
+  const x = mapWidth * zoom <= width ? (width - mapWidth * zoom) / 2 : 8;
+  return { x, y: -BAND_TOP * zoom + 8, zoom };
+}
 
 interface Neighbor {
   readonly part: Part;
@@ -63,20 +97,15 @@ const NODE_TYPES = { part: PartNode, lane: LaneNode, band: BandNode };
 const EDGE_TYPES = { hop: HopEdge };
 
 export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) {
-  const [selected, setSelected] = useState<string | undefined>();
-  const [hop, setHop] = useState<string | undefined>();
-  const [hover, setHover] = useState<string | undefined>();
+  const [{ selected, openNeighbor, hover }, dispatch] = useReducer(nextView, NOTHING_SELECTED);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => root.current?.setAttribute('data-hydrated', ''), []);
   useEffect(() => {
-    root.current?.querySelector(`[data-neighbor="${hop}"]`)?.scrollIntoView({ block: 'nearest' });
-  }, [hop]);
-  const select = (key: string | undefined) => {
-    setSelected(key);
-    setHop(undefined);
-    setHover(undefined);
     root.current?.querySelector('.map-panel')?.scrollTo({ top: 0 });
-  };
+  }, [selected]);
+  useEffect(() => {
+    root.current?.querySelector(`[data-neighbor="${openNeighbor}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [openNeighbor]);
   const part = map.nodes.find((node) => node.key === selected);
   const neighbors = selected === undefined ? [] : neighborsOf(map, selected);
 
@@ -84,7 +113,7 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
     <div className="map-island" ref={root}>
       <div className="map-canvas">
         <ReactFlowProvider>
-          <Canvas map={map} selected={selected} neighbors={neighbors} focus={hover ?? hop} select={select} setHop={setHop} />
+          <Canvas map={map} selected={selected} neighbors={neighbors} focus={hover ?? openNeighbor} dispatch={dispatch} />
         </ReactFlowProvider>
       </div>
       <aside className="map-panel" aria-live="polite">
@@ -114,14 +143,14 @@ export default function SystemMapFlow({ map }: { readonly map: PositionedMap }) 
               <ul className="map-hops">
                 {neighbors.map((neighbor) => {
                   const key = neighbor.part.key;
-                  const open = hop === key;
+                  const open = openNeighbor === key;
                   return (
-                    <li key={key} data-neighbor={key} className={hover === key || open ? 'focus' : undefined} onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(undefined)}>
+                    <li key={key} data-neighbor={key} className={hover === key || open ? 'focus' : undefined} onMouseEnter={() => dispatch({ type: 'hover', neighbor: key })} onMouseLeave={() => dispatch({ type: 'hover', neighbor: undefined })}>
                       <div className="map-hop-row">
-                        <button type="button" className="map-hop-part" title={`ไปที่ ${neighbor.part.label}`} onClick={() => select(key)}>
+                        <button type="button" className="map-hop-part" title={`ไปที่ ${neighbor.part.label}`} onClick={() => dispatch({ type: 'select', part: key })}>
                           {neighbor.part.label}
                         </button>
-                        <button type="button" className="map-hop-count" title="ดูสถานการณ์ที่เดินเส้นนี้" aria-expanded={open} onClick={() => setHop(open ? undefined : key)}>
+                        <button type="button" className="map-hop-count" title="ดูสถานการณ์ที่เดินเส้นนี้" aria-expanded={open} onClick={() => dispatch({ type: 'open', neighbor: open ? undefined : key })}>
                           {neighbor.out === undefined ? null : <span title="ส่งต่อไป">→ {neighbor.out.visits.length}</span>}
                           {neighbor.in === undefined ? null : <span title="รับมาจาก">← {neighbor.in.visits.length}</span>}
                         </button>
@@ -173,21 +202,19 @@ function HopVisits({ title, hop }: { readonly title: string; readonly hop: Hop }
   );
 }
 
-function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly map: PositionedMap; readonly selected: string | undefined; readonly neighbors: readonly Neighbor[]; readonly focus: string | undefined; readonly select: (key: string | undefined) => void; readonly setHop: (key: string) => void }) {
+function Canvas({ map, selected, neighbors, focus, dispatch }: { readonly map: PositionedMap; readonly selected: string | undefined; readonly neighbors: readonly Neighbor[]; readonly focus: string | undefined; readonly dispatch: (action: MapAction) => void }) {
   const flow = useReactFlow();
   const width = useStore((store) => store.width);
   useEffect(() => {
     if (width === 0) return;
-    const zoom = Math.min(1, Math.max((width - 16) / map.width, READABLE_ZOOM));
-    const x = map.width * zoom <= width ? (width - map.width * zoom) / 2 : 8;
-    void flow.setViewport({ x, y: -BAND_TOP * zoom + 8, zoom });
+    void flow.setViewport(fittedViewport(map.width, width));
   }, [width, map.width]);
 
   const near = new Set(neighbors.map((neighbor) => neighbor.part.key));
   const boxes = new Map(map.nodes.map((node) => [node.key, node]));
   const lookOf = (key: string): Look => (selected === undefined ? 'plain' : key === selected ? 'selected' : near.has(key) ? 'near' : 'dim');
   const shown = map.edges.filter((edge) => (selected === undefined ? edge.backbone : edge.from === selected || edge.to === selected));
-  const maxWeight = Math.max(...map.edges.map((edge) => edge.visits.length));
+  const heaviestOfAllEdges = Math.max(...map.edges.map((edge) => edge.visits.length));
 
   const nodes: Node[] = [
     ...map.bands.map((band) => ({
@@ -229,7 +256,7 @@ function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly 
       type: 'hop',
       data: { d: hopPath(boxes.get(edge.from)!, boxes.get(edge.to)!), title: hopTitle(map, edge) },
       className: `map-edge ${tone}${lit ? ' focus' : ''}`,
-      style: { strokeWidth: 1 + 6 * Math.sqrt(edge.visits.length / maxWeight) },
+      style: { strokeWidth: 1 + 6 * Math.sqrt(edge.visits.length / heaviestOfAllEdges) },
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, markerUnits: 'userSpaceOnUse', color: lit ? 'var(--sl-color-white)' : tone === 'out' ? 'var(--sl-color-accent)' : 'var(--sl-color-gray-3)' },
       zIndex: lit ? 1 : 0,
     };
@@ -241,14 +268,11 @@ function Canvas({ map, selected, neighbors, focus, select, setHop }: { readonly 
       edges={edges}
       nodeTypes={NODE_TYPES}
       edgeTypes={EDGE_TYPES}
-      onNodeClick={(_, node) => node.type === 'part' && select(node.id === selected ? undefined : node.id)}
-      onNodeMouseEnter={(_, node) => near.has(node.id) && setHop(node.id)}
-      onEdgeMouseEnter={(_, edge) => selected !== undefined && setHop(edge.source === selected ? edge.target : edge.source)}
-      onEdgeClick={(_, edge) => {
-        if (selected === undefined) select(edge.source);
-        setHop(edge.target === selected ? edge.source : edge.target);
-      }}
-      onPaneClick={() => select(undefined)}
+      onNodeClick={(_, node) => node.type === 'part' && dispatch({ type: 'select', part: node.id === selected ? undefined : node.id })}
+      onNodeMouseEnter={(_, node) => near.has(node.id) && dispatch({ type: 'open', neighbor: node.id })}
+      onEdgeMouseEnter={(_, edge) => selected !== undefined && dispatch({ type: 'open', neighbor: edge.source === selected ? edge.target : edge.source })}
+      onEdgeClick={(_, edge) => dispatch({ type: 'follow-hop', from: edge.source, to: edge.target })}
+      onPaneClick={() => dispatch({ type: 'select', part: undefined })}
       nodesDraggable={false}
       nodesConnectable={false}
       minZoom={0.3}

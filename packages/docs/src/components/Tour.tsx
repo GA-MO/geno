@@ -1,9 +1,9 @@
 import { Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useReactFlow, useStore, type Edge, type Node, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, TURN_END_LABELS, WHOSE_MOVE } from '../scenario/labels.js';
+import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, PHASE_MEANINGS, TURN_END_LABELS, TURN_END_MEANINGS, WHOSE_MOVE } from '../scenario/labels.js';
 import type { OptionId, PartKey, Scenario, Step, StepId } from '../scenario/model.js';
-import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFromHash, walk, type Moment, type TourAction, type TourState } from '../scenario/tour.js';
+import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFromHash, walk, type Cell, type Moment, type TourAction, type TourState } from '../scenario/tour.js';
 
 export interface TourProps {
   readonly scenario: Scenario;
@@ -17,6 +17,7 @@ const HEADER = 40;
 const PLAY_MS = 1700;
 const READABLE_ZOOM = 0.85;
 const MOMENTS_SHOWN = 4;
+const LANE_HEAD_MIN_WIDTH = 64;
 
 type Action = TourAction | { readonly type: 'restore'; readonly state: TourState };
 type View = 'follow' | 'whole';
@@ -162,11 +163,7 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
       void flow.fitView({ padding: 0.04, duration });
       return;
     }
-    const span = grid.columns * COLUMN;
-    const zoom = Math.min(1, Math.max(width / (span + 16), READABLE_ZOOM));
-    const half = width / (2 * zoom);
-    const x = span <= 2 * half ? span / 2 : Math.min(Math.max(current.column * COLUMN + COLUMN / 2, half), span - half);
-    const y = Math.max(HEADER + current.row * ROW + ROW / 2 + height / (6 * zoom), height / (2 * zoom));
+    const { x, y, zoom } = followCenter(current, grid.columns, width, height);
     void flow.setCenter(x, y, { zoom, duration });
   }, [view, current?.step, current?.column, current?.row, grid.columns, grid.rows, width, height]);
 
@@ -189,6 +186,15 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
   );
 }
 
+function followCenter(current: Cell, columns: number, width: number, height: number): { readonly x: number; readonly y: number; readonly zoom: number } {
+  const span = columns * COLUMN;
+  const zoom = Math.min(1, Math.max(width / (span + 16), READABLE_ZOOM));
+  const half = width / (2 * zoom);
+  const x = span <= 2 * half ? span / 2 : Math.min(Math.max(current.column * COLUMN + COLUMN / 2, half), span - half);
+  const y = Math.max(HEADER + current.row * ROW + ROW / 2 + height / (6 * zoom), height / (2 * zoom));
+  return { x, y, zoom };
+}
+
 const minimapClass = (node: TourNode): string => (node.type === 'step' ? node.data.place : 'lane');
 const minimapColor = (node: TourNode): string => (node.type === 'step' ? `var(--party-${node.data.step.party})` : 'transparent');
 
@@ -198,7 +204,7 @@ function LaneHeads({ scenario }: { readonly scenario: Scenario }) {
     <div className="tour-lane-heads" aria-hidden="true">
       {scenario.columns.map((column, i) => (
         <span key={column.key} className={`party-${column.party}`} style={{ left: x + i * COLUMN * zoom, width: (COLUMN - 8) * zoom }}>
-          {COLUMN * zoom < 64 ? null : column.label}
+          {COLUMN * zoom < LANE_HEAD_MIN_WIDTH ? null : column.label}
         </span>
       ))}
     </div>
@@ -303,7 +309,7 @@ export default function Tour({ scenario, parts }: TourProps) {
             <p className={`tour-whose party-${progress.whoseMove}`}>{WHOSE_MOVE[progress.whoseMove]}</p>
             <dl>
               <dt>ช่วงของ turn</dt>
-              <dd>
+              <dd title={PHASE_MEANINGS[progress.phase]}>
                 {PHASE_LABELS[progress.phase]} <code>{progress.phase}</code>
               </dd>
               <dt>ความคืบหน้า</dt>
@@ -316,7 +322,7 @@ export default function Tour({ scenario, parts }: TourProps) {
               </dd>
             </dl>
             {progress.turn.kind === 'end' ? (
-              <p className={`tour-ending turn-${progress.turn.end.turn}`}>
+              <p className={`tour-ending turn-${progress.turn.end.turn}`} title={TURN_END_MEANINGS[progress.turn.end.turn]}>
                 {TURN_END_LABELS[progress.turn.end.turn]}: <code>{endText(progress.turn.end)}</code>
               </p>
             ) : progress.turn.kind === 'leave' ? (

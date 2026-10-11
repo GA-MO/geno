@@ -30,6 +30,8 @@ export interface PositionedMap {
   readonly height: number;
 }
 
+const BACKBONE_ONE_IN = 3;
+
 export function deriveMap(site: Site): { readonly nodes: readonly MapNode[]; readonly edges: readonly MapEdge[] } {
   const nodes = site.lanes.lanes.flatMap((lane): MapNode[] => {
     const base = { lane: lane.id, laneLabel: lane.label, process: lane.process };
@@ -53,7 +55,7 @@ export function deriveMap(site: Site): { readonly nodes: readonly MapNode[]; rea
   }
   const edges = [...hops].map(([key, visits]) => {
     const [from, to] = key.split('>') as [string, string];
-    return { from, to, visits, backbone: visits.length * 3 >= scenarios.length };
+    return { from, to, visits, backbone: visits.length * BACKBONE_ONE_IN >= scenarios.length };
   });
   return { nodes, edges };
 }
@@ -67,13 +69,14 @@ function hopsOf(scenario: Scenario): [Visit['step'], string, string][] {
   });
 }
 
-const widthOf = (text: string): number => [...text.replace(/[\u0e31\u0e34-\u0e3a\u0e47-\u0e4e]/g, '')].reduce((sum, char) => sum + (char === ' ' ? SPACE : char.charCodeAt(0) >= 0x0e00 ? 7.1 : 6.8), 0);
+const widthOf = (text: string): number => [...text.replace(/\p{Mn}/gu, '')].reduce((sum, char) => sum + (char === ' ' ? SPACE : char.charCodeAt(0) >= 0x0e00 ? 7.1 : 6.8), 0);
 const textOf = (node: MapNode): string => `${node.label} ${node.visits.length}`;
 const SPACE = 3.4;
 const PADDING = 18;
 const LINE = 17;
 const MIN_TEXT = 64;
 const MAX_TEXT = 100;
+const WRAP_WIDTH_SHARE = 0.94;
 
 function linesOf(text: string, inner: number): number {
   let lines = 0;
@@ -91,7 +94,7 @@ function linesOf(text: string, inner: number): number {
 function laneWidth(parts: readonly MapNode[]): number {
   return Math.round(Math.min(MAX_TEXT, Math.max(MIN_TEXT, Math.max(...parts.map((part) => widthOf(textOf(part)))) / 2 + 8))) + PADDING;
 }
-const partHeight = (part: MapNode, width: number): number => 10 + LINE * linesOf(textOf(part), (width - PADDING) * 0.94);
+const partHeight = (part: MapNode, width: number): number => 10 + LINE * linesOf(textOf(part), (width - PADDING) * WRAP_WIDTH_SHARE);
 
 export async function layoutMap(graph: ReturnType<typeof deriveMap>, site: Site): Promise<PositionedMap> {
   const processes = site.lanes.processes.map((process) => process.id);
