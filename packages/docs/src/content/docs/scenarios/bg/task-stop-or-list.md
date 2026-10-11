@@ -47,8 +47,8 @@ scenario:
     - use: tool-call-opens
 
     - id: which
-      lane: tool
-      at: executor
+      lane: loop
+      at: tools
       do: >-
         `taskRefOf` อ่านชนิดของ id: `bg-N` คือคำสั่งเบื้องหลัง `wake-N` คือ monitor wake-up หรือการเฝ้า PR อย่างอื่นคือ session id ของลูก
         id ที่ไม่รู้จักได้ error ที่บอกว่า id แบบไหนใช้ได้
@@ -103,8 +103,8 @@ scenario:
             label: wake-up wake-2
             then: result
             steps:
-              - lane: server
-                at: wakes
+              - lane: tool
+                at: executor
                 do: >-
                   `Wakes.stop` ล้างนาฬิกาของ `wake-2` แล้วบันทึกโน้ต `wake` ชนิด `stopped` ลง log
                   engine ตัวถัดไปจึงไม่ตั้งนาฬิกานี้อีก ผลคือ "Cancelled wake-up wake-2. It will not wake you."

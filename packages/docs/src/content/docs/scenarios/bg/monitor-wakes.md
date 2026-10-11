@@ -124,8 +124,8 @@ scenario:
           - id: ended
             label: dev server จบไปก่อน
             steps:
-              - lane: tool
-                at: shell
+              - lane: server
+                at: wakes
                 do: >-
                   `bg-1` จบ (เช่นพอร์ตถูกใช้อยู่) monitor เลิกดูโดยไม่มีโน้ตของตัวเอง การจบของคำสั่งรายงานเองและปลุก session
                 ref: packages/engine/src/wakes.ts#Wakes.monitor

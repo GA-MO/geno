@@ -25,7 +25,8 @@ scenario:
     - use: tool-call-opens
 
     - id: look
-      lane: external
+      lane: tool
+      at: executor
       do: >-
         executor ถาม `gh` หนึ่งครั้งด้วย argv ที่ประกอบเองทั้งชุด (`gh pr view --json ...` และ `gh pr checks --json ...`)
         ไม่มีข้อความจากโมเดลหรือจาก log เข้าไปใน argv
@@ -40,8 +41,7 @@ scenario:
           - id: settled
             label: จบแล้ว หรือ PR ปิดแล้ว
             steps:
-              - lane: tool
-                at: executor
+              - lane: external
                 do: >-
                   ไม่มีอะไรต้องรอ `prReport` เขียนรายงาน (ถ้ามี check ล้ม แนบ log ท้ายของไม่เกิน 2 ตัว) ต่อด้วย "Nothing was set up to wait for."
                   ถ้า `gh` ใช้ไม่ได้หรือหา PR ไม่เจอ call ได้ error แทน

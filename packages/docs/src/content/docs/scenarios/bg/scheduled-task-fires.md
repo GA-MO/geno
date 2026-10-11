@@ -105,7 +105,7 @@ scenario:
     - id: works
       lane: model
       do: >-
-        โมเดลอ่าน `package.json` กับ lockfile ด้วยเครื่องมืออ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
+        โมเดลทำตาม prompt ด้วยเครื่องมืออ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของเครื่องมือไว้) แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
         จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
