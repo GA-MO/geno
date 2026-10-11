@@ -1,0 +1,139 @@
+---
+title: หยุดเทิร์นแม่ขณะลูกทำงาน
+description: ผู้ใช้กด Stop ขณะลูกแบบรอผลและลูกเบื้องหลังยังทำงาน ลูกทุกตัวหยุด รายงานของลูกเบื้องหลังไม่ถูกส่ง และการปลุกถูกพักจนกว่าผู้ใช้จะพิมพ์ใหม่
+tableOfContents: false
+sidebar:
+  order: 4
+scenario:
+  surface: vscode
+  given:
+    - ค่า `agentTool` มีโหมดปัจจุบัน และมี turn ทำงานอยู่
+    - ใน turn นี้โมเดลเริ่ม `review` แบบเบื้องหลังไปแล้ว และตอนนี้รอผลจาก `explore` แบบรอผลอยู่
+  trigger: >-
+    ผู้ใช้กด Stop (หรือ Escape) ในแผงแชต
+  covers: [sub.parent-stop-with-children]
+  related: [sub.user-cancels-child, bg.child-wakes-parent, ctl.stop-while-tools-run, bg.wake-held-or-paused]
+  steps:
+    - id: press
+      lane: user
+      do: ผู้ใช้กด Stop ขณะแถวของ explore ยังหมุนอยู่ใต้ขั้น `agent`
+      phase: running-tools
+
+    - id: post
+      lane: panel
+      at: composer
+      do: >-
+        ปุ่ม Stop โพสต์ข้อความ `stop` ไปให้ extension host
+      ref: "packages/extension/src/chat/webview.ts#\"stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));\""
+      emits: [stop]
+
+    - id: cancel
+      lane: editor
+      at: chat
+      do: >-
+        `Chat.stop` ตอบการ์ดและคำถามที่เปิดอยู่ว่ายกเลิก แล้วส่ง notification ACP `session/cancel` ด้วย session id ของแม่
+      ref: packages/extension/src/chat/chat.ts#Chat.stop
+      emits: [session/cancel]
+
+    - id: abort
+      lane: server
+      at: turns
+      do: >-
+        engine abort `AbortController` ของ turn แม่ใน `turns` signal นี้ไหลไปถึงทุกอย่างที่ turn เริ่มไว้
+      ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
+
+    - id: blocking-stops
+      lane: child@explore
+      at: loop
+      do: >-
+        `runPlaced` ผูก controller ของลูกไว้กับ signal ของ call `agent` ลูกจึงถูก abort ทันที การเรียกที่ค้างอยู่หยุด
+        และลูกจบแบบ `cancelled`
+      ref: packages/engine/src/subagents.ts#runPlaced
+      emits: [cancelled]
+
+    - id: answered
+      lane: loop
+      at: tools
+      do: >-
+        `runTools` เลิกรอชุดนี้ทันที (`unlessAborted`) call `agent` ที่เริ่มแล้วได้คำตอบ `UNRUN_TEXTS.stopped`
+        แทนรายงานของลูก แล้ว `drive` บันทึก error ชนิด `abort` พร้อมรายชื่อ call ที่ถูกตัด
+        `child-end` ของ explore ตามมาลง log ทีหลัง เมื่อลูกปิดตัวเสร็จ
+      ref: packages/core/src/loop.ts#UNRUN_TEXTS
+      emits: [abort, child-end]
+
+    - id: done
+      lane: loop
+      at: step
+      do: >-
+        `loopStep` เห็น error ชนิด `abort` จึงตัดสิน `done(error)`
+      ref: packages/core/src/loop.ts#ERROR_REASON
+      emits: [error]
+      phase: ending
+
+    - id: background
+      lane: loop
+      at: agent
+      do: >-
+        ใน `finally` ของ `runAgent` turn ไม่ได้จบด้วย `end_turn` จึงเรียก `stopBackground()` แทน `detach()`
+        ลูกเบื้องหลังทุกตัวถูก abort และถูกตั้งว่าไม่มีใครฟังรายงานแล้ว จากนั้นรอจนลูกทุกตัวบันทึกการจบ
+      ref: "packages/engine/src/agent.ts#\"else children?.stopBackground();\""
+
+    - id: review-stops
+      lane: child@review
+      at: loop
+      do: >-
+        review หยุดและจบแบบ `cancelled` `child-end` ถูกบันทึกลง log ของแม่ แต่ไม่มีรายงานเข้ากล่องข้อความของแม่
+        จึงไม่มีอะไรปลุก session ภายหลัง
+      ref: "packages/engine/src/subagents.ts#\"const heard = !silent && !unheard;\""
+      emits: [child-end]
+
+    - id: response
+      lane: server
+      at: turns
+      do: >-
+        `runTurn` เห็นว่า signal ถูก abort จึงใช้ `TURN_ENDS.cancelled`: `stopReason: cancelled` งานใน Tasks จบแบบ stopped
+        และ error ชนิด `abort` พักการปลุกของ session นี้จนกว่าผู้ใช้จะพิมพ์ prompt ใหม่
+      ref: packages/core/src/wake.ts#WAKE_PAUSE_TEXT
+      emits: [cancelled, Wake-ups paused after Stop]
+
+    - id: ended
+      lane: server
+      at: updates
+      alongside: true
+      do: >-
+        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` stop reason `cancelled` ของลูกแต่ละตัว
+      ref: packages/engine/src/subagent-acp.ts#acpChildHost
+      emits: [subagent_update]
+
+    - id: turn-end
+      lane: editor
+      at: chat
+      do: >-
+        `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end`
+      ref: packages/extension/src/chat/chat.ts#turnEndOf
+      emits: [turn-end]
+
+    - id: footer
+      lane: panel
+      at: rail
+      do: >-
+        `turn-end` ปิดทุกอย่างที่ยังรันอยู่ใน turn: ขั้นที่ยังหมุนเป็น cancelled และลูกที่ยังรันเป็น Cancelled (`endedByParent`)
+        turn ไม่มีข้อความตอบและไม่มีแถบ error `missingReply` จึงบอกว่าผู้ใช้หยุดก่อนได้คำตอบ
+      sees: >-
+        หัวข้อ "stopped after 1m 05s" แถว explore และ review ขึ้น Cancelled และประกาศ
+        "Geno stopped without a reply · You stopped it before it answered." [Continue] [Retry]
+      ref: "packages/extension/src/chat/transcript.ts#\"const children = Object.keys(settled.children\""
+      end: { turn: stopped, reason: cancelled }
+---
+
+Stop ของแม่หยุดทุกอย่างที่ turn เริ่มไว้ ไม่ว่าลูกจะรันแบบรอผลหรือเบื้องหลัง
+ต่างจาก [Cancel บนแถวของลูก](/scenarios/sub/user-cancels-child/) ที่หยุดแค่ลูกตัวเดียวแล้วให้แม่ทำต่อ
+
+สิ่งที่ควรสังเกต
+
+- **รายงานบางส่วนของลูกแบบรอผลไม่ถึงโมเดล** call `agent` ได้ข้อความว่าผู้ใช้หยุดระหว่างรัน ไม่ใช่รายงานในรั้ว
+  สิ่งที่ลูกทำไว้ยังอยู่ใน log ของลูก เปิดดูได้จากแถวของลูก
+- **ลูกเบื้องหลังรอดได้เฉพาะ turn ที่จบด้วย `end_turn`** ถ้าโมเดลจบ turn เอง ลูกเบื้องหลังทำงานต่อและปลุก session ได้
+  ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/)) ทุกการจบแบบอื่นหยุดลูกเบื้องหลังทั้งหมด
+- **การปลุกถูกพัก** แผง Tasks แสดง "Wake-ups paused after Stop" จนกว่าผู้ใช้จะส่ง prompt ใหม่
+- **Retry หลัง Stop** ส่ง prompt เดิมอีกครั้ง prompt เดิมยังค้างใน log (`abort` เป็นชนิดที่เก็บ prompt ไว้) พร้อมโน้ตว่า turn ก่อนถูกหยุด
