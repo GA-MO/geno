@@ -1,0 +1,40 @@
+# An edit's new text on its way into the editor: the ACP write, the buffer, and the diff in the panel.
+# The edit tool has already worked out the new text; these steps run inside its call.
+- id: write
+  lane: server
+  at: updates
+  do: >-
+    `editorFiles.write` ส่งคำขอ ACP `fs/writeTextFile` ที่มีข้อความทั้งไฟล์หลังแก้ พร้อม `BASE_HASH_META`
+    (hash ของข้อความที่การแก้นี้ยึดเป็นฐาน) และ `TOOL_CALL_META` (call ที่เขียน)
+    ถ้าไม่มี editor แสดง session อยู่ เช่นใน CLI หรือ lane engine เขียนลงดิสก์เองแทน
+  ref: packages/engine/src/serve.ts#editorFiles
+  emits: [BASE_HASH_META, TOOL_CALL_META]
+
+- id: buffer
+  lane: editor
+  at: bridge
+  do: >-
+    `writeTextFile` เทียบ hash ของข้อความปัจจุบันใน buffer (หรือบนดิสก์) กับฐาน ถ้าไม่ตรงจะตอบว่า stale และไม่เขียน
+    ไฟล์ที่มีอยู่ถูกแก้ด้วย `WorkspaceEdit` ทีละ hunk ผู้ใช้กด Cmd-Z ย้อนได้ แล้วบันทึกลงดิสก์ถ้า buffer ไม่มีการแก้ค้าง
+    ไฟล์ใหม่ถูกเขียนลงดิสก์ตรงๆ แล้วเปิดเป็นเอกสารเบื้องหลัง
+  ref: packages/extension/src/chat/bridge.ts#writeTextFile
+
+- id: diff
+  lane: editor
+  at: chat
+  do: >-
+    หลังเขียน `onWrite` ส่งการเปลี่ยนแปลงให้ `ReviewController.track` (ซึ่งไม่เก็บอะไรในโหมด review แบบ auto)
+    แล้วส่ง action `diff` ที่ผูกกับ call นั้นให้แผง
+  ref: "packages/extension/src/chat/chat.ts#\"const diff = { type: 'diff', toolId, at: Date.now()\""
+  emits: [diff]
+
+- id: shown
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    ขั้นของ `edit` ได้ชิปไฟล์พร้อมจำนวนบรรทัดที่เพิ่มและลบ และการ์ดการเปลี่ยนแปลงท้าย turn แสดง hunk ของไฟล์นั้น
+  sees: >-
+    ชิป "date.ts +3 −1" บนขั้น Edited และการ์ด "1 file changed" ที่มีบรรทัดลบสีแดงและบรรทัดเพิ่มสีเขียว
+    คลิกชื่อไฟล์เปิด diff ระหว่างก่อน turn กับตอนนี้ใน VS Code
+  ref: packages/extension/src/chat/render.ts#changesCard
