@@ -1,0 +1,61 @@
+# An `agent` call for the built-in explore subagent, from `launch` to the child row in the panel and the child at work.
+# The child's column is child@explore; a page that uses this fragment names its child the same.
+- id: launch
+  lane: loop
+  at: tools
+  do: >-
+    executor ของ `agent` เรียก `launch` `explore` อ่านอย่างเดียว จึงรันพร้อมลูกแบบอ่านอย่างเดียวตัวอื่นได้ถึง 4 ตัว
+    `runChild` ตั้งเพดานของลูก: 4 รอบ และ $0.02 แต่ไม่เกินงบที่รอบของแม่ยังเหลือให้ลูกทั้งหมด
+  ref: packages/engine/src/subagents.ts#runChild
+
+- id: spawn
+  lane: child@explore
+  at: loop
+  do: >-
+    `openSpawn` เปิด log ของลูกเป็น session ใหม่ `explore` ไม่ได้รับไฟล์คำสั่งโปรเจกต์และหน่วยความจำ (`omitClaudeMd`)
+    เพื่อให้เริ่มเร็วและถูก SubagentStart hook (ถ้ามี) ได้ใส่บริบทเพิ่ม
+  ref: packages/engine/src/subagents.ts#openSpawn
+
+- id: noted
+  lane: loop
+  at: drive
+  do: >-
+    `runPlaced` บันทึก event `child-start` ลง log ของแม่ event นี้ไม่ใช่ส่วนของบทสนทนา โมเดลของแม่ไม่เห็น
+  ref: "packages/engine/src/subagents.ts#\"await ctx.logNote!({ kind: 'child-start'\""
+  emits: [child-start]
+
+- id: announce
+  lane: server
+  at: updates
+  do: >-
+    `acpChildHost.started` ลงทะเบียนตัวยกเลิกของลูกไว้ให้ `session/cancel` หาเจอ เพิ่มงานของลูกในแผง Tasks
+    แล้วส่ง `session/update` ชนิด `subagent_update` สถานะ `running` บน session ของแม่
+  ref: packages/engine/src/subagent-acp.ts#acpChildHost
+  emits: [subagent_update, running]
+
+- id: row-start
+  lane: editor
+  at: chat
+  alongside: true
+  do: >-
+    `subagentAction` แปลงอัปเดตเป็น action `child-start` ผูกกับ call `agent` ด้วย `toolUseId`
+  ref: packages/extension/src/chat/subagent-host.ts#subagentAction
+  emits: [child-start]
+
+- id: row
+  lane: panel
+  at: rail
+  alongside: true
+  do: >-
+    ใต้ขั้นของ `agent` ขึ้นแถวของลูก: ไดโนเสาร์ผู้ช่วย ชื่อ โมเดล นาฬิกา และปุ่ม Cancel คลิกแถวเพื่อเปิดบทสนทนาของลูก
+  sees: แถว "explore · <โมเดล> · 0:02" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
+  ref: packages/extension/src/chat/subagent-view.ts#childRow
+
+- id: works
+  lane: child@explore
+  at: model
+  do: >-
+    ลูกเรียกโมเดลผ่าน gateway ของแม่ ขอ `grep` และ `glob` พร้อมกันในรอบแรก แล้วอ่านเฉพาะบรรทัดที่ตอบคำถามได้
+    การเรียกและขั้นของลูกส่งเป็นอัปเดตภายใต้ session id ของลูกเอง
+  ref: packages/core/src/subagent.ts#childSystemPrompt
+  emits: [tool_use]
