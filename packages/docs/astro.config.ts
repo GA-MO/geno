@@ -45,6 +45,9 @@ const scenarioGate = (): AstroIntegration => ({
 });
 
 export default defineConfig({
+  // A cold dev server otherwise finds the islands' imports only when a page asks for them, re-optimizes, and the
+  // half-loaded page fails to hydrate with "504 Outdated Optimize Dep" until a restart.
+  vite: { optimizeDeps: { include: ['@xyflow/react', 'react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client'] } },
   markdown: {
     // Mermaid fences skip Expressive Code and become inline SVG at build, so they read with JS off and in print.
     syntaxHighlight: { type: 'shiki', excludeLangs: ['mermaid'] },
