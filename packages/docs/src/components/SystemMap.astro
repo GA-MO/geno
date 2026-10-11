@@ -1,47 +1,50 @@
 ---
+import { hopPath } from '../map/hop';
 import { deriveMap, layoutMap } from '../map/map';
 import { siteFor } from '../scenario/site';
 import SystemMapFlow from './SystemMapFlow';
 
-/** `<SystemMap />` on the map page: the island, a static SVG of the same layout, and the same map as nested lists. */
+/** `<SystemMap />` on the map page: the island, a static copy of the same layout, and the same map as nested lists. */
 const site = siteFor();
 const map = await layoutMap(deriveMap(site), site);
 const top = 44;
+const boxOf = (key: string) => map.nodes.find((node) => node.key === key)!;
 const lanesOf = (process: string) => map.lanes.filter((lane) => site.lanes.lanes.find((candidate) => candidate.id === lane.lane)?.process === process);
 ---
 
 <div class="map not-content">
   <SystemMapFlow client:load map={map} />
 
-  <figure class="map-static-svg">
-    <svg viewBox={`-8 ${-top} ${map.width + 16} ${map.height + top + 8}`} width={map.width + 16} role="img" aria-label="แผนที่ระบบของ Geno">
+  <div class="map-static-wrap">
+    <figure class="map-static" style={`width: ${map.width + 8}px; height: ${map.height + top + 4}px`} aria-label="แผนที่ระบบของ Geno">
       {
         map.bands.map((band) => (
-          <g>
-            <rect class="map-svg-band" x={band.x - 6} y={-top} width={band.w + 12} height={map.height + top} rx="10"></rect>
-            <text class="map-svg-band-label" x={band.x} y={-top + 18}>{band.label}</text>
-          </g>
+          <div class="map-band" style={`left: ${band.x}px; top: 0; width: ${band.w + 8}px; height: ${map.height + top + 4}px`}>
+            {band.label}
+          </div>
         ))
       }
       {
         map.lanes.map((lane) => (
-          <g class={`party-${lane.party}`}>
-            <rect class="map-svg-lane" x={lane.x} y={lane.y} width={lane.w} height={lane.h} rx="8"></rect>
-            <text class="map-svg-lane-label" x={lane.x + 10} y={lane.y + 22}>{lane.label}</text>
-          </g>
+          <div class={`map-lane party-${lane.party}`} style={`left: ${lane.x + 4}px; top: ${lane.y + top}px; width: ${lane.w}px; height: ${lane.h}px`}>
+            {lane.label}
+          </div>
         ))
       }
-      {map.edges.map((edge) => <polyline class={`map-svg-edge${edge.crossing ? ' crossing' : ''}`} points={edge.points.map((point) => `${point.x},${point.y}`).join(' ')}></polyline>)}
+      <svg viewBox={`-4 ${-top} ${map.width + 8} ${map.height + top + 4}`} width={map.width + 8} height={map.height + top + 4} aria-hidden="true">
+        {map.edges.filter((edge) => edge.backbone).map((edge) => <path class="map-static-edge" d={hopPath(boxOf(edge.from), boxOf(edge.to))} />)}
+      </svg>
       {
         map.nodes.map((node) => (
-          <g class={`party-${node.party}`}>
-            <rect class="map-svg-part" x={node.x} y={node.y} width={node.w} height={node.h} rx="6"></rect>
-            <text class="map-svg-part-label" x={node.x + node.w / 2} y={node.y + node.h / 2 + 5} text-anchor="middle">{node.label}</text>
-          </g>
+          <div class={`map-part party-${node.party}${node.visits.length === 0 ? ' unvisited' : ''}`} style={`left: ${node.x + 4}px; top: ${node.y + top}px; width: ${node.w}px; height: ${node.h}px`}>
+            <span>
+              {node.label} <small>{node.visits.length}</small>
+            </span>
+          </div>
         ))
       }
-    </svg>
-  </figure>
+    </figure>
+  </div>
 
   <section class="map-list">
     <h2 id="ทุกส่วน">ทุกส่วนของระบบ</h2>
