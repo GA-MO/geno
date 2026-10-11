@@ -75,6 +75,7 @@ lanes:
       - { id: approvals, label: สะพานขออนุญาต, ref: packages/engine/src/serve.ts#editorTurn.approve }
       - { id: tasks, label: แผง Tasks, ref: packages/engine/src/tasks.ts#Tasks }
       - { id: wakes, label: ตัวปลุก, ref: packages/engine/src/wakes.ts#Wakes }
+      - { id: schedules, label: งานตามตารางเวลา, ref: packages/engine/src/schedules.ts#Scheduler }
 
   - id: loop
     label: ลูปเอเจนต์

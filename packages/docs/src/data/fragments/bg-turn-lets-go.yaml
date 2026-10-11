@@ -1,0 +1,38 @@
+# The model ended its turn while the session waits on something that will wake it: the turn ends, the waits stay.
+# Used after the model's end_turn step; the woken turn later starts with bg-wake-starts.
+- id: done
+  lane: loop
+  at: step
+  do: >-
+    `loopStep` ตัดสิน `done(end_turn)` turn ไม่ถูกถือไว้รอ เพราะ engine ปลุก session ได้ (`wakeLater`)
+    สิ่งที่ session รออยู่ยังอยู่ในตัวปลุกของ engine หลัง turn จบ
+  ref: "packages/engine/src/drive.ts#\"surface.wakeLater !== true\""
+  emits: [end_turn]
+  phase: ending
+
+- id: response
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` แปลงผลด้วย `TURN_ENDS` เป็น `stopReason: end_turn` งานจบแบบ `done` และ lock ของ session ถูกปลด
+    `WakeDriver` ดูประตูอีกครั้ง ยังไม่มีอะไรมาถึง จึงไม่ปลุก
+  ref: packages/engine/src/serve.ts#TURN_ENDS
+  emits: [TURN_END_META]
+
+- id: waits
+  lane: panel
+  at: tasks
+  alongside: true
+  do: >-
+    งานของ session ในแผง Tasks บอกว่ามันรออะไรอยู่ และมีปุ่ม Cancel ให้เลิกรอ
+  sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
+  ref: packages/core/src/wake.ts#waitsForText
+
+- id: footer
+  lane: panel
+  at: rail
+  do: >-
+    `headerOf` เปลี่ยนหัวข้อเป็นเวลาที่ทำงาน ปุ่ม Send กลับมา ผู้ใช้ทำอย่างอื่นต่อได้
+  sees: หัวข้อ "worked for 9s" และปุ่ม Send กลับมาแทน Stop
+  ref: packages/extension/src/chat/rail.ts#headerOf
+  phase: idle

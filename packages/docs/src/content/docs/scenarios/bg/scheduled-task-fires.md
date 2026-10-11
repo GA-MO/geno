@@ -1,0 +1,149 @@
+---
+title: งานตามตารางเวลาเริ่มทำงาน
+description: งานที่ตั้งไว้ด้วย /schedule ถึงเวลา engine เปิด session ใหม่ให้มันในโหมด Plan หรือใน lane ของตัวเองในโหมด Auto รันจนจบภายในงบ แล้วจดผลไว้ในแผง Tasks
+tableOfContents: false
+sidebar:
+  order: 12
+scenario:
+  surface: vscode
+  given:
+    - "ผู้ใช้ตั้งงาน \"Check outdated deps\" ไว้ด้วย `/schedule` ให้รันวันธรรมดาเวลา 09:00 แบบอ่านอย่างเดียว งบ 20 รอบ และ $0.20"
+    - หน้าต่าง VS Code ของโฟลเดอร์นี้เปิดอยู่ จึงมี engine ที่มีหน้าต่างต่ออยู่
+  trigger: >-
+    นาฬิกาถึง 09:00 ของวันจันทร์
+  covers: [bg.scheduled-task-fires]
+  related: [bg.schedule-wakeup, bg.task-attention, wf.spinoff]
+  steps:
+    - id: look
+      lane: server
+      at: schedules
+      do: >-
+        `Scheduler` ดูไฟล์งานของ workspace (`<app home>/schedules/<hash ของ workspace>.json`) ภายใต้ lock ของไฟล์
+        อย่างน้อยทุก 60 วินาที และตั้งนาฬิกาไว้ตรงเวลาของงานถัดไป `planDue` ตัดสินแต่ละงาน
+      ref: packages/core/src/schedule.ts#planDue
+      phase: idle
+      fork:
+        ask: ตอนถึงเวลาเป็นอย่างไร
+        options:
+          - id: ready
+            label: มีหน้าต่างต่ออยู่ และรอบก่อนจบแล้ว
+            then: start
+
+          - id: no-window
+            label: ไม่มีหน้าต่างเปิดอยู่เลย
+            steps:
+              - lane: server
+                at: schedules
+                do: >-
+                  ไม่มี engine ที่มีหน้าต่างต่อ (engine จบเองหลังหน้าต่างสุดท้ายปิด 10 วินาที) จึงไม่มีอะไรเริ่ม Geno ไม่มี daemon ของระบบ
+                  เมื่อผู้ใช้เปิดหน้าต่าง engine ตัวใหม่ดูงานอีกครั้ง: ถ้ายังไม่เกิน 1 ชั่วโมงจากเวลาที่ควรรัน งานรันหนึ่งครั้งแบบสาย (catch-up)
+                  ถ้าเกิน งานถูกจดว่าพลาด
+                ref: packages/core/src/schedule.ts#SCHEDULE_POLICY
+              - lane: panel
+                at: tasks
+                do: >-
+                  ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด
+                sees: >-
+                  "Missed Mon 09:00: Geno was not running"
+                ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
+                end: { turn: none }
+
+          - id: busy
+            label: รอบก่อนยังรันอยู่
+            steps:
+              - lane: server
+                at: schedules
+                do: >-
+                  รอบเมื่อวานยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` จดว่าพลาดเพราะรอบก่อนยังรัน
+                ref: packages/core/src/schedule.ts#hasOpenRun
+              - lane: panel
+                at: tasks
+                do: >-
+                  ส่วน Scheduled แสดงรอบที่พลาด
+                sees: >-
+                  "Missed Mon 09:00: the last run still ran"
+                ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
+                end: { turn: none }
+
+    - id: start
+      lane: server
+      at: schedules
+      do: >-
+        งานถึงเวลาและมีหน้าต่างต่ออยู่ `Scheduler` ใช้ engine ของหน้าต่างนั้นเริ่มรอบ แล้วจดรอบลงไฟล์ (`ran`, ยังไม่มี `end`)
+      ref: packages/engine/src/schedules.ts#Scheduler
+      emits: [ran]
+
+    - id: session
+      lane: server
+      at: sessions
+      do: >-
+        `startScheduled` เปิด session ใหม่ชื่อตามงาน งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan
+        (งานที่แก้ไฟล์ได้ lane ใหม่และรันโหมด Auto) ขีดจำกัดของ turn คืองบของงาน ไม่ใช่ $0.40 ปกติ
+      ref: "packages/engine/src/serve.ts#\"const startScheduled = async (workspace: string, task: ScheduledTask) => {\""
+      phase: starting
+
+    - id: tools
+      lane: loop
+      at: agent
+      do: >-
+        `runAgent` ของรอบตามตารางไม่มี `ask_user` และ `remember` ไม่ขยับ editor ไม่เปิด terminal และไม่มีเครื่องมือ schedule หรือ workflow
+        ข้อความแรกบอกโมเดลว่าไม่มีใครอ่านจนกว่าจะจบ ไม่มีใครตอบคำถาม ให้ทำตามที่ขอแล้วจบด้วยรายงานสั้นๆ
+      ref: packages/core/src/schedule.ts#SCHEDULED_RUN_NOTE
+
+    - id: running
+      lane: panel
+      at: tasks
+      alongside: true
+      do: >-
+        แผง Tasks มีงานใหม่ใน Working และส่วน Scheduled บอกว่ารอบนี้กำลังรัน
+      sees: >-
+        งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since 09:00"
+      ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
+
+    - use: model-call
+
+    - id: works
+      lane: model
+      do: >-
+        โมเดลอ่าน `package.json` กับ lockfile ด้วยเครื่องมืออ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
+        จบด้วย `stop_reason: end_turn`
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [end_turn]
+
+    - id: done
+      lane: loop
+      at: step
+      do: >-
+        `loopStep` ตัดสิน `done(end_turn)` turn ของรอบนี้จบแบบ `done`
+      ref: packages/core/src/loop.ts#AFTER_STOP
+      emits: [end_turn]
+      phase: ending
+
+    - id: recorded
+      lane: server
+      at: schedules
+      do: >-
+        `runEndOf` อ่านผลจาก log ของ session แล้ว `Scheduler` จดจุดจบของรอบ (ผลและค่าใช้จ่าย) ลงไฟล์
+        ทุกหน้าต่างได้ `_gcode/schedulesUpdate`
+      ref: packages/core/src/schedule.ts#runEndOf
+      emits: [_gcode/schedulesUpdate]
+
+    - id: shown
+      lane: panel
+      at: tasks
+      do: >-
+        แถว Scheduled แสดงรอบล่าสุด คลิกเปิด session ของรอบนั้นเพื่ออ่านรายงาน งานของรอบย้ายไปส่วนที่จบแล้ว
+      sees: >-
+        "Last run 09:00: Done · $0.03"
+      ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
+      end: { turn: done, reason: end_turn }
+---
+
+ไฟล์งานตามตารางเวลาคือความจริงหนึ่งเดียว มันอยู่นอก engine จึงรอดการเริ่ม engine ใหม่
+แต่สิ่งที่เริ่มรอบได้มีแค่ engine ที่มีหน้าต่าง VS Code ต่ออยู่ Geno ไม่ลงทะเบียน daemon ของระบบ
+
+สิ่งที่ควรสังเกต
+
+- **รายงานไม่ไปที่แชตไหน** รอบตามตารางเป็น session แยก ผลอยู่ใน session นั้นและในแถว Scheduled ไม่ปลุกแชตที่ตั้งงาน
+- **รอบที่ engine ตายระหว่างรัน** ถูกปิดเป็น failed ครั้งถัดไปที่ `Scheduler` ดูไฟล์ เพื่อไม่ให้มันขวางรอบต่อไปตลอด
+- **ไม่ซ้อนกัน** งานเดียวกันมีรอบที่รันอยู่ได้ทีละรอบ รอบที่ถึงเวลาระหว่างนั้นถูกจดว่าพลาด
