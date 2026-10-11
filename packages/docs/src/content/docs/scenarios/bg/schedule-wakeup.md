@@ -26,8 +26,8 @@ scenario:
     - use: tool-call-opens
 
     - id: record
-      lane: loop
-      at: drive
+      lane: tool
+      at: executor
       do: >-
         executor บันทึกโน้ต `wake` ชนิด `scheduled` ลง log ทันที: id `wake-1`, เวลาที่ถึงกำหนด, เหตุผล
         และ `by` ซึ่งเป็น pid กับโฟลเดอร์ของ engine ที่ถือการปลุกนี้ log คือที่ที่ engine ตัวถัดไปจะหาเจอ
