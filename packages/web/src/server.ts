@@ -71,6 +71,7 @@ const isAnswer = (value: unknown): value is UiAnswer => {
 export class WebServer implements Page {
   private readonly clients = new Set<Client>();
   private readonly asked = new Map<string, { readonly request: UiRequest & { readonly id: string }; readonly resolve: (answer: UiAnswer) => void }>();
+  private readonly repeats = new Map<string, Promise<UiAnswer>>();
   private server: Server | undefined;
   private gate: Gate | undefined;
 
@@ -111,12 +112,18 @@ export class WebServer implements Page {
     this.emit({ event: 'note', data: note }, (client) => note.kind === 'clipboard' || client.view === 'chat');
   }
 
+  /** A message asked again while the same one is open shares its answer, as VS Code folds repeated notifications. */
   ask(request: UiRequest): Promise<UiAnswer> {
+    const key = request.kind === 'message' ? JSON.stringify(request) : randomUUID();
+    const open = this.repeats.get(key);
+    if (open !== undefined) return open;
     const id = randomUUID();
-    return new Promise((resolve) => {
+    const answered = new Promise<UiAnswer>((resolve) => {
       this.asked.set(id, { request: { ...request, id }, resolve });
       this.emit({ event: 'ask', data: { ...request, id } }, (client) => client.view === 'chat');
-    });
+    }).finally(() => this.repeats.delete(key));
+    this.repeats.set(key, answered);
+    return answered;
   }
 
   private answer(id: string, answer: UiAnswer): void {

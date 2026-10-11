@@ -11,8 +11,6 @@ import path from 'node:path';
 import type * as vscode from 'vscode';
 import { affects, configurationOf, type SettingsFile } from './settings.js';
 
-// ---- The page on the other side ----
-
 /** A question the page asks the user in its overlay; every one can be dismissed, which answers `cancel`. */
 export type UiRequest =
   | { readonly kind: 'message'; readonly severity: 'info' | 'warning' | 'error'; readonly text: string; readonly detail?: string; readonly modal: boolean; readonly items: readonly string[] }
@@ -47,12 +45,10 @@ export type ShimHost = {
 };
 
 let host: ShimHost | undefined;
-const the = (): ShimHost => {
+const configured = (): ShimHost => {
   if (host === undefined) throw new Error('the vscode shim is used before configureShim');
   return host;
 };
-
-// ---- Basic types ----
 
 export class Disposable {
   static from(...items: { dispose(): unknown }[]): Disposable {
@@ -112,7 +108,13 @@ export class Uri {
   }
   static parse(value: string, _strict?: boolean): Uri {
     const match = URI.exec(value)!;
-    const decode = (part: string | undefined) => decodeURIComponent(part ?? '');
+    const decode = (part: string | undefined) => {
+      try {
+        return decodeURIComponent(part ?? '');
+      } catch {
+        return part ?? '';
+      }
+    };
     return new Uri(match[2] ?? 'file', decode(match[4]), decode(match[5]), decode(match[7]), decode(match[9]));
   }
   static joinPath(base: Uri, ...segments: string[]): Uri {
@@ -290,8 +292,6 @@ export enum StatusBarAlignment {
   Right = 2,
 }
 
-// ---- Files ----
-
 const FS_CODES: Readonly<Record<string, string>> = {
   ENOENT: 'FileNotFound',
   EEXIST: 'FileExists',
@@ -420,17 +420,18 @@ async function applyEdit(edit: WorkspaceEdit): Promise<boolean> {
   return true;
 }
 
-const folderUri = () => Uri.file(the().workspace);
+const folderUri = () => Uri.file(configured().workspace);
 
 function asRelativePath(target: Uri | string, includeWorkspaceFolder?: boolean): string {
   const file = typeof target === 'string' ? target : target.fsPath;
-  const relative = path.relative(the().workspace, file);
+  const relative = path.relative(configured().workspace, file);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return file;
   const shown = relative.split(path.sep).join('/');
-  return includeWorkspaceFolder === true ? `${path.basename(the().workspace)}/${shown}` : shown;
+  return includeWorkspaceFolder === true ? `${path.basename(configured().workspace)}/${shown}` : shown;
 }
 
 const SKIPPED = new Set(['.git', 'node_modules']);
+const WALK_LIMIT = 50_000;
 
 async function walk(dir: string, limit: number, found: string[] = []): Promise<string[]> {
   for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -453,10 +454,10 @@ const rgFiles = (rg: string, cwd: string): Promise<string[] | undefined> =>
 
 /** The workspace's files, as rg lists them (so .gitignore holds), that match `include`; `exclude` is ignored. */
 async function findFiles(include: string | RelativePattern, _exclude?: unknown, maxResults = Number.POSITIVE_INFINITY): Promise<Uri[]> {
-  const base = typeof include === 'string' ? the().workspace : include.baseUri.fsPath;
+  const base = typeof include === 'string' ? configured().workspace : include.baseUri.fsPath;
   const pattern = typeof include === 'string' ? include : include.pattern;
-  const rg = the().rg;
-  const files = (rg === undefined ? undefined : await rgFiles(rg, base)) ?? (await walk(base, Number.isFinite(maxResults) ? maxResults * 4 : 50_000));
+  const rg = configured().rg;
+  const files = (rg === undefined ? undefined : await rgFiles(rg, base)) ?? (await walk(base, WALK_LIMIT));
   const matching = pattern === '**/*' || pattern === '**' ? files : files.filter((file) => path.matchesGlob(path.relative(base, file), pattern));
   return matching.slice(0, maxResults).map((file) => Uri.file(file));
 }
@@ -499,17 +500,17 @@ export const settingsChanged = (keys: readonly string[]): void => configurationC
 
 export const workspace = {
   get workspaceFolders() {
-    return [{ uri: folderUri(), name: path.basename(the().workspace), index: 0 }];
+    return [{ uri: folderUri(), name: path.basename(configured().workspace), index: 0 }];
   },
   get name() {
-    return path.basename(the().workspace);
+    return path.basename(configured().workspace);
   },
   get isTrusted() {
-    return the().trusted;
+    return configured().trusted;
   },
   getWorkspaceFolder: (uri: Uri) => (asRelativePath(uri) === uri.fsPath ? undefined : workspace.workspaceFolders[0]),
   fs,
-  getConfiguration: (section?: string) => configurationOf(the().settings, section),
+  getConfiguration: (section?: string) => configurationOf(configured().settings, section),
   onDidChangeConfiguration: configurationChanged.event,
   onDidGrantWorkspaceTrust: never<void>(),
   asRelativePath,
@@ -527,8 +528,6 @@ export const workspace = {
   registerTextDocumentContentProvider: () => new Disposable(() => {}),
 };
 
-// ---- Commands ----
-
 const registered = new Map<string, (...args: unknown[]) => unknown>();
 
 const shownPath = (target: unknown): string => (target instanceof Uri ? asRelativePath(target) : typeof target === 'string' ? target : 'the file');
@@ -540,13 +539,13 @@ const EDITOR_COMMANDS: Readonly<Record<string, (...args: unknown[]) => string>> 
   'vscode.diff': (_left, _right, title) => `Show the diff ${typeof title === 'string' ? title : ''}`.trim(),
   revealInExplorer: (uri) => `Reveal ${shownPath(uri)} in the Explorer`,
   revealFileInOS: (uri) => `Reveal ${shownPath(uri)} in the Finder`,
-  'workbench.action.openSettings': (query) => `Open Settings at ${String(query ?? '')}; here, edit ${the().settings.file}`,
+  'workbench.action.openSettings': (query) => `Open Settings at ${String(query ?? '')}; here, edit ${configured().settings.file}`,
 };
 
-const toast = (text: string) => the().page.notify({ kind: 'toast', text });
+const toast = (text: string) => configured().page.notify({ kind: 'toast', text });
 
 /** Says in the page what VS Code would have done, and logs it. */
-export function editorOnly(what: string): void {
+function editorOnly(what: string): void {
   process.stderr.write(`[editor] ${what}\n`);
   toast(`In VS Code: ${what}`);
 }
@@ -571,8 +570,6 @@ export const commands = {
   getCommands: async () => [...registered.keys()],
 };
 
-// ---- Window ----
-
 type MessageItem = string | { readonly title: string };
 type MessageOptions = { readonly modal?: boolean; readonly detail?: string };
 
@@ -581,7 +578,7 @@ async function showMessage(severity: 'info' | 'warning' | 'error', text: string,
   const options = first !== undefined && typeof first === 'object' && !('title' in (first as object)) ? (first as MessageOptions) : undefined;
   const items = (options === undefined ? rest : more) as MessageItem[];
   process.stderr.write(`[${severity}] ${text}\n`);
-  const answer = await the().page.ask({
+  const answer = await configured().page.ask({
     kind: 'message',
     severity,
     text,
@@ -595,7 +592,7 @@ async function showMessage(severity: 'info' | 'warning' | 'error', text: string,
 type InputOptions = { readonly title?: string; readonly prompt?: string; readonly value?: string; readonly placeHolder?: string; readonly password?: boolean };
 
 async function showInputBox(options: InputOptions = {}): Promise<string | undefined> {
-  const answer = await the().page.ask({
+  const answer = await configured().page.ask({
     kind: 'input',
     password: options.password === true,
     ...(options.title === undefined ? {} : { title: options.title }),
@@ -610,7 +607,7 @@ type PickItem = string | { readonly label: string; readonly description?: string
 
 async function showQuickPick(given: readonly PickItem[] | Thenable<readonly PickItem[]>, options: { readonly title?: string; readonly placeHolder?: string; readonly canPickMany?: boolean } = {}): Promise<unknown> {
   const items = await given;
-  const answer = await the().page.ask({
+  const answer = await configured().page.ask({
     kind: 'pick',
     many: options.canPickMany === true,
     items: items.map((item) => (typeof item === 'string' ? { label: item } : { label: item.label, ...(item.description === undefined ? {} : { description: item.description }), ...(item.detail === undefined ? {} : { detail: item.detail }) })),
@@ -627,16 +624,16 @@ const typedPaths = (text: string): Uri[] =>
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => Uri.file(path.resolve(the().workspace, line)));
+    .map((line) => Uri.file(path.resolve(configured().workspace, line)));
 
 async function showOpenDialog(options: { readonly canSelectMany?: boolean; readonly openLabel?: string; readonly title?: string } = {}): Promise<Uri[] | undefined> {
-  const answer = await the().page.ask({ kind: 'path', title: options.title ?? 'Open', action: options.openLabel ?? 'Open', many: options.canSelectMany === true });
+  const answer = await configured().page.ask({ kind: 'path', title: options.title ?? 'Open', action: options.openLabel ?? 'Open', many: options.canSelectMany === true });
   return answer.kind === 'text' && typedPaths(answer.value).length > 0 ? typedPaths(answer.value) : undefined;
 }
 
 async function showSaveDialog(options: { readonly defaultUri?: Uri; readonly saveLabel?: string; readonly title?: string } = {}): Promise<Uri | undefined> {
   const value = options.defaultUri === undefined ? undefined : asRelativePath(options.defaultUri);
-  const answer = await the().page.ask({ kind: 'path', title: options.title ?? 'Save', action: options.saveLabel ?? 'Save', many: false, ...(value === undefined ? {} : { value }) });
+  const answer = await configured().page.ask({ kind: 'path', title: options.title ?? 'Save', action: options.saveLabel ?? 'Save', many: false, ...(value === undefined ? {} : { value }) });
   return answer.kind === 'text' ? typedPaths(answer.value)[0] : undefined;
 }
 
@@ -676,14 +673,14 @@ export class WebviewChannel {
   close: () => void = () => {};
   constructor(readonly id: string) {}
   get cspSource(): string {
-    return the().page.origin;
+    return configured().page.origin;
   }
   /** Files are served under /vscode-resource by their path, and only inside the webview's localResourceRoots. */
   asWebviewUri(uri: Uri): Uri {
-    return Uri.parse(`${the().page.origin}/vscode-resource${encodePath(uri.path)}`);
+    return Uri.parse(`${configured().page.origin}/vscode-resource${encodePath(uri.path)}`);
   }
   postMessage(message: unknown): Promise<boolean> {
-    the().page.post(this.id, message);
+    configured().page.post(this.id, message);
     return Promise.resolve(true);
   }
   receive(message: unknown): void {
@@ -723,9 +720,9 @@ let panels = 0;
 function createWebviewPanel(viewType: string, title: string, _column: unknown, options: vscode.WebviewOptions = {}) {
   const view = webviewView(`${viewType}-${++panels}`);
   view.webview.options = options;
-  const url = `${the().page.origin}/view/${view.webview.id}`;
-  the().page.notify({ kind: 'open', url });
-  the().page.notify({ kind: 'toast', text: `${title} opens in a tab of its own.`, link: { label: 'Open', url } });
+  const url = `${configured().page.origin}/view/${view.webview.id}`;
+  configured().page.notify({ kind: 'open', url });
+  configured().page.notify({ kind: 'toast', text: `${title} opens in a tab of its own.`, link: { label: 'Open', url } });
   return {
     ...view,
     title,
@@ -734,7 +731,7 @@ function createWebviewPanel(viewType: string, title: string, _column: unknown, o
     viewColumn: ViewColumn.One,
     iconPath: undefined,
     onDidChangeViewState: never<unknown>(),
-    reveal: () => the().page.notify({ kind: 'open', url }),
+    reveal: () => configured().page.notify({ kind: 'open', url }),
   };
 }
 
@@ -789,8 +786,6 @@ export const window = {
   registerTreeDataProvider: () => new Disposable(() => {}),
 };
 
-// ---- Environment and languages ----
-
 let clipboard = '';
 
 export const env = {
@@ -805,11 +800,11 @@ export const env = {
     readText: async () => clipboard,
     async writeText(text: string): Promise<void> {
       clipboard = text;
-      the().page.notify({ kind: 'clipboard', text });
+      configured().page.notify({ kind: 'clipboard', text });
     },
   },
   async openExternal(uri: Uri): Promise<boolean> {
-    the().page.notify({ kind: 'open', url: uri.toString(true) });
+    configured().page.notify({ kind: 'open', url: uri.toString(true) });
     return true;
   },
   asExternalUri: async (uri: Uri) => uri,

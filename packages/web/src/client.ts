@@ -42,7 +42,11 @@ events.addEventListener('open', () => {
 events.addEventListener('message', (event) => window.dispatchEvent(new MessageEvent('message', { data: JSON.parse((event as MessageEvent<string>).data) })));
 events.addEventListener('note', (event) => noted(JSON.parse((event as MessageEvent<string>).data) as Note));
 events.addEventListener('ask', (event) => asked(JSON.parse((event as MessageEvent<string>).data) as Asked));
-events.addEventListener('answered', (event) => dialogs.get((JSON.parse((event as MessageEvent<string>).data) as { id: string }).id)?.remove());
+events.addEventListener('answered', (event) => {
+  const { id } = JSON.parse((event as MessageEvent<string>).data) as { id: string };
+  dialogs.get(id)?.remove();
+  dialogs.delete(id);
+});
 
 const STYLE = `
 .geno-web-toasts { position: fixed; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2147483646; max-width: min(360px, calc(100vw - 16px)); }
@@ -159,21 +163,46 @@ function body(request: Asked, done: (reply: UiAnswer) => void): (Node | string)[
   }
 }
 
-async function asked(request: Asked): Promise<void> {
-  if (dialogs.has(request.id)) return;
-  // A message that is not modal and offers nothing to choose is a toast, as VS Code shows it.
-  if (request.kind === 'message' && !request.modal && request.items.length === 0) {
+// Escape closes the newest dialog wherever focus is, since the panel may have taken it.
+document.addEventListener(
+  'keydown',
+  (event) => {
+    const newest = [...dialogs].reverse().find(([, shown]) => shown.classList.contains('geno-web-backdrop'));
+    if (event.key !== 'Escape' || newest === undefined) return;
+    event.stopPropagation();
+    answer(newest[0], { kind: 'cancel' });
+  },
+  true,
+);
+
+/** A message that is not modal shows as a toast, as VS Code shows it: one with choices stays until the user picks or closes it. */
+async function notice(request: Extract<Asked, { kind: 'message' }>): Promise<void> {
+  if (request.items.length === 0) {
     answer(request.id, { kind: 'cancel' });
     return toast(request.text);
   }
+  const done = (reply: UiAnswer) => answer(request.id, reply);
+  const shown = element(
+    'div',
+    { className: 'geno-web-toast' },
+    element('span', { textContent: request.text }),
+    ...request.items.map((item, index) => element('a', { href: '#', textContent: item, onclick: (event: MouseEvent) => (event.preventDefault(), done({ kind: 'item', index })) })),
+    element('a', { href: '#', textContent: 'Close', onclick: (event: MouseEvent) => (event.preventDefault(), done({ kind: 'cancel' })) }),
+  );
+  dialogs.set(request.id, shown);
+  (await overlay()).append(shown);
+}
+
+async function asked(request: Asked): Promise<void> {
+  if (dialogs.has(request.id)) return;
+  if (request.kind === 'message' && !request.modal) return notice(request);
   await overlay();
   const done = (reply: UiAnswer) => answer(request.id, reply);
   const dialog = element('div', { className: 'geno-web-dialog' }, ...body(request, done));
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
-  dialog.dataset['ask'] = request.id;
   const backdrop = element('div', { className: 'geno-web-backdrop' }, dialog);
-  backdrop.addEventListener('keydown', (event) => event.key === 'Escape' && done({ kind: 'cancel' }));
+  backdrop.addEventListener('click', (event) => event.target === backdrop && done({ kind: 'cancel' }));
   dialogs.set(request.id, backdrop);
   document.body.append(backdrop);
   (dialog.querySelector('input, button') as HTMLElement | null)?.focus();
