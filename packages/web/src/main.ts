@@ -94,7 +94,7 @@ export async function startWeb(options: WebOptions, extension: string, client: s
   }
   if (!existsSync(options.workspace)) throw new Error(`${options.workspace} does not exist`);
   const token = newToken();
-  const server = new WebServer(token, client, 'dark');
+  const server = new WebServer(token, client);
   const port = await server.listen(options.port);
   const home = gcodeHome(process.env);
   const manifest = JSON.parse(readFileSync(path.join(extension, 'package.json'), 'utf8')) as Parameters<typeof defaultsOf>[0];
