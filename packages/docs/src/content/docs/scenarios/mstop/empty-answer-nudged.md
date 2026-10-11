@@ -1,0 +1,118 @@
+---
+title: โมเดลจบเทิร์นเปล่า ถูกกระตุ้นหนึ่งครั้ง
+description: โมเดลจบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียกเครื่องมือ loop บันทึกคำกระตุ้นแล้วเรียกโมเดลอีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
+tableOfContents: false
+sidebar:
+  order: 2
+scenario:
+  surface: vscode
+  given:
+    - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังทำงาน
+    - ยังไม่ถึงขีดจำกัดของรอบ (40 ครั้ง และ $0.40)
+  trigger: >-
+    โมเดลคิดแล้วจบคำตอบด้วย `stop_reason: end_turn` โดยมีแต่บล็อกความคิด ไม่มีข้อความและไม่มี `tool_use`
+  covers: [mstop.empty-answer-nudged]
+  related: [mstop.no-reply-continue-retry, turn.text-answer, mstop.limit-max-turns]
+  steps:
+    - id: empty
+      lane: model
+      do: >-
+        โมเดลส่งบล็อกความคิดออกมาแล้วจบด้วย `end_turn` ไม่มีข้อความที่ไม่ว่าง และไม่ขอเรียกเครื่องมือ
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      emits: [end_turn]
+      phase: calling-model
+
+    - id: logged
+      lane: loop
+      at: drive
+      do: >-
+        `drive` บันทึก event `assistant` ตามปกติ ความคิดไม่เคยแสดงเป็นข้อความในแผง ผู้ใช้จึงยังเห็นแค่แถว "Thinking"
+      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn\""
+      emits: [assistant]
+
+    - id: answerless
+      lane: loop
+      at: step
+      do: >-
+        `loopStep` เห็นว่า `end_turn` ให้ `done(end_turn)` แต่ `answerless` บอกว่าคำตอบนี้ไม่มีอะไรให้ผู้ใช้อ่าน
+        event ก่อนหน้าไม่ใช่คำกระตุ้นแบบเปล่า และยังไม่ถึงขีดจำกัด จึงตัดสิน `nudge` แบบ `empty` แทนการจบ
+      ref: packages/core/src/loop.ts#answerless
+      emits: [nudge]
+
+    - id: nudge
+      lane: loop
+      at: drive
+      do: >-
+        `drive` บันทึก event `report-nudge` ที่มี `empty: true` server ไม่ส่ง event ชนิดนี้ให้ editor แผงจึงไม่เห็นอะไรเปลี่ยน
+        แต่คำขอถัดไปจะมีข้อความ `EMPTY_TURN_NUDGE` ต่อท้าย ("Your last response ended with no text and no tool call...")
+      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'report-nudge'\""
+      emits: [report-nudge]
+
+    - use: model-call
+
+    - id: again
+      lane: model
+      do: >-
+        โมเดลอ่านคำกระตุ้นแล้วตอบอีกครั้ง
+      ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
+      fork:
+        ask: คำตอบรอบที่สองมีข้อความหรือการเรียกเครื่องมือไหม
+        options:
+          - id: answered
+            label: มีข้อความ
+            steps:
+              - use: answer-streams
+              - use: turn-ends
+          - id: empty-again
+            label: เปล่าอีกครั้ง
+            steps:
+              - lane: loop
+                at: step
+                do: >-
+                  `loopStep` เห็นคำตอบเปล่าอีกครั้ง และ event ก่อนหน้าคือคำกระตุ้นแบบเปล่า จึงตัดสิน `done(error)`
+                  ไม่กระตุ้นซ้ำเป็นครั้งที่สอง
+                ref: packages/core/src/loop.ts#loopStep
+                emits: [error]
+                phase: ending
+              - lane: loop
+                at: drive
+                do: >-
+                  `finish` ไม่บันทึก event `error` เพราะไม่ใช่ขีดจำกัด มันแค่เขียนลง stderr ของ engine
+                  ("the model ended its turn twice with no text and no tool call...") ซึ่งไปอยู่ใน output channel "Geno engine"
+                ref: packages/engine/src/drive.ts#finish
+              - lane: server
+                at: turns
+                do: >-
+                  `runTurn` แปลง `error` ด้วย `TURN_ENDS`: ACP ได้ `stopReason: end_turn` แต่ meta บอกว่างานจบแบบ `failed`
+                ref: packages/engine/src/serve.ts#TURN_ENDS
+                emits: [TURN_END_META, failed]
+              - lane: editor
+                at: chat
+                do: >-
+                  `turnEndOf` เชื่อ meta มากกว่า stop reason จึงส่ง action `turn-end` สถานะ `failed`
+                  stop reason `end_turn` ไม่มีข้อความใน `STOP_MESSAGES` จึงไม่มีบล็อก error
+                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                emits: [turn-end]
+              - lane: panel
+                at: rail
+                do: >-
+                  `missingReply` เห็นว่าไม่มีข้อความ ไม่มีบล็อก error ไม่ได้ถูกหยุด และขั้นสุดท้ายไม่ได้ถูกปฏิเสธ
+                  จึงให้เหตุผลว่าคำตอบสุดท้ายไม่มีข้อความ
+                sees: >-
+                  หัวข้อ "failed after 14s" กล่อง "Geno stopped without a reply · Its last reply had no text."
+                  พร้อมปุ่ม [Continue] [Retry] และท้าย turn ขึ้น "Failed"
+                ref: packages/extension/src/chat/rail.ts#missingReply
+                end: { turn: failed, reason: error }
+---
+
+คำตอบที่มีแต่ความคิดไม่ใช่คำตอบ ผู้ใช้ไม่เห็นอะไรเลย Geno จึงไม่ถือว่า turn จบ
+แต่บอกโมเดลหนึ่งครั้งว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ
+
+สิ่งที่ควรสังเกต
+
+- **คำกระตุ้นมองไม่เห็นในแผง** event `report-nudge` อยู่ใน log และในคำขอถัดไป แต่ server ไม่แปลงมันเป็นอัปเดต
+  ผู้ใช้เห็นแค่ว่า turn ยังทำงานต่อ ดูได้จาก `gcode session` ซึ่งเขียนว่า "the model ended a turn with no text and no tool call and was nudged once"
+- **ครั้งที่สองจบแบบ failed โดยไม่มีบล็อก error** `finish` บันทึก error เฉพาะขีดจำกัด เหตุผลจึงอยู่แค่ใน stderr ของ engine
+  แผงบอกผู้ใช้ผ่านกล่อง "Geno stopped without a reply" แทน
+- **ขีดจำกัดมาก่อนคำกระตุ้น** ถ้าคำตอบเปล่ามาตอนที่ใช้ครบ 40 ครั้งแล้ว `loopStep` จบด้วย `max-turns` แทนการกระตุ้น
+  ดู [ครบ 40 ครั้งของการเรียกโมเดล](/scenarios/mstop/limits/)
