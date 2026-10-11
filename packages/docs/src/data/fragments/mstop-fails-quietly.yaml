@@ -1,0 +1,27 @@
+# A run that loopStep ended `done(error)` without an error event: a stop reason the loop cannot go on from.
+# The reason reaches only the engine's stderr; the panel learns `failed` from TURN_END_META. The page draws the panel.
+- id: stderr
+  lane: loop
+  at: drive
+  do: >-
+    `finish` ไม่บันทึก event `error` เพราะ `error` ไม่ใช่ขีดจำกัดของรอบ มันเขียนเหตุผลลง stderr ของ engine เท่านั้น
+    ("error: the model stopped with ...") ซึ่งไปอยู่ใน output channel "Geno engine" ไม่ใช่ในแผงแชต
+  ref: packages/engine/src/drive.ts#finish
+
+- id: response
+  lane: server
+  at: turns
+  do: >-
+    `runTurn` แปลง `error` ด้วย `TURN_ENDS`: ACP ได้ `stopReason: end_turn` (ACP ไม่มี stop reason สำหรับ error)
+    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ lock ของ session ถูกปลด
+  ref: packages/engine/src/serve.ts#TURN_ENDS
+  emits: [TURN_END_META, failed]
+
+- id: turn-end
+  lane: editor
+  at: chat
+  do: >-
+    `turnEndOf` เชื่อ `TURN_END_META` มากกว่า `stopReason` จึงส่ง action `turn-end` สถานะ `failed`
+    `end_turn` ไม่มีข้อความใน `STOP_MESSAGES` และ engine ไม่ได้ส่ง error มา จึงไม่มีแถบ error
+  ref: packages/extension/src/chat/chat.ts#turnEndOf
+  emits: [turn-end]
