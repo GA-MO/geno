@@ -11,7 +11,7 @@ const NAMED = /^(.+?) \((.+)\)$/;
 
 const cellsOf = (line: string): string[] => line.slice(1, -1).split('|').map((cell) => cell.trim());
 const unticked = (cell: string): string => cell.replace(/^`|`$/g, '');
-const split = (cell: string, count: number): string[] => {
+const cellPerId = (cell: string, count: number): string[] => {
   const parts = cell.split(' / ');
   return parts.length === count ? parts : Array.from({ length: count }, () => cell);
 };
@@ -34,8 +34,8 @@ function parseCatalog(markdown: string): CatalogIn {
     if (chapter === undefined || cells.length !== 8) throw new Error(`catalog row outside a chapter or not 8 cells: ${line}`);
     const [ids, thai, english, , , lanes, terminal, priority] = cells as [string, string, string, string, string, string, string, string];
     const each = ids.split(' / ').map(unticked);
-    const thais = split(thai, each.length);
-    const englishes = split(english, each.length);
+    const thais = cellPerId(thai, each.length);
+    const englishes = cellPerId(english, each.length);
     each.forEach((id, i) => {
       chapter.prefix = id.split('.')[0] ?? '';
       catalog.scenarios.push({

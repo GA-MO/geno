@@ -2,12 +2,12 @@ import { Handle, MiniMap, Position, ReactFlow, ReactFlowProvider, useReactFlow, 
 import '@xyflow/react/dist/style.css';
 import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { codeSegments, endText, PARTY_LABELS, PHASE_LABELS, TURN_END_LABELS, WHOSE_MOVE } from '../scenario/labels.js';
-import type { OptionId, Scenario, Step, StepId } from '../scenario/model.js';
+import type { OptionId, PartKey, Scenario, Step, StepId } from '../scenario/model.js';
 import { briefOf, hashOf, initialState, layoutWalk, progressAt, reduce, stateFromHash, walk, type Moment, type TourAction, type TourState } from '../scenario/tour.js';
 
 export interface TourProps {
   readonly scenario: Scenario;
-  readonly parts: Readonly<Record<string, string>>;
+  readonly parts: Readonly<Record<PartKey, string>>;
 }
 
 const COLUMN = 108;
@@ -147,7 +147,7 @@ function Diagram({ scenario, path, index, choices, view, dispatch }: { readonly 
       sourceHandle: sameRow ? (to.column > from.column ? 'sr' : 'sl') : 'b',
       targetHandle: sameRow ? (to.column > from.column ? 'tl' : 'tr') : 't',
       type: 'smoothstep',
-      className: `tour-edge${done ? ' done' : ''}${edge.crossing ? ' crossing' : ''}${edge.kind === 'again' ? ' again' : ''}`,
+      className: `tour-edge${done ? ' done' : ''}${edge.crossesProcess ? ' crossing' : ''}${edge.kind === 'again' ? ' again' : ''}`,
       animated: path.indexOf(edge.to) === index,
     };
   });

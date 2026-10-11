@@ -1,12 +1,12 @@
 ---
 import { codeSegments, PARTY_LABELS } from '../scenario/labels';
-import type { Scenario } from '../scenario/model';
+import type { PartKey, Scenario } from '../scenario/model';
 import { briefOf, layoutWalk, walk } from '../scenario/tour';
 import StepList from './StepList.astro';
 
 interface Props {
   scenario: Scenario;
-  parts: Readonly<Record<string, string>>;
+  parts: Readonly<Record<PartKey, string>>;
 }
 const { scenario, parts } = Astro.props;
 const COLUMN = 176;
@@ -76,7 +76,7 @@ const forks = path.flatMap((id) => {
           const y2 = yOf(to.row) + (sameRow ? BOX.h / 2 : 0);
           const mid = (y1 + y2) / 2;
           const d = sameRow ? `M${x1},${y1} L${x2},${y2}` : `M${x1},${y1} L${x1},${mid} L${x2},${mid} L${x2},${y2}`;
-          return <path class={`tour-svg-edge${edge.crossing ? ' crossing' : ''}`} d={d} marker-end={`url(#arrow-${scenario.id})`}></path>;
+          return <path class={`tour-svg-edge${edge.crossesProcess ? ' crossing' : ''}`} d={d} marker-end={`url(#arrow-${scenario.id})`}></path>;
         })
       }
       {

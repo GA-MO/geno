@@ -3,8 +3,10 @@ import path from 'node:path';
 import ts from 'typescript';
 import type { CodeRef } from './model.js';
 
+export type Resolution = { readonly ok: true; readonly ref: CodeRef } | { readonly ok: false; readonly reason: string };
+
 export interface SourceIndex {
-  resolve(ref: string): CodeRef | string;
+  resolve(ref: string): Resolution;
   literalExists(text: string): boolean;
 }
 
@@ -53,7 +55,7 @@ function declarationsOf(file: string, text: string): Declaration[] {
   return found;
 }
 
-const nestedIn = (within: readonly string[], outer: readonly string[]): boolean => {
+const containsInOrder = (within: readonly string[], outer: readonly string[]): boolean => {
   let at = 0;
   for (const name of within) if (name === outer[at]) at += 1;
   return at === outer.length;
@@ -62,7 +64,7 @@ const nestedIn = (within: readonly string[], outer: readonly string[]): boolean 
 function findDeclaration(declarations: readonly Declaration[], dotted: string): number | string {
   const names = dotted.split('.');
   const name = names.pop()!;
-  const candidates = declarations.filter((declaration) => declaration.name === name && nestedIn(declaration.within, names));
+  const candidates = declarations.filter((declaration) => declaration.name === name && containsInOrder(declaration.within, names));
   const bodies = candidates.filter((declaration) => !declaration.overload);
   const distinct = bodies.length > 0 ? bodies : candidates;
   const shallowest = Math.min(...distinct.map((declaration) => declaration.within.length));
@@ -91,7 +93,7 @@ export function sourceIndex(repoRoot: string): SourceIndex {
       const file = ref.slice(0, hash);
       const anchor = ref.slice(hash + 1);
       const text = textOf(file);
-      if (text === undefined) return `${file} does not exist`;
+      if (text === undefined) return { ok: false, reason: `${file} does not exist` };
       let line: number | string;
       if (anchor.startsWith('"')) {
         const literal = anchor.slice(1, -1);
@@ -101,8 +103,8 @@ export function sourceIndex(repoRoot: string): SourceIndex {
         if (!declarations.has(file)) declarations.set(file, declarationsOf(file, text));
         line = findDeclaration(declarations.get(file)!, anchor);
       }
-      if (typeof line === 'string') return `${file}: ${line}`;
-      return { path: file, anchor, line, url: `vscode://file${path.join(repoRoot, file)}:${line}` };
+      if (typeof line === 'string') return { ok: false, reason: `${file}: ${line}` };
+      return { ok: true, ref: { path: file, anchor, line, url: `vscode://file${path.join(repoRoot, file)}:${line}` } };
     },
     literalExists(text) {
       corpus ??= LITERAL_SOURCES.flatMap((dir) =>

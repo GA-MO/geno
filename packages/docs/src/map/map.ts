@@ -1,5 +1,5 @@
 import ELK, { type ElkNode } from 'elkjs/lib/elk.bundled.js';
-import type { CodeRef, Scenario } from '../scenario/model.js';
+import { partKeyOf, type CodeRef, type Scenario, type StepId } from '../scenario/model.js';
 import type { Party } from '../scenario/schema.js';
 import type { Site, Visit } from '../scenario/site.js';
 import type { Box } from './hop.js';
@@ -33,9 +33,9 @@ export interface PositionedMap {
 export function deriveMap(site: Site): { readonly nodes: readonly MapNode[]; readonly edges: readonly MapEdge[] } {
   const nodes = site.lanes.lanes.flatMap((lane): MapNode[] => {
     const base = { lane: lane.id, laneLabel: lane.label, process: lane.process };
-    if (lane.parts.length === 0) return [{ ...base, key: lane.id, label: lane.label, party: lane.party, about: lane.about, visits: site.visits[lane.id] ?? [] }];
+    if (lane.parts.length === 0) return [{ ...base, key: lane.id, label: lane.label, party: lane.party, about: lane.about, visits: site.visits[partKeyOf(lane.id)] ?? [] }];
     return lane.parts.map((part) => {
-      const key = `${lane.id}.${part.id}`;
+      const key = partKeyOf(lane.id, part.id);
       const ref = site.partRefs[key];
       return { ...base, key, label: part.label, party: part.party ?? lane.party, ...(part.about === undefined ? {} : { about: part.about }), ...(ref === undefined ? {} : { ref }), visits: site.visits[key] ?? [] };
     });
@@ -59,7 +59,7 @@ export function deriveMap(site: Site): { readonly nodes: readonly MapNode[]; rea
 }
 
 function hopsOf(scenario: Scenario): [Visit['step'], string, string][] {
-  return Object.keys(scenario.via).flatMap((id) => {
+  return (Object.keys(scenario.via) as StepId[]).flatMap((id) => {
     const step = scenario.steps[id]!;
     const flow = step.flow;
     const next = flow.kind === 'next' ? [flow.to] : flow.kind === 'fork' ? flow.options.map((option) => option.to) : [];

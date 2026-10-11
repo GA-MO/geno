@@ -9,6 +9,7 @@
     "check": "tsx scripts/check.ts",
     "catalog": "tsx scripts/catalog.ts",
     "counts": "tsx scripts/counts.ts",
+    "ref": "tsx scripts/ref.ts",
     "typecheck": "astro check"
   },
   "dependencies": {

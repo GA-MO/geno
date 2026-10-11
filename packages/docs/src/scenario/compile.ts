@@ -1,4 +1,4 @@
-import type { Choices, CodeRef, Flow, LaneColumn, Link, OptionId, OutlineItem, PartKey, Problem, Result, Scenario, ScenarioId, Step, StepId } from './model.js';
+import { partKeyOf, type Choices, type CodeRef, type Flow, type LaneColumn, type Link, type OptionId, type OutlineItem, type Problem, type Result, type Scenario, type ScenarioId, type Step, type StepId } from './model.js';
 import type { SourceIndex } from './refs.js';
 import { isUse, type ActingStepIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
 
@@ -13,7 +13,7 @@ export interface CompileContext {
   readonly catalog: Readonly<Record<string, Link>>;
 }
 
-interface Node {
+interface ExpandedStep {
   readonly id: StepId;
   readonly step: ActingStepIn;
   readonly path: string;
@@ -23,7 +23,7 @@ interface Node {
 interface Arm {
   readonly option: OptionIn;
   readonly path: string;
-  readonly nodes: readonly Node[];
+  readonly nodes: readonly ExpandedStep[];
 }
 
 interface Walk {
@@ -38,7 +38,7 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   const problem = (path: string, message: string): void => void problems.push({ level: 'error', file: ctx.file, path, message });
 
   const top = expand(authored.steps, '', 'steps', false, ctx, problem);
-  const nodes = new Map<StepId, Node>();
+  const nodes = new Map<StepId, ExpandedStep>();
   for (const node of allNodes(top)) {
     if (nodes.has(node.id)) problem(`${node.path}.id`, `step id "${node.id}" is used twice`);
     else nodes.set(node.id, node);
@@ -74,7 +74,7 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   }
   if (problems.length > 0) return { ok: false, problems };
 
-  const compiled: Record<string, Step> = {};
+  const compiled: Record<StepId, Step> = {};
   for (const [id, step] of steps) compiled[id] = { ...step, phase: phases.get(id)! };
   return {
     ok: true,
@@ -98,9 +98,9 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   };
 }
 
-function expand(list: readonly StepIn[], scope: string, path: string, inFragment: boolean, ctx: CompileContext, problem: (path: string, message: string) => void): Node[] {
+function expand(list: readonly StepIn[], scope: string, path: string, inFragment: boolean, ctx: CompileContext, problem: (path: string, message: string) => void): ExpandedStep[] {
   const uses = new Map<string, number>();
-  return list.flatMap((step, i): Node[] => {
+  return list.flatMap((step, i): ExpandedStep[] => {
     const at = `${path}[${i}]`;
     if (isUse(step)) {
       const fragment = ctx.fragments[step.use];
@@ -121,13 +121,13 @@ function expand(list: readonly StepIn[], scope: string, path: string, inFragment
   });
 }
 
-function allNodes(list: readonly Node[]): Node[] {
+function allNodes(list: readonly ExpandedStep[]): ExpandedStep[] {
   return list.flatMap((node) => [node, ...node.arms.flatMap((arm) => allNodes(arm.nodes))]);
 }
 
-function link(list: readonly Node[], after: StepId | undefined, ctx: CompileContext, flows: Map<StepId, Flow>, problem: (path: string, message: string) => void): OutlineItem[] {
+function link(list: readonly ExpandedStep[], continuesAt: StepId | undefined, ctx: CompileContext, flows: Map<StepId, Flow>, problem: (path: string, message: string) => void): OutlineItem[] {
   return list.map((node, i) => {
-    const next = list[i + 1]?.id ?? after;
+    const next = list[i + 1]?.id ?? continuesAt;
     const { step } = node;
     const exits = [step.fork && 'fork', step.end && 'end', step.goto && 'goto'].filter(Boolean);
     if (exits.length > 1) problem(node.path, `a step has one way out; this one has ${exits.join(' and ')}`);
@@ -165,7 +165,7 @@ function link(list: readonly Node[], after: StepId | undefined, ctx: CompileCont
   });
 }
 
-function rejoinOf(then: string, list: readonly Node[]): StepId | { readonly problem: string } {
+function rejoinOf(then: string, list: readonly ExpandedStep[]): StepId | { readonly problem: string } {
   const exact = list.find((node) => node.id === then);
   if (exact !== undefined) return exact.id;
   const named = list.filter((node) => node.step.id === then);
@@ -193,7 +193,7 @@ function columnsOf(keys: readonly string[], lanes: LanesIn): LaneColumn[] {
     });
 }
 
-function stepOf(node: Node, flow: Flow | undefined, surface: Surface, columns: readonly LaneColumn[], ctx: CompileContext, problem: (path: string, message: string) => void): Omit<Step, 'phase'> | undefined {
+function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, columns: readonly LaneColumn[], ctx: CompileContext, problem: (path: string, message: string) => void): Omit<Step, 'phase'> | undefined {
   const { step, path } = node;
   const { lane, session } = laneOf(step.lane, ctx.lanes);
   if (lane === undefined) {
@@ -210,8 +210,8 @@ function stepOf(node: Node, flow: Flow | undefined, surface: Surface, columns: r
   let ref: CodeRef | undefined;
   if (step.ref !== undefined) {
     const resolved = ctx.source.resolve(step.ref);
-    if (typeof resolved === 'string') problem(`${path}.ref`, resolved);
-    else ref = resolved;
+    if (resolved.ok) ref = resolved.ref;
+    else problem(`${path}.ref`, resolved.reason);
   } else if (party === 'ai' || party === 'harness') problem(`${path}.ref`, `a ${party} step needs a code ref`);
   for (const [i, name] of (step.emits ?? []).entries()) if (!ctx.source.literalExists(name)) problem(`${path}.emits[${i}]`, `"${name}" appears nowhere in packages/{core,engine,extension}/src`);
   if (step.end?.reason !== undefined && !ctx.source.literalExists(step.end.reason)) problem(`${path}.end.reason`, `"${step.end.reason}" appears nowhere in packages/{core,engine,extension}/src`);
@@ -222,7 +222,7 @@ function stepOf(node: Node, flow: Flow | undefined, surface: Surface, columns: r
     id: node.id,
     lane: step.lane,
     column: columns.findIndex((column) => column.key === step.lane),
-    part: (part === undefined ? lane.id : `${lane.id}.${part.id}`) as PartKey,
+    part: partKeyOf(lane.id, part?.id),
     party,
     ...(counts === undefined ? {} : { counts }),
     ...(step.runs === undefined ? {} : { runs: step.runs }),
@@ -278,7 +278,7 @@ function enumerate(start: StepId, flows: ReadonlyMap<StepId, Flow>, problem: (at
   return walks;
 }
 
-function phasesOf(walks: readonly Walk[], nodes: ReadonlyMap<StepId, Node>, problem: (path: string, message: string) => void): Map<StepId, Phase> {
+function phasesOf(walks: readonly Walk[], nodes: ReadonlyMap<StepId, ExpandedStep>, problem: (path: string, message: string) => void): Map<StepId, Phase> {
   const phases = new Map<StepId, Phase>();
   const reported = new Set<StepId>();
   for (const walk of walks) {
@@ -297,8 +297,8 @@ function phasesOf(walks: readonly Walk[], nodes: ReadonlyMap<StepId, Node>, prob
   return phases;
 }
 
-function viaOf(walks: readonly Walk[]): Record<string, Choices> {
-  const via: Record<string, Choices> = {};
+function viaOf(walks: readonly Walk[]): Record<StepId, Choices> {
+  const via: Record<StepId, Choices> = {};
   for (const walk of walks) {
     walk.path.forEach((id, i) => {
       if (via[id] !== undefined) return;

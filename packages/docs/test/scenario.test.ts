@@ -16,7 +16,8 @@ const REPO = path.resolve(DOCS, '../..');
 const lanes = lanesSchema.parse(parse(readFileSync(path.join(DOCS, 'src/data/lanes.yaml'), 'utf8')));
 
 const fakeSource: SourceIndex = {
-  resolve: (ref) => (ref.includes('missing') ? `${ref}: no declaration named missing` : { path: ref.split('#')[0]!, anchor: ref.split('#')[1]!, line: 1, url: 'vscode://file/x:1' }),
+  resolve: (ref) =>
+    ref.includes('missing') ? { ok: false, reason: `${ref}: no declaration named missing` } : { ok: true, ref: { path: ref.split('#')[0]!, anchor: ref.split('#')[1]!, line: 1, url: 'vscode://file/x:1' } },
   literalExists: () => true,
 };
 
@@ -40,7 +41,7 @@ const ends = { end: { turn: 'done', reason: 'end_turn' } };
 describe('the ask-mode example scenario', () => {
   const site = loadSite(siteOptions(DOCS));
   const scenario = site.scenarios['ask-mode-bash-approval']!;
-  const choose = (option: string) => walk(scenario, { choice: option as OptionId });
+  const choose = (option: string) => walk(scenario, { ['choice' as StepId]: option as OptionId });
   const endOf = (path: readonly StepId[]) => progressAt(scenario, path, path.length - 1);
 
   test('the real site has no errors', () => {
@@ -73,7 +74,7 @@ describe('the ask-mode example scenario', () => {
 
   test('a link into an arm selects that arm', () => {
     const state = stateFromHash(scenario, '#at=choice.reject.4');
-    expect(state.choices['choice']).toBe('reject');
+    expect(state.choices['choice' as StepId]).toBe('reject');
     expect(walk(scenario, state.choices)[state.index]).toBe('choice.reject.4');
   });
 
@@ -131,7 +132,7 @@ describe('a rejoin', () => {
   const inner = { inner: fragmentSchema.parse([{ id: 'run', lane: 'user', do: 'inner run', ...ends }]) };
   const pick = (then: string) => ({ lane: 'user', do: 'pick', fork: { ask: '?', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B', then }] } });
   const rejoinOf = (result: ReturnType<typeof compile>) => {
-    const flow = result.ok ? result.value.steps['1']!.flow : undefined;
+    const flow = result.ok ? result.value.steps['1' as StepId]!.flow : undefined;
     return flow?.kind === 'fork' ? flow.options.find((option) => option.id === 'b')?.to : undefined;
   };
 
@@ -163,13 +164,13 @@ describe('refs through the TypeScript compiler', () => {
   const lineOf = (file: string, text: string) => readFileSync(path.join(REPO, file), 'utf8').split('\n').findIndex((line) => line.includes(text)) + 1;
 
   test('a function, a class member, and a quoted line resolve to their own lines', () => {
-    expect(index.resolve('packages/core/src/loop.ts#loopStep')).toMatchObject({ line: lineOf('packages/core/src/loop.ts', 'export function loopStep(') });
-    expect(index.resolve('packages/extension/src/chat/chat.ts#Chat.askPermission')).toMatchObject({ line: lineOf('packages/extension/src/chat/chat.ts', 'private async askPermission(') });
-    expect(index.resolve('packages/engine/src/drive.ts#"results.some((result) => result?.status === \'rejected\')"')).toMatchObject({ line: lineOf('packages/engine/src/drive.ts', "results.some((result) => result?.status === 'rejected')") });
+    expect(index.resolve('packages/core/src/loop.ts#loopStep')).toMatchObject({ ok: true, ref: { line: lineOf('packages/core/src/loop.ts', 'export function loopStep(') } });
+    expect(index.resolve('packages/extension/src/chat/chat.ts#Chat.askPermission')).toMatchObject({ ok: true, ref: { line: lineOf('packages/extension/src/chat/chat.ts', 'private async askPermission(') } });
+    expect(index.resolve('packages/engine/src/drive.ts#"results.some((result) => result?.status === \'rejected\')"')).toMatchObject({ ok: true, ref: { line: lineOf('packages/engine/src/drive.ts', "results.some((result) => result?.status === 'rejected')") } });
   });
 
   test('a bare name declared twice at the same depth is ambiguous', () => {
-    expect(index.resolve('packages/engine/src/serve.ts#prompt')).toEqual(expect.stringContaining('declared 2 times'));
+    expect(index.resolve('packages/engine/src/serve.ts#prompt')).toEqual({ ok: false, reason: expect.stringContaining('declared 2 times') });
   });
 });
 

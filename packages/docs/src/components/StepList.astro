@@ -1,12 +1,12 @@
 ---
 import { codeSegments, endText, PARTY_LABELS, TURN_END_LABELS } from '../scenario/labels';
-import type { OutlineItem, Scenario } from '../scenario/model';
+import type { OutlineItem, PartKey, Scenario } from '../scenario/model';
 import { briefOf } from '../scenario/tour';
 
 interface Props {
   scenario: Scenario;
   items: readonly OutlineItem[];
-  parts: Readonly<Record<string, string>>;
+  parts: Readonly<Record<PartKey, string>>;
 }
 const { scenario, items, parts } = Astro.props;
 const laneOf = (column: number) => scenario.columns[column]!.label;

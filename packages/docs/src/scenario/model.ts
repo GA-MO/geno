@@ -6,6 +6,8 @@ export type StepId = Brand<string, 'StepId'>;
 export type OptionId = Brand<string, 'OptionId'>;
 export type PartKey = Brand<string, 'PartKey'>;
 
+export const partKeyOf = (lane: string, part?: string): PartKey => (part === undefined ? lane : `${lane}.${part}`) as PartKey;
+
 export type TurnEnd = EndIn;
 
 export interface CodeRef {
@@ -65,7 +67,7 @@ export interface OutlineItem {
   readonly arms?: readonly { readonly option: OptionId; readonly label: string; readonly items: readonly OutlineItem[]; readonly rejoins?: StepId }[];
 }
 
-export type Choices = Readonly<Record<string, OptionId>>;
+export type Choices = Readonly<Record<StepId, OptionId>>;
 
 export interface Scenario {
   readonly id: ScenarioId;
@@ -79,9 +81,9 @@ export interface Scenario {
   readonly related: readonly Link[];
   readonly columns: readonly LaneColumn[];
   readonly start: StepId;
-  readonly steps: Readonly<Record<string, Step>>;
+  readonly steps: Readonly<Record<StepId, Step>>;
   readonly outline: readonly OutlineItem[];
-  readonly via: Readonly<Record<string, Choices>>;
+  readonly via: Readonly<Record<StepId, Choices>>;
   readonly defaults: Choices;
 }
 
