@@ -75,8 +75,10 @@ scenario:
       do: >-
         แผงแชตแสดงการ์ดขออนุญาตพร้อมคำสั่ง เหตุผล และปุ่มให้เลือก หัวข้อเปลี่ยนเป็น "waiting for you"
       sees: >-
-        Allow `pnpm add zod`? It uses a command not on the safe list.
-        [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
+        การ์ด "Run this command?" แสดงคำสั่ง `pnpm add zod`
+        พร้อมเหตุผล "Geno asks because it uses a command not on the safe list."
+        และบรรทัด "Always allow saves the rule `pnpm add` for this workspace."
+        ปุ่ม [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: choice
