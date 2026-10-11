@@ -25,15 +25,17 @@ const webviewEntries = BUNDLES.filter((bundle) => bundle.platform === 'browser')
 );
 
 export const BOUNDARIES: Boundaries = {
-  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src'],
+  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src', 'packages/web/src'],
   layers: [
     {
       name: 'core-is-pure',
       from: 'packages/core',
-      mayNotImport: ['packages/engine', 'packages/extension'],
+      mayNotImport: ['packages/engine', 'packages/extension', 'packages/web'],
       nodeBuiltins: ['path', 'crypto'],
     },
-    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension'] },
+    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/web'] },
+    // The web host runs the extension's chat host; the extension never depends on how it is served.
+    { name: 'extension-without-web', from: 'packages/extension', mayNotImport: ['packages/web'] },
   ],
   gates: [
     {
@@ -58,7 +60,10 @@ export const BOUNDARIES: Boundaries = {
       ],
     },
   ],
-  bundles: [{ name: 'webview-in-browser', runsIn: 'webview', entries: webviewEntries }],
+  bundles: [
+    { name: 'webview-in-browser', runsIn: 'webview', entries: webviewEntries },
+    { name: 'web-client-in-browser', runsIn: 'browser', entries: ['packages/web/src/client.ts'] },
+  ],
   exceptions: [
     {
       from: 'packages/core/src/browser.ts',
