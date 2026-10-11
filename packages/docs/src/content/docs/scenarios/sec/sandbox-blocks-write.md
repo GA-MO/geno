@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - เปิด Geno ในโหมด Ask ไม่ได้ตั้ง `gcode.sandbox.allowedDomains` (ค่าเริ่มต้นคือไม่อนุญาตโฮสต์ใดเลย)
-    - โมเดลขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow once บนการ์ดแล้ว
+    - โมเดลขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow บนการ์ดแล้ว
   trigger: >-
     `settle` บันทึกว่าผู้ใช้อนุญาต และคำสั่งกำลังจะรัน
   covers: [sec.sandbox-blocks-write, sec.sandbox-blocks-network]
