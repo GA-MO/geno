@@ -1,0 +1,132 @@
+---
+title: จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue หรือ Retry
+description: turn ล่าสุดจบโดยไม่มีข้อความตอบ แผงบอกเหตุผลและให้ผู้ใช้กด Continue หรือ Retry ซึ่งเริ่ม turn ใหม่
+tableOfContents: false
+sidebar:
+  order: 1
+scenario:
+  surface: vscode
+  given:
+    - turn ล่าสุดของแชตจบแล้วโดยไม่มีข้อความหลังขั้นสุดท้าย ในทัวร์นี้ผู้ใช้กด Stop ก่อนโมเดลตอบ
+    - ช่องพิมพ์ไม่มีข้อความรอในคิว
+  trigger: >-
+    แผงแชตวาด turn ที่จบแล้วโดยไม่มีคำตอบ
+  covers: [mstop.no-reply-continue-retry]
+  related: [ctl.stop-while-streaming, perm.ask-deny-ends-turn, mstop.limit-max-turns, mstop.empty-answer-nudged]
+  steps:
+    - id: notice
+      lane: panel
+      at: rail
+      do: >-
+        `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้ายของ turn และไม่มีบล็อก error จึงเลือกเหตุผลจากวิธีที่ turn จบ
+        turn นี้จบแบบ stopped เพราะเป็น turn ล่าสุดและไม่มีข้อความรอในคิว `noReplyNotice` จึงใส่ปุ่ม Continue และ Retry
+      sees: >-
+        กล่อง "Geno stopped without a reply" เหตุผล "You stopped it before it answered." และปุ่ม [Continue] [Retry]
+      ref: packages/extension/src/chat/render.ts#noReplyNotice
+      phase: idle
+
+    - id: choice
+      lane: user
+      do: ผู้ใช้กดปุ่มหนึ่งในสองปุ่ม
+      fork:
+        ask: ผู้ใช้กดปุ่มไหน
+        options:
+          - id: continue
+            label: Continue
+            then: route
+            steps:
+              - lane: panel
+                at: rail
+                do: >-
+                  ปุ่ม Continue โพสต์ `send` ด้วยข้อความคงที่ `CONTINUE_PROMPT` เหมือนผู้ใช้พิมพ์ส่งเอง
+                sees: บับเบิลใหม่ "Continue where you stopped, and finish with your answer."
+                ref: packages/extension/src/chat/render.ts#CONTINUE_PROMPT
+                emits: [send]
+          - id: retry
+            label: Retry
+            then: route
+            steps:
+              - lane: panel
+                at: rail
+                do: >-
+                  ปุ่ม Retry โพสต์ `send` ด้วยข้อความเดิมของ turn นั้น ส่งเฉพาะข้อความ ไฟล์แนบของ turn เดิมไม่ถูกส่งซ้ำ
+                sees: บับเบิลใหม่ที่มีข้อความเดียวกับ turn ก่อน
+                ref: "packages/extension/src/chat/render.ts#\"title: 'Send the same message again'\""
+                emits: [send]
+
+    - id: route
+      lane: editor
+      at: chat
+      do: >-
+        `Chat.send` ส่งต่อให้ `prompt()` ซึ่งส่ง action `turn-start` ทันที ปุ่มทั้งสองหายไปเพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว
+      ref: packages/extension/src/chat/chat.ts#Chat.prompt
+      emits: [turn-start]
+
+    - id: request
+      lane: editor
+      at: engine-link
+      do: >-
+        `link()` ได้ session เดิม แล้วส่งคำขอ ACP `session/prompt` คำขอนี้ค้างอยู่จนกว่า turn ใหม่จะจบ
+      ref: "packages/extension/src/chat/chat.ts#\"mine.connection.agent.request(acp.methods.agent.session.prompt, {\""
+
+    - id: accept
+      lane: server
+      at: turns
+      do: >-
+        `runTurn` รับเป็น turn ใหม่ที่มาจากผู้ใช้ จึงล้างขีดจำกัดของรอบก่อน turn นี้ได้ 40 ครั้งและ $0.40 เต็ม
+      ref: "packages/engine/src/serve.ts#\"if (start === 'prompt') runLimits.delete(sessionId);\""
+      phase: starting
+
+    - id: record
+      lane: loop
+      at: drive
+      do: >-
+        `drive` บันทึก event `user` ของข้อความใหม่ต่อท้าย log
+      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
+      emits: [user]
+
+    - id: decide
+      lane: loop
+      at: step
+      do: >-
+        `loopStep` ข้าม error `abort` ของรอบก่อน เพราะ error ชนิดนี้เก็บ prompt ที่ยังไม่ได้คำตอบไว้ แล้วตัดสิน `call-model`
+      ref: packages/core/src/loop.ts#lastLiveEvent
+      emits: [call-model]
+      phase: calling-model
+
+    - id: message
+      lane: loop
+      at: model-call
+      do: >-
+        `replayMessages` รวม prompt ที่ยังไม่ได้คำตอบ โน้ต `STOPPED_TURN_NOTE` และข้อความใหม่เป็นข้อความ user เดียว
+        กด Retry โมเดลจึงเห็น prompt เดิมสองครั้งโดยมีโน้ตคั่น กด Continue โมเดลเห็น prompt เดิม โน้ต แล้ว `CONTINUE_PROMPT`
+      ref: "packages/core/src/session.ts#\"if (stopped && event.from === undefined && event.steer !== true) prompts.push({ type: 'text', text: STOPPED_TURN_NOTE });\""
+      emits: [STOPPED_TURN_NOTE]
+
+    - id: sent
+      lane: loop
+      at: gateway
+      do: >-
+        gateway ส่งคำขอ turn ใหม่ดำเนินต่อเหมือน turn ปกติ
+      ref: packages/engine/src/gateway.ts#gatewayFor.turn
+      end: { turn: continues, reason: call-model }
+---
+
+ประกาศ "Geno stopped without a reply" มาจากแผงล้วนๆ engine ไม่ได้ส่งมา `missingReply` อ่าน turn ที่จบแล้ว
+และให้เหตุผลตามวิธีที่จบ
+
+| turn จบอย่างไร | เหตุผลที่แผงแสดง |
+| --- | --- |
+| ถึงขีดจำกัดจำนวนครั้งหรือค่าใช้จ่าย | It reached its limit before it answered. |
+| มี error อื่น | ไม่แสดงประกาศ บล็อก error บอกเหตุผลแล้ว |
+| ผู้ใช้กด Stop | You stopped it before it answered. |
+| ขั้นสุดท้ายถูกปฏิเสธ | It stopped at the call that was denied. |
+| อย่างอื่น เช่นคำตอบว่าง | Its last reply had no text. |
+
+สิ่งที่ควรสังเกต
+
+- **ปุ่มมีเฉพาะ turn ล่าสุด** และเฉพาะตอนที่ช่องพิมพ์ไม่มีข้อความรอในคิว turn เก่าแสดงแค่ประกาศ
+- **Continue กับ Retry เป็นข้อความธรรมดา** ทั้งสองปุ่มโพสต์ `send` เหมือนผู้ใช้พิมพ์เอง และ turn ใหม่ได้ขีดจำกัดเต็ม
+  ต่างจาก "Retry now" ในช่องพิมพ์ ซึ่งเร่งการเรียกโมเดลที่กำลังรอ backoff ใน turn เดิม
+- **หลัง Stop โน้ตเป็นตัวกำหนดน้ำเสียง** `STOPPED_TURN_NOTE` บอกโมเดลว่าผู้ใช้หยุด turn ที่แล้ว ให้ตอบคำถามก่อนแล้วถามว่าจะทำต่อหรือไม่
+  ข้อความ Continue ที่ตามมาจึงเป็นคำอนุญาตให้ทำต่อ
