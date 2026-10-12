@@ -109,8 +109,9 @@ scenario:
       at: sessions
       runs: 1
       do: >-
-        `runWorkflow` เปิด session เบื้องหลังชื่อ "Workflow fix-bug" ในโหมดเดียวกับแชตนี้ งบของ session คืองบรวมของ workflow
-        director ของ session คือ `workflowDriver` แชตนี้ติดหนี้รายงานหนึ่งฉบับ และตัวปลุกจดว่ารอ workflow นี้
+        `runWorkflow` เปิด session เบื้องหลังชื่อ "Workflow fix-bug" ในโหมดเดียวกับแชตนี้ ขีดจำกัดของ session ไม่ใช่ 40 ครั้งและ $0.40
+        แต่เป็น `WORKFLOW_TURNS` (42 รอบของ director) กับงบรวมของ workflow ($0.50)
+        director ของ session คือ `workflowDriver` แชตนี้ติดหนี้รายงานหนึ่งฉบับ และเมื่อเปิดการปลุก ตัวปลุกจดว่ารอ workflow นี้
       ref: packages/engine/src/serve.ts#runWorkflow
       emits: [session-start]
 
@@ -166,9 +167,10 @@ scenario:
       at: wakes
       do: >-
         `driver.finish` ปิด run แล้ว `childReport` ห่อรายงานด้วยรั้ว `<subagent_report agent="workflow fix-bug" ...>`
-        รายงานเข้ากล่องข้อความของแชตที่เริ่ม เหมือนรายงานของลูกเบื้องหลัง
-      ref: packages/core/src/workflow.ts#workflowReport
-      emits: [child-report]
+        รายงานเข้ากล่องข้อความของแชตที่เริ่มเป็น `child-report` ที่มีแต่รายงาน ไม่มีการจบของลูกแนบมา
+        เมื่อบันทึกลง log จึงได้แค่ event `user` แบบ steer `from: 'child'` ไม่มี `child-end` และไม่มี event `wake`
+      ref: "packages/engine/src/serve.ts#\"if (!silent) steers.inbox.put(parentId, { kind: 'child-report', report: text });\""
+      emits: [child-report, user]
 
     - use: bg-wake-starts
     - use: model-call

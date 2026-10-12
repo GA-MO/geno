@@ -167,7 +167,7 @@ scenario:
       do: >-
         แผง Arena แสดงผล: lane เรียงตามอันดับพร้อมเหตุผล ผลของ check ค่าใช้จ่าย และ diff เทียบกันจาก `_gcode/arena/compare`
         ปุ่ม Pick ของอันดับหนึ่งเป็นปุ่มหลัก และติ๊ก hunk ของ lane อื่นเพื่อ Graft ได้
-      sees: ป้าย "Ranked" แถว lane B ป้าย "Winner" ปุ่ม [Pick B] และปุ่ม "Graft hunks"
+      sees: ป้าย "Ranked" แถว lane B อยู่บนสุดพร้อมป้าย "Passed" ปุ่ม [Pick B] และปุ่ม "Graft hunks" (ป้าย "Winner" ขึ้นหลังผู้ใช้ Pick)
       ref: packages/extension/src/chat/arena-model.ts#RUN_BADGES
       phase: idle
 

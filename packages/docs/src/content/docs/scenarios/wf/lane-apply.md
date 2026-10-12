@@ -126,7 +126,7 @@ scenario:
       alongside: true
       do: ข้อความสรุปขึ้นใต้ขั้นของไฟล์
       sees: >-
-        "\"Applied 2 files from lane worker-1a2b3c4d.\""
+        "Applied 2 files from lane worker-1a2b3c4d."
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: ends
