@@ -1,9 +1,6 @@
 ---
 title: "โหมด Auto ยังขึ้นการ์ดถามคุณ"
 description: สามทางที่โหมด Auto ถามผู้ใช้แทน classifier เมื่อ Auto พักเพราะบล็อกบ่อย เมื่อคำสั่ง rm -rf แตะ workspace หรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

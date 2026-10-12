@@ -1,9 +1,6 @@
 ---
 title: "Context เกินหน้าต่าง Geno ทำ compaction แล้วส่งใหม่"
 description: ผู้ให้บริการปฏิเสธคำขอเพราะยาวเกิน loop สรุปบริบทหนึ่งครั้งแล้วส่งคำขอเดิมใหม่หนึ่งครั้ง ถ้ายังเกินอีก turn จบแบบ failed
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: MCP server ล่มหรือต้องล็อกอิน
 description: model เรียก tool MCP แต่ server ตายซ้ำจน Geno เลิกเริ่มใหม่ หรือตอบ 401 เพราะต้องล็อกอิน call ได้ error model บอกผู้ใช้ และผู้ใช้แก้ได้จากแผง MCP
-tableOfContents: false
-sidebar:
-  order: 9
 scenario:
   surface: vscode
   given:

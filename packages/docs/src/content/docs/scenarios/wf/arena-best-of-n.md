@@ -1,9 +1,6 @@
 ---
 title: "Arena: รันงานเดียวกันหลาย lane แล้วเลือกผู้ชนะ"
 description: ผู้ใช้สั่ง /best-of-n Geno รันงานเดียวกันใน 2 ถึง 4 lane พร้อมกัน ตรวจแต่ละ lane ด้วย check ของโปรเจกต์ ให้ review จัดอันดับ แล้วผู้ใช้ Pick ผู้ชนะ และ Graft hunk ของ lane อื่นทับได้
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

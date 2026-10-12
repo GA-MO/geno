@@ -1,9 +1,6 @@
 ---
 title: "Model อ่านไฟล์ลับอย่าง .env"
 description: read ของไฟล์ที่ดูเหมือนเก็บรหัสต้องผ่านด่านไฟล์ลับก่อนเปิด โหมด Ask ถามผู้ใช้ Auto ให้ classifier ตัดสิน และ Plan ปฏิเสธ
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: vscode
   given:

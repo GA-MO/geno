@@ -1,9 +1,6 @@
 ---
 title: "Model เรียก tool แล้วตอบ"
 description: model ขออ่านไฟล์และค้นข้อความ harness รันทั้งสองพร้อมกัน ส่งผลกลับ แล้ว model ตอบจนจบ turn
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

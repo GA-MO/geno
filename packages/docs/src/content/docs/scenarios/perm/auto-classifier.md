@@ -1,9 +1,6 @@
 ---
 title: "โหมด Auto ให้ classifier ตัดสินคำสั่ง"
 description: ในโหมด Auto คำสั่งที่ไม่อยู่ใน safe list ไปถึง classifier ไม่ใช่ผู้ใช้ classifier อนุญาต ปฏิเสธ หรือไม่แน่ใจ และแต่ละทางให้ผลต่างกัน
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

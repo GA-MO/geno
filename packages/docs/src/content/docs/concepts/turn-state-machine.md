@@ -1,8 +1,6 @@
 ---
 title: "เครื่องสถานะของ turn"
 description: log ของ session คือเครื่องสถานะ loopStep อ่าน log แล้วตัดสินว่าจะทำอะไรต่อ และ turn จบได้กี่แบบ
-sidebar:
-  order: 2
 ---
 
 `drive` บันทึก prompt เป็น event `user` ให้ UserPromptSubmit hooks ได้อ่าน แล้ววนถาม `loopStep` ว่าจะทำอะไรต่อ

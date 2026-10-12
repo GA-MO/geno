@@ -1,9 +1,6 @@
 ---
 title: "โหมด Auto: classifier กันคำสั่งที่จะพิมพ์ความลับ"
 description: การรันจริง A09 คุณขอให้พิมพ์ environment ทั้งหมดรวมค่าใน .env classifier ปฏิเสธ cat .env แต่ปล่อยคำสั่งที่พิมพ์แค่ PORT แล้ว model ก็ตอบได้ว่าทำไมพอร์ตผิด
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: cli
   given:

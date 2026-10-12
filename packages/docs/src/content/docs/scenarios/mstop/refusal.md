@@ -1,9 +1,6 @@
 ---
 title: "Model ปฏิเสธที่จะตอบ"
 description: model จบคำตอบด้วย stop_reason refusal gateway แปลงเป็น error ชนิด refusal turn จบแบบ failed และ prompt นั้นถูกตัดออกจากคำขอต่อไป
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

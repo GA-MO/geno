@@ -1,9 +1,6 @@
 ---
 title: "พิมพ์ข้อความถึง subagent โดยตรง"
 description: ผู้ใช้เปิดบทสนทนาของลูกที่กำลังทำงานแล้วพิมพ์ข้อความในช่องของลูก ข้อความไปถึงลูกที่จุดปลอดภัยถัดไปเป็นคำของผู้ใช้เอง
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: vscode
   given:

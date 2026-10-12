@@ -1,9 +1,6 @@
 ---
 title: "เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ"
 description: การเรียก model ไปไม่ถึงผู้ให้บริการหรือได้ 429 turn ไม่ล้ม แต่รอพร้อมปุ่ม Retry now จนเครือข่ายกลับมา ถึงเวลา ผู้ใช้กด หรือหมดเวลารอ
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: เปลี่ยนชื่อ ลบ และค้นหาแชต
 description: ในรายการ History ผู้ใช้เปลี่ยนชื่อแชต ย้ายแชตไปถังขยะ หรือค้นข้อความในทุกแชต engine เขียน log ค้นใน index แล้วรายการอัปเดต
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

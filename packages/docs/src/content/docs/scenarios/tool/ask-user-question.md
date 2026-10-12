@@ -1,9 +1,6 @@
 ---
 title: "Model ถามคุณด้วยฟอร์มคำถาม"
 description: model เรียก ask_user เพื่อถามผู้ใช้กลางงาน engine ส่งฟอร์มผ่าน ACP แผงแชตแสดงการ์ดคำถาม และคำตอบหรือการข้ามกลับไปเป็นผลของ call
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: vscode
   given:

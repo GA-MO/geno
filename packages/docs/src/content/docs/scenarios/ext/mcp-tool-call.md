@@ -1,9 +1,6 @@
 ---
 title: "เรียก tool ของ MCP"
 description: model โหลด tool MCP ด้วย tool_search แล้วเรียกมัน ในโหมด Ask Geno ถามก่อน ผู้ใช้อนุญาต tool นี้ตลอด session และ server ภายนอกทำงาน
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

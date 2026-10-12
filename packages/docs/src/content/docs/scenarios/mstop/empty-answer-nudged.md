@@ -1,9 +1,6 @@
 ---
 title: "Model จบ turn เปล่า Geno กระตุ้นหนึ่งครั้ง"
 description: model จบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียก tool loop บันทึกคำกระตุ้นแล้วเรียก model อีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

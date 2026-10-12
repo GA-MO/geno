@@ -1,9 +1,6 @@
 ---
 title: "รายงานของ subagent มาถึงขณะ turn ยังทำงาน"
 description: ลูกเบื้องหลังรายงานระหว่างที่ turn ของแม่ยังรัน tool อยู่ รายงานรอที่จุดปลอดภัยถัดไป แล้วเข้า log ก่อนเรียก model ครั้งต่อไป ไม่ต้องปลุก
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: vscode
   given:

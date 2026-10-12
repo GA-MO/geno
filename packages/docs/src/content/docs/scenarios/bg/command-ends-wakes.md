@@ -1,9 +1,6 @@
 ---
 title: คำสั่งเบื้องหลังจบแล้วปลุก
 description: model รัน build แบบเบื้องหลัง เมื่อคำสั่งจบ model ได้รู้ที่จุดปลอดภัยถ้า turn ยังรัน หรือ engine เปิด turn ใหม่ให้ถ้า turn จบไปแล้ว
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

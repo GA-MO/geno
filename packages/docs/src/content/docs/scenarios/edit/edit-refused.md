@@ -1,9 +1,6 @@
 ---
 title: การแก้ไฟล์ถูกปฏิเสธ
 description: edit ไม่เขียนอะไรถ้า model ยังไม่ได้อ่านไฟล์ ถ้าไฟล์เปลี่ยนไปหลังอ่าน หรือถ้า old_str ไม่ตรงกับที่เดียวในไฟล์ ผลบอก model ว่าต้องทำอะไรต่อ
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

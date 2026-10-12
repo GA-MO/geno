@@ -1,9 +1,6 @@
 ---
 title: "reload หน้าต่างขณะ turn ทำงาน"
 description: ผู้ใช้ reload หน้าต่าง VS Code ระหว่างที่ turn ทำงาน engine เป็นคนละ process จึงทำงานต่อ หน้าต่างใหม่โหลด session เล่นซ้ำสิ่งที่เกิดขึ้น แล้วรับช่วง turn จนจบ
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

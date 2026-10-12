@@ -1,9 +1,6 @@
 ---
 title: แสดงหรือหยุดงานเบื้องหลัง
 description: model เรียก list_agents ดูว่า session มีลูก คำสั่ง และการรออะไรค้างอยู่ แล้วเรียก task_stop หยุดตัวที่ไม่ต้องการแล้ว
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

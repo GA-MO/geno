@@ -1,9 +1,6 @@
 ---
 title: นำ lane กลับมาใช้
 description: ผู้ใช้กด Apply บน lane ในแผง Lanes การเปลี่ยนแปลงของ lane ถูก merge เข้า checkout หลักเป็น turn หนึ่งของแชต ทุกไฟล์เข้าระบบ review หรือไม่เขียนอะไรเลยถ้าชนกัน
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "สร้างไฟล์ใหม่ด้วย edit"
 description: model เรียก edit ด้วย create true กับ path ที่ยังไม่มี Geno ไม่ต้องให้อ่านก่อน เขียนไฟล์ใหม่ผ่าน VS Code และแสดงเป็น diff
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "ยกเลิก subagent ระหว่างทำงาน"
 description: ผู้ใช้กด Cancel บนแถวของลูก ลูกหยุด แม่ได้รายงานเท่าที่ลูกมี แล้ว turn ของแม่ทำต่อ
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

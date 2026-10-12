@@ -1,9 +1,6 @@
 ---
 title: "ส่งข้อความแทรก (steer) เข้า turn ที่กำลังทำงาน"
 description: ผู้ใช้กด Send now ระหว่างที่คำสั่งรันอยู่ ข้อความรอที่ inbox ของ turn แล้วเข้าสู่ log ที่จุดปลอดภัยก่อนการเรียก model ครั้งถัดไป
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

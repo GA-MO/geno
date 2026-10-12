@@ -1,9 +1,6 @@
 ---
 title: "ตัวอักษรที่มองไม่เห็นในไฟล์"
 description: ไฟล์ใน workspace มีตัวอักษรความกว้างศูนย์ read แสดงมันเป็น [U+200B] ให้ model เห็น และ edit คืนมันกลับก่อนจับคู่ ส่วนข้อความจากเว็บหรือ MCP ถูกตัดตัวอักษรเหล่านี้ทิ้ง
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

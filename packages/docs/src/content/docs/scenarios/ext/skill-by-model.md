@@ -1,9 +1,6 @@
 ---
 title: "Model เรียก skill"
 description: model เห็นรายชื่อสกิลในข้อความแรกของ session แล้วเรียก skill เพื่อโหลด SKILL.md สกิลที่ตั้ง context fork รันเป็น subagent แทน
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

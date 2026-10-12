@@ -1,9 +1,6 @@
 ---
 title: "Exception หลุดออกจาก loop"
 description: error ที่ไม่ใช่ error ของผู้ให้บริการ เช่น stream ที่จบไม่ครบ หลุดผ่าน gateway ออกจาก loop turn จบแบบ failed โดยไม่มีอะไรใน log และแผงเห็นแค่ "Internal error"
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

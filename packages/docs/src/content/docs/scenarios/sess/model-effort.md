@@ -1,9 +1,6 @@
 ---
 title: "เปลี่ยน effort หรือเปลี่ยน model"
 description: เมนู model ในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วน model เป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

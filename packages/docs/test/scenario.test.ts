@@ -251,6 +251,15 @@ describe('the site', () => {
     ]);
   });
 
+  test('a page key left over from Starlight fails, naming the key', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'gdocs-'));
+    cpSync(path.join(DOCS, 'src/data'), path.join(root, 'src/data'), { recursive: true });
+    mkdirSync(path.join(root, 'src/content/docs'), { recursive: true });
+    writeFileSync(path.join(root, 'src/content/docs/a.md'), `---\ntitle: A\nsidebar:\n  order: 2\ntableOfContents: false\nfull: true\n---\n`);
+    const errors = loadSite({ docsRoot: root, repoRoot: REPO }).problems.filter((problem) => problem.level === 'error');
+    expect(errors.map((problem) => problem.path)).toEqual(['sidebar', 'tableOfContents']);
+  });
+
   test('a page covering an id the catalog does not have fails', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'gdocs-'));
     cpSync(path.join(DOCS, 'src/data'), path.join(root, 'src/data'), { recursive: true });

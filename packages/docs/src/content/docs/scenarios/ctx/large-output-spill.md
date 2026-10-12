@@ -1,9 +1,6 @@
 ---
 title: "ผลของ tool ยาวเกิน Geno เขียนลงไฟล์"
 description: คำสั่งพิมพ์ผลออกมายาวเกินขีดของ model Geno เก็บทั้งหมดลงไฟล์ ส่งให้ model แค่ต้น ท้าย และที่อยู่ไฟล์ แล้ว model อ่านเฉพาะส่วนที่ต้องการ
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

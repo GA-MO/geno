@@ -1,9 +1,6 @@
 ---
 title: "ยกเลิกการปลุก"
 description: ผู้ใช้กด Cancel บนงานที่รอถูกปลุกในแผง Tasks engine เลิกรอทุกอย่างของ session ลูกเบื้องหลังจบโดยไม่รายงาน monitor และการเฝ้า PR หยุด และสิ่งที่มาถึงแล้วก็ไม่ปลุก
-tableOfContents: false
-sidebar:
-  order: 11
 scenario:
   surface: vscode
   given:

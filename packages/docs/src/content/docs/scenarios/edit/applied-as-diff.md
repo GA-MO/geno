@@ -1,9 +1,6 @@
 ---
 title: แก้ไฟล์แล้วแสดงเป็น diff
 description: model แก้ไฟล์ที่อ่านแล้ว การแก้ลง buffer ของ VS Code ผ่าน ACP บันทึกลงดิสก์ และแผงแสดง diff ของ turn
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

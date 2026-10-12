@@ -1,9 +1,6 @@
 ---
 title: monitor จับ pattern แล้วปลุก
 description: model เริ่ม dev server ผ่าน monitor ให้เฝ้าบรรทัดที่ตรง pattern แล้วจบ turn เมื่อบรรทัดนั้นพิมพ์ออกมา engine เปิด turn ใหม่ให้ model ทำต่อ
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

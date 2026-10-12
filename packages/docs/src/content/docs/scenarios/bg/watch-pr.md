@@ -1,9 +1,6 @@
 ---
 title: เฝ้าดู CI ของ PR
 description: model เรียก watch_pr หลัง push engine ถาม gh เป็นระยะจนทุก check จบ แล้วปลุก session พร้อมรายงานและ log ของ check ที่ล้ม
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

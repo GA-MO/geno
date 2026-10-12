@@ -1,9 +1,6 @@
 ---
 title: "หยุด turn ของแม่ขณะ subagent ทำงาน"
 description: ผู้ใช้กด Stop ขณะลูกแบบรอผลและลูกเบื้องหลังยังทำงาน ลูกทุกตัวหยุด รายงานของลูกเบื้องหลังไม่ถูกส่ง และการปลุกถูกพักจนกว่าผู้ใช้จะพิมพ์ใหม่
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

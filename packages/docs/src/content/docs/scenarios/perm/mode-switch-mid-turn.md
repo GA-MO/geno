@@ -1,9 +1,6 @@
 ---
 title: "สลับโหมดระหว่าง turn"
 description: ผู้ใช้เปลี่ยนจาก Ask เป็น Auto ขณะที่ turn ทำงาน engine ใช้โหมดใหม่กับ call ถัดไปทันที และบอก model ที่จุดปลอดภัยถัดไป
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "Model อ่านเทอร์มินัลของคุณ"
 description: model เรียก read_terminal เพื่อดูคำสั่งที่ผู้ใช้รันในเทอร์มินัลของ VS Code engine ขอให้ extension อ่าน ซึ่งตัด ลบความลับ และจำกัดขนาดก่อนส่งกลับ ไม่มีการถาม
-tableOfContents: false
-sidebar:
-  order: 11
 scenario:
   surface: vscode
   given:

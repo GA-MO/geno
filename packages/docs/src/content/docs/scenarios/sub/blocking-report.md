@@ -1,9 +1,6 @@
 ---
 title: "สร้าง subagent แล้วรอรายงาน"
 description: model ส่งงานให้ worker ลูกทำงานใน session ของตัวเอง ขออนุญาตผ่านการ์ดเดียวกับแม่ แล้วส่งรายงานที่ถูกล้อมรั้วกลับมาเป็นผลของ call
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

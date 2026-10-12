@@ -1,9 +1,6 @@
 ---
 title: ย้อนไฟล์และ/หรือบทสนทนา
 description: ผู้ใช้เปิดเมนูบนข้อความหนึ่งแล้วเลือกย้อนไฟล์ ย้อนบทสนทนา ทั้งสองอย่าง หรือ fork เป็นแชตใหม่ engine คืนไฟล์จาก checkpoint ก่อนข้อความนั้น ตัดบทสนทนาด้วย event cut และคืนข้อความกลับไปที่ช่องพิมพ์
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

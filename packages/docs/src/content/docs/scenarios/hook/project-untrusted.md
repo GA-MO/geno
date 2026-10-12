@@ -1,9 +1,6 @@
 ---
 title: "hook ของโปรเจกต์ไม่รันใน workspace ที่ไม่เชื่อถือ"
 description: repo มี hook ใน .claude/settings.json แต่ VS Code ยังไม่เชื่อถือ workspace hook ของผู้ใช้เองรัน ส่วน hook ของ repo รอจนกว่าจะเชื่อถือ
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

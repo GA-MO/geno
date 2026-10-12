@@ -205,6 +205,21 @@ export const scenarioSchema = z
   .strict();
 export type ScenarioIn = z.infer<typeof scenarioSchema>;
 
+/**
+ * A page's frontmatter. Strict, so a key left over from Starlight (`sidebar`, `tableOfContents`, `template`, `hero`)
+ * fails the build and docs:check: meta.json orders the sidebar, and `full` is Fumadocs' wide page without a table of
+ * contents, which every tour page already is.
+ */
+export const pageSchema = z
+  .object({
+    title: z.string(),
+    description: z.string().optional(),
+    full: z.boolean().optional(),
+    scenario: scenarioSchema.optional(),
+    payloads: pagePayloadsSchema.optional(),
+  })
+  .strict();
+
 export const fragmentSchema = z.array(stepSchema).min(1);
 
 const partSchema = z

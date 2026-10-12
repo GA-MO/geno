@@ -1,9 +1,6 @@
 ---
 title: "Session ใหม่โหลดคำสั่งโปรเจกต์ memory และ skill"
 description: ข้อความแรกของหน้าต่างสร้าง session ใหม่ engine อ่านไฟล์คำสั่ง หน่วยความจำ สกิล และสภาพแวดล้อมครั้งเดียว แล้วส่งไปกับข้อความ user แรก
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

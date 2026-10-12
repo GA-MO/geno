@@ -1,9 +1,6 @@
 ---
 title: แก้ cell ของ Jupyter notebook
 description: model เรียก notebook_edit แทนการแก้ JSON ของ .ipynb ตรงๆ Geno ตรวจว่าอ่านแล้วและไฟล์ไม่เปลี่ยน แทน cell เดียว ล้าง output ของ cell code แล้วเขียนผ่าน editor
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "engine หยุดขณะ subagent ทำงาน แล้ว Resume"
 description: engine ตายระหว่างที่ worker กำลังทำงาน engine ตัวใหม่ปิดงานที่ค้างใน log บอก session ว่าลูกถูกตัด แล้วผู้ใช้กด Resume ในแผง Tasks ให้ลูกทำต่อจาก transcript ของตัวเอง
-tableOfContents: false
-sidebar:
-  order: 10
 scenario:
   surface: vscode
   given:

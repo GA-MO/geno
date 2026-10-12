@@ -1,9 +1,6 @@
 ---
 title: "แก้ไฟล์นอก workspace หรือในที่ที่กฎ Edit ครอบ"
 description: edit เขียนได้เฉพาะใน workspace และโฟลเดอร์ที่ตั้งให้เขียนได้ ที่อื่นถูกปฏิเสธโดยไม่มีการ์ด ภายใน workspace กฎ Edit(...) ของผู้ใช้ทำให้ถามหรือปฏิเสธก่อนแก้
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

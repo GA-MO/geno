@@ -1,9 +1,6 @@
 ---
 title: "ดูการเปลี่ยนแปลงของ turn แล้ว Undo"
 description: ในโหมด review แบบ auto การแก้ของ Geno ถูกบันทึกทันที ท้าย turn มีแถวเดียวพร้อม Undo ซึ่งคืนทุกไฟล์เป็นแบบก่อน turn
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: Tab เติมโค้ด
 description: ขณะผู้ใช้พิมพ์ ส่วนขยายสร้าง prompt แบบ fill-in-the-middle ส่งให้ llama-server บนเครื่อง กรองผล แล้วแสดงเป็น ghost text ที่กด Tab รับได้ ไม่มี engine เกี่ยวข้อง
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

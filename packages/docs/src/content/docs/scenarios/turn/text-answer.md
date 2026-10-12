@@ -1,9 +1,6 @@
 ---
 title: "Model ตอบเป็นข้อความโดยไม่เรียก tool"
 description: ผู้ใช้ส่งคำถามหนึ่งข้อ model ตอบเป็นข้อความโดยไม่เรียก tool แล้ว turn จบแบบ done
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

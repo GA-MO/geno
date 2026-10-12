@@ -1,9 +1,6 @@
 ---
 title: "คำตอบของ model ชนเพดาน output"
 description: model เขียนจนถึง max_tokens ถ้าบล็อกที่ถูกตัดเป็นข้อความ turn จบแบบ failed ทันที ถ้าเป็นการเรียก tool Geno บอก model ให้เรียกใหม่ให้เล็กลงหนึ่งครั้ง
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

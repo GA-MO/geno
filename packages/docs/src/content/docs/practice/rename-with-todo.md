@@ -1,9 +1,6 @@
 ---
 title: "Model เปลี่ยนชื่อทั้ง monorepo โดยวางแผนด้วย todo"
 description: การรันจริง A07 งานสามขั้นที่ใช้ model 16 ครั้งใน turn เดียว model เดาชื่อไฟล์ผิด เขียน todo แก้สี่ไฟล์ในคำตอบเดียว รันเทสต์ แล้วตรวจซ้ำเกินจำเป็น
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: cli
   given:

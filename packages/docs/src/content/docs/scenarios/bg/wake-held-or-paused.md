@@ -1,9 +1,6 @@
 ---
 title: การปลุกถูกรอหรือถูกพัก
 description: รายงานมาถึงตอน session ว่าง แต่ประตูของตัวปลุกยังไม่เปิด เพราะมีการ์ดค้าง ไม่มีหน้าต่าง turn ก่อนจบด้วย error หรือปลุกครบ 12 ครั้งแล้ว สิ่งที่มาถึงรออยู่ใน log
-tableOfContents: false
-sidebar:
-  order: 10
 scenario:
   surface: vscode
   given:

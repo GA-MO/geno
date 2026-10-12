@@ -1,9 +1,6 @@
 ---
 title: "Model โหลด tool ที่เลื่อนไว้ด้วย tool_search"
 description: tool นอกชุดหลักส่งให้ model แค่ชื่อ model ต้องเรียก tool_search ก่อนใช้ ถ้าเรียกเลยจะถูกปฏิเสธพร้อมคำบอกให้โหลดก่อน
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "เปิดแชตเก่าจาก History"
 description: ผู้ใช้เปิดรายการแชต เลือกแชตเก่า engine เล่น log ซ้ำให้แผงวาดบทสนทนาทั้งหมด แชตของโปรเจกต์อื่นเปิดในหน้าต่างใหม่
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

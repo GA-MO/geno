@@ -1,9 +1,6 @@
 ---
 title: "แนบไฟล์และ @mention ใน prompt"
 description: ผู้ใช้ @mention ไฟล์ใน workspace และวางภาพหน้าจอในช่องพิมพ์ ส่วนขยายส่งเป็นบล็อก ACP engine อ่านไฟล์ เก็บภาพ บันทึก prompt พร้อมบริบท แล้วจึงเริ่ม turn
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

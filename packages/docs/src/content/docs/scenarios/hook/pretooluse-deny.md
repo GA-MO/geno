@@ -1,9 +1,6 @@
 ---
 title: "hook PreToolUse ตัดสิน call ก่อนรัน"
 description: hook ที่ตั้งไว้ได้ดู call ทุกตัวก่อนรัน มันปฏิเสธ call อนุญาตพร้อมแก้ input ขอให้ถามผู้ใช้ หรือหยุดทั้ง turn ก็ได้
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

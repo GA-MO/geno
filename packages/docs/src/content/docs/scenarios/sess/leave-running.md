@@ -1,9 +1,6 @@
 ---
 title: สลับออกจากแชตที่ยังทำงาน
 description: ผู้ใช้เปิดแชตใหม่ระหว่างที่ turn ของแชตเดิมทำงาน turn นั้นทำงานต่อเบื้องหลังในแผง Tasks และเรียกผู้ใช้กลับเมื่อจบหรือเมื่อต้องการคำตอบ
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:
