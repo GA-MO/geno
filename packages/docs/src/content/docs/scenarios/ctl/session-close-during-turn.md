@@ -1,5 +1,5 @@
 ---
-title: ปิด session ขณะ turn ทำงาน
+title: "ปิด session จากอีกหน้าต่างขณะ turn ทำงาน"
 description: client ส่ง session/close ถึงแชตที่มี turn ทำงานอยู่ engine หยุด turn นั้นทันทีและถือว่า session ปิด แม้ turn จะเป็นของหน้าต่างอื่น
 tableOfContents: false
 sidebar:
@@ -17,12 +17,23 @@ scenario:
   steps:
     - id: new-chat
       lane: user
+      beat:
+        title: "คุณคลิก New Chat ในหน้าต่าง A"
+        text: >-
+          หน้าต่าง B เริ่ม turn ในแชต X และกำลังรัน `pnpm test` หน้าต่าง A แสดงแชตเดียวกัน คุณคลิก New Chat ในหน้าต่าง A
+        to: panel
       do: ผู้ใช้ในหน้าต่าง A คลิก New Chat
       phase: running-tools
 
     - id: move
       lane: editor
       at: chat
+      beat:
+        title: "หน้าต่าง A ขอปิดแชต X"
+        text: >-
+          หน้าต่าง A เปิด session ใหม่แล้วปิด session ที่ออกมา A ไม่ได้ถือ turn ของแชต X จึงขอ engine ให้ปิดแชต X
+          เพื่อหยุด MCP server ของมัน
+        to: engine
       do: >-
         `moveTo` ของหน้าต่าง A เปิด session ใหม่ แล้วปิด session ที่ออกมา แผงของ A ไม่ได้ถือ turn ของแชต X
         (`running` ว่าง) จึงไม่ส่ง detach แต่ส่งคำขอ ACP `session/close` ถึงแชต X เพื่อหยุด MCP server ของมัน
@@ -31,6 +42,11 @@ scenario:
     - id: close
       lane: server
       at: sessions
+      beat:
+        title: "Geno ปิด session และหยุด turn ของมัน"
+        text: >-
+          engine ไม่ได้ดูว่าใครเริ่ม turn มันหยุด turn ของแชต X ด้วยสัญญาณเดียวกับปุ่ม Stop เลิกส่งอัปเดตให้ผู้ดู และปิด
+          MCP server ของ session
       do: >-
         handler ของ `session/close` ไม่ได้ดูว่าใครเริ่ม turn มัน abort `AbortController` ของแชต X ลบ session ออกจากทะเบียน `turns`
         เลิกส่งอัปเดตให้ผู้ดู ถอดรายการคำสั่ง ปิด agent ภายนอก และปิด MCP server ของ session
@@ -39,6 +55,10 @@ scenario:
     - id: aborted
       lane: loop
       at: tools
+      beat:
+        title: "คำสั่งที่รันอยู่ถูกหยุดกลางทาง"
+        text: >-
+          `pnpm test` ถูกหยุดระหว่างรัน และอาจรันไปบางส่วนแล้ว Geno บันทึกว่า turn ถูกหยุด
       do: >-
         signal เดียวกับที่ Stop ใช้ไปถึง batch ที่รันอยู่ `pnpm test` ได้คำตอบว่าถูกหยุดระหว่างรันและอาจรันไปบางส่วน
         `drive` บันทึก event `error` ชนิด `abort` แล้ว `loopStep` ให้ `done(error)`
@@ -49,6 +69,11 @@ scenario:
     - id: stays-closed
       lane: server
       at: turns
+      beat:
+        title: "Engine ตอบหน้าต่าง B ว่า turn ถูกยกเลิก"
+        text: >-
+          engine ตอบคำขอของหน้าต่าง B ว่า turn ถูกยกเลิก งานจบแบบ stopped และแชต X ยังปิดอยู่
+        to: panel
       do: >-
         `runTurn` เห็นว่า signal ถูก abort จึงตอบคำขอของหน้าต่าง B ด้วย `stopReason: cancelled` และงานจบแบบ stopped
         `finally` ไม่ใส่แชต X กลับเข้า `turns` เพราะมันถูกลบไปแล้ว session จึงยังปิดอยู่
@@ -66,6 +91,13 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "หน้าต่าง B ขึ้นว่าคุณเป็นคนหยุด"
+        text: >-
+          แผงของหน้าต่าง B แสดง turn ที่ถูกหยุดเหมือนมีคนกด Stop ใน B ทั้งที่ไม่มีใครกด ผลของ `pnpm test` ไม่มาถึง B
+          เพราะ B ถูกถอดจากผู้ดูแล้ว
+        end: "turn ของ B ถูกหยุด"
+        sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         แผงของหน้าต่าง B แสดง turn ที่ถูกหยุด เหมือนผู้ใช้ใน B กด Stop เอง `session/close` ถอดผู้ดูของแชต X ไปแล้ว
         ผลของ `pnpm test` ที่บันทึกหลัง abort จึงไม่ถูกส่งมาที่ B reducer ของ `turn-end` เปลี่ยนขั้นที่ยังหมุนเป็น cancelled
@@ -90,3 +122,5 @@ scenario:
 - **แชต X ยังปิดอยู่สำหรับหน้าต่าง B** หน้าต่าง B ยังจำว่า session ของมันคือ X ข้อความถัดไปที่ B ส่ง `prompt()` ของ engine จะเรียก `known`
   ซึ่งไม่เจอ X ใน `turns` และปฏิเสธด้วย "no session ..." จนกว่า B จะเปิดแชตนั้นใหม่ (ได้จากการอ่านโค้ด ไม่ได้รันจริง)
 - **Stop ของ ACP กับ close ต่างกัน** `session/cancel` หยุดแค่ turn session ยังเปิด ส่วน `session/close` หยุด turn และปิด MCP server ด้วย
+
+หน้าต่าง B เห็นผลแบบเดียวกับ [กด Stop ขณะ tool ทำงาน](/scenarios/ctl/stop-while-tools-run/)

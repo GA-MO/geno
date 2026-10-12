@@ -1,5 +1,5 @@
 ---
-title: กด Stop ขณะสรุปบริบท
+title: "กด Stop ขณะ Geno ทำ compaction"
 description: ผู้ใช้กด Stop ระหว่างที่ loop สรุปบริบทอัตโนมัติก่อนเรียกโมเดล การสรุปถูกยกเลิกโดยไม่บันทึกอะไร การเรียกที่ตามมาจบทันที และ turn จบแบบ stopped
 tableOfContents: false
 sidebar:
@@ -16,6 +16,12 @@ scenario:
   steps:
     - id: summarizing
       lane: model
+      beat:
+        title: "Geno ให้ model สรุปบทสนทนาเก่า"
+        text: >-
+          context ถึง 80% ของหน้าต่าง Geno จึงส่งส่วนเก่าของบทสนทนาให้โมเดลสรุปก่อนเรียกรอบถัดไป แชตขึ้นแถว Compacting
+          the context พร้อมไอคอนหมุน
+        sees: { kind: notice, text: Compacting the context, tone: info }
       do: >-
         `compactContext` ส่งส่วนเก่าของบทสนทนาไปให้โมเดลสรุป การเรียกนี้ใช้ signal เดียวกับ turn
       ref: packages/engine/src/compact.ts#compactContext
@@ -24,6 +30,13 @@ scenario:
 
     - id: press
       lane: user
+      beat:
+        title: "คุณกด Stop"
+        text: >-
+          คุณกด Stop ขณะแถวยังหมุนอยู่ แผงสั่ง engine ให้หยุด turn
+        from: you
+        to: engine
+        sees: { kind: composer, state: working, header: working }
       do: ผู้ใช้กด Stop
 
     - id: cancel
@@ -36,6 +49,11 @@ scenario:
     - id: abort
       lane: server
       at: turns
+      beat:
+        title: "Geno ยกเลิกการสรุป"
+        text: >-
+          engine ยกเลิก turn การเรียกเพื่อสรุปใช้สัญญาณเดียวกับ turn จึงจบทันที ไม่มีอะไรถูกบันทึก context
+          ยังเหมือนเดิมทุกอย่าง
       do: >-
         engine หา `AbortController` ของ turn ใน `turns` แล้ว abort
       ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
@@ -52,6 +70,10 @@ scenario:
     - id: checkpoint
       lane: loop
       at: model-call
+      beat:
+        title: "Geno ยังเตรียมการเรียกถัดไป"
+        text: >-
+          ระหว่างทาง Geno ไม่ได้ดูสัญญาณหยุด มันยังบันทึก checkpoint ของ workspace ตามปกติ แล้วส่งคำขอต่อ
       do: >-
         `callModel` ไม่ได้ตรวจ signal ระหว่างทาง มันยังบันทึก `checkpoint` ของ workspace ตามปกติ
         แล้วส่งคำขอให้ gateway
@@ -61,6 +83,10 @@ scenario:
     - id: gateway
       lane: loop
       at: gateway
+      beat:
+        title: "คำขอไม่ได้ออกไปถึงผู้ให้บริการ"
+        text: >-
+          ทางส่งคำขอเห็นว่า turn ถูกหยุดแล้ว จึงคืนผลว่าคุณเป็นคนหยุดทันที Geno บันทึกเหตุนั้นแล้วจบ turn
       do: >-
         `slots.run` โยนทันทีเพราะ signal ถูก abort ไปแล้ว gateway เห็นว่า signal ถูก abort จึงคืน `abort` "interrupted by the user"
         คำขอไม่ได้ออกไปถึงผู้ให้บริการ
@@ -79,6 +105,11 @@ scenario:
     - id: cancelled
       lane: server
       at: turns
+      beat:
+        title: "Engine ตอบว่า turn ถูกยกเลิก"
+        text: >-
+          engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped การหยุดไม่ขึ้นเป็นแถบ error
+        to: panel
       do: >-
         `runTurn` เห็นว่าสัญญาณถูก abort ACP ได้ `stopReason: cancelled` งานในแผง Tasks จบแบบ stopped
       ref: "packages/engine/src/serve.ts#\"const end: TurnEnd = controller.signal.aborted ? 'cancelled' : ran.reason;\""
@@ -95,6 +126,13 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นว่าคุณเป็นคนหยุด"
+        text: >-
+          แถว Compacting the context หายไป และไม่มีเส้นคั่นการสรุปเพราะไม่มีอะไรถูกสรุป turn ไม่มีข้อความตอบ
+          แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อ
+        end: "คุณหยุด context เหมือนเดิม"
+        sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         reducer ของ `turn-end` ล้างแถวประกาศ "Compacting the context" ไม่มีเส้นคั่นการสรุปเพราะไม่มีอะไรถูกสรุป
         turn ไม่มีข้อความหลังขั้นสุดท้าย `missingReply` จึงแสดงประกาศพร้อมปุ่มให้ทำต่อ
@@ -116,3 +154,5 @@ scenario:
   Rewind และ Undo จึงเห็นจุดนี้เพิ่มขึ้นหนึ่งจุดโดยไม่มีการเรียกโมเดลตามมา
 - **`/compact` ที่ผู้ใช้สั่งเองต่างออกไป** ทางนั้นไม่ใช่ turn ของ loop Stop ได้คำตอบ "Stopped. The context is as it was."
   และหัวข้อเป็น "worked for ..." ดู [/compact ระหว่าง turn](/scenarios/ctx/compaction-manual/)
+
+การสรุปที่ไม่ถูกขัดเดินต่ออย่างไร ดู [สรุปบริบทอัตโนมัติก่อนเรียกโมเดล](/scenarios/ctx/compaction-auto/)
