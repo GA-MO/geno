@@ -8,21 +8,33 @@ scenario:
   surface: vscode
   given:
     - ค่า `agentTool` มีโหมดปัจจุบัน model จึงเรียก `agent` ได้
-    - ผู้ใช้คุยกับ Geno มาหลายรอบเรื่องการย้ายระบบ log ไปใช้ pino และตกลงข้อจำกัดกันไว้แล้วในบทสนทนา
+    - ผู้ใช้ขอแผนการทำให้ `parseVersion` โยน error เมื่อได้สตริงว่างโดยไม่ทำให้ที่เรียกใช้พัง และ model อ่าน `src/version.ts` ในบทสนทนานี้ไปแล้ว
   trigger: >-
-    model ต้องการแผนการย้ายที่อิงข้อตกลงในบทสนทนา จึงขอ `agent` แบบ `fork: true`
+    model ต้องการแผนที่อิงสิ่งที่อ่านไปแล้วในบทสนทนา จึงขอ `agent` แบบ `fork: true`
   covers: [sub.fork]
   related: [sub.blocking-report, sub.worktree-lane, ext.skill-fork]
   steps:
     - id: wants
       beat:
         title: Model ขอ fork subagent ชื่อ plan
-        text: model อยากได้แผนที่อิงข้อตกลงในบทสนทนานี้ มันขอ subagent `plan` แบบ fork คำสั่งงานจึงสั้นได้ เพราะลูกแบบ fork เห็นบทสนทนาทั้งหมด
+        text: >-
+          schema ของ tool `agent` มี `fork` ที่บอกว่า "Start from a copy of this conversation" (แท็บแรก)
+          model ส่ง `tool_use` ที่มี `agent: "plan"`, `fork: true` และ `task` สั้นๆ ที่อ้าง "the change we just discussed" (แท็บสอง)
+          task สั้นได้เพราะลูกแบบ fork เห็นบทสนทนานี้ทั้งหมด
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/fork.jsonl#line=2
+            select: tools[9]
+            highlight: [input_schema.properties.fork]
+          - kind: payload
+            source: packages/docs/src/data/recorded/fork.jsonl#line=10
+            select: messages[3].content
+            highlight: ['[1].input']
       lane: model
       do: >-
-        model ขอเรียก `agent` ด้วย `agent: "plan"`, `fork: true` และ `task` สั้นๆ ว่า "ร่างแผนการย้ายตามที่ตกลงกันข้างบน"
+        model ขอเรียก `agent` ด้วย `agent: "plan"`, `fork: true` และ `task` สั้นๆ ว่า "Plan the change we just discussed"
         task สั้นได้เพราะลูกแบบ fork เห็นบทสนทนานี้ทั้งหมด จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
@@ -54,9 +66,17 @@ scenario:
     - id: copy
       beat:
         title: plan ได้สำเนาบทสนทนาของแม่
-        text: Geno คัดลอกบทสนทนาจนถึงคำตอบที่ขอ fork และใช้ model เดียวกับแม่เสมอ เพื่อให้ใช้ cache ร่วมกันได้
+        text: >-
+          request แรกของ plan มีทุกข้อความของแม่: prompt ของคุณ การอ่าน `src/version.ts` และ call ที่ขอ fork
+          call นั้นได้ผลว่า "This call started you, a forked subagent" แล้วต่อด้วยคำสั่งของ plan
+          Geno ใช้ model เดียวกับแม่เสมอ เพื่อให้ใช้ cache ร่วมกันได้
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/fork.jsonl#line=6
+          select: messages
+          highlight: ['[3]', '[4].content[0]']
       lane: child@plan
       at: loop
       do: >-
@@ -106,9 +126,22 @@ scenario:
     - id: mode
       beat:
         title: plan ใช้ system prompt และ tool ชุดเดียวกับแม่
-        text: ส่วนต้นของคำขอจึงตรงกับ cache ของแม่ แต่ plan รันได้เฉพาะ tool ของตัวเอง มันไม่มี tool `report` และไม่ถูกเตือนให้รายงาน
+        text: >-
+          role ของ plan ไม่ได้อยู่ใน system prompt แต่อยู่ในโน้ต `[Geno] You are now plan` ท้ายข้อความล่าสุด (แท็บแรก):
+          ใช้ได้แค่ glob, grep, list, read ห้ามส่งงานต่อ และข้อความสุดท้ายคือรายงาน ตามด้วย role ของ plan จากนิยามในตัว Geno
+          และ `Task:` รายการ tool ใน request ยังเป็นของแม่ทั้งชุด รวม `agent` (แท็บสอง) เพื่อให้ prefix ตรงกับ cache
+          แต่ Geno รันได้เฉพาะ tool ของ plan มันไม่มี tool `report` และไม่ถูกเตือนให้รายงาน
         from: engine
         to: model
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/fork.jsonl#line=6
+            select: messages[4]
+            highlight: ['content[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/fork.jsonl#line=6
+            select: tools[9]
+            highlight: [name]
       lane: child@plan
       at: loop
       do: >-
@@ -120,9 +153,14 @@ scenario:
     - id: works
       beat:
         title: plan อ่านไฟล์แล้วเขียนแผน
-        text: คำขอของ plan อ่านส่วนต้นจาก cache มันอ่านไฟล์ที่เกี่ยวข้อง แล้วเขียนแผนเป็นข้อความสุดท้าย
+        text: คำขอของ plan อ่านส่วนต้นจาก cache มัน `grep` หาที่เรียก `parseVersion` แล้วเขียนแผนเป็นข้อความสุดท้าย
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/fork.jsonl#line=8
+          select: messages[5].content
+          highlight: ['[1].input']
       lane: child@plan
       at: model
       do: >-
@@ -158,9 +196,17 @@ scenario:
     - id: fenced
       beat:
         title: Geno ล้อมรั้วรายงานแล้วส่งให้ model
-        text: รายงานกลับมาเป็นผลของ call ในรั้วที่บอกว่ามันไม่ใช่คำสั่งของคุณ แล้ว Geno ส่งให้ model ของแม่อ่าน
+        text: >-
+          ใน request ถัดไปของแม่ ผลของ call `agent` ไม่ใช่ข้อความ "This call started you" อีกแล้ว แต่เป็นแผนของ plan
+          ใน `<subagent_report agent="plan" ...>` ทุกบรรทัดเยื้องสองช่อง ตามด้วยคำเตือนว่ารายงานไม่ใช่คำสั่งของคุณ
+          บทสนทนาของแม่ไม่มีการ grep ของ plan มีแค่ผลนี้
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/fork.jsonl#line=10
+          select: messages[4].content[0]
+          highlight: [content]
       lane: loop
       at: tools
       do: >-

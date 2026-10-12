@@ -10,19 +10,31 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน model จึงมีทั้ง `agent` และ `message_agent`
     - ใน turn นี้ model เริ่ม `explore` แบบเบื้องหลังไว้แล้ว ได้ session id ของลูกจากผลของ call `agent`
   trigger: >-
-    ผู้ใช้บอกว่าให้ดู `packages/cli` ด้วย model จึงส่งข้อความถึง explore
+    ผู้ใช้บอกว่าไม่ต้องดูไฟล์เทสต์ model จึงส่งข้อความถึง explore
   covers: [sub.message-running-child, sub.message-finished-resume]
   related: [sub.user-steers-child, bg.child-wakes-parent, sub.cut-off-by-engine-stop, ctl.steer-delivered]
   steps:
     - id: wants
       beat:
         title: Model ส่งข้อความถึง explore
-        text: คุณบอกให้ดู `packages/cli` ด้วย model จึงเรียก `message_agent` พร้อม session ของ explore และข้อความ "also cover packages/cli"
+        text: >-
+          `message_agent` เป็น tool ที่ส่งแค่ชื่อไปก่อน model จึงโหลดนิยามด้วย `tool_search` ก่อน (แท็บแรก: ผลที่ได้คือ schema
+          และคำอธิบายว่าลูกที่ยังทำงานได้ข้อความหลังรอบ tool ปัจจุบัน ส่วนลูกที่จบแล้วจะทำต่อจาก transcript ของตัวเอง)
+          แล้ว model ส่ง `tool_use` ที่มี `agent_session` คือ session id ที่ได้จากผลของ `agent` และ `text: "Skip test files."` (แท็บสอง)
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-steer.jsonl#line=8
+            select: messages[4].content[0]
+            highlight: [content]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-steer.jsonl#line=14
+            select: messages[5].content
+            highlight: ['[1].input']
       lane: model
       do: >-
-        model ขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "also cover packages/cli"`
+        model ขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "Skip test files."`
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/steer.ts#MESSAGE_AGENT_TOOL_DEFINITION
       emits: [tool_use, message_agent]
@@ -74,10 +86,16 @@ scenario:
               - lane: child@explore
                 beat:
                   title: explore รับข้อความที่จุดปลอดภัย
-                  text: ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความจากแม่ พร้อมหมายเหตุว่าให้ถือเป็นการเปลี่ยนแผน ในบทสนทนาของ explore ข้อความขึ้นตรงที่ลงจริง
+                  text: >-
+                    request ถัดไปของ explore มีผลของ `grep` ที่มันขอไว้ ตามด้วยโน้ตของ Geno: ข้อความของแม่ในรั้ว `<parent_message>`
+                    และหมายเหตุว่าให้ถือเป็นการเปลี่ยน task ข้อความนี้ไม่ใช่ผู้ใช้และไม่อนุมัติอะไร
                   from: engine
                   to: model
-                  sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
+                    select: messages[2]
+                    highlight: ['content[1].text']
                 at: loop
                 do: >-
                   `deliver()` ของลูกที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไปบันทึก event `user` แบบ steer (`from: 'parent'`)
@@ -90,24 +108,31 @@ scenario:
                 alongside: true
                 do: >-
                   ในบทสนทนาของลูก (เปิดได้จากแถวของลูก) ข้อความขึ้นตรงที่ลงจริง
-                sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
+                sees: ป้าย "Message from the parent agent" ตามด้วย "Skip test files."
                 ref: packages/extension/src/chat/steer-view.ts#steerStep
               - lane: child@explore
                 beat:
-                  title: explore ค้น `packages/cli` เพิ่ม
-                  text: explore อ่านข้อความของแม่แล้วปรับการค้น
+                  title: explore ปรับงานตามข้อความของแม่
+                  text: explore อ่านข้อความของแม่แล้วทำงานต่อโดยถือว่า task เปลี่ยนแล้ว
                   from: model
                   to: engine
                 at: model
                 do: >-
-                  ลูกเรียก model ต่อโดยอ่านข้อความของแม่ แล้วค้นใน `packages/cli` เพิ่ม
+                  ลูกเรียก model ต่อโดยอ่านข้อความของแม่ แล้วทำงานต่อตามนั้น
                 ref: packages/core/src/fence.ts#arrivalText
               - lane: loop
                 beat:
                   title: Geno ตอบ model ว่าข้อความถึงแล้ว
-                  text: ผลของ call บอกว่าข้อความไปถึงตอนไหนในบันทึกของ explore
+                  text: >-
+                    ผลของ call บอกว่าข้อความไปถึงตอนไหนในบันทึกของ explore ผลนี้ไม่ใช่รายงาน รายงานของ explore
+                    มาทีหลังเป็นโน้ตของ Geno เหมือนลูกเบื้องหลังตัวอื่น
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/background-steer.jsonl#line=14
+                    select: messages[6].content[0]
+                    highlight: [content]
                 at: tools
                 do: >-
                   `push` ได้ผล `delivered` พร้อมลำดับ event ในลูก ผลของ call คือ
@@ -134,9 +159,18 @@ scenario:
               - lane: child@explore
                 beat:
                   title: explore ทำต่อจาก transcript ของตัวเอง
-                  text: Geno ต่อบันทึกของ explore ด้วยข้อความจากแม่ และบอกให้ส่งรายงานใหม่ explore ได้งบชุดใหม่
+                  text: >-
+                    request ของ explore ที่ถูกปลุกเริ่มด้วยบทสนทนาเดิมของมันทั้งหมด รวม call `report` ครั้งก่อน
+                    ต่อด้วยผล "Report delivered" และโน้ตที่มีข้อความของแม่ในรั้ว `<parent_message>` บอกว่ามาหลังรายงาน
+                    ให้ทำต่อและส่งรายงานใหม่ (การ์ดนี้มาจาก flow ที่ explore รันแบบรอ และข้อความคือคำถามต่อ)
+                    explore ได้งบชุดใหม่
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=12
+                    select: messages
+                    highlight: ['[1].content[1]', '[2].content[1].text']
                 at: loop
                 do: >-
                   `openResume` ต่อท้าย log ของลูกด้วย event `user` จากแม่ (`resumeEvent`) หมายเหตุบอกว่าข้อความนี้มาหลังรายงาน
@@ -174,9 +208,17 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno ตอบ model ว่าปลุก explore แล้ว
-                  text: explore เดิมทำงานเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง session นี้รอรายงานใหม่ ซึ่งจะมาถึงทีหลัง
+                  text: >-
+                    explore เดิมทำงานเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง session นี้รอรายงานใหม่ ซึ่งจะมาถึงทีหลัง
+                    ถ้า explore เคยรันแบบรอ call `message_agent` จะรอ และผลของมันคือรายงานใหม่ในรั้ว
+                    `<subagent_report>` ที่มี session id เดิม (การ์ด จาก flow แบบรอ)
                   from: engine
                   to: model
+                  sees:
+                    kind: payload
+                    source: packages/docs/src/data/recorded/message-finished.jsonl#line=14
+                    select: messages[8].content[0]
+                    highlight: [content]
                 at: tools
                 do: >-
                   explore เดิมเป็นลูกเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง: session ติดหนี้รายงานใหม่ และผลของ call คือ
