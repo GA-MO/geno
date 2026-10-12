@@ -29,7 +29,7 @@ export function redact(text) {
   if (APPEND) out = out.split(REPO).join('<repo>').split(homedir()).join('<home>');
   for (const secret of SECRETS) out = out.split(secret).join('<redacted-key>');
   if (BASE_URL) out = out.split(BASE_URL.replace(/\/$/, '')).join('<DASHSCOPE_BASE_URL>');
-  return out.replace(/("?authorization"?\s*[:=]\s*"?)(Bearer\s+)?[^"\s,}]+/gi, '$1<redacted>').replace(/sk-[A-Za-z0-9]{20,}/g, '<redacted-key>');
+  return out.replace(/("?authorization"?\s*[:=]\s*"?)(Bearer\s+)?[^"\s,}\\]+/gi, '$1<redacted>').replace(/sk-[A-Za-z0-9]{20,}/g, '<redacted-key>');
 }
 
 function write(dir, name, text) {
