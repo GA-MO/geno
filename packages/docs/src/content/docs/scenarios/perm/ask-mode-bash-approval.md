@@ -105,7 +105,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` และเลื่อนสถานะ Auto ด้วย `nextAutoState`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` และเลื่อนสถานะ Auto ด้วย `nextAutoState`
                   บันทึกนี้ติดไปกับผลของ call ให้แผงแชตแสดงได้ว่าใครอนุญาต
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
@@ -151,7 +151,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` โดยไม่มีความเห็น `approveCommand` จึงโยน `refusalOf`
+                  `settle` คืนบันทึก `verdict: deny` โดยไม่มีความเห็น `approveCommand` จึงโยน `refusalOf`
                   ซึ่งเป็น `ToolRejected` คำสั่งไม่ได้รัน
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]
@@ -231,7 +231,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` พร้อมความเห็น `refusalOf` จึงสร้าง `ToolDenied` ไม่ใช่ `ToolRejected`
+                  `settle` คืนบันทึก `verdict: deny` พร้อมความเห็น `refusalOf` จึงสร้าง `ToolDenied` ไม่ใช่ `ToolRejected`
                   call อื่นใน turn เดียวกันยังรันต่อได้
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolDenied]

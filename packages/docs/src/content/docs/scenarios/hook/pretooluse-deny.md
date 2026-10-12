@@ -166,7 +166,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` แล้ว executor ของ `bash` รันด้วย `hookAllowed`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้ว executor ของ `bash` รันด้วย `hookAllowed`
                   การตรวจของ `bash` เองจึงไม่ถามซ้ำ แต่กฎ deny ของ workspace และคำสั่งที่ต้องถามเสมอยังมีผล
                 ref: "packages/engine/src/drive.ts#\"const reply = await own.run(raw, { ...toolCtx, hookAllowed: true });\""
                 phase: running-tools

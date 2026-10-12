@@ -128,7 +128,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow`
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
               - lane: tool
@@ -155,7 +155,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` โดยไม่มีความเห็น `refusalOf` จึงโยน `ToolRejected` คำสั่งไม่ได้รัน
+                  `settle` คืนบันทึก `verdict: deny` โดยไม่มีความเห็น `refusalOf` จึงโยน `ToolRejected` คำสั่งไม่ได้รัน
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]
                 phase: running-tools

@@ -99,7 +99,7 @@ scenario:
       do: >-
         แผง Tasks มีงานใหม่ใน Working และส่วน Scheduled บอกว่ารอบนี้กำลังรัน
       sees: >-
-        งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since 09:00"
+        งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since Mon 12 Oct 09:00"
       ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
 
     - use: model-call
@@ -136,7 +136,7 @@ scenario:
       do: >-
         แถว Scheduled แสดงรอบล่าสุด คลิกเปิด session ของรอบนั้นเพื่ออ่านรายงาน งานของรอบย้ายไปส่วนที่จบแล้ว
       sees: >-
-        "Last run 09:00: Done · $0.03"
+        "Last run Mon 12 Oct 09:00: Done · $0.03"
       ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
       end: { turn: done, reason: end_turn }
 ---

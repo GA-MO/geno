@@ -67,7 +67,7 @@ scenario:
                 at: settle
                 do: >-
                   `CLASSIFIER_OUTCOMES` ให้ `allow` เป็น `run` สถานะ Auto รีเซ็ตตัวนับการบล็อกติดกัน
-                  `settle` บันทึก `decidedBy: classifier, verdict: allow` พร้อมเหตุผลของ classifier ไม่มีการ์ดและไม่ถามใคร
+                  `settle` คืนบันทึก `decidedBy: classifier, verdict: allow` พร้อมเหตุผลของ classifier ไม่มีการ์ดและไม่ถามใคร
                 ref: packages/core/src/auto.ts#CLASSIFIER_OUTCOMES
               - lane: tool
                 at: shell
@@ -97,7 +97,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `CLASSIFIER_OUTCOMES` ให้ `deny` เป็น `refuse` `settle` บันทึก `decidedBy: classifier, verdict: deny`
+                  `CLASSIFIER_OUTCOMES` ให้ `deny` เป็น `refuse` `settle` คืนบันทึก `decidedBy: classifier, verdict: deny`
                   `refusalOf` สร้าง `ToolDenied` ไม่ใช่ `ToolRejected` คำสั่งไม่ได้รัน แต่ turn ไม่จบ
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolDenied]

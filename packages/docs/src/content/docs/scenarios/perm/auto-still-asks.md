@@ -133,7 +133,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` แล้วเลื่อนสถานะ Auto ด้วย `user-allow`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้วเลื่อนสถานะ Auto ด้วย `user-allow`
                   ถ้า Auto พักอยู่ การอนุญาตนี้ทำให้กลับไปเป็น `classifying` และคำสั่งถัดไปที่ classifier ตอบ `ask` จะถูกบล็อกอีกครั้งโดยไม่ถาม
                   ถ้า Auto ไม่ได้พัก ตัวนับการบล็อกติดกันเริ่มใหม่
                 ref: packages/core/src/auto.ts#nextAutoState
@@ -156,7 +156,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` โดยไม่มีความเห็น จึงเป็น `ToolRejected` สถานะ Auto ไม่เปลี่ยน (Auto ที่พักยังพักอยู่)
+                  `settle` คืนบันทึก `verdict: deny` โดยไม่มีความเห็น จึงเป็น `ToolRejected` สถานะ Auto ไม่เปลี่ยน (Auto ที่พักยังพักอยู่)
                   turn จบรอผู้ใช้เหมือนการปฏิเสธในโหมด Ask
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]

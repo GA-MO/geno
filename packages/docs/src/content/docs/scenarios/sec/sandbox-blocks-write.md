@@ -10,7 +10,7 @@ scenario:
     - เปิด Geno ในโหมด Ask ไม่ได้ตั้ง `gcode.sandbox.allowedDomains` (ค่าเริ่มต้นคือไม่อนุญาตโฮสต์ใดเลย)
     - โมเดลขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow บนการ์ดแล้ว
   trigger: >-
-    `settle` บันทึกว่าผู้ใช้อนุญาต และคำสั่งกำลังจะรัน
+    `settle` คืนบันทึกว่าผู้ใช้อนุญาต และคำสั่งกำลังจะรัน
   covers: [sec.sandbox-blocks-write, sec.sandbox-blocks-network]
   related: [perm.ask-allow, tool.bash-nonzero-exit, perm.secret-read, perm.read-outside-workspace]
   steps:
@@ -18,7 +18,7 @@ scenario:
       lane: policy
       at: settle
       do: >-
-        `settle` บันทึก `decidedBy: user, verdict: allow` แล้ว `approveCommand` คืนบันทึกนั้น
+        `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้ว `approveCommand` คืนบันทึกนั้น
         การอนุญาตตอบคำถามว่าให้รันไหม แต่ไม่ได้ขยายสิ่งที่คำสั่งแตะได้
       ref: packages/engine/src/tools/agent.ts#settle
       phase: running-tools

@@ -87,7 +87,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` บันทึกนี้ติดไปกับผลของ call อัปเดตผลจึงมี `APPROVAL_META`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` บันทึกนี้ติดไปกับผลของ call อัปเดตผลจึงมี `APPROVAL_META`
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
           - id: auto
