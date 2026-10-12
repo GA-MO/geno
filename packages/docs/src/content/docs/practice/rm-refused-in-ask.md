@@ -39,21 +39,16 @@ scenario:
         title: "Geno ส่ง request แรกให้ model"
         text: >-
           request มีคำสั่งของคุณ และคำอธิบายของ tool `bash` ซึ่งบอก model ไว้ก่อนแล้วว่าคำสั่งที่ลบแบบ recursive
-          ต้องได้ approval จากผู้ใช้ และอาจถูกปฏิเสธ
+          ต้องได้ approval จากผู้ใช้ และอาจถูกปฏิเสธ การ์ดข้างล่างตัดมาเฉพาะประโยคนั้นจาก `tools[0]`
         to: model
         sees:
-          - kind: payload
-            direction: request
-            source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/wire.jsonl#line=1
-            select: messages[-1].content[-1]
-            highlight: [text]
-          - kind: payload
-            direction: request
-            source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/wire.jsonl#line=1
-            json:
-              name: bash
-              description: "… Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. …"
-            highlight: [description]
+          kind: payload
+          direction: request
+          source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/wire.jsonl#line=1
+          json:
+            name: bash
+            description: "… Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. …"
+          highlight: [description]
 
     - id: wants-look
       lane: model

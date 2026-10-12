@@ -955,6 +955,18 @@ scenarios:
       - tool
       - panel (terminal)
     terminal: '`done` / `end_turn` with no further model call'
+  - id: perm.classifier-secrets-run
+    thai: การรันจริง classifier ปฏิเสธ cat .env แต่อนุญาตคำสั่งที่พิมพ์แค่ PORT
+    english: "Real run: the classifier refuses cat .env and allows a command that prints only PORT"
+    chapter: 8
+    priority: P2
+    lanes:
+      - user
+      - loop
+      - model
+      - policy
+      - tool
+    terminal: '`done` / `end_turn`'
   - id: hook.user-prompt-submit
     thai: UserPromptSubmit บล็อกหรือเพิ่มบริบท
     english: UserPromptSubmit blocks or annotates
