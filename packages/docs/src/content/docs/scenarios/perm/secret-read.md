@@ -139,7 +139,7 @@ scenario:
                             text: >-
                               Geno จดว่าคุณอนุญาตการอ่านครั้งนี้ครั้งเดียว
                             from: you
-                            to: engine
+                            to: panel
                           do: >-
                             `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                           ref: packages/extension/src/chat/chat.ts#Chat.askPermission

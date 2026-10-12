@@ -210,7 +210,7 @@ scenario:
                     คุณไม่อยากรอ VS Code ขอ engine ให้ปลุก turn นี้ Geno เรียกทันทีโดยไม่ตรวจ host ถ้ายังออฟไลน์ การรอเดิมทำต่อ
                     และเวลาเลิกยังนับจากตอนเริ่มรอครั้งแรก
                   from: you
-                  to: engine
+                  to: panel
                 do: ผู้ใช้ไม่อยากรอ จึงกด Retry now
               - lane: panel
                 at: composer
@@ -244,7 +244,7 @@ scenario:
                   text: >-
                     คุณเลิกรอ แผงตอบการ์ดที่เปิดอยู่ว่ายกเลิก แล้วสั่ง Geno หยุด turn
                   from: you
-                  to: engine
+                  to: panel
                   sees: { kind: composer, state: working, header: waiting for the network }
                 do: ผู้ใช้กด Stop ระหว่างรอ
               - lane: editor

@@ -196,7 +196,7 @@ scenario:
                     คำตอบของคุณไปถึงลูก ลูกรันคำสั่งใน sandbox แล้วทำงานต่อ
                     มันเขียนเทสต์และรันเทสต์จนผ่าน
                   from: you
-                  to: machine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -223,7 +223,7 @@ scenario:
                   text: >-
                     คำสั่งไม่ได้รัน คำปฏิเสธเปล่าๆ แปลว่าคุณอยากเป็นคนพูดต่อ ไม่ใช่แค่ลูก
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission

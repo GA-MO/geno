@@ -394,7 +394,7 @@ scenario:
                   text: >-
                     คุณไม่ตอบการ์ด แต่กด Stop แผงแชตตอบการ์ดว่ายกเลิก แล้วสั่งให้ Geno หยุด turn
                   from: you
-                  to: engine
+                  to: panel
                   sees: { kind: composer, state: working, header: working }
                 do: ผู้ใช้ไม่ตอบการ์ด แต่กด Stop ปุ่ม Stop โพสต์ข้อความ `stop` ไปให้ extension host
                 ref: "packages/extension/src/chat/webview.ts#\"stop.addEventListener('click', () => host.postMessage({ type: 'stop' }));\""

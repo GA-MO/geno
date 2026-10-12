@@ -176,7 +176,7 @@ scenario:
                     การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาต ถ้า Auto พักอยู่ การอนุญาตนี้ทำให้ Auto กลับมาใช้ classifier
                     ถ้าไม่ได้พัก ตัวนับการบล็อกเริ่มใหม่
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
