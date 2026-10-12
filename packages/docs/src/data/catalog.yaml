@@ -1316,6 +1316,18 @@ scenarios:
       - loop
       - child
     terminal: Interrupted, then resumed via Tasks
+  - id: sub.explore-report-run
+    thai: การรันจริง explore subagent ถูกบังคับให้ส่งรายงานในรอบสุดท้าย
+    english: "Real run: an explore subagent is made to report on its last call"
+    chapter: 12
+    priority: P2
+    lanes:
+      - user
+      - loop
+      - model
+      - child
+      - tool
+    terminal: '`done` / `end_turn`'
   - id: bg.child-wakes-parent
     thai: ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน
     english: Background child report wakes the session (woken turn)
