@@ -71,7 +71,7 @@ real UI. Mock text quotes the UI exactly, so it stays in the product's English.
 
 | kind | props |
 | --- | --- |
-| `permission` | `command`, `reason?`, `rule?`, `options?` (default: Allow, Deny, Always allow in this workspace, No, and tell the agent…), `chosen?`, `note?` |
+| `permission` | `face?` (default `command`), `command`, `host?`, `server?`, `tool?`, `scope?`, `reason?`, `rule?`, `options?` (default: the face's buttons), `chosen?`, `note?` |
 | `question` | `question`, `options`, `chosen?` |
 | `notice` | `text`, `detail?`, `actions?`, `tone?` (`info`, `warning`, `error`) |
 | `step` | `label`, `status` (`running`, `done`, `failed`, `denied`), `note?`, `output?` |
@@ -80,6 +80,23 @@ real UI. Mock text quotes the UI exactly, so it stays in the product's English.
 | `composer` | `state` (`idle`, `working`), `text?`, `header?` |
 | `task` | `title`, `status` (`running`, `needs-input`, `done`, `failed`), `detail?`, `actions?` |
 | `payload` | real wire data from a recorded run, see below |
+
+### `permission`: the card's face
+
+`face` picks the card the panel draws, with its title and the buttons the engine offers. `src/scenario/faces.ts` holds
+them, and a test checks each against the extension and engine source.
+
+| face | title | buttons |
+| --- | --- | --- |
+| `command` | Run this command? | Allow, Deny, Always allow in this workspace, No, and tell the agent… |
+| `edit` | Change this file? (external agents only) | as `command` |
+| `read` | Read outside the workspace? | Allow, Allow this directory for the session, Deny, No, and tell the agent… |
+| `fetch` | Fetch from `host`? | as `command` |
+| `browse` | Open a page on `host`? | Allow, Deny, No, and tell the agent… |
+| `mcp` | Use `server` tool `tool`? | Allow, Allow this tool for the session, Deny, Always allow in this workspace, No, and tell the agent… |
+| `memory` | Remember this? and the `scope` line | Remember, Don't remember |
+| `workflow` | Run this workflow? | Run, Don't run |
+| `server`, `server-connect` | Allow this server to run? / to connect? | Allow, Turn off |
 
 ### `payload`: real wire data
 

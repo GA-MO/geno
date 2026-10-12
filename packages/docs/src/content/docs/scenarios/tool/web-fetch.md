@@ -103,7 +103,7 @@ scenario:
         from: panel
         to: you
         ask: "กดปุ่มไหน"
-        sees: "การ์ด \"Fetch from date-fns.org?\" \"Geno asks about fetching a page from another host.\" ปุ่ม Allow, Deny, Always allow in this workspace และ No, and tell the agent…"
+        sees: { kind: permission, face: fetch, host: date-fns.org, command: https://date-fns.org/docs/format, reason: Geno asks about fetching a page from another host. }
       do: >-
         การ์ดใช้หน้าตาของการดึงเว็บ ไอคอนลูกโลก หัวข้อบอกชื่อโฮสต์
       sees: >-

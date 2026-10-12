@@ -80,7 +80,7 @@ scenario:
         text: การ์ดแสดงทีละขั้น role model อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณ และราคารวมที่แย่ที่สุด
         from: panel
         to: you
-        sees: การ์ด "Run this workflow?" รายการขั้น reproduce fix และ Gate บรรทัดราคาประมาณและเพดาน ปุ่ม [Run] [Don't run]
+        sees: { kind: permission, face: workflow, command: "fix-bug: reproduce · explore · read-only, fix · worker · can edit, Gate", reason: "Each step runs as a subagent in the background, listed in Tasks." }
         ask: คุณกดอะไร
       lane: panel
       at: card

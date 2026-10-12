@@ -121,7 +121,7 @@ scenario:
         text: การ์ดบอก server และชื่อ tool คุณจะให้ Geno เปิด issue อีกหลายรายการใน session นี้
         from: panel
         to: you
-        sees: '"Use github tool create_issue?" และ "Geno asks about an MCP tool." [Allow] [Allow this tool for the session] [Deny] [Always allow in this workspace] [No, and tell the agent…]'
+        sees: { kind: permission, face: mcp, server: github, tool: create_issue, command: 'mcp__github__create_issue {"owner":"acme","repo":"app","title":"Login is slow"}', reason: Geno asks about an MCP tool. }
         ask: คุณกดปุ่มไหน
       lane: panel
       at: card

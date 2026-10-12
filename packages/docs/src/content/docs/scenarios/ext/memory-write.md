@@ -72,7 +72,7 @@ scenario:
         text: การ์ดแสดงโน้ตตรงตัวและขอบเขตของมัน
         from: panel
         to: you
-        sees: '"Remember this?" ข้อความ "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้" และ "Geno will follow this note in every later chat in this project. You can change or delete it in /memory."'
+        sees: { kind: permission, face: memory, scope: project, command: ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้ }
         ask: คุณกดปุ่มไหน
       lane: panel
       at: card

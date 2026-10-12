@@ -1,4 +1,5 @@
 import { z } from 'astro/zod';
+import { PERMISSION_FACES } from './faces.js';
 
 const PARTIES = ['user', 'ai', 'harness', 'outside'] as const;
 export const ACTORS = ['you', 'panel', 'engine', 'model', 'machine'] as const;
@@ -109,7 +110,25 @@ export const pagePayloadsSchema = z.record(z.string().regex(/^[a-z][A-Za-z0-9]*$
 
 /** What the user sees at a beat: a small copy of the real UI, in its English copy. */
 export const mockSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('permission'), command: text, reason: text.optional(), rule: text.optional(), options: z.array(text).min(1).optional(), chosen: text.optional(), note: text.optional() }).strict(),
+  z
+    .object({
+      kind: z.literal('permission'),
+      /** Which card: its title and default buttons (faces.ts). Default: command. */
+      face: z.enum(PERMISSION_FACES).optional(),
+      /** The command, path, URL, tool input, note or workflow the card shows. */
+      command: text,
+      host: text.optional(),
+      server: text.optional(),
+      tool: text.optional(),
+      /** A memory card's note: where Geno keeps it. Default: project. */
+      scope: z.enum(['project', 'global']).optional(),
+      reason: text.optional(),
+      rule: text.optional(),
+      options: z.array(text).min(1).optional(),
+      chosen: text.optional(),
+      note: text.optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal('question'), question: text, options: z.array(text).min(1), chosen: text.optional() }).strict(),
   z.object({ kind: z.literal('notice'), text, detail: text.optional(), actions: z.array(text).optional(), tone: z.enum(['info', 'warning', 'error']).optional() }).strict(),
   z.object({ kind: z.literal('step'), label: text, status: z.enum(['running', 'done', 'failed', 'denied']), note: text.optional(), output: text.optional() }).strict(),

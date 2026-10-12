@@ -85,7 +85,7 @@ scenario:
         text: การ์ดแสดงคำนิยามทั้งหมด คำสั่ง อาร์กิวเมนต์ ตัวแปรสภาพแวดล้อม และบอกว่าใครเป็นคนเลือก server นี้
         from: panel
         to: you
-        sees: '"Allow this server to run?" พร้อมคำสั่ง `npx db-mcp --url $DATABASE_URL` และเหตุผลว่า .mcp.json ของ workspace นี้กำหนดมัน'
+        sees: { kind: permission, face: server, command: npx db-mcp --url $DATABASE_URL, reason: ".mcp.json in this workspace defines it, so whoever wrote the repository chose it. Geno runs this command outside the sandbox, with network access, whenever a chat in this workspace starts. A changed definition asks again." }
         ask: คุณกดปุ่มไหน
       lane: panel
       at: card
