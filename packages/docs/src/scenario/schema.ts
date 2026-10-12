@@ -101,6 +101,8 @@ export const payloadSpecSchema = z
     json: z.unknown().optional(),
     highlight: z.array(jsonPath).optional(),
     collapse: z.array(jsonPath).optional(),
+    /** Why the card shows only part of a content block; without it, a select inside a block fails docs:check. */
+    cut: z.string().min(12, 'cut says why the card shows only part of a block').optional(),
   })
   .strict();
 export type PayloadSpec = z.infer<typeof payloadSpecSchema>;

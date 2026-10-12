@@ -56,8 +56,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/session.jsonl#seq=3
-          select: content[-1].input
-          highlight: [agent, task]
+          select: content[-1]
+          highlight: [input.agent, input.task]
       do: >-
         model ขอ `agent` ด้วย `agent: explore` จบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition

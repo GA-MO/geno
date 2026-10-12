@@ -19,6 +19,15 @@ export interface More {
  */
 export type Provenance = 'recorded' | 'rebuilt' | 'logged';
 
+/** One content block of the message a card shows, in order: its chip in the summary row. */
+export interface BlockChip {
+  readonly type: string;
+  /** A tool_use block's tool. */
+  readonly name?: string;
+  /** The block's canonical path in the view's `value`; absent when the card does not show it. */
+  readonly at?: string;
+}
+
 export interface PayloadView {
   readonly kind: 'payload';
   readonly direction: PayloadSpec['direction'];
@@ -27,6 +36,8 @@ export interface PayloadView {
   /** Canonical paths into `value`, keys and indexes joined by dots: `content.0.id`. */
   readonly highlight: readonly string[];
   readonly collapse: readonly string[];
+  /** The blocks of the model message the card shows, when it shows one, its content, or one of its blocks. */
+  readonly blocks?: readonly BlockChip[];
   readonly caption: string;
   readonly provenance: Provenance;
   /** The engine commit of the run, when the runs index records it. */
@@ -35,7 +46,11 @@ export interface PayloadView {
   readonly url: string;
 }
 
-export type PayloadResult = { readonly ok: true; readonly view: PayloadView } | { readonly ok: false; readonly reason: string };
+/**
+ * `cut` is set when `select` reaches inside a content block without the spec's own `cut` reason: the view still shows
+ * the whole block, and docs:check fails with this message so the page selects the block itself.
+ */
+export type PayloadResult = { readonly ok: true; readonly view: PayloadView; readonly cut?: string } | { readonly ok: false; readonly reason: string };
 
 export interface RunFiles {
   resolve(mock: PayloadSpec): PayloadResult;
@@ -51,6 +66,40 @@ type Key = string | number;
 export function parsePath(text: string): Key[] {
   return [...text.matchAll(/([A-Za-z_$][\w$-]*)|\[(-?\d+)\]/g)].map((match) => (match[1] === undefined ? Number(match[2]) : match[1]));
 }
+
+type Block = { readonly type: string; readonly name?: unknown };
+const isBlock = (value: unknown): value is Block => value !== null && typeof value === 'object' && !Array.isArray(value) && typeof (value as { type?: unknown }).type === 'string';
+const isBlocks = (value: unknown): value is readonly Block[] => Array.isArray(value) && value.length > 0 && value.every(isBlock);
+
+/** How many of the keys reach the outermost content block they pass through or end at: `content[i]` of a message. */
+function blockDepth(root: unknown, keys: readonly Key[]): number | undefined {
+  let at = root;
+  for (const [i, key] of keys.entries()) {
+    if (typeof key === 'number' && keys[i - 1] === 'content' && isBlocks(at)) return i + 1;
+    at = (at as Record<Key, unknown>)[key];
+  }
+  return undefined;
+}
+
+const valueAt = (root: unknown, keys: readonly Key[]): unknown => keys.reduce<unknown>((at, key) => (at as Record<Key, unknown>)[key], root);
+
+/** The chip row of a selection: the blocks of its message, each with where the card shows it. */
+function chipsOf(root: unknown, keys: readonly Key[], depth: number | undefined): BlockChip[] | undefined {
+  const chip = (block: Block, at: string | undefined): BlockChip => ({ type: block.type, ...(typeof block.name === 'string' ? { name: block.name } : {}), ...(at === undefined ? {} : { at }) });
+  const shown = (blocks: readonly Block[], prefix: string): BlockChip[] =>
+    blocks.map((block, i) => chip(block, blocks.length > ITEMS && i >= KEPT_ITEMS ? undefined : `${prefix}${i}`));
+  if (depth !== undefined) {
+    const blocks = valueAt(root, keys.slice(0, depth - 1)) as readonly Block[];
+    return blocks.map((block, i) => chip(block, i === keys[depth - 1] ? '' : undefined));
+  }
+  const selected = valueAt(root, keys);
+  if (isBlocks(selected) && (keys.length === 0 || keys.at(-1) === 'content')) return shown(selected, '');
+  const content = (selected as { content?: unknown } | null)?.content;
+  if (typeof selected === 'object' && !Array.isArray(selected) && isBlocks(content)) return shown(content, 'content.');
+  return undefined;
+}
+
+const pathText = (keys: readonly Key[]): string => keys.map((key, i) => (typeof key === 'number' ? `[${key}]` : i === 0 ? key : `.${key}`)).join('');
 
 /** Follows a path, resolving negative indexes; returns the canonical keys or why it failed. */
 function follow(root: unknown, keys: readonly Key[]): { readonly ok: true; readonly value: unknown; readonly keys: readonly Key[] } | { readonly ok: false; readonly reason: string } {
@@ -211,22 +260,38 @@ export function runFiles(repoRoot: string): RunFiles {
       const record = by === 'seq' ? bySeq.get(Number(n)) : byLine[Number(n) - 1];
       if (record === undefined) return { ok: false, reason: by === 'seq' ? `${file} has no record with seq ${n}` : `${file} has no line ${n}; it has ${byLine.length}` };
       let selected: unknown = mock.json;
+      let blocks = mock.json === undefined ? undefined : chipsOf(mock.json, [], undefined);
+      let inner: Key[] = [];
+      let cut: string | undefined;
       if (mock.json === undefined) {
-        const picked = follow(record, parsePath(mock.select ?? ''));
+        const keys = parsePath(mock.select ?? '');
+        const picked = follow(record, keys);
         if (!picked.ok) return { ok: false, reason: `select ${mock.select}: ${picked.reason}` };
-        selected = picked.value;
+        const depth = blockDepth(record, picked.keys);
+        const below = depth !== undefined && depth < picked.keys.length;
+        if (below && mock.cut === undefined) {
+          inner = picked.keys.slice(depth);
+          const block = valueAt(record, picked.keys.slice(0, depth)) as Block;
+          selected = block;
+          const marked = (mock.highlight ?? ['']).map((text) => pathText([...inner, ...parsePath(text)]));
+          cut = `select ${mock.select} shows part of a ${block.type} block, which hides its type, id and name: select ${pathText(keys.slice(0, depth))} and highlight [${marked.join(', ')}], or give cut: <why only this part> to show the part alone`;
+        } else {
+          if (!below && mock.cut !== undefined) return { ok: false, reason: `cut: select ${mock.select ?? '(the whole record)'} does not reach inside a content block, so drop cut` };
+          selected = picked.value;
+        }
+        blocks = below && mock.cut !== undefined ? undefined : chipsOf(record, picked.keys, depth);
       }
       const marks = (paths: readonly string[] | undefined, name: string): { readonly ok: true; readonly paths: string[] } | { readonly ok: false; readonly reason: string } => {
         const out: string[] = [];
         for (const text of paths ?? []) {
-          const found = follow(selected, parsePath(text));
+          const found = follow(selected, [...inner, ...parsePath(text)]);
           if (!found.ok) return { ok: false, reason: `${name} ${text}: ${found.reason}` };
           if (!survivesTrim(selected, found.keys)) return { ok: false, reason: `${name} ${text}: the build folds this item into "… more"; select something narrower` };
           out.push(found.keys.join('.'));
         }
         return { ok: true, paths: out };
       };
-      const highlight = marks(mock.highlight, 'highlight');
+      const highlight = marks(mock.highlight ?? (inner.length === 0 ? [] : ['']), 'highlight');
       if (!highlight.ok) return highlight;
       const collapse = marks(mock.collapse, 'collapse');
       if (!collapse.ok) return collapse;
@@ -242,12 +307,14 @@ export function runFiles(repoRoot: string): RunFiles {
           value: trim(selected),
           highlight: highlight.paths,
           collapse: collapse.paths,
+          ...(blocks === undefined ? {} : { blocks }),
           caption: `${label}${run === '1' || run === undefined ? '' : ` (run ${run})`}${model === undefined ? '' : `, ${model}`}`,
           provenance: provenanceOf(file),
           ...(engine === undefined ? {} : { engine }),
           file,
           url: `vscode://file${path.join(repoRoot, file)}`,
         },
+        ...(cut === undefined ? {} : { cut }),
       };
     },
   };

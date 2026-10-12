@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import { FACES, MEMORY_SCOPES } from '../scenario/faces.js';
 import { codeSegments } from '../scenario/labels.js';
 import type { Shown } from '../scenario/model.js';
-import type { Long, More, PayloadView } from '../scenario/payload.js';
+import type { BlockChip, Long, More, PayloadView } from '../scenario/payload.js';
 
 type Mock<K extends Shown['kind']> = Extract<Shown, { kind: K }>;
 
@@ -149,12 +149,12 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
   if (entries.length === 0) return <span className={marked.trim()}>{start + end}</span>;
   if (folded)
     return (
-      <button type="button" className="js-fold" onClick={() => toggle(path)}>
+      <button type="button" className="js-fold" data-path={path} onClick={() => toggle(path)}>
         {start} {Array.isArray(value) ? `${value.length} รายการ` : `${entries.length} key`} {end}
       </button>
     );
   return (
-    <span className={marked.trim() === '' ? undefined : 'mark-block'}>
+    <span className={marked.trim() === '' ? undefined : 'mark-block'} data-path={path}>
       {start}
       {entries.map(([key, inner], i) => (
         <span key={key} className="js-line" style={{ paddingInlineStart: `${(depth + 1) * 1.1}em` }}>
@@ -177,10 +177,45 @@ const PROVENANCE_LABELS: Readonly<Record<PayloadView['provenance'], string>> = {
   logged: 'event ใน session log',
 };
 
-function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
+const chipLabel = (chip: BlockChip): string => (chip.name === undefined ? chip.type : `${chip.type} ${chip.name}`);
+
+/** Whether a card shows a tool_use block, so the page explains how to read one. */
+export const showsToolUse = (shown: readonly Shown[]): boolean =>
+  shown.some((item) => item.kind === 'payload' && (item.blocks ?? []).some((chip) => chip.type === 'tool_use' && chip.at !== undefined));
+
+/** The blocks of the message, in order; a chip scrolls the JSON to its block. */
+function Chips({ chips, json }: { readonly chips: readonly BlockChip[]; readonly json: RefObject<HTMLPreElement | null> }) {
+  const reveal = (at: string) => {
+    const pre = json.current;
+    const block = pre?.querySelector<HTMLElement>(`[data-path="${at}"]`);
+    if (pre === null || pre === undefined || block === null || block === undefined) return;
+    pre.scrollTo({ top: pre.scrollTop + block.getBoundingClientRect().top - pre.getBoundingClientRect().top - 6, behavior: 'smooth' });
+    block.classList.remove('flash');
+    void block.offsetWidth;
+    block.classList.add('flash');
+  };
+  return (
+    <p className="mk-chips" aria-label={`${chips.length} block ในข้อความนี้`}>
+      {chips.map((chip, i) =>
+        chip.at === undefined ? (
+          <span key={i} className="mk-chip off" title="block นี้อยู่ในข้อความเดียวกัน แต่การ์ดนี้ไม่ได้แสดง">
+            {chipLabel(chip)}
+          </span>
+        ) : (
+          <button key={i} type="button" className={`mk-chip t-${chip.type}`} onClick={() => reveal(chip.at!)}>
+            {chipLabel(chip)}
+          </button>
+        ),
+      )}
+    </p>
+  );
+}
+
+function Payloads({ views, legend }: { readonly views: readonly PayloadView[]; readonly legend: boolean }) {
   const [tab, setTab] = useState(0);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [copied, setCopied] = useState(false);
+  const json = useRef<HTMLPreElement>(null);
   const view = views[Math.min(tab, views.length - 1)]!;
   const toggle = (path: string) => setOpen((current) => new Set([...current, path]));
   const copy = () => {
@@ -207,7 +242,14 @@ function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
           {copied ? 'คัดลอกแล้ว' : 'คัดลอก'}
         </button>
       </div>
-      <pre className="mk-json">
+      {view.blocks === undefined ? null : <Chips chips={view.blocks} json={json} />}
+      {legend && showsToolUse([view]) ? (
+        <p className="mk-legend">
+          อ่าน block <code>tool_use</code> อย่างนี้: <code>name</code> คือ tool ที่ model เลือกเรียก, <code>input</code> คือ argument ตาม schema ของ tool นั้น และ <code>id</code> ใช้จับคู่กับ{' '}
+          <code>tool_result</code> ที่ส่งกลับ
+        </p>
+      ) : null}
+      <pre className="mk-json" ref={json}>
         <Json value={view.value} path="" view={view} open={open} toggle={toggle} depth={0} />
       </pre>
       <p className="mk-caption">
@@ -259,8 +301,11 @@ function One({ mock }: { readonly mock: Exclude<Shown, PayloadView> }) {
   }
 }
 
-/** The "What you see" figure: UI mocks in order, with every payload gathered into one tabbed viewer. */
-export default function Sees({ shown }: { readonly shown: readonly Shown[] }) {
+/**
+ * The "What you see" figure: UI mocks in order, with every payload gathered into one tabbed viewer. `legend` lets a
+ * card explain tool_use; a story passes it to its first beat that shows one, and docs.css hides it on later cards.
+ */
+export default function Sees({ shown, legend = true }: { readonly shown: readonly Shown[]; readonly legend?: boolean }) {
   if (shown.length === 0) return null;
   const payloads = shown.filter((item): item is PayloadView => item.kind === 'payload');
   const screens = shown.filter((item): item is Exclude<Shown, PayloadView> => item.kind !== 'payload');
@@ -279,7 +324,7 @@ export default function Sees({ shown }: { readonly shown: readonly Shown[] }) {
       {payloads.length === 0 ? null : (
         <figure className="sees">
           <figcaption>ข้อมูลจากการรันจริง</figcaption>
-          <Payloads views={payloads} />
+          <Payloads views={payloads} legend={legend} />
         </figure>
       )}
     </>

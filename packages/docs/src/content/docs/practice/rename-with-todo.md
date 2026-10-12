@@ -140,8 +140,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=22
-          select: content[-1].input
-          highlight: ['items[0].status']
+          select: content[-1]
+          highlight: ['input.items[0].status']
       do: >-
         model ขอ `todo` ด้วยรายการสามข้อ
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -170,8 +170,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=25
-          select: content[1].input
-          highlight: [path, old_str, new_str]
+          select: content
+          highlight: ['[1].input.path', '[2].input.path', '[3].input.path', '[4].input.path']
       do: >-
         model ขอ `edit` สี่ตัว: `core/src/user.js`, `api/src/routes.js`, `web/src/profile.js` และ `core/test/user.test.js`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

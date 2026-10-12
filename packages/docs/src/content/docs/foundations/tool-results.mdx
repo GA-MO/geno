@@ -15,9 +15,9 @@ payloads:
   wrongEdit:
     direction: response
     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=6
-    select: content[-1].input
+    select: content[-1]
     highlight:
-      - old_str
+      - input.old_str
   editError:
     direction: tool_result
     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=7

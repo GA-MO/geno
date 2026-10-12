@@ -122,8 +122,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=6
-          select: content[-1].input
-          highlight: [command]
+          select: content[-1]
+          highlight: [input.command]
       do: >-
         model ขอ `bash` ด้วย `cat build/bundle.js` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -157,8 +157,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=9
-          select: content[-1].input
-          highlight: [command]
+          select: content[-1]
+          highlight: [input.command]
       do: >-
         model ขอ `bash` ด้วย `rm -rf build/ && ls -d build/ 2>&1; true` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

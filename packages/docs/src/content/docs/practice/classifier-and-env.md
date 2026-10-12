@@ -227,8 +227,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=21
-          select: content[-1].input
-          highlight: [command]
+          select: content[-1]
+          highlight: [input.command]
       do: >-
         model ขอ `bash` ที่มี `node -e` และ `node src/server.js` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

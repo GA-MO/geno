@@ -22,7 +22,7 @@ import {
   type LaneItem,
   type StoryState,
 } from '../scenario/story.js';
-import Sees, { Code } from './Mock.js';
+import Sees, { Code, showsToolUse } from './Mock.js';
 
 export interface StoryProps {
   readonly scenario: Scenario;
@@ -353,7 +353,7 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
       <p className="th">
         <Code text={beat.head.text} />
       </p>
-      <Sees shown={beat.head.sees} />
+      <Sees shown={beat.head.sees} legend={beats.findIndex((candidate) => showsToolUse(candidate.head.sees)) === state.at} />
       {branches.length === 0 ? null : (
         <div className="fork">
           <p className="fork-q">{beat.head.ask}</p>
