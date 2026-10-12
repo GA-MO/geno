@@ -180,6 +180,9 @@ export type ReplayedTurn = {
   readonly command?: Invocation;
 };
 
+/** Key in a `session/prompt`'s `_meta`: the PromptAction whose button sent the prompt's text. */
+export const PROMPT_ACTION_META = 'gcode/action';
+
 /** Key in a replayed `tool_call` or `tool_call_update`'s `_meta`: when it happened, in milliseconds since the epoch. */
 export const REPLAYED_AT_META = 'gcode/at';
 

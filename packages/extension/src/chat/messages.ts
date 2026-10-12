@@ -522,6 +522,8 @@ export type FromView =
   | { readonly type: 'set-mode'; readonly modeId: string }
   /** After a Plan turn: leave Plan and tell the agent to carry out the plan. */
   | { readonly type: 'start-building' }
+  /** After a turn that stopped without a reply: ask the agent to go on and finish its answer. */
+  | { readonly type: 'continue' }
   /** Asks for the history list; answered by `history` or `history-failed`. */
   | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
   /** Searches the text of the scope's sessions; answered by `history-hits` or `history-hits-failed`. */
