@@ -4,7 +4,8 @@
   lane: loop
   at: step
   do: >-
-    `loopStep` ตัดสิน `done(end_turn)` turn ไม่ถูกถือไว้รอ เพราะ engine ปลุก session ได้ (`wakeLater`)
+    `loopStep` ตัดสิน `done(end_turn)` และ turn จบเลย `drive` จะถือ turn ไว้ก็ต่อเมื่อลูกเบื้องหลังยังค้างรายงาน
+    และ engine ปลุก session เองไม่ได้ ที่นี่ engine ปลุกได้ (`wakeLater`)
     สิ่งที่ session รออยู่ยังอยู่ในตัวปลุกของ engine หลัง turn จบ
   ref: "packages/engine/src/drive.ts#\"surface.wakeLater !== true\""
   emits: [end_turn]
@@ -14,8 +15,8 @@
   lane: server
   at: turns
   do: >-
-    `runTurn` แปลงผลด้วย `TURN_ENDS` เป็น `stopReason: end_turn` งานจบแบบ `done` และ lock ของ session ถูกปลด
-    `WakeDriver` ดูประตูอีกครั้ง ยังไม่มีอะไรมาถึง จึงไม่ปลุก
+    `runTurn` แปลงผลด้วย `TURN_ENDS` เป็น `stopReason: end_turn` งานจบแบบ `done` และ turn ของ session ถูกล้างออกจาก `turns`
+    แล้ว `inbox.arrived` ให้ `WakeDriver` ดูประตูอีกครั้ง ยังไม่มีอะไรมาถึง จึงไม่ปลุก
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META]
 

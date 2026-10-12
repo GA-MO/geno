@@ -1,10 +1,11 @@
-# A finished batch: results logged in the model's order and shown under their steps.
+# The calls of one model turn have finished: results logged in the model's order and shown under their steps.
+# Each call's status already reached the panel when that call ended (watcher.toolEnd); these steps add the result.
 - id: logged
   lane: loop
   at: tools
   do: >-
-    เมื่อทั้งชุดจบ `runTools` บันทึก `tool-result` ตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ
-    ผลที่ยาวมากถูกเก็บลงไฟล์ แล้วส่งเฉพาะส่วนต้นพร้อมที่อยู่ไฟล์
+    เมื่อ call ทุกตัวของรอบนี้จบครบทุกชุด `runTools` บันทึก `tool-result` ตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ
+    ผลที่ยาวเกินขีดของเครื่องมือถูกเก็บลงไฟล์ โมเดลได้ส่วนต้น ส่วนท้าย และที่อยู่ไฟล์แทน
   ref: "packages/engine/src/drive.ts#\"for (const result of outcome.results) if (result !== undefined) await record(result);\""
   emits: [tool-result]
 
@@ -12,16 +13,19 @@
   lane: server
   at: updates
   do: >-
-    `watcher.logged` แปลงผลแต่ละตัวด้วย `toolResultUpdate` เป็น `tool_call_update` พร้อมสถานะ ข้อความ และ `APPROVAL_META`
+    สถานะของแต่ละ call ไปถึงแผงตั้งแต่ call นั้นจบ (`watcher.toolEnd`) ตอนนี้ `watcher.logged` แปลงผลแต่ละตัวด้วย
+    `toolResultUpdate` เป็น `tool_call_update` ที่มีสถานะและข้อความผล `_meta` มีเฉพาะสิ่งที่ผลนั้นมีจริง
+    เช่น `APPROVAL_META` มาเฉพาะเมื่อผลมีบันทึกการอนุญาต (`approval`)
   ref: packages/engine/src/session-replay.ts#toolResultUpdate
-  emits: [tool_call_update, APPROVAL_META]
+  emits: [tool_call_update]
 
 - id: relay
   lane: editor
   at: chat
   alongside: true
   do: >-
-    `updateActions` อ่านสถานะและบันทึกการอนุญาต (`denialOf`) แล้วส่ง action ให้ webview
+    `Chat.updated` ให้ `updateActions` แปลงอัปเดตเป็น action ซึ่งอ่านสถานะ และอ่านบันทึกการอนุญาตด้วย `denialOf` ถ้ามี
+    แล้วส่ง action ให้ webview
   ref: packages/extension/src/chat/session-updates.ts#updateActions
 
 - id: shown
@@ -29,6 +33,8 @@
   at: rail
   alongside: true
   do: >-
-    ขั้นนั้นหยุดหมุนและแสดงผล
-  sees: ขั้นขึ้นเครื่องหมายเสร็จหรือล้มเหลว ผลลัพธ์พับอยู่ใต้ขั้น การอ่านไฟล์ติดกันรวมเป็นชิปไฟล์แถวเดียว
+    ขั้นนั้นหยุดหมุนไปแล้วตอนสถานะมาถึง ตอนนี้ผลลัพธ์มาอยู่ใต้ขั้น
+  sees: >-
+    ขั้นขึ้นเครื่องหมายตามสถานะ (เสร็จ ล้มเหลว หรือถูกปฏิเสธ) ผลลัพธ์พับอยู่ใต้ขั้น
+    การอ่านหรือแก้ไฟล์ติดกันรวมเป็นชิปไฟล์แถวเดียว
   ref: packages/extension/src/chat/webview.ts#render

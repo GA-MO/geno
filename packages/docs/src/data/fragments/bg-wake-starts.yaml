@@ -4,10 +4,10 @@
   lane: server
   at: wakes
   do: >-
-    สิ่งที่มาถึงเข้ากล่องข้อความของ session ไม่มี turn รันอยู่ `inbox.arrived` จึงให้ `logArrivals` บันทึกลง log ทันที
-    แล้ว `wakes.soon` ให้ตัวปลุกดูประตู
+    สิ่งที่มาถึงเข้ากล่องข้อความของ session ไม่มี turn รันอยู่ `inbox.arrived` จึงให้ `logArrivals` บันทึกลง log
+    ต่อจากงานเขียนที่ค้างของ session นั้น ตามชนิดของสิ่งที่มา: โน้ต `wake` ของ monitor wake-up หรือ PR,
+    `background-end` ของคำสั่ง หรือ `child-end` กับรายงานของลูก แล้ว `wakes.soon` ให้ตัวปลุกดูประตู
   ref: packages/engine/src/background-hooks.ts#logArrivals
-  emits: [wake]
 
 - id: gate
   lane: server
@@ -21,17 +21,19 @@
   lane: server
   at: wakes
   do: >-
-    ประตูตอบ `wake` `WakeDriver` เลือกหน้าต่างที่แสดง session นี้ให้รัน `wakeTurn` ซึ่งเรียก `runTurn` แบบ `wake`
-    `logWake` บันทึกข้อความแรกของ turn จาก engine (`from: 'wake'`) และขีดจำกัดของ turn นับต่อจาก prompt ล่าสุดของผู้ใช้
+    ประตูตอบ `wake` `WakeDriver` เลือกหน้าต่างที่แสดง session นี้ (หรือหน้าต่างแรกที่ต่ออยู่) ให้รัน `wakeTurn` ซึ่งเรียก `runTurn` แบบ `wake`
+    `logWake` บันทึกข้อความแรกของ turn จาก engine เป็น event `user` ที่มี `from: 'wake'`
+    แล้ว `runTurn` ส่งข้อความนั้นเป็น `user_message_chunk` พร้อม `WAKE_META` ขีดจำกัดของ turn นับต่อจาก prompt ล่าสุดของผู้ใช้
   ref: packages/engine/src/serve.ts#logWake
-  emits: [wake, user_message_chunk, WAKE_META]
+  emits: [user, user_message_chunk, WAKE_META]
   phase: starting
 
 - id: adopt
   lane: editor
   at: chat
   do: >-
-    `user_message_chunk` ที่มี `WAKE_META` ทำให้ `woken` เปิด turn ใหม่ในแผงโดยไม่มีข้อความของผู้ใช้ และรับ turn นี้เป็นของตัว
+    แผงแสดง session นี้อยู่ `user_message_chunk` ที่มี `WAKE_META` จึงทำให้ `woken` เปิด turn ใหม่ในแผงโดยไม่มีข้อความของผู้ใช้
+    และรับ turn นี้เป็นของตัว
     ปุ่ม Stop ใช้ได้เหมือน turn ที่ผู้ใช้ส่งเอง
   ref: packages/extension/src/chat/chat.ts#Chat.woken
   emits: [turn-start]

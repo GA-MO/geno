@@ -29,9 +29,11 @@
   lane: loop
   at: model-call
   do: >-
-    `compactContext` เลือกจุดตัดด้วย `planCompaction`: ตัดได้เฉพาะที่ข้อความผู้ใช้หรือคำตอบโมเดลที่ไม่มี tool call ค้าง
-    และเก็บช่วงท้ายไว้ตามเดิมไม่เกิน 20,000 token (หรือหนึ่งในสี่ของเกณฑ์ ถ้าน้อยกว่า) ส่วนก่อนจุดตัดถูกส่งไปสรุปด้วยการเรียกโมเดลหนึ่งครั้ง
-    ใช้โมเดลและ effort เดียวกับ session ไม่มีเครื่องมือ system prompt เป็น `SUMMARY_SYSTEM` และตัดบทสนทนาไว้ไม่เกิน 210,000 ตัวอักษร
+    จุดตัดมาจาก `planCompaction` (ทาง auto วางแผนไว้แล้วตอนตรวจเกณฑ์ ทาง overflow `compactContext` วางแผนตอนนี้):
+    ตัดได้เฉพาะที่ข้อความผู้ใช้หรือคำตอบโมเดลที่ไม่มี tool call ค้าง และเก็บช่วงท้ายไว้ตามเดิมไม่เกิน 20,000 token
+    (หรือหนึ่งในสี่ของเกณฑ์ ถ้าน้อยกว่า) ส่วนก่อนจุดตัดถูกส่งไปสรุปด้วยการเรียกโมเดลหนึ่งครั้ง
+    ใช้โมเดลและ effort เดียวกับ session ไม่มีเครื่องมือ system prompt เป็น `SUMMARY_SYSTEM`
+    และตัดบทสนทนาไว้ไม่เกิน 210,000 ตัวอักษร (หรือน้อยกว่าตามเกณฑ์ของโมเดล)
   ref: packages/engine/src/compact.ts#compactContext
 
 - id: summary
@@ -64,7 +66,8 @@
   lane: server
   at: updates
   do: >-
-    `compactUpdate` ส่ง `agent_message_chunk` ที่มี `COMPACT_META` ตามด้วย `usage_update` ที่วัดขนาด context ใหม่
+    `watcher.logged` แปลง event ด้วย `compactUpdate` เป็น `agent_message_chunk` ที่มี `COMPACT_META`
+    ตามด้วย `usage_update` ที่วัดขนาด context ใหม่
   ref: packages/engine/src/session-replay.ts#compactUpdate
   emits: [agent_message_chunk, COMPACT_META, usage_update]
 
@@ -73,7 +76,7 @@
   at: chat
   alongside: true
   do: >-
-    `agentChunkAction` เห็น `COMPACT_META` จึงส่ง action `compact` ไม่ใช่ข้อความ
+    `agentChunkAction` เห็น `COMPACT_META` จึงให้ action `compact` ไม่ใช่ข้อความ แล้ว `Chat.updated` ส่งต่อให้ webview
   ref: packages/extension/src/chat/compact-host.ts#agentChunkAction
 
 - id: drawn

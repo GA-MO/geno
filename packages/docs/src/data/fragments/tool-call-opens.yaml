@@ -12,7 +12,8 @@
   lane: policy
   at: hooks
   do: >-
-    PreToolUse hooks ตัดสินทุก call ของเทิร์นก่อน call แรกจะเริ่ม เมื่อไม่มี hook ทุก call ได้ผล `run`
+    ถ้า session มี hook ของเหตุการณ์เครื่องมือ (`toolHooks`) PreToolUse hooks ตัดสินทุก call ของรอบนี้ก่อน call แรกจะเริ่ม
+    แต่ละ call ได้ `run` `ask` หรือ `refuse` ถ้า session ไม่มี hook แบบนี้เลย ขั้นนี้ไม่เกิดและทุก call รันตามปกติ
   ref: "packages/engine/src/drive.ts#\"steps = await hooks?.decide(toolUses\""
   emits: [PreToolUse]
 
@@ -20,16 +21,16 @@
   lane: loop
   at: tools
   do: >-
-    `nextToolBatch` จัด call เป็นชุด: การอ่านที่ไม่ต้องขอสิทธิ์รันพร้อมกันได้ถึง 8 ตัว
-    ส่วน `bash` `edit` และ call ที่อาจต้องถามผู้ใช้ รันทีละตัว
+    `nextToolBatch` จัด call เป็นชุด: call ที่ไม่แก้อะไรและไม่ต้องถามใคร เช่นการอ่าน รันพร้อมกันได้ถึง 8 ตัว
+    ส่วน `bash` `edit` และ call ที่อาจต้องถามผู้ใช้ รันทีละตัว ชุดถัดไปเริ่มหลังชุดก่อนจบ
   ref: packages/core/src/tool-batch.ts#nextToolBatch
 
 - id: started
   lane: server
   at: updates
   do: >-
-    `watcher.toolStart` ส่ง `session/update` ชนิด `tool_call` สถานะ `in_progress` หนึ่งครั้งต่อ call
-  ref: packages/engine/src/serve.ts#editorTurn
+    ตอนที่แต่ละ call เริ่ม `watcher.toolStart` ส่ง `session/update` ชนิด `tool_call` สถานะ `in_progress` ให้ call นั้นหนึ่งครั้ง
+  ref: "packages/engine/src/serve.ts#\"toolStart(use, title) {\""
   emits: [tool_call, in_progress]
 
 - id: relay
@@ -37,7 +38,7 @@
   at: chat
   alongside: true
   do: >-
-    `updateActions` แปลง `tool_call` เป็น action ของขั้นใหม่ แล้วส่งต่อให้ webview
+    `updateActions` แปลง `tool_call` เป็น action ของขั้นใหม่ แล้ว `Chat.updated` ส่งต่อให้ webview
   ref: packages/extension/src/chat/session-updates.ts#updateActions
 
 - id: shown
@@ -45,6 +46,6 @@
   at: rail
   alongside: true
   do: >-
-    บทสนทนาขึ้นขั้นใหม่ ชื่อขั้นมาจาก `describeCall`
+    บทสนทนาขึ้นขั้นใหม่ ชื่อขั้นมาจาก `describeCall` ของ engine
   sees: ชิปของ call เช่น "read package.json" พร้อมจุดที่กำลังหมุน
   ref: packages/extension/src/chat/webview.ts#render

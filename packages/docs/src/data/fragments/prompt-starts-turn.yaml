@@ -37,15 +37,15 @@
   lane: editor
   at: engine-link
   do: >-
-    `link()` ต่อ Unix socket ของ engine (เปิด engine ขึ้นมาก่อนถ้ายังไม่มี) แล้วส่งคำขอ ACP `session/prompt`
-    คำขอนี้ค้างอยู่จนกว่า turn จะจบ
-  ref: packages/extension/src/chat/chat.ts#Chat.link
+    `link()` ได้การเชื่อมต่อจาก `Engine.connection()` (ต่อ Unix socket และเปิด engine ขึ้นมาก่อนถ้ายังไม่มี)
+    กับ session ของแผงนี้ แล้ว `prompt()` ส่งคำขอ ACP `session/prompt` คำขอนี้ค้างอยู่จนกว่า turn จะจบ
+  ref: "packages/extension/src/chat/chat.ts#\"mine.connection.agent.request(acp.methods.agent.session.prompt, {\""
 
 - id: accept
   lane: server
   at: turns
   do: >-
-    `runTurn` ปฏิเสธถ้า session นี้มี turn ทำงานอยู่แล้วหรือ prompt ว่าง
+    `runTurn` ปฏิเสธถ้า session นี้มี turn ทำงานอยู่แล้ว หรือ prompt ไม่มีทั้งข้อความและไฟล์แนบ
     จากนั้นลงทะเบียน `AbortController` ไว้ใน `turns` ให้ปุ่ม Stop ใช้ และเริ่มงานในแผง Tasks
   ref: packages/engine/src/serve.ts#runTurn
   phase: starting
@@ -72,7 +72,7 @@
   at: drive
   do: >-
     `drive` บันทึก event `user` ต่อท้าย log ของ session (ไฟล์ JSONL บรรทัดละ event)
-    log นี้คือสถานะทั้งหมดของ turn ไม่มีสถานะที่อยู่แค่ในหน่วยความจำ
+    loop ตัดสินทุกขั้นของ turn จาก log นี้ ไม่ใช่จากสถานะในหน่วยความจำ
   ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
   emits: [user]
 
@@ -80,7 +80,7 @@
   lane: policy
   at: hooks
   do: >-
-    UserPromptSubmit hooks (`submitted()`) ได้อ่าน prompt ก่อนโมเดล ถ้า hook บล็อก turn จะจบด้วย error `blocked`
-    และโมเดลไม่เห็น prompt นี้ เมื่อไม่มี hook ก็ผ่านไป
+    ถ้ามี UserPromptSubmit hook `submitted()` ให้ hook อ่าน prompt ก่อนโมเดล ถ้า hook บล็อก turn จะจบด้วย error `blocked`
+    และโมเดลไม่เห็น prompt นี้ ถ้า hook ให้บริบทเพิ่ม บริบทนั้นถูกบันทึกเป็น `hook-context` เมื่อไม่มี hook ก็ผ่านไป
   ref: packages/engine/src/drive.ts#submitted
   emits: [UserPromptSubmit]
