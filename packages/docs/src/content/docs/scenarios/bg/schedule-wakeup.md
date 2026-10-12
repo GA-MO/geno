@@ -60,14 +60,10 @@ scenario:
 
     - id: says
       beat:
-        title: Model บอกว่าจะกลับมาตรวจ แล้ว turn จบ
-        text: ปุ่ม Send กลับมา คุณทำอย่างอื่นต่อได้
+        title: Model บอกว่าจะกลับมาตรวจ แล้วจบ turn
+        text: model บอกว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบ turn
         from: model
-        to: panel
-        sees:
-          kind: composer
-          state: idle
-          header: worked for 9s
+        to: engine
       lane: model
       do: >-
         model บอกผู้ใช้ว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบด้วย `stop_reason: end_turn`
@@ -75,6 +71,15 @@ scenario:
       emits: [end_turn]
 
     - use: bg-turn-lets-go
+      beat:
+        title: Geno จบ turn ปุ่ม Send กลับมา
+        text: ปุ่ม Send กลับมา คุณทำอย่างอื่นต่อได้
+        from: engine
+        to: panel
+        sees:
+          kind: composer
+          state: idle
+          header: worked for 9s
 
     - id: meanwhile
       beat:

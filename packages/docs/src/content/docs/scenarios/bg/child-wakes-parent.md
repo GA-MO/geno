@@ -267,15 +267,14 @@ scenario:
         text: >-
           request ของ turn ที่ถูกปลุกจบด้วยโน้ตของ Geno สองอัน อันแรกคือรายงานในรั้ว `<subagent_report>` พร้อมคำเตือน
           อันที่สองบอกว่า Geno เริ่ม turn นี้เอง (woke: 1 task finished) ทั้งสองขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้
-          model อ่านแล้วเล่าผลให้คุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
+          model อ่านแล้วเขียนผลถึงคุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
         from: model
-        to: panel
+        to: engine
         sees:
           kind: payload
           source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
           select: messages[4]
           highlight: ['content[0].text', 'content[1].text']
-        end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
         model อ่านรายงานที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ ตามด้วยข้อความ "Geno started this turn by itself (woke: 1 task finished)..."
@@ -285,6 +284,12 @@ scenario:
       phase: calling-model
 
     - id: woken-ends
+      beat:
+        title: Geno จบ turn แผงแสดงคำตอบ
+        text: Geno จบ turn ที่ตัวเองเริ่ม แผงอ่านการจบจากงานในแผง Tasks แล้วแสดงคำตอบของ model ใต้หัวที่มีกระดิ่ง
+        from: engine
+        to: panel
+        end: Turn ที่ถูกปลุกจบ
       lane: loop
       at: step
       do: >-

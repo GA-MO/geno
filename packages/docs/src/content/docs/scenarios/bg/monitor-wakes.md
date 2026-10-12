@@ -120,11 +120,10 @@ scenario:
 
     - id: says
       beat:
-        title: Model บอกว่ารอ dev server แล้ว turn จบ
-        text: ปุ่ม Send กลับมา แผง Tasks บอกว่า session นี้รออะไร พร้อมปุ่ม Cancel
+        title: Model บอกว่ารอ dev server แล้วจบ turn
+        text: model ตอบสั้นๆ ว่าเปิด dev server แล้วและจะรอให้พร้อม แล้วจบ turn
         from: model
-        to: panel
-        sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
+        to: engine
       lane: model
       do: >-
         model ตอบสั้นๆ ว่าเปิด dev server แล้วและรอให้พร้อม จบด้วย `stop_reason: end_turn`
@@ -132,6 +131,12 @@ scenario:
       emits: [end_turn]
 
     - use: bg-turn-lets-go
+      beat:
+        title: Geno จบ turn แผง Tasks บอกว่ารออะไร
+        text: ปุ่ม Send กลับมา แผง Tasks บอกว่า session นี้รออะไร พร้อมปุ่ม Cancel
+        from: engine
+        to: panel
+        sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
 
     - id: fires
       beat:

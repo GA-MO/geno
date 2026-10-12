@@ -114,7 +114,7 @@ scenario:
         title: Model ทำตามข้อความที่แปลงแล้ว
         text: model เห็นข้อความหลังแปลง ไม่ใช่ `/fix-issue 42` ดิบๆ แล้วทำงานตามนั้น
         from: model
-        to: panel
+        to: engine
       lane: model
       do: >-
         model เห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
@@ -123,6 +123,11 @@ scenario:
       emits: [end_turn]
 
     - use: answer-streams
+      beat:
+        title: คำตอบค่อยๆ ขึ้นในแชต
+        text: Geno ส่งแต่ละส่วนที่ model เขียนผ่าน VS Code ไปถึงแผงแชตทันที คุณจึงอ่านได้ก่อน model เขียนเสร็จ
+        from: engine
+        to: panel
     - use: turn-ends
       beat:
         title: Turn จบ

@@ -149,10 +149,10 @@ scenario:
               - use: tool-result-returns
               - lane: loop
                 beat:
-                  title: Model เล่ารายงานให้คุณ
-                  text: Geno เรียก model ของแม่อีกครั้ง มันอ่านรายงานแล้วเล่าให้คุณ
-                  from: model
-                  to: panel
+                  title: Geno ส่งรายงานให้ model ของแม่
+                  text: Geno เรียก model ของแม่อีกครั้ง มันจะอ่านรายงานแล้วเล่าให้คุณ
+                  from: engine
+                  to: model
                   end: Model เล่ารายงาน
                 at: step
                 do: >-

@@ -23,10 +23,10 @@ scenario:
 
     - id: ask
       beat:
-        title: ส่วนขยายส่งคำขอให้ llama-server
+        title: ส่วนขยายส่งคำขอให้ llama-server บนเครื่อง
         text: ส่วนขยายสร้าง prompt จากข้อความก่อนและหลังเคอร์เซอร์ และไฟล์อื่นที่เปิดอยู่ แล้วรอจนคุณหยุดพิมพ์ ไม่มี engine เกี่ยวข้อง
         from: panel
-        to: model
+        to: machine
       lane: editor
       at: vscode-ui
       do: >-
@@ -47,7 +47,7 @@ scenario:
       beat:
         title: llama-server บนเครื่องเติมโค้ด
         text: model เติมโค้ดขนาดเล็กบนเครื่องของคุณ stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
-        from: model
+        from: machine
         to: panel
       lane: model
       do: >-

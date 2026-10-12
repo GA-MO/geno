@@ -95,11 +95,10 @@ scenario:
 
     - id: says
       beat:
-        title: Model บอกว่ารอ CI แล้ว turn จบ
-        text: "model บอกคุณว่ากำลังรอ CI ของ PR #42 แผง Tasks บอกว่า session รออะไร"
+        title: Model บอกว่ารอ CI แล้วจบ turn
+        text: "model บอกว่ากำลังรอ CI ของ PR #42 แล้วจบ turn"
         from: model
-        to: panel
-        sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
+        to: engine
       lane: model
       do: >-
         model บอกผู้ใช้ว่ากำลังรอ CI ของ PR #42 แล้วจบด้วย `stop_reason: end_turn`
@@ -107,6 +106,12 @@ scenario:
       emits: [end_turn]
 
     - use: bg-turn-lets-go
+      beat:
+        title: Geno จบ turn แผง Tasks บอกว่ารออะไร
+        text: ปุ่ม Send กลับมา แผง Tasks บอกว่า session รอ CI ของ PR #42 พร้อมปุ่ม Cancel
+        from: engine
+        to: panel
+        sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
 
     - id: polls
       beat:

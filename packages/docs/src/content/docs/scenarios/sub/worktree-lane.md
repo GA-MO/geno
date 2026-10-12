@@ -237,7 +237,7 @@ scenario:
         title: Model บอกให้คุณตรวจ lane
         text: model เล่าว่า worker ทำอะไรใน lane ไหน การแก้ยังไม่เข้า checkout หลักจนกว่าคุณจะ Apply ทัวร์ถัดไปเล่าการตรวจและ Apply lane
         from: model
-        to: panel
+        to: engine
         end: ไปตรวจและ Apply lane
       lane: model
       do: >-

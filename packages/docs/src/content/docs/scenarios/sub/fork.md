@@ -220,7 +220,7 @@ scenario:
         title: Model เล่าแผนให้คุณฟัง
         text: model ของแม่อ่านแผนแล้วเล่าให้คุณฟังด้วยคำของตัวเอง
         from: model
-        to: panel
+        to: engine
         end: Turn จบ
       lane: model
       do: >-
