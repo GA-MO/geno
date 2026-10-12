@@ -51,8 +51,8 @@ export type Shown = { readonly kind: 'text'; readonly text: string } | Exclude<M
 export interface BeatHead {
   readonly title: string;
   readonly text: string;
-  readonly from?: Actor;
-  readonly to?: Actor;
+  readonly from: Actor;
+  readonly to: Actor;
   readonly sees: readonly Shown[];
   readonly ask?: string;
   readonly end?: string;
