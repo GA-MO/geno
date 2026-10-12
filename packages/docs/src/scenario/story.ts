@@ -148,15 +148,58 @@ export function storyFromHash(scenario: Scenario, hash: string): StoryState {
   return index === -1 ? storyStart(scenario) : { choices, at: index };
 }
 
-/** A beat placed on the swim-lane canvas, one chip per option of a fork, and the walk's end. */
-export type LaneItem =
-  | { readonly kind: 'beat'; readonly beat: number; readonly x: number; readonly row: number; readonly w: number; readonly fork: boolean }
-  | { readonly kind: 'branch'; readonly branch: Branch; readonly beat: number; readonly x: number; readonly row: number; readonly w: number }
-  | { readonly kind: 'end'; readonly ending: Ending; readonly x: number; readonly row: number; readonly w: number };
+/**
+ * The swim-lane canvas, in pixels. Each beat owns a column: its node sits in the `from` lane and, when the beat goes
+ * from one actor to another, a receiver marker sits in the `to` lane under the node's center, joined by a message
+ * arrow. A fork's diamond takes the receiver's place (beside the node when the actor decides alone), and its chips
+ * stack in a column of their own. Nothing else shares a column, so an arrow inside one crosses no node, and every
+ * other connector turns only in the empty gutter before its target.
+ */
+export const LANE = {
+  height: 72,
+  node: 240,
+  nodeH: 56,
+  receiver: 44,
+  receiverH: 10,
+  diamond: 68,
+  diamondH: 52,
+  branch: 204,
+  branchH: 52,
+  end: 140,
+  endH: 28,
+  gap: 44,
+  pad: 20,
+} as const;
 
+interface Placed {
+  readonly x: number;
+  readonly row: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** A beat's node, its receiver marker or fork diamond, one chip per fork option, and the walk's end. */
+export type LaneItem =
+  | (Placed & { readonly kind: 'beat' | 'receiver' | 'decision'; readonly beat: number })
+  | (Placed & { readonly kind: 'branch'; readonly beat: number; readonly branch: Branch })
+  | (Placed & { readonly kind: 'end'; readonly beat: number; readonly ending: Ending });
+
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * `message`: a beat's actor hands off to its receiver. `flow`: the walk moves on to the next beat. `branch`: a fork
+ * fans out to an option. `beat` is the beat whose place (past, current, future) colors the arrow.
+ */
 export interface LaneEdge {
+  readonly kind: 'message' | 'flow' | 'branch';
   readonly from: number;
   readonly to: number;
+  readonly beat: number;
+  /** An orthogonal polyline whose last point is the arrowhead's tip on the target's edge. */
+  readonly points: readonly Point[];
 }
 
 export interface LaneLayout {
@@ -164,61 +207,81 @@ export interface LaneLayout {
   readonly edges: readonly LaneEdge[];
   readonly rows: number;
   readonly width: number;
+  readonly height: number;
 }
 
-export const LANE = { node: 112, diamond: 68, branch: 112, end: 92, step: 60, gap: 8, trunk: 16, pad: 8 } as const;
+export const rowCenter = (row: number): number => row * LANE.height + LANE.height / 2;
 
-/**
- * Places beats left to right in their actor's row. A beat moves right by at least `step` from the one before it and
- * clears whatever already sits in its row, so beats in different rows overlap in x and the walk stays compact.
- * A fork owns a column of its own right after its diamond: one chip per option, in option order, stacked around the
- * diamond's row. The walk goes on from the chosen chip.
- */
+/** Leaves `from` at its right edge and enters `to` at its left edge, turning in the gutter just before `to`. */
+function across(from: Placed, to: Placed): Point[] {
+  const start = { x: from.x + from.w, y: rowCenter(from.row) };
+  const tip = { x: to.x, y: rowCenter(to.row) };
+  if (start.y === tip.y) return [start, tip];
+  const turn = to.x - Math.min(LANE.gap / 2, (to.x - start.x) / 2);
+  return [start, { x: turn, y: start.y }, { x: turn, y: tip.y }, tip];
+}
+
+/** Leaves a node from its center, straight up or down its own column, onto the near edge of `to`. */
+function down(from: Placed, to: Placed): Point[] {
+  const x = to.x + to.w / 2;
+  const below = to.row > from.row;
+  return [
+    { x, y: rowCenter(from.row) },
+    { x, y: rowCenter(to.row) + (below ? -to.h / 2 : to.h / 2) },
+  ];
+}
+
 export function layoutLanes(scenario: Scenario, choices: Choices, beats: readonly Beat[]): LaneLayout {
   const items: LaneItem[] = [];
   const edges: LaneEdge[] = [];
-  const rowEnd = new Map<number, number>();
   let rows = ACTORS.length;
-  const place = (item: LaneItem): number => {
-    items.push(item);
-    rowEnd.set(item.row, item.x + item.w);
-    return items.length - 1;
-  };
-  const leftOf = (row: number, after: number): number => Math.max(after, (rowEnd.get(row) ?? -Infinity) + LANE.gap);
+  const add = (item: LaneItem): number => items.push(item) - 1;
+  const link = (kind: LaneEdge['kind'], from: number, to: number, beat: number, route: (a: Placed, b: Placed) => Point[]) => edges.push({ kind, from, to, beat, points: route(items[from]!, items[to]!) });
 
-  let previous: number | undefined;
-  let minX: number = LANE.pad;
+  let x: number = LANE.pad;
+  /** The item the walk leaves from to reach the next beat. */
+  let tail: number | undefined;
   beats.forEach((beat, i) => {
-    const fork = beat.flow.kind === 'fork';
     const row = actorIndex(beat.from);
-    const index = place({ kind: 'beat', beat: i, x: leftOf(row, minX), row, w: fork ? LANE.diamond : LANE.node, fork });
-    if (previous !== undefined) edges.push({ from: previous, to: index });
-    const self = items[index]!;
-    previous = index;
-    minX = self.x + LANE.step;
-    if (!fork) return;
+    const toRow = actorIndex(beat.to);
+    const node = add({ kind: 'beat', beat: i, x, row, w: LANE.node, h: LANE.nodeH });
+    if (tail !== undefined) link('flow', tail, node, i, across);
+    tail = node;
+    const center = x + LANE.node / 2;
+    let right = x + LANE.node;
 
-    const branches = branchesAt(scenario, choices, beat.last);
-    rows = Math.max(rows, branches.length);
-    const top = Math.min(Math.max(0, row - Math.floor((branches.length - 1) / 2)), rows - branches.length);
-    const x = Math.max(...branches.map((_, k) => leftOf(top + k, self.x + self.w + LANE.trunk)));
-    branches.forEach((branch, k) => {
-      const chip = place({ kind: 'branch', branch, beat: i, x, row: top + k, w: LANE.branch });
-      edges.push({ from: index, to: chip });
-      if (branch.chosen) previous = chip;
-    });
-    minX = x + LANE.branch + LANE.trunk;
+    if (beat.flow.kind === 'fork') {
+      const alone = toRow === row;
+      const dx = alone ? right + LANE.gap / 2 : center - LANE.diamond / 2;
+      const diamond = add({ kind: 'decision', beat: i, x: dx, row: toRow, w: LANE.diamond, h: LANE.diamondH });
+      link(alone ? 'flow' : 'message', node, diamond, i, alone ? across : down);
+      right = Math.max(right, dx + LANE.diamond);
+      const branches = branchesAt(scenario, choices, beat.last);
+      rows = Math.max(rows, branches.length);
+      const top = Math.min(Math.max(0, toRow - Math.floor((branches.length - 1) / 2)), rows - branches.length);
+      const cx = right + LANE.gap;
+      branches.forEach((branch, k) => {
+        const chip = add({ kind: 'branch', branch, beat: i, x: cx, row: top + k, w: LANE.branch, h: LANE.branchH });
+        link('branch', diamond, chip, i, across);
+        if (branch.chosen) tail = chip;
+      });
+      right = cx + LANE.branch;
+    } else if (toRow !== row) {
+      const receiver = add({ kind: 'receiver', beat: i, x: center - LANE.receiver / 2, row: toRow, w: LANE.receiver, h: LANE.receiverH });
+      link('message', node, receiver, i, down);
+      tail = receiver;
+    }
+    x = right + LANE.gap;
   });
 
   const last = beats.at(-1);
   const ending = last === undefined ? undefined : endingOf(last);
-  if (ending !== undefined && previous !== undefined) {
-    const row = actorIndex(last!.to);
-    const end = place({ kind: 'end', ending, x: leftOf(row, minX), row, w: LANE.end });
-    edges.push({ from: previous, to: end });
+  if (ending !== undefined && tail !== undefined) {
+    const end = add({ kind: 'end', ending, beat: beats.length - 1, x, row: actorIndex(last!.to), w: LANE.end, h: LANE.endH });
+    link('flow', tail, end, beats.length - 1, across);
   }
   const width = Math.max(...items.map((item) => item.x + item.w)) + LANE.pad;
-  return { items, edges, rows, width };
+  return { items, edges, rows, width, height: rows * LANE.height };
 }
 
 export interface StoryItem {

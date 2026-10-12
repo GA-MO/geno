@@ -1,8 +1,9 @@
 /**
  * Walks story tours in Chromium the way a reader does: both views, every branch to its end, at desktop and phone
  * widths. Fails on text that spills out of its box, a page wider than the window, a lane node taller than its lane,
- * a story of 12 beats or fewer that needs horizontal scroll at 1440, a current beat outside the visible lanes, a
- * reading card whose title sits below the fold of an unscrolled page at 1440, or a console error. Usage: pnpm --filter @g-code/docs walk [base-url] [page ...]
+ * a lane node narrower than 200px or whose title needs more than 2 lines, a lane item showing under the lane names, a
+ * current beat outside the visible lanes, a reading card whose title sits below the fold of an unscrolled page at
+ * 1440, or a console error. Usage: pnpm --filter @g-code/docs walk [base-url] [page ...]
  */
 import { chromium, type Page } from 'playwright';
 
@@ -53,13 +54,21 @@ function audit(): string[] {
   if (lane !== null) {
     const captions = [...document.querySelectorAll<HTMLElement>('.ln-caption')].map((caption) => caption.getBoundingClientRect());
     const bands = [...document.querySelectorAll<HTMLElement>('.ln-band')].map((band) => band.getBoundingClientRect());
-    for (const node of document.querySelectorAll<HTMLElement>('.ln-node, .ln-chip, .ln-end, .ln-diamond')) {
-      const box = node.getBoundingClientRect();
-      const name = node.textContent?.slice(0, 40);
-      if (!bands.some((band) => box.top >= band.top - 0.5 && box.bottom <= band.bottom + 0.5)) problems.push(`lane item "${name}" (${Math.round(box.height)}px) does not fit inside its lane`);
-      if (captions.some((caption) => box.left < caption.right && caption.left < box.right && box.top < caption.bottom && caption.top < box.bottom)) problems.push(`lane item "${name}" passes under a lane name`);
-    }
     const scroller = document.querySelector<HTMLElement>('.ln-scroll')!;
+    const shown = scroller.getBoundingClientRect();
+    for (const node of document.querySelectorAll<HTMLElement>('.ln-node, .ln-chip, .ln-end, .ln-diamond, .ln-recv')) {
+      const box = node.getBoundingClientRect();
+      const name = node.textContent?.slice(0, 40) || node.getAttribute('aria-label')?.slice(0, 40);
+      if (!bands.some((band) => box.top >= band.top - 0.5 && box.bottom <= band.bottom + 0.5)) problems.push(`lane item "${name}" (${Math.round(box.height)}px) does not fit inside its lane`);
+      // What the reader sees of an item is the part inside the scrolling lanes.
+      const left = Math.max(box.left, shown.left);
+      const right = Math.min(box.right, shown.right);
+      if (left < right && captions.some((caption) => left < caption.right && caption.left < right && box.top < caption.bottom && caption.top < box.bottom)) problems.push(`lane item "${name}" shows under a lane name`);
+      if (!node.classList.contains('ln-node')) continue;
+      if (box.width < 200) problems.push(`lane node "${name}" is ${Math.round(box.width)}px wide`);
+      const title = node.querySelector<HTMLElement>('.ln-t')!;
+      if (title.scrollHeight > title.clientHeight + 1 || title.clientHeight > 2.5 * parseFloat(getComputedStyle(title).lineHeight)) problems.push(`lane node "${name}" needs more than 2 lines`);
+    }
     const current = document.querySelector<HTMLElement>('.ln-node.current, .ln-diamond.current');
     if (current !== null) {
       const box = current.getBoundingClientRect();
@@ -80,13 +89,6 @@ async function walkView(page: Page, url: string, view: string, width: number, fi
   await page.waitForSelector('.story');
   await page.getByRole('tab', { name: view }).click();
   await settle(page);
-  if (view === 'Swim lane' && width >= 1440) {
-    const fit = await page.evaluate(() => {
-      const scroller = document.querySelector<HTMLElement>('.ln-scroll')!;
-      return { beats: document.querySelectorAll('.ln-node, .ln-diamond').length, scroll: scroller.scrollWidth, client: scroller.clientWidth };
-    });
-    if (fit.beats <= 12 && fit.scroll > fit.client) findings.push({ where: where('start'), problem: `${fit.beats} beats need ${fit.scroll}px of lanes in ${fit.client}px` });
-  }
   let options = 1;
   let walked = 0;
   for (let option = 0; option < options; option++) {

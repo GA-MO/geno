@@ -195,11 +195,19 @@ A page with no header keeps working. Its tour shows a "story coming" state and t
 ## Rendering
 
 `Story.tsx` replaces the old tour island. It has two views over the same beats, Sequence (default) and Swim lanes,
-with the choice kept in `localStorage`. Both draw a fork as a diamond whose branches end in end nodes. In Swim lanes
-the diamond fans out to a column of its own: one chip per option, in option order, each non-chosen chip naming its
-ending, and the walk goes on from the chosen chip. Lanes stay compact (76px, titles clamped to 3 lines) so the reading
-card starts above the fold at 1440x900. The reading
-card shows the beat, its mock, the internals and ย้อนกลับ / "ถัดไป <title> →". The hash is `#at=<step id>` plus `&c=` for
+with the choice kept in `localStorage`. Both draw a fork as a diamond whose branches end in end nodes.
+
+Swim lanes read like a message flow. Each beat owns a column: a 240px node in its `from` lane (at most 2 lines at 14px)
+and, when `to` differs, a message arrow straight down or up the column into a receiver bar in the `to` lane. A beat
+the actor does alone has no message arrow. A thinner connector carries the walk from one beat to the next and changes
+lanes only in the gutter before its target, so no arrow crosses a node. At a fork the diamond takes the receiver's
+place (beside the node when the actor decides alone) and fans out to a column of chips: one per option, in option
+order, each non-chosen chip naming its ending, and the walk goes on from the chosen chip. The current beat's arrows
+are in the accent color, past ones solid, future ones faint. The lanes scroll sideways with the lane names pinned in a
+column of their own, the current beat scrolls to the center, and an overview strip under the lanes shows the whole
+walk and jumps to the beat nearest a click. One 72px row per lane keeps the reading card's title above the fold at
+1440x900. `layoutLanes` returns the items and the routed arrow points, so the tests check the geometry directly. The
+reading card shows the beat, its mock, the internals and ย้อนกลับ / "ถัดไป <title> →". The hash is `#at=<step id>` plus `&c=` for
 non-default choices, so old step links still land on the beat that holds the step. With JS off, `StoryStatic.astro`
 prints the beats as an ordered list with nested branches.
 
