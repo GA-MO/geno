@@ -1,0 +1,82 @@
+---
+import { codeSegments } from '../scenario/labels';
+import type { Scenario } from '../scenario/model';
+import { storyOutline } from '../scenario/story';
+import StepList from './StepList.astro';
+import StoryList from './StoryList.astro';
+
+interface Props {
+  scenario: Scenario;
+  parts: Readonly<Record<string, string>>;
+}
+const { scenario, parts } = Astro.props;
+const steps = Object.keys(scenario.via).length;
+---
+
+<div class="story-page">
+
+  {
+    scenario.story ? (
+      <>
+        <slot />
+        <div class="story-static not-content">
+          <StoryList items={storyOutline(scenario)} />
+        </div>
+      </>
+    ) : (
+      <>
+        <div class="story-coming not-content">
+          <p class="story-coming-title">Story coming</p>
+          <p>
+            หน้านี้ยังไม่มีเรื่องเล่าแบบทีละจังหวะ ระหว่างนี้อ่านได้ทุกขั้นของโค้ด {steps} ขั้นด้านล่าง ตามลำดับที่เกิดขึ้นจริง
+            ทุกทางแยกอยู่ในรายการเดียวกัน
+          </p>
+        </div>
+        <h2 id="ทุกขั้น">ทุกขั้นและทุกทางแยก</h2>
+        <StepList scenario={scenario} items={scenario.outline} parts={parts} />
+      </>
+    )
+  }
+
+  <dl class="tour-given not-content">
+    {
+      scenario.given.length > 0 && (
+        <>
+          <dt>ก่อนเริ่ม</dt>
+          <dd>
+            <ul>
+              {scenario.given.map((line) => (
+                <li>{codeSegments(line).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</li>
+              ))}
+            </ul>
+          </dd>
+        </>
+      )
+    }
+    <dt>จุดเริ่ม</dt>
+    <dd>{codeSegments(scenario.trigger).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</dd>
+  </dl>
+
+  <div class="scenario-prose"><slot name="prose" /></div>
+
+  {
+    scenario.related.length > 0 && (
+      <>
+        <h2 id="อ่านต่อ">อ่านต่อ</h2>
+        <ul class="tour-related">
+          {scenario.related.map((link) => (
+            <li>
+              {link.href === undefined ? (
+                <>
+                  {link.title} <span class="tour-missing">ยังไม่มีหน้า</span>
+                </>
+              ) : (
+                <a href={link.href}>{link.title}</a>
+              )}
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+</div>

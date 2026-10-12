@@ -60,8 +60,8 @@ export default defineConfig({
       description: 'ทัวร์ทีละขั้นผ่าน harness ของ Geno: AI ทำอะไร harness ทำอะไร จนจบ turn',
       defaultLocale: 'root',
       locales: { root: { label: 'ไทย', lang: 'th' } },
-      customCss: ['@fontsource/noto-sans-thai/400.css', '@fontsource/noto-sans-thai/600.css', './src/styles/docs.css'],
-      components: { MarkdownContent: './src/overrides/MarkdownContent.astro' },
+      customCss: ['@fontsource-variable/inter', '@fontsource/noto-sans-thai/400.css', '@fontsource/noto-sans-thai/600.css', './src/styles/docs.css'],
+      components: { MarkdownContent: './src/overrides/MarkdownContent.astro', ThemeProvider: './src/overrides/ThemeProvider.astro', ThemeSelect: './src/overrides/ThemeSelect.astro' },
       sidebar: [
         { label: 'เริ่มต้น', items: [{ label: 'หน้าแรก', link: '/' }, 'start/how-to-read'] },
         { label: 'แผนที่ระบบ', link: '/map/' },

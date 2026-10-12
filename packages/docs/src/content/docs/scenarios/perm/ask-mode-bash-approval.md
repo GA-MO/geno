@@ -157,7 +157,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Always allow in this workspace
+                  title: You click Always allow
                   text: >-
                     เหมือน Allow แต่ Geno บันทึกกฎ `pnpm add` ไว้ใน workspace ด้วย
                     ครั้งหน้าคำสั่งแบบนี้ผ่านโดยไม่ถาม ยกเว้นคำสั่งอันตรายอย่าง `rm -rf`

@@ -205,6 +205,8 @@ describe('the exemplar stories', () => {
   test.each(['ask-mode-bash-approval', 'with-tools', 'blocking-report'])('%s has a story of 8 to 15 beats on every walk', (id) => {
     const scenario = site.scenarios[id]!;
     expect(scenario.story).toBe(true);
+    for (const beat of storyBeats(scenario, scenario.defaults))
+      if (beat.flow.kind === 'fork') expect(branchesAt(scenario, scenario.defaults, beat.last).map((branch) => branch.option.id)).toEqual(beat.flow.options.map((option) => option.id));
     const walks = Object.values(scenario.steps).flatMap((step) => (step.flow.kind === 'fork' ? branchesAt(scenario, scenario.defaults, step.id) : []));
     for (const count of [storyBeats(scenario, scenario.defaults).length, ...walks.map((branch) => branch.beats)]) {
       expect(count).toBeGreaterThanOrEqual(8);

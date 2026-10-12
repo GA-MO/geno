@@ -1,12 +1,14 @@
 ---
 import Default from '@astrojs/starlight/components/MarkdownContent.astro';
-import Tour from '../components/Tour';
-import TourStatic from '../components/TourStatic.astro';
+import Story from '../components/Story';
+import StoryStatic from '../components/StoryStatic.astro';
 import { partLabels, scenarioFor, siteFor } from '../scenario/site';
 
 const { entry } = Astro.locals.starlightRoute;
 const scenario = entry.data.scenario === undefined || entry.filePath === undefined ? undefined : scenarioFor(entry.filePath);
-const parts = partLabels(siteFor().lanes);
+const site = siteFor();
+const parts = partLabels(site.lanes);
+const laneNames = Object.fromEntries(site.lanes.lanes.map((lane) => [lane.id, lane.english]));
 ---
 
 <Default>
@@ -14,12 +16,12 @@ const parts = partLabels(siteFor().lanes);
     scenario === undefined ? (
       <slot />
     ) : (
-      <TourStatic scenario={scenario} parts={parts}>
-        <Tour client:load scenario={scenario} parts={parts} />
+      <StoryStatic scenario={scenario} parts={parts}>
+        {scenario.story && <Story client:only="react" scenario={scenario} laneNames={laneNames} />}
         <Fragment slot="prose">
           <slot />
         </Fragment>
-      </TourStatic>
+      </StoryStatic>
     )
   }
 </Default>
