@@ -138,8 +138,9 @@ scenario:
               - lane: server
                 at: turns
                 do: >-
-                  turn ของ prompt นี้เริ่มก่อน ประตูจึงตอบ `hold` (`turn`) รายงานที่บันทึกลง log แล้วไปกับ prompt นี้
-                  ในคำขอแรก ไม่มี turn ที่ถูกปลุก
+                  turn ของ prompt นี้เริ่มก่อน และการดูประตูต่อคิวหลังงานของ turn นี้ เมื่อ event `user` ของ prompt ถูกบันทึกแล้ว
+                  ไม่มีอะไรมาถึงหลังจุดนั้น ประตูจึงตอบ `none` (ถ้าดูในช่วงสั้นๆ ก่อนนั้นจะได้ `hold` (`turn`))
+                  รายงานที่บันทึกลง log แล้วไปกับ prompt นี้ในคำขอแรก ไม่มี turn ที่ถูกปลุก
                 ref: packages/engine/src/serve.ts#runTurn
                 phase: starting
                 end: { turn: continues }

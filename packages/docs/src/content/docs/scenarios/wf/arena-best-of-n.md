@@ -1,6 +1,6 @@
 ---
 title: Arena best-of-N
-description: ผู้ใช้สั่ง /best-of-n Geno รันงานเดียวกันใน 2 ถึง 4 lane พร้อมกัน ตรวจแต่ละ lane ด้วย check ของโปรเจกต์ ให้ review จัดอันดับ แล้วผู้ใช้เลือก Pick หรือ Graft
+description: ผู้ใช้สั่ง /best-of-n Geno รันงานเดียวกันใน 2 ถึง 4 lane พร้อมกัน ตรวจแต่ละ lane ด้วย check ของโปรเจกต์ ให้ review จัดอันดับ แล้วผู้ใช้ Pick ผู้ชนะ และ Graft hunk ของ lane อื่นทับได้
 tableOfContents: false
 sidebar:
   order: 3
@@ -31,7 +31,8 @@ scenario:
       lane: editor
       at: engine-link
       do: >-
-        `ArenaHost` ส่งคำขอ `_gcode/arena/preview` engine ประมาณราคาจากค่าใช้จ่ายของ session ล่าสุดๆ และคิดราคา review รวมไว้
+        `ArenaHost` ส่งคำขอ `_gcode/arena/preview` engine ประมาณราคาต่อ lane จากค่ามัธยฐานของค่าใช้จ่าย session ล่าสุด 50 ตัว
+        (ถ้ามี session ที่เสียเงินไม่ถึง 3 ตัว ใช้ค่าตั้งต้น $0.032 ต่อ lane) แล้วบวกเพดานของ review เข้าไป
         แล้วตอบพร้อมรายการ variant ของแต่ละ lane (ที่นี่คือโมเดลต่างกัน)
       ref: packages/engine/src/arena.ts#arenaPreview
       emits: [_gcode/arena/preview]
@@ -166,53 +167,63 @@ scenario:
       at: arena
       do: >-
         แผง Arena แสดงผล: lane เรียงตามอันดับพร้อมเหตุผล ผลของ check ค่าใช้จ่าย และ diff เทียบกันจาก `_gcode/arena/compare`
-        ปุ่ม Pick ของอันดับหนึ่งเป็นปุ่มหลัก และติ๊ก hunk ของ lane อื่นเพื่อ Graft ได้
-      sees: ป้าย "Ranked" แถว lane B อยู่บนสุดพร้อมป้าย "Passed" ปุ่ม [Pick B] และปุ่ม "Graft hunks" (ป้าย "Winner" ขึ้นหลังผู้ใช้ Pick)
+        ปุ่ม Pick ของอันดับหนึ่งเป็นปุ่มหลัก ก่อนมีผู้ชนะ diff ยังไม่มีช่องให้ติ๊ก hunk และยังไม่มีปุ่ม Graft
+      sees: ป้าย "Ranked" แถว lane B อยู่บนสุดพร้อมป้าย "Passed" และปุ่ม [Pick B]
       ref: packages/extension/src/chat/arena-model.ts#RUN_BADGES
       phase: idle
 
+    - id: pick
+      lane: editor
+      at: chat
+      do: >-
+        ผู้ใช้อ่านเหตุผลและ diff แล้วกด Pick B `ArenaHost.pick` ส่ง `_gcode/arena/pick` ให้ engine บันทึกผู้ชนะ
+        แล้วเรียก `Chat.applyLane` กับ lane นั้น ระหว่างนั้นแผงขึ้น "Applying lane B in the chat…"
+      ref: packages/extension/src/chat/arena-host.ts#ArenaHost
+      emits: [_gcode/arena/pick]
+
     - id: choose
       lane: user
-      do: ผู้ใช้อ่านเหตุผลและ diff แล้วเลือก
+      do: >-
+        เมื่อ apply จบ แผงขึ้น "Lane B is applied in the chat. Tick hunks of another lane below to graft them over it."
+        hunk ของ lane อื่นที่ต่างจากของผู้ชนะมีช่องให้ติ๊ก และปุ่ม "Graft hunks" ขึ้นใต้ diff ผู้ใช้เลือกว่าจะทำต่อหรือไม่
+      ref: packages/extension/src/chat/arena-model.ts#compareView
       fork:
-        ask: ผู้ใช้ทำอะไร
+        ask: หลัง Pick ผู้ใช้ทำอะไรต่อ
         options:
           - id: pick
-            label: Pick
+            label: พอแค่ Pick
             steps:
               - lane: editor
                 at: chat
                 do: >-
-                  `ArenaHost.pick` ส่ง `_gcode/arena/pick` ให้ engine บันทึกผู้ชนะ แล้วเรียก `Chat.applyLane` กับ lane นั้น
-                  แผงขึ้น "Applying lane B in the chat…"
-                ref: packages/extension/src/chat/arena-host.ts#ArenaHost
-                emits: [_gcode/arena/pick]
+                  การเปลี่ยนแปลงของ lane B อยู่ในแชตของ checkout หลักแล้วผ่าน turn ของ apply
+                ref: "packages/extension/src/chat/chat.ts#\"async applyLane(\""
                 goto: wf.lane-apply
 
           - id: graft
-            label: Graft hunk ที่เลือก
+            label: Graft hunk ที่เลือกต่อ
             steps:
               - lane: editor
                 at: chat
                 do: >-
-                  ผู้ใช้ติ๊ก hunk ของ lane C แล้วกด Graft `graftLane` ส่ง prompt "Graft 2 hunks from lane ..." ที่มี `gcode/laneGraft`
-                  engine ใช้ `applyLaneTurn` แบบเลือก hunk ซึ่งเขียนเฉพาะ hunk เหล่านั้นผ่าน review เหมือน Apply
+                  ผู้ใช้ติ๊ก 2 hunk ของ lane C ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แล้วกด `graftLane` ส่ง prompt "Graft 2 hunks from lane ..." ที่มี `gcode/laneGraft`
+                  engine ใช้ `applyLaneTurn` แบบเลือก hunk ซึ่งเขียนเฉพาะ hunk เหล่านั้นทับผลของ B ผ่าน review เหมือน Apply
                 ref: "packages/extension/src/chat/chat.ts#\"async graftLane(name: string, hunks: readonly string[]): Promise<acp.StopReason>\""
                 emits: [gcode/laneGraft]
                 goto: wf.lane-apply
 ---
 
-Arena คือการแข่งของหลาย lane บนงานเดียว ไม่มีแชตไหนรอผล ผลอยู่ในแผง Arena และกลับเข้า checkout หลักเมื่อผู้ใช้ Pick หรือ Graft เท่านั้น
+Arena คือการแข่งของหลาย lane บนงานเดียว ไม่มีแชตไหนรอผล ผลอยู่ในแผง Arena และกลับเข้า checkout หลักเมื่อผู้ใช้ Pick เท่านั้น Graft ทำได้หลัง Pick แล้ว
 
 | ขั้น | ที่ทำ | ใครทำ |
 | --- | --- | --- |
 | race | แต่ละ lane รันงานใน worktree ของตัวเอง | session ระดับบนสุด หนึ่งตัวต่อ lane |
 | check | check ของโปรเจกต์ใน sandbox ของ lane | engine |
 | rank | review จัดอันดับ lane ที่ผ่าน (เมื่อผ่าน 2 ตัวขึ้นไป) | เอเจนต์ `review` ใน session ที่ไม่มีใครตอบการ์ด |
-| pick หรือ graft | merge lane ที่เลือก หรือ hunk ที่เลือก เข้าแชตของ checkout หลัก | turn ของแชตที่ไม่มีโมเดล |
+| pick แล้ว graft | merge lane ผู้ชนะ แล้ว (ถ้าเลือก) hunk ของ lane อื่นทับ เข้าแชตของ checkout หลัก | turn ของแชตที่ไม่มีโมเดล |
 
 สิ่งที่ควรสังเกต
 
-- **`/best-of-n` ไม่ถึงโมเดลของแชต** editor จัดการเองทั้งหมด แชตไม่มี turn จนกว่าผู้ใช้จะ Pick หรือ Graft
+- **`/best-of-n` ไม่ถึงโมเดลของแชต** editor จัดการเองทั้งหมด แชตไม่มี turn จนกว่าผู้ใช้จะ Pick
 - **lane ที่แพ้ยังอยู่** แผง Lanes ยังแสดงทุก lane ผู้ใช้ Discard เองหรือใช้ `gcode lane sweep` ลบ lane ที่ไม่มีอะไรจะเสีย
 - **lane ที่ชนเพดานยังถูกตรวจ** งานที่ไม่เสร็จแต่ผ่าน check ก็ได้ลงแข่งในอันดับ

@@ -140,7 +140,7 @@ scenario:
                 at: step
                 do: >-
                   `loopStep` ตอบ call ที่ยังไม่ได้รันด้วย `UNRUN_TEXTS.rejected` แล้วตัดสิน `done(end_turn)` Stop hook ไม่ทำงานในทางนี้
-                ref: packages/core/src/loop.ts#unrunnable
+                ref: "packages/core/src/loop.ts#\"userRejected(newestTurn(events)!.after)) return done('end_turn')\""
                 emits: [end_turn]
                 phase: ending
               - lane: server

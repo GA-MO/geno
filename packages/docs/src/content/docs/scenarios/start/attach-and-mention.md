@@ -126,7 +126,7 @@ scenario:
                 at: rail
                 do: แผงแสดงบล็อก error ใต้บับเบิล และ turn จบแบบล้มเหลว
                 sees: >-
-                  บล็อก error สีแดง "Invalid params: no such file: src/date.test.ts" หัวข้อ "failed" และท้าย turn ขึ้น "Failed"
+                  บล็อก error สีแดง "Invalid params: no such file: src/date.test.ts" หัวข้อ "failed after" ตามด้วยเวลาที่ใช้ (เช่น "failed after 85ms") และท้าย turn ขึ้น "Failed"
                 ref: packages/extension/src/chat/render.ts#errorBlock
                 end: { turn: failed }
 ---

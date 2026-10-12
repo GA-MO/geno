@@ -41,8 +41,9 @@
   at: step
   do: >-
     `loopStep` เห็นว่า event ล่าสุดคือ `error` ตาราง `ERROR_REASON` แปลง `transport` และ `overflow` เป็น `done(error)`
-    Stop hook ไม่ทำงานในทางนี้ สิ่งที่โมเดลยังไม่ได้ตอบ (prompt หรือผลของเครื่องมือ) ยังอยู่ใน log
-    เพราะ `KEEPS_PENDING_PROMPT` เก็บไว้สำหรับ `transport` และ `overflow` ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งของเดิมและข้อความใหม่
+    Stop hook ไม่ทำงานในทางนี้ สิ่งที่โมเดลยังไม่ได้ตอบ (prompt หรือผลของเครื่องมือ) ยังอยู่ใน log เสมอ
+    `KEEPS_PENDING_PROMPT` เป็นตัวตัดสินว่ามันถูกส่งไปในคำขอถัดไปหรือไม่ และสำหรับ `transport` กับ `overflow` คำตอบคือส่ง
+    ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งของเดิมและข้อความใหม่
   ref: packages/core/src/loop.ts#ERROR_REASON
   emits: [error]
   phase: ending
@@ -52,7 +53,7 @@
   at: turns
   do: >-
     `runTurn` แปลงผลด้วย `TURN_ENDS.error`: ACP ได้ `stopReason: end_turn` (ACP ไม่มี stop reason สำหรับ error)
-    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ turn ของ session ถูกล้างออกจาก `turns`
+    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และช่อง turn ของ session ใน `turns` ถูกตั้งเป็นว่าง
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META, failed]
 

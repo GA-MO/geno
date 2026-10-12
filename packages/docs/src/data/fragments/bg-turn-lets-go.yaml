@@ -15,8 +15,8 @@
   lane: server
   at: turns
   do: >-
-    `runTurn` แปลงผลด้วย `TURN_ENDS` เป็น `stopReason: end_turn` งานจบแบบ `done` และ turn ของ session ถูกล้างออกจาก `turns`
-    แล้ว `inbox.arrived` ให้ `WakeDriver` ดูประตูอีกครั้ง ยังไม่มีอะไรมาถึง จึงไม่ปลุก
+    `runTurn` แปลงผลด้วย `TURN_ENDS` เป็น `stopReason: end_turn` และงานจบแบบ `done` ใน `finally` มันเรียก `inbox.arrived`
+    แล้วตั้งช่อง turn ของ session ใน `turns` เป็นว่าง `WakeDriver` ดูประตูทีหลังแบบ async จึงเห็น turn ว่างแล้ว ยังไม่มีอะไรมาถึง จึงไม่ปลุก
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META]
 

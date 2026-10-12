@@ -42,9 +42,9 @@ scenario:
               - lane: panel
                 at: tasks
                 do: >-
-                  ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด
+                  ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด พร้อมวัน วันที่ เดือน และเวลาของรอบนั้น
                 sees: >-
-                  "Missed Mon 09:00: Geno was not running"
+                  "Missed Mon 12 Oct 09:00: Geno was not running"
                 ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
                 end: { turn: none }
 
@@ -54,14 +54,15 @@ scenario:
               - lane: server
                 at: schedules
                 do: >-
-                  รอบเมื่อวานยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` จดว่าพลาดเพราะรอบก่อนยังรัน
-                ref: packages/core/src/schedule.ts#hasOpenRun
+                  รอบก่อนหน้า (รอบวันศุกร์) ยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` ตัดสินว่าพลาดเพราะรอบก่อนยังรัน
+                  แล้ว `Scheduler.settle` จดรอบที่พลาดลงไฟล์งาน
+                ref: packages/engine/src/schedules.ts#Scheduler.settle
               - lane: panel
                 at: tasks
                 do: >-
-                  ส่วน Scheduled แสดงรอบที่พลาด
+                  ส่วน Scheduled แสดงรอบที่พลาด พร้อมวัน วันที่ เดือน และเวลาของรอบนั้น
                 sees: >-
-                  "Missed Mon 09:00: the last run still ran"
+                  "Missed Mon 12 Oct 09:00: the last run still ran"
                 ref: packages/extension/src/chat/schedule-model.ts#scheduleRowOf
                 end: { turn: none }
 
