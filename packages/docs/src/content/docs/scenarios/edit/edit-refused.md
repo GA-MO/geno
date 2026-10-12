@@ -15,6 +15,10 @@ scenario:
   related: [edit.applied-as-diff, edit.create-file, ctx.file-changed-on-disk]
   steps:
     - id: asks
+      beat:
+        title: Model ขอแก้ `src/date.ts`
+        text: โมเดลส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน
+        to: engine
       lane: model
       do: >-
         โมเดลขอ `edit` ไฟล์ `src/date.ts` จบด้วย `stop_reason: tool_use`
@@ -31,8 +35,20 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น edit
+        text: Geno จัดคิวการแก้ให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: edit src/date.ts
+          status: running
 
     - id: current
+      beat:
+        title: Geno อ่านไฟล์ล่าสุดจาก VS Code
+        text: คุณเปิดไฟล์นี้อยู่ Geno จึงอ่านข้อความจาก buffer ของ VS Code ซึ่งรวมสิ่งที่คุณพิมพ์แต่ยังไม่ได้บันทึกด้วย
+        from: engine
+        to: panel
       lane: server
       at: updates
       do: >-
@@ -47,6 +63,11 @@ scenario:
       ref: packages/extension/src/chat/bridge.ts#readTextFile
 
     - id: check
+      beat:
+        title: Geno เทียบกับข้อความที่ model เห็น
+        text: Geno หาข้อความที่โมเดลเห็นครั้งล่าสุดจากการอ่านหรือการแก้ก่อนหน้า แล้วเทียบกับไฟล์ตอนนี้ ถ้าผ่าน จึงหา `old_str` ในไฟล์
+        from: engine
+        ask: การแก้ติดตรงไหน
       lane: tool
       at: executor
       runs: 0
@@ -62,6 +83,15 @@ scenario:
             then: failed
             steps:
               - lane: tool
+                beat:
+                  title: Model ยังไม่ได้อ่านไฟล์
+                  text: Geno ไม่รู้ว่าโมเดลแก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร การ์ดเป็นผลจริงจากการรันที่โมเดลแก้สามไฟล์โดยไม่อ่านก่อน
+                  sees:
+                    kind: payload
+                    direction: tool_result
+                    source: docs/results/real-usecases/runs/A27-resume-thai/2/session.jsonl#seq=30
+                    highlight:
+                      - output
                 at: executor
                 do: >-
                   `lastSeen` ไม่พบว่าโมเดลเคยเห็นไฟล์นี้ ทั้งในหน่วยความจำและใน log `edit` โยน `ToolError`
@@ -73,6 +103,9 @@ scenario:
             then: failed
             steps:
               - lane: tool
+                beat:
+                  title: คุณพิมพ์ในไฟล์หลัง model อ่าน
+                  text: ข้อความตอนนี้ไม่ตรงกับที่โมเดลเห็น Geno จึงไม่แทนอะไร และบอกให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
                 at: executor
                 do: >-
                   ผู้ใช้พิมพ์ใน buffer หลังจากโมเดลอ่านไฟล์ hash ของข้อความปัจจุบันจึงไม่ตรงกับฐาน `proposeChange` ล้มเหลวแบบ `stale-base`
@@ -84,6 +117,15 @@ scenario:
             then: failed
             steps:
               - lane: tool
+                beat:
+                  title: หา `old_str` ไม่เจอ
+                  text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ส่งช่วงบรรทัดที่ใกล้ที่สุดกลับไป ให้โมเดลคัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงจากการรันหนึ่ง
+                  sees:
+                    kind: payload
+                    direction: tool_result
+                    source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=7
+                    highlight:
+                      - output
                 at: executor
                 runs: 1
                 do: >-
@@ -97,6 +139,9 @@ scenario:
             then: failed
             steps:
               - lane: tool
+                beat:
+                  title: "`old_str` ตรงหลายที่"
+                  text: "Geno ไม่เดาว่าจะแก้ที่ไหน มันบอกจำนวนและบรรทัดที่เจอ ให้โมเดลใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
                 at: executor
                 runs: 1
                 do: >-
@@ -106,6 +151,14 @@ scenario:
                 emits: [multiple-matches]
 
     - id: failed
+      beat:
+        title: Geno ไม่เขียนอะไรเลย
+        text: ทุกทางจบที่ error ที่บอกเหตุผล ไฟล์และ buffer ไม่เปลี่ยน และไม่มี diff ให้รีวิว ขั้นของ edit ในแชตขึ้นว่าล้มเหลว
+        to: panel
+        sees:
+          kind: step
+          label: edit src/date.ts
+          status: failed
       lane: tool
       at: executor
       do: >-
@@ -116,6 +169,11 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Model อ่านเหตุผลแล้วลองใหม่
+        text: turn ไม่จบ ผลไปถึงโมเดลเป็น error โมเดลมักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง
+        to: model
+        end: Model อ่านไฟล์ใหม่แล้วลองอีกครั้ง
       lane: loop
       at: step
       do: >-

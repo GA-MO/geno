@@ -16,6 +16,10 @@ scenario:
   related: [tool.read-special-files, edit.applied-as-diff, edit.without-read-or-stale, ed.review-hunks]
   steps:
     - id: asks
+      beat:
+        title: Model ขอแก้ cell `c3` ของ notebook
+        text: โมเดลไม่แก้ JSON ของ `.ipynb` ตรงๆ มันใช้ tool `notebook_edit` บอก id ของ cell และโค้ดใหม่ มันรู้ id จากตอนอ่าน notebook
+        to: engine
       lane: model
       do: >-
         โมเดลขอ `notebook_edit` แบบ `replace` (ค่าเริ่มต้นของ `edit_mode`) และจบคำตอบด้วย `stop_reason: tool_use`
@@ -24,8 +28,18 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น notebook_edit
+        text: Geno จัดคิวการแก้ให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: notebook_edit analysis.ipynb
+          status: running
 
     - id: input
+      beat:
+        title: Geno ตรวจว่าเป็น notebook และ input ครบ
+        text: ไฟล์ต้องลงท้ายด้วย `.ipynb` ไฟล์อื่นได้คำบอกให้ใช้ edit การแทน cell ต้องมีทั้ง id ของ cell และโค้ดใหม่
       lane: tool
       at: executor
       do: >-
@@ -34,6 +48,10 @@ scenario:
       ref: packages/engine/src/tools/agent.ts#cellEditOf
 
     - id: current
+      beat:
+        title: Geno ตรวจว่า model อ่าน notebook ล่าสุด
+        text: Geno อ่าน notebook ปัจจุบันผ่าน VS Code แล้วเทียบกับที่โมเดลเห็นตอนอ่าน ถ้าโมเดลยังไม่ได้อ่าน หรือไฟล์เปลี่ยนไปแล้ว Geno ไม่เขียนอะไร รอบนี้ตรงกัน
+        from: engine
       lane: server
       at: updates
       do: >-
@@ -49,6 +67,9 @@ scenario:
       ref: packages/engine/src/tools/agent.ts#notebookEditExecutor
 
     - id: cell
+      beat:
+        title: Geno แทนเฉพาะ cell `c3`
+        text: Geno เปลี่ยน source ของ cell นี้ cell เดียว ล้าง output เก่าของมัน และไม่แตะไบต์อื่นของไฟล์ JSON ของ notebook จึงไม่พัง
       lane: tool
       at: executor
       do: >-
@@ -57,6 +78,10 @@ scenario:
       ref: packages/engine/src/tools/notebook.ts#editNotebook
 
     - id: write
+      beat:
+        title: VS Code เขียน notebook แล้วแชตแสดง diff
+        text: Geno ส่งไฟล์ทั้งไฟล์ให้ VS Code เขียน VS Code ตรวจอีกครั้งว่าไฟล์บนดิสก์ยังเป็นฉบับที่โมเดลเห็น แล้วส่งการเปลี่ยนแปลงให้แผงแชตแสดง
+        to: panel
       lane: server
       at: updates
       do: >-
@@ -74,6 +99,10 @@ scenario:
       emits: [diff]
 
     - id: result
+      beat:
+        title: Geno บอก model ว่าแทน cell แล้ว
+        text: ผลบอกว่า cell นี้อยู่ลำดับไหนในไฟล์ output ถูกล้าง และไม่ต้องอ่านไฟล์ซ้ำ Geno จำ notebook ฉบับใหม่ไว้สำหรับการแก้ครั้งถัดไป
+        to: model
       lane: tool
       at: executor
       do: >-
@@ -84,6 +113,10 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Geno เรียก model อีกครั้ง
+        text: โมเดลแก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
+        end: Model แก้ cell ต่อได้ทันที
       lane: loop
       at: step
       do: >-
