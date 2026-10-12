@@ -52,7 +52,7 @@ scenario:
       at: sandbox
       do: >-
         `BackgroundJobs.start` ตั้งชื่องานเป็น `bg-1` (รันพร้อมกันได้สูงสุด 4 งานต่อ session) เปิดคำสั่งใน sandbox
-        โดยไม่มีเวลาสูงสุด และเขียน output ทั้งหมดลงไฟล์ `background/bg-1.log` ในที่เก็บของ session
+        โดยไม่มีเวลาสูงสุด และเก็บ output ส่วนท้ายสุดไม่เกิน 1 MB (`BACKGROUND_OUTPUT_CAP`) ไว้ในหน่วยความจำและในไฟล์ `background/bg-1.log` ในโฟลเดอร์ spill ของ session
       ref: packages/engine/src/background.ts#BackgroundJobs.start
       emits: [bg-1]
 
