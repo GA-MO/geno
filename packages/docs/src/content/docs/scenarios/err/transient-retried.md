@@ -1,5 +1,5 @@
 ---
-title: ผู้ให้บริการล้มชั่วคราว Geno ลองใหม่เอง
+title: "ผู้ให้บริการล้มชั่วคราว Geno retry เอง"
 description: การเรียกโมเดลได้ 529 หรือโมเดลเงียบไป gateway ลองใหม่เองพร้อมแจ้งในแผงแชต ส่วนเครดิตหมดหรือคีย์ผิดจบ turn ทันที
 tableOfContents: false
 sidebar:
@@ -15,9 +15,20 @@ scenario:
   related: [err.offline-wait, err.rate-limited, ctx.overflow-compact-resend, turn.text-answer]
   steps:
     - use: model-call
+      beat:
+        title: "Geno ส่งคำขอให้ model"
+        text: >-
+          turn กำลังทำงาน เครือข่ายใช้ได้ แต่ฝั่งผู้ให้บริการมีปัญหา
+        to: model
 
     - id: fails
       lane: model
+      beat:
+        title: "ผู้ให้บริการตอบ error แทนคำตอบ"
+        text: >-
+          ผู้ให้บริการตอบเป็น error หรือเงียบไปเฉยๆ ตัวเชื่อมของ SDK ไม่ลองใหม่เอง Geno เป็นคนตัดสินว่าจะ retry ไหม
+          ลองเลือกว่าผู้ให้บริการตอบอะไร
+        ask: "ตอบอะไร"
       do: >-
         ผู้ให้บริการไม่ส่งคำตอบ แต่ตอบเป็น error หรือเงียบไปเฉยๆ wire ของ SDK ไม่ลองใหม่เอง (`maxRetries: 0`)
         การลองใหม่ทั้งหมดเป็นงานของ gateway
@@ -38,6 +49,11 @@ scenario:
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "529 overloaded เป็นแบบที่ retry ได้"
+                  text: >-
+                    ข้อความไม่ได้พูดถึงโควตา rate limit หรือ context และสถานะ 529 ตรงกฎของข้อผิดพลาดชั่วคราว Geno จึง retry ได้
+                    โดยรอ 1 วินาทีก่อนครั้งที่สอง
                 do: >-
                   `classifyFailure` เทียบกับตาราง `RULES` ตามลำดับ ข้อความไม่ได้พูดถึงโควตา rate limit หรือ context
                   สถานะ 529 จึงตรงกฎ 408 และ 5xx ได้ชนิด `transient` ซึ่งลองใหม่ได้
@@ -51,6 +67,10 @@ scenario:
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "Model เงียบไป 180 วินาที"
+                  text: >-
+                    ไม่มี byte ใหม่เข้ามาเลย 180 วินาที Geno ยกเลิกการเรียกนี้ และให้โอกาส retry ได้ครั้งเดียว
                 do: >-
                   ตัวเฝ้า stream นับ byte ที่เข้ามา ไม่มี byte เลย 180 วินาที (ก่อน byte แรก หรือระหว่าง byte)
                   จึงยกเลิกการเรียกนี้ด้วย `StreamStalled` gateway ให้โอกาสลองใหม่ได้ครั้งเดียว (`STALL_RETRIES`)
@@ -62,6 +82,11 @@ scenario:
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "เครดิตหมดหรือคีย์ผิด ไม่ retry"
+                  text: >-
+                    402 เครดิตหมด หรือ 4xx อื่นอย่าง 401 คีย์ผิด ลองไปก็ได้ผลเดิม Geno จึงไม่ retry และถือว่าการเรียกล้ม
+                    พร้อมข้อความของผู้ให้บริการที่ลบคีย์ออกแล้ว
                 do: >-
                   `classifyFailure` ได้ `quota` (402 หรือข้อความเรื่อง billing) หรือ `fatal` (สถานะอื่น เช่น 401 คีย์ผิด)
                   สองชนิดนี้ไม่ลองใหม่ ลองไปก็ได้ผลเดิม gateway คืนผลเป็น error ชนิด `transport` พร้อมข้อความของผู้ให้บริการ
@@ -69,10 +94,24 @@ scenario:
                 ref: packages/core/src/model-error.ts#TURN_ERROR_OF
                 emits: [quota, fatal, transport]
               - use: err-turn-fails
+                beat:
+                  title: "แชตขึ้นแถบ error ของผู้ให้บริการ"
+                  text: >-
+                    Geno บันทึก error แชตขึ้นแถบสีแดงพร้อมข้อความของผู้ให้บริการ และ turn จบแบบ failed ไม่มีปุ่ม Retry
+                    คุณต้องแก้คีย์หรือเติมเครดิตแล้วส่งข้อความใหม่เอง
+                  to: panel
+                  end: "ไม่ retry turn ล้มเหลว"
+                  sees: "แถบ error สีแดงพร้อมข้อความของผู้ให้บริการ เช่นเรื่องเครดิตหรือคีย์"
 
     - id: retry
       lane: loop
       at: model-call
+      beat:
+        title: "Geno บันทึกว่าจะ retry"
+        text: >-
+          Geno บันทึกว่านี่คือครั้งที่เท่าไร จะรอนานเท่าไร และ error คืออะไร ก่อนเริ่มรอ แล้วแจ้งแชต การ retry
+          ไม่นับเป็นการเรียกโมเดลในขีดจำกัดของ turn
+        to: panel
       do: >-
         `onRetry` บันทึก event `retry` (ครั้งที่ เวลาที่จะรอ และข้อความ) ลง log ก่อนเริ่มรอ
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'retry', seq: nextSeq(events)\""
@@ -99,6 +138,11 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้น Retrying พร้อมเหตุผลสั้นๆ"
+        text: >-
+          ท้าย turn ขึ้นแถวประกาศพร้อมไอคอนหมุนแทนแถว Thinking ข้อความเต็มของผู้ให้บริการอยู่ในรายละเอียด
+        sees: { kind: notice, text: Retrying in 1s (model overloaded), tone: warning }
       alongside: true
       do: >-
         ท้าย turn ขึ้นแถวประกาศพร้อมไอคอนหมุน แทนแถว "Thinking"
@@ -109,6 +153,12 @@ scenario:
     - id: backoff
       lane: loop
       at: gateway
+      beat:
+        title: "Geno รอแล้วเรียกใหม่"
+        text: >-
+          Geno รอ 1, 2 และ 4 วินาทีตามครั้ง แล้วเรียกใหม่ ถ้าคุณกด Stop ระหว่างรอ การรอจบทันทีและ turn จบแบบ stopped
+        to: model
+        ask: "ได้ผลไหม"
       do: >-
         gateway นอนรอตามเวลาแล้วเรียกใหม่ เวลารอเพิ่มเป็น 1, 2 และ 4 วินาที ถ้าผู้ใช้กด Stop ระหว่างรอ
         การนอนถูกยกเลิกทันทีและ turn จบแบบ stopped
@@ -120,6 +170,10 @@ scenario:
             label: ครั้งถัดไปได้คำตอบ
             steps:
               - lane: model
+                beat:
+                  title: "ครั้งนี้ผู้ให้บริการตอบ"
+                  text: >-
+                    ผู้ให้บริการตอบตามปกติ คำตอบ stream ออกมาแล้วจบด้วย end_turn
                 do: >-
                   ผู้ให้บริการตอบตามปกติ stream คำตอบออกมาแล้วจบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -127,6 +181,11 @@ scenario:
                 phase: calling-model
               - lane: panel
                 at: rail
+                beat:
+                  title: "แถว Retrying หายไป คำตอบขึ้นแทน"
+                  text: >-
+                    ทันทีที่การเรียกใหม่เริ่ม แถวประกาศหายไป แถว Thinking กลับมา แล้วคำตอบค่อยๆ ขึ้นในแชต
+                  sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว, streaming: true }
                 alongside: true
                 do: >-
                   ทันทีที่การเรียกใหม่ได้ slot และเริ่ม (ก่อน byte แรก) `watchStream` รายงาน progress ครั้งแรก
@@ -135,12 +194,24 @@ scenario:
                 ref: "packages/extension/src/chat/transcript.ts#\"progress: (transcript, { progress }) =>\""
               - use: answer-streams
               - use: turn-ends
+                beat:
+                  title: "Turn จบ"
+                  text: >-
+                    โมเดลไม่ขออะไรเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
+                  to: panel
+                  end: "retry สำเร็จ turn จบ"
+                  sees: { kind: composer, state: idle }
 
           - id: give-up
             label: ยังล้มจนหมดสิทธิ์ลอง
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "ล้มจนหมดสิทธิ์ retry"
+                  text: >-
+                    ข้อผิดพลาดชั่วคราว retry ได้ 3 ครั้ง โมเดลเงียบ retry ได้ครั้งเดียว เมื่อครบแล้ว Geno ถือว่าการเรียกล้ม
+                    สำหรับโมเดลเงียบ ข้อความบอกตัวแปรที่ตั้งให้รอนานขึ้นได้
                 do: >-
                   ล้มอีกจนครบ: ชนิด `transient` ลองใหม่ได้ 3 ครั้ง (`RETRY_POLICY`) โมเดลเงียบลองได้ครั้งเดียว
                   `retryDelayMs` คืน undefined gateway จึงคืนผลเป็น error ชนิด `transport`
@@ -148,6 +219,13 @@ scenario:
                 ref: packages/core/src/model-error.ts#retryDelayMs
                 emits: [transport]
               - use: err-turn-fails
+                beat:
+                  title: "แชตขึ้นแถบ error แล้ว turn ล้มเหลว"
+                  text: >-
+                    Geno บันทึก error แชตขึ้นแถบสีแดง และ turn จบแบบ failed prompt ที่ยังไม่ได้คำตอบไปกับข้อความถัดไปที่คุณส่ง
+                  to: panel
+                  end: "retry ไม่สำเร็จ turn ล้มเหลว"
+                  sees: "แถบ error สีแดงพร้อมข้อความของผู้ให้บริการจากครั้งสุดท้ายที่ลอง"
 ---
 
 gateway แยก error ของผู้ให้บริการเป็นหกชนิดด้วยตาราง `RULES` ใน `model-error.ts` แล้วแต่ละชนิดมีทางของตัวเอง
@@ -171,3 +249,5 @@ gateway แยก error ของผู้ให้บริการเป็�
   ข้อความถัดไปที่ผู้ใช้ส่งจึงไปพร้อม prompt เดิมในข้อความเดียวกัน
 - **แถบ error ไม่มีปุ่ม Retry** `missingReply` ไม่แสดงประกาศ Continue และ Retry เมื่อ turn มีแถบ error อยู่แล้ว
   ผู้ใช้ต้องส่งข้อความใหม่เอง
+
+error ที่ต้องรอนานกว่านี้ ดู [เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ](/scenarios/err/offline-wait/)
