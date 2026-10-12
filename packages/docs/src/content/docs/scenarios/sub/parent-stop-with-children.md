@@ -17,12 +17,19 @@ scenario:
     - id: press
       beat:
         title: คุณกด Stop
-        text: แถวของ explore ยังหมุนอยู่ใต้ขั้นที่ส่งงาน และ review ทำงานเบื้องหลังอยู่ คุณกด Stop
+        text: >-
+          ก่อนหน้านี้ model ส่ง `agent` สองครั้ง: `review` แบบ `background: true` ได้ผลกลับทันทีว่าเริ่มแล้ว
+          แล้ว `explore` แบบรอผล (การ์ด: บทสนทนาของแม่ตอนนั้น) แถวของ explore ยังหมุนอยู่ และ review ทำงานเบื้องหลัง คุณกด Stop
         from: you
         to: panel
         sees:
-          kind: composer
-          state: working
+          - kind: composer
+            state: working
+          - kind: payload
+            source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
+            select: messages
+            collapse: ['[0]', '[4]']
+            highlight: ['[1].content[1].input', '[2].content[0]', '[3].content[1].input']
       lane: user
       do: ผู้ใช้กด Stop ขณะแถวของ explore ยังหมุนอยู่ใต้ขั้น `agent`
       phase: running-tools
@@ -77,9 +84,16 @@ scenario:
     - id: answered
       beat:
         title: Geno ปิด call ที่ค้างแล้วบันทึกการหยุด
-        text: Geno เลิกรอ explore ทันที call ของแม่ได้คำตอบว่าถูกหยุด แทนรายงาน
+        text: >-
+          Geno เลิกรอ explore ทันที call `agent` ของ explore ได้คำตอบว่าถูกหยุด แทนรายงาน model เห็นคำตอบนี้ใน request
+          ของ turn ถัดไป เป็น `tool_result` ที่มี `is_error: true` และข้อความ "[Request interrupted by user for tool use]"
         from: engine
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
+          select: messages[4].content[0]
+          highlight: [content]
       lane: loop
       at: tools
       do: >-
@@ -101,9 +115,17 @@ scenario:
     - id: background
       beat:
         title: Geno หยุด review ที่ทำงานเบื้องหลัง
-        text: turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย review ไม่ส่งรายงาน จึงไม่มีอะไรปลุก session ทีหลัง
+        text: >-
+          turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย ไม่มีอะไรปลุก session ทีหลัง แต่ review ที่ถูกหยุดยังได้รั้ว
+          `<subagent_report agent="review" status="cancelled" partial="true">` ที่มีแค่ "(no report)" และรั้วนี้ติดไปกับ prompt
+          ถัดไปของคุณ ต่อจากผลที่ถูกหยุดของ explore
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/parent-stop.jsonl#line=10
+          select: messages[4]
+          highlight: ['content[1].text', 'content[2].text']
       lane: loop
       at: agent
       do: >-
@@ -115,8 +137,8 @@ scenario:
       lane: child@review
       at: loop
       do: >-
-        review หยุดและจบแบบ `cancelled` `child-end` ถูกบันทึกลง log ของแม่ แต่ไม่มีรายงานเข้ากล่องข้อความของแม่
-        จึงไม่มีอะไรปลุก session ภายหลัง
+        review หยุดและจบแบบ `cancelled` `child-end` ถูกบันทึกลง log ของแม่ ไม่มีอะไรปลุก session ภายหลัง
+        แต่รั้วรายงานที่ว่างของ review ถูกส่งให้ model พร้อม prompt ถัดไปของผู้ใช้
       ref: "packages/engine/src/subagents.ts#\"const heard = !silent && !unheard;\""
       emits: [child-end]
 

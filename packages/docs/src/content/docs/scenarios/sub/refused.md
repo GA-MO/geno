@@ -18,9 +18,21 @@ scenario:
     - id: wants
       beat:
         title: Model ขอเรียก agent อีกครั้ง
-        text: ใน run แบบ non-interactive ของ `gcode agent` model ขอส่งงานให้ subagent ลูกตัวก่อนหน้าใน run นี้ใช้งบไปแล้ว
+        text: >-
+          ใน run แบบ non-interactive ของ `gcode agent` model ขอส่งงานให้ subagent ลูกตัวก่อนหน้าใน run นี้ใช้งบไปแล้ว
+          tool `agent` ยังอยู่ในรายการของ model แม้ run นี้จะเริ่ม worker ไม่ได้ (แท็บแรก) model ส่ง `tool_use` ที่ขอ
+          `agent: "worker"` พร้อม `task` (แท็บสอง)
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/refused-writer.jsonl#line=2
+            select: tools[9]
+            highlight: [description]
+          - kind: payload
+            source: packages/docs/src/data/recorded/refused-writer.jsonl#line=4
+            select: messages[1].content
+            highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `agent` พร้อม task จบคำตอบด้วย `stop_reason: tool_use`
@@ -34,7 +46,7 @@ scenario:
         text: Geno ตัดสินว่าจะรัน tool call นี้ เทอร์มินัลพิมพ์บรรทัดของขั้นที่เริ่ม
         from: panel
         to: you
-        sees: "> agent worker: migrate src/log.ts to pino"
+        sees: "> agent worker: In src/version.ts, make parseVersion throw …"
       lane: loop
       at: step
       do: >-
@@ -49,7 +61,7 @@ scenario:
       alongside: true
       do: >-
         call ที่เริ่มพิมพ์บรรทัด `> ` ตามด้วยชื่อขั้น
-      sees: "> agent worker: migrate src/log.ts to pino"
+      sees: "> agent worker: In src/version.ts, make parseVersion throw …"
       ref: packages/engine/src/drive.ts#terminalSurface
 
     - id: launch
@@ -111,9 +123,16 @@ scenario:
     - id: logged
       beat:
         title: Geno ส่ง error ให้ model อ่าน
-        text: ผลของ call เป็น error ที่บอกเหตุผล เทอร์มินัลไม่พิมพ์ผลนี้
+        text: >-
+          ผลของ call เป็น `tool_result` ที่มี `is_error: true` และบอกเหตุผล ไม่มี `<subagent_report>` เพราะไม่มีลูก
+          เทอร์มินัลไม่พิมพ์ผลนี้ (การ์ดคือทาง worker)
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/refused-writer.jsonl#line=4
+          select: messages[2].content[0]
+          highlight: [content, is_error]
       lane: loop
       at: tools
       do: >-
@@ -127,9 +146,16 @@ scenario:
     - id: goes-on
       beat:
         title: Model ทำงานนั้นเอง
-        text: model อ่าน error แล้วทำงานเอง หรือบอกในคำตอบว่าต้องการอะไรจากคุณ เช่นให้รันใหม่ด้วย `--allow-worker`
+        text: >-
+          model อ่าน error แล้วทำงานเอง หรือบอกในคำตอบว่าต้องการอะไรจากคุณ เช่นให้รันใหม่ด้วย `--allow-worker`
+          ในการบันทึกนี้ model อ่าน `src/version.ts` แล้ว `edit` เอง
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/refused-writer.jsonl#line=8
+          select: messages[5].content
+          highlight: ['[1].input']
         end: Model ทำต่อเอง
       lane: model
       do: >-
