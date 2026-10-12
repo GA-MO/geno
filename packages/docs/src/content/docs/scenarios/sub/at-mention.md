@@ -28,7 +28,10 @@ scenario:
     - id: issued
       beat:
         title: Geno สร้าง tool call `agent` ในนามคุณ
-        text: Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ มันสร้าง call ส่งงานให้ explore เอง งานคือข้อความหลังชื่อ
+        text: >-
+          Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ มันสร้าง `tool_use` ชื่อ `agent` เองในนามคุณ
+          (`id` ขึ้นต้นด้วย `toolu_gcode_`) `input` คือ `agent: "explore"` และ `task` คือข้อความหลังชื่อ ไม่มี `background`
+          และไม่มี `fork` ไม่มี request ไปหา model ของแม่ใน turn นี้เลย
         from: engine
         to: engine
       lane: loop
@@ -52,16 +55,27 @@ scenario:
     - use: sub-child-starts
       beat:
         title: Geno เปิด session ให้ explore
-        text: explore ได้บันทึกและงบของตัวเอง แชตขึ้นแถวของมันใต้ขั้นที่ส่งงาน พร้อมนาฬิกาและปุ่ม Cancel explore ค้นโค้ดด้วย tool ที่อ่านอย่างเดียว
+        text: >-
+          explore ได้บันทึกและงบของตัวเอง แชตขึ้นแถวของมันพร้อมนาฬิกาและปุ่ม Cancel request แรกของ explore
+          เป็น request แรกของทั้ง turn: system prompt คือกรอบ subagent กับ role ของ explore จากนิยามในตัว Geno
+          (แท็บสอง) tool มีแค่ glob, grep, list, read และ `report` และข้อความแรกคือ environment กับคำที่คุณพิมพ์หลัง `@explore` (แท็บสาม)
         from: engine
         to: model
         sees:
-          kind: task
-          title: explore
-          status: running
-          detail: 0:02
-          actions:
-            - Cancel
+          - kind: task
+            title: explore
+            status: running
+            detail: 0:02
+            actions:
+              - Cancel
+          - kind: payload
+            source: packages/docs/src/data/recorded/at-mention.jsonl#line=2
+            select: system
+            quote: You are explore, a search subagent.
+          - kind: payload
+            source: packages/docs/src/data/recorded/at-mention.jsonl#line=2
+            select: messages[0]
+            highlight: ['content[1].text']
 
     - id: report
       beat:

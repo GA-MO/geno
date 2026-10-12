@@ -17,9 +17,20 @@ scenario:
     - id: wants
       beat:
         title: Model ส่งงานค้นหาให้ explore
-        text: model ของแม่ส่งคำถามกว้างๆ ให้ explore แล้วรอรายงาน
+        text: >-
+          model เลือกจาก tool `agent` ใน request ของมัน (แท็บแรก) แล้วส่ง `tool_use` ที่มี `agent: "explore"`
+          และ `task` ที่เขียนให้ครบในตัว ไม่มี `background` จึงรอรายงานใน call นี้ (แท็บสอง)
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=2
+            select: tools[9]
+            highlight: [description]
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=6
+            select: messages[1].content
+            highlight: ['[1].input']
       lane: model
       do: >-
         model ของแม่ขอเรียก `agent` ด้วย `agent: "explore"` และงานค้นหา จบคำตอบด้วย `stop_reason: tool_use`
@@ -39,16 +50,27 @@ scenario:
     - use: sub-child-starts
       beat:
         title: Geno เปิด session ให้ explore
-        text: แชตขึ้นแถวของ explore พร้อมนาฬิกาและปุ่ม Cancel explore ค้นอยู่นาน
+        text: >-
+          แชตขึ้นแถวของ explore พร้อมนาฬิกาและปุ่ม Cancel request แรกของ explore มี system prompt ของ explore
+          (กรอบ subagent กับ role จากนิยามในตัว Geno) และข้อความแรกที่มีแค่ environment กับ `task`
+          ไม่มีบทสนทนาของแม่ explore ค้นอยู่นาน
         from: engine
         to: model
         sees:
-          kind: task
-          title: explore
-          status: running
-          detail: 0:38
-          actions:
-            - Cancel
+          - kind: task
+            title: explore
+            status: running
+            detail: 0:38
+            actions:
+              - Cancel
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=4
+            select: system
+            quote: You are explore, a search subagent.
+          - kind: payload
+            source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=4
+            select: messages[0]
+            highlight: ['content[1].text']
 
     - id: click
       beat:
@@ -105,9 +127,17 @@ scenario:
     - id: partial
       beat:
         title: Geno ส่งรายงานเท่าที่ explore มี
-        text: Geno รวมข้อความที่ explore เขียนไว้เป็นรายงานบางส่วน และบอกว่ามันถูกยกเลิกก่อนเสร็จ
+        text: >-
+          Geno รวมข้อความที่ explore เขียนเสร็จแล้วเป็นรายงานบางส่วน และบอกว่ามันถูกยกเลิกก่อนเสร็จ
+          ข้อความที่กำลัง stream อยู่ตอนกด Cancel ไม่นับ ในการบันทึกนี้ explore stream "src/cli.ts:3 calls parseVersion"
+          ไปแล้วครึ่งคำตอบ แต่รายงานคือ "(no report)" พร้อม `status="cancelled" partial="true"` และ `turns="0"`
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/child-cancelled.jsonl#line=6
+          select: messages[2].content[0]
+          highlight: [content]
       lane: loop
       at: tools
       do: >-
