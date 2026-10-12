@@ -1,6 +1,6 @@
 ---
 title: "กด Ctrl-C ใน CLI ขณะรอรายงานของ subagent"
-description: ใน CLI โมเดลจบ turn แล้วแต่ turn ยังเปิดรอรายงานของลูกที่รันเบื้องหลัง ผู้ใช้กด Ctrl-C การรอจบ ลูกถูกหยุด รายงานไม่ถูกรับ และ process ออกด้วย 130
+description: ใน CLI model จบ turn แล้วแต่ turn ยังเปิดรอรายงานของลูกที่รันเบื้องหลัง ผู้ใช้กด Ctrl-C การรอจบ ลูกถูกหยุด รายงานไม่ถูกรับ และ process ออกด้วย 130
 tableOfContents: false
 sidebar:
   order: 8
@@ -8,7 +8,7 @@ scenario:
   surface: cli
   given:
     - ผู้ใช้รัน `gcode agent "สำรวจว่าโมดูลไหนไม่มีเทสต์"` ในเทอร์มินัล
-    - "โมเดลเรียก `agent` ให้ `explore` ทำงานแบบ `background: true` แล้วจบคำตอบด้วย `end_turn` ว่าจะรอผล"
+    - "model เรียก `agent` ให้ `explore` ทำงานแบบ `background: true` แล้วจบคำตอบด้วย `end_turn` ว่าจะรอผล"
     - CLI ไม่มีตัวปลุก ไม่มีอะไรมาเปิด session ทีหลังได้ turn จึงต้องเปิดรอรายงานเอง
   trigger: >-
     ผู้ใช้กด Ctrl-C ระหว่างที่เทอร์มินัลรออยู่
@@ -21,7 +21,7 @@ scenario:
       beat:
         title: "Geno ยังไม่จบ turn เพราะรอรายงาน"
         text: >-
-          โมเดลส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
+          model ส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
           Geno จึงยังไม่จบ turn แต่เปิดรอรายงานฉบับนั้นเอง
         from: engine
         to: engine
@@ -37,12 +37,12 @@ scenario:
       beat:
         title: "เทอร์มินัลค้างโดยไม่บอกว่ารอ"
         text: >-
-          คำตอบของโมเดลพิมพ์ออกมาแล้ว แต่ไม่มีบรรทัดไหนบอกว่ากำลังรอ และเทอร์มินัลยังไม่คืน prompt
+          คำตอบของ model พิมพ์ออกมาแล้ว แต่ไม่มีบรรทัดไหนบอกว่ากำลังรอ และเทอร์มินัลยังไม่คืน prompt
         from: panel
         to: you
         sees: { kind: message, from: geno, text: ผมให้ explore สำรวจอยู่ เดี๋ยวสรุปให้เมื่อได้ผล }
       do: >-
-        คำตอบของโมเดลพิมพ์ออก stdout ไปแล้ว ไม่มีบรรทัดอะไรบอกว่ากำลังรอ เทอร์มินัลยังไม่คืน prompt
+        คำตอบของ model พิมพ์ออก stdout ไปแล้ว ไม่มีบรรทัดอะไรบอกว่ากำลังรอ เทอร์มินัลยังไม่คืน prompt
       sees: ข้อความ "ผมให้ explore สำรวจอยู่ เดี๋ยวสรุปให้เมื่อได้ผล" แล้วเคอร์เซอร์ค้างอยู่
       ref: packages/engine/src/drive.ts#terminalSurface
 
@@ -150,7 +150,7 @@ scenario:
 ---
 
 การถือ turn ไว้รอลูกเกิดเฉพาะที่ไม่มีตัวปลุก: CLI หรือ engine ที่ตั้ง `GCODE_AUTO_WAKE=off`
-ใน VS Code ปกติ turn จบทันทีที่โมเดลจบ และรายงานของลูกปลุก session ทีหลัง ดู
+ใน VS Code ปกติ turn จบทันทีที่ model จบ และรายงานของลูกปลุก session ทีหลัง ดู
 [ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/)
 
 สิ่งที่ควรสังเกต
@@ -158,6 +158,6 @@ scenario:
 - **การรอไม่มีอะไรบอกบนจอ** เทอร์มินัลแค่ไม่คืน prompt ผู้ใช้ที่ไม่รู้ว่ามีลูกเบื้องหลังอาจคิดว่า process ค้าง
 - **Ctrl-C ทิ้งงานของลูก** `stopBackground` ตั้งให้รายงานไม่มีใครฟัง ลูกที่ใกล้เสร็จก็ไม่ได้ส่งผลกลับ
   และ turn ของแม่จบไปก่อนที่ใครจะได้อ่านมัน
-- **exit code บอกว่าถูกหยุด** 130 มาจาก `EXIT_CODES.abort` ไม่ใช่ 0 แม้โมเดลจะจบคำตอบของมันไปแล้ว
+- **exit code บอกว่าถูกหยุด** 130 มาจาก `EXIT_CODES.abort` ไม่ใช่ 0 แม้ model จะจบคำตอบของมันไปแล้ว
 
-Stop ใน VS Code ระหว่างโมเดลเขียน ดู [กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/)
+Stop ใน VS Code ระหว่าง model เขียน ดู [กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/)

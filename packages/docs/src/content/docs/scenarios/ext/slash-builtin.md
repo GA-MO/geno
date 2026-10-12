@@ -1,6 +1,6 @@
 ---
 title: คำสั่ง / ที่ Geno ทำเอง
-description: คำสั่งในตัวบางคำสั่ง VS Code ทำเองโดยไม่ติดต่อ engine บางคำสั่ง engine ทำเองโดยไม่เรียกโมเดล ทั้งสองแบบไม่เปิดรอบของเอเจนต์
+description: คำสั่งในตัวบางคำสั่ง VS Code ทำเองโดยไม่ติดต่อ engine บางคำสั่ง engine ทำเองโดยไม่เรียก model ทั้งสองแบบไม่เปิดรอบของเอเจนต์
 tableOfContents: false
 sidebar:
   order: 2
@@ -102,7 +102,7 @@ scenario:
                 at: turns
                 do: >-
                   `runTurn` ให้ `commands.expand` แปลงข้อความ ได้ `builtin` จึงเรียก `runBuiltin` แทนการเปิดรอบของเอเจนต์
-                  ไม่มีการลงทะเบียน turn ไม่มีงานในแผง Tasks และไม่มีการเรียกโมเดล
+                  ไม่มีการลงทะเบียน turn ไม่มีงานในแผง Tasks และไม่มีการเรียก model
                 ref: packages/engine/src/commands.ts#runBuiltin
                 emits: [builtin]
                 phase: starting
@@ -154,7 +154,7 @@ scenario:
 
 คำสั่งในตัวมีสามกลุ่ม ต่างกันที่ว่าใครทำและต้องเปิดรอบของเอเจนต์ไหม
 
-| กลุ่ม | คำสั่ง | ใครทำ | เรียกโมเดล |
+| กลุ่ม | คำสั่ง | ใครทำ | เรียก model |
 | --- | --- | --- | --- |
 | editor | `/new` `/clear` `/history` `/model` `/rules` `/memory` `/best-of-n` `/lane` | VS Code | ไม่ |
 | engine | `/mode` `/schedule` | engine โดยไม่เปิดรอบ | ไม่ |

@@ -1,6 +1,6 @@
 ---
 title: CLI ถือ turn ไว้รอรายงาน
-description: ใน gcode agent ไม่มีอะไรปลุก session ทีหลัง turn ที่โมเดลจบจึงค้างไว้จนลูกเบื้องหลังรายงาน แล้วเรียกโมเดลอีกรอบให้อ่านรายงานก่อน process จบ
+description: ใน gcode agent ไม่มีอะไรปลุก session ทีหลัง turn ที่ model จบจึงค้างไว้จนลูกเบื้องหลังรายงาน แล้วเรียก model อีกรอบให้อ่านรายงานก่อน process จบ
 tableOfContents: false
 sidebar:
   order: 9
@@ -8,9 +8,9 @@ scenario:
   surface: cli
   given:
     - "ผู้ใช้รัน `gcode agent \"หาไฟล์ที่ยังใช้ API เก่า แล้วสรุป\"` ในเทอร์มินัล"
-    - "ค่า `agentTool` ในการตั้งค่าของผู้ใช้มีโหมด Ask โมเดลจึงเรียก `agent` เองได้"
+    - "ค่า `agentTool` ในการตั้งค่าของผู้ใช้มีโหมด Ask model จึงเรียก `agent` เองได้"
   trigger: >-
-    โมเดลเริ่ม `explore` แบบเบื้องหลัง แล้วจบ turn
+    model เริ่ม `explore` แบบเบื้องหลัง แล้วจบ turn
   covers: [bg.cli-holds-turn]
   related: [bg.child-wakes-parent, bg.arrives-mid-turn, cli.agent-run]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
       phase: calling-model
@@ -42,7 +42,7 @@ scenario:
         text: session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
         from: engine
         to: model
-        sees: "> explore started (<โมเดล>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
+        sees: "> explore started (<model>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
       lane: loop
       at: tools
       runs: 1
@@ -58,7 +58,7 @@ scenario:
       alongside: true
       do: >-
         `terminalChildHost.started` พิมพ์บรรทัดของลูก ขั้นของลูกพิมพ์ต่อด้วยชื่อลูกนำหน้า
-      sees: "> explore started (<โมเดล>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
+      sees: "> explore started (<model>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
       ref: packages/engine/src/subagents.ts#terminalChildHost
 
     - id: logged
@@ -79,7 +79,7 @@ scenario:
     - id: says
       lane: model
       do: >-
-        โมเดล stream ว่า explore กำลังค้นอยู่ และจบด้วย `stop_reason: end_turn` ข้อความขึ้นใน stdout
+        model stream ว่า explore กำลังค้นอยู่ และจบด้วย `stop_reason: end_turn` ข้อความขึ้นใน stdout
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -183,7 +183,7 @@ scenario:
       at: drive
       do: >-
         turn ที่ถูกถือไว้ไปที่ `deliver()` แม้ขั้นของลูปจะเป็น `done` `deliver()` บันทึกรายงานเป็น event `user` แบบ steer `from: 'child'`
-        ลูปดู log อีกรอบ `loopStep` เห็น event `user` ล่าสุดจึงตัดสิน `call-model` และเรียกโมเดล ขีดจำกัด 40 ครั้งและ $0.40 ยังนับต่อ
+        ลูปดู log อีกรอบ `loopStep` เห็น event `user` ล่าสุดจึงตัดสิน `call-model` และเรียก model ขีดจำกัด 40 ครั้งและ $0.40 ยังนับต่อ
       ref: "packages/engine/src/drive.ts#\"} else if (step.kind === 'call-model' || held !== undefined) {\""
       emits: [user]
       phase: calling-model
@@ -196,7 +196,7 @@ scenario:
         to: panel
       lane: model
       do: >-
-        โมเดลอ่านรายงานในรั้ว แล้ว stream สรุปไฟล์ที่ใช้ API เก่าลง stdout จบด้วย `stop_reason: end_turn`
+        model อ่านรายงานในรั้ว แล้ว stream สรุปไฟล์ที่ใช้ API เก่าลง stdout จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -222,16 +222,16 @@ scenario:
       do: >-
         `finish` พิมพ์บรรทัด usage และ process จบด้วย exit code 0
       sees: >-
-        "usage: ... turns=3" (เรียกโมเดลสามครั้ง: ขอ `agent` บอกว่ารอ และเล่ารายงาน) แล้วเทอร์มินัลกลับมาที่ prompt
+        "usage: ... turns=3" (เรียก model สามครั้ง: ขอ `agent` บอกว่ารอ และเล่ารายงาน) แล้วเทอร์มินัลกลับมาที่ prompt
       ref: packages/engine/src/drive.ts#terminalSurface
       end: { turn: done, reason: end_turn }
 ---
 
-ใน VS Code turn ที่โมเดลจบจะจบจริง และรายงานที่มาทีหลังปลุก session ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/))
+ใน VS Code turn ที่ model จบจะจบจริง และรายงานที่มาทีหลังปลุก session ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/))
 ใน CLI ไม่มี engine ที่อยู่ต่อหลัง process จบ จึงไม่มีใครปลุก `drive` ถือ turn ไว้แทน เพื่อไม่ให้รายงานหายไปพร้อม process
 
 สิ่งที่ควรสังเกต
 
 - **VS Code ที่ปิดการปลุกก็ถือแบบเดียวกัน** ถ้า `gcode.wake.auto` ปิด engine ไม่ตั้ง `wakeLater` turn ในแผงแชตจึงค้างที่ "working" จนลูกรายงาน
 - **ถือเฉพาะหนี้รายงานของลูก** คำสั่งเบื้องหลังที่ยังรันไม่ทำให้ turn ค้าง ใน CLI `monitor`, `schedule_wakeup` และ `watch_pr` ได้ error ว่าไม่มีอะไรปลุก session
-- **รอได้นานเท่าลูก** ระหว่างรอ process ไม่เรียกโมเดลและไม่เสียเงิน เพดานของลูกเป็นตัวกำหนดว่ารอนานแค่ไหน
+- **รอได้นานเท่าลูก** ระหว่างรอ process ไม่เรียก model และไม่เสียเงิน เพดานของลูกเป็นตัวกำหนดว่ารอนานแค่ไหน

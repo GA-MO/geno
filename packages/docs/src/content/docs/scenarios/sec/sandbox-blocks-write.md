@@ -1,6 +1,6 @@
 ---
 title: "Sandbox กันคำสั่งที่คุณอนุญาตแล้ว"
-description: ผู้ใช้อนุญาตคำสั่งแล้ว แต่คำสั่งเขียนนอก workspace อ่านไฟล์กุญแจ หรือออกเน็ต sandbox ปฏิเสธ คำสั่งล้มด้วย exit code และโมเดลทำต่อ
+description: ผู้ใช้อนุญาตคำสั่งแล้ว แต่คำสั่งเขียนนอก workspace อ่านไฟล์กุญแจ หรือออกเน็ต sandbox ปฏิเสธ คำสั่งล้มด้วย exit code และ model ทำต่อ
 tableOfContents: false
 sidebar:
   order: 1
@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - เปิด Geno ในโหมด Ask ไม่ได้ตั้ง `gcode.sandbox.allowedDomains` (ค่าเริ่มต้นคือไม่อนุญาตโฮสต์ใดเลย)
-    - โมเดลขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow บนการ์ดแล้ว
+    - model ขอรัน `bash` ด้วยคำสั่งที่ต้องขออนุญาต และผู้ใช้กด Allow บนการ์ดแล้ว
   trigger: >-
     `settle` คืนบันทึกว่าผู้ใช้อนุญาต และคำสั่งกำลังจะรัน
   covers: [sec.sandbox-blocks-write, sec.sandbox-blocks-network]
@@ -151,13 +151,13 @@ scenario:
       beat:
         title: "Model เลือกทางอื่น"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลอ่าน error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace
+          Geno เรียก model ต่อ model อ่าน error แล้วเลือกทางอื่น เช่นติดตั้งเป็น dev dependency ใน workspace
           หรือบอกคุณว่าต้องรันคำสั่งนี้เอง
         from: engine
         to: model
         end: "sandbox กัน turn ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลอ่านข้อความ error แล้วเลือกทางอื่น
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model อ่านข้อความ error แล้วเลือกทางอื่น
         เช่นติดตั้งเป็น dev dependency ใน workspace แทน หรือบอกผู้ใช้ว่าต้องรันคำสั่งนี้เอง
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
@@ -177,7 +177,7 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **error มาจากคำสั่งเอง** Geno ไม่ได้แปลข้อความให้ โมเดลเห็นข้อความเดียวกับที่คำสั่งพิมพ์ เช่น "Operation not permitted"
+- **error มาจากคำสั่งเอง** Geno ไม่ได้แปลข้อความให้ model เห็นข้อความเดียวกับที่คำสั่งพิมพ์ เช่น "Operation not permitted"
   ยกเว้น `kill` ที่ส่งสัญญาณถึง process ที่ไม่ได้เริ่มใน call เดียวกัน ซึ่งได้โน้ต
   "[Geno] The sandbox lets a command signal only what the same call started." พร้อมคำแนะนำให้ใช้ `task_stop`
 - **allowlist เป็นของ engine ทั้งตัว** sandbox-runtime มี proxy เดียวต่อ process ทุก session ใน engine เดียวกันใช้ allowlist เดียวกัน

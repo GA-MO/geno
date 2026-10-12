@@ -7,10 +7,10 @@ sidebar:
 scenario:
   surface: vscode
   given:
-    - ค่า `agentTool` มีโหมดปัจจุบัน โมเดลจึงมีทั้ง `agent` และ `message_agent`
-    - ใน turn นี้โมเดลเริ่ม `explore` แบบเบื้องหลังไว้แล้ว ได้ session id ของลูกจากผลของ call `agent`
+    - ค่า `agentTool` มีโหมดปัจจุบัน model จึงมีทั้ง `agent` และ `message_agent`
+    - ใน turn นี้ model เริ่ม `explore` แบบเบื้องหลังไว้แล้ว ได้ session id ของลูกจากผลของ call `agent`
   trigger: >-
-    ผู้ใช้บอกว่าให้ดู `packages/cli` ด้วย โมเดลจึงส่งข้อความถึง explore
+    ผู้ใช้บอกว่าให้ดู `packages/cli` ด้วย model จึงส่งข้อความถึง explore
   covers: [sub.message-running-child, sub.message-finished-resume]
   related: [sub.user-steers-child, bg.child-wakes-parent, sub.cut-off-by-engine-stop, ctl.steer-delivered]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "also cover packages/cli"`
+        model ขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "also cover packages/cli"`
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/steer.ts#MESSAGE_AGENT_TOOL_DEFINITION
       emits: [tool_use, message_agent]
@@ -80,7 +80,7 @@ scenario:
                   sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
                 at: loop
                 do: >-
-                  `deliver()` ของลูกที่จุดปลอดภัยก่อนเรียกโมเดลครั้งถัดไปบันทึก event `user` แบบ steer (`from: 'parent'`)
+                  `deliver()` ของลูกที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไปบันทึก event `user` แบบ steer (`from: 'parent'`)
                   เนื้อความอยู่ในรั้ว `<parent_message>` พร้อมหมายเหตุว่าแม่ส่งมาระหว่างทำงาน ให้ถือเป็นการเปลี่ยน task
                   และข้อความนี้ไม่ใช่ผู้ใช้และไม่อนุมัติอะไร
                 ref: packages/core/src/steer.ts#parentMessage
@@ -100,7 +100,7 @@ scenario:
                   to: engine
                 at: model
                 do: >-
-                  ลูกเรียกโมเดลต่อโดยอ่านข้อความของแม่ แล้วค้นใน `packages/cli` เพิ่ม
+                  ลูกเรียก model ต่อโดยอ่านข้อความของแม่ แล้วค้นใน `packages/cli` เพิ่ม
                 ref: packages/core/src/fence.ts#arrivalText
               - lane: loop
                 beat:
@@ -169,7 +169,7 @@ scenario:
                 at: rail
                 alongside: true
                 do: แถวของ explore กลับมาเป็น Running
-                sees: แถว "explore · <โมเดล> · 0:01" พร้อมไดโนเสาร์ที่ขยับ
+                sees: แถว "explore · <model> · 0:01" พร้อมไดโนเสาร์ที่ขยับ
                 ref: packages/extension/src/chat/subagent-view.ts#childRow
               - lane: loop
                 beat:
@@ -221,13 +221,13 @@ scenario:
         end: Turn จบ รอรายงาน
       lane: model
       do: >-
-        โมเดลบอกผู้ใช้ว่าส่งต่อให้ explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
+        model บอกผู้ใช้ว่าส่งต่อให้ explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
       end: { turn: done, reason: end_turn }
 ---
 
-`message_agent` มีทางเดียวสำหรับโมเดล แต่ engine เลือกทางตามสถานะของลูก
+`message_agent` มีทางเดียวสำหรับ model แต่ engine เลือกทางตามสถานะของลูก
 
 | ลูก | ข้อความไปที่ | ผลของ call | รายงาน |
 | --- | --- | --- | --- |

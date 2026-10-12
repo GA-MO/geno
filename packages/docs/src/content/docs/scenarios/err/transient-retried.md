@@ -1,6 +1,6 @@
 ---
 title: "ผู้ให้บริการล้มชั่วคราว Geno retry เอง"
-description: การเรียกโมเดลได้ 529 หรือโมเดลเงียบไป gateway ลองใหม่เองพร้อมแจ้งในแผงแชต ส่วนเครดิตหมดหรือคีย์ผิดจบ turn ทันที
+description: การเรียก model ได้ 529 หรือ model เงียบไป gateway ลองใหม่เองพร้อมแจ้งในแผงแชต ส่วนเครดิตหมดหรือคีย์ผิดจบ turn ทันที
 tableOfContents: false
 sidebar:
   order: 1
@@ -10,7 +10,7 @@ scenario:
     - เปิด Geno ในแผงแชตของ VS Code มี turn ทำงานอยู่
     - เครือข่ายใช้ได้ แต่ฝั่งผู้ให้บริการมีปัญหา
   trigger: >-
-    loop ส่งคำขอโมเดล แต่ผู้ให้บริการตอบกลับด้วย error แทนคำตอบ
+    loop ส่งคำขอ model แต่ผู้ให้บริการตอบกลับด้วย error แทนคำตอบ
   covers: [err.transient-retried, err.quota-or-fatal, err.stream-stalled]
   related: [err.offline-wait, err.rate-limited, ctx.overflow-compact-resend, turn.text-answer]
   steps:
@@ -67,7 +67,7 @@ scenario:
                 emits: [transient]
 
           - id: stalled
-            label: โมเดลเงียบ 180 วินาที
+            label: model เงียบ 180 วินาที
             then: retry
             steps:
               - lane: loop
@@ -120,7 +120,7 @@ scenario:
         title: "Geno บันทึกว่าจะ retry"
         text: >-
           Geno บันทึกว่านี่คือครั้งที่เท่าไร จะรอนานเท่าไร และ error คืออะไร ก่อนเริ่มรอ แล้วแจ้งแชต การ retry
-          ไม่นับเป็นการเรียกโมเดลในขีดจำกัดของ turn
+          ไม่นับเป็นการเรียก model ในขีดจำกัดของ turn
         from: engine
         to: panel
       do: >-
@@ -215,7 +215,7 @@ scenario:
                 beat:
                   title: "Turn จบ"
                   text: >-
-                    โมเดลไม่ขออะไรเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
+                    model ไม่ขออะไรเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
                   from: engine
                   to: panel
                   end: "retry สำเร็จ turn จบ"
@@ -229,14 +229,14 @@ scenario:
                 beat:
                   title: "ล้มจนหมดสิทธิ์ retry"
                   text: >-
-                    ข้อผิดพลาดชั่วคราว retry ได้ 3 ครั้ง โมเดลเงียบ retry ได้ครั้งเดียว เมื่อครบแล้ว Geno ถือว่าการเรียกล้ม
-                    สำหรับโมเดลเงียบ ข้อความบอกตัวแปรที่ตั้งให้รอนานขึ้นได้
+                    ข้อผิดพลาดชั่วคราว retry ได้ 3 ครั้ง model เงียบ retry ได้ครั้งเดียว เมื่อครบแล้ว Geno ถือว่าการเรียกล้ม
+                    สำหรับ model เงียบ ข้อความบอกตัวแปรที่ตั้งให้รอนานขึ้นได้
                   from: engine
                   to: engine
                 do: >-
-                  ล้มอีกจนครบ: ชนิด `transient` ลองใหม่ได้ 3 ครั้ง (`RETRY_POLICY`) โมเดลเงียบลองได้ครั้งเดียว
+                  ล้มอีกจนครบ: ชนิด `transient` ลองใหม่ได้ 3 ครั้ง (`RETRY_POLICY`) model เงียบลองได้ครั้งเดียว
                   `retryDelayMs` คืน undefined gateway จึงคืนผลเป็น error ชนิด `transport`
-                  สำหรับโมเดลเงียบ ข้อความบอกตัวแปร `GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS` หรือ `GCODE_STREAM_IDLE_TIMEOUT_MS` ที่ตั้งให้รอนานขึ้นได้
+                  สำหรับ model เงียบ ข้อความบอกตัวแปร `GCODE_STREAM_FIRST_BYTE_TIMEOUT_MS` หรือ `GCODE_STREAM_IDLE_TIMEOUT_MS` ที่ตั้งให้รอนานขึ้นได้
                 ref: packages/core/src/model-error.ts#retryDelayMs
                 emits: [transport]
               - use: err-turn-fails
@@ -256,7 +256,7 @@ gateway แยก error ของผู้ให้บริการเป็�
 | ชนิด | ตัวอย่าง | ทำอะไร |
 | --- | --- | --- |
 | `transient` | 408, 5xx, 529, ข้อความ "overloaded" | ลองใหม่ 3 ครั้ง รอ 1, 2, 4 วินาที |
-| โมเดลเงียบ | ไม่มี byte 180 วินาที | ลองใหม่ 1 ครั้ง |
+| model เงียบ | ไม่มี byte 180 วินาที | ลองใหม่ 1 ครั้ง |
 | `quota`, `fatal` | 402, 401, 400 อื่น | ไม่ลอง จบ turn แบบ failed |
 | `offline`, `limited` | เชื่อมต่อไม่ได้, 429 | รอนานกว่า ดู [เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ](/scenarios/err/offline-wait/) |
 | `overflow` | "prompt is too long" | สรุปบริบทแล้วส่งใหม่ ดู [สรุปบริบทระหว่าง turn](/scenarios/ctx/compaction-auto/) |

@@ -1,6 +1,6 @@
 ---
 title: "Tool และ permission"
-description: เส้นทางของ tool call ตั้งแต่โมเดลขอ ผ่าน hook การจัดชุด กฎ settle และการ์ด จนผลกลับไปหาโมเดล
+description: เส้นทางของ tool call ตั้งแต่ model ขอ ผ่าน hook การจัดชุด กฎ settle และการ์ด จนผลกลับไปหา model
 sidebar:
   order: 3
 ---
@@ -15,9 +15,9 @@ flowchart TD
   N --> S["watcher.toolStart → tool_call in_progress"]
   S --> X["ชั้นของ executor: roster gate<br/>→ withPermissions → inMode<br/>→ withReach / withPathRules / withWriteRoots"]
   X --> R{"ฟังก์ชันกฎ<br/>ruledDenial / secretReadDenial /<br/>outsideReadDenial / mcpCallDenial"}
-  R -- "ไม่ติดธง" --> RUN["เครื่องมือทำงาน<br/>(shell ใน sandbox, ไฟล์ผ่าน buffer ของ editor)"]
+  R -- "ไม่ติดธง" --> RUN["tool ทำงาน<br/>(shell ใน sandbox, ไฟล์ผ่าน buffer ของ editor)"]
   R -- "ติดธง" --> ST{"settle()"}
-  ST -- "deny / non-interactive" --> PRH1["PermissionRequest hook (ถ้าตอบได้)"] --> DEN["ToolDenied (โมเดลทำต่อ)"]
+  ST -- "deny / non-interactive" --> PRH1["PermissionRequest hook (ถ้าตอบได้)"] --> DEN["ToolDenied (model ทำต่อ)"]
   ST -- "classify (Auto)" --> CL["classifier, 8 วินาที, ล้มเหลว = ask"]
   CL -- allow --> RUN
   CL -- deny --> DEN
@@ -28,14 +28,14 @@ flowchart TD
   CARD -- "No + ข้อความ" --> DEN
   CARD -- "Reject / ยกเลิก" --> REJ["ToolRejected: batch หยุด,<br/>call ที่เหลือได้ 'user rejected', turn จบ"]
   RUN --> POST["PostToolUse hooks; ผลยาวเก็บลงไฟล์"]
-  POST --> LOGR["หลังทั้งชุด: บันทึกผลตามลำดับที่โมเดลขอ<br/>→ tool_call_update พร้อม APPROVAL_META"]
-  LOGR --> PB["PostToolBatch hook"] --> NEXT["จุดปลอดภัย → เรียกโมเดลครั้งถัดไป"]
+  POST --> LOGR["หลังทั้งชุด: บันทึกผลตามลำดับที่ model ขอ<br/>→ tool_call_update พร้อม APPROVAL_META"]
+  LOGR --> PB["PostToolBatch hook"] --> NEXT["จุดปลอดภัย → เรียก model ครั้งถัดไป"]
 ```
 
 ## ปฏิเสธกับปฏิเสธพร้อมข้อความต่างกันอย่างไร
 
 `ToolRejected` (ผู้ใช้กด Reject เฉยๆ) จบ turn ทันที ส่วน `ToolDenied` (กฎ, Auto, hook หรือผู้ใช้ปฏิเสธพร้อมข้อความ)
-เป็นผลธรรมดาที่โมเดลอ่านแล้วหาทางอื่นต่อ
+เป็นผลธรรมดาที่ model อ่านแล้วหาทางอื่นต่อ
 
 ## โหมดสิทธิ์
 

@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงาน workspace มีไฟล์ `.env`
     - ไม่มีกฎของ workspace ที่ตรงกับ path นี้
   trigger: >-
-    โมเดลขอเรียก `read` ด้วย path `.env`
+    model ขอเรียก `read` ด้วย path `.env`
   covers: [perm.secret-read]
   related: [perm.read-outside-workspace, perm.ask-allow, perm.auto-classifier-allows, perm.ask-deny-ends-turn]
   steps:
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "Model ขออ่าน .env"
         text: >-
-          โมเดลขอ `read` ไฟล์ `.env` ไม่มีกฎของ workspace ตรงกับ path นี้ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          model ขอ `read` ไฟล์ `.env` ไม่มีกฎของ workspace ตรงกับ path นี้ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอ `read` ไฟล์ `.env` จบด้วย `stop_reason: tool_use`
+        model ขอ `read` ไฟล์ `.env` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -217,7 +217,7 @@ scenario:
                   sees: { kind: step, label: read .env, status: denied, note: Denied by a rule }
                 do: >-
                   คำตัดสินของ `secret-path` ในโหมด Plan คือ `deny` `settle` ปฏิเสธเองโดยไม่ถาม `refusalOf` สร้าง `ToolDenied`
-                  แผงขึ้นป้าย "Denied by a rule" และโมเดลทำงานต่อโดยไม่ได้อ่านไฟล์
+                  แผงขึ้นป้าย "Denied by a rule" และ model ทำงานต่อโดยไม่ได้อ่านไฟล์
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolDenied]
                 phase: running-tools
@@ -227,7 +227,7 @@ scenario:
                 beat:
                   title: "Model ทำต่อโดยไม่ได้อ่านไฟล์"
                   text: >-
-                    Geno เรียกโมเดลต่อ โมเดลทำแผนต่อโดยไม่ได้อ่าน `.env`
+                    Geno เรียก model ต่อ model ทำแผนต่อโดยไม่ได้อ่าน `.env`
                   from: engine
                   to: model
                   end: "Plan ปฏิเสธ turn ทำต่อ"
@@ -262,7 +262,7 @@ scenario:
       beat:
         title: "ค่าในไฟล์ไปถึง model"
         text: >-
-          Geno เรียกโมเดลต่อ ค่าใน `.env` อยู่ในบันทึกของ session และในคำขอถัดไปที่ส่งให้ผู้ให้บริการ
+          Geno เรียก model ต่อ ค่าใน `.env` อยู่ในบันทึกของ session และในคำขอถัดไปที่ส่งให้ผู้ให้บริการ
         from: engine
         to: model
         end: "อ่านไฟล์ลับแล้ว turn ทำต่อ"

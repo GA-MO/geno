@@ -1,6 +1,6 @@
 ---
 title: "Model เรียก tool แล้วตอบ"
-description: โมเดลขออ่านไฟล์และค้นข้อความ harness รันทั้งสองพร้อมกัน ส่งผลกลับ แล้วโมเดลตอบจนจบ turn
+description: model ขออ่านไฟล์และค้นข้อความ harness รันทั้งสองพร้อมกัน ส่งผลกลับ แล้ว model ตอบจนจบ turn
 tableOfContents: false
 sidebar:
   order: 2
@@ -10,7 +10,7 @@ scenario:
     - เปิด Geno ในแผงแชตของ VS Code ในโหมด Ask
     - session นี้ไม่มี turn ทำงานอยู่ และไม่มี hook ที่ตั้งไว้
   trigger: >-
-    ผู้ใช้ถามว่า "โปรเจกต์นี้รันเทสต์ด้วยอะไร" โมเดลตัดสินใจว่าต้องดูไฟล์ก่อนตอบ
+    ผู้ใช้ถามว่า "โปรเจกต์นี้รันเทสต์ด้วยอะไร" model ตัดสินใจว่าต้องดูไฟล์ก่อนตอบ
   covers: [turn.with-tools]
   related: [turn.text-answer, perm.ask-allow, tool.parallel-read-batch]
   steps:
@@ -28,8 +28,8 @@ scenario:
       beat:
         title: "Geno ส่งบทสนทนาให้ model"
         text: >-
-          Geno ตรวจว่ายังไม่เกินจำนวนรอบและงบของ turn แล้วส่งบทสนทนาทั้งหมดไปให้โมเดล
-          พร้อมรายชื่อเครื่องมือที่โมเดลขอใช้ได้
+          Geno ตรวจว่ายังไม่เกินจำนวนรอบและงบของ turn แล้วส่งบทสนทนาทั้งหมดไปให้ model
+          พร้อมรายชื่อ tool ที่ model ขอใช้ได้
         from: engine
         to: model
         sees:
@@ -43,7 +43,7 @@ scenario:
       beat:
         title: "Model บอกว่าจะดูก่อน แล้วขอ tool สองตัว"
         text: >-
-          โมเดลยังไม่ตอบทันที มันเขียนสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอใช้เครื่องมือสองตัว
+          model ยังไม่ตอบทันที มันเขียนสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอใช้ tool สองตัว
           ตัวหนึ่งอ่าน `package.json` อีกตัวค้นหาคำว่า vitest ข้อความสั้นนั้นขึ้นในแชตของคุณ
         from: model
         to: engine
@@ -54,7 +54,7 @@ scenario:
           select: content
           highlight: ['[2].name', '[2].input']
       do: >-
-        โมเดลเขียนข้อความสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอเรียกเครื่องมือสองตัว: `read` ไฟล์ `package.json`
+        model เขียนข้อความสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอเรียก tool สองตัว: `read` ไฟล์ `package.json`
         และ `grep` หาคำว่า `vitest` จบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
@@ -90,7 +90,7 @@ scenario:
       beat:
         title: "ผลลัพธ์กลับมาที่แชต"
         text: >-
-          Geno เก็บผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ขั้นในแชตหยุดหมุน และผลลัพธ์พับอยู่ใต้แต่ละขั้น
+          Geno เก็บผลตามลำดับที่ model ขอ ไม่ใช่ลำดับที่เสร็จ ขั้นในแชตหยุดหมุน และผลลัพธ์พับอยู่ใต้แต่ละขั้น
         from: engine
         to: panel
         sees: { kind: step, label: read package.json, status: done, output: "\"test\": \"vitest run\"" }
@@ -99,8 +99,8 @@ scenario:
       beat:
         title: "Geno ส่งผลลัพธ์ให้ model"
         text: >-
-          Geno เรียกโมเดลอีกรอบ คราวนี้คำขอมีผลของเครื่องมือทั้งสองต่อท้ายบทสนทนา
-          ถ้าคุณพิมพ์ข้อความแทรกระหว่างที่เครื่องมือรัน ข้อความนั้นก็เข้ามาตรงนี้
+          Geno เรียก model อีกรอบ คราวนี้คำขอมีผลของ tool ทั้งสองต่อท้ายบทสนทนา
+          ถ้าคุณพิมพ์ข้อความแทรกระหว่างที่ tool รัน ข้อความนั้นก็เข้ามาตรงนี้
         from: engine
         to: model
         sees:
@@ -116,12 +116,12 @@ scenario:
       beat:
         title: "Model เขียนคำตอบ"
         text: >-
-          โมเดลอ่านผลทั้งสองแล้วตอบว่าโปรเจกต์ใช้ vitest คำตอบค่อยๆ ขึ้นในแชตของคุณระหว่างที่โมเดลเขียน
+          model อ่านผลทั้งสองแล้วตอบว่าโปรเจกต์ใช้ vitest คำตอบค่อยๆ ขึ้นในแชตของคุณระหว่างที่ model เขียน
         from: model
         to: engine
         sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", streaming: true }
       do: >-
-        โมเดลอ่าน `tool_result` ทั้งสองบล็อก แล้ว stream คำตอบสุดท้ายว่าโปรเจกต์ใช้ vitest
+        model อ่าน `tool_result` ทั้งสองบล็อก แล้ว stream คำตอบสุดท้ายว่าโปรเจกต์ใช้ vitest
         จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_result, end_turn]
@@ -131,22 +131,22 @@ scenario:
       beat:
         title: "Turn จบ"
         text: >-
-          โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
-          และท้ายคำตอบมีแถวสรุปรุ่นโมเดล จำนวน token และค่าใช้จ่าย
+          model ไม่ขอ tool เพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
+          และท้ายคำตอบมีแถวสรุปรุ่น model จำนวน token และค่าใช้จ่าย
         from: engine
         to: panel
         sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", footer: [worked for 8s, claude-sonnet-4.5, 12.4k tokens, $0.02] }
 ---
 
 turn ที่มี tool คือวงรอบเดิมของ [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) ที่วนซ้ำ:
-เรียกโมเดล รัน tool แล้วเรียกโมเดลอีกครั้ง จนโมเดลจบด้วย `end_turn`
-ในทัวร์นี้วนสองรอบ ช่องนับในแผงความคืบหน้าจึงขึ้นเป็นเรียกโมเดล 2 ครั้ง และรัน tool 2 ครั้ง (`read` กับ `grep` ในชุดเดียว)
+เรียก model รัน tool แล้วเรียก model อีกครั้ง จน model จบด้วย `end_turn`
+ในทัวร์นี้วนสองรอบ ช่องนับในแผงความคืบหน้าจึงขึ้นเป็นเรียก model 2 ครั้ง และรัน tool 2 ครั้ง (`read` กับ `grep` ในชุดเดียว)
 
 สิ่งที่ควรสังเกต
 
 - **ถ้ามี hook PreToolUse มันตัดสินทุก call ก่อน** แล้วการจัดชุดจึงเกิดขึ้น ในทัวร์นี้ไม่มี hook จึงจัดชุดทันที
   การอ่านสองตัวอยู่ในชุดเดียวกัน ถ้ามี `bash` อยู่ด้วย `bash` จะรันเป็นชุดของตัวเอง
-- **ผลถูกบันทึกตามลำดับที่โมเดลขอ** ไม่ใช่ลำดับที่เสร็จ แผงแชตเห็นแต่ละขั้นเสร็จก่อนได้ แต่ log เรียงตามคำขอ
-- **ครั้งที่สองที่เรียกโมเดลผ่าน `deliver()` อีกครั้ง** ข้อความ steer ที่ผู้ใช้ส่งระหว่าง tool รันจะเข้ามาตรงนี้
+- **ผลถูกบันทึกตามลำดับที่ model ขอ** ไม่ใช่ลำดับที่เสร็จ แผงแชตเห็นแต่ละขั้นเสร็จก่อนได้ แต่ log เรียงตามคำขอ
+- **ครั้งที่สองที่เรียก model ผ่าน `deliver()` อีกครั้ง** ข้อความ steer ที่ผู้ใช้ส่งระหว่าง tool รันจะเข้ามาตรงนี้
 
 ถ้าคำสั่งต้องขออนุญาตก่อนรัน ดู [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)

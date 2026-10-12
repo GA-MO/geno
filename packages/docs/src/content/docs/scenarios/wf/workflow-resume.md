@@ -1,6 +1,6 @@
 ---
 title: resume workflow จาก journal
-description: workflow รอบก่อนหยุดกลางทาง ผู้ใช้สั่ง /workflow --resume รอบใหม่อ่าน journal ของรอบเก่า ขั้นที่เสร็จแล้วได้ผลเดิมโดยไม่เรียกโมเดล แล้วรันต่อจากขั้นแรกที่ยังไม่เสร็จ
+description: workflow รอบก่อนหยุดกลางทาง ผู้ใช้สั่ง /workflow --resume รอบใหม่อ่าน journal ของรอบเก่า ขั้นที่เสร็จแล้วได้ผลเดิมโดยไม่เรียก model แล้วรันต่อจากขั้นแรกที่ยังไม่เสร็จ
 tableOfContents: false
 sidebar:
   order: 2
@@ -35,7 +35,7 @@ scenario:
       at: drive
       do: >-
         `workflowCommandCall` อ่าน `--resume 5f1c...` แล้วสร้าง call `workflow` ในนามผู้ใช้ที่มี `resume` ไม่ได้ใส่ input
-        director ส่ง call นี้แทนโมเดล
+        director ส่ง call นี้แทน model
       ref: packages/engine/src/workflows.ts#workflowCommandCall
       emits: [workflow]
       phase: running-tools
@@ -82,7 +82,7 @@ scenario:
                 emits: [ToolError]
               - lane: panel
                 at: rail
-                do: ขั้นของ `workflow` ขึ้นเป็นล้มเหลวพร้อมข้อความ error แล้ว turn จบโดยไม่เรียกโมเดล
+                do: ขั้นของ `workflow` ขึ้นเป็นล้มเหลวพร้อมข้อความ error แล้ว turn จบโดยไม่เรียก model
                 sees: ขั้น "workflow fix-bug --resume ..." ขึ้นเครื่องหมายล้มเหลว
                 ref: packages/extension/src/chat/webview.ts#render
                 end: { turn: done, reason: end_turn }
@@ -151,7 +151,7 @@ scenario:
       lane: child@workflow
       at: loop
       do: >-
-        director เรียก `nextLiveRound`: รอบแรกมี `reproduce` ซึ่งอยู่ใน journal `replayRound` ให้ผลเดิมแบบ `replayed` โดยไม่เรียกโมเดล
+        director เรียก `nextLiveRound`: รอบแรกมี `reproduce` ซึ่งอยู่ใน journal `replayRound` ให้ผลเดิมแบบ `replayed` โดยไม่เรียก model
         แล้วข้ามไปรอบถัดไปจนเจอ call ที่ต้องรันจริง (`fix`) ตั้งแต่ call ที่รันจริงแรก ไม่มีอะไรหลังจากนั้นได้ผลจาก journal อีก
         gate ที่รัน check รันใหม่เสมอ และขั้นที่อยู่ใน lane ไม่ replay
       ref: packages/core/src/workflow.ts#nextLiveRound
@@ -169,7 +169,7 @@ scenario:
 ---
 
 journal คือรายการผลของขั้นที่จบแล้วของแต่ละรอบ เก็บข้าง log ของ session ของ workflow
-การ resume ไม่ได้ต่อ session เดิม มันเริ่ม session ใหม่ที่ใช้ผลจาก journal แทนการเรียกโมเดลซ้ำ จนถึงขั้นแรกที่ต้องรันจริง
+การ resume ไม่ได้ต่อ session เดิม มันเริ่ม session ใหม่ที่ใช้ผลจาก journal แทนการเรียก model ซ้ำ จนถึงขั้นแรกที่ต้องรันจริง
 หลังจากนั้นทุกอย่างเหมือน [รัน workflow พร้อมความคืบหน้า](/scenarios/wf/workflow-run/)
 
 สิ่งที่ควรสังเกต

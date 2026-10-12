@@ -1,6 +1,6 @@
 ---
 title: "Model อ่านเทอร์มินัลของคุณ"
-description: โมเดลเรียก read_terminal เพื่อดูคำสั่งที่ผู้ใช้รันในเทอร์มินัลของ VS Code engine ขอให้ extension อ่าน ซึ่งตัด ลบความลับ และจำกัดขนาดก่อนส่งกลับ ไม่มีการถาม
+description: model เรียก read_terminal เพื่อดูคำสั่งที่ผู้ใช้รันในเทอร์มินัลของ VS Code engine ขอให้ extension อ่าน ซึ่งตัด ลบความลับ และจำกัดขนาดก่อนส่งกลับ ไม่มีการถาม
 tableOfContents: false
 sidebar:
   order: 11
@@ -10,7 +10,7 @@ scenario:
     - ผู้ใช้รัน `pnpm build` ในเทอร์มินัลของ VS Code หลังจากที่ Geno เริ่มในหน้าต่างนี้แล้ว และคำสั่งล้มเหลว
     - shell ของเทอร์มินัลเปิด shell integration ของ VS Code อยู่ (bash, zsh, fish หรือ PowerShell)
   trigger: >-
-    ผู้ใช้ถามว่า "build ที่ผมเพิ่งรันพังเพราะอะไร" โมเดลเรียก `read_terminal` โดยไม่ระบุเทอร์มินัล
+    ผู้ใช้ถามว่า "build ที่ผมเพิ่งรันพังเพราะอะไร" model เรียก `read_terminal` โดยไม่ระบุเทอร์มินัล
   covers: [tool.read-terminal]
   related: [tool.parallel-read-batch, sec.hidden-unicode, tool.bash-safe-runs]
   steps:
@@ -35,11 +35,11 @@ scenario:
       beat:
         title: "Model ขออ่านเทอร์มินัล"
         text: >-
-          โมเดลเรียก `read_terminal` โดยไม่ระบุเทอร์มินัลและจำนวนคำสั่ง
+          model เรียก `read_terminal` โดยไม่ระบุเทอร์มินัลและจำนวนคำสั่ง
         from: model
         to: engine
       do: >-
-        โมเดลส่งบล็อก `tool_use` ของ `read_terminal` ไม่ระบุ `terminal` และ `commands` จบด้วย `stop_reason: tool_use`
+        model ส่งบล็อก `tool_use` ของ `read_terminal` ไม่ระบุ `terminal` และ `commands` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
 
@@ -61,8 +61,8 @@ scenario:
         from: engine
         to: engine
       do: >-
-        ไม่มีการตัดสินของนโยบาย `read_terminal` อ่านอย่างเดียว ทุกโหมดที่มีคนดู (Plan, Ask, Auto) ได้เครื่องมือนี้และไม่ถาม
-        run ที่ไม่มีคนดูไม่ได้รับเครื่องมือนี้เลย
+        ไม่มีการตัดสินของนโยบาย `read_terminal` อ่านอย่างเดียว ทุกโหมดที่มีคนดู (Plan, Ask, Auto) ได้ tool นี้และไม่ถาม
+        run ที่ไม่มีคนดูไม่ได้รับ tool นี้เลย
       ref: packages/core/src/terminal.ts#READ_TERMINAL_MODES
 
     - id: request
@@ -134,22 +134,22 @@ scenario:
       beat:
         title: "Model อธิบายว่า build พังเพราะอะไร"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลอ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
+          Geno เรียก model ต่อ model อ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
         from: engine
         to: model
         end: "model อธิบายสาเหตุ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลอ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model อ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-`read_terminal` ให้โมเดลเห็นสิ่งที่ผู้ใช้รันเองนอก Geno โดยผู้ใช้ไม่ต้องคัดลอก output มาวาง
+`read_terminal` ให้ model เห็นสิ่งที่ผู้ใช้รันเองนอก Geno โดยผู้ใช้ไม่ต้องคัดลอก output มาวาง
 ข้อมูลทั้งหมดผ่าน extension ก่อน engine ไม่เคยเห็นเทอร์มินัลดิบ
 
-| ผลที่ extension ตอบ | โมเดลได้อ่าน |
+| ผลที่ extension ตอบ | model ได้อ่าน |
 | --- | --- |
 | ไม่มีเทอร์มินัลเปิด | "The user has no terminal open in VS Code." |
 | เทอร์มินัลไม่มี shell integration | วิธีเปิด shell integration และให้ขอผู้ใช้รันใหม่หรือวาง output |

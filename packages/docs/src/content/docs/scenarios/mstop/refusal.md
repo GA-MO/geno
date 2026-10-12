@@ -1,13 +1,13 @@
 ---
 title: "Model ปฏิเสธที่จะตอบ"
-description: โมเดลจบคำตอบด้วย stop_reason refusal gateway แปลงเป็น error ชนิด refusal turn จบแบบ failed และ prompt นั้นถูกตัดออกจากคำขอต่อไป
+description: model จบคำตอบด้วย stop_reason refusal gateway แปลงเป็น error ชนิด refusal turn จบแบบ failed และ prompt นั้นถูกตัดออกจากคำขอต่อไป
 tableOfContents: false
 sidebar:
   order: 4
 scenario:
   surface: vscode
   given:
-    - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังเรียกโมเดล
+    - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังเรียก model
   trigger: >-
     ผู้ให้บริการจบคำตอบด้วย `stop_reason: refusal` (หรือ `finish_reason: content_filter` บน wire แบบ OpenAI)
   covers: [mstop.refusal]
@@ -18,11 +18,11 @@ scenario:
       beat:
         title: "Model ปฏิเสธที่จะตอบต่อ"
         text: >-
-          โมเดลปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วยสัญญาณ refusal
+          model ปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วยสัญญาณ refusal
         from: model
         to: engine
       do: >-
-        โมเดลปฏิเสธที่จะตอบต่อ บางครั้งมีข้อความอธิบายสั้นๆ หรือ `stop_details.explanation` มาด้วย
+        model ปฏิเสธที่จะตอบต่อ บางครั้งมีข้อความอธิบายสั้นๆ หรือ `stop_details.explanation` มาด้วย
         แล้วจบด้วย `stop_reason: refusal`
       ref: "packages/engine/src/gateway.ts#\"if (message.stop_reason === 'refusal') {\""
       emits: [refusal]
@@ -34,12 +34,12 @@ scenario:
       beat:
         title: "Geno แปลงการปฏิเสธเป็น error"
         text: >-
-          Geno ไม่ถือว่านี่เป็นคำตอบ แต่บันทึกเป็น error ชนิด refusal ข้อความที่โมเดลเขียนมาก่อนปฏิเสธจึงไม่อยู่ในบันทึก
+          Geno ไม่ถือว่านี่เป็นคำตอบ แต่บันทึกเป็น error ชนิด refusal ข้อความที่ model เขียนมาก่อนปฏิเสธจึงไม่อยู่ในบันทึก
         from: engine
         to: engine
       do: >-
         gateway ไม่คืนเป็นคำตอบ แต่คืน error ชนิด `refusal` ข้อความมาจาก `refusalMessage`:
-        คำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ "the model refused"
+        คำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ข้อความที่ model เขียน ถ้าไม่มีอีกก็ "the model refused"
       ref: packages/engine/src/gateway.ts#refusalMessage
 
     - id: logged
@@ -78,7 +78,7 @@ scenario:
       beat:
         title: "แชตขึ้นบล็อก error สีแดง"
         text: >-
-          แผงวาดบล็อก error ด้วยคำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ใช้ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ขึ้นข้อความสั้นๆ
+          แผงวาดบล็อก error ด้วยคำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ใช้ข้อความที่ model เขียน ถ้าไม่มีอีกก็ขึ้นข้อความสั้นๆ
           ด้านล่าง
         from: panel
         to: you
@@ -95,12 +95,12 @@ scenario:
       beat:
         title: "Geno จบ turn"
         text: >-
-          Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบด้วยคำตอบ
+          Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn Stop hook ไม่ทำงาน เพราะ model ไม่ได้จบด้วยคำตอบ
         from: engine
         to: engine
       do: >-
         `loopStep` เห็น event ล่าสุดเป็น error `refusal` ตาราง `ERROR_REASON` ให้ `done(refusal)`
-        Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบ turn ด้วยคำตอบ
+        Stop hook ไม่ทำงาน เพราะ model ไม่ได้จบ turn ด้วยคำตอบ
       ref: packages/core/src/loop.ts#ERROR_REASON
       phase: ending
 
@@ -110,7 +110,7 @@ scenario:
       beat:
         title: "งานใน Tasks จบเป็น failed"
         text: >-
-          engine บอก VS Code ว่า turn จบเพราะโมเดลปฏิเสธ งานในแผง Tasks จบแบบ failed และ session พร้อมรับข้อความถัดไป
+          engine บอก VS Code ว่า turn จบเพราะ model ปฏิเสธ งานในแผง Tasks จบแบบ failed และ session พร้อมรับข้อความถัดไป
         from: engine
         to: panel
       do: >-
@@ -147,13 +147,13 @@ scenario:
       end: { turn: failed, reason: refusal }
 ---
 
-refusal เป็นการหยุดเพียงแบบเดียวของโมเดลที่ Geno ตัด prompt ทิ้ง
+refusal เป็นการหยุดเพียงแบบเดียวของ model ที่ Geno ตัด prompt ทิ้ง
 `KEEPS_PENDING_PROMPT.refusal` เป็น `false` เมื่อ `replayMessages` ประกอบคำขอครั้งถัดไป prompt ที่ถูกปฏิเสธจะไม่ถูกส่งซ้ำ
 ข้อความถัดไปของผู้ใช้จึงเริ่มใหม่ ไม่ได้ต่อท้าย prompt เดิมเหมือนหลัง Stop หรือหลังชนขีดจำกัด
 
 สิ่งที่ควรสังเกต
 
-- **ข้อความที่ stream มาแล้วหายเมื่อ reload** ถ้าโมเดลเขียนอะไรก่อนปฏิเสธ แผงเห็นข้อความนั้นทันที
+- **ข้อความที่ stream มาแล้วหายเมื่อ reload** ถ้า model เขียนอะไรก่อนปฏิเสธ แผงเห็นข้อความนั้นทันที
   แต่ log มีแค่ error `refusal` การเปิดแชตนี้ใหม่จึงเห็นแค่บล็อก error
 - **wire แบบ OpenAI ใช้ทางเดียวกัน** `chatStream` แปลง `finish_reason: content_filter` เป็น `refusal`
   ผู้ให้บริการแบบ OpenAI-compatible จึงได้ผลเหมือนกันทุกขั้น

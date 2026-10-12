@@ -1,6 +1,6 @@
 ---
 title: "โหมด Ask ขอ permission ก่อนรันคำสั่ง"
-description: โมเดลขอรันคำสั่งที่ไม่อยู่ใน safe list Geno หยุดถามผู้ใช้ก่อน และผู้ใช้เลือกได้สี่ทาง
+description: model ขอรันคำสั่งที่ไม่อยู่ใน safe list Geno หยุดถามผู้ใช้ก่อน และผู้ใช้เลือกได้สี่ทาง
 tableOfContents: false
 sidebar:
   order: 1
@@ -8,10 +8,10 @@ scenario:
   surface: vscode
   given:
     - เปิด Geno ในโหมด Ask
-    - มี turn ทำงานอยู่ และโมเดลกำลังจะขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod`
+    - มี turn ทำงานอยู่ และ model กำลังจะขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod`
     - คำสั่งนี้ไม่ตรงกับกฎของ workspace และไม่อยู่ใน safe list
   trigger: >-
-    โมเดลจบคำตอบด้วย `stop_reason: tool_use` พร้อมบล็อก `tool_use` ของ `bash`
+    model จบคำตอบด้วย `stop_reason: tool_use` พร้อมบล็อก `tool_use` ของ `bash`
   covers: [perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-with-comment, perm.always-allow-workspace, ctl.stop-at-card]
   related: [turn.with-tools, tool.bash-safe-runs, perm.auto-classifier-allows, ctl.stop-while-tools-run]
   steps:
@@ -20,12 +20,12 @@ scenario:
       beat:
         title: "Model ขอรัน `pnpm add zod`"
         text: >-
-          โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
+          model ตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
           Geno จดคำขอนี้ไว้ในบันทึกของ turn
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -197,7 +197,7 @@ scenario:
                 beat:
                   title: "คุณกด Deny"
                   text: >-
-                    แผงแชตบอก Geno ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน และไม่มีข้อความอะไรส่งต่อให้โมเดล
+                    แผงแชตบอก Geno ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน และไม่มีข้อความอะไรส่งต่อให้ model
                   from: you
                   to: panel
                 do: >-
@@ -227,7 +227,7 @@ scenario:
                   from: engine
                   to: engine
                 do: >-
-                  ผลของ call นี้มีสถานะ `rejected` และบอกโมเดลให้หยุดรอผู้ใช้ เมื่อ batch นี้จบ `runTools` ไม่เริ่ม batch ถัดไป
+                  ผลของ call นี้มีสถานะ `rejected` และบอก model ให้หยุดรอผู้ใช้ เมื่อ batch นี้จบ `runTools` ไม่เริ่ม batch ถัดไป
                   call ที่เหลือใน turn เดียวกันจึงไม่เริ่ม
                 ref: "packages/engine/src/drive.ts#\"results.some((result) => result?.status === 'rejected')\""
                 emits: [rejected]
@@ -261,7 +261,7 @@ scenario:
                 beat:
                   title: "Turn จบและรอคุณ"
                   text: >-
-                    Geno จบ turn โดยไม่เรียกโมเดลอีก แผงแชตบอกว่าหยุดที่คำสั่งที่ถูกปฏิเสธ
+                    Geno จบ turn โดยไม่เรียก model อีก แผงแชตบอกว่าหยุดที่คำสั่งที่ถูกปฏิเสธ
                     และมีปุ่มให้ทำต่อเมื่อคุณพร้อม
                   from: engine
                   to: panel
@@ -313,7 +313,7 @@ scenario:
                 beat:
                   title: "Geno ไม่รันคำสั่ง แต่เก็บข้อความของคุณไว้"
                   text: >-
-                    คำสั่งไม่ได้รัน แต่ต่างจาก Deny ตรงที่ turn ไม่จบ Geno เก็บข้อความของคุณไว้ส่งให้โมเดล
+                    คำสั่งไม่ได้รัน แต่ต่างจาก Deny ตรงที่ turn ไม่จบ Geno เก็บข้อความของคุณไว้ส่งให้ model
                     และคำสั่งอื่นใน turn เดียวกันยังรันต่อได้
                   from: engine
                   to: model
@@ -337,7 +337,7 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  `tool-result` สถานะ `denied` บอกโมเดลว่าคำสั่งไม่ได้รัน ตามด้วยข้อความของผู้ใช้
+                  `tool-result` สถานะ `denied` บอก model ว่าคำสั่งไม่ได้รัน ตามด้วยข้อความของผู้ใช้
                   ("To tell you how to proceed, the user said: ใช้ npm แทน")
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied, tool-result]
@@ -371,14 +371,14 @@ scenario:
                 beat:
                   title: "Model อ่านข้อความของคุณ"
                   text: >-
-                    Geno เรียกโมเดลต่อ ผลของคำสั่งบอกว่าไม่ได้รัน ตามด้วยข้อความของคุณ
-                    โมเดลจะหาทางอื่นตามที่คุณบอก
+                    Geno เรียก model ต่อ ผลของคำสั่งบอกว่าไม่ได้รัน ตามด้วยข้อความของคุณ
+                    model จะหาทางอื่นตามที่คุณบอก
                   from: engine
                   to: model
                   end: Model หาทางอื่น
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดและไม่มีการปฏิเสธเปล่าจากผู้ใช้ จึงตัดสิน `call-model`
-                  โมเดลจะได้อ่านคำแนะนำของผู้ใช้ใน `tool_result` แล้วทำต่อ
+                  model จะได้อ่านคำแนะนำของผู้ใช้ใน `tool_result` แล้วทำต่อ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -417,7 +417,7 @@ scenario:
                 beat:
                   title: "Geno ยกเลิกคำสั่งที่รออยู่"
                   text: >-
-                    Geno ยกเลิก turn ทันที คำสั่งไม่เคยเริ่มรัน แต่ข้อความที่โมเดลจะได้อ่านบอกว่ามันอาจรันไปบางส่วน
+                    Geno ยกเลิก turn ทันที คำสั่งไม่เคยเริ่มรัน แต่ข้อความที่ model จะได้อ่านบอกว่ามันอาจรันไปบางส่วน
                     ซึ่งไม่ตรงกับที่เกิดขึ้น
                   from: engine
                   to: engine
@@ -490,7 +490,7 @@ scenario:
       beat:
         title: "ผลลัพธ์กลับมาที่แชต"
         text: >-
-          เมื่อคำสั่งจบ Geno เก็บผลตามลำดับที่โมเดลขอ แล้วส่งไปที่แผงแชต
+          เมื่อคำสั่งจบ Geno เก็บผลตามลำดับที่ model ขอ แล้วส่งไปที่แผงแชต
           ขั้นนั้นหยุดหมุนและมีผลลัพธ์พับอยู่ข้างใต้
         from: engine
         to: panel
@@ -502,13 +502,13 @@ scenario:
       beat:
         title: "Geno ส่งผลลัพธ์ให้ model"
         text: >-
-          Geno เรียกโมเดลอีกรอบ คราวนี้ในคำขอมีผลของ `pnpm add zod` ให้โมเดลอ่านด้วย
-          turn ยังเดินต่อจนโมเดลตอบคุณ
+          Geno เรียก model อีกรอบ คราวนี้ในคำขอมีผลของ `pnpm add zod` ให้ model อ่านด้วย
+          turn ยังเดินต่อจน model ตอบคุณ
         from: engine
         to: model
         end: Model อ่านผลลัพธ์
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลจะได้อ่านผลของคำสั่งในคำขอถัดไป
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model จะได้อ่านผลของคำสั่งในคำขอถัดไป
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
@@ -520,14 +520,14 @@ scenario:
 
 | ปุ่ม | ผลต่อคำสั่ง | ผลต่อ turn |
 | --- | --- | --- |
-| **Allow** | รัน | ทำต่อ โมเดลได้อ่านผล |
+| **Allow** | รัน | ทำต่อ model ได้อ่านผล |
 | **Always allow in this workspace** | รัน และบันทึกกฎ `pnpm add` | ทำต่อ ครั้งหน้าไม่ถามอีก |
 | **Deny** | ไม่รัน (`ToolRejected`) | จบทันทีแบบ `done (end_turn)` และรอผู้ใช้ |
-| **No, and tell the agent…** | ไม่รัน (`ToolDenied`) | ทำต่อ โมเดลได้อ่านคำแนะนำของผู้ใช้ |
-| **Stop** (ไม่ตอบการ์ด) | ไม่รัน แต่โมเดลได้ยินว่า "may have partly run" | จบแบบ `stopped (cancelled)` |
+| **No, and tell the agent…** | ไม่รัน (`ToolDenied`) | ทำต่อ model ได้อ่านคำแนะนำของผู้ใช้ |
+| **Stop** (ไม่ตอบการ์ด) | ไม่รัน แต่ model ได้ยินว่า "may have partly run" | จบแบบ `stopped (cancelled)` |
 
 ความต่างระหว่าง Deny กับ "No, and tell the agent…" อยู่ที่ชนิดของ error:
-`ToolRejected` ทำให้ batch หยุดและ turn จบ ส่วน `ToolDenied` เป็นผลธรรมดาที่โมเดลอ่านแล้วหาทางอื่นต่อ
+`ToolRejected` ทำให้ batch หยุดและ turn จบ ส่วน `ToolDenied` เป็นผลธรรมดาที่ model อ่านแล้วหาทางอื่นต่อ
 
 engine ตั้งชื่อสองตัวเลือกแรกว่า "Allow once" และ "Reject" (`PERMISSION_OPTIONS` ใน `serve.ts`)
 แต่แผงแชตแสดงเป็น **Allow** และ **Deny** ตาม `CHOICE_LABELS` ใน `render.ts`
@@ -535,4 +535,4 @@ engine ตั้งชื่อสองตัวเลือกแรกว่�
 กด Stop ขณะการ์ดรออยู่ `Chat.stop` ส่งสองข้อความเกือบพร้อมกัน: ตอบการ์ดว่า `cancelled` ก่อน แล้วจึงส่ง `session/cancel`
 ทัวร์เดินทางที่ abort ไปถึง batch ก่อนที่ `settle` จะได้คำตอบของการ์ด call จึงถูกตอบว่าถูกหยุดระหว่างรัน
 ถ้า `settle` ได้คำตอบก่อน มันจะบันทึก call เป็น `rejected` เหมือนกด Deny แทน (ใครมาก่อนขึ้นกับจังหวะใน engine ไม่ได้ทดลองจริง) ทั้งสองทาง turn จบแบบ `stopped`
-และคำสั่งไม่ได้รัน แต่ในทางแรกข้อความที่โมเดลได้อ่านบอกว่าคำสั่ง "may have partly run" ซึ่งไม่ตรงกับที่เกิดขึ้น
+และคำสั่งไม่ได้รัน แต่ในทางแรกข้อความที่ model ได้อ่านบอกว่าคำสั่ง "may have partly run" ซึ่งไม่ตรงกับที่เกิดขึ้น

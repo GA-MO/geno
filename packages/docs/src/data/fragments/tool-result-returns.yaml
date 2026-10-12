@@ -4,8 +4,8 @@
   lane: loop
   at: tools
   do: >-
-    เมื่อ call ทุกตัวของรอบนี้จบครบทุกชุด `runTools` บันทึก `tool-result` ตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ
-    ผลที่ยาวเกินขีดของเครื่องมือถูกเก็บลงไฟล์ โมเดลได้ส่วนต้น ส่วนท้าย และที่อยู่ไฟล์แทน
+    เมื่อ call ทุกตัวของรอบนี้จบครบทุกชุด `runTools` บันทึก `tool-result` ตามลำดับที่ model ขอ ไม่ใช่ลำดับที่เสร็จ
+    ผลที่ยาวเกินขีดของ tool ถูกเก็บลงไฟล์ model ได้ส่วนต้น ส่วนท้าย และที่อยู่ไฟล์แทน
   ref: "packages/engine/src/drive.ts#\"for (const result of outcome.results) if (result !== undefined) await record(result);\""
   emits: [tool-result]
 

@@ -1,13 +1,13 @@
 ---
 title: "Steer มาไม่ทัน turn"
-description: ผู้ใช้กด Send now ระหว่างที่โมเดลเขียนคำตอบสุดท้าย turn จบก่อนถึงจุดปลอดภัย ถ้า turn จบเอง ข้อความกลายเป็น turn ถัดไป ถ้าผู้ใช้กด Stop ข้อความกลับไปที่ช่องพิมพ์
+description: ผู้ใช้กด Send now ระหว่างที่ model เขียนคำตอบสุดท้าย turn จบก่อนถึงจุดปลอดภัย ถ้า turn จบเอง ข้อความกลายเป็น turn ถัดไป ถ้าผู้ใช้กด Stop ข้อความกลับไปที่ช่องพิมพ์
 tableOfContents: false
 sidebar:
   order: 5
 scenario:
   surface: vscode
   given:
-    - turn ของแชตนี้กำลังทำงาน เครื่องมือรันเสร็จหมดแล้ว และโมเดลกำลัง stream คำตอบสุดท้ายโดยไม่เรียกเครื่องมืออีก
+    - turn ของแชตนี้กำลังทำงาน tool รันเสร็จหมดแล้ว และ model กำลัง stream คำตอบสุดท้ายโดยไม่เรียก tool อีก
     - ข้อความที่จะส่งไม่มีไฟล์แนบหรือ `@` mention
   trigger: >-
     ผู้ใช้พิมพ์ "แล้วอัปเดต README ด้วย" แล้วคลิก Send now หรือกด Cmd-Enter
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "คุณกด Send now ระหว่างคำตอบสุดท้าย"
         text: >-
-          tool รันเสร็จหมดแล้ว และโมเดลกำลังเขียนคำตอบสุดท้าย คุณพิมพ์ "แล้วอัปเดต README ด้วย" แล้วกด Send now
+          tool รันเสร็จหมดแล้ว และ model กำลังเขียนคำตอบสุดท้าย คุณพิมพ์ "แล้วอัปเดต README ด้วย" แล้วกด Send now
         from: you
         to: panel
         sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว 3 กรณี, streaming: true }
-      do: ผู้ใช้กด Send now ขณะที่โมเดลยังเขียนคำตอบอยู่
+      do: ผู้ใช้กด Send now ขณะที่ model ยังเขียนคำตอบอยู่
       phase: calling-model
 
     - id: steer
@@ -56,12 +56,12 @@ scenario:
       beat:
         title: "ข้อความรอใน inbox แต่ไม่มีรอบหน้า"
         text: >-
-          engine ใส่ข้อความไว้ใน inbox ของ turn จุดที่มันจะเข้า turn ได้คือก่อนเรียกโมเดลครั้งหน้า
+          engine ใส่ข้อความไว้ใน inbox ของ turn จุดที่มันจะเข้า turn ได้คือก่อนเรียก model ครั้งหน้า
           แต่คำตอบที่กำลังเขียนนี้จะไม่มีครั้งหน้า
         from: engine
         to: engine
       do: >-
-        `steerRunning` ใส่ข้อความไว้ใน inbox ของ turn คำขอค้างอยู่ จุดปลอดภัยถัดไปคือก่อนการเรียกโมเดลครั้งหน้า
+        `steerRunning` ใส่ข้อความไว้ใน inbox ของ turn คำขอค้างอยู่ จุดปลอดภัยถัดไปคือก่อนการเรียก model ครั้งหน้า
         แต่คำตอบที่กำลัง stream จะไม่มีการเรียกครั้งหน้า
       ref: packages/engine/src/steer.ts#steerRunning
 
@@ -75,22 +75,22 @@ scenario:
         to: engine
         ask: "turn จบอย่างไร"
       do: >-
-        โมเดลเขียนคำตอบต่อ steer ไม่ขัด stream
+        model เขียนคำตอบต่อ steer ไม่ขัด stream
       ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
       fork:
         ask: turn จบอย่างไร
         options:
           - id: ends
-            label: โมเดลเขียนจนจบเอง
+            label: model เขียนจนจบเอง
             steps:
               - lane: model
                 beat:
                   title: "Model เขียนจนจบเอง"
                   text: >-
-                    โมเดลจบคำตอบด้วย end_turn Geno จบ turn และย้ายข้อความที่ค้างไปเป็น turn ถัดไป
+                    model จบคำตอบด้วย end_turn Geno จบ turn และย้ายข้อความที่ค้างไปเป็น turn ถัดไป
                   from: model
                   to: engine
-                do: "โมเดลจบคำตอบด้วย `stop_reason: end_turn`"
+                do: "model จบคำตอบด้วย `stop_reason: end_turn`"
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: loop
@@ -139,14 +139,14 @@ scenario:
                 beat:
                   title: "Model อ่านข้อความเป็น prompt ใหม่"
                   text: >-
-                    โมเดลเห็นข้อความของคุณเป็นคำขอของ turn ใหม่ ไม่ใช่ข้อความที่แทรกเข้ามาระหว่างทำงาน
+                    model เห็นข้อความของคุณเป็นคำขอของ turn ใหม่ ไม่ใช่ข้อความที่แทรกเข้ามาระหว่างทำงาน
                   from: engine
                   to: model
                   end: "กลายเป็น turn ถัดไป"
 
               - lane: model
                 do: >-
-                  โมเดลอ่านข้อความเป็น prompt ธรรมดาของ turn ใหม่ ไม่ใช่ข้อความ "sent while you were working"
+                  model อ่านข้อความเป็น prompt ธรรมดาของ turn ใหม่ ไม่ใช่ข้อความ "sent while you were working"
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 end: { turn: continues, reason: call-model }
 
@@ -220,7 +220,7 @@ scenario:
                 end: { turn: stopped, reason: cancelled }
 ---
 
-steer ส่งถึงได้เฉพาะที่จุดปลอดภัยก่อนการเรียกโมเดล ถ้าโมเดลกำลังเขียนคำตอบสุดท้าย จะไม่มีจุดนั้นอีกใน turn นี้
+steer ส่งถึงได้เฉพาะที่จุดปลอดภัยก่อนการเรียก model ถ้า model กำลังเขียนคำตอบสุดท้าย จะไม่มีจุดนั้นอีกใน turn นี้
 engine ไม่ทิ้งข้อความ แต่ถือไว้จนรู้ว่า turn จบอย่างไร ดูทางที่ส่งถึงได้ทันที่ [ส่งข้อความแทรก (steer) เข้า turn ที่กำลังทำงาน](/scenarios/ctl/steer-delivered/)
 
 | turn จบแบบ | ข้อความ |

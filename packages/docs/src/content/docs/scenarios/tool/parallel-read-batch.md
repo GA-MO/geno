@@ -1,6 +1,6 @@
 ---
 title: "Model อ่านหลายไฟล์พร้อมกัน"
-description: โมเดลขออ่านสามไฟล์และค้นข้อความสองครั้งในคำตอบเดียว harness รันทั้งห้าพร้อมกัน แล้วบันทึกผลตามลำดับที่โมเดลขอ
+description: model ขออ่านสามไฟล์และค้นข้อความสองครั้งในคำตอบเดียว harness รันทั้งห้าพร้อมกัน แล้วบันทึกผลตามลำดับที่ model ขอ
 tableOfContents: false
 sidebar:
   order: 1
@@ -11,7 +11,7 @@ scenario:
     - ไม่มี hook ที่ตั้งไว้ ทุก path อยู่ใน workspace และไม่มีไฟล์ลับ
     - ผู้ใช้เปิด `src/date.ts` ค้างไว้ใน editor และมีการแก้ที่ยังไม่บันทึก
   trigger: >-
-    โมเดลตอบด้วยบล็อก `tool_use` ห้าบล็อก: `read` สามไฟล์ `grep` หนึ่งครั้ง และ `glob` หนึ่งครั้ง
+    model ตอบด้วยบล็อก `tool_use` ห้าบล็อก: `read` สามไฟล์ `grep` หนึ่งครั้ง และ `glob` หนึ่งครั้ง
   covers: [tool.parallel-read-batch]
   related: [turn.with-tools, tool.mixed-batch-sequencing, tool.bash-safe-runs, edit.applied-as-diff]
   steps:
@@ -20,7 +20,7 @@ scenario:
       beat:
         title: "Model ขออ่านสามไฟล์และค้นสองครั้ง"
         text: >-
-          ในคำตอบเดียว โมเดลขออ่าน `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วค้นหา `parseDate`
+          ในคำตอบเดียว model ขออ่าน `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วค้นหา `parseDate`
           และหาไฟล์เทสต์ทั้งหมด run จริงด้านล่างขออ่านสามไฟล์ในคำตอบเดียวแบบเดียวกัน
         from: model
         to: engine
@@ -32,7 +32,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลขอ `read` ไฟล์ `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วขอ `grep` หา `parseDate`
+        model ขอ `read` ไฟล์ `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วขอ `grep` หา `parseDate`
         และ `glob` หา `**/*.test.ts` ในคำตอบเดียว จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
@@ -138,7 +138,7 @@ scenario:
       beat:
         title: "Geno บันทึกผลตามลำดับที่ขอ"
         text: >-
-          เมื่อครบทุก call Geno บันทึกผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ผลพับอยู่ใต้แต่ละขั้น
+          เมื่อครบทุก call Geno บันทึกผลตามลำดับที่ model ขอ ไม่ใช่ลำดับที่เสร็จ ผลพับอยู่ใต้แต่ละขั้น
         from: engine
         to: panel
         sees:
@@ -161,19 +161,19 @@ scenario:
       beat:
         title: "Model ได้ผลทั้งห้าในข้อความเดียว"
         text: >-
-          Geno เรียกโมเดลต่อ ผลทั้งห้าอยู่ในข้อความ user เดียว เรียงตามที่โมเดลขอ
+          Geno เรียก model ต่อ ผลทั้งห้าอยู่ในข้อความ user เดียว เรียงตามที่ model ขอ
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ผลทั้งห้าในข้อความ user เดียว เรียงตามลำดับที่ขอ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ผลทั้งห้าในข้อความ user เดียว เรียงตามลำดับที่ขอ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-การอ่านที่ไม่เปลี่ยนอะไรและไม่ต้องถามใครรันพร้อมกันได้ ส่วนอย่างอื่นรันทีละตัว `nextToolBatch` ตัดชุดตามลำดับที่โมเดลขอ
+การอ่านที่ไม่เปลี่ยนอะไรและไม่ต้องถามใครรันพร้อมกันได้ ส่วนอย่างอื่นรันทีละตัว `nextToolBatch` ตัดชุดตามลำดับที่ model ขอ
 ชุดหนึ่งเป็นการอ่านติดกันได้ถึง 8 ตัว หรือเป็น call อื่นตัวเดียว
 
 | call | รันพร้อมตัวอื่นได้เมื่อ |
@@ -185,7 +185,7 @@ scenario:
 สิ่งที่ควรสังเกต
 
 - **เห็นเสร็จเร็ว บันทึกทีหลัง** แผงเห็นแต่ละขั้นเสร็จทันทีที่ call นั้นจบ แต่ข้อความผลไปถึงแผงเมื่อทั้งชุดจบและถูกบันทึกแล้ว
-  ผลใน log เรียงตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ
+  ผลใน log เรียงตามลำดับที่ model ขอ ไม่ใช่ลำดับที่เสร็จ
 - **ไฟล์ที่ยังไม่บันทึก** ทั้ง `read` และ `grep` เห็นการแก้ที่ผู้ใช้ยังไม่บันทึก `read` ได้ข้อความจาก buffer
   ส่วน `grep` ค้นสำเนาของ buffer ที่ editor ส่งมา
 - **ในแผง** `read` ที่ติดกันรวมเป็นขั้นเดียวที่มีชิปไฟล์ละอัน ส่วน `grep` และ `glob` เป็นขั้นของตัวเอง

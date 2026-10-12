@@ -1,6 +1,6 @@
 ---
 title: รัน workflow พร้อมความคืบหน้า
-description: ผู้ใช้พิมพ์ /workflow Geno แสดงการ์ดราคาก่อน แล้วรัน workflow เป็น session เบื้องหลัง ทีละรอบของขั้น แต่ละขั้นเป็นเอเจนต์ลูก เมื่อจบ รายงานปลุกแชตที่เริ่ม
+description: ผู้ใช้พิมพ์ /workflow Geno แสดงการ์ดราคาก่อน แล้วรัน workflow เป็น session เบื้องหลัง ทีละรอบของขั้น แต่ละขั้นเป็น subagent เมื่อจบ รายงานปลุกแชตที่เริ่ม
 tableOfContents: false
 sidebar:
   order: 1
@@ -30,7 +30,7 @@ scenario:
       at: drive
       do: >-
         `/workflow` เป็นคำสั่งในตัวที่สร้าง turn ข้อความ "Run the workflow fix-bug ..." ถูกบันทึกเป็น event `user` พร้อมชื่อคำสั่ง
-        `runAgent` เห็นคำสั่งนี้ จึงให้ `workflowCommandCall` สร้าง call `workflow` ในนามผู้ใช้ โมเดลไม่ถูกเรียกก่อน
+        `runAgent` เห็นคำสั่งนี้ จึงให้ `workflowCommandCall` สร้าง call `workflow` ในนามผู้ใช้ model ไม่ถูกเรียกก่อน
       ref: packages/engine/src/workflows.ts#workflowCommandCall
       emits: [user, workflow]
 
@@ -38,7 +38,7 @@ scenario:
       lane: loop
       at: step
       do: >-
-        ที่ขั้น `call-model` director ส่ง call ที่ผู้ใช้ออกแทนโมเดล `drive` บันทึกเป็น `assistant` ที่มี `issuedBy: user`
+        ที่ขั้น `call-model` director ส่ง call ที่ผู้ใช้ออกแทน model `drive` บันทึกเป็น `assistant` ที่มี `issuedBy: user`
         แล้ว `loopStep` ตัดสิน `run-tools`
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at: new Date().toISOString(), ...issued, issuedBy: 'user' });\""
       emits: [assistant, run-tools]
@@ -85,7 +85,7 @@ scenario:
       lane: panel
       at: card
       do: >-
-        การ์ด workflow แสดงทีละขั้น: ชื่อ role โมเดล อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณและเพดาน แล้วราคารวม
+        การ์ด workflow แสดงทีละขั้น: ชื่อ role model อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณและเพดาน แล้วราคารวม
       sees: >-
         การ์ด "Run this workflow?" รายการขั้น "reproduce · explore · ... · read-only" "fix · worker · ... · can edit" "Gate"
         บรรทัด "About $0.09, at most $0.50. The run stops cleanly at its total cap of $0.50."
@@ -153,7 +153,7 @@ scenario:
       at: tools
       do: >-
         ผลของ call คือ "Started workflow fix-bug in the background as session ... The user follows it in Tasks."
-        แล้ว director ของแชตนี้ไม่มีอะไรออกอีก turn ของแชตจึงจบ `end_turn` โดยไม่เรียกโมเดล
+        แล้ว director ของแชตนี้ไม่มีอะไรออกอีก turn ของแชตจึงจบ `end_turn` โดยไม่เรียก model
       ref: "packages/engine/src/drive.ts#\"if (issued === undefined) return end('end_turn');\""
       emits: [tool-result, end_turn]
       phase: idle
@@ -196,7 +196,7 @@ scenario:
       lane: child@worker
       at: model
       do: >-
-        แต่ละขั้นรันเป็นเอเจนต์ลูกของ session workflow ด้วยเพดาน โมเดล และ lane ที่ workflow กำหนด
+        แต่ละขั้นรันเป็น subagent ของ session workflow ด้วยเพดาน model และ lane ที่ workflow กำหนด
         `reproduce` หาเทสต์ที่ล้ม แล้วรอบถัดไป `fix` ได้ผลของ `reproduce` ผ่าน `{{previous}}` แก้โค้ด และรายงาน
       ref: packages/engine/src/subagents.ts#runChild
       emits: [report]
@@ -238,7 +238,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
-        โมเดลของแชตอ่านรายงาน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น
+        model ของแชตอ่านรายงาน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น
         แล้วเล่าให้ผู้ใช้ว่าแก้อะไร จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNotice
       emits: [end_turn]
@@ -247,13 +247,13 @@ scenario:
     - use: bg-woken-ends
 ---
 
-workflow คือแผนงานหลายขั้นที่ไม่มีโมเดลเป็นคนคุม: director อ่านไฟล์ JSON แล้วออก call `agent` ของแต่ละขั้นเอง
-โมเดลของแต่ละขั้นทำงานของขั้นนั้น แต่ลำดับ เพดาน และ gate มาจากไฟล์
+workflow คือแผนงานหลายขั้นที่ไม่มี model เป็นคนคุม: director อ่านไฟล์ JSON แล้วออก call `agent` ของแต่ละขั้นเอง
+model ของแต่ละขั้นทำงานของขั้นนั้น แต่ลำดับ เพดาน และ gate มาจากไฟล์
 
 สิ่งที่ควรสังเกต
 
-- **ไม่มีโมเดลถูกเรียกก่อนการ์ด** `/workflow` เหมือน `@agent`: ข้อความของผู้ใช้กลายเป็น call ในนามผู้ใช้ทันที
-  โมเดลก็เรียกเครื่องมือ `workflow` เองได้ ถ้า editor บอกว่ารองรับ และ turn นั้นไม่ใช่รอบตามตารางเวลา
+- **ไม่มี model ถูกเรียกก่อนการ์ด** `/workflow` เหมือน `@agent`: ข้อความของผู้ใช้กลายเป็น call ในนามผู้ใช้ทันที
+  model ก็เรียก tool `workflow` เองได้ ถ้า editor บอกว่ารองรับ และ turn นั้นไม่ใช่รอบตามตารางเวลา
 - **งบถูกจองก่อนรอบ** `nextRound` ไม่เริ่มรอบที่งบที่เหลือไม่พอให้ทุกขั้นใช้จนเต็มเพดาน run จึงหยุดได้ก่อนใช้เงินครบงบ
 - **ขั้นของ workflow ส่งข้อความถึงได้** แชตที่เริ่ม workflow ใช้ `message_agent` กับขั้นของมันได้
 - **ปิดการปลุกอยู่** รายงานยังเข้ากล่องข้อความของแชต และไปกับ prompt ถัดไปของผู้ใช้แทนการปลุก

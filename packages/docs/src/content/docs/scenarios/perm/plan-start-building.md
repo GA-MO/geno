@@ -1,6 +1,6 @@
 ---
 title: "จบแผนแล้วคุณกด Start building"
-description: หลัง turn ในโหมด Plan จบ ผู้ใช้กด Start building ส่วนขยายสลับโหมดเป็น Ask หรือ Auto แล้วส่ง "Go ahead with the plan." เป็น turn ใหม่ ที่โมเดลได้ประกาศโหมดและรายการ todo ของแผน
+description: หลัง turn ในโหมด Plan จบ ผู้ใช้กด Start building ส่วนขยายสลับโหมดเป็น Ask หรือ Auto แล้วส่ง "Go ahead with the plan." เป็น turn ใหม่ ที่ model ได้ประกาศโหมดและรายการ todo ของแผน
 tableOfContents: false
 sidebar:
   order: 6
@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - session อยู่ในโหมด Plan และ turn ล่าสุดจบแบบ done ในโหมด Plan
-    - โมเดลเขียนแผนเป็นคำตอบ และตั้งรายการ todo ห้าข้อที่ยัง `pending` ทั้งหมด
+    - model เขียนแผนเป็นคำตอบ และตั้งรายการ todo ห้าข้อที่ยัง `pending` ทั้งหมด
     - การตั้งค่า `gcode.approvalMode` ของแชตใหม่เป็น Ask (ค่าตั้งต้น)
   trigger: >-
     ผู้ใช้อ่านแผนแล้วคลิกปุ่ม Start building ใต้ turn นั้น
@@ -21,7 +21,7 @@ scenario:
       beat:
         title: "แชตขึ้นปุ่ม Start building ใต้แผน"
         text: >-
-          turn ล่าสุดจบในโหมด Plan โมเดลเขียนแผนและตั้งรายการ todo ห้าข้อที่ยังไม่เริ่ม แผงวาดปุ่ม Start building ใต้
+          turn ล่าสุดจบในโหมด Plan model เขียนแผนและตั้งรายการ todo ห้าข้อที่ยังไม่เริ่ม แผงวาดปุ่ม Start building ใต้
           turn นั้น เพราะ session ยังอยู่ในโหมด Plan
         from: panel
         to: you
@@ -113,7 +113,7 @@ scenario:
         title: "Geno เริ่ม turn ใหม่ในโหมด Ask"
         text: >-
           engine รับเป็น turn ใหม่ที่คุณส่ง ทุก call ใน turn นี้ตัดสินด้วยโหมด Ask และขีดจำกัดเริ่มนับใหม่ Geno
-          บันทึกข้อความแล้วตัดสินว่าขั้นต่อไปคือเรียกโมเดล
+          บันทึกข้อความแล้วตัดสินว่าขั้นต่อไปคือเรียก model
         from: engine
         to: engine
       do: >-
@@ -174,7 +174,7 @@ scenario:
       beat:
         title: "Model เริ่มทำตามแผน"
         text: >-
-          Geno เรียกโมเดล โมเดลอ่านว่าคุณเปลี่ยนเป็นโหมด Ask แล้วแก้โค้ดได้ ตามด้วยรายการ todo ของแผน
+          Geno เรียก model model อ่านว่าคุณเปลี่ยนเป็นโหมด Ask แล้วแก้โค้ดได้ ตามด้วยรายการ todo ของแผน
           แล้วเริ่มแก้โค้ดตามขั้นแรก
         from: engine
         to: model
@@ -183,21 +183,21 @@ scenario:
     - id: builds
       lane: model
       do: >-
-        โมเดลอ่าน "[Geno] The user switched this session to Ask mode. You can change code ..." ตามด้วยรายการ todo ของแผน
+        model อ่าน "[Geno] The user switched this session to Ask mode. You can change code ..." ตามด้วยรายการ todo ของแผน
         แล้วเริ่มแก้โค้ดตามขั้นแรก
       ref: packages/core/src/notice.ts#MODE_NOTICES
       end: { turn: continues, reason: call-model }
 ---
 
 Start building คือทางลัดของสองอย่างที่ผู้ใช้ทำเองได้: สลับโหมดออกจาก Plan และส่งข้อความสั้นๆ ให้ลงมือ
-แผนไม่ได้ถูกส่งซ้ำ มันอยู่ใน log แล้ว โมเดลเห็นแผนของตัวเองในบทสนทนา และเห็นรายการ todo ในประกาศ
+แผนไม่ได้ถูกส่งซ้ำ มันอยู่ใน log แล้ว model เห็นแผนของตัวเองในบทสนทนา และเห็นรายการ todo ในประกาศ
 
 สิ่งที่ควรสังเกต
 
 - **โหมดที่ได้มาจากการตั้งค่า ไม่ใช่โหมดก่อน Plan** `startBuilding` ใช้ `gcode.approvalMode` ของแชตใหม่
   ถ้าผู้ใช้อยู่ใน Auto ก่อนสลับเป็น Plan การกดปุ่มนี้จะได้ Ask เว้นแต่การตั้งค่าเป็น Auto
-- **รายการ todo เป็นสะพาน** ประกาศโหมด Plan ขอให้โมเดลเขียนขั้นตอนลงรายการ todo เมื่อเริ่มสร้าง รายการเดิมกลับมาพร้อมประกาศ
-  และแผงแสดงรายการเดิมจนกว่าโมเดลจะตั้งรายการใหม่
+- **รายการ todo เป็นสะพาน** ประกาศโหมด Plan ขอให้ model เขียนขั้นตอนลงรายการ todo เมื่อเริ่มสร้าง รายการเดิมกลับมาพร้อมประกาศ
+  และแผงแสดงรายการเดิมจนกว่า model จะตั้งรายการใหม่
 - **ปุ่มอยู่เฉพาะ turn ล่าสุด** ถ้าผู้ใช้สลับโหมดออกจาก Plan เองหรือส่งข้อความอื่นก่อน ปุ่มหายไป
 
 การเปลี่ยนโหมดระหว่าง turn ดู [สลับโหมดระหว่าง turn](/scenarios/perm/mode-switch-mid-turn/)

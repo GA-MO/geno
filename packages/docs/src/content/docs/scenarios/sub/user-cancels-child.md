@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - ค่า `agentTool` มีโหมดปัจจุบัน และมี turn ทำงานอยู่
-    - โมเดลของแม่ส่งคำถามกว้างๆ ให้ `explore` และลูกกำลังค้นอยู่นาน
+    - model ของแม่ส่งคำถามกว้างๆ ให้ `explore` และลูกกำลังค้นอยู่นาน
   trigger: >-
     ผู้ใช้เห็นว่าลูกค้นผิดทาง จึงกด Cancel บนแถวของลูก
   covers: [sub.user-cancels-child]
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลของแม่ขอเรียก `agent` ด้วย `agent: "explore"` และงานค้นหา จบคำตอบด้วย `stop_reason: tool_use`
+        model ของแม่ขอเรียก `agent` ด้วย `agent: "explore"` และงานค้นหา จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
       phase: calling-model
@@ -97,7 +97,7 @@ scenario:
       lane: child@explore
       at: loop
       do: >-
-        controller ของลูกถูก abort การเรียกโมเดลหรือเครื่องมือที่ค้างอยู่ของลูกหยุด ลูกบันทึก error ชนิด `abort` แล้ว loop ของลูกจบ
+        controller ของลูกถูก abort การเรียก model หรือ tool ที่ค้างอยู่ของลูกหยุด ลูกบันทึก error ชนิด `abort` แล้ว loop ของลูกจบ
         `childEndOf` เห็นว่ามีการยกเลิก จึงได้ `cancelled` (ไม่มี `by` เพราะผู้ใช้เป็นคนยกเลิก)
       ref: packages/core/src/subagent.ts#childEndOf
       emits: [abort, cancelled]
@@ -123,7 +123,7 @@ scenario:
         text: แถวหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
         from: panel
         to: you
-        sees: แถว "⊘ explore · <โมเดล> · 41s" สถานะ Cancelled
+        sees: แถว "⊘ explore · <model> · 41s" สถานะ Cancelled
       lane: server
       at: updates
       do: >-
@@ -136,7 +136,7 @@ scenario:
       at: rail
       alongside: true
       do: แถวของลูกหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
-      sees: แถว "⊘ explore · <โมเดล> · 41s" สถานะ Cancelled
+      sees: แถว "⊘ explore · <model> · 41s" สถานะ Cancelled
       ref: packages/extension/src/chat/subagent-view.ts#childLook
 
     - use: tool-result-returns
@@ -152,7 +152,7 @@ scenario:
       at: step
       do: >-
         ผลของ call `agent` มีสถานะ `ok` ไม่ใช่ `rejected` `loopStep` จึงตัดสิน `call-model`
-        โมเดลของแม่อ่านรายงานบางส่วนแล้วทำต่อเอง หรือถามผู้ใช้ว่าจะไปทางไหน
+        model ของแม่อ่านรายงานบางส่วนแล้วทำต่อเอง หรือถามผู้ใช้ว่าจะไปทางไหน
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
@@ -160,13 +160,13 @@ scenario:
 ---
 
 Cancel บนแถวของลูกกับ Stop ของแม่ต่างกันที่เป้าหมาย: Cancel ส่ง `session/cancel` ด้วย id ของลูก จึงหยุดแค่ลูก
-ส่วน Stop ส่ง id ของแม่ ซึ่งหยุดทั้ง turn และลูกทุกตัว ดู [หยุดเทิร์นแม่ขณะลูกทำงาน](/scenarios/sub/parent-stop-with-children/)
+ส่วน Stop ส่ง id ของแม่ ซึ่งหยุดทั้ง turn และลูกทุกตัว ดู [หยุด turn แม่ขณะลูกทำงาน](/scenarios/sub/parent-stop-with-children/)
 
 สิ่งที่ควรสังเกต
 
 - **แม่ไม่รู้ว่าผู้ใช้กด Cancel จนกว่าจะอ่านผล** ผลของ call บอกว่าลูกถูกผู้ใช้ยกเลิก
   และข้อความในรั้วคือสิ่งที่ลูกเขียนไว้ก่อนหน้า ไม่ใช่คำตอบที่ลูกตั้งใจส่ง
-- **ข้อความที่ stream อยู่หายไป** ลูกบันทึกข้อความของตัวเองตอนจบการเรียกโมเดลแต่ละครั้ง ข้อความที่กำลัง stream ตอนกด Cancel
+- **ข้อความที่ stream อยู่หายไป** ลูกบันทึกข้อความของตัวเองตอนจบการเรียก model แต่ละครั้ง ข้อความที่กำลัง stream ตอนกด Cancel
   จึงไม่อยู่ในรายงาน
 - **Cancel ใช้ได้ระหว่างที่ turn ของแม่ยังรันอยู่ในแผงนี้** `cancelChild` ไม่ทำอะไรถ้าแผงไม่มี turn หรือแถวไม่ได้รันอยู่แล้ว
 - **บรรทัดหลังรั้วอ่านติดขัด** `childReport` ต่อคำเป็น "The subagent cancelled by the user before it finished, so this is what it had."

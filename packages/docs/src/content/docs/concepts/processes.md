@@ -22,8 +22,8 @@ flowchart LR
     C["ลูปของลูก<br/>subagent, workflow<br/>และ arena"]
     G["Gateway + wire"]
   end
-  P["ผู้ให้บริการโมเดล"]
-  O["เครื่องมือ: shell ใน sandbox,<br/>ดิสก์, งานเบื้องหลัง"]
+  P["ผู้ให้บริการ model"]
+  O["tool: shell ใน sandbox,<br/>ดิสก์, งานเบื้องหลัง"]
   E["MCP server, เว็บ, gh,<br/>hook, classifier"]
   LOG[("log ของ session (JSONL),<br/>shadow checkpoint repo")]
   W <-- postMessage --> X

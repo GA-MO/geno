@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังทำงาน
-    - ผู้ให้บริการเป็น Anthropic (wire แบบ Anthropic) และโมเดลกำลัง stream คำตอบ
+    - ผู้ให้บริการเป็น Anthropic (wire แบบ Anthropic) และ model กำลัง stream คำตอบ
   trigger: >-
     การเชื่อมต่อปิดอย่างเรียบร้อยกลางคำตอบ stream จบโดยไม่มี event `message_stop`
   covers: [err.exception-escapes-loop]
@@ -18,7 +18,7 @@ scenario:
       beat:
         title: "Geno ส่งคำขอให้ model"
         text: >-
-          turn กำลังทำงาน ผู้ให้บริการเป็น Anthropic และโมเดลเริ่ม stream คำตอบกลับมา
+          turn กำลังทำงาน ผู้ให้บริการเป็น Anthropic และ model เริ่ม stream คำตอบกลับมา
         from: engine
         to: model
 
@@ -78,7 +78,7 @@ scenario:
         from: engine
         to: engine
       do: >-
-        `finally` ของ `runAgent` ยังทำงาน: ปิดประตู steer (steer ที่ค้างกลายเป็น turn ถัดไป) หยุดเอเจนต์ลูกเบื้องหลัง
+        `finally` ของ `runAgent` ยังทำงาน: ปิดประตู steer (steer ที่ค้างกลายเป็น turn ถัดไป) หยุด subagent เบื้องหลัง
         และปิด sandbox
       ref: "packages/engine/src/agent.ts#\"steers.release(session.id, inbox);\""
 
@@ -114,7 +114,7 @@ scenario:
         title: "แชตขึ้นแถบ Internal error"
         text: >-
           ข้อความครึ่งเดียวยังค้างในแผงนี้จนกว่าจะ reload แถบ error ไม่บอกเหตุผล ข้อความที่รอในคิวกลับไปที่ช่องพิมพ์
-          ครั้งหน้าที่คุณส่ง โมเดลจะเห็นทั้ง prompt เดิมและข้อความใหม่
+          ครั้งหน้าที่คุณส่ง model จะเห็นทั้ง prompt เดิมและข้อความใหม่
         from: panel
         to: you
         end: "turn ล้มเหลวโดยไม่บอกเหตุ"
@@ -141,6 +141,6 @@ scenario:
   แต่ `EngineError` จาก `anthropicWire` ไม่เคยผ่านตัวจัดประเภท จึงล้มทันทีแทนที่จะลองใหม่หลัง 1 วินาที
 - **ที่อื่นที่โยนแบบเดียวกัน** `takeCheckpoint` ที่ git ล้ม (`checkpoint git ... failed`) และการเขียน log ที่ดิสก์เต็ม
   ให้ผลเหมือนกัน: turn จบ failed ไม่มี event `error` และ prompt ค้างอยู่
-- **prompt ที่ค้างไปกับข้อความถัดไป** log จบที่ `user` ที่ยังไม่มีคำตอบ ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งสองข้อความ
+- **prompt ที่ค้างไปกับข้อความถัดไป** log จบที่ `user` ที่ยังไม่มีคำตอบ ครั้งหน้าที่ผู้ใช้ส่งข้อความ model จะเห็นทั้งสองข้อความ
 
 error ที่ผ่านตัวแยกชนิดได้ทางที่ดีกว่า ดู [ผู้ให้บริการล้มชั่วคราว Geno retry เอง](/scenarios/err/transient-retried/)

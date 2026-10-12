@@ -1,16 +1,16 @@
 ---
 title: แสดงหรือหยุดงานเบื้องหลัง
-description: โมเดลเรียก list_agents ดูว่า session มีลูก คำสั่ง และการรออะไรค้างอยู่ แล้วเรียก task_stop หยุดตัวที่ไม่ต้องการแล้ว
+description: model เรียก list_agents ดูว่า session มีลูก คำสั่ง และการรออะไรค้างอยู่ แล้วเรียก task_stop หยุดตัวที่ไม่ต้องการแล้ว
 tableOfContents: false
 sidebar:
   order: 7
 scenario:
   surface: vscode
   given:
-    - ใน turn นี้โมเดลเริ่มลูก `explore` แบบเบื้องหลัง เริ่ม `pnpm dev` เป็น `bg-1` และตั้ง `schedule_wakeup` เป็น `wake-2` ไว้แล้ว
+    - ใน turn นี้ model เริ่มลูก `explore` แบบเบื้องหลัง เริ่ม `pnpm dev` เป็น `bg-1` และตั้ง `schedule_wakeup` เป็น `wake-2` ไว้แล้ว
     - ผู้ใช้เพิ่งบอกว่าไม่ต้องสำรวจต่อแล้ว เพราะเจอคำตอบเอง
   trigger: >-
-    โมเดลต้องการรู้ว่ามีอะไรค้างอยู่ก่อนจะหยุด จึงเรียก `list_agents`
+    model ต้องการรู้ว่ามีอะไรค้างอยู่ก่อนจะหยุด จึงเรียก `list_agents`
   covers: [bg.task-stop-or-list]
   related: [bg.monitor-wakes, bg.schedule-wakeup, sub.user-cancels-child, bg.user-cancels-wakes]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `list_agents` ซึ่งไม่มี input จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `list_agents` ซึ่งไม่มี input จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/work.ts#LIST_AGENTS_TOOL_DEFINITION
       emits: [tool_use, list_agents]
       phase: calling-model
@@ -59,7 +59,7 @@ scenario:
           select: content[1]
       lane: model
       do: >-
-        โมเดลอ่านรายการ แล้วขอเรียก `task_stop` ด้วย `id` ของสิ่งที่จะหยุด จบคำตอบด้วย `stop_reason: tool_use`
+        model อ่านรายการ แล้วขอเรียก `task_stop` ด้วย `id` ของสิ่งที่จะหยุด จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/work.ts#TASK_STOP_TOOL_DEFINITION
       emits: [tool_use, task_stop]
       phase: calling-model
@@ -80,7 +80,7 @@ scenario:
         id ที่ไม่รู้จักได้ error ที่บอกว่า id แบบไหนใช้ได้
       ref: packages/engine/src/tools/work.ts#workExecutors
       fork:
-        ask: โมเดลหยุดอะไร
+        ask: model หยุดอะไร
         options:
           - id: child
             label: ลูก explore
@@ -137,7 +137,7 @@ scenario:
                 do: >-
                   `stopJob` ส่ง SIGTERM ให้ `pnpm dev` แล้ว SIGKILL ถ้ายังไม่จบในไม่กี่วินาที
                   ผลคือ "Stopped background command bg-1 (`pnpm dev`)." ตามด้วยท้าย output และที่อยู่ไฟล์ output
-                  คำสั่งที่โมเดลหยุดเองไม่ปลุก session
+                  คำสั่งที่ model หยุดเองไม่ปลุก session
                 ref: "packages/engine/src/tools/work.ts#\"async function stopJob(\""
 
           - id: wake
@@ -182,7 +182,7 @@ scenario:
                   end: Model ทำต่อ
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลอ่าน error แล้วทำต่อ
+                  `loopStep` ตัดสิน `call-model` model อ่าน error แล้วทำต่อ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -223,13 +223,13 @@ scenario:
         end: Turn จบ
       lane: model
       do: >-
-        โมเดลบอกผู้ใช้ว่าหยุดอะไรไปแล้ว และสรุปสิ่งที่ explore เจอก่อนถูกหยุด
+        model บอกผู้ใช้ว่าหยุดอะไรไปแล้ว และสรุปสิ่งที่ explore เจอก่อนถูกหยุด
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
       end: { turn: done, reason: end_turn }
 ---
 
-`list_agents` กับ `task_stop` คือมือของโมเดลบนงานเบื้องหลังของ session ตัวเอง
+`list_agents` กับ `task_stop` คือมือของ model บนงานเบื้องหลังของ session ตัวเอง
 ผู้ใช้มีมือของตัวเองในแผง Tasks: ปุ่ม Cancel บนแถวของลูก ปุ่ม Stop ของคำสั่ง และปุ่ม Cancel ของการรอทั้งหมด
 
 | id | `task_stop` ทำอะไร | ผล |
@@ -242,6 +242,6 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **ลูกไม่มีเครื่องมือสองตัวนี้** `list_agents` และ `task_stop` อยู่ในรายการที่ลูกไม่ได้ ลูกหยุดงานของแม่ไม่ได้
+- **ลูกไม่มี tool สองตัวนี้** `list_agents` และ `task_stop` อยู่ในรายการที่ลูกไม่ได้ ลูกหยุดงานของแม่ไม่ได้
 - **workflow หยุดได้เฉพาะเมื่อเปิดการปลุก** (อ่านจากโค้ด) session ของ workflow ถูกจดเป็นการรอใน `Wakes` เฉพาะเมื่อการปลุกอัตโนมัติเปิด
   ถ้าปิดอยู่ `task_stop` ด้วย id ของ workflow หาไม่เจอ

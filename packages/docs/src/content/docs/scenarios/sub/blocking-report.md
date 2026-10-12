@@ -1,16 +1,16 @@
 ---
 title: "สร้าง subagent แล้วรอรายงาน"
-description: โมเดลส่งงานให้ worker ลูกทำงานใน session ของตัวเอง ขออนุญาตผ่านการ์ดเดียวกับแม่ แล้วส่งรายงานที่ถูกล้อมรั้วกลับมาเป็นผลของ call
+description: model ส่งงานให้ worker ลูกทำงานใน session ของตัวเอง ขออนุญาตผ่านการ์ดเดียวกับแม่ แล้วส่งรายงานที่ถูกล้อมรั้วกลับมาเป็นผลของ call
 tableOfContents: false
 sidebar:
   order: 1
 scenario:
   surface: vscode
   given:
-    - ค่า `agentTool` ในไฟล์ตั้งค่าของ Geno มี `ask` โมเดลในโหมด Ask จึงมีเครื่องมือ `agent`
+    - ค่า `agentTool` ในไฟล์ตั้งค่าของ Geno มี `ask` model ในโหมด Ask จึงมี tool `agent`
     - เปิด Geno ในโหมด Ask มี turn ทำงานอยู่ และรอบนี้ยังไม่ได้ใช้งบไปกับลูกตัวอื่น
   trigger: >-
-    ผู้ใช้ขอให้เพิ่มเทสต์ให้ parser โมเดลตัดสินใจส่งงานนี้ให้ subagent `worker`
+    ผู้ใช้ขอให้เพิ่มเทสต์ให้ parser model ตัดสินใจส่งงานนี้ให้ subagent `worker`
   covers: [sub.blocking-report, sub.asks-permission]
   related: [sub.at-mention, sub.user-cancels-child, sub.parent-stop-with-children, bg.child-wakes-parent, perm.ask-allow]
   steps:
@@ -19,12 +19,12 @@ scenario:
       beat:
         title: "Model ส่งงานให้ subagent ชื่อ worker"
         text: >-
-          แทนที่จะเขียนเทสต์เอง โมเดลขอให้ Geno ส่งงานนี้ให้เอเจนต์ลูกชื่อ worker
+          แทนที่จะเขียนเทสต์เอง model ขอให้ Geno ส่งงานนี้ให้ subagent ชื่อ worker
           มันเขียนคำสั่งงานให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `agent` ด้วย `agent: "worker"` และ `task` ที่เขียนให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
+        model ขอเรียก `agent` ด้วย `agent: "worker"` และ `task` ที่เขียนให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
@@ -59,7 +59,7 @@ scenario:
       lane: child@worker
       at: loop
       do: >-
-        `openSpawn` เปิด log ของลูกเป็น session ใหม่: `session-start` ที่มีโมเดล คำสั่งโปรเจกต์ หน่วยความจำ สภาพแวดล้อม
+        `openSpawn` เปิด log ของลูกเป็น session ใหม่: `session-start` ที่มี model คำสั่งโปรเจกต์ หน่วยความจำ สภาพแวดล้อม
         และข้อมูลว่าใครเป็นแม่ SubagentStart hook (ถ้ามี) ได้ใส่บริบทเพิ่ม
       ref: packages/engine/src/subagents.ts#openSpawn
 
@@ -67,7 +67,7 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `runPlaced` บันทึก event `child-start` ลง log ของแม่ event นี้ไม่ใช่ส่วนของบทสนทนา โมเดลของแม่ไม่เห็น
+        `runPlaced` บันทึก event `child-start` ลง log ของแม่ event นี้ไม่ใช่ส่วนของบทสนทนา model ของแม่ไม่เห็น
       ref: "packages/engine/src/subagents.ts#\"await ctx.logNote!({ kind: 'child-start'\""
       emits: [child-start]
 
@@ -103,8 +103,8 @@ scenario:
       at: rail
       alongside: true
       do: >-
-        ใต้ขั้นของ `agent` ขึ้นแถวของลูก: ไดโนเสาร์ผู้ช่วย ชื่อ โมเดล นาฬิกา และปุ่ม Cancel คลิกแถวเพื่อเปิดบทสนทนาของลูก
-      sees: แถว "worker · <โมเดล> · 0:04" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
+        ใต้ขั้นของ `agent` ขึ้นแถวของลูก: ไดโนเสาร์ผู้ช่วย ชื่อ model นาฬิกา และปุ่ม Cancel คลิกแถวเพื่อเปิดบทสนทนาของลูก
+      sees: แถว "worker · <model> · 0:04" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: child-model
@@ -113,13 +113,13 @@ scenario:
       beat:
         title: "Worker อ่านโค้ดแล้วขอติดตั้ง vitest"
         text: >-
-          ลูกคุยกับโมเดลผ่านการเชื่อมต่อเดียวกับแม่ มันอ่านไฟล์ แล้วขอรัน `pnpm add -D vitest`
+          ลูกคุยกับ model ผ่านการเชื่อมต่อเดียวกับแม่ มันอ่านไฟล์ แล้วขอรัน `pnpm add -D vitest`
           ซึ่งเป็นคำสั่งที่ต้องขออนุญาต
         from: model
         to: engine
       do: >-
-        ลูกเรียกโมเดลผ่าน gateway ของแม่ system prompt ของลูกคือ `childSystemPrompt`: กรอบงาน คำสั่งให้จบด้วย `report`
-        และเนื้อหาของนิยาม `worker` โมเดลของลูกอ่านไฟล์ แล้วขอรัน `bash` ด้วย `pnpm add -D vitest`
+        ลูกเรียก model ผ่าน gateway ของแม่ system prompt ของลูกคือ `childSystemPrompt`: กรอบงาน คำสั่งให้จบด้วย `report`
+        และเนื้อหาของนิยาม `worker` model ของลูกอ่านไฟล์ แล้วขอรัน `bash` ด้วย `pnpm add -D vitest`
       ref: packages/core/src/subagent.ts#childSystemPrompt
       emits: [tool_use]
 
@@ -261,14 +261,14 @@ scenario:
                 beat:
                   title: "Turn จบโดยไม่มีคำตอบ"
                   text: >-
-                    Geno จบ turn โดยไม่เรียกโมเดลอีก แถวของลูกขึ้นว่าเสร็จ แต่ประกาศในแชตบอกว่าคำตอบไม่มีข้อความ
+                    Geno จบ turn โดยไม่เรียก model อีก แถวของลูกขึ้นว่าเสร็จ แต่ประกาศในแชตบอกว่าคำตอบไม่มีข้อความ
                     แทนที่จะบอกว่าหยุดเพราะคุณปฏิเสธ
                   from: engine
                   to: panel
                   end: Turn จบเพราะคุณกด Deny
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [Continue, Retry], tone: warning }
                 do: >-
-                  call `agent` ของแม่มีผล `rejected` `loopStep` ของแม่จึงตัดสิน `done(end_turn)` โดยไม่เรียกโมเดล
+                  call `agent` ของแม่มีผล `rejected` `loopStep` ของแม่จึงตัดสิน `done(end_turn)` โดยไม่เรียก model
                   เหมือนผู้ใช้ปฏิเสธ call ของแม่เอง
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [end_turn]
@@ -285,7 +285,7 @@ scenario:
                   แถวของลูกขึ้นเครื่องหมายถูกของ `done` ขั้นของ `agent` เป็นล้มเหลว (ไม่มีป้าย "Denied by you" เพราะผลของแม่ไม่มีบันทึกการอนุญาต)
                   `missingReply` จึงบอกว่าคำตอบไม่มีข้อความ แทนที่จะบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
                 sees: >-
-                  แถว "✓ worker · <โมเดล> · <เวลา>" (คำว่า Done อยู่แค่ใน tooltip ของแถว) และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
+                  แถว "✓ worker · <model> · <เวลา>" (คำว่า Done อยู่แค่ใน tooltip ของแถว) และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
                 ref: packages/extension/src/chat/rail.ts#missingReply
                 end: { turn: done, reason: end_turn }
 
@@ -300,8 +300,8 @@ scenario:
         from: model
         to: engine
       do: >-
-        เมื่อเทสต์ผ่าน โมเดลของลูกเรียก `report` พร้อมข้อความว่าแก้อะไรที่ไหนและตรวจอย่างไร
-        ในบทสนทนาของลูก `report` แสดงเป็นข้อความของลูก ไม่ใช่ขั้นเครื่องมือ
+        เมื่อเทสต์ผ่าน model ของลูกเรียก `report` พร้อมข้อความว่าแก้อะไรที่ไหนและตรวจอย่างไร
+        ในบทสนทนาของลูก `report` แสดงเป็นข้อความของลูก ไม่ใช่ขั้น tool
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
 
@@ -333,7 +333,7 @@ scenario:
       at: rail
       alongside: true
       do: แถวของลูกหยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย ปุ่ม Cancel หายไป
-      sees: แถว "✓ worker · <โมเดล> · 1m 48s · $0.06"
+      sees: แถว "✓ worker · <model> · 1m 48s · $0.06"
       ref: packages/extension/src/chat/subagent-view.ts#childLook
 
     - id: fenced
@@ -342,8 +342,8 @@ scenario:
       beat:
         title: "Geno ล้อมรั้วรายงานแล้วส่งให้ model"
         text: >-
-          รายงานกลับมาเป็นผลของเครื่องมือที่แม่เรียก Geno ล้อมรายงานไว้ในรั้วและเตือนว่ามันไม่ใช่คำสั่งของคุณ
-          ข้อความที่ลูกไปเจอในไฟล์จึงปลอมเป็นคุณไม่ได้ แล้ว Geno ส่งทั้งหมดให้โมเดลของแม่อ่าน
+          รายงานกลับมาเป็นผลของ tool ที่แม่เรียก Geno ล้อมรายงานไว้ในรั้วและเตือนว่ามันไม่ใช่คำสั่งของคุณ
+          ข้อความที่ลูกไปเจอในไฟล์จึงปลอมเป็นคุณไม่ได้ แล้ว Geno ส่งทั้งหมดให้ model ของแม่อ่าน
         from: engine
         to: model
       do: >-
@@ -361,12 +361,12 @@ scenario:
       beat:
         title: "Model เล่าให้คุณฟังว่า worker ทำอะไร"
         text: >-
-          โมเดลของแม่อ่านรายงานแล้วเล่าให้คุณฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหน และเทสต์ผ่านอย่างไร
+          model ของแม่อ่านรายงานแล้วเล่าให้คุณฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหน และเทสต์ผ่านอย่างไร
         from: model
         to: engine
         sees: { kind: message, from: geno, text: "worker ติดตั้ง vitest และเพิ่มไฟล์เทสต์ของ parser แล้ว เทสต์ผ่านทั้งหมด", streaming: true }
       do: >-
-        โมเดลของแม่อ่านรายงานในรั้ว แล้วเล่าให้ผู้ใช้ฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหนและเทสต์ผ่านอย่างไร
+        model ของแม่อ่านรายงานในรั้ว แล้วเล่าให้ผู้ใช้ฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหนและเทสต์ผ่านอย่างไร
         จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
@@ -376,7 +376,7 @@ scenario:
       beat:
         title: "Turn จบ"
         text: >-
-          โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมา และค่าใช้จ่ายท้าย turn รวมของลูกไว้ด้วย
+          model ไม่ขอ tool เพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมา และค่าใช้จ่ายท้าย turn รวมของลูกไว้ด้วย
         from: engine
         to: panel
         sees: { kind: composer, state: idle }
@@ -387,9 +387,9 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **โมเดลเรียก `agent` ได้ก็ต่อเมื่อเปิดไว้** เครื่องมือ `agent` และ `message_agent` มีให้โมเดลเฉพาะโหมดที่อยู่ใน `agentTool`
-  ส่วน `@agent` ที่ผู้ใช้พิมพ์ ([เรียกเอเจนต์ลูกโดยตรง](/scenarios/sub/at-mention/)) ใช้ได้ทุกโหมด
-- **ลูกสร้างลูกต่อไม่ได้** `agent` ไม่อยู่ในชุดเครื่องมือของลูก และ executor ของลูกไม่มีตัวสร้างลูก
+- **model เรียก `agent` ได้ก็ต่อเมื่อเปิดไว้** tool `agent` และ `message_agent` มีให้ model เฉพาะโหมดที่อยู่ใน `agentTool`
+  ส่วน `@agent` ที่ผู้ใช้พิมพ์ ([เรียก subagent โดยตรง](/scenarios/sub/at-mention/)) ใช้ได้ทุกโหมด
+- **ลูกสร้างลูกต่อไม่ได้** `agent` ไม่อยู่ในชุด tool ของลูก และ executor ของลูกไม่มีตัวสร้างลูก
 - **รายงานเป็นข้อมูล** `childReport` ล้อมรั้ว เยื้องทุกบรรทัด และทำให้บรรทัดที่หน้าตาเหมือนโน้ตของ Geno ไม่มีผล
   ข้อความที่ลูกไปเจอในไฟล์หรือเว็บจึงปลอมเป็น Geno หรือผู้ใช้ไม่ได้
 - **การ์ดไม่บอกชื่อลูก** engine ใส่ `[worker]` ไว้หน้าหัวข้อของ `session/request_permission` แต่ `permissionCard` ใช้หัวข้อ "Run this command?"

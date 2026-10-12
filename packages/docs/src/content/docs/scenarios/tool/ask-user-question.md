@@ -1,6 +1,6 @@
 ---
 title: "Model ถามคุณด้วยฟอร์มคำถาม"
-description: โมเดลเรียก ask_user เพื่อถามผู้ใช้กลางงาน engine ส่งฟอร์มผ่าน ACP แผงแชตแสดงการ์ดคำถาม และคำตอบหรือการข้ามกลับไปเป็นผลของ call
+description: model เรียก ask_user เพื่อถามผู้ใช้กลางงาน engine ส่งฟอร์มผ่าน ACP แผงแชตแสดงการ์ดคำถาม และคำตอบหรือการข้ามกลับไปเป็นผลของ call
 tableOfContents: false
 sidebar:
   order: 8
@@ -8,9 +8,9 @@ scenario:
   surface: vscode
   given:
     - turn กำลังทำงานในแผงแชตของ VS Code ซึ่งบอก engine ตอน `initialize` ว่าแสดงฟอร์มได้ (`elicitation`)
-    - session อยู่ในโหมด Ask หรือ Plan ตอนที่โมเดลส่งคำตอบ
+    - session อยู่ในโหมด Ask หรือ Plan ตอนที่ model ส่งคำตอบ
   trigger: >-
-    โมเดลเรียก `ask_user` ถามหนึ่งข้อ หัวข้อ "Date library" คำถาม "ใช้ไลบรารีไหนจัดการวันที่"
+    model เรียก `ask_user` ถามหนึ่งข้อ หัวข้อ "Date library" คำถาม "ใช้ไลบรารีไหนจัดการวันที่"
     ตัวเลือก `date-fns` (แนะนำ) และ `dayjs`
   covers: [tool.ask-user-question]
   related: [perm.ask-allow, ctl.stop-at-card, perm.mode-switch-mid-turn]
@@ -20,12 +20,12 @@ scenario:
       beat:
         title: "Model ถามคุณกลางงาน"
         text: >-
-          โมเดลอยากให้คุณเลือกก่อนทำต่อ มันเรียก tool ถามคำถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก
+          model อยากให้คุณเลือกก่อนทำต่อ มันเรียก tool ถามคำถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก
           date-fns ที่มันแนะนำ และ dayjs
         from: model
         to: engine
       do: >-
-        โมเดลส่งบล็อก `tool_use` ของ `ask_user` ที่มี `questions` หนึ่งข้อ พร้อมตัวเลือกและคำอธิบาย จบด้วย `stop_reason: tool_use`
+        model ส่งบล็อก `tool_use` ของ `ask_user` ที่มี `questions` หนึ่งข้อ พร้อมตัวเลือกและคำอธิบาย จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -77,7 +77,7 @@ scenario:
                 beat:
                   title: "โหมด Auto ไม่มีใครรอตอบ"
                   text: >-
-                    โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันทีพร้อมข้อความบอกโมเดลว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
+                    โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันทีพร้อมข้อความบอก model ว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
                   from: engine
                   to: model
                 do: >-
@@ -201,14 +201,14 @@ scenario:
       beat:
         title: "Geno เขียนผลให้ model อ่าน"
         text: >-
-          ผลของ call บอกคำตอบของคุณ หรือบอกว่าคุณไม่ตอบ ให้โมเดลใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
+          ผลของ call บอกคำตอบของคุณ หรือบอกว่าคุณไม่ตอบ ให้ model ใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
           หรือบอกว่าใช้ไม่ได้ในโหมด Auto ผลกลับมาที่แชตใต้ขั้นนั้น
         from: engine
         to: model
       do: >-
-        `askUserResult` เขียนผลให้โมเดลอ่าน: "The user answered: date-fns" หรือถ้าข้าม
+        `askUserResult` เขียนผลให้ model อ่าน: "The user answered: date-fns" หรือถ้าข้าม
         "The user declined to answer. Go on with your best judgment and say what you assumed."
-        ถ้า editor ที่บอกว่าแสดงฟอร์มได้กลับตอบคำขอนี้ด้วย error (`unshown`) ผลบอกให้โมเดลจบ turn แล้วถามเป็นข้อความธรรมดาแทน
+        ถ้า editor ที่บอกว่าแสดงฟอร์มได้กลับตอบคำขอนี้ด้วย error (`unshown`) ผลบอกให้ model จบ turn แล้วถามเป็นข้อความธรรมดาแทน
       ref: packages/core/src/ask-user.ts#askUserResult
 
     - use: tool-result-returns
@@ -219,12 +219,12 @@ scenario:
       beat:
         title: "Model ทำต่อตามผล"
         text: >-
-          Geno เรียกโมเดลอีกรอบ โมเดลอ่านผลแล้วทำงานต่อใน turn เดิม
+          Geno เรียก model อีกรอบ model อ่านผลแล้วทำงานต่อใน turn เดิม
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลทำงานต่อตามคำตอบ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ทำงานต่อตามคำตอบ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
@@ -242,7 +242,7 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **Skip ไม่จบ turn** ต่างจาก Deny บนการ์ดขออนุญาต การข้ามคำถามเป็นผลธรรมดา โมเดลทำต่อด้วยการตัดสินใจของตัวเอง
+- **Skip ไม่จบ turn** ต่างจาก Deny บนการ์ดขออนุญาต การข้ามคำถามเป็นผลธรรมดา model ทำต่อด้วยการตัดสินใจของตัวเอง
 - **โหมดอ่านตอน call รัน** ถ้าผู้ใช้สลับเป็น Auto ระหว่าง turn call ถัดไปของ `ask_user` จะล้มเหลว แม้ turn เริ่มในโหมด Ask
 - **Stop ปิดการ์ด** `Chat.stop` ตอบการ์ดคำถามที่เปิดอยู่ว่ายกเลิกก่อนส่ง `session/cancel` การ์ดจึงขึ้น "Cancelled"
 

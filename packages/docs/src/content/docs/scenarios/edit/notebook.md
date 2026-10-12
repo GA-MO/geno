@@ -1,6 +1,6 @@
 ---
 title: แก้ cell ของ Jupyter notebook
-description: โมเดลเรียก notebook_edit แทนการแก้ JSON ของ .ipynb ตรงๆ Geno ตรวจว่าอ่านแล้วและไฟล์ไม่เปลี่ยน แทน cell เดียว ล้าง output ของ cell code แล้วเขียนผ่าน editor
+description: model เรียก notebook_edit แทนการแก้ JSON ของ .ipynb ตรงๆ Geno ตรวจว่าอ่านแล้วและไฟล์ไม่เปลี่ยน แทน cell เดียว ล้าง output ของ cell code แล้วเขียนผ่าน editor
 tableOfContents: false
 sidebar:
   order: 5
@@ -8,22 +8,22 @@ scenario:
   surface: vscode
   given:
     - turn กำลังทำงานในโหมด Ask หรือ Auto ไม่มีกฎ path ที่ครอบ `analysis.ipynb`
-    - โมเดล `read` `analysis.ipynb` ไปแล้วใน session นี้ และเห็นหัวของแต่ละ cell พร้อม id เช่น `c3`
+    - model `read` `analysis.ipynb` ไปแล้วใน session นี้ และเห็นหัวของแต่ละ cell พร้อม id เช่น `c3`
     - notebook ไม่ได้เปิดอยู่ในแท็บของ VS Code
   trigger: >-
-    โมเดลขอเรียก `notebook_edit` ด้วย `notebook_path` "analysis.ipynb" `cell_id` "c3" และ `new_source` เป็นโค้ดใหม่
+    model ขอเรียก `notebook_edit` ด้วย `notebook_path` "analysis.ipynb" `cell_id` "c3" และ `new_source` เป็นโค้ดใหม่
   covers: [edit.notebook]
   related: [tool.read-special-files, edit.applied-as-diff, edit.without-read-or-stale, ed.review-hunks]
   steps:
     - id: asks
       beat:
         title: Model ขอแก้ cell `c3` ของ notebook
-        text: โมเดลไม่แก้ JSON ของ `.ipynb` ตรงๆ มันใช้ tool `notebook_edit` บอก id ของ cell และโค้ดใหม่ มันรู้ id จากตอนอ่าน notebook
+        text: model ไม่แก้ JSON ของ `.ipynb` ตรงๆ มันใช้ tool `notebook_edit` บอก id ของ cell และโค้ดใหม่ มันรู้ id จากตอนอ่าน notebook
         from: model
         to: engine
       lane: model
       do: >-
-        โมเดลขอ `notebook_edit` แบบ `replace` (ค่าเริ่มต้นของ `edit_mode`) และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอ `notebook_edit` แบบ `replace` (ค่าเริ่มต้นของ `edit_mode`) และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -55,7 +55,7 @@ scenario:
     - id: current
       beat:
         title: Geno ตรวจว่า model อ่าน notebook ล่าสุด
-        text: Geno อ่าน notebook ปัจจุบันผ่าน VS Code แล้วเทียบกับที่โมเดลเห็นตอนอ่าน ถ้าโมเดลยังไม่ได้อ่าน หรือไฟล์เปลี่ยนไปแล้ว Geno ไม่เขียนอะไร รอบนี้ตรงกัน
+        text: Geno อ่าน notebook ปัจจุบันผ่าน VS Code แล้วเทียบกับที่ model เห็นตอนอ่าน ถ้า model ยังไม่ได้อ่าน หรือไฟล์เปลี่ยนไปแล้ว Geno ไม่เขียนอะไร รอบนี้ตรงกัน
         from: engine
         to: engine
       lane: server
@@ -68,7 +68,7 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        `lastSeen` หาข้อความที่โมเดลเห็นครั้งล่าสุด ถ้ายังไม่เคยอ่าน ได้ "read analysis.ipynb before editing it"
+        `lastSeen` หาข้อความที่ model เห็นครั้งล่าสุด ถ้ายังไม่เคยอ่าน ได้ "read analysis.ipynb before editing it"
         ถ้า hash ไม่ตรงกับข้อความปัจจุบัน ได้คำบอกว่าไฟล์เปลี่ยนหลังอ่าน ทั้งสองทางไม่เขียนอะไร รอบนี้ hash ตรง
       ref: packages/engine/src/tools/agent.ts#notebookEditExecutor
 
@@ -88,7 +88,7 @@ scenario:
     - id: write
       beat:
         title: VS Code เขียน notebook แล้วแชตแสดง diff
-        text: Geno ส่งไฟล์ทั้งไฟล์ให้ VS Code เขียน VS Code ตรวจอีกครั้งว่าไฟล์บนดิสก์ยังเป็นฉบับที่โมเดลเห็น แล้วส่งการเปลี่ยนแปลงให้แผงแชตแสดง
+        text: Geno ส่งไฟล์ทั้งไฟล์ให้ VS Code เขียน VS Code ตรวจอีกครั้งว่าไฟล์บนดิสก์ยังเป็นฉบับที่ model เห็น แล้วส่งการเปลี่ยนแปลงให้แผงแชตแสดง
         from: engine
         to: panel
       lane: server
@@ -102,7 +102,7 @@ scenario:
       lane: editor
       at: bridge
       do: >-
-        `writeTextFile` เทียบ hash กับข้อความบนดิสก์ ตรงกัน จึงเขียน ถ้าไม่ตรง ได้ stale และ `notebook_edit` บอกโมเดลว่าไฟล์เปลี่ยน
+        `writeTextFile` เทียบ hash กับข้อความบนดิสก์ ตรงกัน จึงเขียน ถ้าไม่ตรง ได้ stale และ `notebook_edit` บอก model ว่าไฟล์เปลี่ยน
         หลังเขียน callback ที่ `Chat` ส่งให้ `writeTextFile` ส่ง action `diff` ให้แผง เพราะ session นี้เป็นของแผงเอง
       ref: packages/extension/src/chat/bridge.ts#writeTextFile
       emits: [diff]
@@ -125,21 +125,21 @@ scenario:
     - id: next
       beat:
         title: Geno เรียก model อีกครั้ง
-        text: โมเดลแก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
+        text: model แก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
         from: engine
         to: model
         end: Model แก้ cell ต่อได้ทันที
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `call-model` โมเดลแก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
+        `loopStep` ตัดสิน `call-model` model แก้ cell ถัดไปได้เลยโดยไม่ต้องอ่าน notebook ใหม่
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-`notebook_edit` ทำงานกับ cell ไม่ใช่กับข้อความ ทำให้โมเดลไม่ต้องคัดลอก JSON ของ notebook มาเป็น `old_str`
+`notebook_edit` ทำงานกับ cell ไม่ใช่กับข้อความ ทำให้ model ไม่ต้องคัดลอก JSON ของ notebook มาเป็น `old_str`
 
 | `edit_mode` | ต้องมี | ผล |
 | --- | --- | --- |
@@ -150,5 +150,5 @@ scenario:
 สิ่งที่ควรสังเกต
 
 - **กฎเดียวกับ `edit`** ต้องอ่านก่อน ไฟล์ต้องไม่เปลี่ยนหลังอ่าน ต้องอยู่ใน workspace และกฎ `Edit(...)` ครอบ `notebook_edit` ด้วย
-- **cell ที่ไม่มี id** ได้ชื่อ `cell-0`, `cell-1` ตามตำแหน่ง การเพิ่มหรือลบ cell จึงเปลี่ยนชื่อของ cell ที่ตามหลัง ผลบอกโมเดลเรื่องนี้
+- **cell ที่ไม่มี id** ได้ชื่อ `cell-0`, `cell-1` ตามตำแหน่ง การเพิ่มหรือลบ cell จึงเปลี่ยนชื่อของ cell ที่ตามหลัง ผลบอก model เรื่องนี้
 - **output ของ cell code หายไป** การแก้ cell code ล้าง output เดิม เพราะ output นั้นไม่ใช่ผลของโค้ดใหม่แล้ว

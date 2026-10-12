@@ -149,7 +149,7 @@ scenario:
               - lane: loop
                 at: drive
                 do: >-
-                  รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก โมเดลอ่านทั้งสองอย่างพร้อมกัน prompt ของผู้ใช้ยังปลดการพักด้วย
+                  รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก model อ่านทั้งสองอย่างพร้อมกัน prompt ของผู้ใช้ยังปลดการพักด้วย
                 ref: packages/core/src/wake.ts#lastUserPromptSeq
                 phase: calling-model
                 end: { turn: continues, reason: call-model }
@@ -223,7 +223,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
-        โมเดลอ่านรายงานของ explore แล้วเล่าผลให้ผู้ใช้ จบด้วย `stop_reason: end_turn`
+        model อ่านรายงานของ explore แล้วเล่าผลให้ผู้ใช้ จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNotice
       emits: [end_turn]
       phase: calling-model

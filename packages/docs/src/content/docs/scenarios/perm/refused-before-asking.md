@@ -11,7 +11,7 @@ scenario:
     - '`.claude/settings.json` ของ repo มี `"permissions": { "deny": ["WebFetch"] }`'
     - workspace มีไฟล์ `.env` และไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลขอเรียกเครื่องมือที่ถูกห้ามทั้งตัว หรือขอค้นข้อความในไฟล์ลับ
+    model ขอเรียก tool ที่ถูกห้ามทั้งตัว หรือขอค้นข้อความในไฟล์ลับ
   covers: [perm.claude-bare-tool-deny, perm.secret-search-refused]
   related: [perm.deny-rule, perm.secret-read, tool.web-fetch, hook.project-untrusted]
   steps:
@@ -20,12 +20,12 @@ scenario:
       beat:
         title: "Model ขอใช้ tool"
         text: >-
-          `.claude/settings.json` ของ repo ห้าม WebFetch ทั้งตัว และ workspace มีไฟล์ `.env` โมเดลขอเรียก tool
+          `.claude/settings.json` ของ repo ห้าม WebFetch ทั้งตัว และ workspace มีไฟล์ `.env` model ขอเรียก tool
           แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียกเครื่องมือ และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก tool และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -38,16 +38,16 @@ scenario:
       beat:
         title: "Geno ดูรายการ tool ที่ถูกห้ามก่อน"
         text: >-
-          ทุก tool ของ session ผ่านด่านที่ดูรายการ tool ที่ถูกห้ามก่อนตัว tool จะทำงาน ลองเลือกว่าโมเดลเรียกอะไร
+          ทุก tool ของ session ผ่านด่านที่ดูรายการ tool ที่ถูกห้ามก่อนตัว tool จะทำงาน ลองเลือกว่า model เรียกอะไร
         from: engine
         to: engine
         ask: "เรียกอะไร"
       runs: 0
       do: >-
-        ทุก executor ของ session ถูกห่อด้วย `withPermissions` ซึ่งดูรายการเครื่องมือที่ถูกห้ามก่อนเรียกตัวเครื่องมือ
+        ทุก executor ของ session ถูกห่อด้วย `withPermissions` ซึ่งดูรายการ tool ที่ถูกห้ามก่อนเรียกตัว tool
       ref: packages/engine/src/tools/agent.ts#withPermissions
       fork:
-        ask: โมเดลเรียกอะไร
+        ask: model เรียกอะไร
         options:
           - id: bare
             label: web_fetch (ไฟล์ Claude ห้ามทั้งตัว)
@@ -76,7 +76,7 @@ scenario:
                   to: model
                 do: >-
                   `deniedTool` คืนกฎนั้น `withPermissions` สร้างบันทึก `decidedBy: rule, verdict: deny` แบบ `workspace-deny`
-                  แล้วโยน `ToolDenied` ก่อนเครื่องมือได้ตรวจ URL ไม่ถึง `settle` ไม่มีการ์ด และไม่มี classifier
+                  แล้วโยน `ToolDenied` ก่อน tool ได้ตรวจ URL ไม่ถึง `settle` ไม่มีการ์ด และไม่มี classifier
                 ref: "packages/engine/src/tools/agent.ts#\"if (denied !== undefined) throw refusalOf({ mode: modeOf(approval), ...ruleDenial('deny', denied.text, denied.source, name), decidedBy: 'rule', verdict: 'deny' });\""
                 emits: [ToolDenied, workspace-deny]
               - lane: loop
@@ -84,12 +84,12 @@ scenario:
                 beat:
                   title: "ผลบอก model ว่ากฎของคุณห้าม"
                   text: >-
-                    ผลบอกโมเดลว่า call ตรงกับกฎห้าม WebFetch ที่คุณตั้งไว้ ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้
+                    ผลบอก model ว่า call ตรงกับกฎห้าม WebFetch ที่คุณตั้งไว้ ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้
                     ผลกลับมาที่แชตพร้อมบันทึกของกฎ
                   from: engine
                   to: model
                 do: >-
-                  ผลมีสถานะ `denied` ข้อความบอกโมเดลว่า call ตรงกับกฎ deny `WebFetch` ที่ผู้ใช้ตั้งใน `.claude/settings.json`
+                  ผลมีสถานะ `denied` ข้อความบอก model ว่า call ตรงกับกฎ deny `WebFetch` ที่ผู้ใช้ตั้งใน `.claude/settings.json`
                   ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้ `ToolDenied` พาบันทึกของกฎ (`approval`) มากับผล
                   อัปเดตผลของ call นี้จึงมี `APPROVAL_META` ซึ่งแผงใช้ขึ้นป้าย
                 ref: packages/engine/src/tools/agent.ts#denialText
@@ -100,7 +100,7 @@ scenario:
                 beat:
                   title: "แชตขึ้นป้าย Denied by a rule"
                   text: >-
-                    ขั้นของ call ขึ้นป้ายปฏิเสธของกฎ ข้อความเต็มที่โมเดลได้อยู่หลัง Show details
+                    ขั้นของ call ขึ้นป้ายปฏิเสธของกฎ ข้อความเต็มที่ model ได้อยู่หลัง Show details
                   from: panel
                   to: you
                   sees: { kind: step, label: web_fetch https://date-fns.org, status: denied, note: Denied by a rule }
@@ -113,12 +113,12 @@ scenario:
                 beat:
                   title: "Model ทำต่อโดยไม่ใช้เว็บ"
                   text: >-
-                    turn ไม่จบ Geno เรียกโมเดลต่อ โมเดลอ่านคำปฏิเสธแล้วทำงานต่อโดยไม่ใช้เว็บ
+                    turn ไม่จบ Geno เรียก model ต่อ model อ่านคำปฏิเสธแล้วทำงานต่อโดยไม่ใช้เว็บ
                   from: engine
                   to: model
                   end: "กฎห้าม turn ทำต่อ"
                 do: >-
-                  `loopStep` ตัดสิน `call-model` turn ไม่จบ โมเดลอ่านคำปฏิเสธแล้วทำต่อโดยไม่ใช้เว็บ
+                  `loopStep` ตัดสิน `call-model` turn ไม่จบ model อ่านคำปฏิเสธแล้วทำต่อโดยไม่ใช้เว็บ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -165,7 +165,7 @@ scenario:
                 beat:
                   title: "Model ทำต่อ ขั้นของ grep ล้มเหลว"
                   text: >-
-                    turn ไม่จบ แชตไม่ขึ้นป้ายปฏิเสธ ขั้นของ `grep` แสดงเป็นล้มเหลว Geno เรียกโมเดลต่อ
+                    turn ไม่จบ แชตไม่ขึ้นป้ายปฏิเสธ ขั้นของ `grep` แสดงเป็นล้มเหลว Geno เรียก model ต่อ
                   from: engine
                   to: model
                   end: "ไฟล์ลับห้ามค้น turn ทำต่อ"
@@ -188,8 +188,8 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **tool ที่ถูกห้ามยังอยู่ในรายการ** Geno ยังส่ง `web_fetch` ให้โมเดลทุกคำขอ เพื่อให้ prompt cache ไม่หลุดเมื่อไฟล์เปลี่ยน
-  โมเดลจึงอาจเรียกมันแล้วได้คำปฏิเสธ แทนที่จะไม่รู้ว่ามี
+- **tool ที่ถูกห้ามยังอยู่ในรายการ** Geno ยังส่ง `web_fetch` ให้ model ทุกคำขอ เพื่อให้ prompt cache ไม่หลุดเมื่อไฟล์เปลี่ยน
+  model จึงอาจเรียกมันแล้วได้คำปฏิเสธ แทนที่จะไม่รู้ว่ามี
 - **การค้นแบบเหมาไม่แตะไฟล์ลับ** `grep -r API_KEY .` ทั้ง workspace ข้ามไฟล์ลับไปเงียบๆ การปฏิเสธเกิดเฉพาะเมื่อ path หรือ glob ชี้ไปที่ไฟล์ลับตรงๆ
 - **`bash cat .env` ไม่ใช่ทางนี้** คำสั่ง shell ที่มีคำแบบไฟล์ลับไปที่กฎ `secret-path` ซึ่งถาม ส่งให้ classifier หรือปฏิเสธตามโหมด
   และ sandbox ยังกันโฟลเดอร์อย่าง `~/.ssh` และ `~/.aws` จากทุกคำสั่ง

@@ -63,8 +63,8 @@
   lane: loop
   at: agent
   do: >-
-    `runAgent` ประกอบการทำงานรอบนี้: กฎสิทธิ์ sandbox ชุดเครื่องมือ system prompt และ hooks
-    ทุกโหมดได้เครื่องมือและ system prompt ชุดเดียวกัน prompt cache จึงไม่หลุดเมื่อสลับโหมด
+    `runAgent` ประกอบการทำงานรอบนี้: กฎสิทธิ์ sandbox ชุด tool system prompt และ hooks
+    ทุกโหมดได้ tool และ system prompt ชุดเดียวกัน prompt cache จึงไม่หลุดเมื่อสลับโหมด
   ref: packages/engine/src/agent.ts#runAgent
 
 - id: record
@@ -80,7 +80,7 @@
   lane: policy
   at: hooks
   do: >-
-    ถ้ามี UserPromptSubmit hook `submitted()` ให้ hook อ่าน prompt ก่อนโมเดล ถ้า hook บล็อก turn จะจบด้วย error `blocked`
-    และโมเดลไม่เห็น prompt นี้ ถ้า hook ให้บริบทเพิ่ม บริบทนั้นถูกบันทึกเป็น `hook-context` เมื่อไม่มี hook ก็ผ่านไป
+    ถ้ามี UserPromptSubmit hook `submitted()` ให้ hook อ่าน prompt ก่อน model ถ้า hook บล็อก turn จะจบด้วย error `blocked`
+    และ model ไม่เห็น prompt นี้ ถ้า hook ให้บริบทเพิ่ม บริบทนั้นถูกบันทึกเป็น `hook-context` เมื่อไม่มี hook ก็ผ่านไป
   ref: packages/engine/src/drive.ts#submitted
   emits: [UserPromptSubmit]

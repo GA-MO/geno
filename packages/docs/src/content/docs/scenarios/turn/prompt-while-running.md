@@ -99,14 +99,14 @@ scenario:
       beat:
         title: "แชตของ B ขึ้นแถบ error"
         text: >-
-          turn ใหม่ใน B จบเป็น failed ภายในเสี้ยววินาที ข้อความของคุณไม่ได้ไปถึงโมเดล และไม่กลับไปที่ช่องพิมพ์
+          turn ใหม่ใน B จบเป็น failed ภายในเสี้ยววินาที ข้อความของคุณไม่ได้ไปถึง model และไม่กลับไปที่ช่องพิมพ์
           คุณต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
         from: panel
         to: you
         end: "B ถูกปฏิเสธ turn ของ A ทำต่อ"
         sees: { kind: notice, text: "Invalid request: a turn is already running", tone: error }
       do: >-
-        turn ใหม่ในแผง B จบเป็น failed พร้อมแถบ error ข้อความของผู้ใช้ไม่ได้ไปถึงโมเดล ผู้ใช้ต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
+        turn ใหม่ในแผง B จบเป็น failed พร้อมแถบ error ข้อความของผู้ใช้ไม่ได้ไปถึง model ผู้ใช้ต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
       sees: >-
         แถบ error สีแดง "Invalid request: a turn is already running" หัวข้อ "failed after" ตามด้วยเวลาไม่ถึงวินาทีเป็นมิลลิวินาที เช่น "failed after 90ms" และปุ่ม Send กลับมา
       ref: packages/extension/src/chat/render.ts#errorBlock

@@ -56,13 +56,13 @@ scenario:
       beat:
         title: "Geno ตรวจการตั้งค่าก่อนเปิด engine"
         text: >-
-          ก่อนเปิด engine ครั้งแรก Geno อ่าน provider โมเดล และ API key แล้วตรวจว่าครบไหม provider ตั้งต้นคือ Model
+          ก่อนเปิด engine ครั้งแรก Geno อ่าน provider model และ API key แล้วตรวจว่าครบไหม provider ตั้งต้นคือ Model
           Studio และช่องแรกที่ขาดคือ API key
         from: panel
         to: panel
       do: >-
         `prompt()` เรียก `link()` ซึ่งเรียก `Engine.connection()` การเชื่อมต่อครั้งแรกเริ่มที่ `engineSettings`
-        ซึ่งอ่าน provider โมเดล และคีย์ แล้วให้ `setupProblem` ตรวจ ช่องที่ขาดช่องแรกของ Model Studio คือ API key
+        ซึ่งอ่าน provider model และคีย์ แล้วให้ `setupProblem` ตรวจ ช่องที่ขาดช่องแรกของ Model Studio คือ API key
       ref: packages/extension/src/extension.ts#engineSettings
 
     - id: toast
@@ -103,7 +103,7 @@ scenario:
         title: "แชตขึ้นบรรทัด error"
         text: >-
           ใต้ข้อความของคุณมีบรรทัด error สีแดง หัวข้อบอกว่าล้มเหลวในเสี้ยววินาที และปุ่ม Send กลับมา
-          ไม่มีการเรียกโมเดลเลย
+          ไม่มีการเรียก model เลย
         from: panel
         to: you
         sees: { kind: notice, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", tone: error }
@@ -163,7 +163,7 @@ scenario:
 ---
 
 Geno ตรวจการตั้งค่าใน extension host ก่อนเปิด engine เสมอ ข้อความแรกจึงล้มเหลวเร็วและไม่ทิ้งอะไรไว้:
-ไม่มี process ของ engine ไม่มีไฟล์ log ของ session และไม่มีการเรียกโมเดล
+ไม่มี process ของ engine ไม่มีไฟล์ log ของ session และไม่มีการเรียก model
 
 สิ่งที่ควรสังเกต
 
@@ -171,7 +171,7 @@ Geno ตรวจการตั้งค่าใน extension host ก่อ�
   (หน้าเริ่มต้นขอรายการแชต และแถบสถานะ PR ขอข้อมูลจาก engine) ผู้ใช้ที่ยังไม่มีคีย์จึงเห็น toast เดียวกันตั้งแต่เปิดแผง
   ดู [เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine](/scenarios/start/open-window/)
 - **ปุ่มบน toast เปลี่ยนตามสิ่งที่ขาด** ขาดคีย์ได้ "Set API Key" ขาด endpoint ของ Model Studio ได้ "Open Settings"
-  ที่เปิดไปที่ `gcode.baseUrl` ขาดโมเดลหรือช่องอื่นได้ "Open Geno Settings"
+  ที่เปิดไปที่ `gcode.baseUrl` ขาด model หรือช่องอื่นได้ "Open Geno Settings"
 - **Model Studio ต้องมีทั้งคีย์และ endpoint** `setupProblem` รายงานทีละอย่าง เรียงตามลำดับช่องของ provider
   ผู้ใช้ Model Studio ที่ตั้งคีย์แล้วจึงอาจได้ toast รอบที่สองเรื่อง `gcode.baseUrl` เมื่อส่งข้อความถัดไป
 - **turn ที่ล้มเหลวอยู่แค่ในแผง** มันไม่มีใน log ของ session ใด เมื่อส่งข้อความหลังตั้งคีย์แล้ว Geno สร้าง session ใหม่

@@ -61,7 +61,7 @@ scenario:
                   to: engine
                 at: sessions
                 do: >-
-                  `rewindPreview` เทียบ workspace กับ checkpoint ก่อนการเรียกโมเดลครั้งแรกของ turn นั้นใน repository เงาของ checkpoint
+                  `rewindPreview` เทียบ workspace กับ checkpoint ก่อนการเรียก model ครั้งแรกของ turn นั้นใน repository เงาของ checkpoint
                   และหาไฟล์ที่เปลี่ยนหลัง checkpoint ล่าสุด ซึ่งไม่มี checkpoint ไหนเก็บไว้
                 ref: packages/engine/src/rewind.ts#rewindPreview
               - lane: panel
@@ -117,7 +117,7 @@ scenario:
                   end: ไฟล์ย้อนแล้ว
                 at: rail
                 do: >-
-                  บทสนทนายังอยู่ครบ ใต้ข้อความขึ้นบรรทัดบอกไฟล์ที่คืน คำขอถัดไปของโมเดลจะมีประกาศว่าผู้ใช้ย้อน workspace
+                  บทสนทนายังอยู่ครบ ใต้ข้อความขึ้นบรรทัดบอกไฟล์ที่คืน คำขอถัดไปของ model จะมีประกาศว่าผู้ใช้ย้อน workspace
                   และให้อ่านไฟล์ใหม่ก่อนแก้
                 sees: >-
                   บรรทัด "Restored 2 files: src/date.ts, src/date.test.ts." ใต้ข้อความ
@@ -201,7 +201,7 @@ scenario:
                   to: engine
                 at: sessions
                 do: >-
-                  engine ปฏิเสธถ้ามี turn รันอยู่ หรือถ้าเป็น session ของ agent ภายนอกหรือของเอเจนต์ลูก
+                  engine ปฏิเสธถ้ามี turn รันอยู่ หรือถ้าเป็น session ของ agent ภายนอกหรือของ subagent
                   `forkSession` เขียน log ใหม่: `session-start` ที่มี `fork` ชี้กลับมาที่แชตเดิม แล้วบทสนทนาตามที่เห็นหลัง cut ทั้งหมด
                   จนจบ turn ของข้อความนั้น (รวมคำตอบของมัน) การรอและการปลุกที่ค้างไม่ถูกคัดลอก โฟลเดอร์ของ session (ไฟล์แนบ ผลที่ยาว) ถูกคัดลอกไปด้วย
                 ref: packages/core/src/rewind.ts#forkEvents
@@ -232,7 +232,7 @@ scenario:
                 end: { turn: none }
 ---
 
-Rewind ใช้สองอย่างที่ engine เก็บไว้อยู่แล้ว: checkpoint ของ workspace ที่ถ่ายก่อนการเรียกโมเดลทุกครั้ง
+Rewind ใช้สองอย่างที่ engine เก็บไว้อยู่แล้ว: checkpoint ของ workspace ที่ถ่ายก่อนการเรียก model ทุกครั้ง
 และ log ของ session ที่ไม่เคยลบอะไร การย้อนบทสนทนาจึงเป็นการเพิ่ม event `cut` ไม่ใช่การลบบรรทัด
 
 | เลือก | ไฟล์ | บทสนทนา | ข้อความเดิม |
@@ -244,8 +244,8 @@ Rewind ใช้สองอย่างที่ engine เก็บไว้�
 
 สิ่งที่ควรสังเกต
 
-- **checkpoint ของ turn คือก่อนการเรียกโมเดลครั้งแรก** engine ถ่าย checkpoint ก่อนการเรียกโมเดลทุกครั้ง การย้อนไฟล์ใช้อันแรกของ turn
-  turn ที่ไม่เคยถึงโมเดล เช่นถูกหยุดก่อน จึงไม่มี checkpoint ให้ย้อน
+- **checkpoint ของ turn คือก่อนการเรียก model ครั้งแรก** engine ถ่าย checkpoint ก่อนการเรียก model ทุกครั้ง การย้อนไฟล์ใช้อันแรกของ turn
+  turn ที่ไม่เคยถึง model เช่นถูกหยุดก่อน จึงไม่มี checkpoint ให้ย้อน
 - **ไฟล์ก่อน บทสนทนาทีหลัง** Restore both บันทึก `restored` ก่อน `cut` ประกาศเรื่องไฟล์จึงถูกตัดไปพร้อมกับ turn ที่มันพูดถึง
 - **การแก้ของผู้ใช้หลัง checkpoint ล่าสุดหายได้** กล่องยืนยันบอกไฟล์เหล่านั้นก่อน และให้แป้นพิมพ์เริ่มที่ Cancel
 - **Fork ลอกคำตอบด้วย** รายการในเมนูบอกว่า "A new chat with the conversation up to this message" แต่ `forkEvents` ลอกจนจบ turn ของข้อความนั้น

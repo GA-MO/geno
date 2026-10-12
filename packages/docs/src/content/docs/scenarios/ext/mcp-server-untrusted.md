@@ -39,7 +39,7 @@ scenario:
       at: rules
       do: >-
         ไฟล์อนุมัติ `mcp-trust.json` ไม่มีรายการของ `db` ใน workspace นี้ที่ hash ตรงกับคำนิยาม server จึงอยู่ในสถานะ `untrusted`
-        ไม่มี process ถูกเริ่ม และเครื่องมือของมันไม่ถูกเสนอให้โมเดล
+        ไม่มี process ถูกเริ่ม และ tool ของมันไม่ถูกเสนอให้ model
       ref: packages/engine/src/mcp/trust.ts#approveServer
       emits: [untrusted]
 
@@ -65,7 +65,7 @@ scenario:
       lane: panel
       at: rail
       do: >-
-        เหนือบทสนทนาขึ้นแถบประกาศพร้อมไอคอนโล่ แชตยังใช้ได้ตามปกติ แค่ไม่มีเครื่องมือของ `db`
+        เหนือบทสนทนาขึ้นแถบประกาศพร้อมไอคอนโล่ แชตยังใช้ได้ตามปกติ แค่ไม่มี tool ของ `db`
       sees: >-
         "1 MCP server in this workspace waits for your approval." [Review]
       ref: packages/extension/src/chat/mcp-panel.ts#mcpPanel
@@ -137,7 +137,7 @@ scenario:
                   from: engine
                   to: machine
                 do: >-
-                  engine เริ่ม process ของ `db` (นอก sandbox ของ Geno) server ตอบรายชื่อเครื่องมือ
+                  engine เริ่ม process ของ `db` (นอก sandbox ของ Geno) server ตอบรายชื่อ tool
                 ref: packages/engine/src/mcp/hub.ts#openMcpHub
               - lane: panel
                 beat:
@@ -149,9 +149,9 @@ scenario:
                   end: tool ของ db พร้อมใช้
                 at: rail
                 do: >-
-                  แถวของ `db` เปลี่ยนเป็นพร้อมใช้และแสดงชื่อเครื่องมือ แถบประกาศหายไป
-                  รอบถัดไปของเอเจนต์จะได้เครื่องมือเหล่านี้ และข้อความแจ้งบอกโมเดลชื่อเครื่องมือที่มาใหม่
-                sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อเครื่องมือ เช่น "query, list_tables"
+                  แถวของ `db` เปลี่ยนเป็นพร้อมใช้และแสดงชื่อ tool แถบประกาศหายไป
+                  รอบถัดไปของเอเจนต์จะได้ tool เหล่านี้ และข้อความแจ้งบอก model ชื่อ tool ที่มาใหม่
+                sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อ tool เช่น "query, list_tables"
                 ref: packages/extension/src/chat/mcp-panel.ts#serverRow
                 phase: idle
                 end: { turn: none }

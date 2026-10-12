@@ -10,7 +10,7 @@ scenario:
     - session อยู่ในโหมด Auto และ Auto ยังไม่ถูกพัก (classifier ยังไม่บล็อกครบ 3 ครั้งติดกัน)
     - ไม่มี hook ที่ตั้งไว้ และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` ซึ่งไม่อยู่ใน safe list
+    model ขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` ซึ่งไม่อยู่ใน safe list
   covers: [perm.auto-classifier-allows, perm.auto-classifier-denies, perm.auto-classifier-blocks, perm.classifier-unavailable]
   related: [perm.ask-allow, tool.bash-safe-runs, perm.auto-paused-asks-user, perm.auto-hard-ask]
   steps:
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "Model ขอรัน node scripts/build-icons.mjs"
         text: >-
-          session อยู่ในโหมด Auto โมเดลขอรันคำสั่งที่ไม่อยู่ในรายการคำสั่งปลอดภัย
+          session อยู่ในโหมด Auto model ขอรันคำสั่งที่ไม่อยู่ในรายการคำสั่งปลอดภัย
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `node scripts/build-icons.mjs` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -66,12 +66,12 @@ scenario:
       beat:
         title: "Geno เตรียมข้อมูลให้ classifier"
         text: >-
-          classifier ได้ข้อความล่าสุดที่คุณพิมพ์ ข้อความล่าสุดของโมเดล คำสั่ง กฎที่ติด เนื้อหาไฟล์ที่ session
+          classifier ได้ข้อความล่าสุดที่คุณพิมพ์ ข้อความล่าสุดของ model คำสั่ง กฎที่ติด เนื้อหาไฟล์ที่ session
           นี้แก้แล้วคำสั่งจะรัน และโดเมนที่ workspace อนุญาต
         from: engine
         to: engine
       do: >-
-        `settle` เห็นคำตัดสิน `classify` จึงเตรียมข้อมูลให้ classifier: ข้อความล่าสุดที่ผู้ใช้พิมพ์ ข้อความล่าสุดของโมเดล
+        `settle` เห็นคำตัดสิน `classify` จึงเตรียมข้อมูลให้ classifier: ข้อความล่าสุดที่ผู้ใช้พิมพ์ ข้อความล่าสุดของ model
         คำสั่ง กฎที่ติด เนื้อหาไฟล์ที่ session นี้แก้แล้วคำสั่งจะรัน และโดเมนที่ workspace อนุญาต
       ref: packages/engine/src/tools/agent.ts#settle
 
@@ -81,14 +81,14 @@ scenario:
       beat:
         title: "Classifier ตัดสินภายใน 8 วินาที"
         text: >-
-          Geno เรียกโมเดล classifier ครั้งเดียว บังคับให้ตอบเป็นคำตัดสิน ถ้าหมดเวลาหรือตอบผิดรูป นับเป็นไม่แน่ใจ
+          Geno เรียก model classifier ครั้งเดียว บังคับให้ตอบเป็นคำตัดสิน ถ้าหมดเวลาหรือตอบผิดรูป นับเป็นไม่แน่ใจ
           ค่าใช้จ่ายนับรวมในงบของ turn ลองเลือกคำตอบของ classifier
         from: engine
         to: engine
         ask: "classifier ตอบอะไร"
       do: >-
-        `commandClassifier` เรียกโมเดล classifier (ค่าเริ่มต้น `qwen3.8-flash` บน Model Studio) ครั้งเดียว
-        บังคับให้ตอบผ่านเครื่องมือ `verdict` ภายใน 8 วินาที ถ้าหมดเวลา ล้มเหลว หรือตอบผิดรูป จะนับเป็น `ask`
+        `commandClassifier` เรียก model classifier (ค่าเริ่มต้น `qwen3.8-flash` บน Model Studio) ครั้งเดียว
+        บังคับให้ตอบผ่าน tool `verdict` ภายใน 8 วินาที ถ้าหมดเวลา ล้มเหลว หรือตอบผิดรูป จะนับเป็น `ask`
         ค่าใช้จ่ายของการเรียกนี้นับรวมในงบ $0.40 ของ turn
       ref: packages/engine/src/classifier.ts#commandClassifier
       fork:
@@ -150,12 +150,12 @@ scenario:
                 beat:
                   title: "Model อ่านผลของคำสั่ง"
                   text: >-
-                    Geno เรียกโมเดลต่อ โมเดลได้อ่านผลของคำสั่ง
+                    Geno เรียก model ต่อ model ได้อ่านผลของคำสั่ง
                   from: engine
                   to: model
                   end: "classifier อนุญาต turn ทำต่อ"
                 do: >-
-                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
+                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านผลของคำสั่ง
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -189,11 +189,11 @@ scenario:
                 beat:
                   title: "Geno บอก model ให้หาทางอื่น"
                   text: >-
-                    ผลของ call บอกโมเดลว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น แล้วผลกลับมาที่แชต
+                    ผลของ call บอก model ว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น แล้วผลกลับมาที่แชต
                   from: engine
                   to: model
                 do: >-
-                  ผลของ call มีสถานะ `denied` ข้อความบอกโมเดลว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น
+                  ผลของ call มีสถานะ `denied` ข้อความบอก model ว่า classifier ปฏิเสธพร้อมเหตุผล ห้ามลองซ้ำ ให้หาทางอื่น
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied]
               - use: tool-result-returns
@@ -202,13 +202,13 @@ scenario:
                 beat:
                   title: "แชตขึ้น Denied by Auto"
                   text: >-
-                    ขั้นของคำสั่งขึ้นป้ายปฏิเสธของ Auto พร้อมเหตุผล ข้อความเต็มที่โมเดลได้อยู่หลัง Show details
+                    ขั้นของคำสั่งขึ้นป้ายปฏิเสธของ Auto พร้อมเหตุผล ข้อความเต็มที่ model ได้อยู่หลัง Show details
                   from: panel
                   to: you
                   sees: { kind: step, label: node scripts/build-icons.mjs, status: denied, note: Denied by Auto · Show details }
                 do: >-
                   `denialOf` เห็นว่าผู้ปฏิเสธคือ classifier จึงแสดงป้ายปฏิเสธของ Auto พร้อมเหตุผล
-                  ข้อความเต็มที่โมเดลได้อยู่หลัง Show details
+                  ข้อความเต็มที่ model ได้อยู่หลัง Show details
                 sees: '"Denied by Auto" ตามด้วยเหตุผลของ classifier และลิงก์ "Show details"'
                 ref: packages/extension/src/chat/session-updates.ts#denialOf
               - lane: loop
@@ -216,12 +216,12 @@ scenario:
                 beat:
                   title: "Model หาทางอื่น"
                   text: >-
-                    Geno เรียกโมเดลต่อ โมเดลอ่านคำปฏิเสธแล้วหาทางอื่น
+                    Geno เรียก model ต่อ model อ่านคำปฏิเสธแล้วหาทางอื่น
                   from: engine
                   to: model
                   end: "classifier ปฏิเสธ turn ทำต่อ"
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลอ่านคำปฏิเสธแล้วหาทางอื่นต่อ
+                  `loopStep` ตัดสิน `call-model` model อ่านคำปฏิเสธแล้วหาทางอื่นต่อ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -235,7 +235,7 @@ scenario:
                   title: "Classifier ไม่แน่ใจ Auto บล็อกแทน"
                   text: >-
                     ขณะ Auto ยังไม่พัก ความไม่แน่ใจไม่ไปถึงคุณ คำสั่งถูกบล็อกและ Geno นับครั้ง ครบ 3 ครั้งติดกันหรือ 20 ครั้งรวม
-                    Auto จะพัก ผลบอกโมเดลให้หาทางอื่น หรือบอกว่าต้องให้คุณอนุญาตอะไร
+                    Auto จะพัก ผลบอก model ให้หาทางอื่น หรือบอกว่าต้องให้คุณอนุญาตอะไร
                   from: engine
                   to: model
                 do: >-
@@ -246,7 +246,7 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  ผลของ call มีสถานะ `denied` ข้อความบอกโมเดลว่า Auto บล็อกคำสั่งโดยไม่ถามผู้ใช้เพราะ classifier ไม่ยอม
+                  ผลของ call มีสถานะ `denied` ข้อความบอก model ว่า Auto บล็อกคำสั่งโดยไม่ถามผู้ใช้เพราะ classifier ไม่ยอม
                   ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกในคำตอบว่าต้องให้ผู้ใช้อนุญาตอะไร
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied]
@@ -269,7 +269,7 @@ scenario:
                 beat:
                   title: "Turn ทำต่อ"
                   text: >-
-                    Geno เรียกโมเดลต่อ ถ้า Auto พักแล้ว คำสั่งถัดไปที่ classifier ไม่แน่ใจจะขึ้นการ์ดถามคุณแทน
+                    Geno เรียก model ต่อ ถ้า Auto พักแล้ว คำสั่งถัดไปที่ classifier ไม่แน่ใจจะขึ้นการ์ดถามคุณแทน
                   from: engine
                   to: model
                   end: "Auto บล็อก turn ทำต่อ"
@@ -331,7 +331,7 @@ scenario:
                 beat:
                   title: "Turn ทำต่อ แล้ว Auto พักและถามคุณ"
                   text: >-
-                    Geno เรียกโมเดลต่อ เมื่อ Auto พักแล้ว คำสั่งถัดไปขึ้นการ์ดถามคุณพร้อมบรรทัดว่า Auto ตัดสินไม่ได้เพราะอะไร
+                    Geno เรียก model ต่อ เมื่อ Auto พักแล้ว คำสั่งถัดไปขึ้นการ์ดถามคุณพร้อมบรรทัดว่า Auto ตัดสินไม่ได้เพราะอะไร
                   from: engine
                   to: model
                   end: "Auto พักแล้วถามคุณ"
@@ -358,7 +358,7 @@ scenario:
 - **classifier ที่ล่มเท่ากับ `ask`** หมดเวลา ไม่ได้ตั้งค่า หรือตอบผิดรูป ทั้งหมดกลายเป็น `ask` ซึ่งบล็อกคำสั่ง
   เมื่อบล็อกครบ 3 ครั้งติดกัน Auto พัก และคำถามไปถึงผู้ใช้ Geno จึงไม่รันคำสั่งที่ไม่มีใครตัดสิน
 - **ทุกทางไม่จบ turn** ต่างจากปุ่ม Reject บนการ์ดของโหมด Ask คำปฏิเสธของ classifier เป็น `ToolDenied`
-  โมเดลอ่านเหตุผลแล้วทำต่อ
+  model อ่านเหตุผลแล้วทำต่อ
 - **ป้าย Auto-approved ซ่อนในมุมมองย่อ** แผงแสดงป้ายนี้เฉพาะเมื่อวาดทุกขั้น ส่วนป้าย "Denied by Auto" แสดงเสมอ
 
 เมื่อ Auto ยังต้องถามคุณ ดู [โหมด Auto ยังขึ้นการ์ดถามคุณ](/scenarios/perm/auto-still-asks/)

@@ -21,7 +21,7 @@
   lane: loop
   at: drive
   do: >-
-    `runPlaced` บันทึก event `child-start` ลง log ของแม่ event นี้ไม่ใช่ส่วนของบทสนทนา โมเดลของแม่ไม่เห็น
+    `runPlaced` บันทึก event `child-start` ลง log ของแม่ event นี้ไม่ใช่ส่วนของบทสนทนา model ของแม่ไม่เห็น
   ref: "packages/engine/src/subagents.ts#\"await ctx.logNote!({ kind: 'child-start'\""
   emits: [child-start]
 
@@ -48,15 +48,15 @@
   at: rail
   alongside: true
   do: >-
-    ใต้ขั้นของ `agent` ขึ้นแถวของลูก: ไดโนเสาร์ผู้ช่วย ชื่อ โมเดล นาฬิกา และปุ่ม Cancel คลิกแถวเพื่อเปิดบทสนทนาของลูก
-  sees: แถว "explore · <โมเดล> · 0:02" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
+    ใต้ขั้นของ `agent` ขึ้นแถวของลูก: ไดโนเสาร์ผู้ช่วย ชื่อ model นาฬิกา และปุ่ม Cancel คลิกแถวเพื่อเปิดบทสนทนาของลูก
+  sees: แถว "explore · <model> · 0:02" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
   ref: packages/extension/src/chat/subagent-view.ts#childRow
 
 - id: works
   lane: child@explore
   at: model
   do: >-
-    ลูกเรียกโมเดลผ่าน gateway ของแม่ ขอ `grep` และ `glob` พร้อมกันในรอบแรก แล้วอ่านเฉพาะบรรทัดที่ตอบคำถามได้
+    ลูกเรียก model ผ่าน gateway ของแม่ ขอ `grep` และ `glob` พร้อมกันในรอบแรก แล้วอ่านเฉพาะบรรทัดที่ตอบคำถามได้
     การเรียกและขั้นของลูกส่งเป็นอัปเดตภายใต้ session id ของลูกเอง
   ref: packages/core/src/subagent.ts#childSystemPrompt
   emits: [tool_use]

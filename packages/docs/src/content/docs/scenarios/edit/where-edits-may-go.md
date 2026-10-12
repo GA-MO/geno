@@ -10,19 +10,19 @@ scenario:
     - turn กำลังทำงานในโหมด Ask หรือ Auto
     - ผู้ใช้ตั้งกฎ path ไว้ใน Settings ส่วน Permissions คือ `Edit(src/generated/**)` แบบ ask หรือแบบ deny
   trigger: >-
-    โมเดลขอเรียก `edit` กับไฟล์ที่ไม่ได้อยู่ในที่ที่ edit เขียนได้อย่างอิสระ
+    model ขอเรียก `edit` กับไฟล์ที่ไม่ได้อยู่ในที่ที่ edit เขียนได้อย่างอิสระ
   covers: [edit.outside-workspace, edit.path-rule]
   related: [edit.applied-as-diff, edit.without-read-or-stale, perm.read-outside-workspace, perm.deny-rule, perm.ask-allow]
   steps:
     - id: asks
       beat:
         title: Model ขอแก้ไฟล์
-        text: โมเดลขอ edit ไฟล์หนึ่ง Geno ต้องตัดสินก่อนว่าไฟล์นั้นอยู่ในที่ที่แก้ได้หรือไม่
+        text: model ขอ edit ไฟล์หนึ่ง Geno ต้องตัดสินก่อนว่าไฟล์นั้นอยู่ในที่ที่แก้ได้หรือไม่
         from: model
         to: engine
       lane: model
       do: >-
-        โมเดลขอ `edit` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอ `edit` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -41,7 +41,7 @@ scenario:
     - id: rules
       beat:
         title: Geno หาว่าไฟล์อยู่ที่ไหนและกฎไหนครอบ
-        text: Geno อ่านกฎ path ของ workspace ใหม่ทุกครั้ง หาที่อยู่จริงของไฟล์ แล้วดูว่ามีกฎ `Edit(...)` ข้อไหนครอบ คำตอบขึ้นกับไฟล์ที่โมเดลขอ
+        text: Geno อ่านกฎ path ของ workspace ใหม่ทุกครั้ง หาที่อยู่จริงของไฟล์ แล้วดูว่ามีกฎ `Edit(...)` ข้อไหนครอบ คำตอบขึ้นกับไฟล์ที่ model ขอ
         from: engine
         to: engine
         ask: Model ขอแก้ไฟล์ไหน
@@ -52,7 +52,7 @@ scenario:
         แล้วหากฎ `edit` ที่ครอบ path นั้น ถ้าไม่มีกฎ path เลย `edit` ก็เรียก `resolveWritable` เองตอนเริ่ม
       ref: packages/engine/src/tools/agent.ts#withPathRules
       fork:
-        ask: โมเดลขอแก้ไฟล์ไหน
+        ask: model ขอแก้ไฟล์ไหน
         options:
           - id: outside
             label: /etc/hosts นอก workspace
@@ -178,7 +178,7 @@ scenario:
     - id: refused
       beat:
         title: Geno ไม่เขียนอะไรเลย
-        text: ไฟล์ไม่ถูกแตะ Geno ไม่ได้อ่านมันด้วยซ้ำ ขั้นของ edit ในแชตขึ้นว่าล้มเหลวหรือถูกปฏิเสธ และผลบอกเหตุผลให้โมเดล
+        text: ไฟล์ไม่ถูกแตะ Geno ไม่ได้อ่านมันด้วยซ้ำ ขั้นของ edit ในแชตขึ้นว่าล้มเหลวหรือถูกปฏิเสธ และผลบอกเหตุผลให้ model
         from: engine
         to: panel
         sees:
@@ -198,14 +198,14 @@ scenario:
     - id: next
       beat:
         title: Model อ่านเหตุผลแล้วตัดสินใจต่อ
-        text: turn ไม่จบ โมเดลอ่านเหตุผลแล้วบอกคุณ หรือหาทางอื่นที่อยู่ในที่ที่แก้ได้
+        text: turn ไม่จบ model อ่านเหตุผลแล้วบอกคุณ หรือหาทางอื่นที่อยู่ในที่ที่แก้ได้
         from: model
         to: engine
         end: Model อ่านเหตุผลแล้วทำต่อ
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `call-model` turn ไม่จบ โมเดลอ่านเหตุผลแล้วบอกผู้ใช้ หรือหาทางอื่น
+        `loopStep` ตัดสิน `call-model` turn ไม่จบ model อ่านเหตุผลแล้วบอกผู้ใช้ หรือหาทางอื่น
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model

@@ -1,6 +1,6 @@
 ---
 title: "subagent ที่เริ่มไม่ได้"
-description: ใน run แบบ non-interactive ลูกที่แก้ไฟล์ได้ถูกปฏิเสธ และเมื่องบของลูกในรอบนี้หมด ลูกตัวใหม่ก็ถูกปฏิเสธ โมเดลได้ error แล้วทำต่อเอง
+description: ใน run แบบ non-interactive ลูกที่แก้ไฟล์ได้ถูกปฏิเสธ และเมื่องบของลูกในรอบนี้หมด ลูกตัวใหม่ก็ถูกปฏิเสธ model ได้ error แล้วทำต่อเอง
 tableOfContents: false
 sidebar:
   order: 9
@@ -8,10 +8,10 @@ scenario:
   surface: cli
   given:
     - "ผู้ใช้รัน `gcode agent --non-interactive --max-cost 0.05 \"...\"` ไม่มี `--allow-worker`"
-    - "ค่า `agentTool` ในการตั้งค่าของผู้ใช้มี `non-interactive` โมเดลจึงเรียก `agent` เองได้"
-    - ก่อนหน้านี้ใน run เดียวกัน โมเดลเริ่ม `explore` ไปแล้วหลายตัว
+    - "ค่า `agentTool` ในการตั้งค่าของผู้ใช้มี `non-interactive` model จึงเรียก `agent` เองได้"
+    - ก่อนหน้านี้ใน run เดียวกัน model เริ่ม `explore` ไปแล้วหลายตัว
   trigger: >-
-    โมเดลขอเรียก `agent` อีกครั้ง
+    model ขอเรียก `agent` อีกครั้ง
   covers: [sub.budget-or-writer-refused]
   related: [cli.non-interactive, sub.blocking-report, cli.agent-run]
   steps:
@@ -23,7 +23,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `agent` พร้อม task จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `agent` พร้อม task จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
       phase: calling-model
@@ -65,7 +65,7 @@ scenario:
         executor ของ `agent` เรียก `launch` ก่อนเปิดอะไร `launch` ตรวจว่าลูกตัวนี้เริ่มได้ไหม
       ref: packages/engine/src/subagents.ts#subagents
       fork:
-        ask: โมเดลขอลูกตัวไหน
+        ask: model ขอลูกตัวไหน
         options:
           - id: writer
             label: worker (แก้ไฟล์ได้)
@@ -117,7 +117,7 @@ scenario:
       lane: loop
       at: tools
       do: >-
-        `runTools` บันทึก `tool-result` สถานะ `error` ข้อความ error คือสิ่งที่โมเดลจะอ่าน
+        `runTools` บันทึก `tool-result` สถานะ `error` ข้อความ error คือสิ่งที่ model จะอ่าน
         เทอร์มินัลไม่พิมพ์ผลของ call
       ref: "packages/engine/src/drive.ts#\"for (const result of outcome.results) if (result !== undefined) await record(result);\""
       emits: [tool-result, error]
@@ -133,13 +133,13 @@ scenario:
         end: Model ทำต่อเอง
       lane: model
       do: >-
-        โมเดลอ่าน error แล้วทำงานนั้นเอง หรือบอกในคำตอบว่าต้องการอะไรจากผู้ใช้ เช่นให้รันใหม่ด้วย `--allow-worker`
+        model อ่าน error แล้วทำงานนั้นเอง หรือบอกในคำตอบว่าต้องการอะไรจากผู้ใช้ เช่นให้รันใหม่ด้วย `--allow-worker`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       end: { turn: continues, reason: call-model }
 ---
 
-ทั้งสองทางเป็น `ToolError` ธรรมดา: call ได้ผลเป็น error turn ไม่จบ และโมเดลตัดสินใจเองว่าจะทำอะไรต่อ
+ทั้งสองทางเป็น `ToolError` ธรรมดา: call ได้ผลเป็น error turn ไม่จบ และ model ตัดสินใจเองว่าจะทำอะไรต่อ
 
 | ด่าน | ตรวจที่ | ข้อความ |
 | --- | --- | --- |
@@ -150,5 +150,5 @@ scenario:
 
 - **"spent" นับเงินที่จองด้วย** ลูกที่ยังรันอยู่จองเพดานของตัวเองไว้ทั้งก้อน ลูกตัวใหม่จึงถูกปฏิเสธได้ทั้งที่ยังไม่มีใครใช้เงินถึง
 - **งบเขียนตามค่าที่ตั้ง** ข้อความใช้ตัวเลขของ `--max-cost` ตรงๆ ค่าเริ่มต้น 0.40 จึงขึ้นเป็น `$0.4`
-- **ทางเลี่ยงที่ไม่ได้ตั้งใจไม่มี** สกิลแบบ `context: fork` ที่โมเดลเรียกก็เริ่ม `worker` ผ่าน `launch` เดียวกัน จึงถูกปฏิเสธแบบเดียวกัน
+- **ทางเลี่ยงที่ไม่ได้ตั้งใจไม่มี** สกิลแบบ `context: fork` ที่ model เรียกก็เริ่ม `worker` ผ่าน `launch` เดียวกัน จึงถูกปฏิเสธแบบเดียวกัน
 - **ใน VS Code** ด่านแรกไม่เกิด เพราะมีคนตอบการ์ดได้เสมอ ด่านงบเกิดได้เหมือนกัน

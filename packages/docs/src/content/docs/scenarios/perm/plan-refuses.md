@@ -1,6 +1,6 @@
 ---
 title: "โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์"
-description: ในโหมด Plan คำสั่งนอก safe list ถูกปฏิเสธด้วยกฎ การแก้ไฟล์และงานเบื้องหลังถูกปฏิเสธเป็น error และโมเดลทำงานต่อโดยไม่จบ turn
+description: ในโหมด Plan คำสั่งนอก safe list ถูกปฏิเสธด้วยกฎ การแก้ไฟล์และงานเบื้องหลังถูกปฏิเสธเป็น error และ model ทำงานต่อโดยไม่จบ turn
 tableOfContents: false
 sidebar:
   order: 5
@@ -10,7 +10,7 @@ scenario:
     - session อยู่ในโหมด Plan และ turn กำลังทำงาน
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลขอเรียกเครื่องมือที่เปลี่ยนอะไรบางอย่าง ทั้งที่ประกาศของโหมด Plan บอกแล้วว่าทำไม่ได้
+    model ขอเรียก tool ที่เปลี่ยนอะไรบางอย่าง ทั้งที่ประกาศของโหมด Plan บอกแล้วว่าทำไม่ได้
   covers: [perm.plan-command-denied, perm.plan-edit-refused]
   related: [perm.plan-start-building, perm.mode-switch-mid-turn, perm.deny-rule, tool.bash-background]
   steps:
@@ -19,7 +19,7 @@ scenario:
       beat:
         title: "Model ขอ tool ที่เปลี่ยนอะไรบางอย่าง"
         text: >-
-          ทุกโหมดได้ tool ชุดเดียวกัน `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และโมเดลเรียกได้ ทั้งที่ประกาศของโหมด Plan
+          ทุกโหมดได้ tool ชุดเดียวกัน `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และ model เรียกได้ ทั้งที่ประกาศของโหมด Plan
           บอกแล้วว่าทำไม่ได้ ประกาศจาก run จริงด้านล่างเป็นแบบนี้
         from: model
         to: engine
@@ -29,7 +29,7 @@ scenario:
           source: docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6
           select: messages[-1].content[3]
       do: >-
-        โมเดลขอเรียกเครื่องมือหนึ่งตัวและจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก tool หนึ่งตัวและจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -38,8 +38,8 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `drive` บันทึก event `assistant` ที่มีบล็อก `tool_use` ลง log ทุกโหมดได้เครื่องมือชุดเดียวกัน
-        `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และโมเดลเรียกมันได้
+        `drive` บันทึก event `assistant` ที่มีบล็อก `tool_use` ลง log ทุกโหมดได้ tool ชุดเดียวกัน
+        `edit` จึงอยู่ในคำขอแม้ในโหมด Plan และ model เรียกมันได้
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn\""
       emits: [assistant]
 
@@ -57,16 +57,16 @@ scenario:
       beat:
         title: "Geno อ่านโหมดตอน call รัน"
         text: >-
-          Geno อ่านโหมดของ session ตอนที่ call รัน ได้ Plan ลองเลือกว่าโมเดลเรียกอะไร
+          Geno อ่านโหมดของ session ตอนที่ call รัน ได้ Plan ลองเลือกว่า model เรียกอะไร
         from: engine
         to: engine
-        ask: "โมเดลเรียกอะไร"
+        ask: "model เรียกอะไร"
       runs: 0
       do: >-
         executor อ่านโหมดของ session ตอน call รัน ได้ `plan`
       ref: packages/engine/src/tools/agent.ts#inMode
       fork:
-        ask: โมเดลเรียกอะไร
+        ask: model เรียกอะไร
         options:
           - id: command
             label: bash pnpm add zod
@@ -176,14 +176,14 @@ scenario:
       beat:
         title: "Model ทำแผนต่อด้วย tool อ่านอย่างเดียว"
         text: >-
-          ไม่มีอะไรรันและไม่มีการ์ด การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียกโมเดลต่อ
-          โมเดลอ่านเหตุผลแล้วทำแผนต่อ
+          ไม่มีอะไรรันและไม่มีการ์ด การปฏิเสธนี้ไม่ได้มาจากคุณ turn จึงไม่จบ Geno เรียก model ต่อ
+          model อ่านเหตุผลแล้วทำแผนต่อ
         from: engine
         to: model
         end: "model ทำแผนต่อ"
       do: >-
         ไม่มีอะไรรันและไม่มีการ์ด `loopStep` ตัดสิน `call-model` เพราะการปฏิเสธนี้ไม่ได้มาจากผู้ใช้
-        โมเดลอ่านเหตุผลแล้วทำแผนต่อด้วยเครื่องมืออ่านอย่างเดียว
+        model อ่านเหตุผลแล้วทำแผนต่อด้วย tool อ่านอย่างเดียว
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
@@ -191,7 +191,7 @@ scenario:
 ---
 
 โหมด Plan ไม่ได้ซ่อน tool ทุกโหมดได้ tool ชุดเดียวกันเพื่อให้ prompt cache ไม่หลุดเมื่อสลับโหมด
-Plan ปฏิเสธตอน call รันแทน และประกาศของโหมดบอกโมเดลล่วงหน้าว่าอะไรจะถูกปฏิเสธ
+Plan ปฏิเสธตอน call รันแทน และประกาศของโหมดบอก model ล่วงหน้าว่าอะไรจะถูกปฏิเสธ
 
 | call | ถูกปฏิเสธที่ | สถานะ | แผงแสดง |
 | --- | --- | --- | --- |
@@ -205,6 +205,6 @@ Plan ปฏิเสธตอน call รันแทน และประก�
 - **การแก้ไฟล์ที่ถูกปฏิเสธดูเหมือนล้มเหลว** `inMode` โยน `ToolError` ซึ่งเป็นสถานะ `error` แผงจึงแสดงเหมือนการแก้ที่ล้มเหลวจริง
   ไม่ได้ขึ้นป้าย "Denied" แบบคำสั่งที่ถูกปฏิเสธ ผู้ใช้ต้องเปิดผลดูจึงรู้ว่าเป็นเพราะโหมด
 - **Plan ไม่ถามผู้ใช้เรื่องคำสั่ง** ไม่มีการ์ดในโหมด Plan สำหรับคำสั่ง ทุกคำสั่งที่ไม่ปลอดภัยถูกปฏิเสธทันที
-- **turn ไม่จบ** การปฏิเสธทั้งสามแบบเป็นผลที่โมเดลอ่านแล้วทำต่อได้ ต่างจากผู้ใช้กด Deny
+- **turn ไม่จบ** การปฏิเสธทั้งสามแบบเป็นผลที่ model อ่านแล้วทำต่อได้ ต่างจากผู้ใช้กด Deny
 
 เมื่อแผนเสร็จแล้ว ดู [จบแผนแล้วคุณกด Start building](/scenarios/perm/plan-start-building/)

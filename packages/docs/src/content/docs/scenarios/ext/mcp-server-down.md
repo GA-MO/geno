@@ -1,16 +1,16 @@
 ---
 title: MCP server ล่มหรือต้องล็อกอิน
-description: โมเดลเรียกเครื่องมือ MCP แต่ server ตายซ้ำจน Geno เลิกเริ่มใหม่ หรือตอบ 401 เพราะต้องล็อกอิน call ได้ error โมเดลบอกผู้ใช้ และผู้ใช้แก้ได้จากแผง MCP
+description: model เรียก tool MCP แต่ server ตายซ้ำจน Geno เลิกเริ่มใหม่ หรือตอบ 401 เพราะต้องล็อกอิน call ได้ error model บอกผู้ใช้ และผู้ใช้แก้ได้จากแผง MCP
 tableOfContents: false
 sidebar:
   order: 9
 scenario:
   surface: vscode
   given:
-    - workspace ใช้ MCP server `linear` ที่ผู้ใช้อนุมัติแล้ว server พร้อมตอนเริ่ม run เครื่องมือของมันจึงอยู่ในชุดเครื่องมือของ run นี้
-    - "โมเดลโหลด `mcp__linear__list_issues` ด้วย `tool_search` แล้ว และผู้ใช้อนุญาตเครื่องมือนี้ไว้ตลอด session"
+    - workspace ใช้ MCP server `linear` ที่ผู้ใช้อนุมัติแล้ว server พร้อมตอนเริ่ม run tool ของมันจึงอยู่ในชุด tool ของ run นี้
+    - "model โหลด `mcp__linear__list_issues` ด้วย `tool_search` แล้ว และผู้ใช้อนุญาต tool นี้ไว้ตลอด session"
   trigger: >-
-    โมเดลเรียก `mcp__linear__list_issues` เพื่อดู issue ที่เปิดอยู่
+    model เรียก `mcp__linear__list_issues` เพื่อดู issue ที่เปิดอยู่
   covers: [ext.mcp-server-down]
   related: [ext.mcp-tool-call, ext.mcp-server-untrusted, tool.deferred-tool-load]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `mcp__linear__list_issues` จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `mcp__linear__list_issues` จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/mcp.ts#mcpToolName
       emits: [tool_use]
       phase: calling-model
@@ -39,7 +39,7 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        hub ส่ง call ให้ `McpServerHandle.call` ซึ่งรอให้ server พร้อมก่อน (`ready()`) แล้วจึงเรียกเครื่องมือบน server
+        hub ส่ง call ให้ `McpServerHandle.call` ซึ่งรอให้ server พร้อมก่อน (`ready()`) แล้วจึงเรียก tool บน server
       ref: packages/engine/src/mcp/server.ts#McpServerHandle.call
       fork:
         ask: server เป็นอย่างไร
@@ -83,7 +83,7 @@ scenario:
                   from: model
                   to: panel
                 do: >-
-                  โมเดลอ่าน error แล้วบอกผู้ใช้ว่า server ของ Linear ล่ม และยังดู issue ให้ไม่ได้ จบด้วย `stop_reason: end_turn`
+                  model อ่าน error แล้วบอกผู้ใช้ว่า server ของ Linear ล่ม และยังดู issue ให้ไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
@@ -103,7 +103,7 @@ scenario:
               - lane: loop
                 at: drive
                 do: >-
-                  run ถัดไปของ session ได้ชุดเครื่องมือที่ไม่มีของ `linear` แล้ว ที่จุดปลอดภัย notice ของ MCP บอกโมเดลว่า server นี้ใช้ไม่ได้
+                  run ถัดไปของ session ได้ชุด tool ที่ไม่มีของ `linear` แล้ว ที่จุดปลอดภัย notice ของ MCP บอก model ว่า server นี้ใช้ไม่ได้
                   พร้อม error ในรั้ว `<mcp_server_error server="linear">` และกฎว่าให้ถือเป็นของที่ใช้ไม่ได้ชั่วคราว ไม่ใช่สิ่งที่ไม่มี
                 ref: packages/core/src/mcp-notice.ts#renderMcpDelta
                 emits: [notice]
@@ -142,7 +142,7 @@ scenario:
                   from: model
                   to: panel
                 do: >-
-                  โมเดลบอกผู้ใช้ให้ล็อกอิน Linear ในแผง MCP servers โมเดลล็อกอินแทนไม่ได้ จบด้วย `stop_reason: end_turn`
+                  model บอกผู้ใช้ให้ล็อกอิน Linear ในแผง MCP servers model ล็อกอินแทนไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
@@ -169,7 +169,7 @@ scenario:
                 at: vscode-ui
                 do: >-
                   `McpServers.signIn` เปิด browser ไปหน้า OAuth ของ server และแสดง progress ของ VS Code
-                  token ที่ได้เก็บใน SecretStorage ของ VS Code ไม่ไปถึงโมเดล
+                  token ที่ได้เก็บใน SecretStorage ของ VS Code ไม่ไปถึง model
                 ref: packages/extension/src/chat/mcp-host.ts#McpServers.signIn
                 emits: [Signing in to]
               - lane: editor
@@ -193,8 +193,8 @@ scenario:
                 end: { turn: done, reason: end_turn }
 ---
 
-ความล้มเหลวของ MCP server ไม่ทำให้ turn ล้ม มันเป็น `ToolError` ธรรมดาที่โมเดลอ่านแล้วบอกผู้ใช้
-สิ่งที่ Geno ใส่ใจคือให้โมเดลพูดถูก: server ใช้ไม่ได้ตอนนี้ ไม่ใช่ไม่มี และข้อความ error ของ server เป็นข้อมูล ไม่ใช่คำสั่ง
+ความล้มเหลวของ MCP server ไม่ทำให้ turn ล้ม มันเป็น `ToolError` ธรรมดาที่ model อ่านแล้วบอกผู้ใช้
+สิ่งที่ Geno ใส่ใจคือให้ model พูดถูก: server ใช้ไม่ได้ตอนนี้ ไม่ใช่ไม่มี และข้อความ error ของ server เป็นข้อมูล ไม่ใช่คำสั่ง
 
 | เกิดอะไร | สถานะ | Geno ทำอะไร |
 | --- | --- | --- |
@@ -205,6 +205,6 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **ชุดเครื่องมือคงที่ต่อ run** server ที่ล่มกลาง run ยังมีชื่อเครื่องมืออยู่ในชุดของ run นั้น call จึงได้ error แทนการหายไป
-  ชุดใหม่ที่ไม่มีเครื่องมือของมันเริ่มใน run ถัดไป และ server ที่กลับมาพร้อมกลาง run ก็ได้ใช้ใน run ถัดไปเช่นกัน
-- **token ไม่ผ่าน engine ไปถึงโมเดล** engine ขอ token จาก editor เฉพาะตอนต่อ server ที่ตอบ 401 และโมเดลรู้แค่ว่าต้องล็อกอิน
+- **ชุด tool คงที่ต่อ run** server ที่ล่มกลาง run ยังมีชื่อ tool อยู่ในชุดของ run นั้น call จึงได้ error แทนการหายไป
+  ชุดใหม่ที่ไม่มี tool ของมันเริ่มใน run ถัดไป และ server ที่กลับมาพร้อมกลาง run ก็ได้ใช้ใน run ถัดไปเช่นกัน
+- **token ไม่ผ่าน engine ไปถึง model** engine ขอ token จาก editor เฉพาะตอนต่อ server ที่ตอบ 401 และ model รู้แค่ว่าต้องล็อกอิน

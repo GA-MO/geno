@@ -10,7 +10,7 @@ scenario:
     - session อยู่ในโหมด Auto
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วยคำสั่งที่ไม่อยู่ใน safe list
+    model ขอเรียก `bash` ด้วยคำสั่งที่ไม่อยู่ใน safe list
   covers: [perm.auto-paused-asks-user, perm.auto-hard-ask, perm.workspace-ask-rule]
   related: [perm.auto-classifier-blocks, perm.classifier-unavailable, perm.ask-allow, perm.ask-deny-ends-turn, perm.deny-rule]
   steps:
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "Model ขอรันคำสั่งนอก safe list"
         text: >-
-          session อยู่ในโหมด Auto โมเดลขอรันคำสั่งด้วย `bash` แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          session อยู่ในโหมด Auto model ขอรันคำสั่งด้วย `bash` แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -249,12 +249,12 @@ scenario:
       beat:
         title: "Model อ่านผลของคำสั่ง"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลได้อ่านผลของคำสั่ง
+          Geno เรียก model ต่อ model ได้อ่านผลของคำสั่ง
         from: engine
         to: model
         end: "คุณอนุญาต turn ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านผลของคำสั่ง
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model

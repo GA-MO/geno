@@ -10,7 +10,7 @@ scenario:
     - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังทำงาน
     - ยังไม่ถึงขีดจำกัดของรอบ (40 ครั้ง และ $0.40)
   trigger: >-
-    คำตอบของโมเดลจบด้วย stop reason ที่ไม่ใช่ `end_turn` และไม่ใช่ `tool_use` ที่มีบล็อก `tool_use` ตามมา
+    คำตอบของ model จบด้วย stop reason ที่ไม่ใช่ `end_turn` และไม่ใช่ `tool_use` ที่มีบล็อก `tool_use` ตามมา
   covers: [mstop.pause-turn, mstop.tool-use-without-calls]
   related: [mstop.max-tokens-text, mstop.refusal, mstop.empty-answer-nudged, turn.with-tools]
   steps:
@@ -18,7 +18,7 @@ scenario:
       beat:
         title: "Geno ส่งบทสนทนาให้ model"
         text: >-
-          turn กำลังทำงาน Geno ตรวจขีดจำกัดของ turn แล้วส่งคำขอให้โมเดลตามปกติ
+          turn กำลังทำงาน Geno ตรวจขีดจำกัดของ turn แล้วส่งคำขอให้ model ตามปกติ
         from: engine
         to: model
 
@@ -27,13 +27,13 @@ scenario:
       beat:
         title: "Model ตอบแล้วจบด้วย stop reason แปลกๆ"
         text: >-
-          โมเดลเขียนคำตอบออกมา ข้อความขึ้นในแชตทีละส่วน แต่สัญญาณท้ายคำตอบไม่ใช่ end_turn และไม่ใช่ tool_use
+          model เขียนคำตอบออกมา ข้อความขึ้นในแชตทีละส่วน แต่สัญญาณท้ายคำตอบไม่ใช่ end_turn และไม่ใช่ tool_use
           ที่มีการเรียก tool ตามมา
         from: model
         to: engine
         sees: { kind: message, from: geno, text: กำลังดูโครงสร้างของโปรเจกต์, streaming: true }
       do: >-
-        โมเดล stream คำตอบออกมา gateway เก็บ stop reason ของผู้ให้บริการไว้ตามที่ได้มา
+        model stream คำตอบออกมา gateway เก็บ stop reason ของผู้ให้บริการไว้ตามที่ได้มา
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
 
     - use: answer-streams
@@ -63,13 +63,13 @@ scenario:
                 beat:
                   title: "ผู้ให้บริการพัก turn ไว้ Geno เรียกต่อ"
                   text: >-
-                    pause_turn แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง Geno เรียกโมเดลต่อทันทีโดยไม่ตอบอะไรแทน
+                    pause_turn แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง Geno เรียก model ต่อทันทีโดยไม่ตอบอะไรแทน
                     คำขอถัดไปมีคำตอบที่พักไว้อยู่ท้ายบทสนทนา
                   from: engine
                   to: model
                 do: >-
-                  `pause_turn` แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง (เกิดกับเครื่องมือฝั่งเซิร์ฟเวอร์ของ Anthropic)
-                  `AFTER_STOP.pause_turn` เป็น `call-model` ไม่มีอะไรถูกตอบแทนโมเดล คำขอถัดไปมีคำตอบที่พักไว้อยู่ท้าย history
+                  `pause_turn` แปลว่าผู้ให้บริการพัก turn ที่ยาวไว้กลางทาง (เกิดกับ tool ฝั่งเซิร์ฟเวอร์ของ Anthropic)
+                  `AFTER_STOP.pause_turn` เป็น `call-model` ไม่มีอะไรถูกตอบแทน model คำขอถัดไปมีคำตอบที่พักไว้อยู่ท้าย history
                 ref: packages/core/src/loop.ts#AFTER_STOP
                 emits: [pause_turn, call-model]
               - use: model-call
@@ -94,13 +94,13 @@ scenario:
                 beat:
                   title: "Geno ไม่เดา จึงจบ turn"
                   text: >-
-                    คำตอบบอก tool_use แต่ไม่มี tool ให้รัน หรือไม่มี stop reason เลย Geno ไม่เดาว่าโมเดลตั้งใจจบหรือยัง จึงจบ turn
+                    คำตอบบอก tool_use แต่ไม่มี tool ให้รัน หรือไม่มี stop reason เลย Geno ไม่เดาว่า model ตั้งใจจบหรือยัง จึงจบ turn
                     แบบ error
                   from: engine
                   to: engine
                 do: >-
                   `tool_use` ที่ไม่มีบล็อก `tool_use` เหลือให้รัน ได้ `AFTER_STOP.tool_use` ซึ่งเป็น `done(error)`
-                  คำตอบที่ stop reason เป็น `null` ก็ได้ `done(error)` เช่นกัน loop ไม่เดาว่าโมเดลตั้งใจจบหรือยังไม่จบ
+                  คำตอบที่ stop reason เป็น `null` ก็ได้ `done(error)` เช่นกัน loop ไม่เดาว่า model ตั้งใจจบหรือยังไม่จบ
                 ref: packages/core/src/loop.ts#AFTER_EVENT
                 emits: [tool_use, error]
                 phase: ending
@@ -140,7 +140,7 @@ scenario:
 | --- | --- | --- |
 | `end_turn`, `stop_sequence` | จบ (`done`) | [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) |
 | `tool_use` ที่มีการเรียก | รัน tool | [Model เรียก tool แล้วตอบ](/scenarios/turn/with-tools/) |
-| `pause_turn` | เรียกโมเดลอีกครั้ง | หน้านี้ |
+| `pause_turn` | เรียก model อีกครั้ง | หน้านี้ |
 | `tool_use` ที่ไม่มีการเรียก, ไม่มี stop reason | `failed` | หน้านี้ |
 | `max_tokens` | `failed` หรือลองใหม่หนึ่งครั้ง | [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/) |
 | `refusal` | `failed` | [Model ปฏิเสธที่จะตอบ](/scenarios/mstop/refusal/) |

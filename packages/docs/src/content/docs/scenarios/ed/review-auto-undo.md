@@ -8,9 +8,9 @@ scenario:
   surface: vscode
   given:
     - "`gcode.review.mode` เป็น `auto` (ค่าเริ่มต้น)"
-    - turn ล่าสุดของแชตกำลังทำงาน และโมเดลเพิ่งขอแก้ `src/date.ts` ที่อ่านไว้แล้ว
+    - turn ล่าสุดของแชตกำลังทำงาน และ model เพิ่งขอแก้ `src/date.ts` ที่อ่านไว้แล้ว
   trigger: >-
-    โมเดลแก้ไฟล์ แล้ว turn จบแบบ done
+    model แก้ไฟล์ แล้ว turn จบแบบ done
   covers: [ed.review-auto-undo]
   related: [edit.applied-as-diff, edit.create-file, ed.review-hunks, sess.rewind]
   steps:
@@ -23,7 +23,7 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        `edit` คำนวณข้อความหลังแก้ของ `src/date.ts` ก่อน turn นี้เรียกโมเดลครั้งแรก engine บันทึก checkpoint
+        `edit` คำนวณข้อความหลังแก้ของ `src/date.ts` ก่อน turn นี้เรียก model ครั้งแรก engine บันทึก checkpoint
         (commit ใน shadow git ของ workspace) ไว้แล้ว
       ref: packages/engine/src/tools/agent.ts#editExecutor
       phase: running-tools
@@ -57,7 +57,7 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        turn ทำงานต่อจนโมเดลตอบจบ `prompt()` ส่ง action `turn-end` สถานะ `done`
+        turn ทำงานต่อจน model ตอบจบ `prompt()` ส่ง action `turn-end` สถานะ `done`
       ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response)\""
       emits: [turn-end]
       phase: idle
@@ -68,14 +68,14 @@ scenario:
         text: แชตรวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ก่อนการแก้ครั้งแรก
         from: panel
         to: you
-        sees: แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุปโมเดล token และค่าใช้จ่าย
+        sees: แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุป model token และค่าใช้จ่าย
       lane: panel
       at: rail
       do: >-
         `turnChangesOf` รวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ก่อนการแก้ครั้งแรกของ turn
         แผงวาดแถวการเปลี่ยนแปลงท้าย turn พร้อมปุ่ม Undo
       sees: >-
-        แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุปโมเดล token และค่าใช้จ่าย
+        แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุป model token และค่าใช้จ่าย
       ref: packages/extension/src/chat/render.ts#turnChangesRow
 
     - id: choice
@@ -172,7 +172,7 @@ scenario:
 ---
 
 โหมด review แบบ `auto` ไม่ได้ให้ตรวจทีละ hunk มันบันทึกการแก้ทันที แล้วให้ปุ่มเดียวต่อ turn ที่ย้อนทั้ง turn
-ปุ่มนั้นไม่ได้ย้อนการแก้ทีละ hunk แต่คืน workspace เป็น checkpoint ที่ engine เก็บไว้ก่อนการเรียกโมเดลครั้งแรกของ turn
+ปุ่มนั้นไม่ได้ย้อนการแก้ทีละ hunk แต่คืน workspace เป็น checkpoint ที่ engine เก็บไว้ก่อนการเรียก model ครั้งแรกของ turn
 
 | โหมด | ระหว่าง turn | ท้าย turn |
 | --- | --- | --- |
@@ -186,5 +186,5 @@ scenario:
   ไม่ได้ขึ้นเพราะการแก้ของผู้ใช้ (คำสั่ง Undo All Changes of the Session ต่างออกไป มันเตือนเรื่องการแก้ของผู้ใช้เสมอ)
 - **Undo ใช้ไม่ได้ขณะ turn ทำงาน** engine ตอบว่า "stop the running turn before undoing the session" และ VS Code แสดงเป็น toast เตือน
 - **ไฟล์ที่ turn สร้างถูกลบ** ไฟล์ที่ไม่มีใน checkpoint ถือว่าเกิดหลัง checkpoint ดู [สร้างไฟล์ใหม่](/scenarios/edit/create-file/)
-- **บทสนทนาไม่ถูกย้อน** Undo คืนเฉพาะไฟล์ ข้อความถัดไปที่ส่งมีโน้ตจาก event `restored` บอกโมเดลว่าไฟล์ไหนถูกคืน
+- **บทสนทนาไม่ถูกย้อน** Undo คืนเฉพาะไฟล์ ข้อความถัดไปที่ส่งมีโน้ตจาก event `restored` บอก model ว่าไฟล์ไหนถูกคืน
   และให้อ่านไฟล์ใหม่ก่อนแก้ การย้อนบทสนทนาด้วยคือ Rewind บนข้อความ

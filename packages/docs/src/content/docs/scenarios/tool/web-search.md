@@ -1,16 +1,16 @@
 ---
 title: "Model ค้นเว็บด้วย web_search"
-description: โมเดลเรียก web_search โหมด Plan ค้นทันที โหมด Ask ถามก่อนเพราะคำค้นออกจากเครื่องไป engine ถาม Brave Search แล้วส่งผลกลับในรั้วข้อมูล
+description: model เรียก web_search โหมด Plan ค้นทันที โหมด Ask ถามก่อนเพราะคำค้นออกจากเครื่องไป engine ถาม Brave Search แล้วส่งผลกลับในรั้วข้อมูล
 tableOfContents: false
 sidebar:
   order: 10
 scenario:
   surface: vscode
   given:
-    - ตั้ง key ของ Brave Search ไว้แล้ว (`BRAVE_SEARCH_API_KEY` หรือใน Settings) ถ้าไม่มี key โมเดลไม่ได้รับ `web_search` เลย
+    - ตั้ง key ของ Brave Search ไว้แล้ว (`BRAVE_SEARCH_API_KEY` หรือใน Settings) ถ้าไม่มี key model ไม่ได้รับ `web_search` เลย
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลเรียก `web_search` ด้วย `query` "date-fns format day of week token"
+    model เรียก `web_search` ด้วย `query` "date-fns format day of week token"
   covers: [tool.web-search]
   related: [tool.web-fetch, perm.ask-allow, perm.auto-classifier-allows, perm.plan-command-denied]
   steps:
@@ -19,12 +19,12 @@ scenario:
       beat:
         title: "Model ขอค้นเว็บ"
         text: >-
-          คุณตั้ง key ของ Brave Search ไว้แล้ว โมเดลจึงมี `web_search` ให้ใช้ มันขอค้นว่า "date-fns format day of week
+          คุณตั้ง key ของ Brave Search ไว้แล้ว model จึงมี `web_search` ให้ใช้ มันขอค้นว่า "date-fns format day of week
           token"
         from: model
         to: engine
       do: >-
-        โมเดลส่งบล็อก `tool_use` ของ `web_search` จบด้วย `stop_reason: tool_use`
+        model ส่งบล็อก `tool_use` ของ `web_search` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -192,12 +192,12 @@ scenario:
       beat:
         title: "Model ได้รายการผล"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล ถ้าอยากอ่านหน้าไหนต้องเรียก `web_fetch` ต่อ
+          Geno เรียก model ต่อ model ได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล ถ้าอยากอ่านหน้าไหนต้องเรียก `web_fetch` ต่อ
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ชื่อ URL และคำอธิบายสั้นของแต่ละผล
         ถ้าอยากอ่านหน้าใดต้องเรียก `web_fetch` ต่อ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
@@ -221,6 +221,6 @@ scenario:
 - **Ask ถามทุกครั้งและบันทึกเป็นกฎไม่ได้** กฎ `web-search` ไม่แนบรูปแบบให้บันทึก ปุ่ม Always allow จึงไม่ขึ้น
 - **การ์ดเขียนว่า "Run this command?"** การค้นใช้หน้าตาของการ์ดคำสั่ง เพราะไม่มี subject แบบ fetch หรือ read
   ชื่อการ์ดจึงไม่ตรงกับสิ่งที่ถาม แต่บรรทัดคำสั่งและเหตุผลบอกว่าเป็นการค้นเว็บ
-- **กฎ deny ของโดเมนกรองผลด้วย** โฮสต์ที่ workspace ห้าม `web_fetch` ไม่โผล่ในผลค้น โมเดลจึงไม่ถูกชวนไปเปิดหน้านั้น
+- **กฎ deny ของโดเมนกรองผลด้วย** โฮสต์ที่ workspace ห้าม `web_fetch` ไม่โผล่ในผลค้น model จึงไม่ถูกชวนไปเปิดหน้านั้น
 
 อ่านหน้าที่ค้นเจอ ดู [Model ดึงหน้าเว็บด้วย web_fetch](/scenarios/tool/web-fetch/)

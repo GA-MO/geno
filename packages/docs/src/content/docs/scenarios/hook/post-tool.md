@@ -1,6 +1,6 @@
 ---
 title: "hook PostToolUse และ PostToolBatch หลังคำสั่งรัน"
-description: hook หลัง call เพิ่มข้อความให้โมเดลอ่านคู่กับผล บล็อก หรือหยุด turn และ hook หลังทั้งชุดหยุดลูปก่อนเรียกโมเดลได้
+description: hook หลัง call เพิ่มข้อความให้ model อ่านคู่กับผล บล็อก หรือหยุด turn และ hook หลังทั้งชุดหยุดลูปก่อนเรียก model ได้
 tableOfContents: false
 sidebar:
   order: 4
@@ -11,7 +11,7 @@ scenario:
       และ PostToolBatch hook ที่รัน `batch-guard.sh`
     - โหมด Ask มี turn ทำงานอยู่ คำสั่ง `pnpm test` อยู่ใน safe list
   trigger: >-
-    โมเดลขอรัน `bash` ด้วยคำสั่ง `pnpm test`
+    model ขอรัน `bash` ด้วยคำสั่ง `pnpm test`
   covers: [hook.post-tool, hook.post-tool-batch-blocks]
   related: [hook.pretooluse-deny, hook.stop-keeps-going, tool.bash-safe-runs]
   steps:
@@ -23,7 +23,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm test` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `pnpm test` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -75,7 +75,7 @@ scenario:
               - lane: policy
                 beat:
                   title: hook เพิ่มบริบทให้ model
-                  text: สคริปต์พิมพ์ "2 snapshot files changed" Geno เก็บข้อความนี้ไว้ให้โมเดลอ่านคู่กับผล ไม่มีอะไรหยุด
+                  text: สคริปต์พิมพ์ "2 snapshot files changed" Geno เก็บข้อความนี้ไว้ให้ model อ่านคู่กับผล ไม่มีอะไรหยุด
                   from: machine
                   to: engine
                 at: hooks
@@ -92,13 +92,13 @@ scenario:
               - lane: policy
                 beat:
                   title: hook บล็อก แต่คำสั่งรันไปแล้ว
-                  text: สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" คำสั่งรันไปแล้วจึงย้อนไม่ได้ การบล็อกกลายเป็นข้อความที่โมเดลต้องอ่าน และลูปไม่หยุด
+                  text: สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" คำสั่งรันไปแล้วจึงย้อนไม่ได้ การบล็อกกลายเป็นข้อความที่ model ต้องอ่าน และลูปไม่หยุด
                   from: machine
                   to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" ลง stderr (หรือพิมพ์ `decision: "block"` พร้อม `reason`)
-                  หลัง call ที่รันไปแล้ว การบล็อกไม่ย้อนผล มันกลายเป็นโน้ตชนิด `blocking` ที่โมเดลจะอ่าน และไม่หยุดลูป
+                  หลัง call ที่รันไปแล้ว การบล็อกไม่ย้อนผล มันกลายเป็นโน้ตชนิด `blocking` ที่ model จะอ่าน และไม่หยุดลูป
                 ref: packages/core/src/hooks.ts#toolHookVerdict
                 emits: [blocking]
 
@@ -149,7 +149,7 @@ scenario:
               - lane: loop
                 beat:
                   title: Turn ล้มเหลว
-                  text: Geno ไม่เรียกโมเดลอีก โมเดลจึงไม่ได้อ่านผลของ `pnpm test` ปุ่ม Send กลับมา
+                  text: Geno ไม่เรียก model อีก model จึงไม่ได้อ่านผลของ `pnpm test` ปุ่ม Send กลับมา
                   from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
@@ -159,7 +159,7 @@ scenario:
                     header: failed after 9s
                 at: step
                 do: >-
-                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ได้อ่านผลของ `pnpm test`
+                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` model ไม่ได้อ่านผลของ `pnpm test`
                 ref: packages/core/src/loop.ts#ERROR_REASON
                 emits: [error]
                 phase: ending
@@ -238,7 +238,7 @@ scenario:
               - lane: loop
                 beat:
                   title: Turn ล้มเหลว
-                  text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  text: Geno ไม่เรียก model อีก งานจบแบบ failed และปุ่ม Send กลับมา
                   from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
@@ -248,7 +248,7 @@ scenario:
                     header: failed after 9s
                 at: step
                 do: >-
-                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ถูกเรียกอีก
+                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` model ไม่ถูกเรียกอีก
                 ref: packages/core/src/loop.ts#ERROR_REASON
                 emits: [error]
                 phase: ending
@@ -268,7 +268,7 @@ scenario:
     - id: logged
       beat:
         title: Geno เก็บข้อความของ hook ไว้ให้ model
-        text: Geno บันทึกผลของคำสั่งก่อน แล้วบันทึกข้อความของ hook ผูกกับ call นั้น แผงแชตแสดงแค่ผลเทสต์ ข้อความของ hook มีแต่โมเดลที่ได้อ่าน
+        text: Geno บันทึกผลของคำสั่งก่อน แล้วบันทึกข้อความของ hook ผูกกับ call นั้น แผงแชตแสดงแค่ผลเทสต์ ข้อความของ hook มีแต่ model ที่ได้อ่าน
         from: engine
         to: engine
         sees:
@@ -279,7 +279,7 @@ scenario:
       at: tools
       do: >-
         `runTools` บันทึก `tool-result` ก่อน แล้วบันทึกโน้ตของ hook เป็น event `hook-context` ที่ผูกกับ `toolUseId` ของ call
-        แผงแชตไม่แสดง event นี้ ข้อความของ hook มีแต่โมเดลที่ได้อ่าน
+        แผงแชตไม่แสดง event นี้ ข้อความของ hook มีแต่ model ที่ได้อ่าน
       ref: "packages/engine/src/drive.ts#\"for (const said of outcome.said) if (said?.context !== undefined) await record({ ...said.context, seq: nextSeq(events) });\""
       emits: [tool-result, hook-context]
 
@@ -301,7 +301,7 @@ scenario:
     - id: reads
       beat:
         title: Model อ่านผลและข้อความของ hook
-        text: โมเดลรู้ว่า snapshot เปลี่ยน หรือรู้ว่า lint ล้มเหลว แล้วตัดสินว่าจะทำอะไรต่อ
+        text: model รู้ว่า snapshot เปลี่ยน หรือรู้ว่า lint ล้มเหลว แล้วตัดสินว่าจะทำอะไรต่อ
         from: model
         to: engine
         end: Model อ่านข้อความแล้วทำต่อ
@@ -309,13 +309,13 @@ scenario:
       do: >-
         ในคำขอนี้ ข้อความของ hook ต่อท้าย `tool_result` ของ `pnpm test` เช่น
         "[Geno] PostToolUse:Bash hook additional context: 2 snapshot files changed"
-        หรือ "[Geno] PostToolUse:Bash hook blocking error: lint failed in src/date.ts" โมเดลอ่านแล้วทำงานต่อ
+        หรือ "[Geno] PostToolUse:Bash hook blocking error: lint failed in src/date.ts" model อ่านแล้วทำงานต่อ
       ref: packages/core/src/hooks.ts#hookNoteText
       emits: [tool_result]
       end: { turn: continues, reason: call-model }
 ---
 
-hook หลังรันไม่ได้ตัดสินว่า call รันหรือไม่ call รันไปแล้ว สิ่งที่มันทำได้คือพูดกับโมเดล หรือหยุดลูปก่อนเรียกโมเดลครั้งต่อไป
+hook หลังรันไม่ได้ตัดสินว่า call รันหรือไม่ call รันไปแล้ว สิ่งที่มันทำได้คือพูดกับ model หรือหยุดลูปก่อนเรียก model ครั้งต่อไป
 
 | hook | ตอบ | ผล |
 | --- | --- | --- |
@@ -328,6 +328,6 @@ hook หลังรันไม่ได้ตัดสินว่า call ร
 สิ่งที่ควรสังเกต
 
 - **hook หลัง call รันก่อน call ถัดไปเริ่ม** ใน batch ที่รันพร้อมกัน hook ของแต่ละ call รันทันทีที่ call นั้นจบ
-- **PostToolBatch รันครั้งเดียวต่อ turn ของเครื่องมือ** หลังทุกชุด ไม่ใช่หลังแต่ละชุด
+- **PostToolBatch รันครั้งเดียวต่อ turn ของ tool** หลังทุกชุด ไม่ใช่หลังแต่ละชุด
 - **ผลกับโน้ตถูกบันทึกพร้อมกันตอนท้าย** ถ้าผู้ใช้กด Stop ระหว่างนั้น โน้ตของ hook ไม่ถูกบันทึก
 - **ข้อความของ hook ไม่ขึ้นในแผงแชต** ข้อผิดพลาดของตัว hook เอง (เช่น timeout) ไปที่ output channel "Geno engine"

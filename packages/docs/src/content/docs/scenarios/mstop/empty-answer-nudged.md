@@ -1,6 +1,6 @@
 ---
 title: "Model จบ turn เปล่า Geno กระตุ้นหนึ่งครั้ง"
-description: โมเดลจบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียก tool loop บันทึกคำกระตุ้นแล้วเรียกโมเดลอีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
+description: model จบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียก tool loop บันทึกคำกระตุ้นแล้วเรียก model อีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
 tableOfContents: false
 sidebar:
   order: 2
@@ -10,7 +10,7 @@ scenario:
     - ผู้ใช้ส่งข้อความในแผงแชตของ VS Code และ turn กำลังทำงาน
     - ยังไม่ถึงขีดจำกัดของรอบ (40 ครั้ง และ $0.40)
   trigger: >-
-    โมเดลคิดแล้วจบคำตอบด้วย `stop_reason: end_turn` โดยมีแต่บล็อกความคิด ไม่มีข้อความและไม่มี `tool_use`
+    model คิดแล้วจบคำตอบด้วย `stop_reason: end_turn` โดยมีแต่บล็อกความคิด ไม่มีข้อความและไม่มี `tool_use`
   covers: [mstop.empty-answer-nudged]
   related: [mstop.no-reply-continue-retry, turn.text-answer, mstop.limit-max-turns]
   steps:
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "Model จบคำตอบโดยไม่มีข้อความ"
         text: >-
-          โมเดลคิดอยู่พักหนึ่ง แล้วจบคำตอบด้วยสัญญาณ end_turn โดยไม่มีข้อความให้อ่าน และไม่ขอใช้ tool
+          model คิดอยู่พักหนึ่ง แล้วจบคำตอบด้วยสัญญาณ end_turn โดยไม่มีข้อความให้อ่าน และไม่ขอใช้ tool
         from: model
         to: engine
       do: >-
-        โมเดลส่งบล็อกความคิดออกมาแล้วจบด้วย `end_turn` ไม่มีข้อความที่ไม่ว่าง และไม่ขอเรียกเครื่องมือ
+        model ส่งบล็อกความคิดออกมาแล้วจบด้วย `end_turn` ไม่มีข้อความที่ไม่ว่าง และไม่ขอเรียก tool
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
       phase: calling-model
@@ -34,7 +34,7 @@ scenario:
       beat:
         title: "แชตยังขึ้นแค่ Thinking"
         text: >-
-          Geno บันทึกคำตอบนี้ตามปกติ ความคิดของโมเดลไม่แสดงเป็นข้อความ คุณจึงยังเห็นแค่แถว Thinking
+          Geno บันทึกคำตอบนี้ตามปกติ ความคิดของ model ไม่แสดงเป็นข้อความ คุณจึงยังเห็นแค่แถว Thinking
         from: panel
         to: you
         sees: { kind: composer, state: working, header: working }
@@ -49,7 +49,7 @@ scenario:
       beat:
         title: "Geno เห็นว่าคำตอบนี้ไม่มีอะไรให้อ่าน"
         text: >-
-          ปกติ end_turn แปลว่า turn จบ แต่คำตอบนี้ไม่มีอะไรให้คุณอ่าน และ Geno ยังไม่เคยกระตุ้นโมเดลใน turn นี้
+          ปกติ end_turn แปลว่า turn จบ แต่คำตอบนี้ไม่มีอะไรให้คุณอ่าน และ Geno ยังไม่เคยกระตุ้น model ใน turn นี้
           จึงเลือกกระตุ้นแทนการจบ
         from: engine
         to: engine
@@ -65,7 +65,7 @@ scenario:
       beat:
         title: "Geno เขียนคำกระตุ้นลงบันทึก"
         text: >-
-          Geno บันทึกคำกระตุ้นที่บอกโมเดลว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ คำกระตุ้นนี้ไม่ขึ้นในแชต
+          Geno บันทึกคำกระตุ้นที่บอก model ว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ คำกระตุ้นนี้ไม่ขึ้นในแชต
           คุณเห็นแค่ว่า turn ยังทำงานต่อ
         from: engine
         to: engine
@@ -88,15 +88,15 @@ scenario:
       beat:
         title: "Model ตอบอีกครั้ง"
         text: >-
-          โมเดลอ่านคำกระตุ้นแล้วตอบใหม่ ลองเลือกว่ารอบนี้มีข้อความหรือยังเปล่าอยู่
+          model อ่านคำกระตุ้นแล้วตอบใหม่ ลองเลือกว่ารอบนี้มีข้อความหรือยังเปล่าอยู่
         from: model
         to: engine
         ask: "รอบนี้มีข้อความไหม"
       do: >-
-        โมเดลอ่านคำกระตุ้นแล้วตอบอีกครั้ง
+        model อ่านคำกระตุ้นแล้วตอบอีกครั้ง
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       fork:
-        ask: คำตอบรอบที่สองมีข้อความหรือการเรียกเครื่องมือไหม
+        ask: คำตอบรอบที่สองมีข้อความหรือการเรียก tool ไหม
         options:
           - id: answered
             label: มีข้อความ
@@ -105,7 +105,7 @@ scenario:
                 beat:
                   title: "คำตอบขึ้นในแชต"
                   text: >-
-                    โมเดลเขียนคำตอบออกมา ข้อความค่อยๆ ขึ้นในแชตเหมือน turn ปกติ
+                    model เขียนคำตอบออกมา ข้อความค่อยๆ ขึ้นในแชตเหมือน turn ปกติ
                   from: engine
                   to: panel
                   sees: { kind: message, from: geno, text: เพิ่มเทสต์ให้ parseDate แล้ว 3 กรณี, streaming: true }
@@ -185,7 +185,7 @@ scenario:
 ---
 
 คำตอบที่มีแต่ความคิดไม่ใช่คำตอบ ผู้ใช้ไม่เห็นอะไรเลย Geno จึงไม่ถือว่า turn จบ
-แต่บอกโมเดลหนึ่งครั้งว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ
+แต่บอก model หนึ่งครั้งว่าคำตอบที่แล้วว่าง ให้ทำต่อหรือเขียนคำตอบ
 
 สิ่งที่ควรสังเกต
 
@@ -194,4 +194,4 @@ scenario:
 - **ครั้งที่สองจบแบบ failed โดยไม่มีบล็อก error** `finish` บันทึก error เฉพาะขีดจำกัด เหตุผลจึงอยู่แค่ใน stderr ของ engine
   แผงบอกผู้ใช้ผ่านกล่อง "Geno stopped without a reply" แทน
 - **ขีดจำกัดมาก่อนคำกระตุ้น** ถ้าคำตอบเปล่ามาตอนที่ใช้ครบ 40 ครั้งแล้ว `loopStep` จบด้วย `max-turns` แทนการกระตุ้น
-  ดู [ครบ 40 ครั้งของการเรียกโมเดล](/scenarios/mstop/limits/)
+  ดู [ครบ 40 ครั้งของการเรียก model](/scenarios/mstop/limits/)

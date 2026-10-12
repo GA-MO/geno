@@ -1,6 +1,6 @@
 ---
 title: "Model เรียก skill"
-description: โมเดลเห็นรายชื่อสกิลในข้อความแรกของ session แล้วเรียก skill เพื่อโหลด SKILL.md สกิลที่ตั้ง context fork รันเป็นเอเจนต์ลูกแทน
+description: model เห็นรายชื่อสกิลในข้อความแรกของ session แล้วเรียก skill เพื่อโหลด SKILL.md สกิลที่ตั้ง context fork รันเป็น subagent แทน
 tableOfContents: false
 sidebar:
   order: 3
@@ -10,7 +10,7 @@ scenario:
     - workspace มีสกิล `.claude/skills/release-notes/SKILL.md` ที่มี `description` ใน frontmatter
     - รายชื่อสกิลพร้อมคำอธิบายอยู่ในข้อความแรกของ session (ส่วน skill listing ที่ถูกตรึงไว้ใน `session-start`)
   trigger: >-
-    ผู้ใช้ขอว่า "เขียน release notes ของ v1.4 ให้หน่อย" โมเดลเห็นว่าสกิล release-notes ตรงกับงาน
+    ผู้ใช้ขอว่า "เขียน release notes ของ v1.4 ให้หน่อย" model เห็นว่าสกิล release-notes ตรงกับงาน
   covers: [ext.skill-by-model, ext.skill-fork]
   related: [ext.skill-typed, ext.slash-template, sub.blocking-report, ctx.large-output-spill]
   steps:
@@ -27,7 +27,7 @@ scenario:
           select: content[3]
       lane: model
       do: >-
-        โมเดลเลือกสกิลจากรายชื่อที่เห็น แล้วขอเรียก `skill` ด้วย `name: "release-notes"` และ `args: "v1.4"`
+        model เลือกสกิลจากรายชื่อที่เห็น แล้วขอเรียก `skill` ด้วย `name: "release-notes"` และ `args: "v1.4"`
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/context.ts#listingSection
       emits: [tool_use]
@@ -54,7 +54,7 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        `skillExecutor` อ่านโฟลเดอร์สกิลตามที่เป็นตอนนี้ หา `release-notes` ตรวจว่าโมเดลเรียกได้
+        `skillExecutor` อ่านโฟลเดอร์สกิลตามที่เป็นตอนนี้ หา `release-notes` ตรวจว่า model เรียกได้
         (สกิลที่ตั้ง `disable-model-invocation` ถูกปฏิเสธ เว้นแต่ผู้ใช้พิมพ์ `/release-notes` เองใน session นี้)
         แล้วประกอบข้อความ: ที่อยู่ของไฟล์ โฟลเดอร์ที่ใช้แปลง path สัมพัทธ์ และเนื้อหา SKILL.md ที่แทน `$ARGUMENTS` ด้วย `v1.4`
       ref: packages/engine/src/tools/skill.ts#skillExecutor
@@ -78,7 +78,7 @@ scenario:
                 at: tools
                 do: >-
                   ข้อความของสกิลเป็นผลของ call โดยตรง ผลของ `skill` ยาวได้ถึง 100,000 ตัวอักษรก่อนถูกเก็บลงไฟล์
-                  เพื่อให้โมเดลอ่านคำสั่งของสกิลได้ทั้งก้อน
+                  เพื่อให้ model อ่านคำสั่งของสกิลได้ทั้งก้อน
                 ref: packages/core/src/tools.ts#spillLimitOf
               - use: tool-result-returns
               - lane: loop
@@ -90,15 +90,15 @@ scenario:
                   end: Model ทำตาม skill
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลอ่าน "Skill release-notes, from ..." แล้วทำตามขั้นในสกิล
-                  เช่นรัน `git log` และเขียนไฟล์ release notes ด้วยเครื่องมือของตัวเอง ภายใต้สิทธิ์เดิมของ session
+                  `loopStep` ตัดสิน `call-model` model อ่าน "Skill release-notes, from ..." แล้วทำตามขั้นในสกิล
+                  เช่นรัน `git log` และเขียนไฟล์ release notes ด้วย tool ของตัวเอง ภายใต้สิทธิ์เดิมของ session
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
                 end: { turn: continues, reason: call-model }
 
           - id: fork
-            label: "context: fork (รันเป็นเอเจนต์ลูก)"
+            label: "context: fork (รันเป็น subagent)"
             steps:
               - lane: tool
                 beat:
@@ -160,7 +160,7 @@ scenario:
                   end: Model เล่ารายงาน
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลของแม่อ่านรายงานแล้วเล่าให้ผู้ใช้
+                  `loopStep` ตัดสิน `call-model` model ของแม่อ่านรายงานแล้วเล่าให้ผู้ใช้
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -168,11 +168,11 @@ scenario:
 ---
 
 สกิลคือคำแนะนำที่โหลดเมื่อต้องใช้: ข้อความแรกของ session มีแค่ชื่อกับคำอธิบาย (รวมไม่เกิน 8,000 ตัวอักษร)
-เนื้อหาเต็มเข้ามาเมื่อโมเดลเรียก `skill` หรือเมื่อผู้ใช้พิมพ์ `/ชื่อสกิล` ([คำสั่ง / ที่กลายเป็น prompt](/scenarios/ext/slash-template/))
+เนื้อหาเต็มเข้ามาเมื่อ model เรียก `skill` หรือเมื่อผู้ใช้พิมพ์ `/ชื่อสกิล` ([คำสั่ง / ที่กลายเป็น prompt](/scenarios/ext/slash-template/))
 
 สิ่งที่ควรสังเกต
 
-- **`context: fork` มีผลเฉพาะเมื่อโมเดลเรียก** ผู้ใช้ที่พิมพ์ `/release-notes` ได้สกิลเป็น context item ใน turn ของตัวเองเสมอ
-- **สกิลไม่ขยายสิทธิ์** คำอธิบายของเครื่องมือบอกโมเดลว่าสกิลเป็นข้อมูลจากไฟล์ คำสั่งในสกิลยังต้องผ่านกฎ การ์ด และ sandbox เหมือนเดิม
+- **`context: fork` มีผลเฉพาะเมื่อ model เรียก** ผู้ใช้ที่พิมพ์ `/release-notes` ได้สกิลเป็น context item ใน turn ของตัวเองเสมอ
+- **สกิลไม่ขยายสิทธิ์** คำอธิบายของ tool บอก model ว่าสกิลเป็นข้อมูลจากไฟล์ คำสั่งในสกิลยังต้องผ่านกฎ การ์ด และ sandbox เหมือนเดิม
 - **สกิลของ plugin** ชื่อขึ้นต้นด้วยชื่อ plugin เช่น `pstack:how` โฟลเดอร์ของ plugin อ่านได้แต่แก้ไม่ได้
-- **ไม่เจอสกิล** โมเดลได้ error ที่บอกรายชื่อสกิลที่เรียกได้ แล้วเลือกใหม่ได้ในรอบถัดไป
+- **ไม่เจอสกิล** model ได้ error ที่บอกรายชื่อสกิลที่เรียกได้ แล้วเลือกใหม่ได้ในรอบถัดไป

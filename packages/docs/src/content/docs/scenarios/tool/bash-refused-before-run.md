@@ -1,6 +1,6 @@
 ---
 title: "bash ปฏิเสธคำสั่งก่อนรัน แล้วบอกทางที่ถูก"
-description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้า หรือคำสั่งที่ออกนอก lane แต่ตอบโมเดลว่าควรใช้ tool ไหนแทน
+description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้า หรือคำสั่งที่ออกนอก lane แต่ตอบ model ว่าควรใช้ tool ไหนแทน
 tableOfContents: false
 sidebar:
   order: 3
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในแผงแชตของ VS Code ซึ่งมีงานเบื้องหลัง (`run_in_background`) และ `monitor` ให้ใช้
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วยคำสั่งที่จะค้างจนหมดเวลา หรือที่ออกไปนอก lane ของ session
+    model ขอเรียก `bash` ด้วยคำสั่งที่จะค้างจนหมดเวลา หรือที่ออกไปนอก lane ของ session
   covers: [tool.bash-refused-before-run]
   related: [tool.bash-background, tool.bash-safe-runs, bg.monitor-wakes, wf.lane-apply]
   steps:
@@ -19,11 +19,11 @@ scenario:
       beat:
         title: "Model ขอรันคำสั่งด้วย bash"
         text: >-
-          โมเดลขอรันคำสั่งที่จะค้างจนหมดเวลา หรือคำสั่งที่ออกไปนอก lane ของ session
+          model ขอรันคำสั่งที่จะค้างจนหมดเวลา หรือคำสั่งที่ออกไปนอก lane ของ session
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -135,11 +135,11 @@ scenario:
       beat:
         title: "Geno เรียก model ต่อพร้อมคำแนะนำ"
         text: >-
-          turn ไม่หยุด Geno เรียกโมเดลต่อ โมเดลได้ผลที่บอกว่าเป็น error พร้อมวิธีที่ถูก
+          turn ไม่หยุด Geno เรียก model ต่อ model ได้ผลที่บอกว่าเป็น error พร้อมวิธีที่ถูก
         from: engine
         to: model
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` turn ไม่หยุด โมเดลได้ `tool_result` ที่มี `is_error: true`
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` turn ไม่หยุด model ได้ `tool_result` ที่มี `is_error: true`
         พร้อมวิธีที่ถูก
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
@@ -152,12 +152,12 @@ scenario:
       beat:
         title: "Model เรียกใหม่ตามคำแนะนำ"
         text: >-
-          โมเดลรัน `npm run dev` แบบเบื้องหลังแทน และได้ชื่องานกลับมาทันที
+          model รัน `npm run dev` แบบเบื้องหลังแทน และได้ชื่องานกลับมาทันที
         from: model
         to: engine
         end: "model เรียกแบบที่ถูก"
       do: >-
-        โมเดลเรียกตามคำแนะนำ เช่น `bash` ด้วย `npm run dev` และ `run_in_background: true` ซึ่งได้ job id กลับมาทันที
+        model เรียกตามคำแนะนำ เช่น `bash` ด้วย `npm run dev` และ `run_in_background: true` ซึ่งได้ job id กลับมาทันที
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       end: { turn: continues, reason: run-tools }

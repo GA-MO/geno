@@ -1,16 +1,16 @@
 ---
 title: เสนองานแยกแล้วเริ่ม
-description: ระหว่างทำงาน โมเดลเจองานอีกชิ้นที่ควรทำแยก จึงเรียก spawn_task ซึ่งไม่เริ่มอะไร แค่ขึ้นการ์ดข้อเสนอ ผู้ใช้กด Start แล้ว Geno เปิด lane กับ session ใหม่ให้งานนั้น
+description: ระหว่างทำงาน model เจองานอีกชิ้นที่ควรทำแยก จึงเรียก spawn_task ซึ่งไม่เริ่มอะไร แค่ขึ้นการ์ดข้อเสนอ ผู้ใช้กด Start แล้ว Geno เปิด lane กับ session ใหม่ให้งานนั้น
 tableOfContents: false
 sidebar:
   order: 5
 scenario:
   surface: vscode
   given:
-    - เปิด Geno ใน VS Code (editor บอก engine ว่าแสดงข้อเสนองานได้ โมเดลจึงมี `spawn_task`)
-    - โมเดลกำลังแก้ bug ใน `src/date.ts` และเห็นว่า `src/time.ts` มีปัญหาแบบเดียวกัน
+    - เปิด Geno ใน VS Code (editor บอก engine ว่าแสดงข้อเสนองานได้ model จึงมี `spawn_task`)
+    - model กำลังแก้ bug ใน `src/date.ts` และเห็นว่า `src/time.ts` มีปัญหาแบบเดียวกัน
   trigger: >-
-    โมเดลเสนองานแยกแทนการขยายงานปัจจุบัน
+    model เสนองานแยกแทนการขยายงานปัจจุบัน
   covers: [wf.spinoff]
   related: [wf.lane-apply, wf.arena-best-of-n, bg.task-attention]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `spawn_task` ด้วยหัวข้อ "Fix the same leap-year bug in src/time.ts", สรุปสั้น และ prompt ที่เขียนให้ครบในตัว
+        model ขอเรียก `spawn_task` ด้วยหัวข้อ "Fix the same leap-year bug in src/time.ts", สรุปสั้น และ prompt ที่เขียนให้ครบในตัว
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/spinoff.ts#SPAWN_TASK_TOOL
       emits: [tool_use, spawn_task]
@@ -40,7 +40,7 @@ scenario:
       at: executor
       do: >-
         `spawn_task` ไม่เริ่มอะไร `offerOf` ตรวจว่าไม่มีข้อเสนอที่เปิดอยู่หัวข้อเดียวกัน และข้อเสนอที่เปิดอยู่ไม่เกิน 10
-        แล้วคืนผลที่มีข้อเสนอติดไปด้วย ข้อความถึงโมเดลขึ้นต้นด้วย `Suggested task_<8 หลัก> "Fix the same leap-year bug in src/time.ts".` และบอกว่า "nothing was started. Go on with the current task."
+        แล้วคืนผลที่มีข้อเสนอติดไปด้วย ข้อความถึง model ขึ้นต้นด้วย `Suggested task_<8 หลัก> "Fix the same leap-year bug in src/time.ts".` และบอกว่า "nothing was started. Go on with the current task."
       ref: packages/core/src/spinoff.ts#offerOf
       emits: [offered]
 
@@ -72,7 +72,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลทำ bug ใน `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่ได้เข้ามาในบทสนทนานี้
+        model ทำ bug ใน `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่ได้เข้ามาในบทสนทนานี้
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -110,7 +110,7 @@ scenario:
               - lane: server
                 at: sessions
                 do: >-
-                  engine บันทึกการตัดสิน `dismissed` ลง log ของแชตทันที ไม่ว่าจะมี turn รันหรือไม่ คำขอโมเดลครั้งถัดไปอ่านได้
+                  engine บันทึกการตัดสิน `dismissed` ลง log ของแชตทันที ไม่ว่าจะมี turn รันหรือไม่ คำขอ model ครั้งถัดไปอ่านได้
                   การ์ดหายไป และ `spawn_task` หัวข้อเดิมเสนอใหม่ได้
                 ref: "packages/engine/src/serve.ts#\"const decideSpinoff = async (sessionId: string\""
                 emits: [spinoff, dismissed]
@@ -154,7 +154,7 @@ scenario:
       lane: server
       at: sessions
       do: >-
-        engine บันทึกการตัดสิน `started` พร้อม session id และชื่อ lane ลง log ของแชต ครั้งหน้าโมเดลของแชตรู้ว่างานนี้เริ่มแล้ว
+        engine บันทึกการตัดสิน `started` พร้อม session id และชื่อ lane ลง log ของแชต ครั้งหน้า model ของแชตรู้ว่างานนี้เริ่มแล้ว
       ref: "packages/engine/src/serve.ts#\"const decideSpinoff = async (sessionId: string\""
       emits: [spinoff, started]
 
@@ -168,11 +168,11 @@ scenario:
       end: { turn: continues }
 ---
 
-`spawn_task` แยกการเสนอออกจากการเริ่ม: โมเดลเสนอได้ทุกเมื่อโดยไม่เสียเงินและไม่หลุดจากงานที่ทำอยู่
+`spawn_task` แยกการเสนอออกจากการเริ่ม: model เสนอได้ทุกเมื่อโดยไม่เสียเงินและไม่หลุดจากงานที่ทำอยู่
 ผู้ใช้เป็นคนเดียวที่เริ่มงานนั้นได้ และงานเริ่มใน lane ของตัวเอง จึงไม่แตะไฟล์ที่แชตนี้กำลังแก้
 
 สิ่งที่ควรสังเกต
 
-- **ข้อเสนอไม่ซ้ำ** หัวข้อเดียวกับข้อเสนอที่เปิดอยู่ได้ error และมีข้อเสนอเปิดได้ไม่เกิน 10 อัน โมเดลถอนข้อเสนอของตัวเองได้ด้วย `dismiss_task`
+- **ข้อเสนอไม่ซ้ำ** หัวข้อเดียวกับข้อเสนอที่เปิดอยู่ได้ error และมีข้อเสนอเปิดได้ไม่เกิน 10 อัน model ถอนข้อเสนอของตัวเองได้ด้วย `dismiss_task`
 - **ผลไม่กลับมา** งานที่เริ่มเป็น session ระดับบนสุดใน lane ผู้ใช้ตามงานในแผง Tasks และนำกลับด้วย Apply ในแผง Lanes
 - **ต้องมี editor ที่แสดงข้อเสนอได้** engine ให้ `spawn_task` เฉพาะเมื่อ editor ที่ต่ออยู่บอกว่ารองรับ ใน CLI จึงไม่มี

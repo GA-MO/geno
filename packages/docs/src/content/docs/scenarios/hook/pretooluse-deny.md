@@ -10,19 +10,19 @@ scenario:
     - workspace ที่เชื่อถือแล้ว มี PreToolUse hook ที่ matcher เป็น `Bash` ใน `.claude/settings.json` ซึ่งรันสคริปต์ `guard.sh`
     - เปิด Geno ในโหมด Ask มี turn ทำงานอยู่
   trigger: >-
-    โมเดลขอรัน `bash` ด้วยคำสั่ง `pnpm deploy --prod`
+    model ขอรัน `bash` ด้วยคำสั่ง `pnpm deploy --prod`
   covers: [hook.pretooluse-deny, hook.pretooluse-ask, hook.pretooluse-allow-rewrite, hook.pretooluse-continue-false]
   related: [hook.permission-request, hook.user-prompt-submit, perm.ask-allow]
   steps:
     - id: wants
       beat:
         title: Model ขอรัน `pnpm deploy --prod`
-        text: โมเดลอยากปล่อยงานขึ้น production จากเครื่องของคุณ
+        text: model อยากปล่อยงานขึ้น production จากเครื่องของคุณ
         from: model
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm deploy --prod` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `pnpm deploy --prod` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -78,7 +78,7 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno ไม่รันคำสั่ง
-                  text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน ผลถึงโมเดลคือข้อความของ hook hook หลังรันก็ไม่ทำงานกับ call นี้
+                  text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน ผลถึง model คือข้อความของ hook hook หลังรันก็ไม่ทำงานกับ call นี้
                   from: engine
                   to: model
                 at: tools
@@ -107,14 +107,14 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านเหตุผลของ hook
-                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ โมเดลอ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
+                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ model อ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
                   from: model
                   to: engine
                   end: Model หาทางอื่น
                 at: step
                 do: >-
                   การปฏิเสธจาก hook ไม่ใช่การปฏิเสธของผู้ใช้ `loopStep` จึงตัดสิน `call-model` ตามปกติ
-                  โมเดลจะอ่านเหตุผลใน `tool_result` แล้วหาทางอื่น เช่นบอกผู้ใช้ให้ deploy ผ่าน CI
+                  model จะอ่านเหตุผลใน `tool_result` แล้วหาทางอื่น เช่นบอกผู้ใช้ให้ deploy ผ่าน CI
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -126,13 +126,13 @@ scenario:
               - lane: policy
                 beat:
                   title: hook อนุญาตแล้วแก้คำสั่ง
-                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `pnpm deploy --prod --dry-run` ซึ่งแทนคำสั่งของโมเดลทั้งก้อน
+                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `pnpm deploy --prod --dry-run` ซึ่งแทนคำสั่งของ model ทั้งก้อน
                   from: machine
                   to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON `permissionDecision: "allow"` พร้อม `updatedInput` ที่เปลี่ยนคำสั่งเป็น `pnpm deploy --prod --dry-run`
-                  input ใหม่แทนที่ input ของโมเดลทั้งก้อน และ call ได้ขั้น `run` ที่บอกว่า hook อนุญาตแล้ว
+                  input ใหม่แทนที่ input ของ model ทั้งก้อน และ call ได้ขั้น `run` ที่บอกว่า hook อนุญาตแล้ว
                 ref: "packages/engine/src/hooks.ts#\"const updated = decision.kind === 'none' || decision.input === undefined ? use\""
                 emits: [allow, updatedInput]
               - lane: policy
@@ -149,7 +149,7 @@ scenario:
               - lane: tool
                 beat:
                   title: คำสั่งที่แก้แล้วรันใน sandbox
-                  text: การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่โมเดลส่ง
+                  text: การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่ model ส่ง
                   from: engine
                   to: machine
                 at: shell
@@ -160,14 +160,14 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านผลของ `--dry-run`
-                  text: Geno เรียกโมเดลอีกครั้ง โมเดลเห็นผลของคำสั่งที่ hook แก้
+                  text: Geno เรียก model อีกครั้ง model เห็นผลของคำสั่งที่ hook แก้
                   from: model
                   to: engine
                   end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
-                  log เก็บ `tool_use` ตามที่โมเดลส่ง ส่วน PostToolUse hook เห็น input ที่รันจริง
-                  `loopStep` ตัดสิน `call-model` โมเดลได้อ่านผลของ `--dry-run`
+                  log เก็บ `tool_use` ตามที่ model ส่ง ส่วน PostToolUse hook เห็น input ที่รันจริง
+                  `loopStep` ตัดสิน `call-model` model ได้อ่านผลของ `--dry-run`
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -279,13 +279,13 @@ scenario:
               - lane: loop
                 beat:
                   title: Model อ่านผลของคำสั่ง
-                  text: Geno เรียกโมเดลอีกครั้ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
+                  text: Geno เรียก model อีกครั้ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
                   from: model
                   to: engine
                   end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
+                  `loopStep` ตัดสิน `call-model` model ได้อ่านผลของคำสั่ง
                   (ถ้าผู้ใช้กด Deny call ได้ `ToolRejected` และ turn จบแบบ `done (end_turn)` เหมือนการ์ดของโหมด Ask)
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
@@ -343,7 +343,7 @@ scenario:
               - lane: loop
                 beat:
                   title: Turn ล้มเหลว
-                  text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  text: Geno ไม่เรียก model อีก งานจบแบบ failed และปุ่ม Send กลับมา
                   from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
@@ -353,7 +353,7 @@ scenario:
                     header: failed after 4s
                 at: step
                 do: >-
-                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ถูกเรียกอีก
+                  `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` model ไม่ถูกเรียกอีก
                 ref: packages/core/src/loop.ts#ERROR_REASON
                 emits: [error]
                 phase: ending
@@ -376,7 +376,7 @@ PreToolUse ทำงานก่อนการตรวจสิทธิ์ข
 
 | hook ตอบ | call | turn |
 | --- | --- | --- |
-| deny (exit 2 หรือ `permissionDecision: "deny"`) | ไม่รัน ผล `denied` | ทำต่อ โมเดลอ่านเหตุผล |
+| deny (exit 2 หรือ `permissionDecision: "deny"`) | ไม่รัน ผล `denied` | ทำต่อ model อ่านเหตุผล |
 | allow + `updatedInput` | รันด้วย input ใหม่ ไม่ถามผู้ใช้ | ทำต่อ |
 | ask | ขึ้นการ์ดถามผู้ใช้ก่อนการตรวจของ Geno ทุกโหมด รวมถึง Auto | ตามคำตอบ เหมือน [โหมด Ask ขออนุญาต](/scenarios/perm/ask-mode-bash-approval/) |
 | defer หรือไม่ตอบ | ไปตามการตรวจของ Geno | ตามปกติ |
@@ -386,6 +386,6 @@ PreToolUse ทำงานก่อนการตรวจสิทธิ์ข
 
 - **การปฏิเสธของ hook ต่างจาก Reject ของผู้ใช้** ผลเป็น `denied` (`ToolDenied`) ไม่ใช่ `rejected` ชุดถัดไปจึงยังรัน และ turn ไม่จบ
 - **hook allow ไม่ข้ามกฎ deny** กฎ deny ของ workspace และคำสั่งที่ต้องถามเสมอยังมีผล การอนุญาตของ hook แค่ตอบคำถามแทนผู้ใช้
-- **log เก็บสิ่งที่โมเดลขอ** `updatedInput` ไม่ได้แก้ `tool_use` ใน log การเล่นซ้ำจึงเห็นคำสั่งเดิมของโมเดล
+- **log เก็บสิ่งที่ model ขอ** `updatedInput` ไม่ได้แก้ `tool_use` ใน log การเล่นซ้ำจึงเห็นคำสั่งเดิมของ model
 - **การ์ดของ hook ask อ่านแปลก** (อ่านจากโค้ด) การ์ดคำสั่งเติมเหตุผลต่อท้าย "Geno asks because it uses" เสมอ
   แต่เหตุผลของ `hook-ask` เป็นประโยคเต็ม ("A PreToolUse hook [settings] asks first: ...") ผู้ใช้จึงเห็นประโยคซ้อนกันและจุดสองตัวท้ายบรรทัด

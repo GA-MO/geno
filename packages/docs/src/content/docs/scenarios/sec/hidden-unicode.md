@@ -1,6 +1,6 @@
 ---
 title: "ตัวอักษรที่มองไม่เห็นในไฟล์"
-description: ไฟล์ใน workspace มีตัวอักษรความกว้างศูนย์ read แสดงมันเป็น [U+200B] ให้โมเดลเห็น และ edit คืนมันกลับก่อนจับคู่ ส่วนข้อความจากเว็บหรือ MCP ถูกตัดตัวอักษรเหล่านี้ทิ้ง
+description: ไฟล์ใน workspace มีตัวอักษรความกว้างศูนย์ read แสดงมันเป็น [U+200B] ให้ model เห็น และ edit คืนมันกลับก่อนจับคู่ ส่วนข้อความจากเว็บหรือ MCP ถูกตัดตัวอักษรเหล่านี้ทิ้ง
 tableOfContents: false
 sidebar:
   order: 2
@@ -10,7 +10,7 @@ scenario:
     - '`src/greet.ts` มีบรรทัด `const greeting = "hello world";` ที่มี U+200B (zero-width space) ซ่อนอยู่ระหว่าง hello กับ world'
     - turn กำลังทำงาน ผู้ใช้ขอให้แก้ข้อความทักทาย
   trigger: >-
-    โมเดลขออ่านข้อความที่มีตัวอักษรซ่อนอยู่
+    model ขออ่านข้อความที่มีตัวอักษรซ่อนอยู่
   covers: [sec.hidden-unicode]
   related: [sec.spoofed-geno-note, edit.applied-as-diff, edit.old-str-mismatch, tool.web-fetch]
   steps:
@@ -20,11 +20,11 @@ scenario:
         title: "Model ขออ่านข้อความ"
         text: >-
           `src/greet.ts` มี zero-width space ซ่อนอยู่ระหว่าง hello กับ world คุณขอให้แก้ข้อความทักทาย
-          โมเดลขออ่านข้อความนั้น แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          model ขออ่านข้อความนั้น แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียกเครื่องมืออ่าน และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก tool อ่าน และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -37,13 +37,13 @@ scenario:
       beat:
         title: "Geno ดูว่า tool นี้แสดงหรือตัดตัวซ่อน"
         text: >-
-          ก่อนส่งผลให้โมเดล Geno ดูตารางว่า tool นี้แสดงหรือตัดตัวอักษรซ่อน ตัวที่นับคือ zero-width ตัวควบคุมทิศทาง BOM
+          ก่อนส่งผลให้ model Geno ดูตารางว่า tool นี้แสดงหรือตัดตัวอักษรซ่อน ตัวที่นับคือ zero-width ตัวควบคุมทิศทาง BOM
           และ Unicode tag ซึ่งใช้ซ่อนคำสั่งได้ ลองเลือกว่าข้อความมาจากไหน
         from: engine
         to: engine
         ask: "มาจากไหน"
       do: >-
-        เครื่องมืออ่านเสร็จ แล้ว `runTool` ส่งข้อความผ่าน `toolText` ซึ่งดูตาราง `HIDDEN_IN` ว่าเครื่องมือนี้แสดงหรือตัดตัวอักษรซ่อน
+        tool อ่านเสร็จ แล้ว `runTool` ส่งข้อความผ่าน `toolText` ซึ่งดูตาราง `HIDDEN_IN` ว่า tool นี้แสดงหรือตัดตัวอักษรซ่อน
         ตัวอักษรที่นับคือ zero-width, ตัวควบคุมทิศทาง (bidi), BOM และ Unicode tag ซึ่งใช้ซ่อนคำสั่งได้
       ref: packages/core/src/hidden.ts#toolText
       fork:
@@ -78,8 +78,8 @@ scenario:
                 beat:
                   title: "Model เห็นตัวซ่อนแล้วขอ edit"
                   text: >-
-                    โมเดลเห็นว่ามีอะไรซ่อนอยู่ มันขอ `edit` โดยคัดลอก [U+200B] ลงในข้อความเดิมตามที่เห็น
-                    และเขียนข้อความใหม่ที่ไม่มีตัวซ่อน ใน run จริงด้านล่าง โมเดลพูดถึงตัวซ่อนทันทีหลังอ่าน
+                    model เห็นว่ามีอะไรซ่อนอยู่ มันขอ `edit` โดยคัดลอก [U+200B] ลงในข้อความเดิมตามที่เห็น
+                    และเขียนข้อความใหม่ที่ไม่มีตัวซ่อน ใน run จริงด้านล่าง model พูดถึงตัวซ่อนทันทีหลังอ่าน
                   from: model
                   to: engine
                   sees:
@@ -90,7 +90,7 @@ scenario:
                     collapse:
                       - "[0].thinking"
                 do: >-
-                  โมเดลเห็น `const greeting = "hello[U+200B] world";` จึงรู้ว่ามีอะไรซ่อนอยู่ มันขอ `edit` โดยคัดลอก `[U+200B]`
+                  model เห็น `const greeting = "hello[U+200B] world";` จึงรู้ว่ามีอะไรซ่อนอยู่ มันขอ `edit` โดยคัดลอก `[U+200B]`
                   ลงใน `old_str` ตามที่เห็น และเขียน `new_str` เป็นข้อความใหม่ที่ไม่มีตัวซ่อน
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [tool_use]
@@ -119,12 +119,12 @@ scenario:
                   title: "ข้อความจากนอก workspace ถูกตัดตัวซ่อนทิ้ง"
                   text: >-
                     ผลจากเว็บ MCP subagent หรือเทอร์มินัล ถูกลบตัวซ่อนทิ้งโดยไม่บอก คำสั่งที่ซ่อนด้วย Unicode tag
-                    ในหน้าเว็บจึงไม่ไปถึงโมเดล ผลกลับมาที่แชต
+                    ในหน้าเว็บจึงไม่ไปถึง model ผลกลับมาที่แชต
                   from: engine
                   to: engine
                 do: >-
-                  เครื่องมือที่ไม่อยู่ในตาราง หรืออยู่ในกลุ่ม `strip` ได้ `stripHidden` ตัวอักษรซ่อนถูกลบทิ้งโดยไม่บอก
-                  คำสั่งที่ซ่อนด้วย Unicode tag ในหน้าเว็บจึงไม่ไปถึงโมเดล
+                  tool ที่ไม่อยู่ในตาราง หรืออยู่ในกลุ่ม `strip` ได้ `stripHidden` ตัวอักษรซ่อนถูกลบทิ้งโดยไม่บอก
+                  คำสั่งที่ซ่อนด้วย Unicode tag ในหน้าเว็บจึงไม่ไปถึง model
                 ref: packages/core/src/hidden.ts#stripHidden
               - use: tool-result-returns
               - lane: loop
@@ -132,12 +132,12 @@ scenario:
                 beat:
                   title: "Model ได้ข้อความที่ไม่มีตัวซ่อน"
                   text: >-
-                    Geno เรียกโมเดลต่อ โมเดลอ่านข้อความที่สะอาดแล้ว
+                    Geno เรียก model ต่อ model อ่านข้อความที่สะอาดแล้ว
                   from: engine
                   to: model
                   end: "ตัวซ่อนถูกตัด turn ทำต่อ"
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลได้ข้อความที่ไม่มีตัวซ่อน
+                  `loopStep` ตัดสิน `call-model` model ได้ข้อความที่ไม่มีตัวซ่อน
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model

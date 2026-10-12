@@ -12,7 +12,7 @@
   lane: policy
   at: hooks
   do: >-
-    ถ้า session มี hook ของเหตุการณ์เครื่องมือ (`toolHooks`) PreToolUse hooks ตัดสินทุก call ของรอบนี้ก่อน call แรกจะเริ่ม
+    ถ้า session มี hook ของเหตุการณ์ tool (`toolHooks`) PreToolUse hooks ตัดสินทุก call ของรอบนี้ก่อน call แรกจะเริ่ม
     แต่ละ call ได้ `run` `ask` หรือ `refuse` ถ้า session ไม่มี hook แบบนี้เลย ขั้นนี้ไม่เกิดและทุก call รันตามปกติ
   ref: "packages/engine/src/drive.ts#\"steps = await hooks?.decide(toolUses\""
   emits: [PreToolUse]
