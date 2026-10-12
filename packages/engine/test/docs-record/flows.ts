@@ -5,7 +5,8 @@ import type { Responder, ScriptEntry } from '../fake-model.js';
 import { answer } from '../fake-transport.js';
 
 /** One model request as the engine sent it, and the reply the fake streamed back. */
-export type Exchange = { readonly url: string; readonly body: unknown; status: number; response: string };
+/** `aborted` is set when the engine aborted the request before any reply came. */
+export type Exchange = { readonly url: string; readonly body: unknown; status: number; response: string; aborted?: true };
 
 /** A request the engine sent the editor over ACP, and how many model requests came before it. */
 export type EditorRequest = { readonly after: number; readonly method: string; readonly params: unknown };
@@ -40,7 +41,10 @@ function capture(fetch: typeof globalThis.fetch) {
     const exchange: Exchange = { url: url.replace(/^https:\/\/ws-1\.example\.com\/apps\/anthropic/, '<DASHSCOPE_BASE_URL>'), body: JSON.parse(String(init?.body)), status: 0, response: '' };
     exchanges.push(exchange);
     if (process.env['DOCS_RECORD_DEBUG']) console.error(exchanges.length, JSON.stringify((exchange.body as Body).messages.at(-1)).slice(0, 300));
-    const response = await fetch(input, init);
+    const response = await fetch(input, init).catch((error: unknown) => {
+      if (init?.signal?.aborted === true) exchange.aborted = true;
+      throw error;
+    });
     exchange.status = response.status;
     if (response.body === null) return response;
     const [mine, theirs] = response.body.tee();
@@ -68,9 +72,9 @@ const anyText = (body: Body): string => body.messages.map((message) => textOf(me
 /** The next request of the conversation whose first message holds `marker`. */
 const to = (marker: string, answer: Responder): ScriptEntry => ({ when: (request) => firstText(request.body).includes(marker), answer });
 /** The next request of a fork, whose first messages are its parent's, by a marker anywhere in its conversation. */
-const inFork = (answer: Responder): ScriptEntry => ({ when: (request) => anyText(request.body).includes('You are now explore'), answer });
+const inFork = (answer: Responder): ScriptEntry => ({ when: (request) => anyText(request.body).includes('You are now plan'), answer });
 const notFork = (marker: string, answer: Responder): ScriptEntry => ({
-  when: (request) => firstText(request.body).includes(marker) && !anyText(request.body).includes('You are now explore'),
+  when: (request) => firstText(request.body).includes(marker) && !anyText(request.body).includes('You are now plan'),
   answer,
 });
 
@@ -107,12 +111,19 @@ type Editor = {
   readonly permission?: (params: acp.RequestPermissionRequest) => string;
   /** Called on each session update, with the connection. */
   readonly update?: (params: acp.SessionNotification, ctx: acp.ClientContext) => void;
-  /** Resolves once the run has done what the flow shows, after the prompt's turn ends. */
+  /** Resolves once the run has done what the flow shows, after the last prompt's turn ends. */
   readonly settled?: (requests: () => number) => Promise<void>;
 };
 
-/** One prompt from an editor over ACP, as `gcode serve` runs it for VS Code. */
-async function editorFlow(modes: readonly string[], mode: string, script: readonly ScriptEntry[], prompt: string, editor: Editor = {}, env: Record<string, string> = {}): Promise<Recording> {
+/** Prompts from an editor over ACP in one session, as `gcode serve` runs them for VS Code. */
+async function editorFlow(
+  modes: readonly string[],
+  mode: string,
+  script: readonly ScriptEntry[],
+  prompts: string | readonly string[],
+  editor: Editor = {},
+  env: Record<string, string> = {},
+): Promise<Recording> {
   const run = await scripted('anthropic', script, files(modes));
   Object.assign(run.env, env);
   const seen = capture(run.io.fetch!);
@@ -133,7 +144,7 @@ async function editorFlow(modes: readonly string[], mode: string, script: readon
       await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: { subagents: {} } });
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: run.workspace, mcpServers: [] });
       await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
-      await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text: prompt }] });
+      for (const text of typeof prompts === 'string' ? [prompts] : prompts) await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
       await editor.settled?.(() => seen.exchanges.length);
     });
   } finally {
@@ -163,7 +174,8 @@ const WORKER_TASK =
 const editVersion = call('', [
   { id: 'toolu_edit_1', name: 'edit', input: { path: 'src/version.ts', old_str: "  if (text === '') return [0, 0, 0];", new_str: "  if (text === '') throw new Error('empty version');" } },
 ]);
-const WORKER_REPORT = "Changed src/version.ts:2: parseVersion now throws Error('empty version') on an empty string. The signature is unchanged. No test covers it yet.";
+const CHECK_TASK = 'Add a "check" script to package.json that runs tsc --noEmit. Use npm pkg set, then read package.json back to confirm. Do not run the script.';
+const WORKER_REPORT ="Changed src/version.ts:2: parseVersion now throws Error('empty version') on an empty string. The signature is unchanged. No test covers it yet.";
 
 export const FLOWS: readonly Flow[] = [
   {
@@ -251,21 +263,25 @@ export const FLOWS: readonly Flow[] = [
   },
   {
     name: 'fork',
-    what: 'The parent forks explore, which starts from a copy of the conversation.',
+    what: 'The parent forks plan, which starts from a copy of the conversation and reports with its last text.',
     run: () =>
       cliFlow(
         ['non-interactive'],
         [
-          notFork('Which of these', read('toolu_read_1', 'src/version.ts')),
+          notFork('throw on an empty string', read('toolu_read_1', 'src/version.ts')),
           notFork(
-            'Which of these',
-            agentCall('toolu_agent_1', { agent: 'explore', fork: true, task: 'Find which callers of the function we just read would break if it threw on an empty string.' }),
+            'throw on an empty string',
+            agentCall('toolu_agent_1', { agent: 'plan', fork: true, task: 'Plan the change we just discussed: which callers must change, and in what order.' }),
           ),
           inFork(grep('toolu_grep_1', 'parseVersion\\(')),
-          inFork(say('src/cli.ts:3 passes process.argv[2] ?? "", so it would throw when no argument is given. src/update.ts:3 passes its arguments through.')),
-          notFork('Which of these', say('Only src/cli.ts:3 can pass an empty string, when the CLI gets no argument.')),
+          inFork(
+            say(
+              '1. src/version.ts:2: throw Error("empty version") instead of returning [0, 0, 0].\n2. src/cli.ts:3: it passes process.argv[2] ?? "", so print usage when no argument is given before calling parseVersion.\n3. src/update.ts:3 passes its arguments through; leave it.\nRisk: any caller outside src. Check: run the CLI with no argument.',
+            ),
+          ),
+          notFork('throw on an empty string', say('The plan: change src/version.ts:2, then guard src/cli.ts:3 so the CLI prints usage instead of throwing.')),
         ],
-        [['--non-interactive', 'Which of these callers could break if parseVersion threw on an empty string?']],
+        [['--non-interactive', 'Plan how to make parseVersion throw on an empty string without breaking its callers.']],
       ),
   },
   {
@@ -349,12 +365,14 @@ export const FLOWS: readonly Flow[] = [
         ['ask'],
         'ask',
         [
-          to('test script', agentCall('toolu_agent_1', { agent: 'worker', task: 'Add a "test" script that runs vitest to package.json, using npm pkg set.' })),
-          to('Add a "test" script', call('', [{ id: 'toolu_bash_1', name: 'bash', input: { command: 'npm pkg set scripts.check="tsc --noEmit"' } }])),
-          to('Add a "test" script', report('Ran npm pkg set scripts.check="tsc --noEmit"; package.json now has a check script.', 'toolu_report_1')),
-          to('test script', say('worker added the check script to package.json.')),
+          to('Add a check script', agentCall('toolu_agent_1', { agent: 'worker', task: CHECK_TASK }, 'I will hand this to a worker subagent.')),
+          to(CHECK_TASK, read('toolu_read_1', 'package.json')),
+          to(CHECK_TASK, call('', [{ id: 'toolu_bash_1', name: 'bash', input: { command: 'npm pkg set scripts.check="tsc --noEmit"' } }])),
+          to(CHECK_TASK, read('toolu_read_2', 'package.json')),
+          to(CHECK_TASK, report('Ran npm pkg set scripts.check="tsc --noEmit". package.json:7 now has "check": "tsc --noEmit"; I read the file back to confirm. I did not run it.', 'toolu_report_1')),
+          to('Add a check script', say('worker added a check script (tsc --noEmit) to package.json:7. It has not run it yet.')),
         ],
-        'Add a test script to package.json.',
+        'Add a check script that runs tsc --noEmit to package.json.',
         { permission: (params) => params.options.find((option) => option.kind === 'allow_once')!.optionId },
       ),
   },
@@ -404,6 +422,68 @@ export const FLOWS: readonly Flow[] = [
           'Make parseVersion throw on an empty string, in the background.',
           { settled: (requests) => until(() => requests() === 6, 'the woken turn') },
           { GCODE_WAKE_POLICY: JSON.stringify({ batchMs: 50, secondMs: 20 }) },
+        ),
+    };
+  })(),
+  {
+    name: 'worktree-lane',
+    what: 'The parent runs worker in a lane of its own and waits; the report names the kept lane.',
+    run: () =>
+      cliFlow(
+        ['non-interactive'],
+        [
+          to('in a lane', agentCall('toolu_agent_1', { agent: 'worker', task: WORKER_TASK, isolation: 'worktree' })),
+          to(WORKER_TASK, read('toolu_read_1', 'src/version.ts')),
+          to(WORKER_TASK, editVersion),
+          to(WORKER_TASK, report(WORKER_REPORT, 'toolu_report_1')),
+          to('in a lane', say('worker changed src/version.ts:2 in its lane. Review it there, then apply it with gcode lane apply.')),
+        ],
+        [['--non-interactive', '--allow-worker', 'Make parseVersion throw on an empty string, in a lane.']],
+      ),
+  },
+  {
+    name: 'refused-writer',
+    what: 'In a non-interactive run without --allow-worker, Geno refuses to start worker, and the parent does the change itself.',
+    run: () =>
+      cliFlow(
+        ['non-interactive'],
+        [
+          to('Make parseVersion', agentCall('toolu_agent_1', { agent: 'worker', task: WORKER_TASK })),
+          to('Make parseVersion', read('toolu_read_1', 'src/version.ts')),
+          to('Make parseVersion', editVersion),
+          to('Make parseVersion', say('worker could not start here, so I changed src/version.ts:2 myself: parseVersion now throws on an empty string.')),
+        ],
+        [['--non-interactive', 'Make parseVersion throw on an empty string.']],
+      ),
+  },
+  (() => {
+    let running = 0;
+    const reviewing = gate();
+    const REVIEW_TASK = 'Review the uncommitted change to src/version.ts for bugs.';
+    const hang = { anthropic: { events: [], hang: true as const } };
+    return {
+      name: 'parent-stop',
+      what: 'The user presses Stop while explore runs blocking and review runs in the background; the next turn shows what the parent model reads of both.',
+      run: () =>
+        editorFlow(
+          ['ask'],
+          'ask',
+          [
+            to('Review my change', agentCall('toolu_agent_1', { agent: 'review', task: REVIEW_TASK, background: true })),
+            to(REVIEW_TASK, () => (reviewing.open(), hang)),
+            to('Review my change', async () => (await reviewing.opened, agentCall('toolu_agent_2', { agent: 'explore', task: EXPLORE_TASK }))),
+            to(EXPLORE_TASK, hang),
+            to('Review my change', say('I stopped where you pressed Stop: neither subagent reported. Say if you want me to run them again.')),
+          ],
+          ['Review my change and find where parseVersion is called.', 'Go on.'],
+          {
+            update: (params, ctx) => {
+              const update = params.update as { sessionUpdate: string; state?: { state: string } };
+              if (update.sessionUpdate === 'subagent_update' && update.state?.state === 'running' && ++running === 2) {
+                setTimeout(() => void ctx.notify(acp.methods.agent.session.cancel, { sessionId: params.sessionId }), 300);
+              }
+            },
+          },
         ),
     };
   })(),

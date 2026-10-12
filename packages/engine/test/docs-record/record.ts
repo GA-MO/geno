@@ -85,7 +85,7 @@ function lines(flow: Flow, { exchanges, editor = [] }: Recording, engineCommit: 
   return [
     header,
     ...asked(0),
-    ...exchanges.flatMap((exchange, i) => [{ id: i + 1, url: exchange.url, request: exchange.body }, { id: i + 1, status: exchange.status, response: exchange.response }, ...asked(i + 1)]),
+    ...exchanges.flatMap((exchange, i) => [{ id: i + 1, url: exchange.url, request: exchange.body }, exchange.aborted === true ? { id: i + 1, aborted: "the engine aborted this request before any reply came" } : { id: i + 1, status: exchange.status, response: exchange.response }, ...asked(i + 1)]),
   ].map((line) => JSON.stringify(line));
 }
 
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${flow.name}: no end after 60s`)), 60_000).unref());
     const recording = await Promise.race([flow.run(), timeout]);
     const { exchanges, workspace, home } = recording;
-    const failed = exchanges.findIndex((exchange) => exchange.status !== 200);
+    const failed = exchanges.findIndex((exchange) => exchange.status !== 200 && exchange.aborted !== true);
     if (failed >= 0) throw new Error(`${flow.name}: request ${failed + 1} got HTTP ${exchanges[failed]!.status}: ${exchanges[failed]!.response.slice(0, 400)}`);
     const normalize = normalizer({ workspace, home, tmp });
     const text = `${normalize(lines(flow, recording, engineCommit).join('\n'))
