@@ -441,7 +441,7 @@ export default function Story({ scenario, laneNames }: StoryProps) {
 
   const props = { scenario, beats, state, go, pick };
   return (
-    <div className={`story not-content view-${view}`} ref={root}>
+    <div className={`story not-prose view-${view}`} ref={root}>
       <div className="story-bar">
         <div className="view-switch" role="tablist" aria-label="มุมมอง">
           <button type="button" role="tab" aria-selected={view === 'sequence'} onClick={() => switchView('sequence')}>

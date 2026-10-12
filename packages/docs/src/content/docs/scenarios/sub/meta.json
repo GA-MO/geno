@@ -1,0 +1,16 @@
+{
+  "title": "Subagent",
+  "pages": [
+    "blocking-report",
+    "at-mention",
+    "user-cancels-child",
+    "parent-stop-with-children",
+    "fork",
+    "worktree-lane",
+    "message-child",
+    "user-steers-child",
+    "refused",
+    "cut-off-by-engine-stop",
+    "..."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "title": "งานเบื้องหลังและการปลุก",
+  "pages": [
+    "child-wakes-parent",
+    "command-ends-wakes",
+    "task-attention",
+    "monitor-wakes",
+    "schedule-wakeup",
+    "watch-pr",
+    "task-stop-or-list",
+    "arrives-mid-turn",
+    "cli-holds-turn",
+    "wake-held-or-paused",
+    "user-cancels-wakes",
+    "scheduled-task-fires",
+    "..."
+  ]
+}

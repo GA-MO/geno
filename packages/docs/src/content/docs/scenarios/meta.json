@@ -1,0 +1,24 @@
+{
+  "title": "สถานการณ์",
+  "defaultOpen": true,
+  "pages": [
+    "start",
+    "turn",
+    "mstop",
+    "err",
+    "ctl",
+    "ctx",
+    "tool",
+    "perm",
+    "hook",
+    "sec",
+    "edit",
+    "sub",
+    "bg",
+    "wf",
+    "ext",
+    "sess",
+    "ed",
+    "cli"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Skill / Command / MCP / Memory",
+  "pages": [
+    "slash-template",
+    "slash-builtin",
+    "skill-by-model",
+    "mcp-tool-call",
+    "mcp-server-untrusted",
+    "memory-write",
+    "mcp-server-down",
+    "..."
+  ]
+}

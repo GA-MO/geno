@@ -11,7 +11,7 @@ const boxOf = (key: string) => map.nodes.find((node) => node.key === key)!;
 const lanesOf = (process: string) => map.lanes.filter((lane) => site.lanes.lanes.find((candidate) => candidate.id === lane.lane)?.process === process);
 ---
 
-<div class="map not-content">
+<div class="map not-prose">
   <SystemMapFlow client:load map={map} />
 
   <div class="map-static-wrap">
