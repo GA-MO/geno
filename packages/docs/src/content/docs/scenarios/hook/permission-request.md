@@ -1,5 +1,5 @@
 ---
-title: PermissionRequest ตอบแทนผู้ใช้
+title: "hook PermissionRequest ตอบ permission แทนคุณ"
 description: คำสั่งที่ปกติต้องขึ้นการ์ด hook PermissionRequest ได้ตอบก่อน มันอนุญาต อนุญาตพร้อมแก้ input ปฏิเสธ หรือปฏิเสธแล้วจบ turn ก็ได้
 tableOfContents: false
 sidebar:
@@ -16,6 +16,10 @@ scenario:
   related: [perm.ask-allow, hook.pretooluse-deny, perm.auto-classifier-allows]
   steps:
     - id: wants
+      beat:
+        title: Model ขอรัน `pnpm add zod`
+        text: โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่งนี้บนเครื่องของคุณก่อน
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm add zod` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -24,8 +28,18 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้นของคำสั่ง
+        text: Geno จัดคิวคำสั่งให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: pnpm add zod
+          status: running
 
     - id: judge
+      beat:
+        title: Geno ตรวจคำสั่งกับกฎของคุณ
+        text: คำสั่งนี้ไม่ตรงกับกฎของ workspace และไม่อยู่ในรายการคำสั่งปลอดภัย ในโหมด Ask แปลว่าต้องถามก่อนรัน
       lane: policy
       at: rules
       do: >-
@@ -35,6 +49,9 @@ scenario:
       emits: [unlisted]
 
     - id: may-answer
+      beat:
+        title: Geno ให้ hook ตอบก่อนขึ้นการ์ด
+        text: hook PermissionRequest ตอบได้เฉพาะคำถามที่จะขึ้นการ์ดให้คุณ คำสั่งที่กฎ deny หรือโหมด Plan ปฏิเสธอยู่แล้วไม่ถึง hook
       lane: policy
       at: settle
       do: >-
@@ -43,6 +60,11 @@ scenario:
       ref: packages/core/src/hooks.ts#hookMayAnswer
 
     - id: hook
+      beat:
+        title: Geno ส่งคำถามให้ `approver.sh`
+        text: Geno รันสคริปต์ของ hook แล้วส่ง JSON ที่มีชื่อ tool คำสั่ง และกฎที่บันทึกได้ไปทาง stdin สคริปต์ตอบได้ผ่าน JSON เท่านั้น exit 2 ไม่มีผลกับ hook นี้
+        to: machine
+        ask: hook ตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -59,6 +81,11 @@ scenario:
             then: run
             steps:
               - lane: policy
+                beat:
+                  title: hook ตอบ allow
+                  text: Geno จดว่า hook เป็นคนอนุญาต การ์ดไม่ขึ้น คุณไม่เห็นคำถามเลย
+                  from: machine
+                  to: engine
                 at: settle
                 do: >-
                   สคริปต์พิมพ์ `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}`
@@ -71,6 +98,11 @@ scenario:
             then: run
             steps:
               - lane: policy
+                beat:
+                  title: hook อนุญาตแล้วแก้คำสั่ง
+                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `pnpm add zod --save-exact` Geno ตรวจคำสั่งใหม่อีกรอบ แล้วใช้คำตอบ allow เดิมของ hook จึงไม่ถาม hook ซ้ำ
+                  from: machine
+                  to: engine
                 at: settle
                 do: >-
                   สคริปต์ตอบ allow พร้อม `updatedInput` ที่เปลี่ยนคำสั่งเป็น `pnpm add zod --save-exact`
@@ -89,6 +121,11 @@ scenario:
             label: deny
             steps:
               - lane: policy
+                beat:
+                  title: hook ปฏิเสธพร้อมเหตุผล
+                  text: hook ตอบ deny พร้อมข้อความ "use npm in this repo" คำสั่งไม่ได้รัน Geno บอกโมเดลว่า hook ตอบแทนคุณและปฏิเสธ ห้ามลองซ้ำ
+                  from: machine
+                  to: engine
                 at: settle
                 do: >-
                   สคริปต์ตอบ `behavior: "deny"` พร้อม `message: "use npm in this repo"`
@@ -105,11 +142,25 @@ scenario:
                 emits: [denied]
               - use: tool-result-returns
               - lane: panel
+                beat:
+                  title: แชตบอกว่า hook ปฏิเสธ
+                  text: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมข้อความของ hook
+                  from: panel
+                  sees:
+                    kind: step
+                    label: pnpm add zod
+                    status: denied
+                    note: Denied by a hook · Use npm in this repo.
                 at: rail
                 do: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมข้อความของ hook
                 sees: "Denied by a hook · Use npm in this repo."
                 ref: packages/extension/src/chat/session-updates.ts#denialOf
               - lane: loop
+                beat:
+                  title: Model อ่านเหตุผลของ hook
+                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ Geno เรียกโมเดลอีกครั้ง โมเดลอ่านข้อความของ hook แล้วหาทางอื่น เช่นใช้ npm
+                  to: model
+                  end: Model หาทางอื่น
                 at: step
                 do: >-
                   `ToolDenied` ไม่ใช่การปฏิเสธของผู้ใช้ `loopStep` จึงตัดสิน `call-model` โมเดลอ่านข้อความของ hook แล้วหาทางอื่น
@@ -122,6 +173,11 @@ scenario:
             label: deny พร้อม interrupt
             steps:
               - lane: policy
+                beat:
+                  title: hook ปฏิเสธแล้วสั่งหยุด
+                  text: "hook ตอบ deny พร้อม `interrupt: true` Geno ถือว่าเหมือนคุณกด Deny เอง call อื่นที่รออยู่ใน turn นี้ไม่ได้รัน"
+                  from: machine
+                  to: engine
                 at: settle
                 do: >-
                   สคริปต์ตอบ deny พร้อม `interrupt: true` `settle` ใส่ `interrupt` ไว้ในบันทึกที่คืนด้วย
@@ -137,6 +193,23 @@ scenario:
                 emits: [rejected]
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Turn จบโดยไม่เรียก model
+                  text: Geno จบ turn ทันทีเพื่อรอคุณ ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ และแชตบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
+                  to: panel
+                  end: Turn จบเพราะ hook สั่งหยุด
+                  sees:
+                    - kind: step
+                      label: pnpm add zod
+                      status: denied
+                      note: Denied by a hook · Use npm in this repo.
+                    - kind: notice
+                      text: Geno stopped without a reply
+                      detail: It stopped at the call that was denied.
+                      actions:
+                        - Continue
+                        - Retry
+                      tone: warning
                 at: step
                 do: >-
                   `loopStep` ตอบ call ที่ยังไม่ได้รันด้วย `UNRUN_TEXTS.rejected` แล้วตัดสิน `done(end_turn)` Stop hook ไม่ทำงานในทางนี้
@@ -162,6 +235,10 @@ scenario:
             label: ไม่ตอบ
             steps:
               - lane: policy
+                beat:
+                  title: hook ไม่ตอบ
+                  text: สคริปต์จบโดยไม่พิมพ์คำตอบ Geno จึงส่งคำถามต่อให้คุณ การ์ด “Run this command?” ขึ้นตามปกติ
+                  end: การ์ดขึ้นให้คุณตอบ
                 at: settle
                 do: >-
                   hook จบด้วย exit 0 โดยไม่พิมพ์ `decision` (หรือ exit 2 ซึ่ง PermissionRequest ไม่นับ) ผลคือ `none`
@@ -171,6 +248,10 @@ scenario:
                 goto: perm.ask-allow
 
     - id: run
+      beat:
+        title: คำสั่งรันใน sandbox
+        text: การอนุญาตของ hook ไม่ยกเว้น sandbox ผลของคำสั่งพาบันทึกว่า hook เป็นคนอนุญาตไปด้วย
+        from: machine
       lane: tool
       at: shell
       do: >-
@@ -182,6 +263,11 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Model อ่านผลของคำสั่ง
+        text: Geno ส่งผลกลับให้โมเดลเพื่อตัดสินว่าจะทำอะไรต่อ
+        to: model
+        end: Model อ่านผลแล้วทำต่อ
       lane: loop
       at: step
       do: >-

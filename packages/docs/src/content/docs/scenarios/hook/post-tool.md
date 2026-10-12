@@ -1,5 +1,5 @@
 ---
-title: PostToolUse และ PostToolBatch หลังคำสั่งรัน
+title: "hook PostToolUse และ PostToolBatch หลังคำสั่งรัน"
 description: hook หลัง call เพิ่มข้อความให้โมเดลอ่านคู่กับผล บล็อก หรือหยุด turn และ hook หลังทั้งชุดหยุดลูปก่อนเรียกโมเดลได้
 tableOfContents: false
 sidebar:
@@ -16,6 +16,10 @@ scenario:
   related: [hook.pretooluse-deny, hook.stop-keeps-going, tool.bash-safe-runs]
   steps:
     - id: wants
+      beat:
+        title: Model ขอรัน `pnpm test`
+        text: "`pnpm test` อยู่ในรายการคำสั่งปลอดภัย Geno จึงรันได้โดยไม่ถามคุณ"
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm test` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -24,8 +28,18 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น `pnpm test`
+        text: Geno จัดคิวคำสั่งแล้วบอกแผงแชต ขั้นใหม่ขึ้นพร้อมจุดหมุน
+        sees:
+          kind: step
+          label: pnpm test
+          status: running
 
     - id: run
+      beat:
+        title: "`pnpm test` รันใน sandbox"
+        text: เทสต์ผ่าน คำสั่งจบด้วย exit 0
       lane: tool
       at: shell
       do: >-
@@ -33,6 +47,12 @@ scenario:
       ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
 
     - id: after
+      beat:
+        title: Geno ส่งผลให้ PostToolUse hook
+        text: ทันทีที่คำสั่งจบ ก่อน call ถัดไปเริ่ม Geno รัน `lint-after.sh` พร้อมผลของคำสั่ง call ที่ถูกปฏิเสธไม่ได้รัน hook นี้
+        from: engine
+        to: machine
+        ask: hook ตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -48,6 +68,10 @@ scenario:
             then: batch
             steps:
               - lane: policy
+                beat:
+                  title: hook เพิ่มบริบทให้ model
+                  text: สคริปต์พิมพ์ "2 snapshot files changed" Geno เก็บข้อความนี้ไว้ให้โมเดลอ่านคู่กับผล ไม่มีอะไรหยุด
+                  from: machine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON ที่มี `hookSpecificOutput.additionalContext: "2 snapshot files changed"`
@@ -60,6 +84,10 @@ scenario:
             then: batch
             steps:
               - lane: policy
+                beat:
+                  title: hook บล็อก แต่คำสั่งรันไปแล้ว
+                  text: สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" คำสั่งรันไปแล้วจึงย้อนไม่ได้ การบล็อกกลายเป็นข้อความที่โมเดลต้องอ่าน และลูปไม่หยุด
+                  from: machine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" ลง stderr (หรือพิมพ์ `decision: "block"` พร้อม `reason`)
@@ -71,6 +99,10 @@ scenario:
             label: "continue: false"
             steps:
               - lane: policy
+                beat:
+                  title: hook สั่งหยุด turn
+                  text: 'สคริปต์ตอบ `continue: false` พร้อมเหตุผล "CI is red, stop here" PostToolBatch hook ยังรันก่อน แล้ว Geno บันทึก error ว่า hook หยุด turn'
+                  from: machine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ `{"continue": false, "stopReason": "CI is red, stop here"}`
@@ -85,6 +117,14 @@ scenario:
                 ref: "packages/engine/src/drive.ts#\"const message = `A ${stop.by} hook stopped the turn: ${stop.reason}`;\""
                 emits: [tool-result, hook-context, blocked]
               - lane: server
+                beat:
+                  title: แชตขึ้นแถบ error
+                  text: ขั้นของคำสั่งขึ้นว่าเสร็จ แต่ท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
+                  from: panel
+                  sees:
+                    kind: notice
+                    text: "A PostToolUse hook stopped the turn: CI is red, stop here"
+                    tone: error
                 at: updates
                 do: >-
                   ผลไปเป็น `tool_call_update` และ error ไปเป็น `agent_message_chunk` พร้อม `TURN_ERROR_META`
@@ -98,6 +138,15 @@ scenario:
                   แถบ error "A PostToolUse hook stopped the turn: CI is red, stop here"
                 ref: packages/extension/src/chat/render.ts#errorBlock
               - lane: loop
+                beat:
+                  title: Turn ล้มเหลว
+                  text: Geno ไม่เรียกโมเดลอีก โมเดลจึงไม่ได้อ่านผลของ `pnpm test` ปุ่ม Send กลับมา
+                  to: panel
+                  end: Turn ล้มเหลวเพราะ hook
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: failed after 9s
                 at: step
                 do: >-
                   `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ได้อ่านผลของ `pnpm test`
@@ -112,6 +161,12 @@ scenario:
                 end: { turn: failed, reason: error }
 
     - id: batch
+      beat:
+        title: Geno ถาม PostToolBatch hook
+        text: เมื่อทุก call ของรอบนี้รันจบ Geno รัน `batch-guard.sh` ครั้งเดียว พร้อมรายการ call ทั้งหมดและผลของแต่ละตัว
+        from: engine
+        to: machine
+        ask: hook ท้ายชุดตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -130,6 +185,10 @@ scenario:
             label: บล็อก
             steps:
               - lane: policy
+                beat:
+                  title: hook หลังทั้งชุดบล็อก
+                  text: สคริปต์จบด้วย exit 2 และเขียน "too many commands in one turn" สำหรับ hook นี้ การบล็อกคือหยุดลูป
+                  from: machine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "too many commands in one turn" ลง stderr (หรือพิมพ์ `decision: "block"`)
@@ -144,6 +203,14 @@ scenario:
                 ref: "packages/engine/src/drive.ts#\"const message = `A ${stop.by} hook stopped the turn: ${stop.reason}`;\""
                 emits: [tool-result, hook-context, blocked]
               - lane: server
+                beat:
+                  title: แชตขึ้นแถบ error
+                  text: ขั้นของคำสั่งขึ้นว่าเสร็จ และท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
+                  from: panel
+                  sees:
+                    kind: notice
+                    text: "A PostToolBatch hook stopped the turn: too many commands in one turn"
+                    tone: error
                 at: updates
                 do: >-
                   ผลไปเป็น `tool_call_update` และ error ไปเป็น `agent_message_chunk` พร้อม `TURN_ERROR_META`
@@ -157,6 +224,15 @@ scenario:
                   แถบ error "A PostToolBatch hook stopped the turn: too many commands in one turn"
                 ref: packages/extension/src/chat/render.ts#errorBlock
               - lane: loop
+                beat:
+                  title: Turn ล้มเหลว
+                  text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  to: panel
+                  end: Turn ล้มเหลวเพราะ hook
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: failed after 9s
                 at: step
                 do: >-
                   `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ถูกเรียกอีก
@@ -177,6 +253,13 @@ scenario:
                 end: { turn: failed, reason: error }
 
     - id: logged
+      beat:
+        title: Geno เก็บข้อความของ hook ไว้ให้ model
+        text: Geno บันทึกผลของคำสั่งก่อน แล้วบันทึกข้อความของ hook ผูกกับ call นั้น แผงแชตแสดงแค่ผลเทสต์ ข้อความของ hook มีแต่โมเดลที่ได้อ่าน
+        sees:
+          kind: step
+          label: pnpm test
+          status: done
       lane: loop
       at: tools
       do: >-
@@ -194,8 +277,16 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - use: model-call
+      beat:
+        title: Geno ส่งผลพร้อมข้อความของ hook ให้ model
+        text: ในคำขอถัดไป ข้อความของ hook ต่อท้ายผลของ `pnpm test` ขึ้นต้นด้วย `[Geno] PostToolUse:Bash hook`
+        to: model
 
     - id: reads
+      beat:
+        title: Model อ่านผลและข้อความของ hook
+        text: โมเดลรู้ว่า snapshot เปลี่ยน หรือรู้ว่า lint ล้มเหลว แล้วตัดสินว่าจะทำอะไรต่อ
+        end: Model อ่านข้อความแล้วทำต่อ
       lane: model
       do: >-
         ในคำขอนี้ ข้อความของ hook ต่อท้าย `tool_result` ของ `pnpm test` เช่น

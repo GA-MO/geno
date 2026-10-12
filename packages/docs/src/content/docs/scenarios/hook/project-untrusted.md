@@ -1,5 +1,5 @@
 ---
-title: hook ของโปรเจกต์ไม่รันใน workspace ที่ไม่เชื่อถือ
+title: "hook ของโปรเจกต์ไม่รันใน workspace ที่ไม่เชื่อถือ"
 description: repo มี hook ใน .claude/settings.json แต่ VS Code ยังไม่เชื่อถือ workspace hook ของผู้ใช้เองรัน ส่วน hook ของ repo รอจนกว่าจะเชื่อถือ
 tableOfContents: false
 sidebar:
@@ -17,6 +17,10 @@ scenario:
   related: [hook.user-prompt-submit, ext.mcp-server-untrusted, start.open-window]
   steps:
     - id: settings
+      beat:
+        title: VS Code บอก Geno ว่ายังไม่เชื่อถือ workspace
+        text: ตอนต่อ engine ครั้งแรก ส่วนขยายส่งสถานะ trust ของ workspace ไปด้วย engine จำค่านี้ไว้กับการเชื่อมต่อนี้ ทุก turn จากหน้าต่างนี้ใช้มัน
+        to: engine
       lane: editor
       at: engine-link
       do: >-
@@ -34,6 +38,10 @@ scenario:
       ref: "packages/engine/src/serve.ts#\"trusted: _meta?.[WORKSPACE_TRUST_CAPABILITY] === true,\""
 
     - id: type
+      beat:
+        title: คุณส่ง prompt แรก
+        text: คุณพิมพ์คำถามในแชตใหม่แล้วกด Enter แชตส่ง prompt ไปที่ engine
+        to: engine
       lane: user
       do: ผู้ใช้พิมพ์คำถามแล้วกด Enter
 
@@ -46,6 +54,9 @@ scenario:
       emits: [turn-start, session/prompt]
 
     - id: run
+      beat:
+        title: Geno เริ่ม turn พร้อมสถานะ trust
+        text: engine ส่งสถานะ trust ของการเชื่อมต่อนี้ไปให้ turn ใช้ตัดสินว่าอะไรรันได้
       lane: server
       at: turns
       do: >-
@@ -54,6 +65,9 @@ scenario:
       phase: starting
 
     - id: open
+      beat:
+        title: Geno อ่าน hook จากทุกที่
+        text: session นี้เปิดครั้งแรก Geno จึงอ่านการตั้งค่า hook ทั้งหมด ทั้งของคุณ ของ plugin และของ repo
       lane: loop
       at: agent
       do: >-
@@ -62,6 +76,10 @@ scenario:
       ref: packages/engine/src/hooks.ts#HookSessions.open
 
     - id: filter
+      beat:
+        title: Geno คัด hook ที่รันได้
+        text: hook ของคุณเองรันเสมอ hook ที่มาจากไฟล์ของ repo รันได้เฉพาะเมื่อเชื่อถือ workspace กฎ allow และโฟลเดอร์เพิ่มของ repo ก็รอแบบเดียวกัน
+        ask: เชื่อถือ repo ไหม
       lane: policy
       at: hooks
       do: >-
@@ -79,6 +97,10 @@ scenario:
             label: เชื่อถือแล้ว
             steps:
               - lane: policy
+                beat:
+                  title: ทั้งสอง hook รัน
+                  text: hook ของ repo รันใน sandbox เขียนได้แค่ใน workspace ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อนโมเดล
+                  to: machine
                 at: hooks
                 do: >-
                   hook ทั้งสองตัวรันได้ `hookRunner` ห่อคำสั่งของ hook จาก repo ด้วย `sandbox.wrap`
@@ -92,6 +114,11 @@ scenario:
                 ref: packages/engine/src/drive.ts#submitted
                 emits: [user, UserPromptSubmit]
               - lane: loop
+                beat:
+                  title: Turn เดินต่อตามปกติ
+                  text: ไม่มี hook บล็อก Geno ส่ง prompt ให้โมเดล
+                  to: model
+                  end: Model ได้ prompt
                 at: step
                 do: >-
                   ไม่มี hook บล็อก `loopStep` ตัดสิน `call-model` turn เดินต่อตามปกติ
@@ -101,6 +128,10 @@ scenario:
                 end: { turn: continues, reason: call-model }
 
     - id: record
+      beat:
+        title: เฉพาะ hook ของคุณที่รัน
+        text: Geno บันทึก prompt แล้วรัน `~/bin/log-prompt.sh` ของคุณ `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอกโมเดลหรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
+        to: machine
       lane: loop
       at: drive
       do: >-
@@ -119,6 +150,10 @@ scenario:
       phase: calling-model
 
     - id: look
+      beat:
+        title: คุณเปิด Settings ดูหัวข้อ Hooks
+        text: ระหว่าง turn ทำงาน คุณเปิด Settings ในแผงแชตแล้วเลื่อนไปที่ Hooks แชตถาม engine ว่ามี hook อะไรบ้างและแต่ละตัวรันได้ไหม
+        to: engine
       lane: user
       do: >-
         ระหว่างนั้นผู้ใช้เปิด Settings ในแผงแชตแล้วเลื่อนไปที่หัวข้อ Hooks
@@ -134,6 +169,12 @@ scenario:
       emits: [_gcode/hooks, untrusted]
 
     - id: shown
+      beat:
+        title: Settings บอกว่า hook ของ repo รอ trust
+        text: ทุก hook ขึ้นพร้อมที่มาและสถานะ hook ของ repo มีป้ายว่าต้องเชื่อถือ workspace ก่อน เมื่อคุณเชื่อถือ workspace ใน VS Code มันจะรันใน turn ถัดไป
+        to: you
+        sees: แถว "UserPromptSubmit" `./scripts/hook.sh` ป้าย "Needs a trusted workspace" และแถวของ `~/bin/log-prompt.sh` ที่รันได้
+        end: hook ของ repo ไม่รัน
       lane: panel
       at: settings
       do: >-

@@ -1,5 +1,5 @@
 ---
-title: UserPromptSubmit บล็อกหรือเพิ่มบริบท
+title: "hook UserPromptSubmit บล็อกหรือเพิ่มบริบท"
 description: hook ที่ตั้งไว้ได้อ่าน prompt ก่อนโมเดล ถ้าบล็อก prompt ไม่ถึงโมเดลและ turn จบแบบ failed ถ้าพิมพ์ข้อความออกมา ข้อความนั้นไปกับ prompt
 tableOfContents: false
 sidebar:
@@ -15,8 +15,20 @@ scenario:
   related: [hook.pretooluse-deny, hook.stop-keeps-going, hook.project-untrusted, turn.text-answer]
   steps:
     - use: prompt-starts-turn
+      beat:
+        title: คุณส่ง prompt
+        text: คุณพิมพ์ในแชตแล้วกด Enter แชตเริ่ม turn และส่ง prompt ไปที่ engine
+        from: you
+        sees:
+          kind: composer
+          state: working
 
     - id: run
+      beat:
+        title: Geno ส่ง prompt ให้ hook ก่อน model
+        text: Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึงโมเดล ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
+        to: machine
+        ask: hook ตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -31,6 +43,11 @@ scenario:
             label: บล็อก (exit 2)
             steps:
               - lane: policy
+                beat:
+                  title: hook บล็อก prompt
+                  text: สคริปต์จบด้วย exit 2 และเขียนว่า prompt มีสิ่งที่หน้าตาเหมือน API key
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียนเหตุผลลง stderr ว่า "prompt มีสิ่งที่หน้าตาเหมือน API key"
@@ -38,6 +55,9 @@ scenario:
                 ref: packages/core/src/hooks.ts#promptDecision
                 emits: [block]
               - lane: loop
+                beat:
+                  title: Geno ไม่เรียก model
+                  text: Geno บันทึก error ว่า hook บล็อก prompt และโมเดลไม่เห็นมัน prompt นี้ถูกทิ้ง ข้อความถัดไปของคุณจะไม่พามันไปด้วย
                 at: drive
                 do: >-
                   `submitted()` บันทึก event `error` ชนิด `blocked`: "A UserPromptSubmit hook blocked this prompt,
@@ -45,6 +65,14 @@ scenario:
                 ref: packages/engine/src/drive.ts#submitted
                 emits: [blocked]
               - lane: server
+                beat:
+                  title: แชตขึ้นแถบ error ใต้ข้อความของคุณ
+                  text: แถบสีแดงบอกเหตุผลของ hook
+                  from: panel
+                  sees:
+                    kind: notice
+                    text: "A UserPromptSubmit hook blocked this prompt, so the model did not see it: prompt มีสิ่งที่หน้าตาเหมือน API key"
+                    tone: error
                 at: updates
                 do: >-
                   `errorUpdate` ส่ง `agent_message_chunk` พร้อม `TURN_ERROR_META` ชนิด `blocked`
@@ -64,6 +92,15 @@ scenario:
                   "A UserPromptSubmit hook blocked this prompt, so the model did not see it: prompt มีสิ่งที่หน้าตาเหมือน API key"
                 ref: packages/extension/src/chat/render.ts#errorBlock
               - lane: loop
+                beat:
+                  title: Turn ล้มเหลว
+                  text: Stop hook ไม่ทำงานในทางนี้ แชตไม่ขึ้นปุ่ม Continue หรือ Retry เพราะมีแถบ error แล้ว ปุ่ม Send กลับมา
+                  to: panel
+                  end: prompt ไม่ถึง model
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: failed after 1s
                 at: step
                 do: >-
                   `loopStep` เห็น error ล่าสุด `ERROR_REASON` แปลง `blocked` เป็น `done(error)` Stop hook ไม่ทำงาน
@@ -95,19 +132,35 @@ scenario:
             label: พิมพ์ข้อความ (exit 0)
             steps:
               - lane: policy
+                beat:
+                  title: hook พิมพ์ชื่อ branch
+                  text: 'สคริปต์จบด้วย exit 0 และพิมพ์ "branch: feat/login" สำหรับ hook นี้ ข้อความที่พิมพ์ออกมานับเป็นบริบท'
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 0 และพิมพ์ "branch: feat/login" ลง stdout UserPromptSubmit เป็นเหตุการณ์ที่ stdout
                   นับเป็นบริบท ข้อความนี้จึงเป็นโน้ตของ hook (JSON `additionalContext` ก็ได้ผลเดียวกัน)
                 ref: packages/core/src/hooks.ts#promptDecision
               - lane: loop
+                beat:
+                  title: Geno แนบข้อความไว้กับ prompt
+                  text: Geno บันทึกข้อความของ hook ไว้ คุณไม่เห็นมันในแชต
                 at: drive
                 do: >-
                   `submitted()` บันทึก event `hook-context` ของ `UserPromptSubmit` ผู้ใช้ไม่เห็นโน้ตนี้ในแผงแชต
                 ref: "packages/engine/src/drive.ts#\"await record({ kind: 'hook-context', seq: nextSeq(events), at, event: 'UserPromptSubmit'\""
                 emits: [hook-context]
               - use: model-call
+                beat:
+                  title: Geno ส่ง prompt ให้ model
+                  text: Geno เก็บ checkpoint แล้วส่งบทสนทนาให้โมเดล
+                  to: model
               - lane: model
+                beat:
+                  title: Model ตอบโดยรู้ว่าอยู่ branch ไหน
+                  text: "โมเดลได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
+                  end: Model ตอบต่อ
                 do: >-
                   โมเดลได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"
                   ในข้อความผู้ใช้เดียวกัน แล้วตอบโดยรู้ว่าอยู่ branch ไหน

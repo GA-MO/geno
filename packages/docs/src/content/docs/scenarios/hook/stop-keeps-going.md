@@ -1,5 +1,5 @@
 ---
-title: Stop hook ให้โมเดลทำงานต่อ
+title: "Stop hook ให้ model ทำงานต่อ"
 description: โมเดลจบ turn แล้ว แต่ Stop hook บล็อกพร้อมเหตุผล ลูปเรียกโมเดลอีกรอบให้อ่านเหตุผลนั้น ได้ครั้งเดียวติดกันจนกว่าโมเดลจะเรียกเครื่องมือ
 tableOfContents: false
 sidebar:
@@ -16,6 +16,10 @@ scenario:
   related: [hook.post-tool, hook.user-prompt-submit, turn.with-tools]
   steps:
     - id: says
+      beat:
+        title: Model สรุปว่าแก้เสร็จแล้วจบ
+        text: โมเดลแก้ `src/date.ts` แล้ว แต่ยังไม่ได้รันเทสต์ มันเขียนสรุปและบอกว่าจบ turn
+        to: engine
       lane: model
       do: >-
         โมเดล stream สรุปการแก้ แล้วจบด้วย `stop_reason: end_turn`
@@ -24,8 +28,20 @@ scenario:
       phase: calling-model
 
     - use: answer-streams
+      beat:
+        title: แชตแสดงสรุปทีละส่วน
+        text: ข้อความของโมเดลค่อยๆ ขึ้นในแชต หัวข้อยังเป็น working
+        sees:
+          kind: message
+          from: geno
+          text: แก้ src/date.ts เรียบร้อยแล้ว
+          streaming: true
 
     - id: done
+      beat:
+        title: Geno ถาม Stop hook ก่อนจบ turn
+        text: โมเดลเป็นคนจบ turn เอง ไม่ใช่คุณปฏิเสธ Geno จึงส่งข้อความสุดท้ายของโมเดลให้ `tests-ran.sh` พร้อมบอกว่า hook ยังไม่เคยบล็อกใน run นี้
+        to: machine
       lane: loop
       at: step
       do: >-
@@ -44,6 +60,12 @@ scenario:
       emits: [stop_hook_active, last_assistant_message]
 
     - id: hook
+      beat:
+        title: hook ตรวจว่ารันเทสต์หรือยัง
+        text: "สคริปต์อ่าน transcript ของ turn แล้วตอบ `continue: false` ชนะทุกอย่าง ส่วนการบล็อกหรือข้อความเพิ่มทำให้ turn ทำต่อ"
+        from: machine
+        to: engine
+        ask: hook ตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -62,6 +84,9 @@ scenario:
             label: ปล่อยให้จบ
             steps:
               - lane: policy
+                beat:
+                  title: hook ปล่อยให้จบ
+                  text: สคริปต์จบด้วย exit 0 โดยไม่พิมพ์อะไร turn จบตามปกติ
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 0 โดยไม่พิมพ์อะไร (หรือพิมพ์ `continue: false` พร้อม `stopReason` ซึ่งไปที่ output channel "Geno engine")
@@ -74,6 +99,15 @@ scenario:
                 ref: packages/engine/src/serve.ts#TURN_ENDS
                 emits: [TURN_END_META]
               - lane: panel
+                beat:
+                  title: Turn จบ
+                  text: หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน และปุ่ม Send กลับมา
+                  to: panel
+                  end: Turn จบตามปกติ
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: worked for 31s
                 at: rail
                 do: หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน ท้ายคำตอบมีแถวสรุปโมเดล token และค่าใช้จ่าย
                 sees: หัวข้อ "worked for 31s" และปุ่ม Send กลับมาแทน Stop
@@ -84,12 +118,24 @@ scenario:
             label: บล็อกซ้ำทั้งที่โมเดลไม่ได้เรียกเครื่องมือ
             steps:
               - lane: policy
+                beat:
+                  title: hook บล็อกซ้ำ แต่ Geno ไม่ยอม
+                  text: hook บล็อกไปแล้วครั้งหนึ่งใน run นี้ และหลังจากนั้นโมเดลไม่ได้เรียก tool เลย Geno ไม่ให้ hook ที่บล็อกทุกครั้งวนโมเดลไม่รู้จบ
                 at: hooks
                 do: >-
                   hook บล็อกอีก แต่ run นี้มี `hook-context` ของ Stop อยู่แล้ว และหลังจากนั้นโมเดลไม่ได้เรียกเครื่องมือเลย
                   `stopMayContinue` ตอบว่าไม่ได้ hook ที่บล็อกทุกครั้งจึงวนโมเดลไม่ได้
                 ref: packages/core/src/loop.ts#stopMayContinue
               - lane: loop
+                beat:
+                  title: Geno จบ turn และเขียนเหตุลง log
+                  text: Geno เขียนเหตุผลลง output channel "Geno engine" แผงแชตไม่บอกว่า hook บล็อกซ้ำ turn จบเหมือนปกติ
+                  to: panel
+                  end: Turn จบ ไม่วนซ้ำ
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: worked for 48s
                 at: drive
                 do: >-
                   `drive` เขียนลง stderr ว่า "Stop hook blocked the end of the turn again, and the model called no tool since its last block,
@@ -109,6 +155,11 @@ scenario:
                 end: { turn: done, reason: end_turn }
 
     - id: may
+      beat:
+        title: hook บล็อกพร้อมเหตุผล
+        text: สคริปต์จบด้วย exit 2 และเขียน "run pnpm test before you finish" Geno ยอม เพราะ run นี้ยังไม่เคยบล็อก มันบันทึกเหตุผลของ hook แทนการจบ turn
+        from: machine
+        to: engine
       lane: loop
       at: drive
       do: >-
@@ -118,6 +169,10 @@ scenario:
       emits: [hook-context]
 
     - id: decide
+      beat:
+        title: Geno เรียก model อีกครั้ง
+        text: เหตุผลของ hook ทำให้ turn ทำต่อ ขีดจำกัดของรอบยังนับต่อจากเดิม Geno ใส่เหตุผลไว้ในข้อความถัดไปที่ส่งให้โมเดล
+        to: model
       lane: loop
       at: step
       do: >-
@@ -136,6 +191,10 @@ scenario:
       ref: packages/core/src/hooks.ts#hookNoteText
 
     - id: continues
+      beat:
+        title: Model ขอรัน `pnpm test`
+        text: โมเดลอ่านเหตุผลแล้วขอรันเทสต์ ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน แชตไม่บอกว่า hook เป็นคนให้ทำต่อ
+        end: Turn ทำต่อ
       lane: model
       do: >-
         โมเดลอ่านเหตุผล แล้วขอรัน `bash` ด้วย `pnpm test` ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน
