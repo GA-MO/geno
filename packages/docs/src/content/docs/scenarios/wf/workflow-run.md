@@ -99,7 +99,7 @@ scenario:
                 at: step
                 do: >-
                   call ถูกปฏิเสธโดยผู้ใช้ `loopStep` ตัดสิน `done(end_turn)` ไม่มี session ใหม่ ไม่มีเงินถูกใช้
-                ref: packages/core/src/loop.ts#unrunnable
+                ref: "packages/core/src/loop.ts#\"userRejected(newestTurn(events)!.after)) return done('end_turn')\""
                 emits: [end_turn]
                 phase: ending
                 end: { turn: done, reason: end_turn }

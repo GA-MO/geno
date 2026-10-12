@@ -13,7 +13,7 @@
   at: turns
   do: >-
     `runTurn` แปลง `error` ด้วย `TURN_ENDS`: ACP ได้ `stopReason: end_turn` (ACP ไม่มี stop reason สำหรับ error)
-    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ turn ของ session ถูกล้างออกจาก `turns`
+    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และช่อง turn ของ session ใน `turns` ถูกตั้งเป็นว่าง
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META, failed]
 

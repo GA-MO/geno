@@ -113,7 +113,7 @@ scenario:
               - lane: server
                 at: approvals
                 do: >-
-                  `askUserReplyOf` แปลงคำตอบกลับเป็นคำตอบของแต่ละคำถาม งานใน Tasks กลับเป็นกำลังทำงาน
+                  เมื่อคำตอบมาถึง `askEditor` คืนงานใน Tasks เป็นกำลังทำงานก่อน แล้ว `askUserReplyOf` แปลงคำตอบเป็นคำตอบของแต่ละคำถาม
                 ref: packages/engine/src/serve.ts#askUserReplyOf
                 phase: running-tools
           - id: skip

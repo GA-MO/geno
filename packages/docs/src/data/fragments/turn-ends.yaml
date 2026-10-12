@@ -21,7 +21,7 @@
   at: turns
   do: >-
     `runTurn` แปลงผลด้วย `TURN_ENDS`: ACP ได้ `stopReason: end_turn` และ `_meta` บอกว่างานจบแบบ `done`
-    แล้วปิดงานในแผง Tasks และล้าง turn ของ session ออกจาก `turns` prompt ถัดไปจึงเริ่มได้
+    แล้วปิดงานในแผง Tasks และตั้งช่อง turn ของ session ใน `turns` เป็นว่าง prompt ถัดไปจึงเริ่มได้
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META]
 
