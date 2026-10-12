@@ -78,7 +78,7 @@ scenario:
                   title: Model บอกคุณว่า Linear ล่ม
                   text: model อ่าน error แล้วบอกว่ายังดู issue ให้ไม่ได้
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model อ่าน error แล้วบอกผู้ใช้ว่า server ของ Linear ล่ม และยังดู issue ให้ไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -137,7 +137,7 @@ scenario:
                   title: Model ขอให้คุณล็อกอิน
                   text: model ล็อกอินแทนคุณไม่ได้ มันบอกให้คุณล็อกอิน Linear ในแผง MCP servers
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model บอกผู้ใช้ให้ล็อกอิน Linear ในแผง MCP servers model ล็อกอินแทนไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

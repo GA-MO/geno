@@ -280,6 +280,11 @@ function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path:
   });
   for (const end of ['from', 'to'] as const)
     if (head[end] === undefined) problem(`${path}.${end}`, `beat "${title}" has no ${end}: give every beat its arrow, who acts (from) and who receives (to)`);
+  const { from, to } = head;
+  if (from !== undefined && to !== undefined && from !== to && !ctx.lanes.links.some(([a, b]) => (a === from && b === to) || (a === to && b === from))) {
+    const reach = ctx.lanes.links.flatMap(([a, b]) => (a === from ? [b] : b === from ? [a] : []));
+    problem(`${path}.to`, `beat "${title}" draws ${from} -> ${to}, which no process link carries; ${from} hands to ${reach.join(', ')} (lanes.yaml links)`);
+  }
   return {
     title,
     text: head.text.trim(),

@@ -249,10 +249,9 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าว่า workflow แก้อะไร
-        text: 'model อ่าน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น แล้วเล่าให้คุณ'
+        text: 'model อ่าน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น แล้วเขียนสรุปถึงคุณ'
         from: model
-        to: panel
-        end: Turn ที่ถูกปลุกจบ
+        to: engine
       lane: model
       do: >-
         model ของแชตอ่านรายงาน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น
@@ -262,6 +261,12 @@ scenario:
       phase: calling-model
 
     - use: bg-woken-ends
+      beat:
+        title: Geno จบ turn แผงแสดงคำตอบ
+        text: Geno จบ turn ที่ตัวเองเริ่ม แผงอ่านการจบจากงานในแผง Tasks แล้วแสดงคำตอบของ model ใต้หัวที่มีกระดิ่ง
+        from: engine
+        to: panel
+        end: Turn ที่ถูกปลุกจบ
 ---
 
 workflow คือแผนงานหลายขั้นที่ไม่มี model เป็นคนคุม: director อ่านไฟล์ JSON แล้วออก call `agent` ของแต่ละขั้นเอง

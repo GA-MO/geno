@@ -256,7 +256,7 @@ scenario:
         title: Model บอกคุณว่าส่งต่อแล้ว
         text: model บอกว่าส่งข้อความถึง explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
         from: model
-        to: panel
+        to: engine
         end: Turn จบ รอรายงาน
       lane: model
       do: >-

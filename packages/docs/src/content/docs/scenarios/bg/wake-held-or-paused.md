@@ -214,10 +214,9 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าผลของ explore
-        text: model อ่านรายงานแล้วเล่าผลให้คุณ
+        text: model อ่านรายงานแล้วเขียนผลถึงคุณ
         from: model
-        to: panel
-        end: Turn ที่ถูกปลุกจบ
+        to: engine
       lane: model
       do: >-
         model อ่านรายงานของ explore แล้วเล่าผลให้ผู้ใช้ จบด้วย `stop_reason: end_turn`
@@ -226,6 +225,12 @@ scenario:
       phase: calling-model
 
     - use: bg-woken-ends
+      beat:
+        title: Geno จบ turn แผงแสดงคำตอบ
+        text: Geno จบ turn ที่ตัวเองเริ่ม แผงอ่านการจบจากงานในแผง Tasks แล้วแสดงคำตอบของ model ใต้หัวที่มีกระดิ่ง
+        from: engine
+        to: panel
+        end: Turn ที่ถูกปลุกจบ
 ---
 
 ประตูของตัวปลุกมีหน้าที่เดียว: ไม่ให้ Geno เริ่ม turn เองในจังหวะที่ผู้ใช้ไม่อยากให้เริ่ม

@@ -215,7 +215,7 @@ scenario:
         title: Model บอกคุณว่าหยุดอะไรไปแล้ว
         text: model สรุปสิ่งที่หยุด และสิ่งที่ explore เจอก่อนถูกหยุด
         from: model
-        to: panel
+        to: engine
         end: Turn จบ
       lane: model
       do: >-

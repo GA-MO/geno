@@ -133,7 +133,7 @@ scenario:
                   title: Model บอกว่าทิ้ง commit แล้ว
                   text: model อ่านผลแล้วตอบ turn จบ
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model อ่านผลแล้วตอบว่าทิ้ง commit แล้ว จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -231,7 +231,7 @@ scenario:
                   title: Model อธิบายว่าต้องให้คุณอนุญาต
                   text: model บอกคำสั่งที่คุณรันเองได้ แล้วจบ turn
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model อธิบายว่าต้องให้ผู้ใช้อนุญาต และบอกคำสั่งที่ผู้ใช้รันเองได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""

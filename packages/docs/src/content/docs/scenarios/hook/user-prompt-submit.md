@@ -167,7 +167,7 @@ scenario:
                   title: Model ตอบโดยรู้ว่าอยู่ branch ไหน
                   text: "model ได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
                   from: model
-                  to: panel
+                  to: engine
                   end: Model ตอบต่อ
                 do: >-
                   model ได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"

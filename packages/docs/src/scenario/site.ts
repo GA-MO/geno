@@ -135,7 +135,7 @@ export function loadSite(options: SiteOptions): Site {
   };
   const lanes = read(`${DATA}/lanes.yaml`, lanesSchema);
   const catalog = read(`${DATA}/catalog.yaml`, catalogSchema);
-  if (lanes === undefined || catalog === undefined) return { lanes: { processes: [], lanes: [] }, catalog: { chapters: [], scenarios: [] }, scenarios: {}, links: {}, partRefs: {}, visits: {}, problems };
+  if (lanes === undefined || catalog === undefined) return { lanes: { processes: [], links: [], lanes: [] }, catalog: { chapters: [], scenarios: [] }, scenarios: {}, links: {}, partRefs: {}, visits: {}, problems };
 
   const fragments: Record<string, readonly StepIn[]> = {};
   for (const file of filesUnder(path.join(options.docsRoot, DATA, 'fragments'), /\.yaml$/)) {

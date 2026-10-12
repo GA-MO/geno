@@ -147,7 +147,7 @@ scenario:
                   title: Model บอกว่าแก้อะไร
                   text: model ตอบสั้นๆ แล้วจบ turn
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model ตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
                 ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""

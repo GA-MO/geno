@@ -201,10 +201,10 @@ scenario:
       
     - id: next
       beat:
-        title: Model ส่งลิงก์ issue ให้คุณ
-        text: Geno เรียก model อีกครั้ง model บอกว่าเปิด issue แล้วพร้อมลิงก์
-        from: model
-        to: panel
+        title: Geno เรียก model อีกครั้งพร้อมผลของ tool
+        text: Geno ส่งผลของ tool กลับให้ model ซึ่งจะบอกคุณว่าเปิด issue แล้วพร้อมลิงก์
+        from: engine
+        to: model
         end: Model ตอบพร้อมลิงก์
       lane: loop
       at: step

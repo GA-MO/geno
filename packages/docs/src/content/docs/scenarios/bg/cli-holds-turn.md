@@ -82,9 +82,9 @@ scenario:
     - use: model-call
       beat:
         title: Model บอกว่า explore กำลังค้น
-        text: Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ แล้วจบ turn ข้อความขึ้นใน stdout
+        text: Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ แล้วจบ turn Geno พิมพ์ข้อความลง stdout
         from: model
-        to: panel
+        to: engine
 
     - id: says
       lane: model
@@ -207,10 +207,10 @@ scenario:
 
     - id: relays
       beat:
-        title: Model สรุปลง stdout
-        text: model อ่านรายงาน แล้วเขียนสรุปที่เรียก `parseVersion`
+        title: Model สรุปว่าใครเรียก `parseVersion`
+        text: model อ่านรายงาน แล้วเขียนสรุปที่เรียก `parseVersion` Geno พิมพ์สรุปลง stdout
         from: model
-        to: panel
+        to: engine
       lane: model
       do: >-
         model อ่านรายงานในรั้ว แล้ว stream สรุปที่เรียก `parseVersion`ลง stdout จบด้วย `stop_reason: end_turn`

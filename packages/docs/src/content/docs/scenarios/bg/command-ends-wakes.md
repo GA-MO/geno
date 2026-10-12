@@ -146,7 +146,7 @@ scenario:
                   title: Model บอกว่าจะแจ้งเมื่อเสร็จ แล้วจบ turn
                   text: model ไม่วนถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง คำสั่งเบื้องหลังไม่ถือ turn ไว้ และไม่ถูกฆ่าตอน turn จบ
                   from: model
-                  to: panel
+                  to: engine
                 do: >-
                   model บอกผู้ใช้ว่า build กำลังรันและจะแจ้งเมื่อเสร็จ แล้วจบด้วย `stop_reason: end_turn`
                   (system prompt บอกให้จบ turn แทนการคอยถามสถานะ เพราะ Geno จะเริ่ม turn ถัดไปให้เอง)
@@ -198,7 +198,7 @@ scenario:
                   title: Model เล่าผล build
                   text: model อ่านโน้ตของ bg-1 และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ
                   from: model
-                  to: panel
+                  to: engine
                   end: Model เล่าผล build
                 do: >-
                   model อ่านโน้ตของ bg-1 ตามด้วยข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผล build ให้ผู้ใช้

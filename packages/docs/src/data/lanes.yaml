@@ -18,6 +18,17 @@ processes:
   - { id: provider, label: ผู้ให้บริการ model }
   - { id: outside, label: ระบบภายนอก }
 
+# links     the actor pairs a beat may draw an arrow between, either way, read off the processes above. An actor may
+#           also act alone (from equals to). docs:check fails any other pair. The model never reaches the panel: its
+#           answer goes to the engine (model -> engine), and the engine shows it (engine -> panel).
+links:
+  - [you, panel]        # person - webview, terminal, VS Code
+  - [you, machine]      # person - outside: an OS notification, a file saved in another editor
+  - [panel, engine]     # webview, ext-host - engine daemon, over ACP
+  - [panel, machine]    # ext-host - outside: the disk, the OS, Tab's llama-server on your machine
+  - [engine, model]     # engine - provider, and a child session's model inside the engine
+  - [engine, machine]   # engine - tools, the sandbox, MCP servers, the web
+
 lanes:
   - id: user
     label: ผู้ใช้

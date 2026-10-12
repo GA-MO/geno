@@ -152,6 +152,20 @@ describe('story checks reject', () => {
     ]);
   });
 
+  test('an arrow no process link carries, either way, and lets an actor act alone', () => {
+    expect(
+      messages([
+        { lane: 'model', do: 'ตอบ', ref: REF, ...beat('Model ตอบคุณ', { from: 'model', to: 'panel' }) },
+        { lane: 'panel', at: 'rail', do: 'ขอ', ref: REF, ...beat('แผงขอ model', { from: 'panel', to: 'model' }) },
+        { lane: 'model', do: 'คิด', ref: REF, ...beat('Model คิด', { from: 'model', to: 'model' }) },
+        { lane: 'model', do: 'ส่ง', ref: REF, ...beat('Model ตอบ Geno', { from: 'model', to: 'engine' }), ...end },
+      ]),
+    ).toEqual([
+      'steps[0].beat.to: beat "Model ตอบคุณ" draws model -> panel, which no process link carries; model hands to engine (lanes.yaml links)',
+      'steps[1].beat.to: beat "แผงขอ model" draws panel -> model, which no process link carries; panel hands to you, engine, machine (lanes.yaml links)',
+    ]);
+  });
+
   test('a step before the first beat', () => {
     expect(messages([{ lane: 'user', do: 'x' }, { lane: 'user', do: 'y', ...beat('Later'), ...end }])).toContainEqual(expect.stringContaining('starts with a beat'));
   });
@@ -329,7 +343,7 @@ const fiveWay = [
         id: `o${k}`,
         label,
         ...(k === 0 ? { then: 'run' } : {}),
-        steps: [{ lane: k % 2 === 0 ? 'user' : 'model', do: label, ref: REF, ...beat(`You press ${k}`, { from: k % 2 === 0 ? 'you' : 'model' }), ...(k === 0 ? {} : end) }],
+        steps: [{ lane: k % 2 === 0 ? 'user' : 'model', do: label, ref: REF, ...beat(`You press ${k}`, { from: k % 2 === 0 ? 'you' : 'model', to: k % 2 === 0 ? 'panel' : 'engine' }), ...(k === 0 ? {} : end) }],
       })),
     },
   },
