@@ -62,7 +62,7 @@ describe('boundaries', () => {
   it('keeps elkjs out of every file the docs islands reach, so it stays in the build', () => {
     const island = 'packages/docs/src/components/SystemMapFlow.tsx';
     expect(BOUNDARIES.bundles[1]?.entries).toContain(island);
-    expect(BOUNDARIES.bundles[1]?.entries).toContain('packages/docs/src/components/Tour.tsx');
+    expect(BOUNDARIES.bundles[1]?.entries).toContain('packages/docs/src/components/Story.tsx');
     expect(rulesHit([value(island, 'packages/docs/src/map/map.ts'), value('packages/docs/src/map/map.ts', 'elkjs/lib/elk.bundled.js')])).toEqual(['docs-islands-without-elk']);
     expect(rulesHit([value(island, 'elkjs')])).toEqual(['docs-islands-without-elk']);
     expect(rulesHit([type(island, 'packages/docs/src/map/map.ts'), value('packages/docs/src/map/map.ts', 'elkjs/lib/elk.bundled.js')])).toEqual([]);
