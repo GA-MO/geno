@@ -16,8 +16,8 @@ steps:
       title: Model ขอรัน `pnpm add zod`          # Thai with English terms, at most 60 characters
       text: >-                                  # Thai, 1 to 3 sentences, no function names
         โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
-      from: model                               # optional; default: the actor of the beat's first step
-      to: engine                                # optional; default: the actor of the beat's last step
+      from: model                               # required: who acts
+      to: engine                                # required: who receives
       sees: { kind: step, label: pnpm add zod, status: running }   # optional, see "What the reader sees"
       ask: Which button?                        # required when the beat ends at a fork: the diamond's label
       end: Denied by you                        # optional: the end node's label when a walk ends in this beat
@@ -44,6 +44,15 @@ The compiled `Step` gains two fields: `actor` (from its lane) and `beat?` (the p
 ## Actors
 
 Five story actors come from `lanes.yaml`. Each lane has an `actor:` field. Pages never author actors per step.
+
+Every beat header names its arrow with `from` and `to`; `docs:check` fails a beat without either. The lanes of a beat's
+steps do not decide it, because a beat often spans several lanes. Read the beat and pick:
+
+- the model's requests and answers: `model` → `engine`;
+- Geno's decisions and refusals: `engine` → `model`, or `engine` → `panel` when the chat shows them;
+- a command or tool on your machine: `engine` → `machine`, and its result back: `machine` → `engine`;
+- what you see: `panel` → `you`; your clicks and keys: `you` → `panel`;
+- a self-action, such as Geno checking a rule: `from` equals `to`.
 
 | actor | name | lanes |
 | --- | --- | --- |

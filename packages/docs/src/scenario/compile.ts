@@ -272,11 +272,13 @@ function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path:
     if (!resolved.ok) problem(`${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`, resolved.reason);
     return resolved.ok ? [resolved.view] : [];
   });
+  for (const end of ['from', 'to'] as const)
+    if (head[end] === undefined) problem(`${path}.${end}`, `beat "${title}" has no ${end}: give every beat its arrow, who acts (from) and who receives (to)`);
   return {
     title,
     text: head.text.trim(),
-    ...(head.from === undefined ? {} : { from: head.from }),
-    ...(head.to === undefined ? {} : { to: head.to }),
+    from: head.from ?? 'engine',
+    to: head.to ?? 'engine',
     sees,
     ...(head.ask === undefined ? {} : { ask: head.ask.trim() }),
     ...(head.end === undefined ? {} : { end: head.end.trim() }),

@@ -41,8 +41,7 @@ export function beatsOf(scenario: Scenario, path: readonly StepId[]): Beat[] {
   return groups.flatMap((steps): Beat[] => {
     const head = scenario.steps[steps[0]!]!.beat;
     if (head === undefined) return [];
-    const from = head.from ?? scenario.steps[steps[0]!]!.actor;
-    return [{ id: steps[0]!, head, steps, last: steps.at(-1)!, from, to: head.to ?? scenario.steps[steps.at(-1)!]!.actor, who: whoOf(from), flow: scenario.steps[steps.at(-1)!]!.flow }];
+    return [{ id: steps[0]!, head, steps, last: steps.at(-1)!, from: head.from, to: head.to, who: whoOf(head.from), flow: scenario.steps[steps.at(-1)!]!.flow }];
   });
 }
 

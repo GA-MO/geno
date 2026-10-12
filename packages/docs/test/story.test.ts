@@ -23,7 +23,7 @@ if (!tables.ok) throw new Error(tables.reason);
 const source: SourceIndex = { resolve: (ref) => ({ ok: true, ref: { path: ref.split('#')[0]!, anchor: ref.split('#')[1]!, line: 1, url: 'vscode://file/x:1' } }), literalExists: () => true };
 const REF = 'packages/core/src/loop.ts#loopStep';
 const end = { end: { turn: 'continues' } };
-const beat = (title: string, extra: Record<string, unknown> = {}) => ({ beat: { title, text: 'ข้อความ', ...extra } });
+const beat = (title: string, extra: Record<string, unknown> = {}) => ({ beat: { title, text: 'ข้อความ', from: 'engine' as const, to: 'engine' as const, ...extra } });
 
 function compile(steps: unknown[], fragments: CompileContext['fragments'] = {}) {
   return compileScenario(scenarioSchema.parse({ surface: 'vscode', trigger: 't', covers: ['turn.text-answer'], steps }), {
@@ -55,7 +55,7 @@ interface ForkPage {
 
 /** You type, the engine forks on your answer; one arm rejoins, the other ends. */
 const forked = [
-  { lane: 'user', do: 'พิมพ์', ...beat('You ask') },
+  { lane: 'user', do: 'พิมพ์', ...beat('You ask', { from: 'you', to: 'panel' }) },
   { lane: 'loop', at: 'step', do: 'คิด', ref: REF },
   {
     id: 'ask',
@@ -63,12 +63,12 @@ const forked = [
     at: 'card',
     do: 'ถาม',
     ref: REF,
-    ...beat('Geno asks you', { ask: 'Which answer?', to: 'you' }),
+    ...beat('Geno asks you', { ask: 'Which answer?', from: 'panel', to: 'you' }),
     fork: {
       ask: 'ตอบอะไร',
       options: [
-        { id: 'yes', label: 'Yes', then: 'run', steps: [{ lane: 'user', do: 'ตอบ yes', ...beat('You say yes') }] },
-        { id: 'no', label: 'No', steps: [{ lane: 'user', do: 'ตอบ no', ...beat('You say no', { end: 'Refused' }), ...end }] },
+        { id: 'yes', label: 'Yes', then: 'run', steps: [{ lane: 'user', do: 'ตอบ yes', ...beat('You say yes', { from: 'you', to: 'panel' }) }] },
+        { id: 'no', label: 'No', steps: [{ lane: 'user', do: 'ตอบ no', ...beat('You say no', { from: 'you', to: 'panel', end: 'Refused' }), ...end }] },
       ],
     },
   },
@@ -85,13 +85,13 @@ describe('beats along a walk', () => {
     expect(titles('no')).toEqual(['You ask', 'Geno asks you', 'You say no']);
     const yes = beatsOf(scenario, walk(scenario, { ['ask' as StepId]: 'yes' as OptionId }));
     expect(yes[2]!.steps).toEqual(['ask.yes.1', 'run']);
-    expect(yes[2]!.to).toBe('machine');
   });
 
-  test('from and to default to the actors of the first and last step, and the header overrides them', () => {
-    const [first, second] = beatsOf(scenario, walk(scenario, {}));
-    expect([first!.from, first!.to, first!.who]).toEqual(['you', 'engine', 'you']);
+  test('the header draws the arrow: from and to come from it, not from the lanes of its steps', () => {
+    const [first, second, third] = beatsOf(scenario, walk(scenario, {}));
+    expect([first!.from, first!.to, first!.who]).toEqual(['you', 'panel', 'you']);
     expect([second!.from, second!.to, second!.who]).toEqual(['panel', 'you', 'geno']);
+    expect([third!.from, third!.to]).toEqual(['you', 'panel']);
   });
 
   test('a fork lists every option with the beat it opens and where its walk ends', () => {
@@ -135,6 +135,14 @@ describe('actors', () => {
 });
 
 describe('story checks reject', () => {
+  test('a beat without from or to, naming the beat', () => {
+    const header = (title: string, arrow: Record<string, unknown>) => ({ beat: { title, text: 'ข้อความ', ...arrow } });
+    expect(messages([{ lane: 'user', do: 'x', ...header('Model เรียก monitor', { to: 'engine' }) }, { lane: 'user', do: 'y', ...header('Geno ปฏิเสธ', { from: 'engine' }), ...end }])).toEqual([
+      'steps[0].beat.from: beat "Model เรียก monitor" has no from: give every beat its arrow, who acts (from) and who receives (to)',
+      'steps[1].beat.to: beat "Geno ปฏิเสธ" has no to: give every beat its arrow, who acts (from) and who receives (to)',
+    ]);
+  });
+
   test('a step before the first beat', () => {
     expect(messages([{ lane: 'user', do: 'x' }, { lane: 'user', do: 'y', ...beat('Later'), ...end }])).toContainEqual(expect.stringContaining('starts with a beat'));
   });
@@ -261,7 +269,7 @@ describe('the exemplar stories', () => {
 
 /** The approval card's five buttons: the first goes on to run the command, the other four end the walk. */
 const fiveWay = [
-  { lane: 'user', do: 'พิมพ์', ...beat('You ask') },
+  { lane: 'user', do: 'พิมพ์', ...beat('You ask', { from: 'you', to: 'panel' }) },
   { lane: 'loop', at: 'step', do: 'คิด', ref: REF, ...beat('Geno checks') },
   {
     id: 'ask',
@@ -269,18 +277,18 @@ const fiveWay = [
     at: 'card',
     do: 'ถาม',
     ref: REF,
-    ...beat('Geno asks you', { ask: 'Which button?' }),
+    ...beat('Geno asks you', { ask: 'Which button?', from: 'panel', to: 'you' }),
     fork: {
       ask: 'กดปุ่มไหน',
       options: ['Allow', 'Always allow in this workspace', 'Deny', 'No, and tell the agent…', 'Stop'].map((label, k) => ({
         id: `o${k}`,
         label,
         ...(k === 0 ? { then: 'run' } : {}),
-        steps: [{ lane: k % 2 === 0 ? 'user' : 'model', do: label, ref: REF, ...beat(`You press ${k}`), ...(k === 0 ? {} : end) }],
+        steps: [{ lane: k % 2 === 0 ? 'user' : 'model', do: label, ref: REF, ...beat(`You press ${k}`, { from: k % 2 === 0 ? 'you' : 'model' }), ...(k === 0 ? {} : end) }],
       })),
     },
   },
-  { id: 'run', lane: 'tool', at: 'shell', do: 'รัน', ref: REF, ...beat('Command runs') },
+  { id: 'run', lane: 'tool', at: 'shell', do: 'รัน', ref: REF, ...beat('Command runs', { to: 'machine' }) },
   { lane: 'loop', at: 'step', do: 'จบ', ref: REF, ...beat('Geno finishes'), ...end },
 ];
 
