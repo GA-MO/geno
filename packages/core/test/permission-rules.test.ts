@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { denialFor, type ApprovalMode, type CommandScope, type Denial } from '../src/approval.js';
+import { denialFor, MAX_SHOWN_ARGUMENTS, shownArguments, type ApprovalMode, type CommandScope, type Denial } from '../src/approval.js';
 import {
   domainMatches,
   domainRuleFor,
@@ -231,6 +231,7 @@ describe('ruledDenial', () => {
       rule: 'workspace-deny',
       reason: 'the workspace rule that denies `pnpm publish`, which the user set in Settings under Permissions',
       command: 'pnpm publish --tag x',
+      line: 'pnpm test && pnpm publish --tag x',
       verdict: 'deny',
     });
     expect(ruledDenial('timeout 9 pnpm publish', scope, 'auto', [ask('pnpm publish')])).toEqual({
@@ -308,10 +309,23 @@ describe('the offered rule', () => {
     ['auto', '$TOOL run', undefined],
     ['plan', 'git push', undefined],
     ['non-interactive', 'git push', undefined],
+    ['ask', 'for f in server.js lib/*.js; do node --import tsx $f; done && npm test 2>&1 | tail -12', 'node --import'],
+    ['ask', 'if [ -f a.js ]; then node a.js; fi', 'node a.js'],
+    ['ask', 'node scan.js; echo ok', 'node scan.js'],
+    ['ask', 'grep -c x a.txt; ls $DIR', undefined],
+    ['ask', 'while true; do git push; done', 'git push'],
+    ['ask', 'for f in ../x/*.js; do echo $f; done', undefined],
   ];
   it.each(OFFERS)('%s: %s offers %s', (mode, command, offered) => {
     const offer = ruledDenial(command, scope, mode, [])?.offer;
     expect(offer === undefined ? undefined : patternText(offer)).toBe(offered);
+  });
+
+  it('asks about the flagged part beside the whole line, which one yes runs', () => {
+    const line = 'for f in server.js lib/*.js; do node --import tsx $f; done && npm test 2>&1 | tail -12';
+    expect(ruledDenial(` ${line} `, scope, 'ask', [])).toMatchObject({ command: 'node --import tsx $f', line });
+    expect(ruledDenial('grep -c x a.txt; ls $DIR', scope, 'ask', [])).toMatchObject({ command: 'ls $DIR', line: 'grep -c x a.txt; ls $DIR' });
+    expect(ruledDenial('git push', scope, 'ask', [])).not.toHaveProperty('line');
   });
 
   it('covers the command it was offered for', () => {
@@ -486,10 +500,41 @@ describe('MCP rules', () => {
   });
 
   it("names the server and the tool a question asks about, whether a rule or the mode asks", () => {
-    const call = { name: 'mcp__github__create_issue', server: 'github', tool: 'create_issue', readOnly: false };
-    const subject = { kind: 'mcp', server: 'github', tool: 'create_issue' };
+    const call = { name: 'mcp__github__create_issue', server: 'github', tool: 'create_issue', readOnly: false, args: { title: 'Login fails', labels: ['bug'] } };
+    const subject = { kind: 'mcp', server: 'github', tool: 'create_issue', arguments: '{\n  "title": "Login fails",\n  "labels": [\n    "bug"\n  ]\n}' };
     expect(mcpCallDenial(call, 'ask', false, [])).toMatchObject({ rule: 'mcp-tool', subject });
     expect(mcpCallDenial(call, 'auto', false, [stored({ effect: 'ask', mcp: 'mcp__github' })])).toMatchObject({ rule: 'workspace-ask', subject });
+  });
+
+  it('asks about a read-only tool in Ask, and says the server alone vouches for it', () => {
+    const call = { name: 'mcp__thai_baht__baht_text', server: 'thai-baht', tool: 'baht_text', readOnly: true, args: { amountSatang: 125050 } };
+    expect(mcpCallDenial(call, 'ask', false, [])).toEqual({
+      rule: 'mcp-read-only',
+      reason: 'a tool its MCP server calls read-only, which Geno cannot check',
+      command: 'mcp__thai_baht__baht_text',
+      verdict: 'ask',
+      keeps: 'mcp__thai_baht__baht_text',
+      subject: { kind: 'mcp', server: 'thai-baht', tool: 'baht_text', arguments: '{\n  "amountSatang": 125050\n}' },
+    });
+    expect(mcpCallDenial(call, 'auto', false, [])).toBeUndefined();
+    expect(mcpCallDenial(call, 'ask', true, [])).toBeUndefined();
+  });
+});
+
+describe('shownArguments', () => {
+  it('shows no arguments as empty', () => {
+    expect(shownArguments({})).toBe('');
+    expect(shownArguments(undefined)).toBe('');
+  });
+
+  it('cuts large arguments at a line and says how much it left out', () => {
+    const args = { rows: Array.from({ length: 400 }, (_, i) => `row ${i}`) };
+    const whole = JSON.stringify(args, null, 2);
+    const shown = shownArguments(args);
+    const [head, note] = [shown.slice(0, shown.lastIndexOf('\n')), shown.slice(shown.lastIndexOf('\n') + 1)];
+    expect(head.length).toBeLessThanOrEqual(MAX_SHOWN_ARGUMENTS);
+    expect(whole.startsWith(`${head}\n`)).toBe(true);
+    expect(note).toBe(`… ${(whole.length - head.length).toLocaleString('en-US')} more characters`);
   });
 });
 

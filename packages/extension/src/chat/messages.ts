@@ -218,6 +218,8 @@ export type PermissionBlock = {
   readonly kind: 'permission';
   readonly id: string;
   readonly command: string;
+  /** The whole command line, which one yes runs, when `command` is only the part that needs the answer. */
+  readonly line?: string | undefined;
   readonly reason: string;
   /** The asking bash call's description, when it gave one. */
   readonly description?: string | undefined;
@@ -306,6 +308,7 @@ export type Action =
       readonly type: 'permission';
       readonly id: string;
       readonly command: string;
+      readonly line?: string | undefined;
       readonly reason: string;
       readonly description?: string | undefined;
       readonly options: readonly PermissionChoice[];
@@ -519,6 +522,8 @@ export type FromView =
   | { readonly type: 'set-mode'; readonly modeId: string }
   /** After a Plan turn: leave Plan and tell the agent to carry out the plan. */
   | { readonly type: 'start-building' }
+  /** After a turn that stopped without a reply: ask the agent to go on and finish its answer. */
+  | { readonly type: 'continue' }
   /** Asks for the history list; answered by `history` or `history-failed`. */
   | { readonly type: 'list-sessions'; readonly scope: HistoryScope }
   /** Searches the text of the scope's sessions; answered by `history-hits` or `history-hits-failed`. */

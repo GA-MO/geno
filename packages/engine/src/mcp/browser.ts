@@ -148,7 +148,7 @@ function wandered(state: BrowserState, before: ReadonlyMap<number, string>, work
 }
 
 /** A yes that outlives the call: the tool for the rest of the session, or its rule saved for the workspace. */
-export async function keepMcpAnswer(answer: KeptAnswer, call: McpCall, allowed: Set<string>, ctx: ToolContext): Promise<void> {
+export async function keepMcpAnswer(answer: KeptAnswer, call: Pick<McpCall, 'name' | 'server' | 'tool'>, allowed: Set<string>, ctx: ToolContext): Promise<void> {
   allowed.add(call.name);
   if (answer === 'allow-workspace') await ctx.permissions?.add({ effect: 'allow', mcp: mcpToolRuleName(call.server, call.tool) });
 }
@@ -198,7 +198,7 @@ export function browserExecutor(name: string, info: McpToolInfo, deps: BrowserTo
           }),
           ctx,
           async (answer) => {
-            if (isMcpRule(denial.rule)) await keepMcpAnswer(answer, { name, server: info.server, tool: info.tool, readOnly: info.readOnly }, allowed, ctx);
+            if (isMcpRule(denial.rule)) await keepMcpAnswer(answer, { name, server: info.server, tool: info.tool }, allowed, ctx);
           },
         );
         if (record.verdict === 'deny') {

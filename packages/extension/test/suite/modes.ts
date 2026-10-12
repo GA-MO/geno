@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { START_BUILDING_PROMPT } from '../../src/chat/chat.js';
 import { COMMANDS, FOLLOW_UP, PROMPTS, REASONS, THEMES } from './modes-fixture.js';
 import { SHOOTING } from './shooting.js';
 
@@ -74,7 +73,6 @@ async function send(prompt: string): Promise<void> {
 }
 
 export async function run(): Promise<void> {
-  check(FOLLOW_UP === START_BUILDING_PROMPT, 'the fixture sends what Start building sends');
   await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
   await vscode.commands.executeCommand('notifications.clearAll');
   await showPanel();

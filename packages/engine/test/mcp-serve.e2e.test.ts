@@ -134,7 +134,7 @@ describe('gcode serve with MCP', () => {
 
     expect(permissions).toHaveLength(1);
     expect(permissions[0]!.options.map((option) => option.optionId)).toEqual(['allow', 'allow-session', 'reject', 'allow-workspace', 'reject-with-comment']);
-    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'an MCP tool its server marks read-only', rule: 'mcp__fake__echo', subject: { kind: 'mcp', server: 'fake', tool: 'echo' } });
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'mcp__fake__echo', reason: 'a tool its MCP server calls read-only, which Geno cannot check', rule: 'mcp__fake__echo', subject: { kind: 'mcp', server: 'fake', tool: 'echo', arguments: '{\n  "text": "one"\n}' } });
     expect(JSON.stringify(transport.requests[2]!.body.messages)).toContain('echo: one');
     expect(JSON.stringify(transport.requests[3]!.body.messages)).toContain('echo: two');
     expect(updates).toContainEqual(

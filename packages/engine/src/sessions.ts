@@ -15,6 +15,7 @@ import {
   HUNK_STATUSES,
   INPUT_PARTS,
   nextSeq,
+  PROMPT_ACTION_IDS,
   PROVIDERS,
   SESSION_MODES,
   sessionEffortOf,
@@ -179,6 +180,7 @@ const approvalSchema = z.strictObject({
   rule: z.enum(APPROVAL_RULE_IDS),
   reason: z.string(),
   command: z.string(),
+  line: z.string().optional(),
   classifier: z
     .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable() })
     .optional(),
@@ -305,8 +307,9 @@ const turnEventSchema = z.union([
       content: z.string(),
       context: z.array(contextItemSchema).optional(),
       attachments: z.array(attachmentSchema).optional(),
-      command: z.strictObject({ name: z.string().min(1), args: z.string() }).optional(),
+      command: z.strictObject({ name: z.string().min(1), args: z.string(), description: z.string().optional() }).optional(),
       steer: z.literal(true).optional(),
+      action: z.enum(PROMPT_ACTION_IDS).optional(),
       from: z.enum(['parent', 'child', 'wake']).optional(),
       wake: z.array(wakeTriggerSchema).optional(),
     }),

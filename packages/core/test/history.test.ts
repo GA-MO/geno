@@ -44,6 +44,20 @@ describe('session history', () => {
     expect(long.endsWith('…')).toBe(true);
   });
 
+  it('titles a session started with a command by the text after it, else by what the command does', () => {
+    const invoked = (content: string, args: string, description?: string): TurnEvent => ({
+      kind: 'user',
+      seq: 1,
+      at: '2026-10-01T00:00:01.000Z',
+      content,
+      command: { name: 'add-category', args, ...(description === undefined ? {} : { description }) },
+    });
+    expect(titleOf([start, invoked('/add-category  เพิ่มหมวด\nสัตว์เลี้ยง ', ' เพิ่มหมวด\nสัตว์เลี้ยง ', 'Add a spending category')])).toBe('เพิ่มหมวด สัตว์เลี้ยง');
+    expect(titleOf([start, invoked('/add-category', '', 'Add a spending category'), user(2, 'Pets, with a paw icon')])).toBe('Add a spending category');
+    expect(titleOf([start, invoked('Review the long template text', '', 'Review a file')])).toBe('Review a file');
+    expect(titleOf([start, invoked('/add-category', '')]), 'a log from before descriptions were kept').toBe('/add-category');
+  });
+
   it('summarizes prompts, cost and the last activity, with an unknown price making the cost unknown', () => {
     expect(summarizeSession(session, [start, user(1, 'a'), answer(2, 0.25), user(3, 'b'), answer(4, 0.5)])).toEqual({
       id: 's1',

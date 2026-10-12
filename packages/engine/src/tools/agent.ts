@@ -176,7 +176,7 @@ export async function settle(
   call: CallScope,
   keep: (answer: KeptAnswer) => void | Promise<void> = () => {},
 ): Promise<ApprovalRecord> {
-  const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command };
+  const record = { mode, rule: denial.rule, reason: denial.reason, command: denial.command, ...(denial.line === undefined ? {} : { line: denial.line }) };
   const refused: ApprovalRecord = { ...record, decidedBy: 'rule', verdict: 'deny' };
   const hooked = async (): Promise<ApprovalRecord | undefined> => {
     const answer = call.permissionRequest === undefined || !hookMayAnswer(denial, mode) ? undefined : await call.permissionRequest(denial);

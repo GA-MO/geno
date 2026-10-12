@@ -41,6 +41,8 @@ export type SimpleCommand = {
   readonly prefix: readonly string[];
   readonly args: readonly string[];
   readonly words: readonly string[];
+  /** Where in `words` a redirect names its file, as in `> out.txt`. */
+  readonly redirects: ReadonlySet<number>;
   readonly cwd: string | undefined;
 };
 
@@ -92,12 +94,34 @@ export type ApprovalSubject =
   | { readonly kind: 'read'; readonly path: string }
   | { readonly kind: 'fetch'; readonly url: string; readonly host: string }
   | { readonly kind: 'browse'; readonly url: string; readonly host: string }
-  | { readonly kind: 'mcp'; readonly server: string; readonly tool: string };
+  | { readonly kind: 'mcp'; readonly server: string; readonly tool: string; readonly arguments: string };
+
+/** Past this, a card shows the head of an MCP call's arguments and says how much it left out. */
+export const MAX_SHOWN_ARGUMENTS = 1_500;
+
+/**
+ * An MCP call's arguments as its card shows them: indented JSON, empty for none, cut at a line past
+ * `MAX_SHOWN_ARGUMENTS` characters with a note of how many it left out.
+ */
+export function shownArguments(args: unknown): string {
+  if (args === undefined || (typeof args === 'object' && args !== null && Object.keys(args).length === 0)) return '';
+  const text = JSON.stringify(args, null, 2);
+  if (text.length <= MAX_SHOWN_ARGUMENTS) return text;
+  const lineEnd = text.lastIndexOf('\n', MAX_SHOWN_ARGUMENTS);
+  const kept = text.slice(0, lineEnd > MAX_SHOWN_ARGUMENTS / 2 ? lineEnd : MAX_SHOWN_ARGUMENTS);
+  return `${kept}\n… ${(text.length - kept.length).toLocaleString('en-US')} more characters`;
+}
+
+/** What an MCP call's question asks about: the server's names for server and tool, and the arguments it would send. */
+export const mcpSubject = (server: string, tool: string, args: unknown): ApprovalSubject => ({ kind: 'mcp', server, tool, arguments: shownArguments(args) });
 
 export type Denial = {
   readonly rule: ApprovalRuleId;
   readonly reason: string;
+  /** What needs the answer: one simple command of the line, or the whole line. */
   readonly command: string;
+  /** The whole command line, which one yes runs, when `command` is only part of it. */
+  readonly line?: string;
   readonly verdict: Exclude<RuleVerdict, 'allow'>;
   /** The workspace allow rule the question offers to save: a program and its fixed arguments. */
   readonly offer?: readonly string[];
@@ -335,6 +359,14 @@ function safeGitSubcommand(name: string, rest: readonly string[]): boolean {
 const safeScript = ([verb, script]: readonly string[]): boolean =>
   verb !== undefined && (PROJECT_SCRIPT.test(verb) || ((verb === 'run' || verb === 'run-script') && script !== undefined && PROJECT_SCRIPT.test(script)));
 
+// The version, a syntax check that runs nothing, and the test runner as `npm test` runs it; any other option may load code.
+function safeNode([form, ...operands]: readonly string[]): boolean {
+  if (operands.some((arg) => arg.startsWith('-'))) return false;
+  if (form === '--version' || form === '-v') return operands.length === 0;
+  if (form === '--check' || form === '-c') return operands.length > 0;
+  return form === '--test';
+}
+
 const safeVerbs =
   (...verbs: string[]) =>
   ([verb]: readonly string[]): boolean =>
@@ -343,13 +375,15 @@ const safeVerbs =
 /** Programs Auto runs without asking: read-only inspection and the project's own checks, each with its safe forms. */
 const SAFE_PROGRAMS: ReadonlyMap<string, (args: readonly string[]) => boolean> = new Map<string, (args: readonly string[]) => boolean>([
   ...[
-    'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'tree', 'pwd', 'echo', 'printf', 'true', 'false',
+    'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'tree', 'pwd', 'echo', 'true', 'false',
     'test', '[', 'stat', 'file', 'du', 'which', 'basename', 'dirname', 'realpath', 'readlink', 'diff', 'cmp', 'sort',
     'uniq', 'cut', 'tr', 'jq', 'nl', 'column', 'date', 'sleep', 'cd', 'pushd', 'popd', 'mkdir', 'touch', 'tee',
     'mktemp', 'comm', 'paste', 'seq', 'od', 'xxd', 'shasum', 'sha256sum', 'md5', 'md5sum',
     'tsc', 'vue-tsc', 'svelte-check', 'vitest', 'jest', 'mocha', 'eslint', 'prettier', 'biome', 'stylelint', 'oxlint',
-    'pytest', 'mypy', 'ruff', 'for', 'fi', 'done',
+    'pytest', 'mypy', 'ruff', 'for', 'fi', 'done', 'esac', '}',
   ].map((program) => [program, always] as const),
+  ['printf', ([first]) => first !== '-v'],
+  ['node', safeNode],
   ['find', (args) => !args.some((arg) => FIND_ACTIONS.has(arg))],
   ['rg', (args) => !args.some((arg) => arg === '--pre' || arg.startsWith('--pre='))],
   ['sed', (args) => args.length >= 2 && args[0] === '-n' && SED_PRINT.test(args[1]!) && !args.slice(2).some((arg) => arg.startsWith('-'))],
@@ -364,8 +398,12 @@ const SAFE_PROGRAMS: ReadonlyMap<string, (args: readonly string[]) => boolean> =
   ['go', safeVerbs('test', 'vet', 'build', 'fmt')],
 ]);
 
+// Programs whose arguments are only text to print or compare, from the index given (after printf's format): a variable
+// there changes no program, file or option.
+const DATA_ARGUMENTS: ReadonlyMap<string, number> = new Map([['echo', 0], ['printf', 1], ['test', 0], ['[', 0], ['true', 0], ['false', 0], ['for', 0]]);
+
 // Wrappers that leave the command as it is; sudo, env, xargs and exec change who runs it or what it receives.
-const SAFE_PREFIXES = new Set(['npx', 'bunx', 'time', 'command', 'nohup', 'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{']);
+const SAFE_PREFIXES = new Set(['npx', 'bunx', 'time', 'command', 'nohup']);
 // Variables that choose which code a program loads or runs.
 const CODE_VARIABLES = /^(?:PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|SHELLOPTS|PS4|PROMPT_COMMAND|IFS|GIT_\w+|npm_config_\w+|PAGER|EDITOR|VISUAL|PYTHON\w*|RUBYOPT|PERL5\w*)=/i;
 // Where a project or a home keeps credentials, as a whole path segment, globs included.
@@ -404,12 +442,15 @@ function trustedExecutable(word: string): boolean {
   return TRUSTED_BIN_DIRS.includes(path.dirname(word));
 }
 
-function isClearlySafe({ program, executable, prefix, args, words }: SimpleCommand): boolean {
+function isClearlySafe({ program, executable, prefix, args, words, redirects }: SimpleCommand): boolean {
   if (words.some((word) => UNSAFE_WORD.some((pattern) => pattern.test(word)))) return false;
   if (prefix.some((word) => (isAssignment(word) ? CODE_VARIABLES.test(word) : !SAFE_PREFIXES.has(path.basename(word))))) return false;
   // An assignment alone runs nothing; the commands of its substitutions are judged on their own.
   if (executable === '') return prefix.length > 0 && prefix.every(isAssignment);
-  if ([executable, ...args].some((word) => /[$`]/.test(word))) return false;
+  if (/[$`]/.test(executable)) return false;
+  const data = DATA_ARGUMENTS.get(program);
+  // A variable left unexpanded could hold anything, so it may stand only where any value is harmless.
+  if (args.some((arg, at) => /[$`]/.test(arg) && (data === undefined || at < data || redirects.has(prefix.length + 1 + at)))) return false;
   const safe = SAFE_PROGRAMS.get(program);
   return safe !== undefined && trustedExecutable(executable) && safe(args);
 }
@@ -535,8 +576,8 @@ export function hookAskDenial({ reason, from }: { readonly reason: string | unde
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
-  'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
-  'mcp-tool': { reason: 'an MCP tool', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
+  'mcp-read-only': { reason: 'a tool its MCP server calls read-only, which Geno cannot check', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
+  'mcp-tool': { reason: 'a tool of an MCP server, which runs outside the sandbox', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
 };
 
 /**
@@ -583,22 +624,31 @@ export function mcpDenialFor(call: { readonly name: string; readonly readOnly: b
 const SEPARATORS = ['&&', '||', ';;', ';', '&', '|', '\n', '(', ')'];
 const REDIRECTS = ['>>', '>&', '&>', '>', '<'];
 
+// Reserved words that a command follows, as in `do node a.js`. `time` is left to the wrappers, as it takes options.
+const OPENING_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{']);
+/** The shell's reserved words; an allow rule never starts with one. */
+export const SHELL_KEYWORDS: ReadonlySet<string> = new Set([...OPENING_KEYWORDS, 'fi', 'done', 'for', 'in', 'case', 'esac', 'select', 'function', '}', '[[', ']]', 'time', 'coproc']);
+
 type Heredoc = { readonly delimiter: string; readonly quoted: boolean; readonly stripTabs: boolean };
 
 /**
  * Splits a shell command into simple commands of words. Quotes group and are removed. A command substitution stays in
  * its word as text and its commands are split out ahead of it. Heredoc bodies are data, except for the substitutions
- * of an unquoted one.
+ * of an unquoted one. A reserved word that opens a command, such as `do` or `then`, is dropped; one that closes a
+ * compound command, such as `done`, stays as a command of its own.
  */
 export function splitCommand(command: string): string[][] {
   return split(command).commands;
 }
 
-/** The simple commands, and whether the line leaves a quote, a substitution or an operator open, which a shell refuses to run as written. */
-type Split = { readonly commands: string[][]; broken: boolean };
+/**
+ * The simple commands, where each names a redirect's file, and whether the line leaves a quote, a substitution or an
+ * operator open, which a shell refuses to run as written.
+ */
+type Split = { readonly commands: string[][]; readonly redirects: Set<number>[]; broken: boolean };
 
 function split(command: string): Split {
-  const out: Split = { commands: [], broken: false };
+  const out: Split = { commands: [], redirects: [], broken: false };
   scan(command, 0, undefined, out);
   return out;
 }
@@ -621,17 +671,30 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
   // After `&&`, `||` or `|` with no command yet: a line that ends here is cut short.
   let dangling = false;
   const heredocs: Heredoc[] = [];
+  let redirects = new Set<number>();
+  // Whether the next word is the file of a redirect.
+  let redirected = false;
+  // Whether a quote or a backslash wrote part of the word, which makes it a plain word, never a keyword.
+  let quoted = false;
   const endWord = () => {
-    if (word !== null) words.push(word);
+    if (word !== null && !(words.length === 0 && !quoted && OPENING_KEYWORDS.has(word))) {
+      words.push(word);
+      if (redirected) redirects.add(words.length - 1);
+      redirected = false;
+    }
     word = null;
+    quoted = false;
   };
   const endCommand = () => {
     endWord();
     if (words.length > 0) {
       commands.push(words);
+      out.redirects.push(redirects);
       dangling = false;
     }
     words = [];
+    redirects = new Set();
+    redirected = false;
   };
   let i = start;
   for (; i < src.length; i++) {
@@ -642,6 +705,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       if (close === -1) out.broken = true;
       const end = close === -1 ? src.length : close;
       word = (word ?? '') + src.slice(i + 1, end);
+      quoted = true;
       i = end;
       continue;
     }
@@ -661,11 +725,13 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       }
       if (j >= src.length) out.broken = true;
       word = (word ?? '') + text;
+      quoted = true;
       i = j;
       continue;
     }
     if (ch === '\\' && i + 1 < src.length) {
       word = (word ?? '') + src[++i];
+      quoted = true;
       continue;
     }
     const substitution = substitutionAt(src, i, out);
@@ -701,7 +767,9 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       endWord();
       i += redirect.length - 1;
       // `>&1` and `>&-` name a file descriptor, not a file.
-      if (redirect === '>&') i += /^(?:\d+|-)?/.exec(src.slice(i + 1))![0].length;
+      const descriptor = redirect === '>&' ? /^(?:\d+|-)?/.exec(src.slice(i + 1))![0].length : 0;
+      i += descriptor;
+      redirected = descriptor === 0;
       continue;
     }
     if (/\s/.test(ch)) {
@@ -782,15 +850,13 @@ function substitutionsIn(text: string, out: Split): void {
   }
 }
 
-// Programs that run the next word as the command, and shell keywords that start a command.
-const WRAPPERS = new Set([
-  'sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice',
-  'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{',
-]);
+// Programs that run the next word as the command.
+const WRAPPERS = new Set(['sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice']);
 const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd']);
 const isAssignment = (word: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
 
-export function simpleCommand(words: readonly string[], cwd: string | undefined): SimpleCommand {
+/** Without `redirects` from the parse, any word may name a redirect's file. */
+export function simpleCommand(words: readonly string[], cwd: string | undefined, redirects: ReadonlySet<number> = new Set(words.keys())): SimpleCommand {
   let i = 0;
   for (;;) {
     while (i < words.length && (isAssignment(words[i]!) || words[i]!.startsWith('-'))) i++;
@@ -798,7 +864,7 @@ export function simpleCommand(words: readonly string[], cwd: string | undefined)
     else break;
   }
   const executable = words[i] ?? '';
-  return { program: path.basename(executable), executable, prefix: words.slice(0, i), args: words.slice(i + 1), words, cwd };
+  return { program: path.basename(executable), executable, prefix: words.slice(0, i), args: words.slice(i + 1), words, redirects, cwd };
 }
 
 /** The values each variable may hold anywhere in the command line; a variable missing here could hold anything. */
@@ -857,11 +923,11 @@ const movesCwd = (commands: readonly (readonly string[])[]): boolean => commands
 export const changesDirectory = (command: string): boolean => movesCwd(splitCommand(command));
 
 export function parseCommandLine(command: string, scope: CommandScope): readonly ParsedCommand[] {
-  const commands = splitCommand(command);
+  const { commands, redirects } = split(command);
   const vars = bindings(commands, scope);
   // A cd may sit in a loop or a subshell, so after one anywhere the directory of any command is unknown.
   const cwd = movesCwd(commands) ? undefined : scope.workspace;
-  return commands.map((words) => ({ words, variants: variants(words, vars).map((variant) => simpleCommand(variant, cwd)) }));
+  return commands.map((words, at) => ({ words, variants: variants(words, vars).map((variant) => simpleCommand(variant, cwd, redirects[at])) }));
 }
 
 // Programs that run the file named by their first operand; an option such as -c or -e runs code from the line instead.
@@ -958,7 +1024,13 @@ export function lineDenial(command: string, mode: ApprovalMode): Denial | undefi
 /** The first command in the line a rule denies in this mode, else the line's own question, else the merged question or classification. */
 export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const flags = flagsOf(parseCommandLine(command, scope), scope, mode);
-  return flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags));
+  return withLine(flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags)), command);
+}
+
+/** The denial with the whole line beside it, when it names one simple command of several. */
+export function withLine(denial: Denial | undefined, command: string): Denial | undefined {
+  const line = command.trim();
+  return denial === undefined || denial.command === line || splitCommand(command).length < 2 ? denial : { ...denial, line };
 }
 
 /** The rules that flag one simple command on its own in this mode. */

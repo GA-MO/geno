@@ -153,9 +153,29 @@ export const mcpDefinitionView = (transport: McpTransport): McpDefinitionView =>
 /** One approval in the trust store. */
 export type McpTrustEntry = { readonly workspace: string; readonly name: string; readonly hash: string; readonly approvedAt: string };
 
-export const isTrusted = (config: McpServerConfig, workspace: string, entries: readonly McpTrustEntry[]): boolean =>
+/**
+ * Whether `config` may start in `workspace`. A lane, a worktree of the repository, also takes the approvals of its
+ * main checkout, under any spelling in `mainCheckout`, for the definition the main checkout would have read: the
+ * lane's folder in it read as the main checkout's. A lane whose definition differs asks again.
+ */
+export const isTrusted = (config: McpServerConfig, workspace: string, entries: readonly McpTrustEntry[], mainCheckout: readonly string[] = []): boolean =>
   MCP_SOURCE_TRUST[config.source] === 'trusted' ||
-  entries.some((entry) => entry.workspace === workspace && entry.hash === definitionHash(config));
+  entries.some((entry) =>
+    entry.workspace === workspace
+      ? entry.hash === definitionHash(config)
+      : mainCheckout.includes(entry.workspace) && entry.hash === definitionHash({ ...config, transport: movedTransport(config.transport, workspace, entry.workspace) }),
+  );
+
+/** A definition read in folder `from` as it reads in folder `to`: every path under `from` moved to `to`. */
+function movedTransport(transport: McpTransport, from: string, to: string): McpTransport {
+  // Only the folder itself, so a lane named `fix` does not move `fix-2`.
+  const at = new RegExp(String.raw`${from.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}(?=$|[/\s"'=:;,])`, 'g');
+  const move = (text: string): string => text.replace(at, () => to);
+  const moveAll = (record: Readonly<Record<string, string>>) => Object.fromEntries(Object.entries(record).map(([key, value]) => [key, move(value)]));
+  return transport.kind === 'stdio'
+    ? { ...transport, command: move(transport.command), args: transport.args.map(move), env: moveAll(transport.env), cwd: transport.cwd === undefined ? undefined : move(transport.cwd) }
+    : { ...transport, url: move(transport.url), headers: moveAll(transport.headers) };
+}
 
 /** What the model is told of one server tool. `readOnly` is the server's own readOnlyHint. */
 export type McpToolInfo = {

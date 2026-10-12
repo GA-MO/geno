@@ -39,17 +39,19 @@ const docsIslandEntries = readdirSync(path.join(repo, DOCS_ISLANDS))
   .map((name) => `${DOCS_ISLANDS}/${name}`);
 
 export const BOUNDARIES: Boundaries = {
-  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src', 'packages/docs/src'],
+  sources: ['packages/core/src', 'packages/engine/src', 'packages/extension/src', 'packages/web/src', 'packages/docs/src'],
   layers: [
     {
       name: 'core-is-pure',
       from: 'packages/core',
-      mayNotImport: ['packages/engine', 'packages/extension', 'packages/docs'],
+      mayNotImport: ['packages/engine', 'packages/extension', 'packages/web', 'packages/docs'],
       nodeBuiltins: ['path', 'crypto'],
     },
-    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/docs'] },
-    { name: 'extension-without-docs', from: 'packages/extension', mayNotImport: ['packages/docs'] },
-    { name: 'docs-read-sources-as-text', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension'] },
+    { name: 'engine-without-extension', from: 'packages/engine', mayNotImport: ['packages/extension', 'packages/web', 'packages/docs'] },
+    // The web host runs the extension's chat host; the extension never depends on how it is served.
+    { name: 'extension-without-web', from: 'packages/extension', mayNotImport: ['packages/web', 'packages/docs'] },
+    { name: 'web-without-docs', from: 'packages/web', mayNotImport: ['packages/docs'] },
+    { name: 'docs-read-sources-as-text', from: 'packages/docs', mayNotImport: ['packages/core', 'packages/engine', 'packages/extension', 'packages/web'] },
   ],
   gates: [
     {
@@ -71,11 +73,14 @@ export const BOUNDARIES: Boundaries = {
         'packages/engine/src/workspace.ts',
         // The installed Claude Code plugins, whose `.mcp.json` servers join the session's.
         'packages/engine/src/plugins.ts',
+        // Which lane a workspace is, whose main checkout's approvals hold in it.
+        'packages/engine/src/lanes.ts',
       ],
     },
   ],
   bundles: [
     { name: 'webview-in-browser', runsIn: 'webview', entries: webviewEntries },
+    { name: 'web-client-in-browser', runsIn: 'browser', entries: ['packages/web/src/client.ts'] },
     {
       name: 'docs-islands-without-elk',
       runsIn: "reader's browser",

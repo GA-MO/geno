@@ -29,7 +29,7 @@ import type { PartRun } from './parts.js';
 import type { CutEvent, ForkOrigin } from './rewind.js';
 import { compactedText, contextView, type CompactEvent } from './compact.js';
 import { renderEnvironment, type Environment } from './environment.js';
-import { arrivalText, GENO_NOTE, STOPPED_TURN_NOTE, USER_PROMPT_FOLLOWS, userSteerText } from './fence.js';
+import { arrivalText, GENO_NOTE, STOPPED_TURN_NOTE, USER_PROMPT_FOLLOWS, userActionText, userSteerText, type PromptAction } from './fence.js';
 import { nudgeText, type ReportNudgeEvent } from './handback.js';
 import { changedOnDiskNote, type FileChangedEvent, type FileStamp } from './file-tracker.js';
 import { renderMemory, type MemoryEntry } from './memory.js';
@@ -212,6 +212,8 @@ export type TurnEvent =
       readonly command?: Invocation | undefined;
       /** Delivered into a running turn, after its last tool results, rather than starting one (`steer.ts`). */
       readonly steer?: true | undefined;
+      /** The button that sent `content` for the user, in Geno's words (`PROMPT_ACTIONS`). */
+      readonly action?: PromptAction | undefined;
       /**
        * Someone other than the user: the parent agent's steer, a background child's report, or the engine itself,
        * which starts a woken turn (`wake.ts`).
@@ -375,15 +377,16 @@ type UserEvent = Extract<TurnEvent, { kind: 'user' }>;
  * A user event's text as the model reads it, by who sent it. The log keeps what was sent; only the user's own
  * prompt goes as it is. A woken turn's text is the arrival notice already.
  */
-const SENDER_TEXT: Readonly<Record<'prompt' | 'steer' | NonNullable<UserEvent['from']>, (text: string) => string>> = {
+const SENDER_TEXT: Readonly<Record<'prompt' | 'steer' | 'action' | NonNullable<UserEvent['from']>, (text: string) => string>> = {
   prompt: (text) => text,
   steer: userSteerText,
+  action: userActionText,
   parent: arrivalText,
   child: arrivalText,
   wake: (text) => text,
 };
 
-const senderOf = (event: UserEvent): keyof typeof SENDER_TEXT => event.from ?? (event.steer === true ? 'steer' : 'prompt');
+const senderOf = (event: UserEvent): keyof typeof SENDER_TEXT => event.from ?? (event.steer === true ? 'steer' : event.action === undefined ? 'prompt' : 'action');
 
 /** Images first, which the model reads best before the text about them; then the prompt; then mentions and attached files. */
 function userBlocks(event: Extract<TurnEvent, { kind: 'user' }>, stored: StoredAttachments, workspace: string): (TextBlockParam | ImageBlockParam)[] {

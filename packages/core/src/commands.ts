@@ -92,8 +92,8 @@ export const COMMAND_META = 'gcode/command';
 
 export type CommandMeta = { readonly kind: SlashCommand['kind']; readonly runs?: BuiltinRunner };
 
-/** What a user event records of the command that produced it: the name and the raw text after it. */
-export type Invocation = { readonly name: string; readonly args: string };
+/** What a user event records of the command that produced it: the name, the raw text after it, and what it does as the list says. */
+export type Invocation = { readonly name: string; readonly args: string; readonly description?: string | undefined };
 
 export const builtinCommands = (): SlashCommand[] =>
   Object.entries(BUILTIN_COMMANDS).map(([name, spec]: [string, BuiltinSpec]) => ({
@@ -175,17 +175,17 @@ export type Expansion =
   | { readonly kind: 'message'; readonly content: string; readonly command: Invocation; readonly context: readonly ContextItem[] };
 
 const EXPAND: { readonly [K in SlashCommand['kind']]: (command: Extract<SlashCommand, { kind: K }>, text: string, args: string) => Expansion } = {
-  builtin: ({ name, runs }, _text, args) => {
+  builtin: ({ name, runs, description }, _text, args) => {
     const spec: BuiltinSpec = BUILTIN_COMMANDS[name];
     return spec.turn === undefined
       ? { kind: 'builtin', name, runs, args }
-      : { kind: 'message', content: spec.turn(args), command: { name, args }, context: [] };
+      : { kind: 'message', content: spec.turn(args), command: { name, args, description }, context: [] };
   },
-  prompt: ({ name, template }, _text, args) => ({ kind: 'message', content: expandTemplate(template, args), command: { name, args }, context: [] }),
-  skill: ({ name, path, text: skill }, text, args) => ({
+  prompt: ({ name, template, description }, _text, args) => ({ kind: 'message', content: expandTemplate(template, args), command: { name, args, description }, context: [] }),
+  skill: ({ name, path, text: skill, description }, text, args) => ({
     kind: 'message',
     content: text,
-    command: { name, args },
+    command: { name, args, description },
     context: [{ kind: 'skill', name, path, text: skill }],
   }),
 };
