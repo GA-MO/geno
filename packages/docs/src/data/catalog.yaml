@@ -172,6 +172,31 @@ scenarios:
       - editor
       - server
     terminal: Request rejected with "a turn is already running"
+  - id: turn.first-prompt-path
+    thai: prompt แรกเดินทางจากแผงถึง model
+    english: The first prompt travels from the panel to the model
+    chapter: 2
+    priority: P1
+    lanes:
+      - user
+      - panel
+      - editor
+      - server
+      - loop
+      - model
+    terminal: Continues as `turn.with-tools`
+  - id: turn.test-fix-loop
+    thai: แก้โค้ดแล้วรันเทสต์จนผ่าน
+    english: Change the code and run the tests until they pass
+    chapter: 2
+    priority: P1
+    lanes:
+      - user
+      - loop
+      - policy
+      - tool
+      - model
+    terminal: "`done` / `end_turn`"
   - id: mstop.no-reply-continue-retry
     thai: จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue/Retry
     english: Turn ends with no reply; Continue or Retry
