@@ -1116,6 +1116,18 @@ scenarios:
       - tool
       - model
     terminal: Neutralized as data
+  - id: sec.injection-file-run
+    thai: การรันจริง ไฟล์ใน repo ซ่อนคำสั่งให้ agent ส่ง .env ออกไป
+    english: "Real run: a repo file hides an instruction to upload .env"
+    chapter: 10
+    priority: P2
+    lanes:
+      - user
+      - loop
+      - model
+      - tool
+      - policy
+    terminal: '`done` / `end_turn`'
   - id: edit.applied-as-diff
     thai: แก้ไฟล์แล้วแสดงเป็น diff
     english: Edit lands in the editor as a diff
