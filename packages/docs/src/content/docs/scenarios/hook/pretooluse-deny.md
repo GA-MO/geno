@@ -59,14 +59,14 @@ scenario:
                 do: >-
                   call ยังขึ้นเป็นขั้นในแผงแชต แต่ `callOf` ไม่รันอะไร ได้ผลสถานะ `denied` ทันที
                   ข้อความผลคือ "[Geno] PreToolUse:Bash hook error: deploys go through CI" ไม่มี card ไม่มี classifier
-                  และ PostToolUse ไม่ทำงานกับ call ที่ถูกปฏิเสธ
+                  และ PostToolUse ไม่ทำงานกับ call ที่ถูกปฏิเสธ ผลพาบันทึก `hook-deny` ไปด้วย update ปิดจึงมี `APPROVAL_META`
                 ref: "packages/engine/src/drive.ts#\"if (step?.kind === 'refuse') return { status: 'denied'\""
                 emits: [denied]
               - use: tool-result-returns
               - lane: panel
                 at: rail
                 do: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมเหตุผลของ hook
-                sees: "Denied by a hook · Deploys go through CI"
+                sees: "Denied by a hook · Deploys go through CI."
                 ref: packages/extension/src/chat/session-updates.ts#denialOf
               - lane: loop
                 at: step
@@ -173,7 +173,7 @@ scenario:
               - lane: tool
                 at: shell
                 do: >-
-                  `bash` รัน `pnpm deploy --prod` ใน sandbox
+                  `bash` รัน `pnpm deploy --prod` ใน sandbox ผลแนบบันทึกว่าผู้ใช้อนุญาต update ปิดจึงมี `APPROVAL_META`
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
               - use: tool-result-returns
               - lane: loop
@@ -199,7 +199,7 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  call ได้ผล `denied` call อื่นของ turn เดียวกันที่ hook ไม่ได้ปฏิเสธยังรันตามปกติ
+                  call ได้ผล `denied` ที่พาบันทึก `hook-deny` (`APPROVAL_META`) call อื่นของ turn เดียวกันที่ hook ไม่ได้ปฏิเสธยังรันตามปกติ
                   เมื่อบันทึกผลครบ `runTools` บันทึก event `error` ชนิด `blocked`: "A PreToolUse hook stopped the turn: production is frozen"
                 ref: "packages/engine/src/drive.ts#\"const message = `A ${stop.by} hook stopped the turn: ${stop.reason}`;\""
                 emits: [denied, blocked]
@@ -214,7 +214,7 @@ scenario:
                 alongside: true
                 do: ขั้นของคำสั่งขึ้นป้ายปฏิเสธ และท้าย turn ขึ้นแถบ error
                 sees: >-
-                  "Denied by a hook · Production is frozen" และแถบ error "A PreToolUse hook stopped the turn: production is frozen"
+                  "Denied by a hook · Production is frozen." และแถบ error "A PreToolUse hook stopped the turn: production is frozen"
                 ref: packages/extension/src/chat/render.ts#errorBlock
               - lane: loop
                 at: step

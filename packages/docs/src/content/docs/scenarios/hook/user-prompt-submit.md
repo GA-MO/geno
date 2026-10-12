@@ -80,8 +80,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` อ่านได้ `failed` แล้วส่ง action `turn-end`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `turnEndOf` อ่าน `_meta` ได้ `failed` แล้ว `prompt()` ส่ง action `turn-end`
+                ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response)\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
