@@ -15,6 +15,10 @@ scenario:
   related: [ctx.compaction-manual, ext.slash-template, perm.mode-switch-mid-turn, sess.new-chat]
   steps:
     - id: type
+      beat:
+        title: คุณเลือกคำสั่งจากรายการ `/`
+        text: รายการบอกว่าคำสั่งไหน VS Code ทำเอง และคำสั่งไหน engine ทำ คุณกด Enter แชตส่งข้อความทั้งบรรทัด
+        to: panel
       lane: user
       do: >-
         ผู้ใช้เลือกคำสั่งจากรายการ `/` แล้วกด Enter รายการบอกว่าคำสั่งไหน editor ทำเอง และคำสั่งไหน engine ทำ
@@ -29,6 +33,10 @@ scenario:
       emits: [send]
 
     - id: route
+      beat:
+        title: แชตดูว่าใครทำคำสั่งนี้
+        text: ก่อนทำอย่างอื่น แชตดูว่าคำสั่งเป็นของ VS Code หรือของ engine
+        ask: คำสั่งไหน
       lane: editor
       at: chat
       do: >-
@@ -42,12 +50,22 @@ scenario:
             label: /new (VS Code ทำเอง)
             steps:
               - lane: editor
+                beat:
+                  title: VS Code เปิดแชตใหม่เอง
+                  text: "`/new` ไม่ติดต่อ engine ไม่มี turn และไม่มีอะไรถูกบันทึกลง log session เดิมยังอยู่ในประวัติ"
                 at: chat
                 do: >-
                   `/new` ตรงกับ action `new-chat` `Chat.newChat` ซ่อนประวัติ แล้วเปิด session ใหม่ให้แผง
                   ไม่มี action `turn-start` ไม่มีคำขอ `session/prompt` และไม่มีอะไรถูกบันทึกลง log ของ session เดิม
                 ref: packages/extension/src/chat/chat.ts#Chat.newChat
               - lane: panel
+                beat:
+                  title: แชตว่างพร้อมหน้าเริ่มต้น
+                  text: ช่องพิมพ์ว่าง พร้อมรับ prompt แรกของแชตใหม่
+                  sees:
+                    kind: composer
+                    state: idle
+                  end: แชตใหม่ว่าง
                 at: rail
                 do: แผงแชตว่าง พร้อมหน้าเริ่มต้นของแชตใหม่ session เดิมยังอยู่ในประวัติ
                 sees: หน้าแชตใหม่ที่ไม่มีข้อความ และช่องพิมพ์ว่าง
@@ -58,12 +76,19 @@ scenario:
             label: /mode plan (engine ทำเอง)
             steps:
               - lane: editor
+                beat:
+                  title: แชตส่ง `/mode plan` ไปที่ engine
+                  text: "`/mode` ไม่ใช่คำสั่งของ VS Code แชตขึ้น turn ที่มีชิปของคำสั่ง แล้วส่งเป็น prompt"
+                  to: engine
                 at: chat
                 do: >-
                   `/mode` ไม่ใช่คำสั่งของ editor `prompt()` ส่ง action `turn-start` ที่มีชิปของคำสั่ง แล้วส่งคำขอ ACP `session/prompt`
                 ref: packages/extension/src/chat/chat.ts#Chat.prompt
                 emits: [turn-start, session/prompt]
               - lane: server
+                beat:
+                  title: engine ทำเองโดยไม่เรียก model
+                  text: คำสั่งในตัวไม่เปิดรอบของ agent ไม่มีงานในแผง Tasks และไม่มีการเรียก model
                 at: turns
                 do: >-
                   `runTurn` ให้ `commands.expand` แปลงข้อความ ได้ `builtin` จึงเรียก `runBuiltin` แทนการเปิดรอบของเอเจนต์
@@ -72,6 +97,9 @@ scenario:
                 emits: [builtin]
                 phase: starting
               - lane: server
+                beat:
+                  title: Geno เปลี่ยนโหมดทันที
+                  text: Geno ตรวจว่า plan เป็นโหมดที่มีจริง เปลี่ยนโหมดของ session บันทึกลง log และบอกแชตว่าโหมดเปลี่ยน
                 at: turns
                 do: >-
                   `ENGINE_ACTIONS.mode` ตรวจว่า `plan` เป็นโหมดที่มีจริง แล้ว `switchMode` เปลี่ยนโหมดของ session ทันที
@@ -79,6 +107,15 @@ scenario:
                 ref: packages/engine/src/serve.ts#switchMode
                 emits: [current_mode_update, mode]
               - lane: server
+                beat:
+                  title: แชตขึ้นคำตอบหนึ่งบรรทัด
+                  text: turn สั้นๆ จบแบบ done ตัวเลือกโหมดในช่องพิมพ์เป็น Plan
+                  to: panel
+                  sees:
+                    kind: message
+                    from: geno
+                    text: "Approval mode: plan."
+                  end: Turn สั้นๆ จบ
                 at: turns
                 do: >-
                   คำตอบของคำสั่งคือ "Approval mode: plan." ส่งเป็น `agent_message_chunk` แล้วตอบ `session/prompt`

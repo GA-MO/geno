@@ -15,6 +15,10 @@ scenario:
   related: [ext.mcp-tool-call, ext.mcp-server-untrusted, tool.deferred-tool-load]
   steps:
     - id: wants
+      beat:
+        title: Model เรียก tool ของ Linear
+        text: model โหลด `mcp__linear__list_issues` ไว้แล้ว มันขอดู issue ที่เปิดอยู่ แชตขึ้นขั้นของ call นี้
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `mcp__linear__list_issues` จบคำตอบด้วย `stop_reason: tool_use`
@@ -25,6 +29,10 @@ scenario:
     - use: tool-call-opens
 
     - id: call
+      beat:
+        title: Geno รอให้ server พร้อมแล้วส่ง call
+        text: Geno ส่ง call ให้ server `linear` ถ้า server ยังไม่พร้อม call รอก่อน
+        ask: server เป็นอย่างไร
       lane: tool
       at: executor
       do: >-
@@ -37,11 +45,19 @@ scenario:
             label: process ของ server ตายซ้ำ
             steps:
               - lane: external
+                beat:
+                  title: process ของ server ตาย
+                  text: server จบกลางทาง Geno เห็นว่าการเชื่อมต่อหาย และเริ่ม server ใหม่
+                  from: machine
                 do: >-
                   process stdio ของ server จบกลางทาง `onLost` บอก handle ว่าการเชื่อมต่อหาย handle ส่งเหตุการณ์ `crashed`
                   ให้ `nextServerState` ซึ่งเปลี่ยนสถานะจาก `ready` เป็น `starting` (ยังเริ่มใหม่ได้) หรือ `failed` (ครบแล้ว) ไม่มีสถานะชื่อ `crashed`
                 ref: packages/core/src/mcp.ts#nextServerState
               - lane: server
+                beat:
+                  title: server ตายครั้งที่สี่ Geno เลิกเริ่มใหม่
+                  text: 'Geno รอ 0.5, 1 แล้ว 2 วินาทีก่อนต่อใหม่แต่ละครั้ง ครั้งที่สี่ server ถูกตั้งว่าล้ม call ได้ error "the MCP server linear is failed: crashed 4 times"'
+                  to: model
                 at: mcp
                 do: >-
                   ถ้ายังเริ่มใหม่ไม่ครบ 3 ครั้ง handle รอ 0.5, 1 แล้ว 2 วินาทีก่อนต่อใหม่ (ไม่เกิน 8 วินาที) call ที่รออยู่รอการต่อนั้นด้วย
@@ -56,11 +72,20 @@ scenario:
               - use: tool-result-returns
               - use: model-call
               - lane: model
+                beat:
+                  title: Model บอกคุณว่า Linear ล่ม
+                  text: model อ่าน error แล้วบอกว่ายังดู issue ให้ไม่ได้
+                  to: panel
                 do: >-
                   โมเดลอ่าน error แล้วบอกผู้ใช้ว่า server ของ Linear ล่ม และยังดู issue ให้ไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
+                beat:
+                  title: แผง MCP บอกว่า server ล้ม
+                  text: แผง MCP servers แสดงสถานะพร้อมเหตุผล run ถัดไปไม่มี tool ของ `linear` และ Geno บอก model ว่า server นี้ใช้ไม่ได้
+                  sees: 'แถว "linear" ป้าย "Failed" และเหตุผล "crashed 4 times; last: ..."'
+                  end: server นี้ใช้ไม่ได้
                 at: rail
                 do: >-
                   แผง MCP servers แสดงสถานะของ server พร้อมเหตุผล
@@ -80,10 +105,18 @@ scenario:
             label: server ตอบ 401
             steps:
               - lane: external
+                beat:
+                  title: server ตอบ 401
+                  text: token ของ server หมดอายุ
+                  from: machine
                 do: >-
                   server HTTP ตอบ 401 เพราะ token หมดอายุ
                 ref: packages/engine/src/mcp/connection.ts#isUnauthorized
               - lane: server
+                beat:
+                  title: Geno บอกว่าต้องล็อกอิน
+                  text: Geno ปิดการเชื่อมต่อ ตั้งว่า server ต้องล็อกอิน แล้ว call ได้ error ที่บอกให้ขอคุณล็อกอินในแผง MCP servers
+                  to: model
                 at: mcp
                 do: >-
                   handle ปิดการเชื่อมต่อ สถานะเป็น `failed` แบบ `needsSignIn` และ call ได้ `ToolError`
@@ -93,11 +126,19 @@ scenario:
               - use: tool-result-returns
               - use: model-call
               - lane: model
+                beat:
+                  title: Model ขอให้คุณล็อกอิน
+                  text: model ล็อกอินแทนคุณไม่ได้ มันบอกให้คุณล็อกอิน Linear ในแผง MCP servers
+                  to: panel
                 do: >-
                   โมเดลบอกผู้ใช้ให้ล็อกอิน Linear ในแผง MCP servers โมเดลล็อกอินแทนไม่ได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
+                beat:
+                  title: แผง MCP มีปุ่ม Sign in
+                  text: แถวของ server บอกว่าต้องล็อกอินก่อน Geno จึงจะใช้ tool ของมันได้
+                  sees: แถว "linear" ป้าย "Needs sign-in" บรรทัด "It needs you to sign in before Geno can use its tools." และปุ่ม [Sign in]
                 at: rail
                 do: >-
                   แผง MCP servers แสดงแถวของ server พร้อมปุ่มล็อกอิน
@@ -105,6 +146,10 @@ scenario:
                   แถว "linear" ป้าย "Needs sign-in" บรรทัด "It needs you to sign in before Geno can use its tools." และปุ่ม [Sign in]
                 ref: packages/extension/src/chat/mcp-panel.ts#signInRow
               - lane: user
+                beat:
+                  title: คุณกด Sign in
+                  text: VS Code เปิด browser ไปหน้า OAuth ของ server token เก็บใน SecretStorage ของ VS Code ไม่ไปถึง model
+                  to: panel
                 do: ผู้ใช้กด Sign in
               - lane: editor
                 at: vscode-ui
@@ -114,6 +159,11 @@ scenario:
                 ref: packages/extension/src/chat/mcp-host.ts#McpServers.signIn
                 emits: [Signing in to]
               - lane: editor
+                beat:
+                  title: Geno ต่อ server ใหม่ด้วย token
+                  text: หลังล็อกอิน แชตขอให้ engine ต่อ server ใหม่ engine ขอ token จาก VS Code แถวของ server กลับมาพร้อมใช้
+                  sees: แถว "linear" ป้ายพร้อมใช้ และปุ่ม Sign out
+                  end: server กลับมาพร้อมใช้
                 at: chat
                 do: >-
                   หลังล็อกอิน `reconnect` ส่ง `_gcode/mcpReconnect` ให้ engine ต่อ server ใหม่ คราวนี้ engine ขอ token จาก editor ผ่าน `_gcode/mcpToken`
