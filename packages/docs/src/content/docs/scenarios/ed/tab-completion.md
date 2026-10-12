@@ -15,11 +15,19 @@ scenario:
   related: [ed.inline-edit-cmd-k, start.open-window]
   steps:
     - id: type
+      beat:
+        title: คุณพิมพ์แล้วหยุด
+        text: คุณพิมพ์ `export function isWeekend(` แล้วหยุดครู่หนึ่ง VS Code ขอคำเติม
+        to: panel
       lane: user
       do: ผู้ใช้พิมพ์แล้วหยุด
       phase: idle
 
     - id: ask
+      beat:
+        title: ส่วนขยายส่งคำขอให้ llama-server
+        text: ส่วนขยายสร้าง prompt จากข้อความก่อนและหลังเคอร์เซอร์ และไฟล์อื่นที่เปิดอยู่ แล้วรอจนคุณหยุดพิมพ์ ไม่มี engine เกี่ยวข้อง
+        to: model
       lane: editor
       at: vscode-ui
       do: >-
@@ -37,12 +45,20 @@ scenario:
       ref: packages/core/src/tab/stream.ts#streamFim
 
     - id: complete
+      beat:
+        title: llama-server บนเครื่องเติมโค้ด
+        text: model เติมโค้ดขนาดเล็กบนเครื่องของคุณ stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
+        to: panel
       lane: model
       do: >-
         llama-server บนเครื่องรันโมเดลเติมโค้ดขนาดเล็กแล้ว stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
       ref: packages/extension/src/tab/server.ts#TabServer
 
     - id: filter
+      beat:
+        title: ส่วนขยายกรองผล
+        text: ผลถูกทิ้งถ้าคุณขยับเคอร์เซอร์ไปแล้ว ผลว่าง บรรทัดแรกซ้ำข้อความหลังเคอร์เซอร์ หรือยาวเกิน 8 บรรทัด
+        ask: ผ่านตัวกรองไหม
       lane: editor
       at: vscode-ui
       do: >-
@@ -57,6 +73,12 @@ scenario:
             label: ผ่าน
             steps:
               - lane: editor
+                beat:
+                  title: VS Code แสดงข้อความจาง
+                  text: ข้อความจางต่อจากเคอร์เซอร์ คุณรับด้วย Tab หรือพิมพ์ต่อก็ได้
+                  to: you
+                  sees: "ข้อความจางต่อจากเคอร์เซอร์ `date: Date): boolean {` และบรรทัดถัดไปของฟังก์ชัน"
+                  ask: กด Tab ไหม
                 at: vscode-ui
                 do: >-
                   `TabProvider` คืน inline completion หนึ่งรายการ และจดไว้ว่ากำลังแสดงอยู่ในไฟล์นี้
@@ -72,6 +94,11 @@ scenario:
                       label: กด Tab
                       steps:
                         - lane: editor
+                          beat:
+                            title: คุณกด Tab
+                            text: VS Code แทรกข้อความ ส่วนขยายจดว่าคุณรับ และตรวจภายหลังว่าข้อความยังอยู่ในไฟล์ไหม
+                            from: you
+                            end: โค้ดอยู่ในไฟล์แล้ว
                           at: vscode-ui
                           do: >-
                             VS Code แทรกข้อความแล้วรันคำสั่ง `gcode.tab.accepted` `OutcomeTracker.accepted` บันทึกว่ารับ
@@ -83,6 +110,11 @@ scenario:
                       label: พิมพ์ต่อ
                       steps:
                         - lane: editor
+                          beat:
+                            title: คุณพิมพ์ต่อ
+                            text: ข้อความจางหายไป ถ้าสิ่งที่คุณพิมพ์ตรงกับต้นของผล ผลนั้นยังใช้ต่อได้
+                            from: you
+                            end: ข้อความจางหายไป
                           at: vscode-ui
                           do: >-
                             ข้อความจางหายไป ผลที่ขอไว้แล้วยังใช้ต่อได้ถ้าสิ่งที่ผู้ใช้พิมพ์ตรงกับต้นของมัน
@@ -93,6 +125,10 @@ scenario:
             label: ถูกกรอง
             steps:
               - lane: editor
+                beat:
+                  title: ไม่มีข้อความจาง
+                  text: ส่วนขยายไม่คืนอะไร ผลยังอยู่ใน cache ถ้าคุณพิมพ์ต่อในทางเดียวกับมัน
+                  end: ไม่มีคำเติม
                 at: vscode-ui
                 do: >-
                   `TabProvider` ไม่คืนอะไร ไม่มีข้อความจาง ผลยังอยู่ใน cache ถ้าผู้ใช้พิมพ์ต่อในทางเดียวกับมัน

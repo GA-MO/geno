@@ -15,6 +15,12 @@ scenario:
   related: [edit.applied-as-diff, edit.old-str-mismatch, turn.text-answer, ed.review-hunks]
   steps:
     - id: target
+      beat:
+        title: คุณเลือกบรรทัดแล้วกด Cmd-K Cmd-I
+        text: คุณเลือกบรรทัด 12 ถึง 18 ของ `src/date.ts` ส่วนขยายขยายการเลือกเป็นบรรทัดเต็ม แล้วเปิดกล่องให้พิมพ์คำสั่ง
+        from: you
+        to: panel
+        sees: กล่องพิมพ์ของ VS Code "Edit the selection" ข้อความจาง "What should change?"
       lane: editor
       at: vscode-ui
       do: >-
@@ -25,10 +31,22 @@ scenario:
       phase: idle
 
     - id: type
+      beat:
+        title: คุณพิมพ์ “รองรับรูปแบบ ISO week”
+        text: คุณกด Enter คำสั่งไปทางเดียวกับข้อความที่พิมพ์ในแผง พร้อมบอกไฟล์และช่วงบรรทัด
+        to: panel
       lane: user
       do: ผู้ใช้พิมพ์ "รองรับรูปแบบ ISO week" แล้วกด Enter
 
     - id: prompt
+      beat:
+        title: แชตในแผงขึ้น turn ของการแก้
+        text: บับเบิลบอกไฟล์และช่วงบรรทัด turn นี้แสดงในแผงเหมือน turn อื่น
+        to: engine
+        sees:
+          kind: message
+          from: you
+          text: "Edit lines 12-18 of src/date.ts: รองรับรูปแบบ ISO week"
       lane: editor
       at: chat
       do: >-
@@ -47,6 +65,10 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: accept
+      beat:
+        title: Geno เตรียม turn ที่มีแค่ tool edit
+        text: Geno ปฏิเสธไฟล์นอก workspace อ่านไฟล์และ problem ของไฟล์จาก VS Code แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่งของคุณ แล้วส่งให้ model
+        to: model
       lane: server
       at: turns
       do: >-
@@ -75,6 +97,10 @@ scenario:
     - use: model-call
 
     - id: edit-call
+      beat:
+        title: Model ขอแก้ช่วงนั้น
+        text: model อ่านไฟล์จาก prompt จึงไม่ต้อง read ก่อน มันส่ง `old_str` และ `new_str` แชตขึ้นขั้นของ edit
+        to: engine
       lane: model
       do: >-
         โมเดลอ่านไฟล์จาก prompt แล้วขอ `edit` ด้วย `old_str` และ `new_str` จบด้วย `stop_reason: tool_use`
@@ -85,6 +111,10 @@ scenario:
     - use: tool-call-opens
 
     - id: apply
+      beat:
+        title: Geno แทน `old_str` ในไฟล์
+        text: Geno เทียบข้อความปัจจุบันกับข้อความที่อยู่ใน prompt แล้วหาข้อความเดิม
+        ask: การแก้ลงไหม
       lane: tool
       at: executor
       do: >-
@@ -97,24 +127,52 @@ scenario:
             label: ลง
             steps:
               - use: edit-write-lands
+                beat:
+                  title: VS Code เขียนการแก้ลง buffer
+                  text: การแก้เข้า buffer ที่คุณเปิดอยู่ ขั้นของ edit บอกจำนวนบรรทัด Geno ส่งผลให้ model
+                  to: panel
+                  sees:
+                    kind: step
+                    label: Edited date.ts
+                    status: done
+                    note: +9 −2
               - use: tool-result-returns
               - use: model-call
               - lane: model
+                beat:
+                  title: Model บอกว่าแก้อะไร
+                  text: model ตอบสั้นๆ แล้วจบ turn
+                  to: panel
                 do: >-
                   โมเดลตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
                 ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
                 emits: [end_turn]
               - use: turn-ends
+                beat:
+                  title: Turn จบ
+                  text: ปุ่ม Send กลับมา hunk ของการแก้รอคุณตรวจตามโหมด review
+                  sees:
+                    kind: composer
+                    state: idle
+                  end: การแก้อยู่ในไฟล์แล้ว
           - id: fails
             label: ไม่ลง
             steps:
               - lane: tool
+                beat:
+                  title: การแก้ไม่ลง
+                  text: "`old_str` ไม่ตรง หรือคุณแก้ไฟล์ไประหว่างนั้น ไม่มีอะไรถูกเขียน"
                 at: executor
                 do: >-
                   `old_str` ไม่ตรง หรือผู้ใช้แก้ไฟล์ไประหว่างนั้น `edit` ล้มเหลวด้วย `ToolError` ไม่มีอะไรถูกเขียน
                 ref: "packages/engine/src/tools/agent.ts#\"if (proposed.result.kind === 'failed') throw new ToolError(proposed.result.detail);\""
                 emits: [ToolError]
               - lane: loop
+                beat:
+                  title: Model ลองใหม่ได้สามครั้ง
+                  text: Geno ให้ model ลองใหม่ ถ้าครบสามครั้งยังไม่ลง การเรียกครั้งสุดท้ายไม่มี tool model จึงเขียนได้แค่ประโยคปิดท้าย
+                  to: model
+                  end: Turn จบโดยแก้ไม่ลง
                 at: step
                 do: >-
                   `loopStep` เรียกโมเดลอีกครั้งให้ลองใหม่ ถ้าลองครบสามครั้งแล้วยังไม่ลง การเรียกครั้งที่สี่ซึ่งเป็นครั้งสุดท้ายออกไปพร้อมเครื่องมือปิด
