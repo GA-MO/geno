@@ -99,7 +99,7 @@ scenario:
         โมเดลเรียกตามคำแนะนำ เช่น `bash` ด้วย `npm run dev` และ `run_in_background: true` ซึ่งได้ job id กลับมาทันที
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
-      end: { turn: continues, reason: tool_use }
+      end: { turn: continues, reason: run-tools }
 ---
 
 การตรวจเหล่านี้กันไม่ให้ call หนึ่งตัวค้างจนถึง timeout 120 วินาทีโดยไม่ได้อะไร

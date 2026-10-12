@@ -156,7 +156,7 @@ scenario:
         โมเดลบอกผู้ใช้ว่าหยุดอะไรไปแล้ว และสรุปสิ่งที่ explore เจอก่อนถูกหยุด
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
-      end: { turn: continues, reason: end_turn }
+      end: { turn: done, reason: end_turn }
 ---
 
 `list_agents` กับ `task_stop` คือมือของโมเดลบนงานเบื้องหลังของ session ตัวเอง
