@@ -270,9 +270,12 @@ function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path:
   const listed = head.sees === undefined ? [] : typeof head.sees === 'string' ? [head.sees] : Array.isArray(head.sees) ? head.sees : [head.sees];
   const sees = listed.flatMap((mock, i): Shown[] => {
     if (typeof mock === 'string') return [{ kind: 'text', text: mock.trim() }];
-    if (mock.kind === 'permission')
-      for (const need of FACES[mock.face ?? 'command'].needs)
-        if (mock[need] === undefined) problem(`${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}.${need}`, `a ${mock.face} card's title names its ${need}: give the mock ${need}:`);
+    if (mock.kind === 'permission') {
+      const at = `${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`;
+      for (const need of FACES[mock.face ?? 'command'].needs) if (mock[need] === undefined) problem(`${at}.${need}`, `a ${mock.face} card's title names its ${need}: give the mock ${need}:`);
+      if (mock.face === 'mcp' && mock.command !== '' && !isJson(mock.command)) problem(`${at}.command`, "an MCP card shows the call's arguments as JSON, or '' for none");
+      if (mock.face !== 'mcp' && mock.command.trim() === '') problem(`${at}.command`, 'only an MCP card, whose call sends no arguments, shows no command');
+    }
     if (mock.kind !== 'payload') return [mock];
     const resolved = ctx.runs.resolve(mock);
     const at = `${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`;
@@ -399,3 +402,12 @@ function viaOf(walks: readonly Walk[]): Record<StepId, Choices> {
   }
   return via;
 }
+
+const isJson = (text: string): boolean => {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+};

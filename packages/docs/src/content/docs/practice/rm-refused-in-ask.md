@@ -188,7 +188,7 @@ scenario:
         from: panel
         to: you
         sees: >-
-          ตอนนี้ stderr เขียนว่า "Allow `rm -rf build/`? It uses rm -rf of a path inside the workspace. There is no terminal to answer, so it was refused."
+          ตอนนี้ stderr เขียนว่า "Allow `rm -rf build/` in `rm -rf build/ && ls -d build/ 2>&1; true`? It uses rm -rf of a path inside the workspace. There is no terminal to answer, so it was refused."
       do: >-
         `terminalConfirm` เห็นว่า stdin ไม่ใช่ TTY จึงคืน `false` ทันที
       ref: packages/engine/src/terminal-confirm.ts#terminalConfirm

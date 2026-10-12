@@ -52,12 +52,12 @@ scenario:
         title: "Geno ตรวจคำสั่งกับกฎของคุณ"
         text: >-
           ก่อนรันอะไร Geno เทียบคำสั่งกับกฎของ workspace และรายการคำสั่งปลอดภัย
-          `pnpm add` ไม่อยู่ในทั้งสองที่ และโหมด Ask บอกว่าเรื่องแบบนี้ต้องถามคุณ
+          `pnpm add zod` ไม่อยู่ในทั้งสองที่ และโหมด Ask บอกว่าเรื่องแบบนี้ต้องถามคุณ
         from: engine
         to: engine
       do: >-
         ก่อนรันอะไร `approveCommand` ส่งคำสั่งให้ `ruledDenial` เทียบกับกฎของ workspace และตาราง safe list
-        ผลคือ `unlisted` ซึ่งในโหมด Ask แปลว่าต้องถามผู้ใช้ และแนบรูปแบบ `pnpm add` ไว้ให้เลือกบันทึกเป็นกฎ
+        ผลคือ `unlisted` ซึ่งในโหมด Ask แปลว่าต้องถามผู้ใช้ และแนบรูปแบบ `pnpm add zod` ไว้ให้เลือกบันทึกเป็นกฎ
       ref: packages/core/src/permission-rules.ts#ruledDenial
       emits: [unlisted]
 
@@ -110,13 +110,13 @@ scenario:
           kind: permission
           command: pnpm add zod
           reason: Geno asks because it uses a command not on the safe list.
-          rule: pnpm add
+          rule: pnpm add zod
       do: >-
         แผงแชตแสดงการ์ดขออนุญาตพร้อมคำสั่ง เหตุผล และปุ่มให้เลือก หัวข้อเปลี่ยนเป็น "waiting for you"
       sees: >-
         การ์ด "Run this command?" แสดงคำสั่ง `pnpm add zod`
         พร้อมเหตุผล "Geno asks because it uses a command not on the safe list."
-        และบรรทัด "Always allow saves the rule `pnpm add` for this workspace."
+        และบรรทัด "Always allow saves the rule `pnpm add zod` for this workspace."
         ปุ่ม [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
@@ -165,8 +165,8 @@ scenario:
                 beat:
                   title: "คุณกด Always allow"
                   text: >-
-                    เหมือน Allow แต่ Geno บันทึกกฎ `pnpm add` ไว้ใน workspace ด้วย
-                    ครั้งหน้าคำสั่งแบบนี้ผ่านโดยไม่ถาม ยกเว้นคำสั่งอันตรายอย่าง `rm -rf`
+                    เหมือน Allow แต่ Geno บันทึกกฎ `pnpm add zod` ไว้ใน workspace ด้วย
+                    ครั้งหน้าคำสั่งที่ขึ้นต้นด้วย `pnpm add zod` ผ่านโดยไม่ถาม ส่วน `pnpm add lodash` ยังถาม เพราะกฎเก็บชื่อแพ็กเกจไว้ด้วย
                   from: you
                   to: panel
                 do: >-
@@ -181,8 +181,8 @@ scenario:
               - lane: policy
                 at: rules
                 do: >-
-                  `settle` เรียก `keep` ซึ่งบันทึกกฎ allow รูปแบบ `pnpm add` ลงที่เก็บของ workspace
-                  ครั้งต่อไป `ruledDenial` จะผ่านคำสั่งแบบนี้โดยไม่ถาม ยกเว้นคำสั่งอันตรายอย่าง `rm -rf`
+                  `settle` เรียก `keep` ซึ่งบันทึกกฎ allow รูปแบบ `pnpm add zod` ลงที่เก็บของ workspace
+                  ครั้งต่อไป `ruledDenial` จะผ่านคำสั่งที่ขึ้นต้นด้วย `pnpm add zod` โดยไม่ถาม ยกเว้นคำสั่งอันตรายอย่าง `rm -rf`
                 ref: "packages/engine/src/tools/agent.ts#\"permissions?.add({ effect: 'allow', pattern\""
                 phase: running-tools
 
@@ -300,7 +300,7 @@ scenario:
                     ปุ่มบนการ์ดเปลี่ยนเป็นช่องพิมพ์ คุณพิมพ์ว่า "ใช้ npm แทน" แล้วกด Send
                   from: you
                   to: panel
-                  sees: { kind: permission, command: pnpm add zod, options: [Send], note: ใช้ npm แทน }
+                  sees: { kind: permission, command: pnpm add zod, options: [Send, Back], note: ใช้ npm แทน }
                 do: ปุ่มบนการ์ดเปลี่ยนเป็นช่องให้พิมพ์ข้อความถึงเอเจนต์
                 ref: packages/extension/src/chat/render.ts#commentField
               - lane: user
@@ -518,7 +518,7 @@ scenario:
 | ปุ่ม | ผลต่อคำสั่ง | ผลต่อ turn |
 | --- | --- | --- |
 | **Allow** | รัน | ทำต่อ model ได้อ่านผล |
-| **Always allow in this workspace** | รัน และบันทึกกฎ `pnpm add` | ทำต่อ ครั้งหน้าไม่ถามอีก |
+| **Always allow in this workspace** | รัน และบันทึกกฎ `pnpm add zod` | ทำต่อ ครั้งหน้าไม่ถามอีก |
 | **Deny** | ไม่รัน (`ToolRejected`) | จบทันทีแบบ `done (end_turn)` และรอผู้ใช้ |
 | **No, and tell the agent…** | ไม่รัน (`ToolDenied`) | ทำต่อ model ได้อ่านคำแนะนำของผู้ใช้ |
 | **Stop** (ไม่ตอบการ์ด) | ไม่รัน แต่ model ได้ยินว่า "may have partly run" | จบแบบ `stopped (cancelled)` |

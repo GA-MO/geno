@@ -208,7 +208,7 @@ scenario:
         from: panel
         to: you
         ask: กดปุ่มไหน
-        sees: { kind: permission, command: 'npm pkg set scripts.check="tsc --noEmit"', reason: Geno asks because it uses a command not on the safe list. }
+        sees: { kind: permission, command: npm pkg set scripts.check=tsc --noEmit, reason: Geno asks because it uses a command not on the safe list. }
       do: >-
         การ์ดขออนุญาตขึ้นในบทสนทนาของแม่ หัวข้อของคำขอ ACP ขึ้นต้นด้วย `[worker]` แต่การ์ดใช้หัวข้อของตัวเอง
         จึงไม่บอกว่าลูกตัวไหนเป็นคนขอ

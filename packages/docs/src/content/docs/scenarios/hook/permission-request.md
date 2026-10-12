@@ -46,7 +46,7 @@ scenario:
       at: rules
       do: >-
         `ruledDenial` เทียบคำสั่งกับกฎของ workspace และ safe list ได้ `unlisted` ซึ่งในโหมด Ask แปลว่าต้องถาม
-        และแนบรูปแบบ `pnpm add` ไว้เป็นกฎที่บันทึกได้
+        และแนบรูปแบบ `pnpm add zod` ไว้เป็นกฎที่บันทึกได้
       ref: packages/core/src/permission-rules.ts#ruledDenial
       emits: [unlisted]
 
@@ -74,7 +74,7 @@ scenario:
       at: hooks
       do: >-
         `permissionAsk` รัน hook ด้วย JSON บน stdin: `tool_name: "Bash"`, `tool_input.command`
-        และ `permission_suggestions` ที่เสนอกฎ `addRules` รูปแบบ `pnpm add` ปลายทาง `localSettings`
+        และ `permission_suggestions` ที่เสนอกฎ `addRules` รูปแบบ `pnpm add zod` ปลายทาง `localSettings`
         มีแค่ object `decision` ที่ตอบได้ exit 2 ไม่มีผล ถ้าหลาย hook ตอบ การปฏิเสธชนะการอนุญาต
       ref: packages/core/src/hooks.ts#permissionRequestDecision
       emits: [PermissionRequest, permission_suggestions]
