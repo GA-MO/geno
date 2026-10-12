@@ -38,7 +38,8 @@ scenario:
             steps:
               - lane: external
                 do: >-
-                  process stdio ของ server จบกลางทาง `onLost` บอก handle ว่าการเชื่อมต่อหาย สถานะจาก `ready` เป็น `crashed`
+                  process stdio ของ server จบกลางทาง `onLost` บอก handle ว่าการเชื่อมต่อหาย handle ส่งเหตุการณ์ `crashed`
+                  ให้ `nextServerState` ซึ่งเปลี่ยนสถานะจาก `ready` เป็น `starting` (ยังเริ่มใหม่ได้) หรือ `failed` (ครบแล้ว) ไม่มีสถานะชื่อ `crashed`
                 ref: packages/core/src/mcp.ts#nextServerState
               - lane: server
                 at: mcp

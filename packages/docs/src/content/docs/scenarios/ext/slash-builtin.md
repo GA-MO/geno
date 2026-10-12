@@ -82,15 +82,15 @@ scenario:
                 at: turns
                 do: >-
                   คำตอบของคำสั่งคือ "Approval mode: plan." ส่งเป็น `agent_message_chunk` แล้วตอบ `session/prompt`
-                  ด้วย `stopReason: end_turn` งานจบแบบ `done`
+                  ด้วย `stopReason: end_turn` และ `_meta` ที่บอกว่าจบแบบ `done` (ไม่มีงานในแผง Tasks ให้จบ)
                 ref: "packages/engine/src/serve.ts#\"if (reply !== '') await from.client.notify(\""
                 emits: [agent_message_chunk, end_turn]
                 phase: ending
               - lane: editor
                 at: chat
                 do: >-
-                  `current_mode_update` เปลี่ยนตัวเลือกโหมดในช่องพิมพ์ แล้ว `turnEndOf` อ่านได้ `done` และส่ง action `turn-end`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `current_mode_update` เปลี่ยนตัวเลือกโหมดในช่องพิมพ์ แล้ว `turnEndOf` อ่าน `_meta` ได้ `done` และ `prompt()` ส่ง action `turn-end`
+                ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response)\""
                 emits: [turn-end]
               - lane: panel
                 at: rail

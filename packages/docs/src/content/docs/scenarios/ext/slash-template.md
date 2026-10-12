@@ -55,7 +55,7 @@ scenario:
       at: turns
       do: >-
         ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความที่แปลงแล้ว ชื่อคำสั่งกับอาร์กิวเมนต์
-        และ context item ของสกิล (ถ้ามี) แล้วเรียก `runAgent` ด้วย prompt ว่าง ให้ loop ใช้ prompt ที่อยู่ใน log
+        และ context item ของสกิล (ถ้ามี) แล้ว `runTurn` เรียก `runAgent` ด้วย prompt ว่าง ให้ loop ใช้ prompt ที่อยู่ใน log
       ref: packages/engine/src/serve.ts#logPrompt
       emits: [user]
 
