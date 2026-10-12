@@ -345,6 +345,6 @@ describe('gcode serve: /rules and /init', () => {
     expect(sent).toContain('keep everything the user wrote, word for word');
     expect(editor.writes.map((w) => [w.path, w.content])).toEqual([[path.join(workspace, 'AGENTS.md'), 'Use pnpm.\n\n## Build\n\npnpm build\n']]);
     const user = (await events(sessionId)).find((e): e is Extract<TurnEvent, { kind: 'user' }> => e.kind === 'user');
-    expect(user?.command).toEqual({ name: 'init', args: '' });
+    expect(user?.command).toEqual({ name: 'init', args: '', description: 'Create or update AGENTS.md for this project' });
   });
 });
