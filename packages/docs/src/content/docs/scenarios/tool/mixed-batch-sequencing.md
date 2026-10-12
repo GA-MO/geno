@@ -158,7 +158,7 @@ scenario:
                   text: >-
                     การ์ดย่อเหลือ Allowed VS Code ตอบ engine ว่าอนุญาตครั้งนี้ และ Geno จดว่าคุณเป็นคนอนุญาต
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -198,7 +198,7 @@ scenario:
                   text: >-
                     VS Code ตอบ engine ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission

@@ -159,7 +159,7 @@ scenario:
                   text: >-
                     คุณกด Stop แผงสั่ง engine ให้หยุด turn ทันที
                   from: you
-                  to: engine
+                  to: panel
                 do: ผู้ใช้กด Stop ก่อนคำตอบจบ
               - lane: editor
                 at: chat

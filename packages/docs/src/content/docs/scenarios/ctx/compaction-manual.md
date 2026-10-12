@@ -208,7 +208,7 @@ scenario:
                   text: >-
                     แถว Compacting the context ยังหมุน คุณกด Stop แผงสั่ง engine ให้หยุด
                   from: you
-                  to: engine
+                  to: panel
                 do: ผู้ใช้กด Stop ขณะแถว "Compacting the context" ยังหมุน
               - lane: editor
                 at: chat

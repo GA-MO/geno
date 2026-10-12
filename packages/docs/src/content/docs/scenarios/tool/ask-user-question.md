@@ -148,7 +148,7 @@ scenario:
                   text: >-
                     การ์ดย่อเหลือบรรทัดเดียวที่บอกคำตอบ VS Code ส่งคำตอบกลับไปที่ engine งานใน Tasks กลับเป็นกำลังทำงาน
                   from: you
-                  to: engine
+                  to: panel
                   sees: { kind: question, question: ใช้ไลบรารีไหนจัดการวันที่, options: [ date-fns (Recommended), dayjs ], chosen: date-fns (Recommended) }
                 do: การ์ดโพสต์ `answer` พร้อมคำตอบ แล้วย่อเหลือบรรทัดเดียวที่บอกคำตอบ
                 sees: การ์ดย่อเหลือบรรทัดที่มีเครื่องหมายถูกและ "date-fns"
@@ -177,7 +177,7 @@ scenario:
                   text: >-
                     การ์ดย่อเหลือคำว่า Skipped VS Code บอก engine ว่าคุณไม่ตอบ
                   from: you
-                  to: engine
+                  to: panel
                 do: การ์ดโพสต์ `answer` ชนิด `declined`
                 sees: การ์ดย่อเหลือ "Skipped"
                 ref: "packages/extension/src/chat/question-view.ts#\"if ('cancel' in step.effect) return answer({ type: 'answer', id, answer: { kind: 'declined' } });\""

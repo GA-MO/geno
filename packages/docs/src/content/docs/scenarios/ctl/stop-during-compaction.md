@@ -37,7 +37,7 @@ scenario:
         text: >-
           คุณกด Stop ขณะแถวยังหมุนอยู่ แผงสั่ง engine ให้หยุด turn
         from: you
-        to: engine
+        to: panel
         sees: { kind: composer, state: working, header: working }
       do: ผู้ใช้กด Stop
 

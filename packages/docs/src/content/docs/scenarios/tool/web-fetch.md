@@ -128,7 +128,7 @@ scenario:
                   text: >-
                     การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาตครั้งนี้
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -156,7 +156,7 @@ scenario:
                     Geno บันทึกกฎอนุญาต `web_fetch` สำหรับโดเมน date-fns.org ลงที่เก็บของ workspace ครั้งหน้าทุก URL
                     บนโฮสต์นี้ผ่านโดยไม่ถาม ทั้งในโหมด Ask และ Auto
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow-workspace`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission

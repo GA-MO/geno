@@ -139,7 +139,7 @@ scenario:
                   text: >-
                     Geno จดว่าคุณอนุญาตไฟล์นี้ครั้งเดียว
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -167,7 +167,7 @@ scenario:
                     Geno เพิ่มโฟลเดอร์นี้เข้ารายการที่ session อ่านได้ การอ่านครั้งต่อไปใต้โฟลเดอร์นี้ไม่ถามอีก
                     แต่ไฟล์ลับในนั้นยังถามแยก
                   from: you
-                  to: engine
+                  to: panel
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow-session`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission

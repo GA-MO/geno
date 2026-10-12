@@ -121,7 +121,7 @@ scenario:
                   text: >-
                     ทางอื่นของการ์ดเหมือนการขอรันคำสั่งในโหมด Ask การ์ดย่อเหลือ Allowed และ Geno จดว่าคุณอนุญาต
                   from: you
-                  to: engine
+                  to: panel
                 do: ผู้ใช้กด Allow (ทางอื่นของการ์ดเหมือนการขอรันคำสั่งในโหมด Ask)
               - lane: editor
                 at: chat

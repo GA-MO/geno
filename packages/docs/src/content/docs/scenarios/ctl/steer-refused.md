@@ -79,7 +79,7 @@ scenario:
                     คุณเปิดบทสนทนาของ explore จากแถวของมัน พิมพ์ "ดูโฟลเดอร์ test ด้วย" แล้วกด Send ช่องพิมพ์ของ subagent ส่ง
                     steer ไปที่ session ของมัน
                   from: you
-                  to: engine
+                  to: panel
                   sees: "ใต้ช่องขึ้น \"Sending… it lands at the next tool round\""
                 do: >-
                   ผู้ใช้เปิดบทสนทนาของลูกจากแถวของมัน พิมพ์ "ดูโฟลเดอร์ test ด้วย" ในช่อง "Message explore…" แล้วกด Send
