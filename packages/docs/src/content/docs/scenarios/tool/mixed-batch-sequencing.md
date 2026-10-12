@@ -100,7 +100,8 @@ scenario:
       at: card
       do: แผงแชตแสดงการ์ดขออนุญาตใต้ขั้นของคำสั่ง
       sees: >-
-        Allow `pnpm add zod`? It uses a command not on the safe list. [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
+        การ์ด "Run this command?" แสดงคำสั่ง `pnpm add zod` พร้อมเหตุผล "Geno asks because it uses a command not on the safe list."
+        [Allow] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: choice
@@ -135,6 +136,7 @@ scenario:
                 runs: 1
                 do: >-
                   `bash` รัน `pnpm add zod` ใน sandbox จนจบ `pnpm-lock.yaml` เปลี่ยนก่อนที่ `read` ตัวสุดท้ายจะเริ่ม
+                  ผลของมันมีบันทึกการอนุญาต (`approval`) ติดไป อัปเดตผลของ call นี้จึงมี `APPROVAL_META` ส่วนผลของ `read` ไม่มี
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
           - id: reject
             label: Deny
@@ -162,6 +164,7 @@ scenario:
                 do: >-
                   หลังชุดที่สอง `runTools` เห็นผลสถานะ `rejected` จึงไม่เริ่มชุดที่สาม แล้วบันทึกผลที่มีตามลำดับ:
                   `read` สองตัวแรกและคำสั่งที่ถูกปฏิเสธ `read pnpm-lock.yaml` ยังไม่มีผล
+                  ผลที่ถูกปฏิเสธมี `approval` ติดไป อัปเดตของมันจึงมี `APPROVAL_META` ซึ่งแผงใช้ขึ้นป้าย "Denied by you"
                 ref: "packages/engine/src/drive.ts#\"results.some((result) => result?.status === 'rejected')\""
                 emits: [rejected, tool-result]
               - lane: loop
@@ -188,8 +191,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` ส่ง action `turn-end` สถานะ `done`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `prompt()` ส่ง action `turn-end` สถานะ `done`
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail

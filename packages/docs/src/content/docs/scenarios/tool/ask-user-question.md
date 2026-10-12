@@ -145,7 +145,7 @@ scenario:
       do: >-
         `askUserResult` เขียนผลให้โมเดลอ่าน: "The user answered: date-fns" หรือถ้าข้าม
         "The user declined to answer. Go on with your best judgment and say what you assumed."
-        ถ้า editor แสดงฟอร์มไม่ได้ ผลบอกให้โมเดลจบ turn แล้วถามเป็นข้อความธรรมดาแทน
+        ถ้า editor ที่บอกว่าแสดงฟอร์มได้กลับตอบคำขอนี้ด้วย error (`unshown`) ผลบอกให้โมเดลจบ turn แล้วถามเป็นข้อความธรรมดาแทน
       ref: packages/core/src/ask-user.ts#askUserResult
 
     - use: tool-result-returns

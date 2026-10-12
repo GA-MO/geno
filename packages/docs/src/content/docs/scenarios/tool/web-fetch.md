@@ -168,7 +168,7 @@ scenario:
       at: executor
       do: >-
         `web_fetch` ห่อคำตอบในรั้ว `<web_fetch_answer>` ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้
-        ผลมีบันทึกว่าผู้ใช้อนุญาต
+        ผลมีบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
       ref: packages/core/src/web.ts#fetchAnswerText
 
     - use: tool-result-returns
