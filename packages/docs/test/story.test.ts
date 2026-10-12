@@ -11,7 +11,7 @@ import { runFiles, type PayloadView } from '../src/scenario/payload.js';
 import type { SourceIndex } from '../src/scenario/refs.js';
 import { lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
-import { ACTORS, actorsOn, beatsOf, branchesAt, choose, layoutLanes, storyBeats, storyFromHash, storyHash, storyStart } from '../src/scenario/story.js';
+import { ACTORS, actorIndex, actorsOn, beatsOf, branchesAt, choose, LANE, layoutLanes, rowCenter, storyBeats, storyFromHash, storyHash, storyStart, type LaneItem, type Point } from '../src/scenario/story.js';
 import { walk } from '../src/scenario/tour.js';
 import { FACES, MEMORY_SCOPES, PERMISSION_FACES } from '../src/scenario/faces.js';
 
@@ -325,41 +325,109 @@ const fiveWay = [
 ];
 
 describe('the swim-lane layout', () => {
-  const overlaps = (a: { x: number; w: number; row: number }, b: { x: number; w: number; row: number }) => a.row === b.row && a.x < b.x + b.w && b.x < a.x + a.w;
+  interface Box {
+    readonly left: number;
+    readonly right: number;
+    readonly top: number;
+    readonly bottom: number;
+  }
+  const boxOf = (item: LaneItem): Box => ({ left: item.x, right: item.x + item.w, top: rowCenter(item.row) - item.h / 2, bottom: rowCenter(item.row) + item.h / 2 });
+  const overlaps = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  /** A straight leg of an arrow passes through the inside of `box` (touching an edge does not count). */
+  const crosses = (a: Point, b: Point, box: Box) => overlaps({ left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) }, box) && (a.x === b.x ? box.left < a.x && a.x < box.right : box.top < a.y && a.y < box.bottom);
 
-  /** Every choice at every fork: no two items share space in a row, time runs left to right, and a fork is one column of chips. */
-  function expectTidy(scenario: Scenario) {
+  const site = loadSite(siteOptions(DOCS));
+  const tours = Object.values(site.scenarios).filter((scenario) => scenario.story);
+  const walksOf = (scenario: Scenario) => {
     const forks = Object.values(scenario.steps).filter((step) => step.flow.kind === 'fork');
-    const choiceSets = [scenario.defaults, ...forks.flatMap((step) => (step.flow.kind === 'fork' ? step.flow.options.map((option) => ({ ...scenario.defaults, [step.id]: option.id })) : []))];
-    for (const choices of choiceSets) {
+    return [scenario.defaults, ...forks.flatMap((step) => (step.flow.kind === 'fork' ? step.flow.options.map((option) => ({ ...scenario.defaults, [step.id]: option.id })) : []))];
+  };
+
+  /** Every walk of a tour: roomy nodes, nothing overlapping, arrows that go around nodes, and a message into every receiver. */
+  function expectTidy(scenario: Scenario) {
+    for (const choices of walksOf(scenario)) {
       const beats = storyBeats(scenario, choices);
       const layout = layoutLanes(scenario, choices, beats);
-      layout.items.forEach((a, i) => layout.items.slice(i + 1).forEach((b) => expect(overlaps(a, b)).toBe(false)));
-      const placed = layout.items.filter((item) => item.kind === 'beat');
-      placed.slice(1).forEach((item, i) => expect(item.x).toBeGreaterThan(placed[i]!.x));
-      for (const diamond of placed.filter((item) => item.fork)) {
-        const chips = layout.items.flatMap((item) => (item.kind === 'branch' && item.beat === diamond.beat ? [item] : []));
-        expect(chips.map((chip) => chip.branch.option.id)).toEqual(branchesAt(scenario, choices, beats[diamond.beat]!.last).map((branch) => branch.option.id));
+      const boxes = layout.items.map(boxOf);
+      boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => expect(overlaps(a, b)).toBe(false)));
+      for (const item of layout.items) {
+        expect(item.x).toBeGreaterThanOrEqual(LANE.pad);
+        expect(boxOf(item).top).toBeGreaterThanOrEqual(item.row * LANE.height);
+        expect(boxOf(item).bottom).toBeLessThanOrEqual((item.row + 1) * LANE.height);
+      }
+
+      const nodes = layout.items.filter((item) => item.kind === 'beat');
+      expect(nodes.map((node) => node.beat)).toEqual(beats.map((_, i) => i));
+      nodes.forEach((node, i) => {
+        expect(node.w).toBeGreaterThanOrEqual(200);
+        expect(node.row).toBe(actorIndex(beats[i]!.from));
+        if (i > 0) expect(node.x).toBeGreaterThan(nodes[i - 1]!.x + nodes[i - 1]!.w);
+      });
+
+      for (const edge of layout.edges) {
+        const legs = edge.points.slice(1).map((point, k) => [edge.points[k]!, point] as const);
+        for (const [a, b] of legs) expect(a.x === b.x || a.y === b.y).toBe(true);
+        boxes.forEach((box, i) => {
+          if (i === edge.from || i === edge.to) return;
+          for (const [a, b] of legs) expect(crosses(a, b, box), `${edge.kind} ${edge.from}->${edge.to} crosses item ${i} in ${scenario.id}`).toBe(false);
+        });
+      }
+
+      beats.forEach((beat, i) => {
+        const messages = layout.edges.filter((edge) => edge.kind === 'message' && edge.beat === i);
+        if (beat.from === beat.to) return expect(messages).toEqual([]);
+        expect(messages.map((edge) => edge.from)).toEqual([layout.items.indexOf(nodes[i]!)]);
+        expect(layout.items[messages[0]!.to]!.row).toBe(actorIndex(beat.to));
+      });
+
+      for (const node of nodes.filter((item) => beats[item.beat]!.flow.kind === 'fork')) {
+        const diamond = layout.items.findIndex((item) => item.kind === 'decision' && item.beat === node.beat);
+        expect(layout.items[diamond]!.row).toBe(actorIndex(beats[node.beat]!.to));
+        const chips = layout.items.flatMap((item) => (item.kind === 'branch' && item.beat === node.beat ? [item] : []));
+        expect(chips.map((chip) => chip.branch.option.id)).toEqual(branchesAt(scenario, choices, beats[node.beat]!.last).map((branch) => branch.option.id));
         expect(chips.map((chip) => chip.row)).toEqual(chips.map((_, k) => chips[0]!.row + k));
         expect(new Set(chips.map((chip) => chip.x)).size).toBe(1);
-        expect(chips[0]!.x).toBeGreaterThan(diamond.x + diamond.w);
-        for (const later of placed.filter((item) => item.beat > diamond.beat)) expect(later.x).toBeGreaterThan(chips[0]!.x + chips[0]!.w);
+        for (const later of nodes.filter((item) => item.beat > node.beat)) expect(later.x).toBeGreaterThan(chips[0]!.x + chips[0]!.w);
         for (const chip of chips) {
           const at = layout.items.indexOf(chip);
-          expect(layout.edges.filter((edge) => edge.to === at)).toEqual([{ from: layout.items.indexOf(diamond), to: at }]);
+          expect(layout.edges.filter((edge) => edge.to === at).map((edge) => [edge.kind, edge.from])).toEqual([['branch', diamond]]);
           expect(layout.edges.filter((edge) => edge.from === at).length).toBe(chip.branch.chosen ? 1 : 0);
         }
       }
     }
   }
 
-  test.each(['ask-mode-bash-approval', 'with-tools', 'blocking-report'])('%s lays out tidily on every walk', (id) => {
-    expectTidy(loadSite(siteOptions(DOCS)).scenarios[id]!);
+  test('every tour has walks to lay out', () => {
+    expect(tours.length).toBeGreaterThan(30);
   });
 
-  test('a five-way fork stacks its options in one column, in order, and the walk goes on from the chosen one', () => {
+  test.each(tours.map((scenario) => scenario.id))('%s lays out tidily on every walk', (id) => {
+    expectTidy(site.scenarios[id]!);
+  });
+
+  test('a five-way fork the actor decides alone stacks its options in one column, in order, and goes on from the chosen one', () => {
     const scenario = compiled(fiveWay);
     expectTidy(scenario);
     expect(layoutLanes(scenario, scenario.defaults, storyBeats(scenario, scenario.defaults)).rows).toBe(ACTORS.length);
+  });
+
+  test('a fork that asks someone else puts its diamond in their lane, under the message', () => {
+    const scenario = compiled(forked);
+    expectTidy(scenario);
+    const layout = layoutLanes(scenario, scenario.defaults, storyBeats(scenario, scenario.defaults));
+    const diamond = layout.items.find((item) => item.kind === 'decision')!;
+    expect(diamond.row).toBe(actorIndex('you'));
+  });
+
+  test('the walk changes lanes in the gutter between beats, never inside a beat column', () => {
+    const scenario = site.scenarios['agent-loop']!;
+    const layout = layoutLanes(scenario, scenario.defaults, storyBeats(scenario, scenario.defaults));
+    expect(layout.items.some((item) => item.kind === 'receiver' && item.row === actorIndex('machine'))).toBe(true);
+    for (const edge of layout.edges.filter((candidate) => candidate.kind === 'flow' && candidate.points.length > 2)) {
+      const turn = edge.points[1]!.x;
+      const target = layout.items[edge.to]!;
+      expect(turn).toBeLessThan(target.x);
+      expect(turn).toBeGreaterThan(target.x - LANE.gap);
+    }
   });
 });
