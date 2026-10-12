@@ -1,5 +1,5 @@
 ---
-title: รันเอเจนต์จากเทอร์มินัล
+title: "รัน agent จากเทอร์มินัล"
 description: gcode agent รันเอเจนต์หนึ่งรอบใน process เดียว ข้อความออก stdout คำถามขออนุญาตเป็น [y/N] บนเทอร์มินัล และผลจบเป็น exit code
 tableOfContents: false
 sidebar:
@@ -15,12 +15,20 @@ scenario:
   related: [perm.ask-allow, turn.with-tools, sec.sandbox-blocks-write]
   steps:
     - id: run
+      beat:
+        title: คุณรัน `gcode agent`
+        text: คุณขอให้ทิ้ง commit ล่าสุดทั้งหมด ค่าเริ่มต้นคือโหมด Ask เพิ่ม `--mode auto` หรือ `--non-interactive` ได้
+        to: engine
       lane: user
       do: >-
         ผู้ใช้รันคำสั่ง (เพิ่ม `--mode auto` หรือ `--non-interactive` ได้ ค่าเริ่มต้นคือโหมด Ask)
       phase: idle
 
     - id: setup
+      beat:
+        title: Geno เตรียม session ใน process นี้
+        text: ไม่มี engine แยก และไม่มี VS Code ไฟล์อ่านเขียนจากดิสก์ตรง Geno ตั้งขีดจำกัด 40 ครั้งและ $0.40 เลือกวิธีถามคุณบนเทอร์มินัล แล้วส่ง prompt ให้ model
+        to: model
       lane: loop
       at: agent
       do: >-
@@ -42,6 +50,11 @@ scenario:
     - use: model-call
 
     - id: wants
+      beat:
+        title: Model ขอรัน `git reset --hard HEAD~1`
+        text: ข้อความของ model ออก stdout ทีละส่วน ทุก call ที่เริ่มพิมพ์บรรทัดของขั้น
+        to: engine
+        sees: "> bash git reset --hard HEAD~1"
       lane: model
       do: >-
         โมเดล stream ข้อความสั้นๆ แล้วขอเรียก `bash` ด้วย `git reset --hard HEAD~1` จบด้วย `stop_reason: tool_use`
@@ -57,6 +70,10 @@ scenario:
       ref: packages/engine/src/drive.ts#terminalSurface
 
     - id: judge
+      beat:
+        title: Geno จับคำสั่งด้วยกฎ git reset --hard
+        text: โหมด Ask ต้องถาม โหมด Auto ให้ classifier ตัดสิน และ non-interactive ปฏิเสธ
+        ask: ใครตอบ
       lane: policy
       at: rules
       do: >-
@@ -72,6 +89,11 @@ scenario:
             label: ผู้ใช้พิมพ์ y
             steps:
               - lane: panel
+                beat:
+                  title: เทอร์มินัลถาม [y/N]
+                  text: Geno รอบรรทัดจากเทอร์มินัล
+                  to: you
+                  sees: "Allow `git reset --hard HEAD~1`? It uses git reset --hard. [y/N] "
                 at: terminal
                 do: >-
                   `askOnTerminal` ถามผ่าน `terminalConfirm` ซึ่งรอบรรทัดจากเทอร์มินัล
@@ -80,6 +102,10 @@ scenario:
                 ref: packages/engine/src/terminal-confirm.ts#terminalConfirm
                 phase: waiting-user
               - lane: user
+                beat:
+                  title: คุณพิมพ์ y
+                  text: Geno จดว่าคุณเป็นคนอนุญาต
+                  to: engine
                 do: ผู้ใช้พิมพ์ y แล้วกด Enter
               - lane: policy
                 at: settle
@@ -88,17 +114,31 @@ scenario:
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
               - lane: tool
+                beat:
+                  title: คำสั่งรันใน sandbox
+                  text: ไฟล์ใน workspace กลับไปเป็นของ commit ก่อนหน้า
+                  from: machine
                 at: shell
                 do: >-
                   `bash` รันคำสั่งใน sandbox ไฟล์ใน workspace กลับไปเป็นของ commit ก่อนหน้า
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
               - use: model-call
               - lane: model
+                beat:
+                  title: Model บอกว่าทิ้ง commit แล้ว
+                  text: model อ่านผลแล้วตอบ turn จบ
+                  to: engine
                 do: >-
                   โมเดลอ่านผลแล้วตอบว่าทิ้ง commit แล้ว จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: loop
+                beat:
+                  title: process จบด้วย exit 0
+                  text: Geno พิมพ์ยอดใช้งานลง stdout แล้วคืน exit code ตามวิธีที่ turn จบ
+                  to: panel
+                  sees: "usage: ... turns=2"
+                  end: process จบ exit 0
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `done(end_turn)` `finish` พิมพ์ยอดใช้งานลง stdout แล้วคืน exit code จาก `DONE_EXIT`
@@ -117,6 +157,11 @@ scenario:
             then: rejected
             steps:
               - lane: panel
+                beat:
+                  title: เทอร์มินัลถาม [y/N]
+                  text: คำตอบที่ไม่ใช่ y หรือ yes นับเป็นไม่
+                  to: you
+                  sees: "Allow `git reset --hard HEAD~1`? It uses git reset --hard. [y/N] "
                 at: terminal
                 do: >-
                   `terminalConfirm` ถามแบบเดียวกัน คำตอบที่ไม่ใช่ y หรือ yes นับเป็นไม่
@@ -125,6 +170,10 @@ scenario:
                 ref: packages/engine/src/terminal-confirm.ts#terminalConfirm
                 phase: waiting-user
               - lane: user
+                beat:
+                  title: คุณกด Enter เฉยๆ
+                  text: N เป็นค่าเริ่มต้น Geno ถือว่าคุณปฏิเสธ
+                  to: engine
                 do: ผู้ใช้กด Enter เฉยๆ
 
           - id: no-tty
@@ -132,6 +181,10 @@ scenario:
             then: rejected
             steps:
               - lane: panel
+                beat:
+                  title: ไม่มีเทอร์มินัลให้ตอบ
+                  text: stdin เป็น pipe ไม่มีคนตอบ Geno จึงตอบไม่ทันที และเขียนเหตุไว้
+                  sees: Allow `git reset --hard HEAD~1`? It uses git reset --hard. There is no terminal to answer, so it was refused.
                 at: terminal
                 do: >-
                   คำสั่งถูกรันโดยมี pipe เป็น stdin ไม่มีคนตอบ `terminalConfirm` จึงตอบไม่ทันที และเขียนเหตุลงไว้
@@ -143,6 +196,9 @@ scenario:
             label: --non-interactive
             steps:
               - lane: policy
+                beat:
+                  title: กฎปฏิเสธทันที
+                  text: ในโหมด non-interactive hook PermissionRequest ได้ตอบก่อน ไม่มี hook Geno จึงปฏิเสธ การปฏิเสธนี้ไม่จบ turn ผลบอก model ว่าไม่มีใครตอบได้ที่นี่
                 at: settle
                 do: >-
                   ในโหมด non-interactive กฎนี้ปฏิเสธเลย `settle` ให้ PermissionRequest hook ตอบแทนได้ก่อน ไม่มี hook
@@ -158,11 +214,20 @@ scenario:
                 emits: [denied]
               - use: model-call
               - lane: model
+                beat:
+                  title: Model อธิบายว่าต้องให้คุณอนุญาต
+                  text: model บอกคำสั่งที่คุณรันเองได้ แล้วจบ turn
+                  to: panel
                 do: >-
                   โมเดลอธิบายว่าต้องให้ผู้ใช้อนุญาต และบอกคำสั่งที่ผู้ใช้รันเองได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
+                beat:
+                  title: process จบด้วย exit 0
+                  text: run จบแบบปกติจึงได้ exit 0 ทั้งที่งานไม่ได้ทำ
+                  sees: "usage: ... turns=2"
+                  end: exit 0 แต่งานไม่ได้ทำ
                 at: terminal
                 do: >-
                   `finish` พิมพ์ยอดใช้งาน run จบแบบ `end_turn` จึงได้ exit code 0 ทั้งที่งานไม่ได้ทำ
@@ -172,6 +237,16 @@ scenario:
                 end: { turn: done, reason: end_turn }
 
     - id: rejected
+      beat:
+        title: คำสั่งไม่ได้รัน
+        text: Geno ถือว่าคุณปฏิเสธ ผลบอก model ให้หยุดรอคุณ การ์ดเป็นผลจริงจาก `gcode agent` ที่ไม่มีเทอร์มินัลให้ตอบ ซึ่งปฏิเสธ `rm -rf build` แบบเดียวกัน
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A08-ask-risky-denied/1/session.jsonl#seq=9
+          highlight:
+            - status
+            - output
       lane: policy
       at: settle
       do: >-
@@ -182,6 +257,12 @@ scenario:
       phase: running-tools
 
     - id: stops
+      beat:
+        title: Geno จบ turn ทันที
+        text: Geno ไม่เรียก model อีก แล้วพิมพ์ยอดใช้งาน process จบด้วย exit 0
+        to: panel
+        sees: "usage: ... turns=1"
+        end: process จบ exit 0
       lane: loop
       at: step
       do: >-
