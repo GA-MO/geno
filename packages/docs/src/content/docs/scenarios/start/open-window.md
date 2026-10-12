@@ -99,7 +99,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `listSessions` ต้องใช้ engine การเรียก `Engine.connection()` ครั้งแรกนี้จึงเป็นตัวต่อ engine
+                  `listSessions` ต้องใช้ engine ตอน `ready` แผงสั่งดึงสถานะ PR (`prStatus.refresh(true)`) ไปแล้ว
+                  ซึ่งเรียก `Engine.connection()` ก่อน ทั้งสองจึงรอการต่อ engine ครั้งแรกตัวเดียวกัน
                   ยังไม่มี session ใดถูกสร้าง แชตใหม่จะเกิดเมื่อผู้ใช้ส่งข้อความแรก
                 ref: packages/extension/src/chat/chat.ts#Chat.listSessions
               - use: start-engine-connects
@@ -130,7 +131,8 @@ engine ไม่ได้อยู่ใน process ของ VS Code มัน�
 สิ่งที่ควรสังเกต
 
 - **ตอนไหน engine ถูกเรียกขึ้นมา** ถ้าหน้าต่างจำแชตไว้ Geno ต่อ engine ตั้งแต่ตอนเปิดหน้าต่าง
-  ถ้าไม่ได้จำไว้ Geno ต่อ engine ตอนเปิดแผง เพราะหน้าเริ่มต้นต้องการรายการแชต และแถบสถานะ PR ใต้ช่องพิมพ์ก็ขอข้อมูลจาก engine ด้วย
+  ถ้าไม่ได้จำไว้ Geno ต่อ engine ตอนเปิดแผง แถบสถานะ PR ใต้ช่องพิมพ์ขอข้อมูลจาก engine ตั้งแต่ `ready`
+  และหน้าเริ่มต้นขอรายการแชตตามมา
 - **การต่อ engine ตรวจคีย์ก่อนเสมอ** ถ้าคีย์ยังไม่ได้ตั้ง `engineSettings` จะแสดง toast แล้วการต่อจะล้มเหลว
   หน้าต่างที่ยังไม่มีคีย์จึงเห็น toast ตั้งแต่เปิดแผง ก่อนผู้ใช้จะส่งอะไร ดู [ส่งข้อความแรกโดยไม่มี API key](/scenarios/start/first-run-no-key/)
 - **ไม่มี session ใหม่เกิดขึ้นตอนเปิดแผง** แชตใหม่ (`session/new`) เกิดเมื่อผู้ใช้ส่งข้อความแรกหรือกด New Chat
