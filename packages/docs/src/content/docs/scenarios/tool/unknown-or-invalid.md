@@ -1,5 +1,5 @@
 ---
-title: เครื่องมือไม่มีจริงหรือ input ผิด
+title: "Model เรียก tool ที่ไม่มีจริง หรือส่ง input ผิด"
 description: โมเดลเรียกเครื่องมือที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model เรียก tool ตามความเคยชิน"
+        text: >-
+          ชื่อหรือ input ของ tool call นี้มาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการ tool ของ Geno
+        to: engine
       do: >-
         โมเดลขอเรียกเครื่องมือ ชื่อหรือ input ของมันมาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการเครื่องมือของ Geno
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -23,10 +28,19 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของ call"
+        text: >-
+          Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: lookup
       lane: tool
       at: executor
+      beat:
+        title: "Geno หา tool แล้วตรวจ input ก่อนทำอะไร"
+        text: >-
+          Geno หา tool ตามชื่อ แล้วตรวจ input กับ schema ของมันก่อนรัน ลองเลือกว่า call นี้ผิดตรงไหน
+        ask: "ผิดตรงไหน"
       runs: 0
       do: >-
         `runExecutor` หา executor ตามชื่อ แล้วให้ executor ตรวจ input ด้วย zod schema ของมันก่อนทำอะไร
@@ -40,6 +54,12 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "ไม่มี tool ชื่อ write_file"
+                  text: >-
+                    Geno รู้ว่าเป็นชื่อ tool เขียนไฟล์ของ harness อื่น จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน
+                    ตามด้วยรายชื่อ tool ทั้งหมด ชื่อขั้นในแชตเป็นชื่อกับ JSON ของ input
+                  sees: { kind: step, label: 'write_file {"path":"src/date.ts","content":"..."}', status: failed }
                 do: >-
                   ไม่มี executor ชื่อ `write_file` `unknownTool` เห็นว่าเป็นชื่อเครื่องมือเขียนไฟล์ของ harness อื่น
                   จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน ตามด้วยรายชื่อเครื่องมือทั้งหมด ชื่อขั้นในแผงเป็นชื่อกับ JSON ของ input
@@ -52,6 +72,11 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "input ของ bash ไม่ตรง schema"
+                  text: >-
+                    `bash` ได้ `cmd` แทน `command` schema ไม่รับฟิลด์ที่ไม่รู้จัก ผลบอกฟิลด์ที่ขาดและฟิลด์ที่ไม่รู้จัก
+                  sees: { kind: step, label: 'bash {"cmd":"ls"}', status: failed }
                 do: >-
                   `bash` ได้ `{"cmd": "ls"}` แทน `command` schema ของมันเป็น `strictObject` จึงไม่ผ่าน executor โยน `ToolError`
                   "invalid input: ..." ตามด้วยข้อความของ zod ที่บอกฟิลด์ที่ขาดและฟิลด์ที่ไม่รู้จัก
@@ -63,6 +88,10 @@ scenario:
     - id: result
       lane: tool
       at: executor
+      beat:
+        title: "ไม่มีอะไรรัน ผลเป็น error ที่บอกทางแก้"
+        text: >-
+          ทั้งสองทางไม่รันอะไร ไม่ผ่านกฎสิทธิ์ และไม่มีการ์ด Geno บันทึกผลเป็น error แล้วส่งไปที่แชต
       do: >-
         ทั้งสองทางได้ผลสถานะ `error` พร้อมข้อความนั้น ไม่มีอะไรรัน ไม่ผ่านนโยบาย และไม่มีการ์ด
       ref: packages/engine/src/tools/index.ts#runTool
@@ -72,6 +101,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model อ่านวิธีที่ถูกแล้วเรียกใหม่"
+        text: >-
+          turn ไม่หยุด Geno เรียกโมเดลต่อ โมเดลได้ผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก
+        to: model
+        end: "model เรียกใหม่"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ `tool_result` ที่มี `is_error: true` และข้อความบอกวิธีที่ถูก
       ref: packages/core/src/loop.ts#loopStep
@@ -91,3 +126,5 @@ Geno ไม่ซ่อมหรือเดา input ให้ โมเดล�
   ดู [โหลดเครื่องมือที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
 - **input ที่ถูกตัดเพราะ `max_tokens` ไม่มาทางนี้** call ที่ถูกตัดได้คำตอบ `cut-off` จาก loop ก่อนถึง executor
   ดู [คำตอบชนเพดาน output](/scenarios/mstop/max-tokens/)
+
+tool ที่มีจริงแต่ยังไม่ได้โหลด ดู [Model โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)

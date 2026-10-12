@@ -1,5 +1,5 @@
 ---
-title: โมเดลถามคำถามแบบฟอร์ม
+title: "Model ถามคุณด้วยฟอร์มคำถาม"
 description: โมเดลเรียก ask_user เพื่อถามผู้ใช้กลางงาน engine ส่งฟอร์มผ่าน ACP แผงแชตแสดงการ์ดคำถาม และคำตอบหรือการข้ามกลับไปเป็นผลของ call
 tableOfContents: false
 sidebar:
@@ -17,6 +17,12 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ถามคุณกลางงาน"
+        text: >-
+          โมเดลอยากให้คุณเลือกก่อนทำต่อ มันเรียก tool ถามคำถามหนึ่งข้อว่า "ใช้ไลบรารีไหนจัดการวันที่" พร้อมตัวเลือก
+          date-fns ที่มันแนะนำ และ dayjs
+        to: engine
       do: >-
         โมเดลส่งบล็อก `tool_use` ของ `ask_user` ที่มี `questions` หนึ่งข้อ พร้อมตัวเลือกและคำอธิบาย จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -32,10 +38,20 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของคำถาม"
+        text: >-
+          Geno จัดคิวคำถามนี้ให้รันทีละตัว เพราะต้องรอคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: mode
       lane: tool
       at: executor
+      beat:
+        title: "Geno ดูโหมดตอนที่ call รัน"
+        text: >-
+          Geno อ่านโหมดของ session ตอนที่ call รัน ไม่ใช่ตอนที่ turn เริ่ม แล้วตรวจคำถามและตัวเลือกตามขีดจำกัด
+          ถ้าคุณสลับโหมดระหว่าง turn ผลจึงเปลี่ยนตาม
+        ask: "โหมดไหน"
       runs: 0
       do: >-
         `ask_user` ถูกห่อด้วย `inMode` ซึ่งอ่านโหมดของ session ตอนที่ call รัน ไม่ใช่ตอนที่ turn เริ่ม
@@ -53,6 +69,10 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "โหมด Auto ไม่มีใครรอตอบ"
+                  text: >-
+                    โหมด Auto ไม่ถามคุณ call จึงล้มเหลวทันทีพร้อมข้อความบอกโมเดลว่าอย่าเรียกซ้ำ ไม่มีการ์ดขึ้น
                 do: >-
                   `USER_TOOL_MODES` ไม่ให้ `ask_user` ในโหมด Auto ซึ่งไม่มีใครรอตอบ call จึงล้มเหลวด้วย `ToolError`
                   "ask_user is not available in auto mode. Do not retry it." และไม่มีการ์ด
@@ -62,6 +82,13 @@ scenario:
     - id: elicit
       lane: server
       at: approvals
+      beat:
+        title: "Geno ส่งฟอร์มไปที่ VS Code"
+        text: >-
+          Geno ส่งอัปเดตที่ค้างออกไปก่อน แล้วส่งฟอร์มคำถามไปที่ VS Code งานในแผง Tasks เปลี่ยนเป็นรอคุณ VS Code
+          ตรวจคำถามด้วยตัวตรวจเดียวกับ engine แล้วโฟกัสแผงแชต
+        to: panel
+        sees: { kind: task, title: เพิ่มเทสต์ให้ parseDate, status: needs-input }
       runs: 1
       do: >-
         `editorUser.ask_user` ส่งอัปเดตที่ค้างออกไปก่อน แล้วส่งคำขอ ACP `elicitation/create` แบบฟอร์ม
@@ -81,6 +108,13 @@ scenario:
     - id: card
       lane: panel
       at: card
+      beat:
+        title: "คุณเห็นการ์ดคำถาม"
+        text: >-
+          การ์ดแสดงตัวเลือกพร้อมช่อง Other ให้พิมพ์เอง และใช้แป้นพิมพ์เลือกได้ turn รออยู่ตรงนี้ ลองเลือกแต่ละทาง
+        to: you
+        ask: "ทำอะไรกับการ์ด"
+        sees: { kind: question, question: ใช้ไลบรารีไหนจัดการวันที่, options: [ date-fns (Recommended), dayjs, "Other: type your own answer" ] }
       do: >-
         `questionCard` วาดคำถามเป็นรายการตัวเลือกแบบ radio มีช่อง Other ท้ายรายการ และใช้แป้นพิมพ์เลือกได้
       sees: >-
@@ -100,6 +134,13 @@ scenario:
             steps:
               - lane: panel
                 at: card
+                beat:
+                  title: "คุณเลือก date-fns แล้วกด Submit answers"
+                  text: >-
+                    การ์ดย่อเหลือบรรทัดเดียวที่บอกคำตอบ VS Code ส่งคำตอบกลับไปที่ engine งานใน Tasks กลับเป็นกำลังทำงาน
+                  from: you
+                  to: engine
+                  sees: { kind: question, question: ใช้ไลบรารีไหนจัดการวันที่, options: [ date-fns (Recommended), dayjs ], chosen: date-fns (Recommended) }
                 do: การ์ดโพสต์ `answer` พร้อมคำตอบ แล้วย่อเหลือบรรทัดเดียวที่บอกคำตอบ
                 sees: การ์ดย่อเหลือบรรทัดที่มีเครื่องหมายถูกและ "date-fns"
                 ref: "packages/extension/src/chat/question-view.ts#\"if ('submit' in step.effect) return answer({ type: 'answer', id, answer: { kind: 'answered', answers: answersOf(request, state) } });\""
@@ -122,6 +163,12 @@ scenario:
             steps:
               - lane: panel
                 at: card
+                beat:
+                  title: "คุณกด Skip"
+                  text: >-
+                    การ์ดย่อเหลือคำว่า Skipped VS Code บอก engine ว่าคุณไม่ตอบ
+                  from: you
+                  to: engine
                 do: การ์ดโพสต์ `answer` ชนิด `declined`
                 sees: การ์ดย่อเหลือ "Skipped"
                 ref: "packages/extension/src/chat/question-view.ts#\"if ('cancel' in step.effect) return answer({ type: 'answer', id, answer: { kind: 'declined' } });\""
@@ -142,6 +189,11 @@ scenario:
     - id: result
       lane: tool
       at: executor
+      beat:
+        title: "Geno เขียนผลให้ model อ่าน"
+        text: >-
+          ผลของ call บอกคำตอบของคุณ หรือบอกว่าคุณไม่ตอบ ให้โมเดลใช้วิจารณญาณแล้วบอกว่าสมมติอะไร
+          หรือบอกว่าใช้ไม่ได้ในโหมด Auto ผลกลับมาที่แชตใต้ขั้นนั้น
       do: >-
         `askUserResult` เขียนผลให้โมเดลอ่าน: "The user answered: date-fns" หรือถ้าข้าม
         "The user declined to answer. Go on with your best judgment and say what you assumed."
@@ -153,6 +205,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model ทำต่อตามผล"
+        text: >-
+          Geno เรียกโมเดลอีกรอบ โมเดลอ่านผลแล้วทำงานต่อใน turn เดิม
+        to: model
+        end: "model ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลทำงานต่อตามคำตอบ
       ref: packages/core/src/loop.ts#loopStep
@@ -175,3 +233,5 @@ scenario:
 - **Skip ไม่จบ turn** ต่างจาก Deny บนการ์ดขออนุญาต การข้ามคำถามเป็นผลธรรมดา โมเดลทำต่อด้วยการตัดสินใจของตัวเอง
 - **โหมดอ่านตอน call รัน** ถ้าผู้ใช้สลับเป็น Auto ระหว่าง turn call ถัดไปของ `ask_user` จะล้มเหลว แม้ turn เริ่มในโหมด Ask
 - **Stop ปิดการ์ด** `Chat.stop` ตอบการ์ดคำถามที่เปิดอยู่ว่ายกเลิกก่อนส่ง `session/cancel` การ์ดจึงขึ้น "Cancelled"
+
+การ์ดอีกแบบที่หยุด turn รอคุณ ดู [โหมด Ask ขอ permission ก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)

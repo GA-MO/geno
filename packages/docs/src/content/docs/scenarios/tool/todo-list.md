@@ -1,5 +1,5 @@
 ---
-title: อัปเดตรายการ todo
+title: "Model อัปเดตรายการ todo"
 description: โมเดลตั้งรายการงานด้วย todo แผงแชตปักรายการไว้ท้าย turn ทันทีที่ call จบ และ harness เตือนโมเดลถ้าไม่อัปเดตนาน
 tableOfContents: false
 sidebar:
@@ -15,6 +15,19 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ตั้งรายการ todo พร้อมอ่านไฟล์"
+        text: >-
+          งานนี้มีหลายขั้น โมเดลส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts`
+          ในคำตอบเดียว run จริงด้านล่างส่ง todo กับ read คู่กันแบบนี้
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/B09-stop-and-resume-thai/1/session-c35ff8bd-d9bb-4d36-aff0-e5a554dff67f.jsonl#seq=10
+          select: content
+          collapse:
+            - "[0].thinking"
       do: >-
         โมเดลส่ง `todo` ที่มี `items` สี่ข้อ (แต่ละข้อมี `id` `text` และ `status`) และ `read` อีกหนึ่ง call จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -30,10 +43,26 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "Geno จัด todo กับ read ไว้ชุดเดียว"
+        text: >-
+          todo ไม่เปลี่ยนอะไรบนเครื่องและไม่ถามใคร จึงรันพร้อมการอ่านไฟล์ได้
 
     - id: parse
       lane: tool
       at: executor
+      beat:
+        title: "Geno ตรวจรายการ"
+        text: >-
+          รายการต้องไม่ยาวเกินกำหนด id ไม่ซ้ำ และมีข้อที่กำลังทำได้ข้อเดียว ถ้าผิด call ล้มเหลวพร้อมบอกว่าผิดตรงไหน
+          รอบนี้ผ่าน ผลสรุปว่าเสร็จกี่ข้อและข้อไหนกำลังทำ แบบในผลจาก run จริงด้านล่าง
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A19-poteto-thai/1/requests.jsonl#seq=35
+          select: messages[-1].content[0]
+          highlight:
+            - content
       do: >-
         `todo` รันพร้อม `read` ได้เพราะไม่เปลี่ยนอะไรและไม่ถามใคร `parseTodo` ตรวจรายการ: ไม่เกินจำนวนที่กำหนด
         `id` ไม่ซ้ำ และ `in_progress` มีได้ข้อเดียว ถ้าผิดกฎข้อใด call ล้มเหลวพร้อมบอกว่าผิดตรงไหน
@@ -43,6 +72,11 @@ scenario:
     - id: early
       lane: server
       at: updates
+      beat:
+        title: "Geno ส่งรายการไปที่แชตทันที"
+        text: >-
+          ทันทีที่ todo จบ Geno ส่งรายการไปที่แชต ไม่ต้องรอให้การอ่านไฟล์ในชุดเดียวกันจบ
+        to: panel
       do: >-
         ทันทีที่ `todo` จบ `watcher.toolEnd` ส่ง `tool_call_update` ที่มีรายการใน `TODO_META`
         ไม่ต้องรอให้ `read` ในชุดเดียวกันจบหรือให้ผลลง log
@@ -60,6 +94,11 @@ scenario:
     - id: pinned
       lane: panel
       at: rail
+      beat:
+        title: "แชตปักรายการไว้ท้าย turn"
+        text: >-
+          todo ไม่ขึ้นเป็นขั้นของ tool แต่แชตปักรายการล่าสุดไว้ก่อนขั้นสุดท้ายของ turn และเปิดไว้ให้เห็น
+        sees: "กล่อง \"1 of 4 done · write tests\" ข้อที่เสร็จมีเครื่องหมายถูก ข้อ \"Write tests\" มีไอคอนหมุน ข้อที่เหลือเป็นวงกลมว่าง"
       alongside: true
       do: >-
         `railOf` ไม่วาด `todo` เป็นขั้นของเครื่องมือ แต่ปักรายการล่าสุดไว้ก่อนขั้นสุดท้ายของ turn ที่กำลังทำงาน และเปิดรายการไว้
@@ -72,6 +111,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model ทำต่อ Geno เตือนถ้าลืมอัปเดต"
+        text: >-
+          Geno เรียกโมเดลต่อ ถ้าเรียกไป 10 ครั้งโดยที่โมเดลไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
+        to: model
+        end: "model ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ถ้า loop เรียกโมเดลไป 10 ครั้งโดยที่โมเดลไม่อัปเดตรายการที่ยังไม่เสร็จ
         `deliver()` จะเพิ่ม `notice` ที่แนบรายการมาเตือน (`todoReminder`)
@@ -97,3 +142,5 @@ scenario:
 - **เตือนเมื่อรายการค้าง** นอกจากเตือนหลัง 10 ครั้งแล้ว ถ้าผู้ใช้พิมพ์ prompt ใหม่ขณะที่รายการยังไม่เสร็จ
   การเรียกโมเดลครั้งแรกของ turn ใหม่ได้รายการเดิมพร้อมบอกว่า turn ก่อนจบก่อนรายการเสร็จหรือไม่
 - **ส่งรายการว่างคือการล้าง** `items: []` ได้ผล "Cleared the todo list." และแผงไม่ปักอะไร
+
+อ่านต่อที่ [Model อ่านหลายไฟล์พร้อมกัน](/scenarios/tool/parallel-read-batch/)

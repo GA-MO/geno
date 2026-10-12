@@ -1,5 +1,5 @@
 ---
-title: ดึงหน้าเว็บ
+title: "Model ดึงหน้าเว็บด้วย web_fetch"
 description: โมเดลเรียก web_fetch กับหน้าเว็บของโฮสต์อื่น โหมด Ask ถามผู้ใช้ก่อน แล้ว engine ดึงหน้า ให้โมเดลผู้ช่วยอ่านและตอบคำถาม ผลไปถึงโมเดลในรั้วข้อมูล
 tableOfContents: false
 sidebar:
@@ -16,6 +16,19 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอดึงหน้าเว็บพร้อมคำถาม"
+        text: >-
+          โมเดลขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร" run
+          จริงด้านล่างเรียก `web_fetch` แบบเดียวกันกับ example.com
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=7
+          select: content
+          collapse:
+            - "[0].thinking"
       do: >-
         โมเดลส่งบล็อก `tool_use` ของ `web_fetch` พร้อม URL และคำถามที่อยากรู้จากหน้านั้น จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -31,10 +44,20 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของ web_fetch"
+        text: >-
+          Geno จัดคิว call ให้รันทีละตัว เพราะอาจต้องถามคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: judge
       lane: policy
       at: rules
+      beat:
+        title: "Geno ตรวจกฎของโดเมน"
+        text: >-
+          ยังไม่มีกฎของ workspace สำหรับ date-fns.org กฎของ URL ภายนอกในโหมด Ask คือถาม ไม่มี hook ตอบแทน Geno
+          จึงส่งคำถามไปที่แชต พร้อมกฎของโดเมนให้เลือกบันทึก งานใน Tasks เปลี่ยนเป็นรอคุณ
+        to: panel
       do: >-
         `webDenialFor` ดูกฎโดเมนของ workspace ก่อน ไม่พบ จึงใช้กฎ `web-remote-url` ซึ่งในโหมด Ask คือถาม
         (Plan อนุญาต Auto ส่งให้ classifier) และแนบกฎ `WebFetch(domain:date-fns.org)` ไว้ให้เลือกบันทึก
@@ -69,6 +92,13 @@ scenario:
     - id: card
       lane: panel
       at: card
+      beat:
+        title: "คุณเห็นการ์ด “Fetch from date-fns.org?”"
+        text: >-
+          การ์ดของการดึงเว็บมีไอคอนลูกโลกและชื่อโฮสต์ turn รออยู่ตรงนี้ ลองเลือกแต่ละทาง
+        to: you
+        ask: "กดปุ่มไหน"
+        sees: "การ์ด \"Fetch from date-fns.org?\" \"Geno asks about fetching a page from another host.\" ปุ่ม Allow, Deny, Always allow in this workspace และ No, and tell the agent…"
       do: >-
         การ์ดใช้หน้าตาของการดึงเว็บ ไอคอนลูกโลก หัวข้อบอกชื่อโฮสต์
       sees: >-
@@ -88,6 +118,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Allow"
+                  text: >-
+                    การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาตครั้งนี้
+                  from: you
+                  to: engine
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -109,6 +145,13 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Always allow"
+                  text: >-
+                    Geno บันทึกกฎอนุญาต `web_fetch` สำหรับโดเมน date-fns.org ลงที่เก็บของ workspace ครั้งหน้าทุก URL
+                    บนโฮสต์นี้ผ่านโดยไม่ถาม ทั้งในโหมด Ask และ Auto
+                  from: you
+                  to: engine
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow-workspace`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -130,6 +173,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Deny"
+                  text: >-
+                    ไม่มีการดึงหน้า turn จบรอคุณ เหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อว่าเกิดอะไรขึ้น
+                  from: you
+                  end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -151,6 +200,13 @@ scenario:
 
     - id: get
       lane: external
+      beat:
+        title: "Engine ดึงหน้าเองนอก sandbox"
+        text: >-
+          engine ปฏิเสธที่อยู่ภายในเครื่องหรือเครือข่ายส่วนตัว ถ้าหน้าพาไปโฮสต์อื่น
+          การไปต่อแต่ละครั้งผ่านกฎและการถามใหม่ หน้าที่ตอบ error หรือช้าเกินทำให้ call ล้มเหลว
+        from: engine
+        to: machine
       do: >-
         engine ดึงหน้าเองนอก sandbox ผ่าน `guardedResolve` ซึ่งปฏิเสธที่อยู่ภายในเครื่องหรือเครือข่ายส่วนตัวและตรึง DNS ไว้
         ถ้าหน้าพาไปโฮสต์อื่น การไปต่อแต่ละครั้งผ่านกฎและการถามใหม่ หน้าที่ตอบ HTTP 400 ขึ้นไปหรือช้าเกินกำหนดทำให้ call ล้มเหลว
@@ -158,6 +214,10 @@ scenario:
 
     - id: read
       lane: external
+      beat:
+        title: "Model ผู้ช่วยอ่านหน้าแล้วตอบคำถาม"
+        text: >-
+          หน้าถูกแปลงเป็น markdown แล้วให้โมเดลผู้ช่วยที่ถูกที่สุดอ่านและตอบคำถาม โมเดลหลักจึงไม่ต้องอ่านทั้งหน้า
       do: >-
         โมเดลผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` เลือกโมเดลที่ถูกที่สุดก่อน:
         โมเดลของบทบาท explore ถ้าตั้งไว้ แล้ว classifier แล้วจึงเป็นโมเดลของ session
@@ -166,6 +226,11 @@ scenario:
     - id: answer
       lane: tool
       at: executor
+      beat:
+        title: "Geno ล้อมรั้วคำตอบว่าเป็นข้อมูล"
+        text: >-
+          คำตอบอยู่ในรั้ว ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้ ผลมีบันทึกว่าคุณอนุญาต แล้วกลับมาที่แชต
+        sees: { kind: step, label: fetch date-fns.org, status: done }
       do: >-
         `web_fetch` ห่อคำตอบในรั้ว `<web_fetch_answer>` ข้อความในหน้าที่พยายามปิดรั้วเองถูกทำให้ใช้ไม่ได้
         ผลมีบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
@@ -176,6 +241,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model ได้คำตอบจากหน้าเว็บ"
+        text: >-
+          Geno เรียกโมเดลต่อ โมเดลได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
+        to: model
+        end: "model ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้คำตอบจากหน้าเว็บ ไม่ใช่หน้าเว็บทั้งหน้า
       ref: packages/core/src/loop.ts#loopStep
@@ -202,3 +273,5 @@ URL บนเครื่องนี้ (`localhost`) ผ่านเสมอ 
   ด่านของมันคือกฎ `web-remote-url` และ `guardedResolve` ที่ห้ามที่อยู่ส่วนตัว
 - **Always allow บันทึกเป็นโดเมน** ไม่ใช่ URL กฎ `WebFetch(domain:date-fns.org)` ครอบคลุมทุกหน้าบนโฮสต์นั้น
 - **Plan ดึงเว็บได้** ต่างจากคำสั่ง shell การอ่านเว็บไม่เปลี่ยนอะไรใน workspace โหมด Plan จึงอนุญาต
+
+อ่านต่อที่ [Model ค้นเว็บด้วย web_search](/scenarios/tool/web-search/)
