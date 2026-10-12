@@ -129,6 +129,18 @@ function Composer({ mock }: { readonly mock: Mock<'composer'> }) {
   );
 }
 
+/** A string's JSON text with every occurrence of the quote marked. */
+function Quoted({ text, quote }: { readonly text: string; readonly quote: string | undefined }): ReactNode {
+  const needle = quote === undefined ? '' : JSON.stringify(quote).slice(1, -1);
+  if (needle === '' || !text.includes(needle)) return text;
+  return text.split(needle).map((part, i) => (
+    <span key={i}>
+      {i === 0 ? null : <mark className="js-quote">{needle}</mark>}
+      {part}
+    </span>
+  ));
+}
+
 const isLong = (value: unknown): value is Long => typeof value === 'object' && value !== null && '$long' in value;
 const isMore = (value: unknown): value is More => typeof value === 'object' && value !== null && '$more' in value;
 
@@ -136,12 +148,19 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
   const marked = view.highlight.includes(path) ? ' mark' : '';
   if (isLong(value))
     return (
-      <span className={`js-str${marked}`}>
-        {JSON.stringify(value.$long).slice(0, -1)}
-        <span className="js-cut">… {`${value.chars.toLocaleString('en-US')} ตัวอักษร`}</span>"
+      <span className={`js-string${marked}`}>
+        "{value.from === 0 ? null : <span className="js-cut">… </span>}
+        <Quoted text={JSON.stringify(value.$long).slice(1, -1)} quote={view.quote} />
+        <span className="js-cut"> … {`${value.chars.toLocaleString('en-US')} ตัวอักษร`}</span>"
       </span>
     );
   if (isMore(value)) return <span className="js-cut">… อีก {value.$more} รายการ</span>;
+  if (typeof value === 'string')
+    return (
+      <span className={`js-string${marked}`}>
+        "<Quoted text={JSON.stringify(value).slice(1, -1)} quote={view.quote} />"
+      </span>
+    );
   if (value === null || typeof value !== 'object') return <span className={`js-${value === null ? 'null' : typeof value}${marked}`}>{JSON.stringify(value)}</span>;
   const entries: [string, unknown][] = Array.isArray(value) ? value.map((item, i) => [String(i), item]) : Object.entries(value);
   const [start, end] = Array.isArray(value) ? ['[', ']'] : ['{', '}'];
@@ -170,7 +189,6 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
   );
 }
 
-const DIRECTION_LABELS: Readonly<Record<PayloadView['direction'], string>> = { request: 'Request ที่ส่งให้ model', response: 'คำตอบของ model', tool_result: 'ผลของ tool' };
 const PROVENANCE_LABELS: Readonly<Record<PayloadView['provenance'], string>> = {
   recorded: 'ไบต์จริงจาก wire log',
   rebuilt: 'request ที่ engine สร้างใหม่จาก session log ตอนเก็บผล',
@@ -211,38 +229,26 @@ function Chips({ chips, json }: { readonly chips: readonly BlockChip[]; readonly
   );
 }
 
-function Payloads({ views, legend }: { readonly views: readonly PayloadView[]; readonly legend: boolean }) {
-  const [tab, setTab] = useState(0);
+/** One payload: its chips, what a log event records or which calls a tool result answers, the JSON, and its source. */
+function Panel({ view, legend, hidden }: { readonly view: PayloadView; readonly legend: boolean; readonly hidden: boolean }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const [copied, setCopied] = useState(false);
   const json = useRef<HTMLPreElement>(null);
-  const view = views[Math.min(tab, views.length - 1)]!;
   const toggle = (path: string) => setOpen((current) => new Set([...current, path]));
-  const copy = () => {
-    void navigator.clipboard.writeText(JSON.stringify(view.value, null, 2)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    });
-  };
   return (
-    <div className="mk-payload">
-      <div className="mk-payload-bar">
-        {views.length === 1 ? (
-          <span className="mk-payload-label">{DIRECTION_LABELS[view.direction]}</span>
-        ) : (
-          <span role="tablist" className="mk-tabs">
-            {views.map((candidate, i) => (
-              <button key={i} type="button" role="tab" aria-selected={i === tab} onClick={() => setTab(i)}>
-                {DIRECTION_LABELS[candidate.direction]}
-              </button>
-            ))}
-          </span>
-        )}
-        <button type="button" className="mk-copy" onClick={copy}>
-          {copied ? 'คัดลอกแล้ว' : 'คัดลอก'}
-        </button>
-      </div>
+    <div className="mk-panel" role="tabpanel" data-unit={view.unit} data-label={view.label} hidden={hidden}>
       {view.blocks === undefined ? null : <Chips chips={view.blocks} json={json} />}
+      {view.note === undefined ? null : <p className="mk-note">{view.note}</p>}
+      {view.answers === undefined ? null : (
+        <p className="mk-answers">
+          ตอบ{' '}
+          {view.answers.map((answer, i) => (
+            <span key={answer.id}>
+              {i === 0 ? null : ', '}
+              <code>tool_use {answer.name}</code> ({answer.id})
+            </span>
+          ))}
+        </p>
+      )}
       {legend && showsToolUse([view]) ? (
         <p className="mk-legend">
           อ่าน block <code>tool_use</code> อย่างนี้: <code>name</code> คือ tool ที่ model เลือกเรียก, <code>input</code> คือ argument ตาม schema ของ tool นั้น และ <code>id</code> ใช้จับคู่กับ{' '}
@@ -259,6 +265,42 @@ function Payloads({ views, legend }: { readonly views: readonly PayloadView[]; r
         </a>
         {` · ${PROVENANCE_LABELS[view.provenance]}${view.engine === undefined ? '' : ` · engine ${view.engine}`}`}
       </p>
+    </div>
+  );
+}
+
+/** Every payload of a figure as a tab; each panel is in the page, so a reader without JS and the cards check see all. */
+function Payloads({ views, legend }: { readonly views: readonly PayloadView[]; readonly legend: boolean }) {
+  const [tab, setTab] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const active = Math.min(tab, views.length - 1);
+  const copy = () => {
+    void navigator.clipboard.writeText(JSON.stringify(views[active]!.value, null, 2)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
+  };
+  return (
+    <div className="mk-payload">
+      <div className="mk-payload-bar">
+        {views.length === 1 ? (
+          <span className="mk-payload-label">{views[0]!.label}</span>
+        ) : (
+          <span role="tablist" className="mk-tabs">
+            {views.map((candidate, i) => (
+              <button key={i} type="button" role="tab" aria-selected={i === active} onClick={() => setTab(i)}>
+                {candidate.label}
+              </button>
+            ))}
+          </span>
+        )}
+        <button type="button" className="mk-copy" onClick={copy}>
+          {copied ? 'คัดลอกแล้ว' : 'คัดลอก'}
+        </button>
+      </div>
+      {views.map((view, i) => (
+        <Panel key={i} view={view} legend={legend} hidden={i !== active} />
+      ))}
     </div>
   );
 }

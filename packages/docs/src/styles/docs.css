@@ -192,6 +192,9 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 button.mk-chip:hover { background: var(--sunk); }
 .mk-legend { margin: 0; padding: 6px 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); background: var(--sunk); border-bottom: 1px solid var(--line-2); }
 .mk-legend code { font-size: 0.92em; }
+.mk-note, .mk-answers { margin: 0; padding: 6px 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
+.mk-answers code { font-size: 0.92em; }
+.js-quote { background: color-mix(in srgb, var(--you) 22%, transparent); color: inherit; border-radius: 3px; }
 /* A page explains tool_use once: on the first Payload island that shows one. */
 astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-legend) ~ * astro-island .mk-legend { display: none; }
 .mk-json [data-path].flash > .js-line { animation: mk-flash 1.2s ease-out; }

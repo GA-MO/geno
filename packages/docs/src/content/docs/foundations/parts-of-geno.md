@@ -142,7 +142,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
           select: messages[0].content
           highlight: ['[3].text']

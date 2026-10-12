@@ -34,7 +34,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A20-thai-question/1/requests.jsonl#seq=4
           select: messages[-1]
 
@@ -49,7 +48,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A20-thai-question/1/session.jsonl#seq=18
           select: content
       do: >-

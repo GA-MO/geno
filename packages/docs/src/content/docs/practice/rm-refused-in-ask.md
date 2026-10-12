@@ -40,17 +40,15 @@ scenario:
         title: "Geno ส่ง request แรกให้ model"
         text: >-
           request มีคำสั่งของคุณ และคำอธิบายของ tool `bash` ซึ่งบอก model ไว้ก่อนแล้วว่าคำสั่งที่ลบแบบ recursive
-          ต้องได้ approval จากผู้ใช้ และอาจถูกปฏิเสธ การ์ดข้างล่างตัดมาเฉพาะประโยคนั้นจาก `tools[0]`
+          ต้องได้ approval จากผู้ใช้ และอาจถูกปฏิเสธ การ์ดข้างล่างเป็น `tools[0]` ทั้งก้อน โดยทำเครื่องหมายประโยคนั้นไว้
         from: engine
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/wire.jsonl#line=1
-          json:
-            name: bash
-            description: "… Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied. …"
-          highlight: [description]
+          select: tools[0]
+          quote: "Commands that push, hard-reset, delete recursively, download, call cloud or database CLIs, or name paths outside the workspace need the user's approval and may be denied."
+          collapse: [input_schema]
 
     - id: wants-look
       lane: model
@@ -63,7 +61,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=3
           select: content
           highlight: ['[1].text', '[2].input.command']
@@ -85,7 +82,6 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=4
           highlight: [status, output]
           collapse: [timing]
@@ -120,7 +116,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=6
           select: content[-1]
           highlight: [input.command]
@@ -155,7 +150,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=9
           select: content[-1]
           highlight: [input.command]
@@ -214,7 +208,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/fix-b2/session.jsonl#seq=10
           highlight: [status, approval.decidedBy, output]
           collapse: [timing]

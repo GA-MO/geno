@@ -275,7 +275,7 @@ function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path:
     const resolved = ctx.runs.resolve(mock);
     const at = `${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`;
     if (!resolved.ok) problem(at, resolved.reason);
-    else if (resolved.cut !== undefined) problem(`${at}.select`, resolved.cut);
+    else if (resolved.partial !== undefined) problem(`${at}.select`, resolved.partial);
     return resolved.ok ? [resolved.view] : [];
   });
   for (const end of ['from', 'to'] as const)

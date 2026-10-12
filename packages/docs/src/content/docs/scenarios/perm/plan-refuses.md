@@ -25,7 +25,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6
           select: messages[-1].content[3]
       do: >-

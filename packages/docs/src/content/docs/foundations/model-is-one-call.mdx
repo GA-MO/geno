@@ -5,13 +5,11 @@ sidebar:
   order: 1
 payloads:
   first:
-    direction: request
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
     select: messages
     highlight:
       - "[0].content[3].text"
   second:
-    direction: request
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
     select: messages
     highlight:
@@ -22,7 +20,6 @@ payloads:
     collapse:
       - "[0]"
   secondSent:
-    direction: request
     source: docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3
     select: messages
     highlight:

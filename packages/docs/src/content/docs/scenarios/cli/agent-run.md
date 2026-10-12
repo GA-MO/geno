@@ -263,7 +263,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A08-ask-risky-denied/1/session.jsonl#seq=9
           highlight:
             - status

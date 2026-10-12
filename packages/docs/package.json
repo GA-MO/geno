@@ -8,6 +8,7 @@
     "site": "astro build",
     "check": "tsx scripts/check.ts",
     "counts": "tsx scripts/counts.ts",
+    "cards": "tsx scripts/cards.ts",
     "ref": "tsx scripts/ref.ts",
     "typecheck": "astro check",
     "walk": "tsx scripts/walk.ts",

@@ -67,12 +67,8 @@ scenario:
         ask: "โหมดไหน"
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=16
-          select: approval
-          highlight:
-            - rule
-            - reason
+          highlight: [approval.rule, approval.reason]
       do: >-
         `secretReadDenial` ใช้กฎ `secret-path` ("a credentials file such as .env") ซึ่งคำตัดสินขึ้นกับโหมด
         PreToolUse hook ที่อนุญาต call นี้ไม่ได้ข้ามด่านนี้

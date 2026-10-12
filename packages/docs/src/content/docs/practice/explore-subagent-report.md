@@ -37,7 +37,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=1
           select: tools[9]
           highlight: [name, description]
@@ -54,7 +53,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/session.jsonl#seq=3
           select: content[-1]
           highlight: [input.agent, input.task]
@@ -76,7 +74,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=3
           select: system[0]
           highlight: [text]
@@ -104,7 +101,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/child-68ca7508-6075-4917-bc25-2e6e4dfd793e.jsonl#seq=4
           highlight: [status, output]
           collapse: [timing]
@@ -125,9 +121,9 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/child-68ca7508-6075-4917-bc25-2e6e4dfd793e.jsonl#seq=8
-          select: output
+          source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=9
+          select: messages[-1].content[0]
+          highlight: [content]
       do: >-
         model ของลูกขอ `list` ของ `packages` ด้วย `depth: 3`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -154,7 +150,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=9
           select: messages[-1].content[-1]
           highlight: [text]
@@ -174,7 +169,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/child-68ca7508-6075-4917-bc25-2e6e4dfd793e.jsonl#seq=11
           select: content[-1]
           highlight: [name, input.message]
@@ -195,7 +189,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/wire.jsonl#line=11
           select: messages[-1].content[0]
           highlight: [tool_use_id, content]
@@ -216,7 +209,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/session.jsonl#seq=8
           select: content
           highlight: ['[1].text', '[2].input']
@@ -248,7 +240,6 @@ scenario:
         end: จบ turn
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a2/session.jsonl#seq=11
           select: content[-1]
           highlight: [text]

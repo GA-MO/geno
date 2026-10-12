@@ -25,7 +25,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A12-background-server/1/session.jsonl#seq=7
           select: content
           highlight:
@@ -141,7 +140,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=10
           select: messages[-1].content[0]
           highlight:

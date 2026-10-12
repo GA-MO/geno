@@ -22,7 +22,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/session.jsonl#seq=3
           select: content[2]
           highlight:
@@ -49,9 +48,9 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/session.jsonl#seq=4
-          select: output
+          source: docs/results/real-usecases/runs/A12-background-server/fix-s3-1/wire.jsonl#line=3
+          select: messages[-1].content[0]
+          highlight: [content]
       lane: tool
       at: shell
       do: >-

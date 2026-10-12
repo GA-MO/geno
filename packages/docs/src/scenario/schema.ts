@@ -93,16 +93,13 @@ const runSource = z.string().regex(/^docs\/results\/real-usecases\/runs\/[^#\s]+
 /** Real wire data from a recorded run, on a beat or on any page's `payloads`. */
 export const payloadSpecSchema = z
   .object({
-    direction: z.enum(['request', 'response', 'tool_result']),
     source: runSource,
-    /** A path into the record; the whole record when absent. */
+    /** A path into the record; the whole record when absent. The card's label comes from what the path reaches. */
     select: jsonPath.optional(),
-    /** An inline excerpt in place of select; source still names where it came from. */
-    json: z.unknown().optional(),
     highlight: z.array(jsonPath).optional(),
     collapse: z.array(jsonPath).optional(),
-    /** Why the card shows only part of a content block; without it, a select inside a block fails docs:check. */
-    cut: z.string().min(12, 'cut says why the card shows only part of a block').optional(),
+    /** Text to mark in a string of the card; a long string keeps the stretch around it. */
+    quote: z.string().min(1).optional(),
   })
   .strict();
 export type PayloadSpec = z.infer<typeof payloadSpecSchema>;

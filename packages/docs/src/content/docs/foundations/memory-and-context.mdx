@@ -5,21 +5,14 @@ sidebar:
   order: 11
 payloads:
   firstUsage:
-    direction: response
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4
-    select: usage
-    highlight:
-      - cacheRead
-      - cacheWrite
+    highlight: [usage.cacheRead, usage.cacheWrite]
+    collapse: [content]
   secondUsage:
-    direction: response
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9
-    select: usage
-    highlight:
-      - cacheRead
-      - cacheWrite
+    highlight: [usage.cacheRead, usage.cacheWrite]
+    collapse: [content]
   compaction:
-    direction: response
     source: docs/results/real-usecases/runs/A31-compaction-forced/2/session.jsonl.gz#seq=84
     highlight:
       - keptFrom

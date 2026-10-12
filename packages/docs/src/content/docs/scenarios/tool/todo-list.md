@@ -24,7 +24,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/B09-stop-and-resume-thai/1/session-c35ff8bd-d9bb-4d36-aff0-e5a554dff67f.jsonl#seq=10
           select: content
           collapse:
@@ -63,7 +62,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A19-poteto-thai/1/requests.jsonl#seq=35
           select: messages[-1].content[0]
           highlight:

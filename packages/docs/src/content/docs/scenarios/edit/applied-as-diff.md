@@ -23,7 +23,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A04-blind-edit-recovery/1/session.jsonl#seq=7
           select: content[1]
           highlight:
@@ -103,9 +102,9 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/1/session.jsonl#seq=8
-          select: output
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/1/requests.jsonl#seq=10
+          select: messages[-1].content[0]
+          highlight: [content]
       lane: tool
       at: executor
       do: >-

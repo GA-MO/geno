@@ -26,7 +26,6 @@ scenario:
         to: panel
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=2
           highlight: [content]
       do: ผู้ใช้รัน `gcode agent --mode auto` พร้อมคำขอ
@@ -60,7 +59,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=5
           select: content
           highlight: ['[2].input', '[3].input.command']
@@ -106,7 +104,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=7
           highlight: [approval.classifier.verdict, approval.classifier.reason, output]
           collapse: [timing]
@@ -136,9 +133,9 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=10
-          select: output
+          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/wire.jsonl#line=7
+          select: messages[-1].content[0]
+          highlight: [content]
       do: >-
         model ขอ `read` สองไฟล์ จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -166,9 +163,9 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=15
-          select: output
+          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/wire.jsonl#line=9
+          select: messages[-1].content[1]
+          highlight: [content]
       do: >-
         model ขอ `read` และ `grep` ในคำตอบเดียว จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -196,9 +193,9 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=19
-          select: output
+          source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/wire.jsonl#line=11
+          select: messages[-1].content[1]
+          highlight: [content]
       do: >-
         model ขอ `read` `scripts/lint.js` และ `scripts/report.js` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -225,7 +222,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=21
           select: content[-1]
           highlight: [input.command]
@@ -246,7 +242,6 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=22
           highlight: [approval.classifier.verdict, approval.classifier.reason, output]
           collapse: [timing]
@@ -276,7 +271,6 @@ scenario:
         end: จบ turn
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A09-auto-classifier/fix-b2/session.jsonl#seq=24
           select: content[-1]
           highlight: [text]

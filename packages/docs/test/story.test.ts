@@ -216,26 +216,27 @@ describe('payload mocks read real runs', () => {
   const story = (sees: unknown) => [{ lane: 'user', do: 'x', ...beat('One', { sees }) }, { lane: 'user', do: 'y', ...beat('Two'), ...end }];
 
   test('a request expands its $prefix messages, picks a path, and trims long text', () => {
-    const scenario = compiled(story({ kind: 'payload', direction: 'request', source: `${RUN}/requests.jsonl#seq=9`, select: 'messages[-1]', highlight: ['content[0].tool_use_id'] }));
+    const scenario = compiled(story({ kind: 'payload', source: `${RUN}/requests.jsonl#seq=9`, select: 'messages[-1]', highlight: ['content[0].tool_use_id'] }));
     const view = scenario.steps[scenario.start]!.beat!.sees[0] as PayloadView;
     const message = view.value as { role: string; content: { type: string }[] };
     expect(message.role).toBe('user');
     expect(message.content.map((block) => block.type)).toEqual(['tool_result', 'tool_result', 'tool_result']);
     expect(view.highlight).toEqual(['content.0.tool_use_id']);
     expect(view.caption).toBe('A06 read-not-cat, qwen3.8-flash');
-    const whole = compiled(story({ kind: 'payload', direction: 'request', source: `${RUN}/requests.jsonl#seq=9`, select: 'tools[0].description' }));
-    expect((whole.steps[whole.start]!.beat!.sees[0] as PayloadView).value).toEqual({ $long: expect.any(String), chars: expect.any(Number) });
+    const tool = compiled(story({ kind: 'payload', source: `${RUN}/requests.jsonl#seq=9`, select: 'tools[0]' }));
+    expect((tool.steps[tool.start]!.beat!.sees[0] as PayloadView).value).toMatchObject({ name: expect.any(String), description: { $long: expect.any(String), from: 0, chars: expect.any(Number) } });
   });
 
   test('a missing seq, a path that does not resolve, and a missing file fail docs:check', () => {
-    expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/session.jsonl#seq=999` }))).toEqual([expect.stringContaining('no record with seq 999')]);
-    expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/session.jsonl#seq=4`, select: 'content[9]' }))).toEqual([expect.stringContaining('index 9 is outside')]);
-    expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/nope.jsonl#seq=4` }))).toEqual([expect.stringContaining('does not exist')]);
+    expect(messages(story({ kind: 'payload', source: `${RUN}/session.jsonl#seq=999` }))).toEqual([expect.stringContaining('no record with seq 999')]);
+    expect(messages(story({ kind: 'payload', source: `${RUN}/session.jsonl#seq=4`, select: 'content[9]' }))).toEqual([expect.stringContaining('index 9 is outside')]);
+    expect(messages(story({ kind: 'payload', source: `${RUN}/nope.jsonl#seq=4` }))).toEqual([expect.stringContaining('does not exist')]);
+    expect(messages(story({ kind: 'payload', source: `${RUN}/session.jsonl#seq=4`, select: 'usage' }))).toEqual([expect.stringContaining('shows part of a log-event')]);
   });
 
   const runs = runFiles(REPO);
   const view = (source: string, select?: string): PayloadView => {
-    const result = runs.resolve({ direction: 'request', source: `docs/results/real-usecases/runs/${source}`, ...(select === undefined ? {} : { select }) });
+    const result = runs.resolve({ source: `docs/results/real-usecases/runs/${source}`, ...(select === undefined ? {} : { select }) });
     if (!result.ok) throw new Error(result.reason);
     return result.view;
   };
@@ -249,7 +250,7 @@ describe('payload mocks read real runs', () => {
 
   test('a wire.jsonl response line is its stream, one event per item', () => {
     expect(view('A01-fix-failing-test/fix-a2/wire.jsonl#line=2', '[-2]').value).toMatchObject({ event: 'message_delta', data: { delta: { stop_reason: 'tool_use' } } });
-    expect(view('A01-fix-failing-test/fix-a2/wire.jsonl#line=2', '[-1].event').value).toBe('message_stop');
+    expect(view('A01-fix-failing-test/fix-a2/wire.jsonl#line=2', '[-1]').value).toMatchObject({ event: 'message_stop' });
   });
 
   test('a gzipped session log reads by seq, and each file names where its bytes came from', () => {
@@ -262,7 +263,7 @@ describe('payload mocks read real runs', () => {
   });
 
   test('a line past the end of the file fails docs:check', () => {
-    expect(messages(story({ kind: 'payload', direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=7' }))).toEqual([expect.stringContaining('has no line 7; it has 6')]);
+    expect(messages(story({ kind: 'payload', source: 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=7' }))).toEqual([expect.stringContaining('has no line 7; it has 6')]);
   });
 
   test("docs:check reads the payloads of a page that is not a scenario", () => {
@@ -272,7 +273,7 @@ describe('payload mocks read real runs', () => {
     const source = 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3';
     writeFileSync(
       path.join(docs, 'src/content/docs/foundations/page.mdx'),
-      `---\ntitle: Page\npayloads:\n  good: { direction: request, source: "${source}", select: messages }\n  bad: { direction: request, source: "${source}", select: "messages[9]" }\n  typo: { direction: request, source: "${source}", selects: messages }\n---\n`,
+      `---\ntitle: Page\npayloads:\n  good: { source: "${source}", select: messages }\n  bad: { source: "${source}", select: "messages[9]" }\n  typo: { source: "${source}", selects: messages }\n---\n`,
     );
     const errors = loadSite({ docsRoot: docs, repoRoot: REPO }).problems.filter((problem) => problem.file === 'src/content/docs/foundations/page.mdx');
     expect(errors).toEqual([

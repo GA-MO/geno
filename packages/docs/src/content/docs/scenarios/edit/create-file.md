@@ -22,7 +22,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A03-new-file-create/fix-a1/session.jsonl#seq=23
           select: content[2]
           highlight:
@@ -95,9 +94,9 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A03-new-file-create/fix-a1/session.jsonl#seq=24
-          select: output
+          source: docs/results/real-usecases/runs/A03-new-file-create/fix-a1/wire.jsonl#line=13
+          select: messages[-1].content[0]
+          highlight: [content]
       lane: tool
       at: executor
       do: >-

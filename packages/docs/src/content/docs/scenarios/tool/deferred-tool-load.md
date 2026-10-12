@@ -94,7 +94,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=4
           select: content
           highlight:
@@ -129,7 +128,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/requests.jsonl#seq=7
           select: messages[-1].content[0]
           collapse:
@@ -171,7 +169,6 @@ scenario:
         end: "tool พร้อมใช้"
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=7
           select: content
           collapse:

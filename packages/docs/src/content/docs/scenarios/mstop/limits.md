@@ -28,7 +28,6 @@ scenario:
         ask: "ขีดจำกัดไหนมาก่อน"
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A17-budget-reminder/1/requests.jsonl#seq=20
           select: messages[-1].content
           highlight:

@@ -26,7 +26,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A20-thai-question/1/session.jsonl#seq=13
           select: content
           collapse:
@@ -143,7 +142,6 @@ scenario:
         to: panel
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A20-thai-question/1/requests.jsonl#seq=18
           select: messages[-1].content
           highlight:

@@ -5,7 +5,6 @@ sidebar:
   order: 7
 payloads:
   results:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
     select: messages[-1].content
     highlight:
@@ -13,13 +12,11 @@ payloads:
       - "[1].tool_use_id"
       - "[2].tool_use_id"
   wrongEdit:
-    direction: response
     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=6
     select: content[-1]
     highlight:
       - input.old_str
   editError:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=7
     highlight:
       - status
@@ -27,14 +24,12 @@ payloads:
     collapse:
       - timing
   recovered:
-    direction: response
     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=9
     select: content
     highlight:
       - "[1].text"
       - "[2].input.old_str"
   denied:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=8
     highlight:
       - status

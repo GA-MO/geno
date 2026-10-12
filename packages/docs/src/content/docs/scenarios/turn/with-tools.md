@@ -34,7 +34,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
           select: messages[-1].content[-1]
 
@@ -49,7 +48,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4
           select: content
           highlight: ['[2].name', '[2].input']
@@ -105,7 +103,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
           select: messages[-1].content
           highlight: ['[0].tool_use_id']

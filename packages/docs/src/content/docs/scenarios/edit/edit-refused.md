@@ -94,7 +94,6 @@ scenario:
                   to: model
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A27-resume-thai/2/session.jsonl#seq=30
                     highlight:
                       - output
@@ -132,7 +131,6 @@ scenario:
                   to: model
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A04-blind-edit-recovery/fix-a3/session.jsonl#seq=7
                     highlight:
                       - output
