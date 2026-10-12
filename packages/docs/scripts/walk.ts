@@ -20,13 +20,28 @@ interface Finding {
 
 function audit(): string[] {
   const problems: string[] = [];
+  // Text for screen readers only (the anchor link's "Section titled …") is clipped to nothing on purpose; take it out
+  // while measuring.
+  const unseen = [...document.querySelectorAll<HTMLElement>('main *')].filter((element) => {
+    const style = getComputedStyle(element);
+    return style.position === 'absolute' && (/^rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)$/.test(style.clip) || style.clipPath === 'inset(50%)');
+  });
+  const displays = unseen.map((element) => element.style.display);
+  for (const element of unseen) element.style.display = 'none';
   for (const element of document.querySelectorAll<HTMLElement>('main *')) {
     if (element.closest('svg') !== null) continue;
     const style = getComputedStyle(element);
     if (style.display === 'none' || element.clientWidth === 0) continue;
     const scrolls = style.overflowX === 'auto' || style.overflowX === 'scroll';
-    if (!scrolls && element.scrollWidth > element.clientWidth + 1) problems.push(`text spills out of ${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: "${element.textContent?.slice(0, 40)}"`);
+    if (scrolls || element.scrollWidth <= element.clientWidth + 1) continue;
+    // scrollWidth also counts a ::before/::after hit area (a heading's anchor link has one), so a spill must show as
+    // content drawn past the box. (No named helpers in here: the bundler's __name does not exist in the page.)
+    const box = element.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    if ([...range.getClientRects()].some((rect) => rect.width > 0 && (rect.right > box.right + 1 || rect.left < box.left - 1))) problems.push(`text spills out of ${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: "${element.textContent?.slice(0, 40)}"`);
   }
+  unseen.forEach((element, i) => (element.style.display = displays[i]!));
   if (document.documentElement.scrollWidth > document.documentElement.clientWidth) problems.push(`the page is ${document.documentElement.scrollWidth}px wide in a ${document.documentElement.clientWidth}px window`);
   const lane = document.querySelector<HTMLElement>('.ln-band');
   if (lane !== null) {
