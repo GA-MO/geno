@@ -1,5 +1,5 @@
 ---
-title: ส่งข้อความซ้อนขณะ turn ทำงาน
+title: "ส่ง prompt จากอีกหน้าต่างขณะ turn ยังทำงาน"
 description: อีกหน้าต่างหนึ่งส่ง session/prompt ถึงแชตที่มี turn ทำงานอยู่ engine ปฏิเสธทันที turn เดิมไม่ถูกแตะ
 tableOfContents: false
 sidebar:
@@ -17,12 +17,22 @@ scenario:
   steps:
     - id: type
       lane: user
+      beat:
+        title: "คุณพิมพ์ในหน้าต่างที่สอง"
+        text: >-
+          คุณเปิดโฟลเดอร์เดียวกันไว้สองหน้าต่าง หน้าต่าง A มี turn ทำงานอยู่ คุณพิมพ์ข้อความในแชตเดียวกันจากหน้าต่าง B
+          แล้วกด Enter
       do: ผู้ใช้พิมพ์ข้อความในหน้าต่าง B แล้วกด Enter
       phase: idle
 
     - id: send
       lane: panel
       at: composer
+      beat:
+        title: "แผงของหน้าต่าง B ส่งข้อความทันที"
+        text: >-
+          แผงของ B ไม่รู้ว่าหน้าต่าง A มี turn ค้างอยู่ ปุ่มของมันยังเป็น Send
+          มันจึงส่งข้อความต่อทันทีแทนที่จะเก็บไว้ในคิว
       do: >-
         `submit()` ของแผง B ไม่เห็น turn ที่ทำงาน จึงโพสต์ `send` ไปให้ extension host ทันที แทนที่จะเข้าคิว
       ref: packages/extension/src/chat/webview.ts#submit
@@ -31,6 +41,13 @@ scenario:
     - id: turn-start
       lane: editor
       at: chat
+      beat:
+        title: "B เปิด turn ใหม่ในแชตแล้วขอ engine"
+        text: >-
+          หน้าต่าง B ไม่ได้ถือ turn ไหนอยู่ จึงผ่านการตรวจของตัวเอง แชตของ B ขึ้นข้อความของคุณกับปุ่ม Stop ทันที
+          แล้วส่งคำขอเริ่ม turn ไปที่ engine ตัวเดียวกับที่หน้าต่าง A ใช้
+        to: engine
+        sees: { kind: composer, state: working, header: working }
       do: >-
         `Chat` ของหน้าต่าง B ไม่ได้ถือ turn ใด (`this.turn` ว่าง) จึงผ่านการตรวจของตัวเอง
         `prompt()` ส่ง action `turn-start` ให้แผง แล้วส่งคำขอ ACP `session/prompt`
@@ -42,6 +59,11 @@ scenario:
     - id: refuse
       lane: server
       at: turns
+      beat:
+        title: "Geno ปฏิเสธเพราะมี turn ทำงานอยู่แล้ว"
+        text: >-
+          engine ยอมให้แต่ละ session มี turn ได้ทีละหนึ่ง มันเห็นว่า session นี้มี turn ของหน้าต่าง A อยู่
+          จึงปฏิเสธทันที ไม่มีอะไรถูกบันทึก และ turn ของหน้าต่าง A ทำงานต่อโดยไม่รู้เรื่อง
       do: >-
         `runTurn` เห็นว่าทะเบียน `turns` มี `AbortController` ของ session นี้อยู่แล้ว จึงโยน `invalidRequest`
         "a turn is already running" ก่อนอ่าน log ไม่มีอะไรถูกบันทึก ไม่เปิดงานใน Tasks และ turn ของหน้าต่าง A ทำงานต่อโดยไม่รู้เรื่อง
@@ -52,6 +74,11 @@ scenario:
     - id: failed
       lane: editor
       at: chat
+      beat:
+        title: "หน้าต่าง B ได้ error กลับมา"
+        text: >-
+          คำขอของ B ถูกปฏิเสธ VS Code รับ error นั้นแล้วบอกแผงว่า turn ใหม่นี้ล้มเหลว
+        to: panel
       do: >-
         คำขอ `session/prompt` ถูกปฏิเสธ `prompt()` จับ error แล้วส่ง action `error` ด้วยข้อความของมัน
         ตามด้วย `turn-end` สถานะ `failed`
@@ -61,6 +88,13 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตของ B ขึ้นแถบ error"
+        text: >-
+          turn ใหม่ใน B จบเป็น failed ภายในเสี้ยววินาที ข้อความของคุณไม่ได้ไปถึงโมเดล และไม่กลับไปที่ช่องพิมพ์
+          คุณต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
+        end: "B ถูกปฏิเสธ turn ของ A ทำต่อ"
+        sees: { kind: notice, text: "Invalid request: a turn is already running", tone: error }
       do: >-
         turn ใหม่ในแผง B จบเป็น failed พร้อมแถบ error ข้อความของผู้ใช้ไม่ได้ไปถึงโมเดล ผู้ใช้ต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
       sees: >-
@@ -81,3 +115,5 @@ engine ยอมให้แต่ละ session มี turn ได้ทีล�
   การ reload หน้าต่าง B จะไม่เห็นข้อความนั้นและไม่เห็นแถบ error
 - **แผง B แสดงเป็น turn ที่ล้ม** `turn-start` เกิดก่อนติดต่อ engine แผงจึงวาด turn ใหม่ไว้แล้ว เมื่อถูกปฏิเสธ turn นั้นจบเป็น failed
   ข้อความของผู้ใช้ไม่กลับไปที่ช่องพิมพ์
+
+ถ้าข้อความถูกพิมพ์ในหน้าต่างเดียวกับที่ turn ทำงานอยู่ ดู [ส่งข้อความแทรกเข้าเทิร์นที่กำลังทำงาน](/scenarios/ctl/steer-delivered/)
