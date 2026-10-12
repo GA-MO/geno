@@ -942,6 +942,19 @@ scenarios:
       - policy
       - panel
     terminal: Blocks, then pauses, then cards
+  - id: perm.rm-rf-refused-run
+    thai: การรันจริง ขอ rm -rf ในโหมด Ask แล้วถูกปฏิเสธ
+    english: "Real run: rm -rf asked in Ask mode and refused"
+    chapter: 8
+    priority: P2
+    lanes:
+      - user
+      - loop
+      - model
+      - policy
+      - tool
+      - panel (terminal)
+    terminal: '`done` / `end_turn` with no further model call'
   - id: hook.user-prompt-submit
     thai: UserPromptSubmit บล็อกหรือเพิ่มบริบท
     english: UserPromptSubmit blocks or annotates
