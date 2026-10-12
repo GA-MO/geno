@@ -14,7 +14,7 @@
   do: >-
     ต่อ Unix socket ของ engine ที่ใช้การตั้งค่าชุดนี้ ถ้ายังไม่มี engine ฟังอยู่ `launch` เปิด `gcode serve --socket`
     เป็น process แยกที่อยู่ต่อแม้หน้าต่างปิด แล้วลองต่อใหม่ทุก 50 ms นานสุด 20 วินาที
-    stderr ของ engine ไหลเข้า output channel ชื่อ "Geno engine"
+    stderr ของ engine ลงไฟล์ log ข้าง socket และ `follow` คัดลอกสิ่งที่เขียนใหม่เข้า output channel ชื่อ "Geno engine"
   ref: packages/extension/src/chat/engine.ts#Engine.launch
 
 - id: initialize

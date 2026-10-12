@@ -1,19 +1,21 @@
-# A woken turn the model ended: it ends done, counts toward the wake cap, and the panel reads its end from Tasks.
+# A woken turn the model ended: it ends done, and the panel reads its end from Tasks.
 - id: done
   lane: loop
   at: step
   do: >-
-    `loopStep` ตัดสิน `done(end_turn)` turn ที่ถูกปลุกจบแบบ `done` และนับเป็นหนึ่งในการปลุกของชั่วโมงนี้
-    (ไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของผู้ใช้)
+    `loopStep` ตัดสิน `done(end_turn)` turn ที่ถูกปลุกจบแบบ `done`
+    การปลุกนี้นับไปแล้วตั้งแต่ข้อความ wake ลง log: ไม่เกิน 12 ครั้งในหนึ่งชั่วโมงหลัง prompt ล่าสุดของผู้ใช้ แล้วการปลุกจะพักรอผู้ใช้
   ref: packages/core/src/loop.ts#AFTER_STOP
   emits: [end_turn]
   phase: ending
 
 - id: ended
-  lane: panel
-  at: rail
+  lane: editor
+  at: chat
   do: >-
-    แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` อ่านการจบจากงานในแผง Tasks แทน แล้วแสดงท้าย turn ตามปกติ
+    แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` อ่านการจบจากงานในแผง Tasks แทน
+    แล้วส่ง action `turn-end` ให้แผงแสดงท้าย turn ตามปกติ
   sees: หัวข้อ "worked for 6s" และคำตอบของโมเดลใต้หัวที่มีกระดิ่ง
   ref: packages/extension/src/chat/chat.ts#Chat.adoptedEnded
+  emits: [turn-end]
   end: { turn: done, reason: end_turn }

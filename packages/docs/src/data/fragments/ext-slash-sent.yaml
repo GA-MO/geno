@@ -34,8 +34,9 @@
   lane: editor
   at: engine-link
   do: >-
-    `link()` ต่อ engine แล้วส่งคำขอ ACP `session/prompt` ข้อความยังเป็น `/name args` ตามที่พิมพ์ การแปลงคำสั่งเป็นงานของ engine
-  ref: packages/extension/src/chat/chat.ts#Chat.link
+    `link()` ได้การเชื่อมต่อกับ engine และ session ของแผงนี้ แล้ว `prompt()` ส่งคำขอ ACP `session/prompt`
+    ข้อความยังเป็น `/name args` ตามที่พิมพ์ การแปลงคำสั่งเป็นงานของ engine
+  ref: "packages/extension/src/chat/chat.ts#\"mine.connection.agent.request(acp.methods.agent.session.prompt, {\""
   emits: [session/prompt]
 
 - id: expand

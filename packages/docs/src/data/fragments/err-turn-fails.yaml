@@ -23,7 +23,8 @@
   at: chat
   alongside: true
   do: >-
-    `agentChunkAction` เห็น `TURN_ERROR_META` จึงไม่ใส่ข้อความลงคำตอบ แต่ส่ง action `error` ให้ webview แทน
+    `agentChunkAction` เห็น `TURN_ERROR_META` จึงไม่ใส่ข้อความลงคำตอบ แต่ให้ action `error` แทน
+    แล้ว `Chat.updated` ส่ง action นั้นให้ webview
   ref: packages/extension/src/chat/compact-host.ts#agentChunkAction
 
 - id: shown
@@ -32,7 +33,7 @@
   alongside: true
   do: >-
     `errorBlock` วาดแถบ error สีแดงท้าย turn ด้วยข้อความของผู้ให้บริการ (ตัวอักษรแรกเป็นตัวใหญ่)
-  sees: แถบ error สีแดงพร้อมไอคอน เช่น "529 {"type":"error","error":{"type":"overloaded_error",...}}"
+  sees: แถบ error สีแดงพร้อมไอคอนและข้อความของผู้ให้บริการ
   ref: packages/extension/src/chat/render.ts#errorBlock
 
 - id: done
@@ -40,7 +41,8 @@
   at: step
   do: >-
     `loopStep` เห็นว่า event ล่าสุดคือ `error` ตาราง `ERROR_REASON` แปลง `transport` และ `overflow` เป็น `done(error)`
-    Stop hook ไม่ทำงานในทางนี้ prompt ที่ยังไม่ได้คำตอบยังอยู่ใน log ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งสองข้อความ
+    Stop hook ไม่ทำงานในทางนี้ สิ่งที่โมเดลยังไม่ได้ตอบ (prompt หรือผลของเครื่องมือ) ยังอยู่ใน log
+    เพราะ `KEEPS_PENDING_PROMPT` เก็บไว้สำหรับ `transport` และ `overflow` ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งของเดิมและข้อความใหม่
   ref: packages/core/src/loop.ts#ERROR_REASON
   emits: [error]
   phase: ending
@@ -50,7 +52,7 @@
   at: turns
   do: >-
     `runTurn` แปลงผลด้วย `TURN_ENDS.error`: ACP ได้ `stopReason: end_turn` (ACP ไม่มี stop reason สำหรับ error)
-    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ lock ของ session ถูกปลด
+    ส่วน `_meta` บอกว่างานจบแบบ `failed` งานในแผง Tasks จบเป็น failed และ turn ของ session ถูกล้างออกจาก `turns`
   ref: packages/engine/src/serve.ts#TURN_ENDS
   emits: [TURN_END_META, failed]
 
@@ -58,9 +60,9 @@
   lane: editor
   at: chat
   do: >-
-    `turnEndOf` เชื่อ `TURN_END_META` มากกว่า `stopReason` จึงส่ง action `turn-end` สถานะ `failed`
+    `turnEndOf` เชื่อ `TURN_END_META` มากกว่า `stopReason` สถานะจึงเป็น `failed` แล้ว `prompt()` ส่ง action `turn-end`
     `end_turn` ไม่มีข้อความใน `STOP_MESSAGES` แถบ error จาก engine จึงเป็นคำอธิบายเดียวของ turn นี้
-  ref: packages/extension/src/chat/chat.ts#turnEndOf
+  ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response)\""
   emits: [turn-end]
 
 - id: footer

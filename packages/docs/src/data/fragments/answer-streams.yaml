@@ -22,7 +22,7 @@
   at: rail
   alongside: true
   do: >-
-    `render()` วาดบทสนทนาใหม่ทุกครั้งที่มี action ข้อความจึงค่อยๆ ปรากฏ
+    ทุก action ทำให้ `render()` วาดบทสนทนาใหม่ในเฟรมถัดไป ข้อความจึงค่อยๆ ปรากฏ
   sees: ข้อความของ Geno ขึ้นทีละส่วนพร้อมเคอร์เซอร์ หัวข้อยังเป็น "working"
   ref: packages/extension/src/chat/webview.ts#render
 
