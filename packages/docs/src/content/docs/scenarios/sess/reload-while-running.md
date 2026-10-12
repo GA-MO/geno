@@ -1,5 +1,5 @@
 ---
-title: reload หน้าต่างขณะเทิร์นทำงาน
+title: "reload หน้าต่างขณะ turn ทำงาน"
 description: ผู้ใช้ reload หน้าต่าง VS Code ระหว่างที่ turn ทำงาน engine เป็นคนละ process จึงทำงานต่อ หน้าต่างใหม่โหลด session เล่นซ้ำสิ่งที่เกิดขึ้น แล้วรับช่วง turn จนจบ
 tableOfContents: false
 sidebar:
@@ -15,11 +15,18 @@ scenario:
   related: [sess.leave-running, sess.open-history, start.open-window, ctl.stop-while-streaming]
   steps:
     - id: reload
+      beat:
+        title: คุณ reload หน้าต่าง
+        text: 'model เขียนคำตอบไปได้ครึ่งหนึ่ง คุณรัน "Developer: Reload Window"'
+        to: panel
       lane: user
       do: ผู้ใช้ reload หน้าต่าง
       phase: calling-model
 
     - id: dispose
+      beat:
+        title: ส่วนขยายตัดการเชื่อมต่อ แต่ engine อยู่ต่อ
+        text: engine เป็น process แยกที่อยู่ต่อแม้หน้าต่างปิด
       lane: editor
       at: engine-link
       do: >-
@@ -28,6 +35,9 @@ scenario:
       ref: packages/extension/src/chat/engine.ts#Engine.dispose
 
     - id: keeps
+      beat:
+        title: turn ทำงานต่อโดยไม่มีคนดู
+        text: ไม่มีใครแสดง session นี้ engine จึงทิ้งอัปเดตสด แต่ log เก็บทุกอย่าง และ engine เก็บ event ของ turn นี้ไว้เล่นซ้ำ
       lane: server
       at: updates
       do: >-
@@ -36,6 +46,10 @@ scenario:
       ref: packages/engine/src/viewers.ts#Viewers.notify
 
     - id: activate
+      beat:
+        title: หน้าต่างใหม่ต่อ engine ตัวเดิม
+        text: ส่วนขยายตัวใหม่เห็นว่าหน้าต่างนี้เคยแสดง session ไว้ จึงต่อ engine ทันที การตั้งค่าเหมือนเดิม จึงได้ engine ตัวเดิม
+        to: engine
       lane: editor
       at: engine-link
       do: >-
@@ -45,6 +59,10 @@ scenario:
       emits: [initialize]
 
     - id: load
+      beat:
+        title: แชตขอโหลด session ที่จำไว้
+        text: แชตขอ engine เล่น session นี้ซ้ำ
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -52,6 +70,10 @@ scenario:
       ref: packages/extension/src/chat/chat.ts#Chat.load
 
     - id: replay
+      beat:
+        title: Geno เล่นซ้ำ turn ที่กำลังทำงาน
+        text: engine ส่ง event ของ turn ข้อความที่ stream ค้างไว้ การรอ และงานเบื้องหลัง อัปเดตสดรอจนเล่นซ้ำจบ แชตจึงเห็นตามลำดับ
+        to: panel
       lane: server
       at: sessions
       do: >-
@@ -62,6 +84,10 @@ scenario:
       emits: [RUNNING_META]
 
     - id: adopt
+      beat:
+        title: แผงรับช่วง turn
+        text: แผงเห็นว่า turn ยังทำงาน มันรับ turn เป็นของตัว ปุ่ม Stop ใช้ได้ ข้อความครึ่งแรกกลับมาแล้วข้อความใหม่ต่อท้าย
+        sees: บทสนทนาเดิม หัวข้อ "working" ข้อความครึ่งแรกของคำตอบตามด้วยส่วนที่ stream ต่อ และปุ่ม Stop แทนปุ่ม Send
       lane: editor
       at: chat
       do: >-
@@ -80,6 +106,10 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: ends
+      beat:
+        title: turn จบ Geno บอกผ่าน Tasks
+        text: คำขอเดิมที่เริ่ม turn อยู่กับการเชื่อมต่อที่ปิดไปแล้ว engine จึงบอกการจบผ่านงานในแผง Tasks
+        to: panel
       lane: server
       at: tasks
       do: >-
@@ -99,6 +129,14 @@ scenario:
       emits: [turn-end]
 
     - id: footer
+      beat:
+        title: แผงปิด turn ตามปกติ
+        text: หัวข้อบอกเวลา ท้าย turn มีแถวสรุป model token และค่าใช้จ่าย เหมือน turn ที่ส่งจากหน้าต่างนี้
+        sees:
+          kind: composer
+          state: idle
+          header: worked for 1m 4s
+        end: Turn จบ
       lane: panel
       at: rail
       do: >-

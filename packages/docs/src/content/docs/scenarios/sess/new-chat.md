@@ -1,5 +1,5 @@
 ---
-title: เริ่มแชทใหม่
+title: "เริ่มแชตใหม่"
 description: ผู้ใช้กด New Chat Geno สร้าง session ใหม่ทันที แผงกลับเป็นหน้าเริ่มต้น และ turn ของแชตเดิมที่ยังทำงานไปต่อในเบื้องหลัง
 tableOfContents: false
 sidebar:
@@ -14,11 +14,19 @@ scenario:
   related: [sess.open-history, sess.leave-running, start.new-session-context, start.open-window]
   steps:
     - id: click
+      beat:
+        title: คุณกด +
+        text: คุณกดปุ่ม New Chat บนหัวแผง `/new` ไปถึงที่เดียวกัน ถ้าแชตที่แสดงยังไม่มี turn เลย ไม่มีอะไรต้องทำ
+        to: panel
       lane: user
       do: ผู้ใช้กดปุ่ม + บนหัวแผงแชต
       phase: idle
 
     - id: new-chat
+      beat:
+        title: แชตดูว่า turn เดิมยังทำงานไหม
+        text: ก่อนออกจากแชตเดิม แชตตรวจว่ามี turn ที่แผงนี้เริ่มไว้และยังทำงานอยู่หรือไม่
+        ask: turn เดิมยังทำไหม
       lane: editor
       at: vscode-ui
       do: >-
@@ -41,6 +49,10 @@ scenario:
             label: ยังทำงานอยู่
             steps:
               - lane: editor
+                beat:
+                  title: แชตปล่อย turn เดิมไว้
+                  text: การ์ดและคำถามที่เปิดอยู่ถูกตอบว่าไม่ได้แสดง engine จะถามใหม่ในหน้าต่างถัดไปที่แสดง session นั้น turn ทำงานต่อจนจบ และเห็นได้ในแผง Tasks
+                  to: engine
                 at: chat
                 do: >-
                   `leaveRunning` ปล่อย turn ไว้ การ์ดขออนุญาตและคำถามที่เปิดอยู่ถูกตอบว่า "ไม่ได้แสดง"
@@ -53,6 +65,10 @@ scenario:
                 ref: "packages/engine/src/serve.ts#\".onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {\""
 
     - id: fresh
+      beat:
+        title: Geno สร้าง session ใหม่
+        text: engine สร้าง session ทันที โหลดไฟล์คำสั่ง หน่วยความจำ skill และสภาพแวดล้อม แล้วเขียนบรรทัดแรกของ log
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -69,6 +85,11 @@ scenario:
       emits: [session-start]
 
     - id: show
+      beat:
+        title: แผงกลับเป็นหน้าเริ่มต้น
+        text: บทสนทนาว่าง ชื่อแชตถูกล้าง แชตที่เพิ่งออกมาอยู่บนสุดของรายการ Continue
+        to: panel
+        sees: หน้าเริ่มต้นกับ Noodle คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
       lane: editor
       at: chat
       do: >-
@@ -87,6 +108,10 @@ scenario:
       ref: packages/extension/src/chat/start-page.ts#startPage
 
     - id: close
+      beat:
+        title: Geno ปิด session เดิมถ้าว่าง
+        text: ถ้าแชตเดิมไม่มี turn ทำงาน engine ปิด MCP server ของมัน log ยังอยู่ เปิดจาก History ได้เสมอ
+        end: แชตใหม่พร้อม
       lane: server
       at: sessions
       do: >-

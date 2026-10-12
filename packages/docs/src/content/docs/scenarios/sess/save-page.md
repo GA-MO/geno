@@ -15,6 +15,10 @@ scenario:
   related: [sess.rewind, sess.history-manage]
   steps:
     - id: menu
+      beat:
+        title: คุณเลือก Save as page
+        text: คำตอบมีตาราง แผนภาพ และรูป เมนูของข้อความมีรายการบันทึกเป็นหน้า HTML
+        sees: รายการ "Save as page" กับคำอธิบาย "The answer as one HTML file to show someone"
       lane: panel
       at: rail
       do: >-
@@ -28,6 +32,9 @@ scenario:
       do: ผู้ใช้เลือก Save as page
 
     - id: post
+      beat:
+        title: แผงส่งแผนภาพที่วาดไว้แล้ว
+        text: แผงส่งแผนภาพตามที่เห็นตอนนี้พร้อมธีมสี หน้า HTML จึงไม่ต้องวาดเอง
       lane: panel
       at: rail
       do: >-
@@ -37,6 +44,9 @@ scenario:
       emits: [save-page]
 
     - id: draft
+      beat:
+        title: ส่วนขยายประกอบหน้า HTML
+        text: ส่วนขยายดึงคำตอบของ turn นั้น อ่านรูปจาก workspace ฝังเข้าไปในไฟล์เดียว ไม่มีอะไรถูกอัปโหลด
       lane: editor
       at: chat
       do: >-
@@ -45,6 +55,10 @@ scenario:
       ref: packages/extension/src/chat/page-host.ts#pageHost
 
     - id: target
+      beat:
+        title: ส่วนขยายเลือกชื่อไฟล์
+        text: ชื่อไฟล์มาจากหัวข้อของคำตอบ ที่อยู่คือ `geno-pages/` ในโฟลเดอร์แรกของ workspace
+        ask: มีไฟล์ชื่อนี้ไหม
       lane: editor
       at: vscode-ui
       do: >-
@@ -63,6 +77,10 @@ scenario:
             then: write
             steps:
               - lane: editor
+                beat:
+                  title: VS Code ถามว่าจะเขียนทับไหม
+                  text: Keep Both บันทึกเป็นชื่อใหม่ที่บอกไว้ในคำถาม
+                  sees: '"geno-pages/leap-year-fix.html already exists. Replace it?" ปุ่ม [Replace] [Keep Both] และ Cancel'
                 at: vscode-ui
                 do: >-
                   VS Code ถามแบบ modal ว่าจะเขียนทับหรือเก็บทั้งสอง Keep Both บันทึกเป็นชื่อใหม่ที่บอกไว้ในคำถาม
@@ -70,9 +88,16 @@ scenario:
                   "geno-pages/leap-year-fix.html already exists. Replace it?" ปุ่ม [Replace] [Keep Both] และ Cancel
                 ref: "packages/extension/src/chat/page-host.ts#\"already exists. Replace it?\""
               - lane: user
+                beat:
+                  title: คุณกด Keep Both
+                  text: ไฟล์เดิมไม่ถูกแตะ
+                  to: panel
                 do: ผู้ใช้กด Keep Both
 
     - id: write
+      beat:
+        title: ส่วนขยายเขียนไฟล์
+        text: ส่วนขยายเขียนผ่าน filesystem ของ VS Code ไม่ผ่าน engine และไม่มี turn ใหม่
       lane: editor
       at: vscode-ui
       do: >-
@@ -80,6 +105,16 @@ scenario:
       ref: packages/extension/src/chat/page-host.ts#pageHost
 
     - id: saved
+      beat:
+        title: toast บอกที่อยู่ของไฟล์
+        text: เปิดหน้าใน browser หรือเปิดโฟลเดอร์ได้จาก toast
+        sees:
+          kind: toast
+          text: Saved the page to geno-pages/leap-year-fix-2.html.
+          actions:
+            - Open in Browser
+            - Reveal in Finder
+        end: หน้า HTML พร้อมส่ง
       lane: editor
       at: vscode-ui
       do: >-
