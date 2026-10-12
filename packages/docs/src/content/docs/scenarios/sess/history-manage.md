@@ -48,7 +48,7 @@ scenario:
                 at: sessions
                 do: >-
                   `renameSession` ตัดชื่อให้เป็นบรรทัดเดียว (ชื่อว่างถูกปฏิเสธ) แล้วต่อท้าย log ด้วย event `title` ไม่แก้บรรทัดเดิม
-                  งานในแผง Tasks ได้ชื่อใหม่ และหน้าต่างที่แสดงแชตนั้นได้ `session_info_update`
+                  งานในแผง Tasks ได้ชื่อใหม่ และหน้าต่างที่ส่งคำขอเปลี่ยนชื่อได้ `session_info_update` (หน้าต่างอื่นไม่ได้ update นี้)
                 ref: packages/engine/src/history.ts#renameSession
                 emits: [title, session_info_update]
               - lane: panel

@@ -57,8 +57,8 @@ scenario:
               - lane: loop
                 at: model-call
                 do: >-
-                  ตั้งแต่รอบถัดไป ทุกการเรียกโมเดลอ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` แล้วส่งเป็น `output_config.effort`
-                  สำหรับโมเดลที่รองรับ effort
+                  ตั้งแต่รอบถัดไป ทุกการเรียกโมเดลอ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` ซึ่งขยับระดับตาม policy ของชนิดการเรียก
+                  (หลัง prompt หลังเครื่องมือ หรือหลังเครื่องมือล้ม) แล้วส่งเป็น `output_config.effort` สำหรับโมเดลที่รองรับ effort
                 ref: packages/core/src/effort.ts#withTurnEffort
                 end: { turn: none }
           - id: model
