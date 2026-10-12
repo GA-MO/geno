@@ -18,6 +18,8 @@ scenario:
       beat:
         title: Tasks บอกว่า session รอถูกปลุก
         text: turn ก่อนจบไปแล้ว แต่ session รอสามอย่าง subagent explore monitor บน `bg-1` และ wake-up แถวของงานบอกว่ารออะไร พร้อมปุ่ม Cancel
+        from: panel
+        to: you
         sees: ป้าย "Waiting to wake" บรรทัด "Wakes on explore, a monitor on bg-1 and a wake-up at 14:30" และปุ่ม [Cancel]
       lane: panel
       at: tasks
@@ -33,7 +35,8 @@ scenario:
       beat:
         title: คุณกด Cancel
         text: คุณไม่อยากให้ Geno กลับมาทำต่อเอง แชตขอให้ engine เลิกรอทุกอย่างของ session นี้
-        to: engine
+        from: you
+        to: panel
       lane: user
       do: ผู้ใช้กด Cancel
 
@@ -49,6 +52,8 @@ scenario:
       beat:
         title: Geno เลิกรอทุกอย่างของ session
         text: explore ถูกปิดเสียงแล้วหยุด monitor เลิกเฝ้าและหยุด `bg-1` ที่มันเริ่มเอง นาฬิกาของ wake-up ถูกล้าง
+        from: engine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -61,6 +66,8 @@ scenario:
       beat:
         title: Geno ขีดเส้นแบ่งใน log
         text: Geno จดว่าคุณยกเลิกการปลุก สิ่งที่มาถึงก่อนหน้านี้แต่ยังไม่ได้ปลุกก็จะไม่ปลุกแล้ว และ engine ตัวถัดไปจะไม่รับช่วงการรอ
+        from: engine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -81,6 +88,7 @@ scenario:
         title: explore ปิดตัวโดยไม่มีรายงาน
         text: explore จบแบบ cancelled การจบของมันถูกบันทึกหลังเส้นแบ่ง จึงไม่ปลุกใคร
         from: model
+        to: engine
       lane: child@explore
       at: loop
       do: >-
@@ -93,6 +101,8 @@ scenario:
       beat:
         title: แถวของงานกลับเป็นงานที่จบแล้ว
         text: บรรทัดว่ารออะไรและปุ่ม Cancel หายไป ไม่มีอะไรปลุก session นี้จนกว่าคุณจะส่ง prompt
+        from: panel
+        to: you
         sees: แถวของ session ไม่มี "Wakes on ..." และไม่มีปุ่ม Cancel
         end: ไม่มีอะไรปลุก session
       lane: panel

@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอ monitor เฝ้า `pnpm dev`
         text: model ไม่อยากวนรอ dev server มันขอให้ Geno รันคำสั่ง แล้วปลุกเมื่อมีบรรทัดตรง "ready on" การ์ดเป็นคำขอจริงจากการรันหนึ่ง ซึ่งเฝ้างานเบื้องหลังที่เริ่มไว้แล้ว
+        from: model
         to: engine
         sees:
           kind: payload
@@ -38,6 +39,8 @@ scenario:
       beat:
         title: "`pnpm dev` เริ่มรันเบื้องหลัง"
         text: แชตขึ้นขั้นของ monitor คำสั่งผ่านกฎ allow ของ workspace แล้วรันเป็นงานเบื้องหลัง `bg-1`
+        from: engine
+        to: machine
         sees:
           kind: step
           label: monitor pnpm dev
@@ -57,6 +60,8 @@ scenario:
       beat:
         title: Geno เริ่มดู output
         text: Geno ดู output ตั้งแต่ตอนนี้ และดูส่วนที่พิมพ์ไปแล้วด้วย
+        from: engine
+        to: engine
         ask: บรรทัดนั้นมาหรือยัง
       lane: server
       at: wakes
@@ -77,6 +82,8 @@ scenario:
                 beat:
                   title: บรรทัดนั้นพิมพ์ไปแล้ว
                   text: dev server พิมพ์ "ready on http://localhost:3000" ก่อน monitor เริ่มดู ไม่มีอะไรต้องรอ
+                  from: machine
+                  to: engine
                 at: wakes
                 do: >-
                   `bg-1` พิมพ์ "ready on http://localhost:3000" ไปก่อน monitor เริ่มดู ไม่มีอะไรต้องรอ
@@ -87,7 +94,8 @@ scenario:
                 beat:
                   title: Model ทำต่อใน turn เดิม
                   text: model อ่านว่าบรรทัดมาแล้ว และทำงานต่อโดยไม่ต้องจบ turn
-                  to: model
+                  from: model
+                  to: engine
                   end: Turn ทำต่อ
                 at: step
                 do: >-
@@ -101,6 +109,7 @@ scenario:
       beat:
         title: Geno ตั้ง monitor พร้อมนาฬิกา 300 วินาที
         text: Geno จด monitor `wake-1` ไว้ในการรอของ session แล้วบอก model ให้จบ turn ตอนนี้
+        from: engine
         to: model
       lane: server
       at: wakes
@@ -117,6 +126,7 @@ scenario:
       beat:
         title: Model บอกว่ารอ dev server แล้ว turn จบ
         text: ปุ่ม Send กลับมา แผง Tasks บอกว่า session นี้รออะไร พร้อมปุ่ม Cancel
+        from: model
         to: panel
         sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
       lane: model
@@ -131,6 +141,8 @@ scenario:
       beat:
         title: Geno อ่าน output ทีละบรรทัด
         text: Geno ตรวจทุกบรรทัดที่จบแล้วกับ pattern
+        from: engine
+        to: engine
         ask: อะไรเกิดก่อน
       lane: server
       at: wakes
@@ -151,6 +163,8 @@ scenario:
                 beat:
                   title: ครบ 300 วินาทีโดยไม่ตรง
                   text: monitor เลิกดู dev server ยังรันต่อ Geno ใส่โน้ตว่าหมดเวลาลงกล่องข้อความของ session
+                  from: machine
+                  to: engine
                 at: wakes
                 do: >-
                   นาฬิกาครบ monitor เลิกดู (`dev server` ยังรันต่อ) แล้วใส่โน้ต `wake` ชนิด `monitor` ผล `timed-out` ลงกล่องข้อความของ session
@@ -161,12 +175,16 @@ scenario:
                 beat:
                   title: Geno ปลุก session
                   text: แชตเปิด turn ใหม่ที่หัวมีกระดิ่งกับเหตุที่ปลุก
+                  from: engine
+                  to: panel
                   sees: 'กระดิ่งกับ "woke: monitor timed out" หัวข้อ "working"'
               - use: model-call
               - lane: model
                 beat:
                   title: Model ไปดูว่า dev server ติดตรงไหน
                   text: model อ่านว่า monitor หมดเวลา แล้วอ่าน output ของ `bg-1` และเล่าให้คุณ
+                  from: model
+                  to: engine
                   end: Model เล่าว่าติดตรงไหน
                 do: >-
                   โมเดลอ่าน "Monitor wake-1 on bg-1 for /ready on/ timed out without a match." แล้วอ่าน output ด้วย `bash_output`
@@ -183,6 +201,8 @@ scenario:
                 beat:
                   title: dev server จบไปก่อน
                   text: เช่นพอร์ตถูกใช้อยู่ monitor เลิกดูโดยไม่มีโน้ตของตัวเอง การจบของคำสั่งรายงานเองและปลุก session
+                  from: machine
+                  to: engine
                   end: การจบของคำสั่งปลุกแทน
                 at: wakes
                 do: >-
@@ -194,6 +214,8 @@ scenario:
       beat:
         title: บรรทัด “ready on” มาถึง
         text: monitor จบ แล้วใส่โน้ตพร้อมบรรทัดนั้นลงกล่องข้อความของ session
+        from: machine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -206,6 +228,8 @@ scenario:
       beat:
         title: Geno ปลุก session
         text: ไม่มีอะไรขวาง แชตเปิด turn ใหม่ที่หัวมีกระดิ่งแทนข้อความของคุณ
+        from: engine
+        to: panel
         sees: 'กระดิ่งกับ "woke: monitor matched" หัวข้อ "working" และปุ่ม Stop'
     - use: model-call
 
@@ -213,6 +237,8 @@ scenario:
       beat:
         title: Model ลองเปิดหน้าแรก
         text: model อ่านว่า monitor ตรงแล้ว บรรทัดที่ตรงอยู่ในรั้วเพราะเป็น output ไม่ใช่คำสั่ง แล้วมันลองเปิดหน้าแรกของ dev server
+        from: model
+        to: engine
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-

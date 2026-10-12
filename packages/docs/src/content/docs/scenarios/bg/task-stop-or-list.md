@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอดูว่ามีอะไรค้างอยู่
         text: คุณบอกว่าไม่ต้องสำรวจต่อแล้ว ก่อนหยุดอะไร model เรียก `list_agents` เพื่อดูของที่ค้าง
+        from: model
         to: engine
       lane: model
       do: >-
@@ -32,6 +33,7 @@ scenario:
       beat:
         title: Geno รวบรวมลูก คำสั่ง และการรอ
         text: Geno อ่าน subagent จาก log คำสั่งเบื้องหลัง และ monitor wake-up หรือการเฝ้า PR ที่ยังค้าง แล้วส่งรายการให้ model
+        from: engine
         to: model
       lane: tool
       at: executor
@@ -48,6 +50,7 @@ scenario:
       beat:
         title: Model ขอหยุดสิ่งที่ไม่ต้องการ
         text: model เรียก `task_stop` ด้วย id ของสิ่งที่จะหยุด การ์ดเป็นคำขอจริงจากการรันที่หยุด dev server
+        from: model
         to: engine
         sees:
           kind: payload
@@ -67,6 +70,8 @@ scenario:
       beat:
         title: Geno ดูว่า id เป็นของอะไร
         text: "`bg-N` คือคำสั่งเบื้องหลัง `wake-N` คือ monitor wake-up หรือการเฝ้า PR อย่างอื่นคือ session ของ subagent id ที่ไม่รู้จักได้ error"
+        from: engine
+        to: engine
         ask: Model หยุดอะไร
       lane: loop
       at: tools
@@ -85,6 +90,8 @@ scenario:
                 beat:
                   title: Geno หยุด explore
                   text: Geno ปิดเสียงรายงานที่จะมาทีหลัง แล้วหยุด explore และรอจนมันจบ แถวของมันขึ้นว่ายกเลิก ผลของ call คือข้อความที่ explore เขียนไว้ก่อนถูกหยุด
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   `stopChild` หาตัวหยุดของลูก `stopNow` ปิดเสียงรายงานที่จะมาทีหลัง แล้ว abort ลูกด้วยเหตุ `MODEL_STOP`
@@ -119,7 +126,8 @@ scenario:
                 beat:
                   title: Geno หยุด `pnpm dev`
                   text: Geno ส่ง SIGTERM แล้ว SIGKILL ถ้ายังไม่จบในไม่กี่วินาที ผลบอกท้ายของ output และที่อยู่ไฟล์ การ์ดเป็นผลจริงจากการรันเดียวกัน
-                  from: machine
+                  from: engine
+                  to: machine
                   sees:
                     kind: payload
                     direction: tool_result
@@ -140,6 +148,8 @@ scenario:
                 beat:
                   title: Geno ยกเลิก `wake-2`
                   text: Geno ล้างนาฬิกาและจดลง log ว่ายกเลิก engine ตัวถัดไปจึงไม่ตั้งนาฬิกานี้อีก
+                  from: engine
+                  to: engine
                 at: executor
                 do: >-
                   `Wakes.stop` ล้างนาฬิกาของ `wake-2` แล้วบันทึกโน้ต `wake` ชนิด `stopped` ลง log
@@ -154,6 +164,8 @@ scenario:
                 beat:
                   title: explore จบไปแล้ว
                   text: ไม่มีอะไรให้หยุด Geno ตอบ error ว่า explore ไม่ได้รันแล้ว subagent แบบรอก็หยุดทางนี้ไม่ได้ เพราะมันจบพร้อมรายงานอยู่แล้ว
+                  from: engine
+                  to: model
                 at: executor
                 do: >-
                   ลูกไม่ได้รันแล้ว `stopChild` จึงโยน `ToolError` "explore subagent ... is not running: it ended (done)."
@@ -165,7 +177,8 @@ scenario:
                 beat:
                   title: Model อ่าน error แล้วทำต่อ
                   text: turn ไม่จบ model อ่านเหตุผลแล้วทำงานต่อ
-                  to: model
+                  from: model
+                  to: engine
                   end: Model ทำต่อ
                 at: step
                 do: >-
@@ -179,6 +192,8 @@ scenario:
       beat:
         title: Geno บันทึกผลของ `task_stop`
         text: สิ่งที่หยุดแล้วหายจากรายการรอของงาน เมื่อ turn จบ แผง Tasks จึงไม่แสดงมันว่ากำลังรอ
+        from: engine
+        to: engine
         sees: หลัง turn จบ แถวของ session ไม่มีตัวที่หยุดแล้วในรายการที่รอ
       lane: loop
       at: tools
@@ -203,6 +218,7 @@ scenario:
       beat:
         title: Model บอกคุณว่าหยุดอะไรไปแล้ว
         text: model สรุปสิ่งที่หยุด และสิ่งที่ explore เจอก่อนถูกหยุด
+        from: model
         to: panel
         end: Turn จบ
       lane: model

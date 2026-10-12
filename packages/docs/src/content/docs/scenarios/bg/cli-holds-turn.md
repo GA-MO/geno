@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
         text: "ใน `gcode agent` model ส่งงานค้นให้ explore พร้อม `background: true` แล้วไม่รอ"
+        from: model
         to: engine
       lane: model
       do: >-
@@ -39,6 +40,8 @@ scenario:
       beat:
         title: Geno เริ่ม explore โดยไม่รอ
         text: session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
+        from: engine
+        to: model
         sees: "> explore started (<โมเดล>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
       lane: loop
       at: tools
@@ -70,7 +73,8 @@ scenario:
       beat:
         title: Model บอกว่า explore กำลังค้น
         text: Geno ส่งผลของ call ให้ model model เขียนว่า explore กำลังค้นอยู่ แล้วจบ turn ข้อความขึ้นใน stdout
-        to: model
+        from: model
+        to: panel
 
     - id: says
       lane: model
@@ -84,6 +88,7 @@ scenario:
         title: Geno ถือ turn ไว้
         text: ใน CLI ไม่มีอะไรปลุก session ทีหลัง และ session ยังค้างรายงาน Geno จึงไม่ให้ turn จบ process รออยู่
         from: engine
+        to: engine
         ask: อะไรเกิดก่อน
       lane: loop
       at: drive
@@ -107,6 +112,7 @@ scenario:
                   title: คุณกด Ctrl-C
                   text: คุณไม่อยากรอ การรอจบทันที Geno บันทึกว่าคุณหยุด run
                   from: you
+                  to: panel
                 do: ผู้ใช้ไม่อยากรอ จึงกด Ctrl-C
               - lane: loop
                 at: drive
@@ -119,6 +125,7 @@ scenario:
                 beat:
                   title: Geno หยุด explore แล้วจบ process
                   text: turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัว รายงานของ explore ไม่มีใครได้ยิน เทอร์มินัลพิมพ์ usage แล้วจบด้วย exit 130
+                  from: engine
                   to: panel
                   sees: "usage: ... turns=2"
                   end: คุณหยุด run
@@ -139,6 +146,7 @@ scenario:
       beat:
         title: explore รายงานแล้วจบ
         text: explore ค้นเสร็จ เทอร์มินัลพิมพ์บรรทัดว่ามันจบ พร้อมจำนวนรอบและค่าใช้จ่าย
+        from: model
         to: engine
         sees: "> explore done, turns=3 $0.0071"
       lane: child@explore
@@ -161,6 +169,7 @@ scenario:
       beat:
         title: Geno ส่งรายงานเข้า turn ที่ถือไว้
         text: Geno ใส่รายงานในรั้วลงกล่อง การรอจบ turn ที่ถือไว้บันทึกรายงานแล้วเรียก model อีกครั้ง
+        from: engine
         to: model
       lane: loop
       at: tools
@@ -183,6 +192,7 @@ scenario:
       beat:
         title: Model สรุปลง stdout
         text: model อ่านรายงาน แล้วเขียนสรุปไฟล์ที่ใช้ API เก่า
+        from: model
         to: panel
       lane: model
       do: >-
@@ -194,6 +204,8 @@ scenario:
       beat:
         title: run จบ
         text: ไม่มีรายงานค้างแล้ว turn จึงจบจริง เทอร์มินัลพิมพ์ usage ว่าเรียก model สามครั้ง แล้ว process จบด้วย exit 0
+        from: engine
+        to: panel
         sees: "usage: ... turns=3"
         end: process จบ exit 0
       lane: loop
