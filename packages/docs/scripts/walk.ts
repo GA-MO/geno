@@ -1,8 +1,8 @@
 /**
  * Walks story tours in Chromium the way a reader does: both views, every branch to its end, at desktop and phone
  * widths. Fails on text that spills out of its box, a page wider than the window, a lane node taller than its lane,
- * a story of 12 beats or fewer that needs horizontal scroll at 1440, a current beat outside the visible lanes, or a
- * console error. Usage: pnpm --filter @g-code/docs walk [base-url] [page ...]
+ * a story of 12 beats or fewer that needs horizontal scroll at 1440, a current beat outside the visible lanes, a
+ * reading card whose title sits below the fold of an unscrolled page at 1440, or a console error. Usage: pnpm --filter @g-code/docs walk [base-url] [page ...]
  */
 import { chromium, type Page } from 'playwright';
 
@@ -32,7 +32,7 @@ function audit(): string[] {
   if (lane !== null) {
     const captions = [...document.querySelectorAll<HTMLElement>('.ln-caption')].map((caption) => caption.getBoundingClientRect());
     const bands = [...document.querySelectorAll<HTMLElement>('.ln-band')].map((band) => band.getBoundingClientRect());
-    for (const node of document.querySelectorAll<HTMLElement>('.ln-node, .ln-stub, .ln-end, .ln-diamond')) {
+    for (const node of document.querySelectorAll<HTMLElement>('.ln-node, .ln-chip, .ln-end, .ln-diamond')) {
       const box = node.getBoundingClientRect();
       const name = node.textContent?.slice(0, 40);
       if (!bands.some((band) => box.top >= band.top - 0.5 && box.bottom <= band.bottom + 0.5)) problems.push(`lane item "${name}" (${Math.round(box.height)}px) does not fit inside its lane`);
@@ -75,6 +75,10 @@ async function walkView(page: Page, url: string, view: string, width: number, fi
     for (let guard = 0; guard < 40; guard++) {
       const title = await page.locator('.read .bt').innerText();
       for (const problem of await page.evaluate(audit)) findings.push({ where: where(title), problem });
+      if (width >= 1440) {
+        const card = await page.evaluate(() => ({ title: document.querySelector('.read .bt')!.getBoundingClientRect().bottom + scrollY, fold: innerHeight }));
+        if (card.title > card.fold) findings.push({ where: where(title), problem: `the reading card's title ends at ${Math.round(card.title)}px, below the ${card.fold}px fold` });
+      }
       walked++;
       ends.add(`${url} ${view} @${width}: ${await page.evaluate(() => document.querySelector('.read .end-row')?.textContent ?? '')}`);
       const fork = page.locator('.read .fork-option');

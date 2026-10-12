@@ -17,6 +17,7 @@ import {
   type Beat,
   type Branch,
   type Ending,
+  type LaneEdge,
   type LaneItem,
   type StoryState,
 } from '../scenario/story.js';
@@ -30,9 +31,9 @@ export interface StoryProps {
 
 type View = 'sequence' | 'lanes';
 const VIEW_KEY = 'geno-docs:tour-view';
-const LANE_H = 128;
+const LANE_H = 76;
 /** The lane name sits in a strip at the top of its lane, so nodes below it never pass under it. */
-const CAPTION = 24;
+const CAPTION = 18;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const place = (i: number, at: number): 'past' | 'current' | 'future' => (i < at ? 'past' : i === at ? 'current' : 'future');
 const hopText = (beat: Beat): string => (beat.from === beat.to ? `${ACTOR_NAME[beat.from]} ทำเอง` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`);
@@ -152,18 +153,18 @@ interface Box {
   readonly w: number;
 }
 
-function edgePath(from: LaneItem & Box, to: LaneItem & Box, lane: number, diamond: boolean): string {
-  const right = to.x;
-  if (from.row === to.row) return `M ${from.x + from.w} ${from.cy} H ${right}`;
+function edgePath(from: Box, to: Box): string {
+  const start = from.x + from.w;
+  if (from.cy === to.cy) return `M ${start} ${from.cy} H ${to.x}`;
   const s = to.cy > from.cy ? 1 : -1;
-  if (!diamond && right - (from.x + from.w) >= 24) {
-    const turn = right - 12;
-    const bend = Math.min(8, Math.abs(to.cy - from.cy) / 2);
-    return `M ${from.x + from.w} ${from.cy} H ${turn - bend} Q ${turn} ${from.cy} ${turn} ${from.cy + s * bend} V ${to.cy - s * bend} Q ${turn} ${to.cy} ${turn + bend} ${to.cy} H ${right}`;
+  if (to.x - start >= LANE.trunk) {
+    const turn = to.x - 8;
+    const bend = Math.min(6, Math.abs(to.cy - from.cy) / 2);
+    return `M ${start} ${from.cy} H ${turn - bend} Q ${turn} ${from.cy} ${turn} ${from.cy + s * bend} V ${to.cy - s * bend} Q ${turn} ${to.cy} ${turn + bend} ${to.cy} H ${to.x}`;
   }
-  const x = diamond ? from.x + from.w / 2 + (lane - 1) * LANE.branch : from.x + from.w / 2;
-  const r = Math.min(8, Math.abs(to.cy - from.cy) / 2, (right - x) / 2);
-  return `M ${x} ${from.cy} V ${to.cy - s * r} Q ${x} ${to.cy} ${x + r} ${to.cy} H ${right}`;
+  const x = from.x + from.w / 2;
+  const r = Math.min(8, Math.abs(to.cy - from.cy) / 2, (to.x - x) / 2);
+  return `M ${x} ${from.cy} V ${to.cy - s * r} Q ${x} ${to.cy} ${x + r} ${to.cy} H ${to.x}`;
 }
 
 function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenario; readonly beats: readonly Beat[]; readonly state: StoryState; readonly go: (i: number) => void; readonly pick: (branch: Branch) => void }) {
@@ -171,7 +172,6 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
   const layout = useMemo(() => layoutLanes(scenario, state.choices, beats), [scenario, state.choices, beats]);
   const boxes = layout.items.map((item) => ({ ...item, cy: item.row * LANE_H + CAPTION + (LANE_H - CAPTION) / 2 }));
   const current = layout.items.findIndex((item) => item.kind === 'beat' && item.beat === state.at);
-  const lastBeat = layout.items.findLastIndex((item) => item.kind === 'beat');
   useLayoutEffect(() => {
     const element = scroller.current;
     const item = boxes[current];
@@ -179,18 +179,22 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
     element.scrollTo({ left: item.x + item.w / 2 - element.clientWidth / 2, behavior: reduced() ? 'auto' : 'smooth' });
   }, [current, layout.width]);
   const height = layout.rows * LANE_H;
-  const stateOf = (index: number): string => {
-    const item = layout.items[index]!;
+  const stateOf = (item: LaneItem): 'past' | 'current' | 'future' | 'other' => {
     if (item.kind === 'beat') return place(item.beat, state.at);
-    if (item.kind === 'end') return state.at === beats.length - 1 ? 'current' : 'future';
-    return 'faded';
+    if (item.kind === 'branch') return !item.branch.chosen ? 'other' : state.at > item.beat ? 'past' : 'future';
+    return state.at === beats.length - 1 ? 'current' : 'future';
+  };
+  const edgeKind = (edge: LaneEdge): string => {
+    if (edge.to === current) return 'into';
+    const to = stateOf(layout.items[edge.to]!);
+    return to === 'other' ? 'faded' : to === 'future' ? 'future' : 'past';
   };
   return (
     <section className="lanes tour-card" aria-label="Swim lanes">
       <div className="ln-captions" aria-hidden="true">
         {[...Array(layout.rows).keys()].map((row) => (
           <p key={row} className="ln-caption" style={{ top: row * LANE_H }}>
-            {ACTORS[row] === undefined ? <strong>ทางจบอื่น</strong> : <><strong>{ACTORS[row].name}</strong> <span>{ACTORS[row].sub}</span></>}
+            {ACTORS[row] === undefined ? null : <><strong>{ACTORS[row].name}</strong> <span>{ACTORS[row].sub}</span></>}
           </p>
         ))}
       </div>
@@ -207,44 +211,50 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
                 </marker>
               ))}
             </defs>
-            {layout.edges.map((edge) => {
-              const from = boxes[edge.from]!;
-              const to = boxes[edge.to]!;
-              const kind = to.kind === 'stub' ? 'faded' : edge.to === current ? 'into' : stateOf(edge.to) === 'future' ? 'future' : 'past';
-              return <path key={`${edge.from}-${edge.to}`} className={`edge e-${kind}`} d={edgePath(from, to, edge.lane, from.kind === 'beat' && from.fork)} markerEnd={`url(#ah-${kind})`} />;
-            })}
+            {[...layout.edges]
+              .map((edge) => ({ edge, kind: edgeKind(edge) }))
+              .sort((a, b) => Number(b.kind === 'faded') - Number(a.kind === 'faded'))
+              .map(({ edge, kind }) => (
+                <path key={`${edge.from}-${edge.to}`} className={`edge e-${kind}`} d={edgePath(boxes[edge.from]!, boxes[edge.to]!)} markerEnd={`url(#ah-${kind})`} />
+              ))}
           </svg>
           {boxes.map((item, index) => {
             const style: CSSProperties = { left: item.x, top: item.cy, width: item.w };
             if (item.kind === 'beat') {
               const beat = beats[item.beat]!;
+              const label = `จังหวะที่ ${item.beat + 1}: ${beat.head.title.replace(/`/g, '')}`;
               if (item.fork)
                 return (
-                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={{ ...style, height: 64 }} onClick={() => go(item.beat)} aria-label={`จังหวะที่ ${item.beat + 1}: ${beat.head.title.replace(/`/g, '')}`}>
+                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={style} onClick={() => go(item.beat)} aria-label={label} title={label}>
                     <span className="dm-shape" aria-hidden="true" />
                     <span className="dm-t">{beat.head.ask}</span>
                   </button>
                 );
-              const branch = beats[item.beat - 1]?.flow.kind === 'fork' ? branchesAt(scenario, state.choices, beats[item.beat - 1]!.last).find((candidate) => candidate.chosen) : undefined;
               return (
-                <button key={index} type="button" className={`ln-node ${place(item.beat, state.at)} w-${beat.who}`} style={style} onClick={() => go(item.beat)} aria-current={item.beat === state.at ? 'step' : undefined}>
+                <button key={index} type="button" className={`ln-node ${place(item.beat, state.at)} w-${beat.who}`} style={style} onClick={() => go(item.beat)} aria-current={item.beat === state.at ? 'step' : undefined} title={label}>
                   <span className="ln-t">
-                    {branch === undefined ? null : <span className="ln-branch">{branch.option.label}</span>}
                     <span className="ln-num">{item.beat + 1}</span>
                     <Code text={beat.head.title} />
                   </span>
                 </button>
               );
             }
-            if (item.kind === 'stub')
+            if (item.kind === 'branch') {
+              const { option, ending, chosen } = item.branch;
               return (
-                <button key={index} type="button" className="ln-stub" style={style} onClick={() => pick(item.branch)} title={`เดินทาง ${item.branch.option.label}`}>
-                  <span className="ln-branch">{item.branch.option.label}</span>
-                  <EndPill ending={item.branch.ending} />
+                <button key={index} type="button" className={`ln-chip ${stateOf(item)}`} style={style} onClick={() => pick(item.branch)} aria-pressed={chosen} title={chosen ? option.label : `เดินทาง ${option.label}: ${ending.label}`}>
+                  <span className="chip-label">{option.label}</span>
+                  {chosen ? null : (
+                    <span className={`chip-end end-${ending.tone}`}>
+                      <span className="end-dot" aria-hidden="true" />
+                      {ending.label}
+                    </span>
+                  )}
                 </button>
               );
+            }
             return (
-              <div key={index} className={`ln-end ${index > lastBeat && state.at === beats.length - 1 ? 'current' : 'future'}`} style={style}>
+              <div key={index} className={`ln-end ${stateOf(item)}`} style={style}>
                 <EndPill ending={item.ending} />
               </div>
             );
