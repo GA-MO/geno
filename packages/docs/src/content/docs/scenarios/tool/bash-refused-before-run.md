@@ -1,5 +1,5 @@
 ---
-title: คำสั่งถูกปฏิเสธก่อนรัน
+title: "bash ปฏิเสธคำสั่งก่อนรัน แล้วบอกทางที่ถูก"
 description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้า หรือคำสั่งที่ออกนอก lane แต่ตอบโมเดลว่าควรใช้เครื่องมือไหนแทน
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอรันคำสั่งด้วย bash"
+        text: >-
+          โมเดลขอรันคำสั่งที่จะค้างจนหมดเวลา หรือคำสั่งที่ออกไปนอก lane ของ session
+        to: engine
       do: >-
         โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -23,10 +28,20 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของคำสั่ง"
+        text: >-
+          Geno จัดคิว `bash` ให้รันทีละตัว แชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: checks
       lane: tool
       at: executor
+      beat:
+        title: "bash ตรวจคำสั่งก่อนถามกฎสิทธิ์"
+        text: >-
+          ก่อนถามกฎสิทธิ์และก่อนรันอะไร `bash` ตรวจคำสั่งเอง สองข้อแรกตรวจเฉพาะคำสั่งที่รอผล
+          และเฉพาะเมื่อมีงานเบื้องหลังให้ใช้แทน ลองเลือกว่าคำสั่งติดข้อไหน
+        ask: "ติดข้อไหน"
       runs: 0
       do: >-
         `bash` ตรวจคำสั่งก่อนถามนโยบายและก่อนรันอะไร การตรวจสองข้อแรกทำเฉพาะคำสั่งที่ไม่ได้ขอ `run_in_background`
@@ -41,6 +56,11 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "คำสั่งขึ้นต้นด้วย sleep นาน"
+                  text: >-
+                    `sleep 30 && curl -s localhost:3000/health` รอ 2 วินาทีขึ้นไปแล้วมีคำสั่งตามหลัง bash บอกให้ใช้ monitor
+                    รอเงื่อนไข หรือรันแบบเบื้องหลังแล้วจบ turn และห้ามต่อ sleep สั้นๆ หลบ
                 do: >-
                   `leadingSleep` จับ `sleep 30 && curl -s localhost:3000/health` ได้ การรอ 2 วินาทีขึ้นไปที่มีคำสั่งตามหลังถูกปฏิเสธ
                   `sleepRefusal` บอกให้ใช้ `monitor` รอเงื่อนไข หรือรันคำสั่งด้วย `run_in_background: true` แล้วจบ turn
@@ -53,6 +73,11 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "คำสั่งเปิด dev server ไว้ข้างหน้า"
+                  text: >-
+                    bash อ่าน script ใน `package.json` แล้วเห็นว่า `npm run dev` เปิด server ซึ่งจะค้างจนหมดเวลา
+                    มันบอกคำสั่งที่ควรรันเบื้องหลัง วิธีรอบรรทัด ready และวิธีหยุด
                 do: >-
                   `serverStartOf` อ่าน script ของ `package.json` แล้วเห็นว่า `npm run dev` เปิด server ซึ่งจะค้างจนหมดเวลา
                   `serverRefusal` บอกคำสั่งที่ควรส่งด้วย `run_in_background: true` วิธีรอบรรทัด ready ด้วย `monitor`
@@ -65,6 +90,11 @@ scenario:
             steps:
               - lane: tool
                 at: executor
+                beat:
+                  title: "คำสั่งออกไปนอก lane"
+                  text: >-
+                    session นี้ทำงานใน lane ซึ่งเป็น git worktree แยก `cd ../main && git status` ออกไปนอก lane
+                    จึงถูกปฏิเสธก่อนถึงกฎของ workspace
                 do: >-
                   session นี้ทำงานใน lane (git worktree แยก) `approveCommand` ให้ `laneCommandDenial` อ่านคำสั่ง
                   `cd ../main && git status` เปลี่ยนไปโฟลเดอร์นอก lane จึงถูกปฏิเสธก่อนถึงกฎของ workspace
@@ -74,6 +104,12 @@ scenario:
     - id: result
       lane: tool
       at: executor
+      beat:
+        title: "bash ไม่รัน แต่ตอบว่าควรทำอะไรแทน"
+        text: >-
+          ไม่มีอะไรรัน ไม่มีการ์ด ผลของ call เป็น error ที่มีวิธีที่ถูก ขั้นในแชตขึ้นว่าล้มเหลว
+        to: panel
+        sees: { kind: step, label: npm run dev, status: failed }
       do: >-
         executor โยน `ToolError` `runExecutor` แปลงเป็นผลสถานะ `error` ด้วยข้อความของมัน ไม่มีอะไรรัน ไม่มีการ์ด
         และไม่มีบันทึกการอนุญาต
@@ -84,6 +120,11 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Geno เรียก model ต่อพร้อมคำแนะนำ"
+        text: >-
+          turn ไม่หยุด Geno เรียกโมเดลต่อ โมเดลได้ผลที่บอกว่าเป็น error พร้อมวิธีที่ถูก
+        to: model
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` turn ไม่หยุด โมเดลได้ `tool_result` ที่มี `is_error: true`
         พร้อมวิธีที่ถูก
@@ -95,6 +136,11 @@ scenario:
 
     - id: retry
       lane: model
+      beat:
+        title: "Model เรียกใหม่ตามคำแนะนำ"
+        text: >-
+          โมเดลรัน `npm run dev` แบบเบื้องหลังแทน และได้ชื่องานกลับมาทันที
+        end: "model เรียกแบบที่ถูก"
       do: >-
         โมเดลเรียกตามคำแนะนำ เช่น `bash` ด้วย `npm run dev` และ `run_in_background: true` ซึ่งได้ job id กลับมาทันที
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -117,3 +163,5 @@ scenario:
 - **เกิดก่อนนโยบาย** คำสั่งเหล่านี้ไม่ไปถึง `ruledDenial` การ์ด หรือ classifier แม้กฎของ workspace จะอนุญาตคำสั่งนั้นไว้
 - **ไม่มีงานเบื้องหลังก็ไม่ตรวจ** ที่ที่ไม่มี `run_in_background` ให้ใช้ เช่นเอเจนต์ลูกบางตัว `sleep` และ dev server รันได้ตามปกติ
   และจะถูกฆ่าเมื่อครบเวลา ดู [คำสั่งปลอดภัยรันโดยไม่ถาม](/scenarios/tool/bash-safe-runs/)
+
+อ่านต่อที่ [Model รันคำสั่งเบื้องหลัง](/scenarios/tool/bash-background/)

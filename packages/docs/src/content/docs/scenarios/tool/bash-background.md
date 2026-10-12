@@ -1,5 +1,5 @@
 ---
-title: รันคำสั่งเบื้องหลัง
+title: "Model รันคำสั่งเบื้องหลัง"
 description: โมเดลรันคำสั่งที่ไม่จบเองด้วย run_in_background harness เปิดงาน bg-1 ใน sandbox แล้วคืนผลทันที งานรันต่อขณะที่ turn ทำงานอื่น
 tableOfContents: false
 sidebar:
@@ -16,6 +16,21 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอรันคำสั่งที่ไม่จบเองเบื้องหลัง"
+        text: >-
+          `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง โมเดลจึงขอรันเป็นงานเบื้องหลัง run จริงด้านล่างขอรัน dev server
+          แบบเดียวกัน
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A12-background-server/1/session.jsonl#seq=7
+          select: content
+          highlight:
+            - "[2].input"
+          collapse:
+            - "[0].thinking"
       do: >-
         โมเดลขอรัน `pnpm tsc --watch` เป็นงานเบื้องหลัง เพราะคำสั่งนี้เฝ้าไฟล์และไม่จบเอง จบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -31,10 +46,21 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของคำสั่ง"
+        text: >-
+          Geno จัดคิว `bash` ให้รันทีละตัว แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees: { kind: step, label: pnpm tsc --watch, status: running }
 
     - id: checks
       lane: tool
       at: executor
+      beat:
+        title: "Geno ตรวจคำสั่งเบื้องหลังด้วยกฎชุดเดิม"
+        text: >-
+          คำสั่งเบื้องหลังไม่ต้องผ่านการตรวจ sleep และ dev server ที่ใช้กับคำสั่งรอผล
+          แต่ผ่านกฎสิทธิ์ชุดเดียวกับคำสั่งปกติ ต่างกันข้อเดียวคือโหมด Plan ปฏิเสธงานเบื้องหลังทั้งหมด
+          คำสั่งนี้ไม่ติดกฎใด จึงไม่มีการ์ด
       do: >-
         `bash` เห็น `run_in_background` จึงข้ามการตรวจ `sleep` นำหน้าและการเปิด dev server ซึ่งปฏิเสธเฉพาะคำสั่งที่รันแบบรอผล
       ref: "packages/engine/src/tools/agent.ts#\"const background = run_in_background ? tools.background : undefined;\""
@@ -50,6 +76,13 @@ scenario:
     - id: start
       lane: tool
       at: sandbox
+      beat:
+        title: "Geno เปิดงาน bg-1 ใน sandbox"
+        text: >-
+          Geno ตั้งชื่องานว่า bg-1 แล้วเปิดคำสั่งใน sandbox โดยไม่มีเวลาสูงสุด รันพร้อมกันได้ 4 งานต่อ session output
+          ส่วนท้ายไม่เกิน 1 MB ถูกเก็บไว้ในหน่วยความจำและในไฟล์ log ของงาน
+        from: engine
+        to: machine
       do: >-
         `BackgroundJobs.start` ตั้งชื่องานเป็น `bg-1` (รันพร้อมกันได้สูงสุด 4 งานต่อ session) เปิดคำสั่งใน sandbox
         โดยไม่มีเวลาสูงสุด และเก็บ output ส่วนท้ายสุดไม่เกิน 1 MB (`BACKGROUND_OUTPUT_CAP`) ไว้ในหน่วยความจำและในไฟล์ `background/bg-1.log` ในโฟลเดอร์ spill ของ session
@@ -77,6 +110,12 @@ scenario:
     - id: row
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นแถว Running in background"
+        text: >-
+          ทุกครั้งที่งานเปลี่ยนสถานะหรือพิมพ์ output แผง Tasks และแชตได้รับแจ้ง ใต้กล่องของคำสั่งมีแถวสถานะ และปุ่ม Stop
+          ของงานนั้นเอง ซึ่งไม่ใช่ปุ่ม Stop ของ turn
+        sees: "แถว \"Running in background as bg-1\" ไอคอนจุดทึบ และปุ่ม Stop ที่ชี้แล้วขึ้น \"Stop bg-1: SIGTERM, then SIGKILL\""
       alongside: true
       do: >-
         ใต้กล่องของคำสั่งขึ้นแถวสถานะงานพร้อมปุ่ม Stop ของงานนั้นเอง ซึ่งไม่ใช่ปุ่ม Stop ของ turn
@@ -87,6 +126,18 @@ scenario:
     - id: returns
       lane: tool
       at: executor
+      beat:
+        title: "bash คืนผลทันทีโดยไม่รอ"
+        text: >-
+          ผลบอกชื่องานและที่อยู่ไฟล์ output และบอกโมเดลว่าไม่ต้องคอยถาม Geno จะบอกเองเมื่องานจบ
+        to: model
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A12-background-server/1/requests.jsonl#seq=10
+          select: messages[-1].content[0]
+          highlight:
+            - content
       do: >-
         `bash` คืนผลทันทีโดยไม่รอคำสั่ง ข้อความผลบอกชื่องาน ที่อยู่ไฟล์ output และบอกโมเดลว่าไม่ต้องคอยถาม
         ("Started background command bg-1. ... Geno tells you when it ends, so do not poll it.")
@@ -97,6 +148,11 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model ทำงานอื่นต่อ"
+        text: >-
+          Geno เรียกโมเดลต่อ ขณะที่ bg-1 ยังรันอยู่ โมเดลทำอย่างอื่นใน turn เดิมได้
+        end: "งานรันต่อเบื้องหลัง"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลทำงานอื่นต่อขณะที่ `bg-1` ยังรันอยู่
       ref: packages/core/src/loop.ts#loopStep
@@ -121,3 +177,5 @@ scenario:
   หรือปลุก session ขึ้นมาใหม่ถ้าไม่มี turn ทำงาน
 - **โหมด Plan ไม่มีงานเบื้องหลัง** `approveCommand` ปฏิเสธด้วย `ToolError` ก่อนดูกฎใดๆ
   ("background commands are not available: ...")
+
+คำสั่งที่รอผลจนจบ ดู [คำสั่งที่ปลอดภัยรันโดยไม่ถาม](/scenarios/tool/bash-safe-runs/)

@@ -1,5 +1,5 @@
 ---
-title: ลำดับชุดคำสั่งแบบผสม
+title: "Geno แบ่ง tool call แบบผสมเป็นชุดที่รันต่อกัน"
 description: โมเดลขออ่านสองไฟล์ รันคำสั่ง แล้วอ่านอีกไฟล์ในคำตอบเดียว harness แบ่งเป็นสามชุดที่รันต่อกัน และหยุดชุดที่เหลือถ้าผู้ใช้ปฏิเสธคำสั่ง
 tableOfContents: false
 sidebar:
@@ -16,6 +16,12 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอ tool สี่ตัวในคำตอบเดียว"
+        text: >-
+          โมเดลขออ่าน `package.json` และ `src/date.ts` รัน `pnpm add zod` แล้วอ่าน `pnpm-lock.yaml` ตามลำดับ Geno
+          บันทึกคำขอแล้วแชตขึ้นขั้นของแต่ละ call
+        to: engine
       do: >-
         โมเดลขอเรียกเครื่องมือสี่ตัวในคำตอบเดียว และจบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -35,6 +41,12 @@ scenario:
     - id: first-batch
       lane: loop
       at: tools
+      beat:
+        title: "ชุดแรกคือ read สองตัวที่รันพร้อมกัน"
+        text: >-
+          การอ่านที่ไม่แก้อะไรรันพร้อมกันได้ แต่ `bash` ไม่ได้ ชุดแรกจึงมีแค่ read สองตัว ทั้งสองอ่านพร้อมกัน และ Geno
+          รอให้ทั้งชุดจบก่อนเริ่มชุดถัดไป
+        sees: { kind: step, label: read package.json, status: done }
       do: >-
         ชุดแรกเริ่มที่ call แรก `concurrentAt` บอกว่า `read` สองตัวแรกรันพร้อมกันได้ แต่ `bash` ไม่ได้
         ชุดแรกจึงมีแค่ `read` สองตัว
@@ -58,6 +70,11 @@ scenario:
     - id: second-batch
       lane: loop
       at: tools
+      beat:
+        title: "ชุดที่สองมี bash ตัวเดียว"
+        text: >-
+          `bash` รันพร้อมตัวอื่นไม่ได้ จึงเป็นชุดของตัวเอง แชตขึ้นขั้น pnpm add zod ที่กำลังหมุน
+        sees: { kind: step, label: pnpm add zod, status: running }
       do: >-
         `nextToolBatch` เริ่มชุดที่สองที่ `bash` ซึ่งรันพร้อมตัวอื่นไม่ได้ จึงเป็นชุดที่มีมันตัวเดียว
         แผงขึ้นขั้น "pnpm add zod" ที่กำลังหมุน
@@ -66,6 +83,12 @@ scenario:
     - id: judge
       lane: policy
       at: rules
+      beat:
+        title: "Geno ตรวจคำสั่งกับกฎของคุณ"
+        text: >-
+          `pnpm add` ไม่อยู่ในรายการคำสั่งปลอดภัยและไม่ตรงกฎของ workspace โหมด Ask จึงต้องถามคุณ ไม่มี hook ตอบแทน Geno
+          หยุด turn แล้วส่งคำถามไปที่แชต งานใน Tasks เปลี่ยนเป็นรอคุณ
+        to: panel
       do: >-
         `approveCommand` ส่งคำสั่งให้ `ruledDenial` ผลคือ `unlisted` ซึ่งในโหมด Ask ต้องถามผู้ใช้
       ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -98,6 +121,13 @@ scenario:
     - id: card
       lane: panel
       at: card
+      beat:
+        title: "คุณเห็นการ์ด “Run this command?”"
+        text: >-
+          การ์ดขึ้นใต้ขั้นของคำสั่ง read ตัวสุดท้ายยังไม่เริ่ม เพราะชุดของมันอยู่หลังคำสั่งนี้ ลองเลือกแต่ละทาง
+        to: you
+        ask: "กดปุ่มไหน"
+        sees: { kind: permission, command: pnpm add zod, reason: Geno asks because it uses a command not on the safe list. }
       do: แผงแชตแสดงการ์ดขออนุญาตใต้ขั้นของคำสั่ง
       sees: >-
         การ์ด "Run this command?" แสดงคำสั่ง `pnpm add zod` พร้อมเหตุผล "Geno asks because it uses a command not on the safe list."
@@ -116,6 +146,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Allow"
+                  text: >-
+                    การ์ดย่อเหลือ Allowed VS Code ตอบ engine ว่าอนุญาตครั้งนี้ และ Geno จดว่าคุณเป็นคนอนุญาต
+                  from: you
+                  to: engine
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -133,6 +169,13 @@ scenario:
                 phase: running-tools
               - lane: tool
                 at: shell
+                beat:
+                  title: "pnpm add zod รัน แล้ว lockfile เปลี่ยน"
+                  text: >-
+                    คำสั่งรันใน sandbox จนจบ `pnpm-lock.yaml` เปลี่ยนก่อน read ตัวสุดท้ายจะเริ่ม
+                    ผลของคำสั่งนี้มีบันทึกการอนุญาตติดไป
+                  from: engine
+                  to: machine
                 runs: 1
                 do: >-
                   `bash` รัน `pnpm add zod` ใน sandbox จนจบ `pnpm-lock.yaml` เปลี่ยนก่อนที่ `read` ตัวสุดท้ายจะเริ่ม
@@ -143,6 +186,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Deny"
+                  text: >-
+                    VS Code ตอบ engine ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน
+                  from: you
+                  to: engine
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -161,6 +210,12 @@ scenario:
                 phase: running-tools
               - lane: loop
                 at: tools
+                beat:
+                  title: "Geno ไม่เริ่มชุดที่สาม"
+                  text: >-
+                    หลังชุดที่สอง Geno เห็นว่าคุณปฏิเสธ จึงไม่เริ่มชุดที่เหลือ แล้วบันทึกผลที่มี ขั้นของคำสั่งขึ้นป้าย Denied by
+                    you
+                  sees: { kind: step, label: pnpm add zod, status: denied, note: Denied by you }
                 do: >-
                   หลังชุดที่สอง `runTools` เห็นผลสถานะ `rejected` จึงไม่เริ่มชุดที่สาม แล้วบันทึกผลที่มีตามลำดับ:
                   `read` สองตัวแรกและคำสั่งที่ถูกปฏิเสธ `read pnpm-lock.yaml` ยังไม่มีผล
@@ -169,6 +224,12 @@ scenario:
                 emits: [rejected, tool-result]
               - lane: loop
                 at: step
+                beat:
+                  title: "Geno ตอบ read ที่ค้างว่าไม่ได้รัน แล้วจบ turn"
+                  text: >-
+                    read ตัวสุดท้ายได้คำตอบว่าคุณปฏิเสธ call ก่อนหน้าของ turn นี้ ขั้นของมันขึ้นว่าล้มเหลว แล้ว Geno จบ turn
+                    โดยไม่เรียกโมเดลอีก Stop hook ไม่ทำงาน
+                  to: panel
                 do: >-
                   `loopStep` เห็น call ที่ยังไม่มีผลหลังการปฏิเสธของผู้ใช้ จึงตัดสิน `answer-tools`
                   `drive` ตอบ `read pnpm-lock.yaml` ด้วย `UNRUN_TEXTS.rejected` ("The user rejected an earlier call of this turn...")
@@ -196,6 +257,13 @@ scenario:
                 emits: [turn-end]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นประกาศที่ไม่ตรงเหตุ"
+                  text: >-
+                    แผงดูขั้นสุดท้าย ซึ่งคือ read ที่ล้มเหลว ไม่ใช่คำสั่งที่ถูกปฏิเสธ จึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ
+                    แทนที่จะบอกว่าหยุดที่ call ที่คุณปฏิเสธ
+                  end: "คุณปฏิเสธ turn จบ"
+                  sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-
                   `missingReply` ดูขั้นเครื่องมือสุดท้าย ซึ่งคือ `read pnpm-lock.yaml` ที่ล้มเหลว ไม่ใช่คำสั่งที่ถูกปฏิเสธ
                   จึงให้เหตุผลว่าคำตอบสุดท้ายไม่มีข้อความ แทนที่จะบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
@@ -208,6 +276,11 @@ scenario:
     - id: third-batch
       lane: loop
       at: tools
+      beat:
+        title: "ชุดที่สามอ่าน lockfile ฉบับใหม่"
+        text: >-
+          หลังคำสั่งจบ Geno เริ่มชุดที่สาม `read` อ่าน `pnpm-lock.yaml` ที่เพิ่งถูกเขียน แล้ว Geno
+          บันทึกผลทั้งสี่ตามลำดับที่โมเดลขอ
       do: >-
         `runTools` เริ่มชุดที่สามหลังคำสั่งจบ `read pnpm-lock.yaml` อยู่ชุดนี้ตัวเดียวเพราะไม่มี call หลังมัน
       ref: packages/core/src/tool-batch.ts#nextToolBatch
@@ -225,6 +298,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Geno ส่งผลทั้งสี่ให้ model"
+        text: >-
+          Geno เรียกโมเดลต่อ โมเดลได้ผลทั้งสี่เรียงตามที่มันขอ
+        to: model
+        end: "ครบสามชุด model ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ผลทั้งสี่ตามลำดับที่มันขอ
       ref: packages/core/src/loop.ts#loopStep
@@ -251,3 +330,5 @@ call ที่เปลี่ยนอะไรได้ (`bash`, `edit`) หร
   แล้วจบ turn โดยไม่เรียกโมเดล
 - **ประกาศท้าย turn บอกเหตุผลผิด** เมื่อมี call ที่ยังไม่ได้รันตามหลังคำสั่งที่ถูกปฏิเสธ ขั้นเครื่องมือสุดท้ายในแผงคือ call ที่ล้มเหลว
   ไม่ใช่ call ที่ถูกปฏิเสธ `missingReply` จึงขึ้น "Its last reply had no text." แทน "It stopped at the call that was denied."
+
+ชุดที่มีแต่การอ่าน ดู [Model อ่านหลายไฟล์พร้อมกัน](/scenarios/tool/parallel-read-batch/)

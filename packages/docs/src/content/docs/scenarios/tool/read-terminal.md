@@ -1,5 +1,5 @@
 ---
-title: อ่านเทอร์มินัลของผู้ใช้
+title: "Model อ่านเทอร์มินัลของคุณ"
 description: โมเดลเรียก read_terminal เพื่อดูคำสั่งที่ผู้ใช้รันในเทอร์มินัลของ VS Code engine ขอให้ extension อ่าน ซึ่งตัด ลบความลับ และจำกัดขนาดก่อนส่งกลับ ไม่มีการถาม
 tableOfContents: false
 sidebar:
@@ -17,6 +17,11 @@ scenario:
     - id: recorded
       lane: editor
       at: vscode-ui
+      beat:
+        title: "VS Code จดคำสั่งในเทอร์มินัลไว้"
+        text: >-
+          ตั้งแต่ Geno ทำงานในหน้าต่างนี้ VS Code จดคำสั่งล่าสุด 20 คำสั่งต่อเทอร์มินัล พร้อมท้าย output และ exit code
+          คุณรัน `pnpm build` แล้วมันล้ม จากนั้นถามว่า "build ที่ผมเพิ่งรันพังเพราะอะไร"
       do: >-
         ตั้งแต่ extension ทำงาน `TerminalRecorder` ฟัง event เริ่มและจบคำสั่งของ shell integration
         เก็บคำสั่งล่าสุด 20 คำสั่งต่อเทอร์มินัล พร้อมท้าย output ไม่เกิน 64,000 ตัวอักษรต่อคำสั่ง และ exit code
@@ -25,16 +30,30 @@ scenario:
 
     - id: asks
       lane: model
+      beat:
+        title: "Model ขออ่านเทอร์มินัล"
+        text: >-
+          โมเดลเรียก `read_terminal` โดยไม่ระบุเทอร์มินัลและจำนวนคำสั่ง
+        from: model
+        to: engine
       do: >-
         โมเดลส่งบล็อก `tool_use` ของ `read_terminal` ไม่ระบุ `terminal` และ `commands` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของ read_terminal"
+        text: >-
+          Geno จัดคิว call แล้วแชตขึ้นขั้นใหม่พร้อมจุดหมุน
 
     - id: no-ask
       lane: policy
       at: rules
+      beat:
+        title: "Geno ไม่ถาม เพราะอ่านอย่างเดียว"
+        text: >-
+          ทุกโหมดที่มีคนดูได้ tool นี้และไม่ถาม run ที่ไม่มีคนดูไม่ได้รับ tool นี้เลย
       do: >-
         ไม่มีการตัดสินของนโยบาย `read_terminal` อ่านอย่างเดียว ทุกโหมดที่มีคนดู (Plan, Ask, Auto) ได้เครื่องมือนี้และไม่ถาม
         run ที่ไม่มีคนดูไม่ได้รับเครื่องมือนี้เลย
@@ -43,6 +62,11 @@ scenario:
     - id: request
       lane: server
       at: updates
+      beat:
+        title: "Geno ขอ VS Code อ่านเทอร์มินัล"
+        text: >-
+          engine หา editor ที่แสดง session นี้และอ่านเทอร์มินัลได้ แล้วขอคำสั่งล่าสุด ค่าตั้งต้นคือ 3 คำสั่ง
+        to: panel
       do: >-
         executor เรียก `editorTerminals` ซึ่งหา editor ที่แสดง session นี้และอ่านเทอร์มินัลได้
         แล้วส่งคำขอ ACP ส่วนขยาย `_gcode/readTerminal` พร้อมจำนวนคำสั่งที่ต้องการ (ค่าเริ่มต้น 3)
@@ -52,6 +76,12 @@ scenario:
     - id: read
       lane: editor
       at: chat
+      beat:
+        title: "VS Code ลบความลับและตัด output"
+        text: >-
+          VS Code เลือกเทอร์มินัลที่ active ล้าง escape code ลบความลับทั้งจากคำสั่งและ output แล้วเก็บท้าย output
+          ไม่เกิน 40 บรรทัดต่อคำสั่ง ไม่มีข้อความดิบออกจาก VS Code
+        to: engine
       do: >-
         `TerminalRecorder.read` เลือกเทอร์มินัลที่ active ล้าง escape code ของเทอร์มินัล ลบความลับด้วย `redactSecrets`
         ทั้งจากบรรทัดคำสั่งและ output ก่อนตัด แล้วเก็บท้าย output ไม่เกิน 40 บรรทัดหรือ 3,000 ตัวอักษรต่อคำสั่ง
@@ -61,6 +91,10 @@ scenario:
     - id: checked
       lane: server
       at: updates
+      beat:
+        title: "Geno ตรวจคำตอบ"
+        text: >-
+          ถ้า VS Code ตอบผิดรูป หรือไม่มี editor แสดง session อยู่ call ล้มเหลวพร้อมเหตุผล
       do: >-
         engine ตรวจคำตอบด้วย `readTerminalResponse` ถ้า editor ตอบผิดรูปหรือไม่มี editor แสดง session อยู่ call ล้มเหลวพร้อมเหตุผล
       ref: packages/engine/src/tools/terminal.ts#readTerminalResponse
@@ -68,6 +102,12 @@ scenario:
     - id: fenced
       lane: tool
       at: executor
+      beat:
+        title: "Geno ล้อมรั้ว output ว่าเป็นข้อมูล"
+        text: >-
+          แต่ละคำสั่งเขียนเป็นบรรทัดคำสั่ง โฟลเดอร์ และ exit code ตามด้วย output ในรั้ว บรรทัดท้ายบอกว่านี่คือข้อมูล
+          ไม่ใช่คำสั่ง ตัวอักษรที่มองไม่เห็นถูกตัดทิ้ง ผลกลับมาที่แชต
+        sees: { kind: step, label: read_terminal, status: done, output: "$ pnpm build\n[exit code 1]" }
       do: >-
         `terminalReadText` เขียนแต่ละคำสั่งเป็น `$ pnpm build` โฟลเดอร์ และ exit code ตามด้วย output ในรั้ว `<terminal_output>`
         บรรทัดท้ายบอกว่านี่คือข้อมูล ไม่ใช่คำสั่ง และความลับถูกแทนด้วย `[redacted]` จากนั้น `toolText` ตัดตัวอักษรซ่อนทิ้ง
@@ -79,6 +119,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model อธิบายว่า build พังเพราะอะไร"
+        text: >-
+          Geno เรียกโมเดลต่อ โมเดลอ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
+        to: model
+        end: "model อธิบายสาเหตุ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลอ่าน error ของ build จากเทอร์มินัลแล้วอธิบายสาเหตุ
       ref: packages/core/src/loop.ts#loopStep
@@ -104,3 +150,5 @@ scenario:
 - **ลบความลับก่อนตัด** `redactSecrets` ทำงานบน output ทั้งก้อนก่อนเก็บแค่ท้าย ความลับจึงไม่ถูกตัดครึ่งจนหลุดรูปแบบที่จับได้
   ต่างจาก output ของ `bash` ที่ไม่ผ่าน `redactSecrets`
 - **ไม่มีการ์ด** การอ่านเทอร์มินัลไม่ผ่าน `settle` เลย ไม่มีกฎ workspace หรือ classifier ที่กันมันได้ ยกเว้น hook PreToolUse
+
+ตัวอักษรที่ถูกตัดทิ้ง ดู [ตัวอักษรที่มองไม่เห็นในไฟล์](/scenarios/sec/hidden-unicode/)

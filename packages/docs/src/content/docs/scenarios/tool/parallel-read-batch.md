@@ -1,5 +1,5 @@
 ---
-title: อ่านหลายไฟล์พร้อมกัน
+title: "Model อ่านหลายไฟล์พร้อมกัน"
 description: โมเดลขออ่านสามไฟล์และค้นข้อความสองครั้งในคำตอบเดียว harness รันทั้งห้าพร้อมกัน แล้วบันทึกผลตามลำดับที่โมเดลขอ
 tableOfContents: false
 sidebar:
@@ -17,6 +17,19 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขออ่านสามไฟล์และค้นสองครั้ง"
+        text: >-
+          ในคำตอบเดียว โมเดลขออ่าน `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วค้นหา `parseDate`
+          และหาไฟล์เทสต์ทั้งหมด run จริงด้านล่างขออ่านสามไฟล์ในคำตอบเดียวแบบเดียวกัน
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A20-thai-question/1/session.jsonl#seq=13
+          select: content
+          collapse:
+            - "[0].thinking"
       do: >-
         โมเดลขอ `read` ไฟล์ `src/date.ts`, `src/date.test.ts` และ `package.json` แล้วขอ `grep` หา `parseDate`
         และ `glob` หา `**/*.test.ts` ในคำตอบเดียว จบด้วย `stop_reason: tool_use`
@@ -33,10 +46,20 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: "แชตขึ้นขั้นของทุก call"
+        text: >-
+          Geno บันทึกคำขอแล้วแชตขึ้นขั้นใหม่ของแต่ละ call พร้อมจุดหมุน
+        sees: { kind: step, label: read src/date.ts, status: running }
 
     - id: together
       lane: loop
       at: tools
+      beat:
+        title: "Geno จัดทั้งห้าไว้ชุดเดียว"
+        text: >-
+          การอ่านไฟล์ที่ไม่ใช่ไฟล์ลับใน workspace และการค้นหา ไม่แก้อะไรและไม่ต้องถามใคร
+          ทั้งห้าจึงรันพร้อมกันได้ในชุดเดียว ชุดหนึ่งรับได้ถึง 8 call
       do: >-
         `concurrentAt` ถามแต่ละ call ว่ารันพร้อมตัวอื่นได้หรือไม่ `read` ได้เมื่อ path ไม่ใช่ไฟล์ลับและไม่ออกนอก workspace
         `grep` และ `glob` ได้เสมอ ทั้งห้าจึงอยู่ชุดเดียวกัน (สูงสุด 8 ต่อชุด) และเริ่มพร้อมกัน
@@ -45,6 +68,12 @@ scenario:
     - id: read
       lane: tool
       at: executor
+      beat:
+        title: "read อ่านผ่าน VS Code"
+        text: >-
+          เมื่อ VS Code แสดง session นี้อยู่ Geno ขอให้ VS Code อ่านไฟล์แทนการอ่านดิสก์เอง `src/date.ts`
+          ที่คุณเปิดค้างไว้จึงมาพร้อมการแก้ที่ยังไม่บันทึก
+        to: panel
       runs: 3
       do: >-
         `read` แต่ละตัวอ่านผ่าน `editorFiles` เมื่อมี editor ที่อ่านไฟล์ได้แสดง session นี้อยู่ engine จึงส่งคำขอ ACP
@@ -62,6 +91,12 @@ scenario:
     - id: search
       lane: tool
       at: executor
+      beat:
+        title: "การค้นหาใช้สำเนาของ buffer ที่ยังไม่บันทึก"
+        text: >-
+          การค้นหารันบนดิสก์ใน engine แต่ก่อนค้นมันขอ buffer ที่ยังไม่บันทึกจาก VS Code แล้วค้นบนสำเนาเหล่านั้นแทน
+          ผลจึงตรงกับที่คุณเห็นใน editor
+        from: engine
       runs: 2
       alongside: true
       do: >-
@@ -72,6 +107,12 @@ scenario:
     - id: each-ends
       lane: loop
       at: tools
+      beat:
+        title: "แต่ละขั้นเสร็จไม่พร้อมกัน"
+        text: >-
+          call ที่เสร็จก่อนแจ้งแชตทันที คุณจึงเห็นบางขั้นเสร็จก่อนขั้นอื่น
+          การอ่านแต่ละไฟล์จดเนื้อหาที่เห็นไว้เป็นฐานสำหรับการแก้ไฟล์ครั้งต่อไป
+        to: panel
       do: >-
         แต่ละ call ที่เสร็จส่ง `watcher.toolEnd` ทันที แผงจึงเห็นขั้นที่เสร็จก่อนได้ `read` รอให้ call ก่อนหน้าในชุดจบก่อน
         แล้วจึงจดเนื้อหาที่เห็นเป็นฐานสำหรับ `edit` ครั้งต่อไป
@@ -86,10 +127,33 @@ scenario:
       emits: [tool_call_update, completed]
 
     - use: tool-result-returns
+      beat:
+        title: "Geno บันทึกผลตามลำดับที่ขอ"
+        text: >-
+          เมื่อครบทุก call Geno บันทึกผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ผลพับอยู่ใต้แต่ละขั้น
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A20-thai-question/1/requests.jsonl#seq=18
+          select: messages[-1].content
+          highlight:
+            - "[0].tool_use_id"
+            - "[1].tool_use_id"
+            - "[2].tool_use_id"
+          collapse:
+            - "[0].content"
+            - "[1].content"
+            - "[2].content"
 
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model ได้ผลทั้งห้าในข้อความเดียว"
+        text: >-
+          Geno เรียกโมเดลต่อ ผลทั้งห้าอยู่ในข้อความ user เดียว เรียงตามที่โมเดลขอ
+        to: model
+        end: "model ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ผลทั้งห้าในข้อความ user เดียว เรียงตามลำดับที่ขอ
       ref: packages/core/src/loop.ts#loopStep
@@ -114,3 +178,5 @@ scenario:
 - **ไฟล์ที่ยังไม่บันทึก** ทั้ง `read` และ `grep` เห็นการแก้ที่ผู้ใช้ยังไม่บันทึก `read` ได้ข้อความจาก buffer
   ส่วน `grep` ค้นสำเนาของ buffer ที่ editor ส่งมา
 - **ในแผง** `read` ที่ติดกันรวมเป็นขั้นเดียวที่มีชิปไฟล์ละอัน ส่วน `grep` และ `glob` เป็นขั้นของตัวเอง
+
+เมื่อชุดมี bash ปนอยู่ ดู [Geno แบ่ง tool call แบบผสมเป็นชุดที่รันต่อกัน](/scenarios/tool/mixed-batch-sequencing/)
