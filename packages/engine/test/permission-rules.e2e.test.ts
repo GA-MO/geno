@@ -131,9 +131,9 @@ describe('remembered permission rules', () => {
   });
 
   it('asks about one command of a loop with the whole line beside it, logs both, and the saved rule covers the loop', async () => {
-    const line = 'for f in a.ts; do node --check $f; done && git status';
+    const line = 'for f in a.ts; do node --import tsx $f; done && git status';
     const first = bash(line);
-    const again = bash('for f in a.ts b.ts; do node --check $f; done');
+    const again = bash('for f in a.ts b.ts; do node --import tsx $f; done');
     const { workspace, store, permissions, session, prompt, results, answerWith } = await setup([
       toolCall('Checking.', [first], usage),
       answer('Checked.', usage),
@@ -147,11 +147,11 @@ describe('remembered permission rules', () => {
       return id;
     });
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'node --check $f', line, reason: 'a command not on the safe list', rule: 'node --check' });
-    expect(permissions[0]!.toolCall.title).toBe(`Allow \`node --check $f\` in \`${line}\`? It uses a command not on the safe list.`);
+    expect(permissions[0]!.toolCall.rawInput).toEqual({ command: 'node --import tsx $f', line, reason: 'a command not on the safe list', rule: 'node --import' });
+    expect(permissions[0]!.toolCall.title).toBe(`Allow \`node --import tsx $f\` in \`${line}\`? It uses a command not on the safe list.`);
     const log = await readSessionLog(sessionFile(store, asSessionId(sessionId)));
     const logged = log.events.flatMap((event) => (event.kind === 'tool-result' && event.approval !== undefined ? [event.approval] : []));
-    expect(logged).toEqual([expect.objectContaining({ command: 'node --check $f', line, decidedBy: 'user', verdict: 'allow' })]);
+    expect(logged).toEqual([expect.objectContaining({ command: 'node --import tsx $f', line, decidedBy: 'user', verdict: 'allow' })]);
 
     const listed = await session(async (ctx, id) => {
       await prompt(ctx, id, 'Check both');
@@ -159,7 +159,7 @@ describe('remembered permission rules', () => {
     });
     expect(permissions).toHaveLength(1);
     expect(results().get(again.id)).not.toContain('denied');
-    expect(listed.rules).toEqual([expect.objectContaining({ effect: 'allow', pattern: ['node', '--check'] })]);
+    expect(listed.rules).toEqual([expect.objectContaining({ effect: 'allow', pattern: ['node', '--import'] })]);
   });
 
   it('blocks a command a deny rule names in Auto, without asking or calling the classifier, and removes the rule', async () => {

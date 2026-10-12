@@ -476,6 +476,51 @@ describe('auto mode', () => {
     expect(denialFor(command, scope, 'ask')).toBeUndefined();
   });
 
+  // Seen live in the web walkthrough (B3): each asked in ask mode.
+  it.each([
+    'npm test 2>&1 | tail -5; echo scan exit: $?',
+    'echo "files: $#" "$1" ${COUNT:-0}',
+    'printf "%s\\n" "$?"',
+    'test -n "$CI" && echo ci',
+    'echo "$?" > status.txt',
+    'for f in $(ls lib); do echo $f; done',
+    'node --version',
+    'node -v',
+    'node --check lib/categories.js',
+    'node -c lib/categories.js',
+    'for f in server.js lib/*.js; do node --check $f; done',
+    'node --test',
+    'node --test 2>&1 | tail -20',
+    'node --test test/a.test.js test/b.test.js',
+  ])('runs %s in ask mode without asking', (command) => {
+    expect(denialFor(command, scope, 'ask')).toBeUndefined();
+  });
+
+  it.each([
+    '$CMD --version',
+    'echo x > $OUT',
+    'echo x >> "$OUT"',
+    'echo x 2> ${LOG}',
+    'tee $OUT < a.txt',
+    'printf $FMT x',
+    'printf -v PATH /tmp',
+    'rm -rf $DIR',
+    'node -e 1',
+    'node -p 1',
+    'node --check',
+    'node --check -e 1',
+    'node --test --import ./x.js',
+    'node --test -r ./x.js',
+    'node --test --experimental-test-coverage',
+    'node --version script.js',
+    'node script.js',
+    'node --check $FILE',
+    'PATH=/tmp echo hi',
+    'NODE_OPTIONS=--require=./x.js node --test',
+  ])('still asks before %s in ask mode', (command) => {
+    expect(denialFor(command, scope, 'ask')?.verdict).toBe('ask');
+  });
+
   it.each(SECRET)('asks before %s in ask mode, classifies it in auto and refuses it with nobody to ask', (command) => {
     expect(denialFor(command, scope, 'ask')).toMatchObject({ rule: 'secret-path', verdict: 'ask' });
     expect(denialFor(command, scope, 'auto')?.verdict).toBe('classify');
