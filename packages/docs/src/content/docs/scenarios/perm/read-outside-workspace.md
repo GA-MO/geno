@@ -114,7 +114,7 @@ scenario:
         from: panel
         to: you
         ask: "กดปุ่มไหน"
-        sees: "การ์ด \"Read outside the workspace?\" \"Geno asks about a path outside the workspace.\" ปุ่ม Allow, Allow this directory for the session, Deny และ No, and tell the agent…"
+        sees: { kind: permission, face: read, command: /Users/me/shared-lib/src/date.ts, reason: Geno asks about a path outside the workspace. }
       do: >-
         การ์ดใช้หน้าตาของการอ่านนอก workspace
       sees: >-

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { FACES, MEMORY_SCOPES } from '../scenario/faces.js';
 import { codeSegments } from '../scenario/labels.js';
 import type { Shown } from '../scenario/model.js';
 import type { Long, More, PayloadView } from '../scenario/payload.js';
@@ -8,14 +9,14 @@ type Mock<K extends Shown['kind']> = Extract<Shown, { kind: K }>;
 export const Code = ({ text }: { readonly text: string }): ReactNode =>
   codeSegments(text).map((segment, i) => (segment.code ? <code key={i}>{segment.text}</code> : <span key={i}>{segment.text}</span>));
 
-const PERMISSION_OPTIONS = ['Allow', 'Deny', 'Always allow in this workspace', 'No, and tell the agent…'];
-
 function Permission({ mock }: { readonly mock: Mock<'permission'> }) {
-  const options = mock.options ?? PERMISSION_OPTIONS;
+  const face = FACES[mock.face ?? 'command'];
+  const options = mock.options ?? face.options;
   return (
     <div className="mk-permission">
-      <p className="mk-title">Run this command?</p>
+      <p className="mk-title">{face.title(mock)}</p>
       <pre className="mk-command">{mock.command}</pre>
+      {mock.face === 'memory' ? <p className="mk-muted">{MEMORY_SCOPES[mock.scope ?? 'project']}</p> : null}
       {mock.reason === undefined ? null : <p className="mk-muted">{mock.reason}</p>}
       {mock.rule === undefined ? null : (
         <p className="mk-muted">

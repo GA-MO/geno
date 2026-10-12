@@ -13,6 +13,7 @@ import { lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
 import { ACTORS, beatsOf, branchesAt, choose, layoutLanes, storyBeats, storyFromHash, storyHash, storyStart } from '../src/scenario/story.js';
 import { walk } from '../src/scenario/tour.js';
+import { FACES, MEMORY_SCOPES, PERMISSION_FACES } from '../src/scenario/faces.js';
 
 const DOCS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(DOCS, '../..');
@@ -177,6 +178,28 @@ describe('story checks reject', () => {
   test('a mock with a prop it does not have, or without one it needs', () => {
     expect(() => compile([{ lane: 'user', do: 'x', ...beat('One', { sees: { kind: 'step', label: 'x', status: 'spinning' } }) }])).toThrow();
     expect(() => compile([{ lane: 'user', do: 'x', ...beat('One', { sees: { kind: 'permission' } }) }])).toThrow();
+  });
+});
+
+describe('permission card faces', () => {
+  const source = ['packages/extension/src/chat/render.ts', 'packages/extension/src/chat/mcp-panel.ts', 'packages/engine/src/serve.ts'].map((file) => readFileSync(path.join(REPO, file), 'utf8')).join('\n');
+  const quoted = (text: string) => [`'${text}'`, `"${text}"`, `\`${text}\``].some((form) => source.includes(form));
+
+  test.each(PERMISSION_FACES)('the %s face quotes the real card title and buttons', (face) => {
+    expect(quoted(FACES[face].title({ host: '${subject.host}', server: '${subject.server}', tool: '${subject.tool}' }))).toBe(true);
+    for (const option of FACES[face].options) expect(quoted(option)).toBe(true);
+  });
+
+  test('a memory card quotes the scope line the panel adds', () => {
+    for (const line of Object.values(MEMORY_SCOPES)) expect(source).toContain(line.replace(' You can change or delete it in /memory.', ''));
+    expect(source).toContain('You can change or delete it in /memory.');
+  });
+
+  test('a face whose title names its subject needs it', () => {
+    const card = (sees: Record<string, unknown>) => [{ lane: 'user', do: 'x', ...beat('One', { sees: { kind: 'permission', command: 'https://x.dev', ...sees } }) }, { lane: 'user', do: 'y', ...beat('Two'), ...end }];
+    expect(messages(card({ face: 'fetch' }))).toEqual([expect.stringContaining("a fetch card's title names its host")]);
+    expect(messages(card({ face: 'mcp', server: 'github' }))).toEqual([expect.stringContaining("a mcp card's title names its tool")]);
+    expect(messages(card({ face: 'fetch', host: 'x.dev' }))).toEqual([]);
   });
 });
 

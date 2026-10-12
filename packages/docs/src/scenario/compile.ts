@@ -2,6 +2,7 @@ import { partKeyOf, type BeatHead, type Choices, type CodeRef, type Flow, type L
 import { endProblems, type EndTables } from './ends.js';
 import type { RunFiles } from './payload.js';
 import type { SourceIndex } from './refs.js';
+import { FACES } from './faces.js';
 import { isUse, type ActingStepIn, type BeatIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
 
 export interface CompileContext {
@@ -267,6 +268,9 @@ function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path:
   const listed = head.sees === undefined ? [] : typeof head.sees === 'string' ? [head.sees] : Array.isArray(head.sees) ? head.sees : [head.sees];
   const sees = listed.flatMap((mock, i): Shown[] => {
     if (typeof mock === 'string') return [{ kind: 'text', text: mock.trim() }];
+    if (mock.kind === 'permission')
+      for (const need of FACES[mock.face ?? 'command'].needs)
+        if (mock[need] === undefined) problem(`${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}.${need}`, `a ${mock.face} card's title names its ${need}: give the mock ${need}:`);
     if (mock.kind !== 'payload') return [mock];
     const resolved = ctx.runs.resolve(mock);
     if (!resolved.ok) problem(`${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`, resolved.reason);
