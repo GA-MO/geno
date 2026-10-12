@@ -3,6 +3,7 @@ import path from 'node:path';
 import { parse, YAMLParseError } from 'yaml';
 import type { z } from 'astro/zod';
 import { compileScenario } from './compile.js';
+import { LOOP_FILE, readEndTables, SERVE_FILE, type EndTables } from './ends.js';
 import { partKeyOf, type CodeRef, type Link, type PartKey, type Problem, type Scenario, type StepId } from './model.js';
 import { sourceIndex } from './refs.js';
 import { catalogSchema, fragmentSchema, isUse, lanesSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
@@ -142,9 +143,12 @@ export function loadSite(options: SiteOptions): Site {
       else problems.push({ level: 'error', file: `${DATA}/lanes.yaml`, path: `lanes[${i}].parts[${j}].ref`, message: resolved.reason });
     }),
   );
+  const tables = readEndTables(readFileSync(path.join(options.repoRoot, LOOP_FILE), 'utf8'), readFileSync(path.join(options.repoRoot, SERVE_FILE), 'utf8'));
+  if (!tables.ok) problems.push({ level: 'error', file: tables.file, path: '-', message: `${tables.reason}; until it reads, no page's end is checked` });
+  const ends: EndTables = tables.ok ? tables.tables : { afterStop: new Map(), turnEnds: new Map(), goingOn: new Set() };
   const scenarios: Record<string, Scenario> = {};
   for (const { page, scenario } of authored) {
-    const result = compileScenario(scenario, { file: page.file, id: page.id, href: page.href, title: page.title, lanes, fragments, source, catalog: links });
+    const result = compileScenario(scenario, { file: page.file, id: page.id, href: page.href, title: page.title, lanes, fragments, source, ends, catalog: links });
     if (result.ok) scenarios[page.id] = result.value;
     else problems.push(...result.problems.map((problem) => ({ ...problem, path: `scenario.${problem.path}` })));
   }

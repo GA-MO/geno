@@ -143,7 +143,7 @@ scenario:
         โมเดลบอกผู้ใช้ว่าส่งต่อให้ explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
-      end: { turn: continues, reason: end_turn }
+      end: { turn: done, reason: end_turn }
 ---
 
 `message_agent` มีทางเดียวสำหรับโมเดล แต่ engine เลือกทางตามสถานะของลูก

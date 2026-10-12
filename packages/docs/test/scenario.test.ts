@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { compileScenario, type CompileContext } from '../src/scenario/compile.js';
+import { LOOP_FILE, readEndTables, SERVE_FILE } from '../src/scenario/ends.js';
 import type { OptionId, StepId } from '../src/scenario/model.js';
 import { sourceIndex, type SourceIndex } from '../src/scenario/refs.js';
 import { fragmentSchema, lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
@@ -14,6 +15,11 @@ import { progressAt, reduce, stateFromHash, walk } from '../src/scenario/tour.js
 const DOCS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(DOCS, '../..');
 const lanes = lanesSchema.parse(parse(readFileSync(path.join(DOCS, 'src/data/lanes.yaml'), 'utf8')));
+const loopText = readFileSync(path.join(REPO, LOOP_FILE), 'utf8');
+const serveText = readFileSync(path.join(REPO, SERVE_FILE), 'utf8');
+const read = readEndTables(loopText, serveText);
+if (!read.ok) throw new Error(read.reason);
+const tables = read.tables;
 
 const fakeSource: SourceIndex = {
   resolve: (ref) =>
@@ -30,6 +36,7 @@ function compile(steps: unknown[], source = fakeSource, fragments: CompileContex
     lanes,
     fragments,
     source,
+    ends: tables,
     catalog: { 'turn.text-answer': { id: 'turn.text-answer', title: 'ถามแล้วได้คำตอบ' } },
   };
   return compileScenario(scenarioSchema.parse({ surface: 'vscode', trigger: 't', covers: ['turn.text-answer'], steps }), ctx);
@@ -125,6 +132,71 @@ describe('compile rejects', () => {
     expect(compile(forks(8)).ok).toBe(true);
     const result = compile(forks(9));
     expect(!result.ok && result.problems).toEqual([expect.objectContaining({ level: 'error', path: 'steps', message: expect.stringContaining('scenario "test" has more than 256 walks') })]);
+  });
+});
+
+describe('a turn end against AFTER_STOP and TURN_ENDS', () => {
+  const MODEL_REF = 'packages/engine/src/gateway.ts#gatewayFor';
+  const problemsOf = (step: Record<string, unknown>) => {
+    const result = compile([step]);
+    return result.ok ? [] : result.problems;
+  };
+
+  test('the tables read from the code', () => {
+    expect(tables.afterStop.get('end_turn')).toEqual({ kind: 'done', reason: 'end_turn' });
+    expect(tables.afterStop.get('pause_turn')).toEqual({ kind: 'call-model', reason: undefined });
+    expect(tables.turnEnds.get('max-turns')).toEqual({ task: 'failed', stop: 'max_turn_requests' });
+    expect(tables.goingOn).toEqual(new Set(['call-model', 'run-tools', 'answer-tools', 'nudge']));
+  });
+
+  test("the model's end_turn marked as a turn that continues fails, naming the task end TURN_ENDS gives it", () => {
+    expect(problemsOf({ lane: 'model', do: 'relays', ref: MODEL_REF, emits: ['end_turn'], end: { turn: 'continues', reason: 'end_turn' } })).toEqual([
+      expect.objectContaining({ path: 'steps[0].end', message: expect.stringContaining('TURN_ENDS.end_turn is task done') }),
+    ]);
+  });
+
+  test('a failed turn with reason end_turn fails', () => {
+    expect(problemsOf({ lane: 'loop', at: 'step', do: 'x', ref: REF, end: { turn: 'failed', reason: 'end_turn' } })).toEqual([
+      expect.objectContaining({ path: 'steps[0].end', message: expect.stringContaining('write turn: done') }),
+    ]);
+  });
+
+  test("a walk that ends where the turn's model stops must end as AFTER_STOP does, with or without a reason", () => {
+    expect(problemsOf({ lane: 'model', do: 'stops', ref: MODEL_REF, emits: ['max_tokens'], end: { turn: 'continues' } })).toEqual([
+      expect.objectContaining({ path: 'steps[0].emits', message: expect.stringContaining('AFTER_STOP.max_tokens is done(error)') }),
+    ]);
+    expect(problemsOf({ lane: 'model', do: 'stops', ref: MODEL_REF, emits: ['max_tokens'], end: { turn: 'failed', reason: 'error' } })).toEqual([]);
+  });
+
+  test("a child's end_turn does not end the parent's turn, and a model that asks for tools goes on", () => {
+    expect(problemsOf({ lane: 'child@plan', at: 'model', do: 'x', ref: MODEL_REF, emits: ['end_turn'], end: { turn: 'continues', reason: 'run-tools' } })).toEqual([]);
+    expect(problemsOf({ lane: 'model', do: 'asks', ref: MODEL_REF, emits: ['tool_use'], end: { turn: 'continues', reason: 'run-tools' } })).toEqual([]);
+    expect(problemsOf({ lane: 'model', do: 'asks', ref: MODEL_REF, emits: ['tool_use'], end: { turn: 'continues', reason: 'tool_use' } })).toEqual([
+      expect.objectContaining({ path: 'steps[0].end', message: expect.stringContaining('write reason: run-tools') }),
+    ]);
+  });
+
+  test('a loop step that keeps going, or a stop the user caused, cannot sit on the wrong end', () => {
+    expect(problemsOf({ lane: 'loop', at: 'step', do: 'x', ref: REF, end: { turn: 'done', reason: 'call-model' } })).toEqual([expect.objectContaining({ path: 'steps[0].end' })]);
+    expect(problemsOf({ lane: 'loop', at: 'step', do: 'x', ref: REF, end: { turn: 'failed', reason: 'cancelled' } })).toEqual([expect.objectContaining({ message: expect.stringContaining('write turn: stopped') })]);
+  });
+
+  test('a renamed or reshaped table fails loudly instead of checking nothing', () => {
+    expect(readEndTables(loopText.replace('const AFTER_STOP:', 'const AFTER_MODEL_STOP:'), serveText)).toEqual({ ok: false, file: LOOP_FILE, reason: expect.stringContaining('AFTER_STOP') });
+    expect(readEndTables(loopText, serveText.replace('const TURN_ENDS:', 'const ENDS_OF_TURNS:'))).toEqual({ ok: false, file: SERVE_FILE, reason: expect.stringContaining('TURN_ENDS') });
+    expect(readEndTables(loopText.replace("end_turn: done('end_turn'),", "end_turn: finish('end_turn'),"), serveText)).toMatchObject({ ok: false, reason: expect.stringContaining('AFTER_STOP.end_turn') });
+  });
+
+  test('the site reports an unreadable table as an error', () => {
+    const repo = mkdtempSync(path.join(tmpdir(), 'gdocs-repo-'));
+    for (const [file, text] of [[LOOP_FILE, loopText.replace('const AFTER_STOP:', 'const AFTER_MODEL_STOP:')], [SERVE_FILE, serveText]] as const) {
+      mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+      writeFileSync(path.join(repo, file), text);
+    }
+    const docs = mkdtempSync(path.join(tmpdir(), 'gdocs-'));
+    cpSync(path.join(DOCS, 'src/data'), path.join(docs, 'src/data'), { recursive: true });
+    const errors = loadSite({ docsRoot: docs, repoRoot: repo }).problems.filter((problem) => problem.level === 'error');
+    expect(errors).toContainEqual(expect.objectContaining({ file: LOOP_FILE, message: expect.stringContaining('no top-level const named AFTER_STOP') }));
   });
 });
 

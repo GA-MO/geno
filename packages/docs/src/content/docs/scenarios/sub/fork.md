@@ -127,7 +127,7 @@ scenario:
         โมเดลของแม่อ่านรายงานแล้วเล่าแผนให้ผู้ใช้ด้วยคำของตัวเอง
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
-      end: { turn: continues, reason: end_turn }
+      end: { turn: done, reason: end_turn }
 ---
 
 ลูกแบบ fork กับลูกแบบปกติต่างกันที่จุดเริ่ม: ลูกปกติเริ่มจาก session ว่างกับ task ที่เขียนให้ครบในตัว

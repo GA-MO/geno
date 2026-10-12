@@ -1,4 +1,5 @@
 import { partKeyOf, type Choices, type CodeRef, type Flow, type LaneColumn, type Link, type OptionId, type OutlineItem, type Problem, type Result, type Scenario, type ScenarioId, type Step, type StepId } from './model.js';
+import { endProblems, type EndTables } from './ends.js';
 import type { SourceIndex } from './refs.js';
 import { isUse, type ActingStepIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
 
@@ -10,6 +11,7 @@ export interface CompileContext {
   readonly lanes: LanesIn;
   readonly fragments: Readonly<Record<string, readonly StepIn[]>>;
   readonly source: SourceIndex;
+  readonly ends: EndTables;
   readonly catalog: Readonly<Record<string, Link>>;
 }
 
@@ -215,6 +217,10 @@ function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, co
   } else if (party === 'ai' || party === 'harness') problem(`${path}.ref`, `a ${party} step needs a code ref`);
   for (const [i, name] of (step.emits ?? []).entries()) if (!ctx.source.literalExists(name)) problem(`${path}.emits[${i}]`, `"${name}" appears nowhere in packages/{core,engine,extension}/src`);
   if (step.end?.reason !== undefined && !ctx.source.literalExists(step.end.reason)) problem(`${path}.end.reason`, `"${step.end.reason}" appears nowhere in packages/{core,engine,extension}/src`);
+  if (step.end !== undefined) {
+    const modelStops = party === 'ai' && !lane.instanced ? (step.emits ?? []) : [];
+    for (const { field, message } of endProblems(step.end, modelStops, ctx.ends)) problem(field === 'reason' ? `${path}.end` : `${path}.emits`, message);
+  }
   if (flow === undefined) return undefined;
 
   const counts = part?.counts ?? lane.counts;
