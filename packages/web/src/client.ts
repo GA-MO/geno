@@ -51,7 +51,7 @@ events.addEventListener('answered', (event) => {
 });
 
 const STYLE = `
-.geno-web-toasts { position: fixed; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2147483646; max-width: min(360px, calc(100vw - 16px)); }
+.geno-web-toasts { position: fixed; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2147483646; max-width: min(360px, calc(100vw - 16px)); }
 .geno-web-toast, .geno-web-dialog, .geno-web-menu { font: var(--vscode-font-size) var(--vscode-font-family); color: var(--vscode-notifications-foreground, var(--vscode-foreground));
   background: var(--vscode-notifications-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-notifications-border, var(--vscode-widget-border, transparent));
   box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,.4)); border-radius: 6px; }
@@ -100,15 +100,40 @@ async function overlay(): Promise<HTMLElement> {
     toasts = element('div', { className: 'geno-web-toasts' });
     toasts.setAttribute('role', 'status');
     document.body.append(toasts);
+    // Under the header, out of the way of the composer at the bottom and of the menus that open above it.
+    const header = document.querySelector<HTMLElement>('.chat-header');
+    if (header !== null) {
+      const stack = toasts;
+      const place = () => void (stack.style.top = `${header.getBoundingClientRect().bottom + 8}px`);
+      new ResizeObserver(place).observe(header);
+      place();
+    }
   }
   return toasts;
+}
+
+/** How long each kind of toast that only informs stays: text alone, a link to open, or choices to pick. */
+const SHOWN_MS = { text: 6000, link: 15_000, choices: 10_000 } as const;
+
+/** Removes `shown` after `ms`, counted again from the start once the pointer or the focus leaves it. */
+function expire(shown: HTMLElement, ms: number, gone: () => void): void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const start = () => {
+    clearTimeout(timer);
+    if (!shown.matches(':hover, :focus-within')) timer = setTimeout(() => shown.isConnected && gone(), ms);
+  };
+  shown.addEventListener('mouseenter', () => clearTimeout(timer));
+  shown.addEventListener('focusin', () => clearTimeout(timer));
+  shown.addEventListener('mouseleave', start);
+  shown.addEventListener('focusout', () => setTimeout(start));
+  start();
 }
 
 async function toast(text: string, link?: { readonly label: string; readonly url: string }): Promise<void> {
   const shown = element('div', { className: 'geno-web-toast' }, element('span', { textContent: text }));
   if (link !== undefined) shown.append(element('a', { href: link.url, target: '_blank', rel: 'noopener', textContent: link.label }));
   (await overlay()).append(shown);
-  setTimeout(() => shown.remove(), link === undefined ? 6000 : 15_000);
+  expire(shown, link === undefined ? SHOWN_MS.text : SHOWN_MS.link, () => shown.remove());
 }
 
 function noted(note: Note): void {
@@ -186,7 +211,10 @@ document.addEventListener(
   true,
 );
 
-/** A message that is not modal shows as a toast, as VS Code shows it: one with choices stays until the user picks or closes it. */
+/**
+ * A message that is not modal shows as a toast. One that only informs goes after a while, as if closed, while the
+ * pointer or the focus is not on it; a warning or an error with choices stays until the user picks or closes it.
+ */
 async function notice(request: Extract<Asked, { kind: 'message' }>): Promise<void> {
   if (request.items.length === 0) {
     answer(request.id, { kind: 'cancel' });
@@ -200,8 +228,10 @@ async function notice(request: Extract<Asked, { kind: 'message' }>): Promise<voi
     ...request.items.map((item, index) => element('a', { href: '#', textContent: item, onclick: (event: MouseEvent) => (event.preventDefault(), done({ kind: 'item', index })) })),
     element('a', { href: '#', textContent: 'Close', onclick: (event: MouseEvent) => (event.preventDefault(), done({ kind: 'cancel' })) }),
   );
+  shown.dataset['severity'] = request.severity;
   dialogs.set(request.id, shown);
   (await overlay()).append(shown);
+  if (request.severity === 'info') expire(shown, SHOWN_MS.choices, () => done({ kind: 'cancel' }));
 }
 
 async function asked(request: Asked): Promise<void> {
