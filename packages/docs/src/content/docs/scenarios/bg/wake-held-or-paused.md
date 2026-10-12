@@ -18,6 +18,7 @@ scenario:
       beat:
         title: explore รายงานเสร็จ
         text: session นี้ไม่มี turn ทำงาน แต่รอ explore ที่เริ่มไว้ใน turn ก่อน explore ส่งรายงานแล้วจบ
+        from: model
         to: engine
       lane: child@explore
       at: model
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: Geno บันทึกรายงานลง log ทันที
         text: ไม่มี turn รับรายงาน Geno จึงบันทึกมันลง log ก่อน แล้วค่อยดูว่าปลุกได้ไหม
+        from: engine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -43,6 +46,8 @@ scenario:
       beat:
         title: Geno ดูว่าปลุกได้ไหม
         text: Geno ไล่กฎตามลำดับ การปลุกปิดอยู่ไหม มี turn รัน การปลุกถูกพัก มีการ์ดค้าง คุณกำลังพิมพ์ หรือไม่มีหน้าต่าง
+        from: engine
+        to: engine
         ask: ปลุกได้ไหม
       lane: server
       at: wakes
@@ -61,6 +66,8 @@ scenario:
                 beat:
                   title: รอ เพราะมีการ์ดค้าง
                   text: subagent อีกตัวของ session นี้รอการ์ด permission Geno ไม่ให้ turn ใหม่แทรกขณะคุณตัดสินใจ
+                  from: engine
+                  to: engine
                 at: tasks
                 do: >-
                   ลูกอีกตัวของ session นี้รอการ์ดขออนุญาตอยู่ งานจึงเป็น `needs-input` `Tasks.asks` ตอบว่าใช่
@@ -71,6 +78,7 @@ scenario:
                   title: คุณตอบการ์ด
                   text: งานใน Tasks เปลี่ยน Geno ดูอีกครั้ง ไม่มีอะไรกันแล้ว
                   from: you
+                  to: panel
                 do: ผู้ใช้ตอบการ์ดนั้น
               - lane: server
                 at: wakes
@@ -86,6 +94,8 @@ scenario:
                 beat:
                   title: รอ เพราะไม่มีหน้าต่าง
                   text: คุณปิดหน้าต่าง VS Code ทุกบาน engine ยังรัน explore จนเสร็จ แต่ไม่มีหน้าต่างให้รัน turn
+                  from: engine
+                  to: engine
                 at: wakes
                 do: >-
                   ผู้ใช้ปิดหน้าต่าง VS Code ทุกบาน engine ยังรันลูกจนเสร็จ แต่ไม่มีหน้าต่างให้รัน turn ที่ถูกปลุก
@@ -96,6 +106,7 @@ scenario:
                   title: คุณเปิดโฟลเดอร์อีกครั้ง
                   text: หน้าต่างต่อ engine ก่อนมันจบ Geno ดูทุก session ที่รออยู่ คราวนี้มีหน้าต่างแล้ว
                   from: you
+                  to: panel
                 do: ผู้ใช้เปิดโฟลเดอร์เดิมใน VS Code อีกครั้งก่อนที่ engine จะจบ
               - lane: server
                 at: wakes
@@ -110,6 +121,8 @@ scenario:
                 beat:
                   title: พัก เพราะ turn ก่อนจบด้วย error
                   text: turn ล่าสุดจบด้วย Stop ขีดจำกัด หรือ error อื่น การปลุกพักไว้จนคุณส่ง prompt ทางนี้ไม่มีอะไรรอต่อ แผง Tasks จึงไม่บอกว่าพัก
+                  from: engine
+                  to: engine
                   sees: แถวของ session ขึ้นเหมือนงานที่จบแล้วตามปกติ
                 at: wakes
                 do: >-
@@ -130,6 +143,7 @@ scenario:
                   title: คุณส่ง prompt ใหม่
                   text: รายงานอยู่ใน log แล้ว จึงไปกับ prompt นี้ในคำขอแรก prompt ของคุณยังปลดการพักด้วย
                   from: you
+                  to: panel
                   end: prompt ของคุณพารายงานไป
                 do: ภายหลังผู้ใช้ส่ง prompt ใหม่ใน session นี้
               - lane: loop
@@ -147,6 +161,8 @@ scenario:
                 beat:
                   title: พัก เพราะปลุกครบ 12 ครั้ง
                   text: นับจาก prompt ล่าสุดของคุณ session ถูกปลุกไปแล้ว 12 ครั้งในหนึ่งชั่วโมง งานย้ายไปกลุ่ม Needs you
+                  from: engine
+                  to: panel
                   sees: ป้าย "Wake-ups paused" และบรรทัด "Paused after 12 wake-ups in an hour"
                   end: รอคุณใน Needs you
                 at: wakes
@@ -167,6 +183,7 @@ scenario:
       beat:
         title: Geno เปิด turn ใหม่เอง
         text: แชตเปิด turn ที่หัวมีกระดิ่งแทนข้อความของคุณ
+        from: engine
         to: panel
         sees: 'กระดิ่งกับ "woke: 1 task finished"'
       lane: server
@@ -201,6 +218,8 @@ scenario:
       beat:
         title: Model เล่าผลของ explore
         text: model อ่านรายงานแล้วเล่าผลให้คุณ
+        from: model
+        to: panel
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-

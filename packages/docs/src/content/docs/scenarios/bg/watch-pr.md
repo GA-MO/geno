@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอเฝ้า CI หลัง push
         text: model เพิ่ง push commit ใหม่ มันเรียก `watch_pr` เพื่อรอผล CI โดยไม่ต้องวนถาม เฝ้าได้นานสุด 1 ชั่วโมงตามค่าเริ่มต้น
+        from: model
         to: engine
       lane: model
       do: >-
@@ -32,6 +33,7 @@ scenario:
       beat:
         title: Geno ถาม `gh` หนึ่งครั้ง
         text: Geno ประกอบคำสั่ง `gh` เองทั้งหมด ไม่มีข้อความจาก model หรือจาก log เข้าไปในคำสั่ง
+        from: engine
         to: machine
         ask: CI จบหรือยัง
       lane: tool
@@ -55,6 +57,7 @@ scenario:
                   title: CI จบแล้ว ไม่ต้องรอ
                   text: Geno เขียนรายงาน แนบ log ท้ายของ check ที่ล้มไม่เกิน 2 ตัว แล้วบอกว่าไม่ได้ตั้งอะไรรอ
                   from: machine
+                  to: engine
                 do: >-
                   ไม่มีอะไรต้องรอ `prReport` เขียนรายงาน (ถ้ามี check ล้ม แนบ log ท้ายของไม่เกิน 2 ตัว) ต่อด้วย "Nothing was set up to wait for."
                   ถ้า `gh` ใช้ไม่ได้หรือหา PR ไม่เจอ call ได้ error แทน
@@ -64,7 +67,8 @@ scenario:
                 beat:
                   title: Model อ่านผล CI ใน turn เดิม
                   text: turn ไม่ต้องจบ model อ่านผลแล้วทำต่อ
-                  to: model
+                  from: model
+                  to: engine
                   end: Turn ทำต่อ
                 at: step
                 do: >-
@@ -78,6 +82,7 @@ scenario:
       beat:
         title: Geno ตั้งการเฝ้า `wake-1`
         text: ถ้า PR นี้ถูกเฝ้าอยู่แล้ว Geno ไม่เริ่มซ้ำ ผลของ call บอกจำนวน check ที่ยังรัน และบอกให้จบ turn
+        from: engine
         to: model
       lane: server
       at: wakes
@@ -95,6 +100,7 @@ scenario:
       beat:
         title: Model บอกว่ารอ CI แล้ว turn จบ
         text: "model บอกคุณว่ากำลังรอ CI ของ PR #42 แผง Tasks บอกว่า session รออะไร"
+        from: model
         to: panel
         sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
       lane: model
@@ -121,6 +127,8 @@ scenario:
       beat:
         title: CI จบ มี check ล้ม
         text: Geno เขียนรายงานพร้อม log ท้ายของ check ที่ล้ม แล้วใส่โน้ตลงกล่องข้อความของ session
+        from: machine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -133,6 +141,8 @@ scenario:
       beat:
         title: Geno ปลุก session
         text: แชตเปิด turn ใหม่ที่หัวมีกระดิ่งกับเหตุที่ปลุก
+        from: engine
+        to: panel
         sees: 'กระดิ่งกับ "woke: CI failed" หัวข้อ "working" และปุ่ม Stop'
     - use: model-call
 
@@ -140,6 +150,8 @@ scenario:
       beat:
         title: Model เปิดไฟล์ที่ทำให้เทสต์ล้ม
         text: model อ่านรายงานและ log ของ check ที่ล้ม แล้วเปิดไฟล์ที่เกี่ยวข้อง และเล่าสาเหตุให้คุณ
+        from: model
+        to: engine
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-

@@ -18,6 +18,7 @@ scenario:
       beat:
         title: งานของ “migrate tests” เปลี่ยนสถานะ
         text: คุณเปลี่ยนแชตไปอีก session และสลับไปเบราว์เซอร์ engine บันทึกสถานะใหม่ของงาน ตัดสินว่าควรแจ้งไหม แล้วส่งให้ทุกหน้าต่าง
+        from: engine
         to: panel
         ask: งานเปลี่ยนเป็นอะไร
       lane: server
@@ -37,6 +38,8 @@ scenario:
                 beat:
                   title: งานต้องขอ permission
                   text: งานย้ายเข้ากลุ่ม Needs you ตัวเลขบนไอคอนเพิ่มขึ้น หน้าต่างไม่ได้โฟกัส Geno จึงแจ้งทั้งใน VS Code และผ่าน macOS
+                  from: engine
+                  to: panel
                 at: chat
                 do: >-
                   `TaskHost.updated` จัดงานใหม่ งานย้ายเข้า Needs you ด้วยเหตุ `permission` `attentionNotice` ได้
@@ -54,6 +57,7 @@ scenario:
                   title: macOS แจ้งเตือน
                   text: ชื่องานไปเป็นข้อความของการแจ้งเตือนเท่านั้น จึงรันเป็น script ไม่ได้
                   from: machine
+                  to: you
                   sees: 'การแจ้งเตือนของ macOS หัวข้อ "Geno" ข้อความ "Geno needs your permission: migrate tests"'
                 do: >-
                   `osascript` แสดงการแจ้งเตือนของ macOS ข้อความส่งเป็นอาร์กิวเมนต์ ไม่ใช่ตัวสคริปต์ ชื่องานจึงรันเป็น AppleScript ไม่ได้
@@ -64,6 +68,8 @@ scenario:
                 beat:
                   title: คุณกด Open บน toast
                   text: คุณกลับมาที่ VS Code และกด Open
+                  from: you
+                  to: panel
                   sees:
                     kind: toast
                     text: "Geno needs your permission: migrate tests"
@@ -75,6 +81,8 @@ scenario:
                 beat:
                   title: แชตพาไปที่การ์ดที่รออยู่
                   text: แชตเปิด session นั้นแล้วเลื่อนไปที่การ์ดที่รอคำตอบของคุณ
+                  from: panel
+                  to: you
                   end: คุณตอบการ์ด
                 at: card
                 do: >-
@@ -90,6 +98,8 @@ scenario:
                 beat:
                   title: งานเสร็จ
                   text: งานย้ายเข้ากลุ่ม Ready การแจ้งเป็นระดับ info ไม่ส่งถึง macOS งานที่ยังมีงานเบื้องหลังรอปลุก ยังไม่นับว่าเสร็จ
+                  from: engine
+                  to: panel
                 at: chat
                 do: >-
                   งานจบแบบ done และย้ายเข้า Ready `attentionNotice` ได้การแจ้งระดับ info ที่ไม่ส่งถึงระบบปฏิบัติการ
@@ -101,6 +111,8 @@ scenario:
                 beat:
                   title: VS Code ขึ้น toast
                   text: มีแค่ toast ของ VS Code ไม่มีการแจ้งเตือนของ macOS
+                  from: panel
+                  to: you
                   sees:
                     kind: toast
                     text: "Geno finished: migrate tests"
@@ -117,6 +129,7 @@ scenario:
                   title: คุณกด Open
                   text: แชตเปิด session นั้นที่ท้ายบทสนทนา และนับว่าคุณดูแล้ว
                   from: you
+                  to: panel
                   end: คุณอ่านคำตอบ
                 do: ผู้ใช้กลับมาที่ VS Code เห็น toast แล้วกด Open
               - lane: panel
@@ -134,6 +147,8 @@ scenario:
                 beat:
                   title: งานล้มเหลว
                   text: งานย้ายเข้ากลุ่ม Needs you การแจ้งเป็นระดับ error และส่งถึง macOS ได้
+                  from: engine
+                  to: panel
                 at: chat
                 do: >-
                   งานจบแบบ failed และย้ายเข้า Needs you ด้วยเหตุ `failed` การแจ้งเป็นระดับ error และส่งถึงระบบปฏิบัติการได้
@@ -145,6 +160,7 @@ scenario:
                   title: macOS และ VS Code แจ้งว่างานล้ม
                   text: การแจ้งเตือนของ macOS ขึ้น พร้อม toast สีแดงใน VS Code
                   from: machine
+                  to: you
                   sees:
                     kind: toast
                     text: "Geno failed: migrate tests"
@@ -159,6 +175,7 @@ scenario:
                   title: คุณกด Open
                   text: แชตเปิด session นั้นที่ท้ายบทสนทนา ซึ่งมีแถบ error ของ turn ที่ล้ม
                   from: you
+                  to: panel
                   end: คุณดู error
                 do: ผู้ใช้กด Open บน toast
               - lane: panel

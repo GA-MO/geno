@@ -18,6 +18,8 @@ scenario:
       beat:
         title: Geno ดูงานที่ตั้งเวลาไว้
         text: engine ของหน้าต่างที่เปิดอยู่ดูไฟล์งานของ workspace อย่างน้อยทุก 60 วินาที และตั้งนาฬิกาไว้ตรงเวลาของงานถัดไป ตอนนี้ถึง 09:00 ของวันจันทร์
+        from: engine
+        to: engine
         ask: พร้อมรันไหม
       lane: server
       at: schedules
@@ -40,6 +42,8 @@ scenario:
                 beat:
                   title: ไม่มีหน้าต่างเปิดอยู่เลย
                   text: Geno ไม่มี daemon ของระบบ engine จบเองหลังหน้าต่างสุดท้ายปิด จึงไม่มีอะไรเริ่มรอบนี้ เมื่อคุณเปิดหน้าต่าง engine ตัวใหม่ดูงานแล้วจดว่ารอบนี้พลาด
+                  from: engine
+                  to: engine
                 at: schedules
                 do: >-
                   ไม่มี engine ที่มีหน้าต่างต่อ (engine จบเองหลังหน้าต่างสุดท้ายปิด 10 วินาที) จึงไม่มีอะไรเริ่ม Geno ไม่มี daemon ของระบบ
@@ -50,6 +54,8 @@ scenario:
                 beat:
                   title: Tasks บอกว่ารอบนี้พลาด
                   text: ส่วน Scheduled ในแผง Tasks แสดงรอบที่พลาด พร้อมวันและเวลา
+                  from: panel
+                  to: you
                   sees: "Missed Mon 12 Oct 09:00: Geno was not running"
                   end: รอบนี้พลาด
                 at: tasks
@@ -67,6 +73,8 @@ scenario:
                 beat:
                   title: รอบก่อนยังรันอยู่
                   text: รอบวันศุกร์ยังไม่จบ Geno ไม่ซ้อนรอบ มันจดว่ารอบนี้พลาดเพราะรอบก่อนยังรัน
+                  from: engine
+                  to: engine
                 at: schedules
                 do: >-
                   รอบก่อนหน้า (รอบวันศุกร์) ยังไม่จบ (`hasOpenRun`) รอบนี้ไม่ซ้อน `planDue` ตัดสินว่าพลาดเพราะรอบก่อนยังรัน
@@ -76,6 +84,8 @@ scenario:
                 beat:
                   title: Tasks บอกว่ารอบนี้พลาด
                   text: ส่วน Scheduled แสดงรอบที่พลาด พร้อมวันและเวลา
+                  from: panel
+                  to: you
                   sees: "Missed Mon 12 Oct 09:00: the last run still ran"
                   end: รอบนี้พลาด
                 at: tasks
@@ -90,6 +100,8 @@ scenario:
       beat:
         title: Geno เริ่มรอบ 09:00
         text: engine ของหน้าต่างที่ต่ออยู่เริ่มรอบ แล้วจดลงไฟล์งานว่ารอบนี้เริ่มแล้วแต่ยังไม่จบ
+        from: engine
+        to: engine
       lane: server
       at: schedules
       do: >-
@@ -101,6 +113,8 @@ scenario:
       beat:
         title: Geno เปิด session ใหม่ในโหมด Plan
         text: งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan งานที่แก้ไฟล์ได้จะได้ lane ใหม่และโหมด Auto ขีดจำกัดของ turn คืองบของงาน
+        from: engine
+        to: engine
       lane: server
       at: sessions
       do: >-
@@ -114,6 +128,8 @@ scenario:
       beat:
         title: รอบนี้ไม่มีใครตอบคำถาม
         text: รอบตามตารางไม่มี tool ถามคุณ ไม่ขยับ editor และตั้งงานใหม่ไม่ได้ ข้อความแรกบอก model ว่าไม่มีใครอ่านจนกว่ารอบจะจบ แผง Tasks ขึ้นงานใหม่ใน Working
+        from: panel
+        to: you
         sees: งาน "Check outdated deps" ใน Working และแถว Scheduled "Running since Mon 12 Oct 09:00"
       lane: loop
       at: agent
@@ -138,6 +154,7 @@ scenario:
       beat:
         title: Model ตรวจ dependency แล้วเขียนรายงาน
         text: model ใช้ tool อ่านที่โหมด Plan ยอม แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย turn จบแบบ done
+        from: model
         to: engine
       lane: model
       do: >-
@@ -159,6 +176,7 @@ scenario:
       beat:
         title: Geno จดผลของรอบ
         text: Geno อ่านผลจาก log ของ session แล้วจดผลและค่าใช้จ่ายลงไฟล์งาน ทุกหน้าต่างเห็น คลิกแถวเพื่อเปิด session ของรอบนั้นและอ่านรายงาน
+        from: engine
         to: panel
         sees: "Last run Mon 12 Oct 09:00: Done · $0.03"
         end: รอบจบ ผลอยู่ใน Tasks

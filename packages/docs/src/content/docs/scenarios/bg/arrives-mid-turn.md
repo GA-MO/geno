@@ -18,6 +18,7 @@ scenario:
       beat:
         title: explore ส่งรายงานแล้วจบ
         text: explore ที่ model เริ่มไว้เบื้องหลังค้นเสร็จ มันส่งรายการไฟล์ที่ใช้ API เก่า แถวของมันในแชตหยุดหมุนทันที
+        from: model
         to: engine
         sees:
           kind: task
@@ -52,6 +53,8 @@ scenario:
       beat:
         title: Geno เก็บรายงานไว้ในกล่องของแม่
         text: turn ของแม่ยังทำงานอยู่ Geno จึงไม่ต้องปลุกใคร มันจดว่า explore จบ แล้วใส่รายงานในรั้วลงกล่องข้อความของแม่
+        from: engine
+        to: engine
       lane: loop
       at: tools
       do: >-
@@ -64,6 +67,8 @@ scenario:
       beat:
         title: รายงานรอจน `pnpm build` จบ
         text: รายงานไม่แทรกกลางชุด tool ที่กำลังรัน มันรอในกล่องจนกว่า `pnpm build` จะจบ
+        from: engine
+        to: engine
       lane: loop
       at: tools
       do: >-
@@ -76,6 +81,7 @@ scenario:
         title: "`pnpm build` จบ"
         text: build ผ่าน ผลของมันขึ้นใต้ขั้นในแชต
         from: machine
+        to: engine
         sees:
           kind: step
           label: pnpm build
@@ -92,6 +98,8 @@ scenario:
       beat:
         title: Geno ใส่รายงานต่อท้ายผลของ build
         text: ที่จุดปลอดภัยก่อนเรียก model Geno หยิบรายงานจากกล่อง แล้วบันทึกต่อท้ายผลของ build ส่วนต้นของบทสนทนาที่ cache ไว้จึงไม่เปลี่ยน
+        from: engine
+        to: engine
       lane: loop
       at: step
       do: >-
@@ -113,6 +121,8 @@ scenario:
       beat:
         title: แชตขึ้นบรรทัดว่า explore รายงานแล้ว
         text: แชตวาดบรรทัดสั้นตรงที่รายงานลง ไม่แสดงเนื้อรายงาน คุณอ่านมันได้จากแถวของ explore
+        from: panel
+        to: you
         sees: บรรทัด "explore reported back"
       lane: server
       at: updates
@@ -134,6 +144,7 @@ scenario:
       beat:
         title: Geno ส่งทั้งสองอย่างให้ model
         text: รายงานขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของคุณ ตามด้วยรั้ว `<subagent_report>`
+        from: engine
         to: model
       lane: loop
       at: model-call
@@ -145,6 +156,8 @@ scenario:
       beat:
         title: Model อ่านผล build และรายงานพร้อมกัน
         text: model อ่านทั้งสองอย่างในคำขอเดียว แล้วทำงานต่อใน turn เดิม ไม่มีการปลุก
+        from: model
+        to: engine
         end: Turn ทำต่อ
       lane: model
       do: >-

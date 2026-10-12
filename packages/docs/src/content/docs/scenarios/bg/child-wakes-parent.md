@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
         text: "คุณขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า model ส่งงานให้ explore พร้อม `background: true` มันจะไม่รอรายงาน"
+        from: model
         to: engine
       lane: model
       do: >-
@@ -39,6 +40,8 @@ scenario:
       beat:
         title: Geno เปิด session ให้ explore
         text: แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน explore เริ่มค้นโค้ด
+        from: engine
+        to: model
         sees:
           kind: task
           title: explore
@@ -51,6 +54,7 @@ scenario:
       beat:
         title: Geno ไม่รอ explore
         text: Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันทีว่าเริ่ม explore แล้ว model บอกคุณว่า explore กำลังสำรวจ และจะเล่าเมื่อรายงานมาถึง
+        from: engine
         to: model
       lane: loop
       at: tools
@@ -84,6 +88,7 @@ scenario:
       beat:
         title: Turn จบ แต่ explore ทำงานต่อ
         text: Geno ปลุก session ได้ทีหลัง จึงไม่ถือ turn ไว้ แชตปิดทุกอย่างของ turn แถวของ explore จึงขึ้นว่า Cancelled ทั้งที่มันยังทำงาน
+        from: engine
         to: panel
         sees:
           kind: composer
@@ -110,6 +115,7 @@ scenario:
       beat:
         title: explore ส่งรายงาน แล้ว Geno บันทึกไว้
         text: explore ค้นเสร็จแล้วรายงาน แถวของมันเปลี่ยนจาก Cancelled เป็น Done ไม่มี turn รันอยู่ Geno จึงบันทึกรายงานลง log ทันที
+        from: model
         to: engine
         sees:
           kind: task
@@ -143,6 +149,8 @@ scenario:
       beat:
         title: Geno ดูว่าปลุกได้ไหม
         text: Geno รอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว และตรวจว่ามีการ์ดค้าง หรือคุณกำลังพิมพ์ไหม
+        from: engine
+        to: engine
         ask: คุณทำอะไรอยู่
       lane: server
       at: wakes
@@ -165,6 +173,8 @@ scenario:
                 beat:
                   title: Geno รอจนคุณลบร่าง
                   text: ช่องพิมพ์ที่มีร่างบอก engine ว่าคุณกำลังพิมพ์ Geno ไม่ปลุกทับ เมื่อคุณลบร่างจนว่าง Geno รออีก 2 วินาทีแล้วจึงปลุก
+                  from: engine
+                  to: engine
                 at: wakes
                 do: >-
                   ช่องพิมพ์ที่มีร่างข้อความบอก engine ผ่าน `_gcode/draft` ประตูตอบ `hold` (`typing`)
@@ -179,6 +189,7 @@ scenario:
                   title: คุณส่ง prompt ใหม่ก่อน
                   text: turn ของคุณเริ่มก่อน และพารายงานที่บันทึกไว้ไปด้วย เมื่อ Geno ดูอีกครั้ง ไม่มีอะไรใหม่ให้ปลุก
                   from: you
+                  to: panel
                   end: Turn ของคุณอ่านรายงาน
                 do: ผู้ใช้ส่งคำถามใหม่ก่อนประตูจะปลุก
               - lane: server
@@ -195,6 +206,7 @@ scenario:
       beat:
         title: Geno เปิด turn ใหม่เอง
         text: แชตเปิด turn ที่ไม่มีข้อความของคุณ หัวของมันมีกระดิ่งกับเหตุที่ปลุก ปุ่ม Stop ใช้ได้ตามปกติ
+        from: engine
         to: panel
         sees: 'กระดิ่งกับ "woke: 1 task finished" หัวข้อ "working" และปุ่ม Stop'
       lane: server
@@ -231,6 +243,7 @@ scenario:
       beat:
         title: Model เล่าผลของ explore
         text: model อ่านรายงาน และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
+        from: model
         to: panel
         end: Turn ที่ถูกปลุกจบ
       lane: model

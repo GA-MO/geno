@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ตั้งเวลาปลุกตัวเองใน 10 นาที
         text: model เพิ่ง deploy ไป staging ซึ่งใช้เวลาราว 10 นาทีกว่าจะพร้อม มันขอให้ Geno ปลุก พร้อมเหตุผล "check staging health after the deploy"
+        from: model
         to: engine
       lane: model
       do: >-
@@ -33,6 +34,8 @@ scenario:
       beat:
         title: Geno จดการปลุกลง log
         text: Geno บันทึก id `wake-1` เวลาที่ถึงกำหนด เหตุผล และ engine ที่ถือการปลุกนี้ log คือสิ่งที่ทำให้การปลุกรอด engine เริ่มใหม่
+        from: engine
+        to: engine
       lane: tool
       at: executor
       do: >-
@@ -45,6 +48,7 @@ scenario:
       beat:
         title: Geno ตั้งนาฬิกาแล้วบอก model ให้จบ turn
         text: ผลของ call บอกเวลาที่จะปลุก และบอกให้จบ turn ตอนนี้
+        from: engine
         to: model
       lane: server
       at: wakes
@@ -61,6 +65,7 @@ scenario:
       beat:
         title: Model บอกว่าจะกลับมาตรวจ แล้ว turn จบ
         text: ปุ่ม Send กลับมา คุณทำอย่างอื่นต่อได้
+        from: model
         to: panel
         sees:
           kind: composer
@@ -78,6 +83,8 @@ scenario:
       beat:
         title: Tasks บอกว่ารอการปลุก
         text: ระหว่างรอ แผง Tasks บอกเวลาที่จะปลุก นาฬิกาอยู่ในหน่วยความจำของ engine
+        from: panel
+        to: you
         sees: Wakes on a wake-up at <เวลา>
         ask: engine ยังอยู่ไหม
       lane: server
@@ -100,6 +107,8 @@ scenario:
                 beat:
                   title: engine ตัวใหม่รับการปลุกต่อ
                   text: engine ตัวเดิมจบไป เมื่อหน้าต่างต่อ engine ตัวใหม่ มันหาการปลุกที่ยังไม่ดังใน log แล้วตั้งนาฬิกาตามเวลาเดิม ถ้าเลยเวลาแล้วก็ดังทันที
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   engine ตัวเดิมจบไป (เช่นหลังปิดหน้าต่างทั้งหมด) เมื่อหน้าต่างต่อ engine ตัวใหม่ `takeUpWaits` เรียก `WakeDriver.takeUp`
@@ -117,6 +126,8 @@ scenario:
       beat:
         title: นาฬิกาดัง
         text: Geno ลบการรอ แล้วใส่โน้ตว่าการปลุกถึงกำหนด พร้อมเหตุผล ลงกล่องข้อความของ session
+        from: engine
+        to: engine
       lane: server
       at: wakes
       do: >-
@@ -129,6 +140,8 @@ scenario:
       beat:
         title: Geno เปิด turn ใหม่เอง
         text: แชตเปิด turn ที่หัวมีกระดิ่งแทนข้อความของคุณ
+        from: engine
+        to: panel
         sees: 'กระดิ่งกับ "woke: scheduled" หัวข้อ "working" และปุ่ม Stop'
     - use: model-call
 
@@ -136,6 +149,8 @@ scenario:
       beat:
         title: Model ไปตรวจ staging
         text: model อ่านเหตุผลที่ตัวเองเขียนไว้ และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเปิดหน้า health ของ staging
+        from: model
+        to: engine
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
