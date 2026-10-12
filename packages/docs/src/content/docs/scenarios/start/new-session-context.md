@@ -82,7 +82,8 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        engine ตอบ id ของ session โหมด และตัวเลือก effort `fresh()` สลับเป็นโหมดที่การตั้งค่าให้แชตใหม่ถ้าต่างกัน
+        engine ตอบ id ของ session โหมด และตัวเลือก effort `fresh()` สลับเป็นโหมดที่แผงเลือกไว้ก่อนมี session
+        (ค่าเริ่มต้นมาจากการตั้งค่า) ถ้าต่างกัน
         แล้ว `show` จำ id ไว้ บทสนทนาที่มี turn นี้อยู่แล้วยังคงแสดงต่อ
       ref: packages/extension/src/chat/chat.ts#Chat.show
 
@@ -106,8 +107,8 @@ scenario:
       lane: policy
       at: hooks
       do: >-
-        `runAgent` เปิด hooks ของ session นี้ครั้งแรกใน process นี้ SessionStart hooks ทำงานด้วย source `startup`
-        เพราะโมเดลยังไม่เคยตอบ ข้อความที่ hook พิมพ์ออกมาถูกบันทึกและไปต่อท้ายส่วนเปิดของข้อความแรก
+        `runAgent` เปิด hooks ของ session นี้ครั้งแรกใน process นี้ ถ้าตั้ง SessionStart hook ไว้ มันทำงานด้วย source `startup`
+        เพราะโมเดลยังไม่เคยตอบ ข้อความที่ hook พิมพ์ออกมาถูกบันทึกและไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ไม่มีอะไรเกิดขึ้นตรงนี้
       ref: packages/engine/src/hooks.ts#HookSessions.open
       emits: [SessionStart]
 

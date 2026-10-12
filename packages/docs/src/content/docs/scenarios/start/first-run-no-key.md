@@ -53,7 +53,7 @@ scenario:
         engine ไม่ถูกเปิด และไม่มี session ใดถูกสร้าง
       sees: >-
         toast สีเหลืองมุมขวาล่าง: "Geno has no Model Studio API key. Run Geno: Set API Key." พร้อมปุ่ม [Set API Key]
-      ref: packages/extension/src/runtime.ts#setupProblem
+      ref: "packages/extension/src/extension.ts#\"void vscode.window.showWarningMessage(problem.message, problem.fix.label).then((choice) => {\""
 
     - id: failed
       lane: editor

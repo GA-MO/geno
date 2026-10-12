@@ -32,8 +32,8 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `Mentions.completions` จัดอันดับไฟล์ใน workspace ตามคำค้น และเพิ่ม `@selection` ถ้า editor ที่ใช้งานอยู่มีการเลือกในไฟล์
-        แล้วส่ง `completions` กลับ
+        `Mentions.completions` จัดอันดับไฟล์ใน workspace ตามคำค้น และเพิ่ม `@selection` ไว้บนสุดเมื่อ editor ที่ใช้งานอยู่มีการเลือกในไฟล์
+        และคำค้นเป็นต้นคำของ `selection` (คำค้น `date.t` จึงไม่มี) แล้วส่ง `completions` กลับ
       ref: packages/extension/src/chat/context.ts#Mentions.completions
       emits: [completions]
 
@@ -42,9 +42,10 @@ scenario:
       at: composer
       do: >-
         แผงแสดงรายการให้เลือก ผู้ใช้เลือก `src/date.test.ts` แล้ววางภาพด้วย Cmd-V ตัวจัดการ `paste` รับไฟล์จาก clipboard เป็นไฟล์แนบ
-        ไฟล์ที่ใหญ่เกินหรือเป็นโฟลเดอร์ถูกปฏิเสธพร้อมเหตุผลตั้งแต่ตรงนี้
+        ไฟล์ที่ใหญ่เกินหรืออ่านไม่ได้ถูกปฏิเสธพร้อมเหตุผลตั้งแต่ตรงนี้ (โฟลเดอร์ถูกปฏิเสธเมื่อลากหรือเลือกผ่าน "Attach file…")
       sees: >-
-        ในช่องพิมพ์มีชิป `@src/date.test.ts` และชิปรูปภาพที่วางเหนือช่องพิมพ์ ท้ายรายการมีแถว "Attach file…"
+        ในช่องพิมพ์มีข้อความ `@src/date.test.ts` และชิปรูปภาพที่วางอยู่เหนือช่องพิมพ์
+        (แถว "Attach file…" ขึ้นบนสุดของรายการเฉพาะตอนพิมพ์ `@` เปล่า)
       ref: "packages/extension/src/chat/composer-attachments.ts#\"target.addEventListener('paste', (event) => {\""
 
     - id: send
@@ -63,8 +64,9 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `Chat.send` แปลง mention เป็นบล็อก ACP: `@path` ที่เป็นไฟล์จริงเป็น `resource_link` (`@selection` เป็น `resource` ที่มีข้อความของบรรทัดที่เลือก)
-        และไฟล์แนบเป็นบล็อก `image` ที่มี `ATTACHMENT_META` จากนั้น `prompt()` ส่ง `turn-start` และคำขอ ACP `session/prompt`
+        `Chat.send` เรียก `prompt()` ซึ่งส่ง `turn-start` ก่อน แล้วจึงแปลง mention เป็นบล็อก ACP ตอนสร้างคำขอ `session/prompt`:
+        `@path` ที่เป็นไฟล์จริงเป็น `resource_link` (`@selection` เป็น `resource` ที่มีข้อความของบรรทัดที่เลือก)
+        และไฟล์แนบเป็นบล็อก `image` ที่มี `ATTACHMENT_META`
       ref: "packages/extension/src/chat/chat.ts#\"const blocks = async () => [...(await this.mentions.blocks(text)), ...promptBlocks(attachments)];\""
       emits: [ATTACHMENT_META, turn-start]
 
@@ -94,7 +96,7 @@ scenario:
                 at: turns
                 do: >-
                   `logPrompt` บันทึก event `user` ที่มีข้อความ `context` (เนื้อไฟล์ที่ mention และกฎของโปรเจกต์ที่ตรงกับไฟล์นั้น)
-                  และ `attachments` แล้วเรียก `runAgent` โดยไม่ส่ง prompt ซ้ำ
+                  และ `attachments` แล้ว `runTurn` เรียก `runAgent` ด้วย prompt ว่าง จึงไม่บันทึกซ้ำ
                 ref: packages/engine/src/serve.ts#logPrompt
                 emits: [user]
               - lane: loop
@@ -141,7 +143,8 @@ mention กับไฟล์แนบต่างกันที่ใครอ
 
 - **บริบทถูกแช่ไว้ใน log** เนื้อไฟล์ที่ mention ถูกบันทึกใน event `user` ตอนส่ง ไฟล์ที่เปลี่ยนทีหลังไม่ทำให้ prompt เดิมเปลี่ยน
   คำขอทุกครั้งต่อจากนี้จึงส่งไบต์เดิมและ prompt cache ไม่หลุด
-- **ข้อความที่มีไฟล์แนบส่งเป็น steer ไม่ได้** ระหว่าง turn ทำงาน ข้อความที่มีไฟล์แนบหรือ mention ต้องรอในคิวจนกว่า turn จะจบ
+- **ร่างที่มีไฟล์แนบส่งเป็น steer ไม่ได้** ระหว่าง turn ทำงาน ปุ่ม Send now ไม่ยอมส่งร่างที่มีไฟล์แนบหรือ mention
+  ร่างนั้นต้องเข้าคิวรอจนกว่า turn จะจบ
 - **ข้อความ error มีคำนำของ JSON-RPC** engine ปฏิเสธด้วย `invalidParams` ซึ่ง ACP SDK เติม "Invalid params:" หน้าข้อความ
   แผงแสดงข้อความนั้นตรงๆ ผู้ใช้จึงเห็นคำนำนี้ก่อนเหตุผลจริง
 - **mention ที่ไม่ใช่ไฟล์ยังเป็นข้อความ** คำที่ขึ้นต้นด้วย `@` แต่ไม่ตรงกับไฟล์ใน workspace ถูกส่งเป็นข้อความธรรมดา
