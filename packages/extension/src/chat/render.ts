@@ -488,7 +488,7 @@ const CHOICE_STYLES: Readonly<Record<string, string>> = {
   [WORKSPACE_OPTION]: 'button secondary',
   [COMMENT_OPTION]: 'button ghost',
   allow_once: 'button',
-  allow_always: 'button ghost',
+  allow_always: 'button secondary',
   reject_once: 'button secondary',
   reject_always: 'button ghost',
 };
@@ -588,13 +588,19 @@ const commandBody =
   (because: (reason: string) => string) =>
   (block: PermissionBlock): Child[] => [
     block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
-    h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
-    h('p', { class: 'permission-reason' }, because(block.reason)),
-    block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
-    block.rule !== undefined &&
-      block.outcome.kind === 'open' &&
-      h('p', { class: 'permission-reason permission-rule' }, 'Always allow saves the rule ', h('code', {}, block.rule), ' for this workspace. Settings lists its rules.'),
+    h('pre', { class: 'permission-command' }, h('code', {}, block.line ?? block.command)),
+    block.line !== undefined && h('p', { class: 'permission-part' }, 'Needs approval: ', h('code', {}, block.command)),
+    ...whyLines(block, because),
   ];
+
+/** Why the card asks, what Auto made of it, and the rule Always allow would save. */
+const whyLines = (block: PermissionBlock, because: (reason: string) => string): Child[] => [
+  h('p', { class: 'permission-reason' }, because(block.reason)),
+  block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
+  block.rule !== undefined &&
+    block.outcome.kind === 'open' &&
+    h('p', { class: 'permission-reason permission-rule' }, 'Always allow saves the rule ', h('code', {}, block.rule), ' for this workspace. Settings lists its rules.'),
+];
 
 const COMMAND_FACE: CardFace = {
   label: 'Geno asks to run a command',
@@ -633,11 +639,24 @@ const reachFace = (label: string, glyph: string): CardFace => ({
   body: commandBody((reason) => `Geno asks about ${reason}.`),
 });
 
+/** An MCP call shows the arguments the server would get, not the model-facing name, which the title already says. */
+const mcpFace: CardFace = {
+  ...reachFace('Geno asks to use an MCP tool', 'plug'),
+  body: (block) => {
+    const shown = block.subject?.kind === 'mcp' ? block.subject.arguments : '';
+    return [
+      block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
+      shown === '' ? h('p', { class: 'permission-part' }, 'No arguments') : h('pre', { class: 'permission-arguments', 'aria-label': 'Arguments' }, h('code', {}, shown)),
+      ...whyLines(block, (reason) => `Geno asks about ${reason}.`),
+    ];
+  },
+};
+
 const SUBJECT_FACES: Readonly<Record<ApprovalSubject['kind'], CardFace>> = {
   read: reachFace('Geno asks to read outside the workspace', 'folder-opened'),
   fetch: reachFace('Geno asks to fetch a page', 'globe'),
   browse: reachFace('Geno asks to open a page', 'globe'),
-  mcp: reachFace('Geno asks to use an MCP tool', 'plug'),
+  mcp: mcpFace,
 };
 
 const FACES: Readonly<Record<PermissionAsk['kind'] | 'command' | 'edit', CardFace>> = {
@@ -803,9 +822,6 @@ const ENDINGS: Readonly<Record<Exclude<TurnStatus, 'streaming' | 'done'>, { read
   failed: { icon: 'error', label: 'Failed' },
 };
 
-/** The follow-up Continue sends to a turn that stopped without a reply. */
-export const CONTINUE_PROMPT = 'Continue where you stopped, and finish with your answer.';
-
 /**
  * Under a finished turn with no answer to show: that Geno stopped without one, and why. The latest turn offers
  * Continue, which asks Geno to go on, and Retry, which sends its prompt again.
@@ -820,7 +836,7 @@ export function noReplyNotice(reason: string, prompt: string | undefined, ui: Ui
       h(
         'div',
         { class: 'no-reply-actions' },
-        h('button', { type: 'button', class: 'button secondary small', 'data-focus': 'no-reply-continue', title: CONTINUE_PROMPT, onclick: () => ui.post({ type: 'send', text: CONTINUE_PROMPT }) }, 'Continue'),
+        h('button', { type: 'button', class: 'button secondary small', 'data-focus': 'no-reply-continue', title: 'Ask Geno to go on and finish its answer', onclick: () => ui.post({ type: 'continue' }) }, 'Continue'),
         h('button', { type: 'button', class: 'button ghost small', 'data-focus': 'no-reply-retry', title: 'Send the same message again', onclick: () => ui.post({ type: 'send', text: prompt }) }, 'Retry'),
       ),
   );

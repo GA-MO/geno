@@ -50,6 +50,8 @@ export type ApprovalRecord = {
   readonly reason: string;
   /** The flagged part of the line, or the whole line when several parts were flagged. */
   readonly command: string;
+  /** The whole line, which the answer ran or refused, when `command` is only part of it. */
+  readonly line?: string | undefined;
   readonly classifier?: ClassifierRun | undefined;
   /** `hook` is a PermissionRequest hook that answered the card in the user's place. */
   readonly decidedBy: 'rule' | 'classifier' | 'user' | 'hook';
@@ -63,7 +65,7 @@ export type ApprovalRecord = {
 
 /** The question the user answers before a flagged command runs, with the classifier's reason when it asked. */
 export const approvalQuestion = (denial: Denial, classifier: ClassifierVerdict | undefined): string =>
-  `Allow \`${denial.command}\`? ${denial.rule === 'hook-ask' ? denial.reason : `It uses ${denial.reason}.`}${classifier === undefined ? '' : ` The classifier says: ${classifier.reason.replace(/\.$/, '')}.`}`;
+  `Allow \`${denial.command}\`${denial.line === undefined ? '' : ` in \`${denial.line}\``}? ${denial.rule === 'hook-ask' ? denial.reason : `It uses ${denial.reason}.`}${classifier === undefined ? '' : ` The classifier says: ${classifier.reason.replace(/\.$/, '')}.`}`;
 
 export const CLASSIFIER_TOOL: Tool = {
   name: 'verdict',

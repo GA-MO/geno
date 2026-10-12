@@ -1354,7 +1354,8 @@ button.file-chip:hover {
   color: var(--warn);
 }
 
-.permission-command {
+.permission-command,
+.permission-arguments {
   margin: 8px 0 6px;
   padding: 7px 10px;
   border-radius: 7px;
@@ -1370,7 +1371,13 @@ button.file-chip:hover {
   color: var(--muted);
 }
 
-.permission-reason {
+.permission-arguments {
+  max-height: 240px;
+  overflow: auto;
+}
+
+.permission-reason,
+.permission-part {
   margin: 0 0 10px;
   color: var(--muted);
   font-size: var(--small);
@@ -1378,6 +1385,11 @@ button.file-chip:hover {
 
 .permission-rule {
   margin-top: -6px;
+  overflow-wrap: anywhere;
+}
+
+.permission-part {
+  margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
 

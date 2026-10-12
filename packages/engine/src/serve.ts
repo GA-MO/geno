@@ -72,6 +72,11 @@ import {
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   INLINE_EDIT_META,
+  isPromptAction,
+  PROMPT_ACTION_IDS,
+  PROMPT_ACTION_META,
+  PROMPT_ACTIONS,
+  type PromptAction,
   RESUME_AGENT_META,
   nextSeq,
   REVIEW_METHOD,
@@ -102,7 +107,7 @@ import {
   type SearchSessionsResponse,
   SESSION_SUMMARY_META,
   summarizeSession,
-  titleFrom,
+  promptTitle,
   titleOf,
   type SessionScope,
   type SessionSummary,
@@ -788,6 +793,7 @@ function editorTurn(
       const description = asker === undefined ? runningDescription : undefined;
       const rawInput: PermissionInput = {
         command: denial.command,
+        ...(denial.line === undefined ? {} : { line: denial.line }),
         reason: denial.reason,
         ...(description === undefined ? {} : { description }),
         ...(denial.offer === undefined ? (denial.keeps === undefined ? {} : { rule: denial.keeps }) : { rule: patternText(denial.offer) }),
@@ -1031,6 +1037,7 @@ async function logPrompt(
   files: Files,
   sessionId: string,
   expanded: Expanded | undefined,
+  action: PromptAction | undefined,
 ): Promise<OpenSession> {
   const { log } = opened;
   let context: ContextItem[];
@@ -1050,6 +1057,7 @@ async function logPrompt(
     context: [...(expanded?.context ?? []), ...context],
     ...(attachments.length === 0 ? {} : { attachments }),
     ...(expanded === undefined ? {} : { command: expanded.command }),
+    ...(action === undefined ? {} : { action }),
   };
   await appendEvent(log.file, event);
   return { ...opened, log: { ...log, events: [...log.events, event] } };
@@ -1543,7 +1551,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
     const resumeAgent = meta?.[RESUME_AGENT_META];
     if (resumeAgent !== undefined && (typeof resumeAgent !== 'string' || resumeAgent === '')) throw acp.RequestError.invalidParams({ sessionId }, `${RESUME_AGENT_META} must be a subagent's session id`);
-    const slash = target === undefined && rawLane === undefined && resumeAgent === undefined ? await commands.expand(sessionId, text) : undefined;
+    const action = meta?.[PROMPT_ACTION_META];
+    if (action !== undefined && !isPromptAction(action)) throw acp.RequestError.invalidParams({ sessionId }, `${PROMPT_ACTION_META} must be ${PROMPT_ACTION_IDS.join(' or ')}`);
+    const slash = target === undefined && rawLane === undefined && resumeAgent === undefined && action === undefined ? await commands.expand(sessionId, text) : undefined;
     if (slash?.kind === 'builtin') {
       let spent: Spent | undefined;
       const reply = await runBuiltin(slash, {
@@ -1560,6 +1570,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { end: 'end_turn', response: turnResponse('end_turn', usageOf(spent, undefined)) };
     }
     if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
+    const firstTitle = promptTitle({ content: text, command: slash?.command });
 
     const controller = new AbortController();
     turns.set(sessionId, controller);
@@ -1582,7 +1593,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => startsTurn(e) && isUsersOwn(e))?.content ?? '') : text)),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : resume ? promptTitle(header.events.findLast((e) => startsTurn(e) && isUsersOwn(e)) ?? { content: '' }) : firstTitle),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
@@ -1599,7 +1610,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           await dropTornTail(log);
           session = log.session;
           shown.live.events.push(...log.events);
-          if (titleOf(log.events) === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+          if (titleOf(log.events) === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: firstTitle });
           if (rawLane !== undefined) {
             const repo = await laneRepoOf(log.session.workspace).catch(refused({ sessionId }));
             await applyLaneTurn(store, { log }, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
@@ -1642,7 +1653,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (start === 'wake' && wake?.kind === 'user') {
           shown.updates.send({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: wake.content }, _meta: wakeMetaOf(wake) });
         }
-        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: firstTitle });
         if (rawLane !== undefined) {
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
           await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
@@ -1650,8 +1661,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           return { reason: 'end_turn' };
         }
         const opened =
-          target === undefined && (hasAttached(attached) || slash !== undefined)
-            ? await logPrompt(store, base, slash?.content ?? text, attached, shown.surface.files, sessionId, slash)
+          target === undefined && (hasAttached(attached) || slash !== undefined || action !== undefined)
+            ? await logPrompt(store, base, slash?.content ?? (action === undefined ? text : PROMPT_ACTIONS[action]), attached, shown.surface.files, sessionId, slash, action)
             : base;
         const prompt = opened === base ? text : '';
         const approval: Approval = {

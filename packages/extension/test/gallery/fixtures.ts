@@ -866,6 +866,23 @@ export const FIXTURES: readonly Fixture[] = [
       asking(host, { command: 'pnpm publish --tag next', reason: 'a package publish', description: 'Publish the package under the next tag', rule: 'Bash(pnpm publish:*)', options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT] }),
   },
   {
+    id: 'approve-compound',
+    group: 'Approval cards',
+    title: 'One part of a compound line',
+    play: async ({ host }) =>
+      asking(
+        host,
+        {
+          command: 'node --check $f',
+          line: 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12',
+          reason: 'a command not on the safe list',
+          rule: 'node --check',
+          options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT],
+        },
+        { narration: 'Checking the syntax, then running the tests.', name: 'bash', input: { command: 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12' } },
+      ),
+  },
+  {
     id: 'approve-classifier',
     group: 'Approval cards',
     title: 'Auto could not decide',
@@ -932,13 +949,31 @@ export const FIXTURES: readonly Fixture[] = [
         host,
         {
           command: 'mcp__github__create_issue',
-          reason: 'an MCP tool',
+          reason: 'a tool of an MCP server, which runs outside the sandbox',
           rule: 'mcp__github__create_issue',
           options: [PERMISSION_OPTIONS[0], { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' }, PERMISSION_OPTIONS[1], WORKSPACE_RULE, COMMENT],
           toolKind: 'other',
-          subject: { kind: 'mcp', server: 'github', tool: 'create_issue' },
+          subject: { kind: 'mcp', server: 'github', tool: 'create_issue', arguments: '{\n  "title": "Login fails with a trailing space",\n  "labels": [\n    "bug"\n  ]\n}' },
         },
-        { narration: 'Filing the issue.', name: 'mcp__github__create_issue', input: { title: 'Login fails with a trailing space' } },
+        { narration: 'Filing the issue.', name: 'mcp__github__create_issue', input: { title: 'Login fails with a trailing space', labels: ['bug'] } },
+      ),
+  },
+  {
+    id: 'approve-mcp-read-only',
+    group: 'Approval cards',
+    title: 'An MCP tool its server calls read-only',
+    play: async ({ host }) =>
+      asking(
+        host,
+        {
+          command: 'mcp__thai_baht__baht_text',
+          reason: 'a tool its MCP server calls read-only, which Geno cannot check',
+          rule: 'mcp__thai_baht__baht_text',
+          options: [PERMISSION_OPTIONS[0], { optionId: 'allow-session', name: 'Allow this tool for the session', kind: 'allow_always' }, PERMISSION_OPTIONS[1], WORKSPACE_RULE, COMMENT],
+          toolKind: 'other',
+          subject: { kind: 'mcp', server: 'thai-baht', tool: 'baht_text', arguments: '{\n  "amountSatang": 125050\n}' },
+        },
+        { narration: 'Spelling out the amount.', name: 'mcp__thai_baht__baht_text', input: { amountSatang: 125050 } },
       ),
   },
   {

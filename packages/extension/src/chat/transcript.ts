@@ -177,12 +177,12 @@ const REDUCERS: { readonly [K in Action['type']]: (transcript: Transcript, actio
     );
     return changed ? { ...transcript, turns } : transcript;
   },
-  permission: (transcript, { id, command, reason, description, options, classifier, ask, toolId, toolKind, rule, subject }) =>
+  permission: (transcript, { id, command, line, reason, description, options, classifier, ask, toolId, toolKind, rule, subject }) =>
     onLast(transcript, (turn) => ({
       ...turn,
       blocks: [
         ...turn.blocks,
-        { kind: 'permission', id, command, reason, ...(description === undefined ? {} : { description }), options, classifier, ...(ask === undefined ? {} : { ask }), ...(toolId === undefined ? {} : { toolId }), ...(toolKind === undefined ? {} : { toolKind }), ...(rule === undefined ? {} : { rule }), ...(subject === undefined ? {} : { subject }), outcome: { kind: 'open' } },
+        { kind: 'permission', id, command, ...(line === undefined ? {} : { line }), reason, ...(description === undefined ? {} : { description }), options, classifier, ...(ask === undefined ? {} : { ask }), ...(toolId === undefined ? {} : { toolId }), ...(toolKind === undefined ? {} : { toolKind }), ...(rule === undefined ? {} : { rule }), ...(subject === undefined ? {} : { subject }), outcome: { kind: 'open' } },
       ],
     })),
   'permission-done': (transcript, { id, optionId, answer, comment }) =>

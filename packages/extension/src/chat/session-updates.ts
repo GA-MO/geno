@@ -44,9 +44,9 @@ const approvalSubject = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('read'), path: z.string() }),
   z.object({ kind: z.literal('fetch'), url: z.string(), host: z.string() }),
   z.object({ kind: z.literal('browse'), url: z.string(), host: z.string() }),
-  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string() }),
+  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string(), arguments: z.string().catch('') }),
 ]);
-export const permissionInput = z.object({ command: z.string(), reason: z.string(), description: z.string().optional(), rule: z.string().optional(), subject: approvalSubject.optional().catch(undefined) });
+export const permissionInput = z.object({ command: z.string(), line: z.string().optional(), reason: z.string(), description: z.string().optional(), rule: z.string().optional(), subject: approvalSubject.optional().catch(undefined) });
 
 const bashInput = z.object({ description: z.string() });
 
@@ -292,13 +292,14 @@ export function updateActions(update: acp.SessionUpdate, relative: (file: string
 /** The card a permission request shows, as card `id`. */
 export function permissionAction({ toolCall, options }: Pick<acp.RequestPermissionRequest, 'toolCall' | 'options'>, id: string): Extract<Action, { type: 'permission' }> {
   const input = permissionInput.safeParse(toolCall.rawInput);
-  const { command, reason, description, rule, subject } = input.success ? input.data : { command: toolCall.title ?? 'a command', reason: '', description: undefined, rule: undefined, subject: undefined };
+  const { command, line, reason, description, rule, subject } = input.success ? input.data : { command: toolCall.title ?? 'a command', line: undefined, reason: '', description: undefined, rule: undefined, subject: undefined };
   const memory = rememberInput.safeParse(toolCall._meta?.[REMEMBER_META]);
   const workflow = workflowPreviewWire.safeParse(toolCall._meta?.[WORKFLOW_META]);
   return {
     type: 'permission',
     id,
     command: memory.success ? memory.data.text : command,
+    ...(line === undefined ? {} : { line }),
     reason,
     ...(description === undefined ? {} : { description }),
     options: options.map(({ optionId, name, kind }) => ({ optionId, name, kind })),

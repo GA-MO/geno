@@ -187,6 +187,18 @@ importers:
         specifier: 1.61.1
         version: 1.61.1
 
+  packages/web:
+    devDependencies:
+      '@types/vscode':
+        specifier: ~1.95.0
+        version: 1.95.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      playwright-core:
+        specifier: 1.61.1
+        version: 1.61.1
+
 packages:
 
   '@agentclientprotocol/sdk@1.7.0':

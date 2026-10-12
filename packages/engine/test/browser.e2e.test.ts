@@ -300,7 +300,7 @@ describe('the built-in browser', () => {
     expect(opened).toContain(`[Geno] Page 2 is now at http://${OFF_HOST}:`);
     expect(opened).toContain(`on ${OFF_HOST}:`);
     expect(permissions).toHaveLength(1);
-    expect(permissions[0]!.toolCall.rawInput).toMatchObject({ reason: 'acting on a page from another host the user did not approve' });
+    expect(permissions[0]!.toolCall.rawInput).toMatchObject({ reason: expect.stringMatching(new RegExp(`^acting on http://${OFF_HOST.replaceAll('.', '\\.')}:\\d+/\\S*, a page from another host the user did not approve$`)) });
     expect(transport.requests, 'the rejection ends the turn').toHaveLength(2);
   }, 120_000);
 

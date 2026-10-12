@@ -35,6 +35,7 @@ import { AttachmentError, describeImage, storeImage } from '../attachments.js';
 import type { Env } from '../child-env.js';
 import { EngineError } from '../errors.js';
 import type { Store } from '../store.js';
+import { laneAt } from '../lanes.js';
 import { modeOf, refusalOf, settle, type Approval } from '../tools/agent.js';
 import { executor, ToolError, type Executor, type ToolContext } from '../tools/context.js';
 import { browserExecutor, browserServerConfig, keepMcpAnswer, newBrowserState, type BrowserOptions } from './browser.js';
@@ -144,9 +145,11 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
     return false;
   });
   const trust = await readTrust(store);
+  // A lane's servers take what the user approved in its main checkout.
+  const mainCheckout = (await laneAt(workspace, undefined))?.bounds.main ?? [];
   const disabled = await readDisabled(store, workspace);
   const handles = new Map(
-    servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust), disabled.has(config.name), env, workspace, tokenSourceOf(config, tokens))]),
+    servers.map((config) => [config.name, new McpServerHandle(config, isTrusted(config, workspace, trust, mainCheckout), disabled.has(config.name), env, workspace, tokenSourceOf(config, tokens))]),
   );
   // Its on and off live in the editor's settings, not the disabled file.
   if (browser !== undefined) {
@@ -184,7 +187,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
     const waiting = [...handles.values()].filter((handle) => handle.state.status === 'untrusted');
     if (waiting.length === 0) return;
     const entries = await readTrust(store);
-    for (const handle of waiting) if (isTrusted(handle.config, workspace, entries)) handle.trust();
+    for (const handle of waiting) if (isTrusted(handle.config, workspace, entries, mainCheckout)) handle.trust();
   };
 
   const toolExecutor = (name: string, info: McpToolInfo, approval: Approval): Executor => {
@@ -199,7 +202,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
         const mode = modeOf(approval);
-        const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly };
+        const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly, args };
         const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);
         const record =
           denial === undefined

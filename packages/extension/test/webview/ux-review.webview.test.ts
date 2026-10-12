@@ -96,9 +96,9 @@ describe.each(WIDTHS)('at %ipx', (width) => {
   it('a turn that ends with no reply says so, and Continue and Retry send a follow-up and the prompt again', () =>
     at('no-reply', width, async (panel) => {
       expect(await texts(panel, '.no-reply-title, .no-reply-reason')).toEqual(['Geno stopped without a reply', 'Its last reply had no text.']);
-      const continued = panel.host.next('send');
+      const continued = panel.host.next('continue');
       await panel.click('.no-reply-actions button', 'Continue');
-      expect((await continued).text).toBe('Continue where you stopped, and finish with your answer.');
+      expect(await continued).toEqual({ type: 'continue' });
       const retried = panel.host.next('send');
       await panel.click('.no-reply-actions button', 'Retry');
       expect((await retried).text).toBe('สร้างเกม pacman ในไฟล์ game.html');

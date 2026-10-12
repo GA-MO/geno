@@ -59,6 +59,7 @@ function approvalRequest(run: ArchivedRun, conversation: Conversation, toolUseId
   }
   const rawInput = {
     command: denial.command,
+    ...(denial.line === undefined ? {} : { line: denial.line }),
     reason: denial.reason,
     ...(typeof call.input.description === 'string' ? { description: call.input.description } : {}),
     ...(denial.offer === undefined ? (denial.keeps === undefined ? {} : { rule: denial.keeps }) : { rule: patternText(denial.offer) }),

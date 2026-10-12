@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { h, icon, type Child } from './dom.js';
-import { CLOSED, insertCommand, movePicker, pickerAt, type CommandOption, type CommandRoute, type Picker, type SentCommand } from './slash.js';
+import { CLOSED, insertCommand, movePicker, pickerAt, sendsWhenPicked, type CommandOption, type CommandRoute, type Picker, type SentCommand } from './slash.js';
 
 const ICONS: Readonly<Record<CommandRoute, string>> = { editor: 'window', engine: 'gear', prompt: 'note', skill: 'library' };
 
@@ -22,7 +22,7 @@ type Hooks = {
 
 /**
  * The `/` picker over the composer, beside the `@` list and with its keys: arrows move, Tab or a click puts the
- * command in the draft, and Escape closes. Enter does what Tab does, and sends a command that takes no arguments
+ * command in the draft, and Escape closes. Enter does what Tab does, and sends a built-in that takes no arguments
  * at once, so `/new` and Enter start a new chat.
  */
 export function slashPicker(input: HTMLTextAreaElement, { edited, wanted, submit }: Hooks) {
@@ -91,7 +91,8 @@ export function slashPicker(input: HTMLTextAreaElement, { edited, wanted, submit
     ArrowDown: () => show(movePicker(picker, 1)),
     ArrowUp: () => show(movePicker(picker, -1)),
     Enter: () => {
-      if (picker.kind === 'open' && accept(picker.active)?.hint === undefined) submit();
+      const command = picker.kind === 'open' ? accept(picker.active) : undefined;
+      if (command !== undefined && sendsWhenPicked(command)) submit();
     },
     Tab: () => picker.kind === 'open' && accept(picker.active),
     Escape: close,

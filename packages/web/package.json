@@ -1,0 +1,15 @@
+{
+  "name": "@g-code/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build": "tsx build.mts"
+  },
+  "devDependencies": {
+    "@types/vscode": "~1.95.0",
+    "esbuild": "^0.28.2",
+    "playwright-core": "1.61.1"
+  }
+}

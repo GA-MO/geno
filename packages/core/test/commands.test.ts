@@ -62,7 +62,7 @@ describe('invocations', () => {
     expect(expandInvocation(catalog, '/review src/app.ts "error paths"')).toEqual({
       kind: 'message',
       content: 'Review src/app.ts carefully. Focus: error paths.',
-      command: { name: 'review', args: 'src/app.ts "error paths"' },
+      command: { name: 'review', args: 'src/app.ts "error paths"', description: 'Review a file' },
       context: [],
     });
     expect(expandInvocation(catalog, '/review src/app.ts')).toMatchObject({ content: 'Review src/app.ts carefully. Focus: everything.' });
@@ -80,7 +80,7 @@ describe('invocations', () => {
     expect(expanded).toEqual({
       kind: 'message',
       content: '/add-i18n th',
-      command: { name: 'add-i18n', args: 'th' },
+      command: { name: 'add-i18n', args: 'th', description: 'Add a locale' },
       context: [{ kind: 'skill', name: 'add-i18n', path: '.claude/skills/add-i18n/SKILL.md', text: i18n.kind === 'skill' ? i18n.text : '' }],
     });
     expect(renderContextItems(expanded?.kind === 'message' ? expanded.context : [])).toContain(

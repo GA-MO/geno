@@ -144,6 +144,8 @@ An MCP rule matches a call by its server's and tool's names, spelled as Geno spe
 
 The card for a remote web_fetch host and an MCP card offer "Always allow in this workspace". It saves `WebFetch(domain:<host>)` or `mcp__<server>__<tool>`, and the card names the rule it saves.
 
+An MCP card shows the arguments the call sends as indented JSON, cut at a line past 1,500 characters with a count of what it left out (`shownArguments`), and "No arguments" for none. Ask asks before a tool its server marks read-only too, as Claude Code's default mode asks before any MCP tool: the hint is the server's word, which Geno cannot check. Auto and Plan run such a tool unasked.
+
 The trusted domains are the hosts of the allow domain rules the session honours. In Auto, every classifier input carries them in a `<trusted_domains>` block, which says that every other host is untrusted and that a call carrying project or conversation data there is a deny. A workspace without allow domain rules sends the classifier request it always did.
 
 The sandbox stays off the network unless the user sets `gcode.sandbox.allowedDomains`, which the extension passes as `GCODE_SANDBOX_ALLOWED_DOMAINS`. Only the user's own value counts, not a workspace's. sandbox-runtime keeps one allowlist per process, so the list applies to every workspace, and a change restarts the engine.

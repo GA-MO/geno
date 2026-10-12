@@ -1,3 +1,4 @@
+import type { Invocation } from './commands.js';
 import type { ForkOrigin } from './rewind.js';
 import { classifierCostOf, spendOf, type Session, type SessionId, type TurnEvent } from './session.js';
 
@@ -31,13 +32,19 @@ export function titleFrom(text: string): string {
   return line.length <= TITLE_LENGTH ? line : `${line.slice(0, TITLE_LENGTH - 1).trimEnd()}…`;
 }
 
+/** A prompt as a title. A command's name says little of the task, so the text after it stands in, else what the command does. */
+export function promptTitle({ content, command }: { readonly content: string; readonly command?: Invocation | undefined }): string {
+  if (command === undefined) return titleFrom(content);
+  return titleFrom(command.args) || titleFrom(command.description ?? '') || titleFrom(content);
+}
+
 /** The name the user gave the session last, else its first prompt; undefined before the first prompt. */
 export function titleOf(events: readonly TurnEvent[]): string | undefined {
   let named: string | undefined;
   let first: string | undefined;
   for (const event of events) {
     if (event.kind === 'title') named = event.title;
-    if (event.kind === 'user' && first === undefined && event.content.trim() !== '') first = titleFrom(event.content);
+    if (event.kind === 'user' && first === undefined && event.content.trim() !== '') first = promptTitle(event);
   }
   return named ?? first;
 }
