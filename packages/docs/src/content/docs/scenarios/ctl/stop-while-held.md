@@ -1,5 +1,5 @@
 ---
-title: กด Ctrl-C ขณะรอรายงานของเอเจนต์ลูกเบื้องหลัง
+title: "กด Ctrl-C ใน CLI ขณะรอรายงานของ subagent"
 description: ใน CLI โมเดลจบ turn แล้วแต่ turn ยังเปิดรอรายงานของลูกที่รันเบื้องหลัง ผู้ใช้กด Ctrl-C การรอจบ ลูกถูกหยุด รายงานไม่ถูกรับ และ process ออกด้วย 130
 tableOfContents: false
 sidebar:
@@ -18,6 +18,11 @@ scenario:
     - id: done
       lane: loop
       at: step
+      beat:
+        title: "Model จบแล้ว แต่ Geno ยังรอรายงาน"
+        text: >-
+          โมเดลส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
+          Geno จึงยังไม่จบ turn แต่เปิดรอรายงานฉบับนั้นเอง
       do: >-
         `loopStep` ให้ `done(end_turn)` แต่ `holdsTurnOpen` เห็นว่าลูกเบื้องหลังยังติดรายงานอยู่หนึ่งฉบับ
         และพื้นผิวนี้ไม่มี `wakeLater` loop จึงไม่จบ แต่รอที่ `arrival` ของ inbox
@@ -27,6 +32,11 @@ scenario:
     - id: waiting
       lane: panel
       at: terminal
+      beat:
+        title: "เทอร์มินัลค้างโดยไม่บอกว่ารอ"
+        text: >-
+          คำตอบของโมเดลพิมพ์ออกมาแล้ว แต่ไม่มีบรรทัดไหนบอกว่ากำลังรอ และเทอร์มินัลยังไม่คืน prompt
+        sees: { kind: message, from: geno, text: ผมให้ explore สำรวจอยู่ เดี๋ยวสรุปให้เมื่อได้ผล }
       do: >-
         คำตอบของโมเดลพิมพ์ออก stdout ไปแล้ว ไม่มีบรรทัดอะไรบอกว่ากำลังรอ เทอร์มินัลยังไม่คืน prompt
       sees: ข้อความ "ผมให้ explore สำรวจอยู่ เดี๋ยวสรุปให้เมื่อได้ผล" แล้วเคอร์เซอร์ค้างอยู่
@@ -35,6 +45,10 @@ scenario:
     - id: child
       lane: child@explore
       at: model
+      beat:
+        title: "Subagent ยังอ่านไฟล์อยู่"
+        text: >-
+          explore ทำงานต่อใน session ของตัวเอง ยังไม่ได้เขียนรายงาน
       alongside: true
       do: >-
         ลูกยังอ่านไฟล์อยู่ใน session ของตัวเอง
@@ -42,11 +56,20 @@ scenario:
 
     - id: press
       lane: user
+      beat:
+        title: "คุณกด Ctrl-C"
+        text: >-
+          คุณไม่อยากรอแล้ว Ctrl-C ครั้งแรกสั่งให้ Geno หยุด turn ครั้งที่สองจะฆ่า process ทันที
+        to: engine
       do: ผู้ใช้กด Ctrl-C
 
     - id: sigint
       lane: loop
       at: agent
+      beat:
+        title: "Geno เลิกรอทันที"
+        text: >-
+          การรอรายงานฟังสัญญาณหยุดเดียวกับ turn จึงจบทันที Geno บันทึกว่าคุณเป็นคนหยุด
       do: >-
         SIGINT ตัวแรกสั่ง abort `AbortController` ที่ `interrupts()` ให้ไว้ตอนเริ่มรอบ (ตัวที่สองจะฆ่า process ตามปกติของ Node)
       ref: "packages/engine/src/cli.ts#\"process.once('SIGINT', () => controller.abort());\""
@@ -63,6 +86,10 @@ scenario:
     - id: ended
       lane: loop
       at: step
+      beat:
+        title: "Geno จบ turn"
+        text: >-
+          Geno เห็นว่าคุณหยุด จึงจบ turn และไม่ถือ turn ไว้รออีก ทางรับข้อความของ turn ปิด
       do: >-
         `loopStep` เห็น error `abort` จึงให้ `done(error)` การรอไม่ถือ turn อีกเพราะการรอเกิดเฉพาะหลัง `done(end_turn)`
         `end()` ปิด inbox
@@ -71,6 +98,11 @@ scenario:
     - id: stop-children
       lane: loop
       at: agent
+      beat:
+        title: "Geno หยุด subagent ทุกตัว"
+        text: >-
+          turn ไม่ได้จบด้วยคำตอบ และ CLI ไม่มีตัวปลุก Geno จึงหยุด subagent เบื้องหลังทุกตัว สิ่งที่ explore
+          พบไม่ไปถึงแชตหลัก Geno รอให้มันจบก่อนปิด sandbox
       do: >-
         `finally` ของ `runAgent` เรียก `stopBackground` เมื่อ turn ไม่ได้จบด้วย `end_turn` หรือไม่มีตัวปลุก (ที่นี่เป็นทั้งสองอย่าง):
         abort ลูกเบื้องหลังทุกตัว และตั้งว่ารายงานของพวกมันไม่มีใครฟังแล้ว แล้วรอให้ลูกจบก่อนปิด sandbox
@@ -87,6 +119,12 @@ scenario:
     - id: exit
       lane: panel
       at: terminal
+      beat:
+        title: "เทอร์มินัลคืน prompt พร้อมรหัส 130"
+        text: >-
+          Geno พิมพ์บรรทัด usage แล้ว process ออกด้วยรหัส 130 ซึ่งแปลว่าถูกขัด script ที่เรียก CLI จึงแยกออกได้
+        end: "คุณหยุด process ออก 130"
+        sees: "บรรทัด \"usage: ... turns=3\" แล้ว prompt ของเชลล์กลับมา `echo $?` ได้ 130"
       do: >-
         `finish` ไม่เพิ่มข้อความ error เพราะ event สุดท้ายเป็น `abort` อยู่แล้ว พิมพ์บรรทัด usage แล้ว process ออกด้วย
         `EXIT_CODES.abort`
@@ -106,3 +144,5 @@ scenario:
 - **Ctrl-C ทิ้งงานของลูก** `stopBackground` ตั้งให้รายงานไม่มีใครฟัง ลูกที่ใกล้เสร็จก็ไม่ได้ส่งผลกลับ
   และ turn ของแม่จบไปก่อนที่ใครจะได้อ่านมัน
 - **exit code บอกว่าถูกหยุด** 130 มาจาก `EXIT_CODES.abort` ไม่ใช่ 0 แม้โมเดลจะจบคำตอบของมันไปแล้ว
+
+Stop ใน VS Code ระหว่างโมเดลเขียน ดู [กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/)

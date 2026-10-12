@@ -1,5 +1,5 @@
 ---
-title: กด Stop ขณะโมเดลกำลังเขียน
+title: "กด Stop ขณะ model กำลังเขียน"
 description: ผู้ใช้กด Stop ระหว่างที่คำตอบกำลัง stream engine ตัดคำขอโมเดล บันทึกการหยุด และ turn จบแบบ stopped
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: streaming
       lane: model
+      beat:
+        title: "Model กำลังเขียนคำตอบ"
+        text: >-
+          ข้อความแต่ละส่วนขึ้นในแชตทันที แต่ Geno ยังไม่บันทึกอะไรลงบันทึกของ session จนกว่าคำตอบจะจบ
+        sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, streaming: true }
       do: >-
         โมเดลกำลัง stream คำตอบ ข้อความแต่ละส่วนไปถึงแผงทันที แต่ยังไม่มีอะไรถูกบันทึกลง log จนกว่าคำตอบจะจบ
       ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
@@ -23,6 +28,12 @@ scenario:
 
     - id: press
       lane: user
+      beat:
+        title: "คุณกด Stop"
+        text: >-
+          คุณคลิกปุ่มสี่เหลี่ยม กด Escape หรือรันคำสั่ง "Geno: Stop the Chat Turn" แผงส่งคำสั่งหยุดให้ VS Code
+        to: panel
+        sees: { kind: composer, state: working, header: working }
       do: ผู้ใช้กด Stop
 
     - id: post
@@ -36,6 +47,11 @@ scenario:
     - id: cancel
       lane: editor
       at: chat
+      beat:
+        title: "VS Code ตอบการ์ดที่ค้างแล้วสั่งหยุด"
+        text: >-
+          ถ้ามีการ์ดขออนุญาตหรือคำถามเปิดอยู่ VS Code ตอบว่ายกเลิกก่อน แล้วสั่ง engine ให้หยุด turn
+        to: engine
       do: >-
         `Chat.stop` ตอบการ์ดขออนุญาตและคำถามที่เปิดอยู่ว่า cancelled ก่อน (ACP กำหนดให้ทำ) แล้วส่ง notification ACP `session/cancel`
       ref: packages/extension/src/chat/chat.ts#Chat.stop
@@ -43,6 +59,10 @@ scenario:
     - id: abort
       lane: server
       at: turns
+      beat:
+        title: "Geno ยกเลิก turn"
+        text: >-
+          engine ส่งสัญญาณหยุดไปทุกที่ที่ turn กำลังทำงาน ทั้งการเรียกโมเดล การรอ การรัน tool และ compaction
       do: >-
         engine หา `AbortController` ของ turn นี้ในทะเบียน `turns` แล้วสั่ง abort (ถ้า session id เป็นของเอเจนต์ลูก
         `childCancels` หยุดลูกตัวนั้นแทน) สัญญาณนี้ไปถึง gateway การรอ backoff การรันเครื่องมือ และ compaction
@@ -51,6 +71,10 @@ scenario:
     - id: gateway
       lane: loop
       at: gateway
+      beat:
+        title: "Stream ถูกตัด Geno ไม่ retry"
+        text: >-
+          การเรียกโมเดลถูกตัดกลางทาง Geno ไม่ลองใหม่ เพราะรู้ว่าคุณเป็นคนหยุด
       do: >-
         stream ถูกตัด SDK โยน `APIUserAbortError` gateway ไม่ลองใหม่ แต่คืนผล `abort` พร้อมข้อความ "interrupted by the user"
       ref: packages/engine/src/gateway.ts#ABORTED
@@ -59,6 +83,11 @@ scenario:
     - id: logged
       lane: loop
       at: drive
+      beat:
+        title: "Geno บันทึกการหยุด"
+        text: >-
+          Geno บันทึกว่าคุณหยุด turn ข้อความที่ stream มาแล้วไม่ถูกบันทึก เพราะบันทึกเก็บคำตอบเฉพาะตอนที่คำตอบจบ
+          แผงไม่ขึ้นแถบ error เพราะปุ่ม Stop บอกอยู่แล้ว
       do: >-
         `callModel` บันทึก event `error` ชนิด `abort` ลง log ข้อความที่ stream มาแล้วไม่ถูกบันทึก เพราะ log เก็บคำตอบเฉพาะตอนที่คำตอบจบ
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'error', seq: nextSeq(events), at, error: result.error, message: result.message, ...timing });\""
@@ -84,6 +113,11 @@ scenario:
     - id: done
       lane: loop
       at: step
+      beat:
+        title: "Geno จบ turn แบบ stopped"
+        text: >-
+          Stop hook ไม่ทำงานในทางนี้ engine บอก VS Code ว่า turn ถูกยกเลิก งานในแผง Tasks จบแบบ stopped
+        to: panel
       do: >-
         `loopStep` เห็น event ล่าสุดเป็น error `abort` ตาราง `ERROR_REASON` ให้ `done(error)` Stop hook ไม่ทำงานในทางนี้
         เพราะมันทำงานเฉพาะตอนที่โมเดลจบด้วย `end_turn`
@@ -111,6 +145,12 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตเก็บกวาด turn ที่หยุด"
+        text: >-
+          tool ที่ยังหมุนเปลี่ยนเป็น cancelled การ์ดที่ค้างเปลี่ยนเป็น Cancelled และข้อความในคิวกลับไปที่ช่องพิมพ์
+          แผงดูว่ามีข้อความตอบอยู่ไหม
+        ask: "เขียนไปแล้วไหม"
       do: >-
         reducer ของ `turn-end` เปลี่ยนเครื่องมือที่ยังหมุนเป็น cancelled และการ์ดที่เปิดค้างเป็น Cancelled
         ข้อความที่รออยู่ในคิวกลับไปที่ช่องพิมพ์ แล้ว `missingReply` ดูว่ามีข้อความตอบหลังขั้นสุดท้ายหรือไม่
@@ -123,6 +163,12 @@ scenario:
             steps:
               - lane: panel
                 at: rail
+                beat:
+                  title: "ข้อความครึ่งเดียวค้างในแชต"
+                  text: >-
+                    ข้อความที่ขึ้นมาแล้วยังอยู่ในแผง แต่ไม่อยู่ในบันทึก reload แล้วจะหายไป และโมเดลก็ไม่เห็นมันในคำขอถัดไป
+                  end: "คุณหยุด ข้อความค้างครึ่ง"
+                  sees: { kind: message, from: geno, text: ฟังก์ชันนี้รับวันที่เป็นข้อความ แล้ว, footer: [ stopped after 6.2s, Stopped by you ] }
                 do: >-
                   ข้อความที่ stream มาแล้วยังอยู่ในแผง จึงไม่มีประกาศ "stopped without a reply"
                   แต่ข้อความนี้ไม่อยู่ใน log การ reload หรือเปิดแชตนี้ใหม่จะไม่เห็นมัน และโมเดลก็ไม่เห็นมันในคำขอถัดไป
@@ -135,6 +181,12 @@ scenario:
             steps:
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นว่าคุณหยุดก่อน Geno ตอบ"
+                  text: >-
+                    ไม่มีข้อความตอบและไม่มีแถบ error แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อหรือลองใหม่
+                  end: "คุณหยุดก่อนได้คำตอบ"
+                  sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
                 do: >-
                   ไม่มีข้อความหลังขั้นสุดท้าย และไม่มีบล็อก error `missingReply` จึงให้เหตุผลว่าผู้ใช้หยุดก่อน Geno ตอบ
                   turn ล่าสุดที่ไม่มีข้อความรอในคิวได้ปุ่ม Continue และ Retry
@@ -157,3 +209,5 @@ Stop เดินทางเป็นสายเดียวจากแผง
   และมีโน้ตบอกโมเดลว่าผู้ใช้หยุด turn ที่แล้ว ดู [จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue/Retry](/scenarios/mstop/no-reply-continue-retry/)
 - **ไม่มีบล็อก error ในแผง** engine ส่ง error `abort` มาเหมือน error อื่น แต่ฝั่ง extension ทิ้งมันไป
   ป้าย "Stopped by you" ท้าย turn ทำหน้าที่บอกแทน
+
+ปุ่ม Continue และ Retry ทำอะไรต่อ ดู [Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry](/scenarios/mstop/no-reply-continue-retry/)

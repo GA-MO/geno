@@ -1,5 +1,5 @@
 ---
-title: กด Stop ขณะเครื่องมือทำงาน
+title: "กด Stop ขณะ tool ทำงาน"
 description: ผู้ใช้กด Stop ระหว่างที่คำสั่งใน batch กำลังรัน engine ฆ่า process group ของคำสั่ง ตอบ call ที่ค้างว่าถูกหยุด แล้ว turn จบแบบ stopped
 tableOfContents: false
 sidebar:
@@ -17,6 +17,13 @@ scenario:
     - id: running
       lane: tool
       at: shell
+      beat:
+        title: "pnpm test รันอยู่บนเครื่องของคุณ"
+        text: >-
+          โมเดลขอรัน `pnpm test` แล้วอ่าน `src/date.ts` คำสั่งผ่านการตรวจสิทธิ์แล้วและรันอยู่ในกลุ่ม process ของตัวเอง
+          ส่วนการอ่านไฟล์รออยู่ในชุดถัดไป
+        from: machine
+        sees: { kind: step, label: pnpm test, status: running }
       do: >-
         `runShell` รัน `pnpm test` ด้วย `/bin/sh` ใน process group ของตัวเอง และฟังสัญญาณ abort ของ turn ไว้
       ref: packages/engine/src/process.ts#runShell
@@ -24,6 +31,11 @@ scenario:
 
     - id: press
       lane: user
+      beat:
+        title: "คุณกด Stop"
+        text: >-
+          คุณคลิก Stop กด Escape หรือรันคำสั่ง "Geno: Stop the Chat Turn" ขณะ `pnpm test` ยังไม่จบ
+        to: panel
       do: ผู้ใช้กด Stop
 
     - id: post
@@ -37,6 +49,11 @@ scenario:
     - id: cancel
       lane: editor
       at: chat
+      beat:
+        title: "VS Code สั่ง engine หยุด"
+        text: >-
+          รอบนี้ไม่มีการ์ดเปิดอยู่ VS Code จึงสั่ง engine ให้หยุด turn ทันที
+        to: engine
       do: >-
         `Chat.stop` ตอบการ์ดที่เปิดอยู่ว่า cancelled (รอบนี้ไม่มี) แล้วส่ง notification ACP `session/cancel`
       ref: packages/extension/src/chat/chat.ts#Chat.stop
@@ -44,6 +61,10 @@ scenario:
     - id: abort
       lane: server
       at: turns
+      beat:
+        title: "Geno ยกเลิก turn"
+        text: >-
+          engine ส่งสัญญาณหยุด สัญญาณเดียวกันนี้อยู่ในทุก tool ที่กำลังรัน
       do: >-
         engine หา `AbortController` ของ turn ใน `turns` แล้วสั่ง abort สัญญาณเดียวกันนี้อยู่ใน `ctx.signal` ของทุกเครื่องมือ
       ref: "packages/engine/src/serve.ts#\".onNotification(acp.methods.agent.session.cancel, ({ params }) => {\""
@@ -51,6 +72,10 @@ scenario:
     - id: race
       lane: loop
       at: tools
+      beat:
+        title: "Geno เลิกรอทั้งชุดทันที"
+        text: >-
+          Geno ไม่รอให้ tool หยุดเสร็จก่อน มันเลิกรอชุดนี้ทันทีที่ได้สัญญาณ
       do: >-
         `runTools` รอทั้ง batch ผ่าน `unlessAborted` ซึ่งจบทันทีที่สัญญาณถูก abort โดยไม่รอให้เครื่องมือหยุดเสร็จ
       ref: packages/engine/src/drive.ts#unlessAborted
@@ -58,6 +83,11 @@ scenario:
     - id: kill
       lane: tool
       at: shell
+      beat:
+        title: "Geno ฆ่า process ของ pnpm test ทั้งกลุ่ม"
+        text: >-
+          ทุกอย่างที่ `pnpm test` เปิดไว้ถูกฆ่าไปด้วย ไม่มี process ลูกค้างอยู่บนเครื่องของคุณ
+        from: engine
       alongside: true
       do: >-
         ตัวฟัง abort ของ `runShell` ส่ง `SIGKILL` ให้ทั้ง process group ทุกอย่างที่ `pnpm test` เปิดไว้ถูกฆ่าด้วย
@@ -66,6 +96,12 @@ scenario:
     - id: answered
       lane: loop
       at: tools
+      beat:
+        title: "Geno ตอบทุก call ที่ค้างว่าถูกหยุด"
+        text: >-
+          call ที่เริ่มแล้วได้คำตอบว่าคุณหยุดมันระหว่างรันและอาจรันไปบางส่วน
+          การอ่านไฟล์ที่ยังไม่เริ่มได้คำตอบว่ามันไม่ได้รัน Geno บันทึกทุกคำตอบไว้ รอบหน้าจึงไม่รัน call เหล่านี้ซ้ำ
+        to: panel
       do: >-
         call ที่จบแล้วเก็บผลจริงไว้ call ที่เริ่มแล้วแต่ไม่จบได้คำตอบ `UNRUN_TEXTS.stopped` ("...may have partly run.")
         ส่วน `read` ที่ยังไม่เริ่มขึ้นเป็นขั้นรอในแผงก่อน แล้วได้คำตอบ `UNRUN_TEXTS['not-started']` ("...so it did not run.")
@@ -84,6 +120,11 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นสองขั้นที่ล้มเหลว"
+        text: >-
+          ขั้นของ `pnpm test` และการอ่านไฟล์หยุดหมุนและขึ้นเครื่องหมายล้มเหลว ผลที่พับไว้คือข้อความว่าคุณหยุด
+        sees: { kind: step, label: pnpm test, status: failed, output: "[Request interrupted by user for tool use] The user stopped this call while it ran, so it may have partly run." }
       alongside: true
       do: >-
         ขั้นของ `pnpm test` และ `read` หยุดหมุนและขึ้นเครื่องหมายล้มเหลว ผลที่พับไว้คือข้อความว่าผู้ใช้หยุด
@@ -95,6 +136,11 @@ scenario:
     - id: abort-logged
       lane: loop
       at: drive
+      beat:
+        title: "Geno บันทึกการหยุดแล้วจบ turn"
+        text: >-
+          Geno บันทึกการหยุดพร้อมรายการ tool ที่ถูกตัด เวลาเริ่ม และเวลาหยุด แผงไม่ขึ้นแถบ error Geno จบ turn และ Stop
+          hook ไม่ทำงาน
       do: >-
         `drive` บันทึก event `error` ชนิด `abort` ที่มีรายการเครื่องมือที่ถูกตัดพร้อมเวลาเริ่มและเวลาหยุด
       ref: "packages/engine/src/drive.ts#\"error: 'abort', message: 'interrupted by the user', tools: interrupted\""
@@ -127,6 +173,11 @@ scenario:
     - id: cancelled
       lane: server
       at: turns
+      beat:
+        title: "Engine ตอบว่า turn ถูกยกเลิก"
+        text: >-
+          engine บอก VS Code ว่า turn จบแบบ stopped VS Code ส่งต่อให้แผง
+        to: panel
       do: >-
         `runTurn` เห็นสัญญาณถูก abort จึงถือว่าจบแบบ `cancelled` ACP ได้ `stopReason: cancelled` meta บอก `stopped`
       ref: "packages/engine/src/serve.ts#\"const end: TurnEnd = controller.signal.aborted ? 'cancelled' : ran.reason;\""
@@ -143,6 +194,12 @@ scenario:
     - id: notice
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นว่าคุณเป็นคนหยุด"
+        text: >-
+          ไม่มีข้อความหลังขั้นสุดท้ายและไม่มีแถบ error แผงจึงขึ้นประกาศพร้อมปุ่ม Continue และ Retry
+        end: "คุณหยุด tool ถูกฆ่า"
+        sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้าย ไม่มีบล็อก error และ turn ถูกหยุด จึงแสดงประกาศพร้อม Continue และ Retry
       sees: >-
@@ -164,3 +221,5 @@ Stop ระหว่างรันเครื่องมือใช้สั
 - **ขั้นที่ถูกหยุดขึ้นเป็นล้มเหลว** engine ส่งคำตอบของ call ที่ถูกหยุดเป็น `tool_call_update` สถานะ `failed`
   ก่อนที่ `turn-end` จะเปลี่ยนขั้นที่ยังหมุนเป็น cancelled ขั้นเหล่านี้จึงขึ้นไอคอน error แบบเดียวกับคำสั่งที่ล้มเหลวจริง
   ความต่างอยู่ในข้อความผลที่พับไว้
+
+ปุ่ม Continue และ Retry ทำอะไรต่อ ดู [Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry](/scenarios/mstop/no-reply-continue-retry/)
