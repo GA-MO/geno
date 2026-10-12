@@ -68,7 +68,7 @@ scenario:
               - lane: loop
                 at: gateway
                 beat:
-                  title: "Model เงียบไป 180 วินาที"
+                  title: "Geno เลิกรอ model ที่เงียบไป 180 วินาที"
                   text: >-
                     ไม่มี byte ใหม่เข้ามาเลย 180 วินาที Geno ยกเลิกการเรียกนี้ และให้โอกาส retry ได้ครั้งเดียว
                 do: >-

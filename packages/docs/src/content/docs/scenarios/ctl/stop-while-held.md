@@ -19,7 +19,7 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: "Model จบแล้ว แต่ Geno ยังรอรายงาน"
+        title: "Geno ยังไม่จบ turn เพราะรอรายงาน"
         text: >-
           โมเดลส่งงานให้ subagent ชื่อ explore ทำเบื้องหลัง แล้วจบคำตอบว่าจะรอผล ใน CLI ไม่มีอะไรมาปลุก session ทีหลัง
           Geno จึงยังไม่จบ turn แต่เปิดรอรายงานฉบับนั้นเอง
