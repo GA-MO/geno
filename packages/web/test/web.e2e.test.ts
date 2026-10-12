@@ -368,6 +368,39 @@ describe('the web host', () => {
       await browser.close();
     }
   }, 60_000);
+
+  it('shows a lane’s finished notice under the header, clear of the composer, and lets it go after a while unless the pointer is on it', async ({ skip }) => {
+    const browser = await chromium.launch(process.env['GCODE_CHROMIUM'] ? { executablePath: process.env['GCODE_CHROMIUM'] } : {}).catch((error: unknown) => skip(`no Chromium for playwright: ${String(error)}`));
+    try {
+      const page = await browser.newPage({ viewport: { width: 360, height: 700 } });
+      await page.clock.install();
+      await page.goto(address);
+      await page.locator('textarea').fill('/lane Say hello');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.body.dataset['view'] === 'lanes');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.body.dataset['view'] === 'chat');
+      const finished = page.locator('.geno-web-toast[data-severity="info"]', { hasText: 'Geno finished' });
+      await finished.waitFor({ timeout: 45_000 });
+      const boxes = await page.evaluate(() => {
+        const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+        const toast = box('.geno-web-toast');
+        const meets = (other: DOMRect) => toast.left < other.right && other.left < toast.right && toast.top < other.bottom && other.top < toast.bottom;
+        return { composer: meets(box('form.composer')), header: meets(box('.chat-header')) };
+      });
+      expect(boxes, 'the toast covers neither the composer nor the header').toEqual({ composer: false, header: false });
+
+      await finished.hover();
+      await page.clock.fastForward(30_000);
+      expect(await finished.count(), 'it stays while the pointer is on it').toBe(1);
+      await page.mouse.move(180, 400);
+      await page.clock.fastForward(11_000);
+      await finished.waitFor({ state: 'detached' });
+      expect(await page.locator('.geno-web-toast').count(), 'and then goes').toBe(0);
+    } finally {
+      await browser.close();
+    }
+  }, 90_000);
 });
 
 describe('the web host in review mode', () => {

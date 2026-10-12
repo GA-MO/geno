@@ -30,6 +30,8 @@ Keys come from the environment the command runs in, under the names the extensio
 
 The actions VS Code puts in the chat view's title bar (New Chat, History, Lanes, Tasks, MCP Servers, Models and Keys) sit at the right of the panel's header, read from the extension's manifest when the host starts, so a new one shows up here too. When the page is too narrow for every icon, the rest move to a `…` menu. Memory and the rules open with `/memory` and `/rules`, as in VS Code.
 
+Notifications show as toasts at the top right, under the header, so they never cover the composer. One that only informs, such as "Geno finished" with its Open, goes after ten seconds unless the pointer or the focus is on it, and going counts as Close. There is no notification center to find it again. A warning or an error with choices stays until you pick one or close it.
+
 There is no editor. Opening a file, revealing it, or showing a diff shows a toast that says what VS Code would have done. The engine sees no unsaved buffers, diagnostics or terminals. Open and save dialogs ask for a path instead.
 
 Review runs VS Code's own review code. A turn's Undo restores the checkpoint before the turn, and in review mode (`"gcode.review.mode": "review"`) Keep and Undo on a hunk work from the diff cards. Both write to disk, so an editor open on the folder reloads the files. The review differs from VS Code's in these ways:
@@ -44,4 +46,4 @@ Review runs VS Code's own review code. A turn's Undo restores the checkpoint bef
 pnpm vitest run --project unit packages/web/test
 ```
 
-`web.e2e.test.ts` runs the built host against the engine's fake model. Over the host's own wire it sends a prompt, answers a permission card, undoes a turn, and keeps and undoes hunks in review mode, then reloads the host to check the engine logged those decisions. It also loads the panel in Chromium, clicks a turn’s Undo, and opens the Lanes and MCP panes from the header’s actions, at 360px and from the narrow `…` menu.
+`web.e2e.test.ts` runs the built host against the engine's fake model. Over the host's own wire it sends a prompt, answers a permission card, undoes a turn, and keeps and undoes hunks in review mode, then reloads the host to check the engine logged those decisions. It also loads the panel in Chromium, clicks a turn’s Undo, and opens the Lanes and MCP panes from the header’s actions, at 360px and from the narrow `…` menu. It runs a lane and checks its finished toast clears the composer, stays while hovered and then goes.
