@@ -512,3 +512,15 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
   .story, .map-island { display: none; }
   .story-page[data-hydrated] .story-static, .map-static-wrap { display: block !important; }
 }
+
+.prose :not(pre) > code, .prose td, .prose a { overflow-wrap: anywhere; }
+
+.ln-scroll { cursor: grab; }
+.ln-scroll.dragging { cursor: grabbing; user-select: none; }
+.ln-scroll.dragging .ln-node, .ln-scroll.dragging .ln-recv { cursor: grabbing; }
+.ln-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 16px 2px; font-size: 12px; color: var(--ink-3); }
+.ln-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ln-legend i { display: inline-block; box-sizing: border-box; }
+.lg-node { width: 22px; height: 12px; border: 1.5px solid var(--ink-3); border-radius: 4px; background: var(--surface); }
+.lg-recv { width: 18px; height: 6px; border-radius: 999px; background: var(--ink-3); }
+.lg-current { width: 22px; height: 12px; border: 1.5px solid var(--accent); border-radius: 4px; background: var(--accent-soft); }
