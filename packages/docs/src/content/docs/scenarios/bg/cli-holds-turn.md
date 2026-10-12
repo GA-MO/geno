@@ -7,7 +7,7 @@ sidebar:
 scenario:
   surface: cli
   given:
-    - "ผู้ใช้รัน `gcode agent \"หาไฟล์ที่ยังใช้ API เก่า แล้วสรุป\"` ในเทอร์มินัล"
+    - "ผู้ใช้รัน `gcode agent \"Where is parseVersion called?\"` ในเทอร์มินัล"
     - "ค่า `agentTool` ในการตั้งค่าของผู้ใช้มีโหมด Ask model จึงเรียก `agent` เองได้"
   trigger: >-
     model เริ่ม `explore` แบบเบื้องหลัง แล้วจบ turn
@@ -17,9 +17,16 @@ scenario:
     - id: wants
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
-        text: "ใน `gcode agent` model ส่งงานค้นให้ explore พร้อม `background: true` แล้วไม่รอ"
+        text: >-
+          ใน `gcode agent` model ส่ง `tool_use` ชื่อ `agent` ที่มี `agent: "explore"`, `task` ที่เขียนให้ครบในตัว
+          และ `background: true` แล้วไม่รอ
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/cli-holds.jsonl#line=6
+          select: messages[1].content
+          highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
@@ -39,10 +46,16 @@ scenario:
     - id: launch
       beat:
         title: Geno เริ่ม explore โดยไม่รอ
-        text: session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
+        text: >-
+          session ค้างรายงานหนึ่งฉบับ CLI ไม่มีตัวปลุก จึงไม่มีงานรอใน Tasks เทอร์มินัลพิมพ์บรรทัดของ explore
+          ผลของ call ที่ model ได้คือ session id ของ explore และคำสั่งว่าอย่าเดาผลจนกว่ารายงานจะมา
         from: engine
         to: model
-        sees: "> explore started (<model>, caps 4 turns $0.02), log: ~/.g-code/sessions/....jsonl"
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/cli-holds.jsonl#line=6
+            select: messages[2].content[0]
+            highlight: [content]
       lane: loop
       at: tools
       runs: 1
@@ -168,9 +181,16 @@ scenario:
     - id: put
       beat:
         title: Geno ส่งรายงานเข้า turn ที่ถือไว้
-        text: Geno ใส่รายงานในรั้วลงกล่อง การรอจบ turn ที่ถือไว้บันทึกรายงานแล้วเรียก model อีกครั้ง
+        text: >-
+          Geno ใส่รายงานในรั้วลงกล่อง การรอจบ turn ที่ถือไว้บันทึกรายงานแล้วเรียก model อีกครั้ง request นั้นจบด้วยโน้ตของ Geno
+          ที่มีรายงานในรั้ว `<subagent_report>` และคำเตือน ไม่มีบรรทัด "Geno started this turn by itself" เพราะ turn นี้ยังเป็น turn เดิม
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/cli-holds.jsonl#line=10
+          select: messages[4]
+          highlight: ['content[0].text']
       lane: loop
       at: tools
       do: >-
@@ -191,12 +211,12 @@ scenario:
     - id: relays
       beat:
         title: Model สรุปลง stdout
-        text: model อ่านรายงาน แล้วเขียนสรุปไฟล์ที่ใช้ API เก่า
+        text: model อ่านรายงาน แล้วเขียนสรุปที่เรียก `parseVersion`
         from: model
         to: panel
       lane: model
       do: >-
-        model อ่านรายงานในรั้ว แล้ว stream สรุปไฟล์ที่ใช้ API เก่าลง stdout จบด้วย `stop_reason: end_turn`
+        model อ่านรายงานในรั้ว แล้ว stream สรุปที่เรียก `parseVersion`ลง stdout จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 

@@ -10,16 +10,28 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน และการปลุกอัตโนมัติ (`gcode.wake.auto`) เปิดอยู่ตามค่าเริ่มต้น
     - หน้าต่าง VS Code ที่แสดง session นี้ยังเปิดอยู่
   trigger: >-
-    ผู้ใช้ขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า model เริ่ม `explore` แบบเบื้องหลัง
+    ผู้ใช้ขอให้หาว่า `parseVersion` ถูกเรียกที่ไหน model เริ่ม `explore` แบบเบื้องหลัง
   covers: [bg.child-wakes-parent]
   related: [bg.command-ends-wakes, bg.task-attention, bg.wake-held-or-paused, bg.arrives-mid-turn, sub.blocking-report]
   steps:
     - id: wants
       beat:
         title: Model เริ่ม explore แบบเบื้องหลัง
-        text: "คุณขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า model ส่งงานให้ explore พร้อม `background: true` มันจะไม่รอรายงาน"
+        text: >-
+          คำอธิบายของ `background` ใน schema ของ tool `agent` บอกว่า call จะกลับทันทีพร้อม session id
+          และรายงานจะมาเป็นข้อความทีหลัง (แท็บแรก) model ส่ง `tool_use` ที่มี `agent: "explore"`, `task` และ
+          `background: true` (แท็บสอง) มันจะไม่รอรายงาน
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=2
+            select: tools[9]
+            highlight: [input_schema.properties.background]
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=6
+            select: messages[1].content
+            highlight: ['[1].input']
       lane: model
       do: >-
         model ขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
@@ -39,23 +51,36 @@ scenario:
     - use: sub-child-starts
       beat:
         title: Geno เปิด session ให้ explore
-        text: แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน explore เริ่มค้นโค้ด
+        text: >-
+          แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน request แรกของ explore เหมือนลูกแบบรอทุกอย่าง: system prompt ของ explore
+          และข้อความแรกที่มีแค่ environment กับ `task` explore ไม่รู้ว่าตัวเองรันเบื้องหลัง และยังต้องจบด้วย `report`
         from: engine
         to: model
         sees:
-          kind: task
-          title: explore
-          status: running
-          detail: 0:02
-          actions:
-            - Cancel
+          - kind: task
+            title: explore
+            status: running
+            detail: 0:02
+            actions:
+              - Cancel
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-wake.jsonl#line=4
+            select: messages[0]
+            highlight: ['content[1].text']
 
     - id: owed
       beat:
         title: Geno ไม่รอ explore
-        text: Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันทีว่าเริ่ม explore แล้ว model บอกคุณว่า explore กำลังสำรวจ และจะเล่าเมื่อรายงานมาถึง
+        text: >-
+          Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันที ผลของ call บอก session id ของ explore
+          บอกว่ารายงานจะมาเป็นข้อความจาก Geno ห้ามเดาผลก่อนนั้น และห้ามทำงานซ้ำกับมัน model บอกคุณว่า explore กำลังค้น
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/background-wake.jsonl#line=6
+          select: messages[2].content[0]
+          highlight: [content]
       lane: loop
       at: tools
       do: >-
@@ -124,7 +149,7 @@ scenario:
       lane: child@explore
       at: model
       do: >-
-        ลูกค้นต่อจนเสร็จ แล้วเรียก `report` พร้อมรายการไฟล์ที่ใช้ API เก่า ลูกจบแบบ `done`
+        ลูกค้นต่อจนเสร็จ แล้วเรียก `report` พร้อมรายการที่เรียก `parseVersion` ลูกจบแบบ `done`
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
 
@@ -242,9 +267,17 @@ scenario:
     - id: relays
       beat:
         title: Model เล่าผลของ explore
-        text: model อ่านรายงาน และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
+        text: >-
+          request ของ turn ที่ถูกปลุกจบด้วยโน้ตของ Geno สองอัน อันแรกคือรายงานในรั้ว `<subagent_report>` พร้อมคำเตือน
+          อันที่สองบอกว่า Geno เริ่ม turn นี้เอง (woke: 1 task finished) ทั้งสองขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้
+          model อ่านแล้วเล่าผลให้คุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
         from: model
         to: panel
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/background-wake.jsonl#line=10
+          select: messages[4]
+          highlight: ['content[0].text', 'content[1].text']
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-

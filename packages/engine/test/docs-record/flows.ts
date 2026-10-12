@@ -406,21 +406,20 @@ export const FLOWS: readonly Flow[] = [
     const ended = gate();
     return {
       name: 'background-wake',
-      what: 'The parent starts worker in the background in a lane and ends its turn; the report wakes the session for a new turn.',
+      what: 'The parent starts explore in the background and ends its turn; the report wakes the session for a new turn.',
       run: () =>
         editorFlow(
-          ['ask', 'auto'],
-          'auto',
+          ['ask'],
+          'ask',
           [
-            to('in the background', agentCall('toolu_agent_1', { agent: 'worker', task: WORKER_TASK, background: true, isolation: 'worktree' }, 'Starting a worker in a lane.')),
-            to('in the background', () => (ended.open(), say('The worker runs in its own lane; I will read its report when it comes.'))),
-            to(WORKER_TASK, async () => (await ended.opened, read('toolu_read_1', 'src/version.ts'))),
-            to(WORKER_TASK, editVersion),
-            to(WORKER_TASK, report(WORKER_REPORT, 'toolu_report_1')),
-            to('in the background', say('The worker changed src/version.ts:2 in its lane. Review it with gcode lane apply.')),
+            to('in the background', agentCall('toolu_agent_1', { agent: 'explore', task: EXPLORE_TASK, background: true }, 'Starting explore in the background.')),
+            to(EXPLORE_TASK, async () => (await ended.opened, grep('toolu_grep_1', 'parseVersion\\('))),
+            to('in the background', () => (ended.open(), say('explore is searching in the background; I will tell you what it finds.'))),
+            to(EXPLORE_TASK, report(FOUND, 'toolu_report_1')),
+            to('in the background', say('parseVersion is called in src/cli.ts:3 and twice in src/update.ts:3.')),
           ],
-          'Make parseVersion throw on an empty string, in the background.',
-          { settled: (requests) => until(() => requests() === 6, 'the woken turn') },
+          'Find where parseVersion is called, in the background.',
+          { settled: (requests) => until(() => requests() === 5, 'the woken turn') },
           { GCODE_WAKE_POLICY: JSON.stringify({ batchMs: 50, secondMs: 20 }) },
         ),
     };
