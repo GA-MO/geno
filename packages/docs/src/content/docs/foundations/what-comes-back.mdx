@@ -5,7 +5,6 @@ sidebar:
   order: 6
 payloads:
   answer:
-    direction: response
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4
     highlight:
       - content[2].name
@@ -16,20 +15,17 @@ payloads:
       - promptParts
       - timing
   streamStart:
-    direction: response
     source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
     highlight:
       - "[1].event"
       - "[2].data.content_block"
       - "[3].data.delta"
   streamToolUse:
-    direction: response
     source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
     select: "[17]"
     highlight:
       - data.content_block
   streamEnd:
-    direction: response
     source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
     select: "[-2]"
     highlight:

@@ -116,12 +116,8 @@ scenario:
                   to: engine
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A14-deny-rules/1/session.jsonl#seq=5
-                    select: approval
-                    highlight:
-                      - rule
-                      - reason
+                    highlight: [approval.rule, approval.reason]
                 do: >-
                   กฎ deny `git push` ตรงกับคำสั่งก่อนจะถึงกฎในตัว `userRuleDenial` สร้าง denial ชนิด `workspace-deny`
                   ที่บอกรูปแบบของกฎและที่เก็บกฎ ("the workspace rule that denies `git push`, which the user set in Settings under Permissions")

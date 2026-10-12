@@ -25,7 +25,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A01-fix-failing-test/1/session.jsonl#seq=4
           select: content
           highlight:

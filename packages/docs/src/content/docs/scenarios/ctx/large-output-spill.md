@@ -88,7 +88,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A07-multi-step-todo/1/requests.jsonl#seq=17
           select: messages[-1].content[0]
           highlight:

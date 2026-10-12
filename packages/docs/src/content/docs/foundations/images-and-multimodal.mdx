@@ -5,7 +5,6 @@ sidebar:
   order: 10
 payloads:
   asks:
-    direction: response
     source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=19
     select: content
     highlight:
@@ -13,7 +12,6 @@ payloads:
       - "[2].input"
       - "[3].input"
   imageResult:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=20
     highlight:
       - images[0].sha256
@@ -22,13 +20,11 @@ payloads:
     collapse:
       - timing
   imageSent:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A35-show-before-after/3/wire.jsonl#line=13
     select: messages[-1].content[0]
     highlight:
       - content[1].source
   sawIt:
-    direction: response
     source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=24
     select: content
     highlight:

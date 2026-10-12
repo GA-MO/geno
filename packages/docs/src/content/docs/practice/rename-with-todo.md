@@ -36,7 +36,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/wire.jsonl.gz#line=1
           select: tools[8]
           highlight: [name, description]
@@ -54,7 +53,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=12
           highlight: [status, output]
           collapse: [timing]
@@ -138,7 +136,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=22
           select: content[-1]
           highlight: ['input.items[0].status']
@@ -168,7 +165,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=25
           select: content
           highlight: ['[1].input.path', '[2].input.path', '[3].input.path', '[4].input.path']
@@ -199,7 +195,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=33
           highlight: [output]
           collapse: [timing]
@@ -248,7 +243,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=48
           highlight: [output]
           collapse: [timing, todo]
@@ -329,7 +323,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=59
           highlight: [output]
           collapse: [timing]
@@ -397,7 +390,6 @@ scenario:
         end: จบ turn
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A07-multi-step-todo/fix-s1-1/session.jsonl#seq=61
           select: content[-1]
           highlight: [text]

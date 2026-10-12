@@ -136,7 +136,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A16-compaction-goal/1/requests.jsonl#seq=23
           select: messages[-1].content
           highlight:

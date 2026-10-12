@@ -103,13 +103,13 @@ function checkPayloads(page: Page, runs: RunFiles, problems: Problem[]): void {
     }
     const resolved = runs.resolve(parsed.data[name]!);
     if (!resolved.ok) problems.push({ level: 'error', file: page.file, path: `payloads.${name}`, message: resolved.reason });
-    else if (resolved.cut !== undefined) problems.push({ level: 'error', file: page.file, path: `payloads.${name}.select`, message: resolved.cut });
+    else if (resolved.partial !== undefined) problems.push({ level: 'error', file: page.file, path: `payloads.${name}.select`, message: resolved.partial });
   }
 }
 
 let pageRuns: RunFiles | undefined;
 
-/** The views a `<Payload>` shows, from its page's `payloads` frontmatter. Throws on one that does not resolve; one that cuts a block shows the whole block. */
+/** The views a `<Payload>` shows, from its page's `payloads` frontmatter. Throws on one that does not resolve; one that selects part of a unit shows the whole unit. */
 export function payloadViews(specs: readonly unknown[]): PayloadView[] {
   pageRuns ??= runFiles(siteOptions().repoRoot);
   const runs = pageRuns;

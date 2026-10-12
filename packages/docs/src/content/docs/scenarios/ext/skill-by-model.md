@@ -22,7 +22,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A18-project-skill/fix-b2/session.jsonl#seq=15
           select: content[3]
       lane: model
@@ -72,9 +71,9 @@ scenario:
                   to: model
                   sees:
                     kind: payload
-                    direction: tool_result
-                    source: docs/results/real-usecases/runs/A18-project-skill/fix-b2/session.jsonl#seq=17
-                    select: output
+                    source: docs/results/real-usecases/runs/A18-project-skill/fix-b2/wire.jsonl#line=9
+                    select: messages[-1].content[1]
+                    highlight: [content]
                 at: tools
                 do: >-
                   ข้อความของสกิลเป็นผลของ call โดยตรง ผลของ `skill` ยาวได้ถึง 100,000 ตัวอักษรก่อนถูกเก็บลงไฟล์

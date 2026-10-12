@@ -100,19 +100,17 @@ them, and a test checks each against the extension and engine source.
 
 ### `payload`: real wire data
 
-A payload mock shows what Geno sends the model, what the model returns, or what goes back as a tool result. Its JSON
-comes from a recorded run under `docs/results/real-usecases/runs/<case>/<n>/`, read at build time:
+A payload mock shows what Geno sends the model, what the model returns, what goes back as a tool result, or what Geno
+logs. Its JSON comes from a recorded run under `docs/results/real-usecases/runs/<case>/<n>/`, read at build time:
 
 ```yaml
 sees:
   - kind: payload
-    direction: request                 # request | response | tool_result
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
     select: messages[-1]               # optional JSON path into the record; default: the whole record
     highlight: [content[0].tool_use_id] # optional paths, relative to the selection
     collapse: [content[0].content]      # optional paths shown folded
   - kind: payload
-    direction: response
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9
     select: content
 ```
@@ -123,23 +121,48 @@ sees:
   list of `{ event, data }`, one per SSE event. Any file takes `#line=N`.
 - A `.jsonl.gz` file reads the same as its `.jsonl`.
 - Paths use dots and brackets. `[-1]` counts from the end.
-- A card never shows less than a whole content block of a message (`content[i]` of a message or a response). A
-  `select` that reaches inside one, such as `content[-1].input`, renders the whole block with the part highlighted,
-  and `docs:check` fails it with the select and highlight to write instead. `cut: <why>` opts out and shows the part
-  alone.
+- `quote: <text>` marks that text in the card. A long string that holds it keeps the stretch around it, not its start,
+  so a card can point at one sentence of a 10,000-character system prompt and still show the whole prompt block.
+
+A card shows one whole unit, and `resolve` in `src/scenario/payload.ts` decides which: a request, a response, a
+stream or one of its events, a request's `messages`, `tools` or `system`, one message, one tool, the `content` of a
+message or one of its blocks, or one session log event. A `select` that stops inside a unit, such as
+`content[-1].input`, an event's `output`, or `usage`, renders the whole unit with the part highlighted, and
+`docs:check` fails it with the select and highlight to write instead. The rule covers every route: a beat's `sees`,
+a page's `payloads:`, `<Payload>`, and the static story list, which renders the same views.
+
+The label comes from the unit, never from the page:
+
+| unit | label |
+| --- | --- |
+| request | Request ที่ส่งให้ model |
+| response, model-output (blocks of a response or an `assistant` event) | คำตอบของ model |
+| tool-result (`tool_result` blocks, or a message of only those) | ผลของ tool (block tool_result) |
+| request-content (other blocks of a request message) | เนื้อหาข้อความใน request |
+| message, messages, tools, tool, system | ข้อความหนึ่งใน request, messages ใน request, tool ทั้งหมดใน request, นิยาม tool, System prompt |
+| stream, stream-event | Stream ที่ model ส่งกลับ, Event หนึ่งใน stream ของ model |
+| log-event | บันทึกใน session log, plus a Thai line on what that kind of event records |
+
 - A card that shows a message, its `content`, or one of its blocks gets a chip row above the JSON listing the
   message's blocks in order (`thinking · text · tool_use edit · tool_use edit`). A chip scrolls the JSON to its
   block; a dashed chip is a block of the same message that the card does not show.
+- A tool result card, and a logged `tool-result` event, names the call it answers ("ตอบ `tool_use edit`
+  (toolu_…)") when the matching `tool_use` is in the same record or the same file.
+- To show what the model got back from a tool, point at the `tool_result` block in the next request
+  (`requests.jsonl` or `wire.jsonl`, `select: messages[-1].content[i]`), not at the session log's `output`.
 - The first card on a page that shows a `tool_use` block carries a Thai line on reading one: `name`, `input`, `id`.
   In a story it is the first beat with one; on other pages, CSS hides it on every later `Payload`.
-- Instead of `source` + `select`, a page may give an inline `json:` excerpt. It still names `source`, which must exist.
 
-`docs:check` fails when the file, the `seq` or line, the `select` path or a `highlight`/`collapse` path does not
-resolve. The build trims the excerpt: strings over 240 characters keep their start and show "… 10,905 chars", and
-arrays over 6 items show "… 6 more". Several payloads in one `sees` render as tabs. The caption names the run and model
-("A06 read-not-cat, qwen3.8-flash"), links the source file, and says where the bytes come from: recorded bytes
-(`wire.jsonl`), a request rebuilt from the session log (`requests.jsonl`) or a logged event (a session log), plus the
-engine commit when `runs/index.json` records it.
+`docs:check` fails when the file, the `seq` or line, the `select` path, a `highlight`/`collapse` path, or a `quote`
+does not resolve. The build trims the excerpt: strings over 240 characters keep 160 and show "… 10,905 ตัวอักษร", and
+arrays over 6 items show "… อีก 6 รายการ". Several payloads in one `sees` render as tabs, every panel in the HTML. The
+caption names the run and model ("A06 read-not-cat, qwen3.8-flash"), links the source file, and says where the bytes
+come from: recorded bytes (`wire.jsonl`), a request rebuilt from the session log (`requests.jsonl`) or a logged event
+(a session log), plus the engine commit when `runs/index.json` records it.
+
+`pnpm --filter @g-code/docs cards <url>` reads every card a running dev or preview server renders and fails on a card
+whose JSON is not a whole unit of its kind, a `tool_use` or `tool_result` block missing its ids, a tool result with no
+chip row or answered call, a log event not labelled as one, or a page whose payloads render no card.
 
 A page that is not a tour lists its payloads by name in its frontmatter and shows them with the `Payload` component.
 `docs:check` reads them on every page:
@@ -148,7 +171,7 @@ A page that is not a tour lists its payloads by name in its frontmatter and show
 ---
 title: …
 payloads:
-  sent: { direction: request, source: "docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3", select: messages }
+  sent: { source: "docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3", select: messages }
 ---
 import Payload from '../../../components/Payload.astro';
 

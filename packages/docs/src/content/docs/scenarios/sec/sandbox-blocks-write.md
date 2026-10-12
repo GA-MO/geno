@@ -125,7 +125,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=22
           select: messages[-1].content[0]
           highlight:

@@ -152,9 +152,9 @@ scenario:
                   to: model
                   sees:
                     kind: payload
-                    direction: tool_result
-                    source: docs/results/real-usecases/runs/A14-deny-rules/1/session.jsonl#seq=11
-                    select: output
+                    source: docs/results/real-usecases/runs/A14-deny-rules/1/requests.jsonl#seq=13
+                    select: messages[-1].content[2]
+                    highlight: [content]
                 do: >-
                   ผลมีสถานะ `error` ข้อความว่า ".env is off limits to grep: it matches Geno's built-in rule for credentials files ..."
                   และบอกให้ถามผู้ใช้ถ้างานต้องการค่าจากไฟล์นั้น `ToolError` ไม่มีบันทึกการอนุญาต อัปเดตผลจึงไม่มี `APPROVAL_META`

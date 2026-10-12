@@ -22,7 +22,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A12-background-server/fix-a1/session.jsonl#seq=12
           select: content[1]
           highlight:

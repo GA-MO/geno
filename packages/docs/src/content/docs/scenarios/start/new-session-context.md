@@ -175,7 +175,6 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A18-project-skill/1/requests.jsonl#seq=4
           select: messages[0].content[2]
       do: >-
@@ -219,7 +218,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A18-project-skill/1/requests.jsonl#seq=4
           select: messages[0].content
           highlight:

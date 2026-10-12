@@ -23,7 +23,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/B08-mcp-banner/1/session-e4c82936-19b2-44b3-a830-e99ae0a865c0.jsonl#seq=4
           select: content[1]
       lane: model
@@ -42,9 +41,8 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/B08-mcp-banner/1/session-e4c82936-19b2-44b3-a830-e99ae0a865c0.jsonl#seq=5
-          select: output
+          highlight: [output]
       lane: tool
       at: executor
       do: >-
@@ -65,7 +63,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/B08-mcp-banner/1/session-e4c82936-19b2-44b3-a830-e99ae0a865c0.jsonl#seq=7
           select: content[1]
       lane: model
@@ -192,9 +189,8 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/B08-mcp-banner/1/session-e4c82936-19b2-44b3-a830-e99ae0a865c0.jsonl#seq=8
-          select: output
+          highlight: [output]
       lane: tool
       at: executor
       do: >-

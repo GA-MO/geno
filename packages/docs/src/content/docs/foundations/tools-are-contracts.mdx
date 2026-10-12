@@ -5,7 +5,6 @@ sidebar:
   order: 5
 payloads:
   readTool:
-    direction: request
     source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
     select: tools[6]
     highlight:
@@ -14,24 +13,21 @@ payloads:
     collapse:
       - input_schema.properties
   searchCall:
-    direction: response
     source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=4
     select: content[-1]
     highlight:
       - name
       - input
   searchResult:
-    direction: tool_result
-    source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=5
-    select: output
+    source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/requests.jsonl#seq=7
+    select: messages[-1].content[0]
+    highlight: [content]
   badCall:
-    direction: response
     source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=30
     select: content[-1]
     highlight:
       - input.files
   badResult:
-    direction: tool_result
     source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=31
     highlight:
       - status

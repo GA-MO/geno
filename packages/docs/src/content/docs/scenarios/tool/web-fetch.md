@@ -25,7 +25,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=7
           select: content
           collapse:

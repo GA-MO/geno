@@ -63,7 +63,6 @@ scenario:
                   to: machine
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A30-hidden-char-edit/1/requests.jsonl#seq=7
                     select: messages[-1].content[0]
                     highlight:
@@ -84,7 +83,6 @@ scenario:
                   to: engine
                   sees:
                     kind: payload
-                    direction: response
                     source: docs/results/real-usecases/runs/A30-hidden-char-edit/1/session.jsonl#seq=7
                     select: content
                     collapse:

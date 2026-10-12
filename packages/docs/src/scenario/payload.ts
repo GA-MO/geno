@@ -3,9 +3,10 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import type { PayloadSpec } from './schema.js';
 
-/** A long string cut at build: its start, and how long it was. */
+/** A long string cut at build: the part kept, where in the string it starts, and how long the string was. */
 export interface Long {
   readonly $long: string;
+  readonly from: number;
   readonly chars: number;
 }
 /** The items an array had past the ones kept. */
@@ -19,6 +20,26 @@ export interface More {
  */
 export type Provenance = 'recorded' | 'rebuilt' | 'logged';
 
+/**
+ * What a card shows, read off the record and never written by the page: a whole request, a stream or one of its
+ * events, the request's messages, tools or system prompt, one message, the content blocks of one (tool results, the
+ * model's answer, or other request content), or one session log event.
+ */
+export type Unit =
+  | 'request'
+  | 'response'
+  | 'stream'
+  | 'stream-event'
+  | 'messages'
+  | 'message'
+  | 'tool-result'
+  | 'model-output'
+  | 'request-content'
+  | 'tools'
+  | 'tool'
+  | 'system'
+  | 'log-event';
+
 /** One content block of the message a card shows, in order: its chip in the summary row. */
 export interface BlockChip {
   readonly type: string;
@@ -28,16 +49,30 @@ export interface BlockChip {
   readonly at?: string;
 }
 
+/** The tool_use a tool result answers, found in the same record or the same file. */
+export interface Answer {
+  readonly id: string;
+  readonly name: string;
+}
+
 export interface PayloadView {
   readonly kind: 'payload';
-  readonly direction: PayloadSpec['direction'];
+  readonly unit: Unit;
+  /** The card's title, from its unit. */
+  readonly label: string;
+  /** One line on what a log event records. */
+  readonly note?: string;
   /** The excerpt, with long strings as `Long` and long arrays ending in a `More`. */
   readonly value: unknown;
   /** Canonical paths into `value`, keys and indexes joined by dots: `content.0.id`. */
   readonly highlight: readonly string[];
   readonly collapse: readonly string[];
-  /** The blocks of the model message the card shows, when it shows one, its content, or one of its blocks. */
+  /** Text marked wherever a string in `value` contains it. */
+  readonly quote?: string;
+  /** The blocks of the message the card shows, when it shows one, its content, or one of its blocks. */
   readonly blocks?: readonly BlockChip[];
+  /** For each tool result the card shows, the call it answers. */
+  readonly answers?: readonly Answer[];
   readonly caption: string;
   readonly provenance: Provenance;
   /** The engine commit of the run, when the runs index records it. */
@@ -47,10 +82,10 @@ export interface PayloadView {
 }
 
 /**
- * `cut` is set when `select` reaches inside a content block without the spec's own `cut` reason: the view still shows
- * the whole block, and docs:check fails with this message so the page selects the block itself.
+ * `partial` is set when `select` reaches inside a unit (a block, a message, a tool, a log event): the view shows the
+ * whole unit with the part highlighted, and docs:check fails with this message so the page selects the unit itself.
  */
-export type PayloadResult = { readonly ok: true; readonly view: PayloadView; readonly cut?: string } | { readonly ok: false; readonly reason: string };
+export type PayloadResult = { readonly ok: true; readonly view: PayloadView; readonly partial?: string } | { readonly ok: false; readonly reason: string };
 
 export interface RunFiles {
   resolve(mock: PayloadSpec): PayloadResult;
@@ -58,6 +93,7 @@ export interface RunFiles {
 
 const LONG = 240;
 const KEPT_CHARS = 160;
+const QUOTE_LEAD = 40;
 const ITEMS = 6;
 const KEPT_ITEMS = 5;
 
@@ -67,39 +103,169 @@ export function parsePath(text: string): Key[] {
   return [...text.matchAll(/([A-Za-z_$][\w$-]*)|\[(-?\d+)\]/g)].map((match) => (match[1] === undefined ? Number(match[2]) : match[1]));
 }
 
-type Block = { readonly type: string; readonly name?: unknown };
-const isBlock = (value: unknown): value is Block => value !== null && typeof value === 'object' && !Array.isArray(value) && typeof (value as { type?: unknown }).type === 'string';
+type Block = { readonly type: string; readonly name?: unknown; readonly id?: unknown; readonly tool_use_id?: unknown };
+const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isBlock = (value: unknown): value is Block => isObject(value) && typeof value['type'] === 'string';
 const isBlocks = (value: unknown): value is readonly Block[] => Array.isArray(value) && value.length > 0 && value.every(isBlock);
-
-/** How many of the keys reach the outermost content block they pass through or end at: `content[i]` of a message. */
-function blockDepth(root: unknown, keys: readonly Key[]): number | undefined {
-  let at = root;
-  for (const [i, key] of keys.entries()) {
-    if (typeof key === 'number' && keys[i - 1] === 'content' && isBlocks(at)) return i + 1;
-    at = (at as Record<Key, unknown>)[key];
-  }
-  return undefined;
-}
+const isStream = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.length > 0 && value.every((item) => isObject(item) && typeof item['event'] === 'string');
 
 const valueAt = (root: unknown, keys: readonly Key[]): unknown => keys.reduce<unknown>((at, key) => (at as Record<Key, unknown>)[key], root);
+const pathText = (keys: readonly Key[]): string => keys.map((key, i) => (typeof key === 'number' ? `[${key}]` : i === 0 ? key : `.${key}`)).join('');
 
-/** The chip row of a selection: the blocks of its message, each with where the card shows it. */
-function chipsOf(root: unknown, keys: readonly Key[], depth: number | undefined): BlockChip[] | undefined {
-  const chip = (block: Block, at: string | undefined): BlockChip => ({ type: block.type, ...(typeof block.name === 'string' ? { name: block.name } : {}), ...(at === undefined ? {} : { at }) });
-  const shown = (blocks: readonly Block[], prefix: string): BlockChip[] =>
-    blocks.map((block, i) => chip(block, blocks.length > ITEMS && i >= KEPT_ITEMS ? undefined : `${prefix}${i}`));
-  if (depth !== undefined) {
-    const blocks = valueAt(root, keys.slice(0, depth - 1)) as readonly Block[];
-    return blocks.map((block, i) => chip(block, i === keys[depth - 1] ? '' : undefined));
-  }
-  const selected = valueAt(root, keys);
-  if (isBlocks(selected) && (keys.length === 0 || keys.at(-1) === 'content')) return shown(selected, '');
-  const content = (selected as { content?: unknown } | null)?.content;
-  if (typeof selected === 'object' && !Array.isArray(selected) && isBlocks(content)) return shown(content, 'content.');
+/** A whole thing a card may show, by where it sits in its record. */
+type Spot = 'request' | 'response' | 'stream' | 'stream-event' | 'messages' | 'message' | 'content' | 'block' | 'tools' | 'tool' | 'system' | 'event';
+
+function rootSpot(record: unknown, logged: boolean): Spot | undefined {
+  if (isStream(record)) return 'stream';
+  if (!isObject(record)) return undefined;
+  if (logged && typeof record['kind'] === 'string') return 'event';
+  if (Array.isArray(record['messages'])) return 'request';
+  if (record['type'] === 'message') return 'response';
   return undefined;
 }
 
-const pathText = (keys: readonly Key[]): string => keys.map((key, i) => (typeof key === 'number' ? `[${key}]` : i === 0 ? key : `.${key}`)).join('');
+/** The spot one key below a spot, when the value there is a whole thing too. */
+function childSpot(spot: Spot, key: Key, value: unknown): Spot | undefined {
+  const blocks = key === 'content' && isBlocks(value) ? 'content' : undefined;
+  switch (spot) {
+    case 'stream':
+      return typeof key === 'number' ? 'stream-event' : undefined;
+    case 'request':
+      return key === 'messages' ? 'messages' : key === 'tools' ? 'tools' : key === 'system' ? 'system' : undefined;
+    case 'messages':
+      return typeof key === 'number' ? 'message' : undefined;
+    case 'tools':
+      return typeof key === 'number' ? 'tool' : undefined;
+    case 'system':
+      return typeof key === 'number' ? 'system' : undefined;
+    case 'content':
+      return typeof key === 'number' ? 'block' : undefined;
+    case 'message':
+    case 'response':
+    case 'event':
+      return blocks;
+    default:
+      return undefined;
+  }
+}
+
+interface Spotted {
+  readonly spot: Spot;
+  /** How many keys of the selection reach it. */
+  readonly depth: number;
+  /** Whether its blocks are the model's answer: under a response, an assistant event or an assistant message. */
+  readonly fromModel: boolean;
+}
+
+/** The innermost whole thing the selection reaches; a selection that goes further is a part of it. */
+function spotOf(record: unknown, keys: readonly Key[], logged: boolean): Spotted | undefined {
+  const root = rootSpot(record, logged);
+  if (root === undefined) return undefined;
+  let found: Spotted = { spot: root, depth: 0, fromModel: false };
+  let at = record;
+  for (const [i, key] of keys.entries()) {
+    const owner = at as Record<Key, unknown>;
+    at = owner[key];
+    const next = childSpot(found.spot, key, at);
+    if (next === undefined) break;
+    const modelOwner = next === 'content' && (found.spot === 'response' || owner['kind'] === 'assistant' || owner['role'] === 'assistant');
+    found = { spot: next, depth: i + 1, fromModel: found.fromModel || modelOwner };
+  }
+  return found;
+}
+
+const SPOT_UNITS: Readonly<Record<Exclude<Spot, 'message' | 'content' | 'block' | 'event'>, Unit>> = {
+  request: 'request',
+  response: 'response',
+  stream: 'stream',
+  'stream-event': 'stream-event',
+  messages: 'messages',
+  tools: 'tools',
+  tool: 'tool',
+  system: 'system',
+};
+
+/** The blocks a card shows, when it shows a message, its content, or one block. */
+function shownBlocks(spot: Spot, value: unknown): readonly Block[] {
+  if (spot === 'block') return isBlock(value) ? [value] : [];
+  if (spot === 'content') return isBlocks(value) ? value : [];
+  const content = isObject(value) ? value['content'] : undefined;
+  return (spot === 'message' || spot === 'response') && isBlocks(content) ? content : [];
+}
+
+function unitOf({ spot, fromModel }: Spotted, value: unknown): Unit {
+  if (spot === 'event') return 'log-event';
+  if (spot !== 'message' && spot !== 'content' && spot !== 'block') return SPOT_UNITS[spot];
+  const blocks = shownBlocks(spot, value);
+  if (blocks.length > 0 && blocks.every((block) => block.type === 'tool_result')) return 'tool-result';
+  if (spot === 'message') return 'message';
+  return fromModel ? 'model-output' : 'request-content';
+}
+
+const LABELS: Readonly<Record<Unit, string>> = {
+  request: 'Request ที่ส่งให้ model',
+  response: 'คำตอบของ model',
+  stream: 'Stream ที่ model ส่งกลับ',
+  'stream-event': 'Event หนึ่งใน stream ของ model',
+  messages: 'messages ใน request',
+  message: 'ข้อความหนึ่งใน request',
+  'tool-result': 'ผลของ tool (block tool_result)',
+  'model-output': 'คำตอบของ model',
+  'request-content': 'เนื้อหาข้อความใน request',
+  tools: 'tool ทั้งหมดใน request',
+  tool: 'นิยาม tool',
+  system: 'System prompt',
+  'log-event': 'บันทึกใน session log',
+};
+
+/** What each kind of session log event records, in one line; a kind with no line here gets a generic one. */
+const EVENT_NOTES: Readonly<Record<string, string>> = {
+  assistant: 'Geno บันทึกคำตอบของ model หนึ่งครั้ง: block ใน content, เหตุที่หยุด, usage และค่าใช้จ่าย',
+  'tool-result': 'Geno บันทึกผลของ tool call หนึ่งครั้ง พร้อมสถานะและการตัดสิน permission ถ้ามี ผลนี้ไปถึง model เป็น block tool_result ใน request ถัดไป',
+  user: 'ข้อความที่ผู้ใช้ส่ง ตามที่ Geno บันทึก',
+  compact: 'Geno บันทึกการ compaction: summary ที่แทนข้อความเก่า ข้อความที่เก็บไว้ และจำนวน token ก่อนและหลัง',
+  mode: 'Geno บันทึกการเปลี่ยน permission mode',
+  notice: 'Geno บันทึกข้อความแจ้งที่แสดงให้ผู้ใช้เห็น',
+  error: 'Geno บันทึก error ที่ทำให้ turn หยุด',
+  'hook-context': 'Geno บันทึกข้อความที่ hook เพิ่มเข้าไปใน context',
+  'file-changed': 'Geno บันทึกว่าไฟล์ถูกแก้นอก session',
+  'child-start': 'Geno บันทึกการเริ่ม subagent',
+  'child-end': 'Geno บันทึกการจบของ subagent และรายงานที่ส่งกลับ',
+};
+const noteOf = (event: string): string => EVENT_NOTES[event] ?? `Geno บันทึก event ชนิด ${event} ใน session log`;
+
+/** The chip row: the blocks of the message the card shows, each with where the card shows it. */
+function chipsOf(record: unknown, keys: readonly Key[], spotted: Spotted): BlockChip[] | undefined {
+  const chip = (block: Block, at: string | undefined): BlockChip => ({ type: block.type, ...(typeof block.name === 'string' ? { name: block.name } : {}), ...(at === undefined ? {} : { at }) });
+  const shown = (blocks: readonly Block[], prefix: string): BlockChip[] => blocks.map((block, i) => chip(block, blocks.length > ITEMS && i >= KEPT_ITEMS ? undefined : `${prefix}${i}`));
+  const selected = valueAt(record, keys.slice(0, spotted.depth));
+  if (spotted.spot === 'block') {
+    const blocks = valueAt(record, keys.slice(0, spotted.depth - 1)) as readonly Block[];
+    return blocks.map((block, i) => chip(block, i === keys[spotted.depth - 1] ? '' : undefined));
+  }
+  if (spotted.spot === 'content' && isBlocks(selected)) return shown(selected, '');
+  const content = isObject(selected) ? selected['content'] : undefined;
+  if (spotted.spot !== 'messages' && isBlocks(content)) return shown(content, 'content.');
+  return undefined;
+}
+
+/** Every tool_use block in a value, by id. */
+function toolUses(value: unknown, into = new Map<string, string>()): Map<string, string> {
+  if (Array.isArray(value)) for (const item of value) toolUses(item, into);
+  else if (isObject(value)) {
+    if (value['type'] === 'tool_use' && typeof value['id'] === 'string' && typeof value['name'] === 'string') into.set(value['id'], value['name']);
+    for (const inner of Object.values(value)) toolUses(inner, into);
+  }
+  return into;
+}
+
+/** The ids of the tool results a card shows: its tool_result blocks, or a logged tool result's toolUseId. */
+function resultIds(unit: Unit, value: unknown): string[] {
+  if (unit === 'log-event') return isObject(value) && value['kind'] === 'tool-result' && typeof value['toolUseId'] === 'string' ? [value['toolUseId']] : [];
+  if (unit !== 'tool-result') return [];
+  const blocks = isBlock(value) ? [value] : isBlocks(value) ? value : isObject(value) && isBlocks(value['content']) ? value['content'] : [];
+  return blocks.flatMap((block) => (typeof block.tool_use_id === 'string' ? [block.tool_use_id] : []));
+}
 
 /** Follows a path, resolving negative indexes; returns the canonical keys or why it failed. */
 function follow(root: unknown, keys: readonly Key[]): { readonly ok: true; readonly value: unknown; readonly keys: readonly Key[] } | { readonly ok: false; readonly reason: string } {
@@ -113,21 +279,28 @@ function follow(root: unknown, keys: readonly Key[]): { readonly ok: true; reado
       at = at[index];
       canonical.push(index);
     } else {
-      if (at === null || typeof at !== 'object' || Array.isArray(at) || !(key in at)) return { ok: false, reason: `no key "${key}" at "${canonical.join('.') || '(root)'}"` };
-      at = (at as Record<string, unknown>)[key];
+      if (!isObject(at) || !(key in at)) return { ok: false, reason: `no key "${key}" at "${canonical.join('.') || '(root)'}"` };
+      at = at[key];
       canonical.push(key);
     }
   }
   return { ok: true, value: at, keys: canonical };
 }
 
-export function trim(value: unknown): unknown {
-  if (typeof value === 'string') return value.length > LONG ? ({ $long: value.slice(0, KEPT_CHARS), chars: value.length } satisfies Long) : value;
+/** Cuts long strings and arrays; a long string that holds `quote` keeps the stretch around it rather than its start. */
+export function trim(value: unknown, quote?: string): unknown {
+  if (typeof value === 'string') {
+    if (value.length <= LONG) return value;
+    const at = quote === undefined ? -1 : value.indexOf(quote);
+    const length = Math.max(KEPT_CHARS, (quote?.length ?? 0) + 2 * QUOTE_LEAD);
+    const from = at < 0 ? 0 : Math.max(0, Math.min(at - QUOTE_LEAD, value.length - length));
+    return { $long: value.slice(from, from + length), from, chars: value.length } satisfies Long;
+  }
   if (Array.isArray(value)) {
     const kept = value.length > ITEMS ? value.slice(0, KEPT_ITEMS) : value;
-    return [...kept.map(trim), ...(value.length > ITEMS ? [{ $more: value.length - KEPT_ITEMS } satisfies More] : [])];
+    return [...kept.map((item) => trim(item, quote)), ...(value.length > ITEMS ? [{ $more: value.length - KEPT_ITEMS } satisfies More] : [])];
   }
-  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, trim(inner)]));
+  if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, trim(inner, quote)]));
   return value;
 }
 
@@ -139,6 +312,14 @@ function survivesTrim(root: unknown, keys: readonly Key[]): boolean {
     at = (at as Record<Key, unknown>)[key];
   }
   return true;
+}
+
+/** Whether a string the trimmed card shows contains the quote. */
+function shows(value: unknown, quote: string): boolean {
+  if (typeof value === 'string') return value.includes(quote);
+  if (Array.isArray(value)) return value.some((item) => shows(item, quote));
+  if (isObject(value)) return '$long' in value ? String(value['$long']).includes(quote) : Object.values(value).some((inner) => shows(inner, quote));
+  return false;
 }
 
 /** A run file's records, by line (from 0) and by `seq`. */
@@ -230,6 +411,15 @@ export function runFiles(repoRoot: string): RunFiles {
     }
     return found;
   };
+  const callsOf = new Map<string, Map<string, string>>();
+  const fileCalls = (file: string): Map<string, string> => {
+    let found = callsOf.get(file);
+    if (found === undefined) {
+      found = toolUses(recordsOf(file).byLine);
+      callsOf.set(file, found);
+    }
+    return found;
+  };
   let engines: ReadonlyMap<string, string> | undefined;
   const engineOf = (file: string): string | undefined => {
     engines ??= new Map(
@@ -259,27 +449,19 @@ export function runFiles(repoRoot: string): RunFiles {
       const { byLine, bySeq } = recordsOf(file);
       const record = by === 'seq' ? bySeq.get(Number(n)) : byLine[Number(n) - 1];
       if (record === undefined) return { ok: false, reason: by === 'seq' ? `${file} has no record with seq ${n}` : `${file} has no line ${n}; it has ${byLine.length}` };
-      let selected: unknown = mock.json;
-      let blocks = mock.json === undefined ? undefined : chipsOf(mock.json, [], undefined);
-      let inner: Key[] = [];
-      let cut: string | undefined;
-      if (mock.json === undefined) {
-        const keys = parsePath(mock.select ?? '');
-        const picked = follow(record, keys);
-        if (!picked.ok) return { ok: false, reason: `select ${mock.select}: ${picked.reason}` };
-        const depth = blockDepth(record, picked.keys);
-        const below = depth !== undefined && depth < picked.keys.length;
-        if (below && mock.cut === undefined) {
-          inner = picked.keys.slice(depth);
-          const block = valueAt(record, picked.keys.slice(0, depth)) as Block;
-          selected = block;
-          const marked = (mock.highlight ?? ['']).map((text) => pathText([...inner, ...parsePath(text)]));
-          cut = `select ${mock.select} shows part of a ${block.type} block, which hides its type, id and name: select ${pathText(keys.slice(0, depth))} and highlight [${marked.join(', ')}], or give cut: <why only this part> to show the part alone`;
-        } else {
-          if (!below && mock.cut !== undefined) return { ok: false, reason: `cut: select ${mock.select ?? '(the whole record)'} does not reach inside a content block, so drop cut` };
-          selected = picked.value;
-        }
-        blocks = below && mock.cut !== undefined ? undefined : chipsOf(record, picked.keys, depth);
+      const provenance = provenanceOf(file);
+      const picked = follow(record, parsePath(mock.select ?? ''));
+      if (!picked.ok) return { ok: false, reason: `select ${mock.select}: ${picked.reason}` };
+      const spotted = spotOf(record, picked.keys, provenance === 'logged');
+      if (spotted === undefined) return { ok: false, reason: `${mock.source} is not a request, a response, a stream or a session log event, so no card can say what it is` };
+      const outer = picked.keys.slice(0, spotted.depth);
+      const inner = picked.keys.slice(spotted.depth);
+      const selected = valueAt(record, outer);
+      const unit = unitOf(spotted, selected);
+      let partial: string | undefined;
+      if (inner.length > 0) {
+        const marked = (mock.highlight ?? ['']).map((text) => pathText([...inner, ...parsePath(text)]));
+        partial = `select ${mock.select} shows part of a ${unit} (${LABELS[unit]}), which hides what it is: ${outer.length === 0 ? 'drop select' : `select ${pathText(outer)}`} and highlight [${marked.join(', ')}]`;
       }
       const marks = (paths: readonly string[] | undefined, name: string): { readonly ok: true; readonly paths: string[] } | { readonly ok: false; readonly reason: string } => {
         const out: string[] = [];
@@ -295,6 +477,14 @@ export function runFiles(repoRoot: string): RunFiles {
       if (!highlight.ok) return highlight;
       const collapse = marks(mock.collapse, 'collapse');
       if (!collapse.ok) return collapse;
+      const value = trim(selected, mock.quote);
+      if (mock.quote !== undefined && !shows(value, mock.quote)) return { ok: false, reason: `quote "${mock.quote}" is not in a string the card shows` };
+      const calls = toolUses(record);
+      const answers = resultIds(unit, selected).flatMap((id): Answer[] => {
+        const name = calls.get(id) ?? fileCalls(file).get(id);
+        return name === undefined ? [] : [{ id, name }];
+      });
+      const blocks = chipsOf(record, picked.keys, spotted);
       const [, runCase, run] = /runs\/([^/]+)\/([^/]+)\//.exec(file) ?? [];
       const label = (runCase ?? '').replace(/^([A-Z]\d+)-/, '$1 ');
       const model = modelOf(file, record);
@@ -303,18 +493,22 @@ export function runFiles(repoRoot: string): RunFiles {
         ok: true,
         view: {
           kind: 'payload',
-          direction: mock.direction,
-          value: trim(selected),
+          unit,
+          label: LABELS[unit],
+          ...(unit === 'log-event' ? { note: noteOf(String((selected as { kind: unknown }).kind)) } : {}),
+          value,
           highlight: highlight.paths,
           collapse: collapse.paths,
+          ...(mock.quote === undefined ? {} : { quote: mock.quote }),
           ...(blocks === undefined ? {} : { blocks }),
+          ...(answers.length === 0 ? {} : { answers }),
           caption: `${label}${run === '1' || run === undefined ? '' : ` (run ${run})`}${model === undefined ? '' : `, ${model}`}`,
-          provenance: provenanceOf(file),
+          provenance,
           ...(engine === undefined ? {} : { engine }),
           file,
           url: `vscode://file${path.join(repoRoot, file)}`,
         },
-        ...(cut === undefined ? {} : { cut }),
+        ...(partial === undefined ? {} : { partial }),
       };
     },
   };

@@ -67,12 +67,8 @@ scenario:
         to: panel
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A32-outside-explicit/1/session.jsonl#seq=9
-          select: approval
-          highlight:
-            - rule
-            - reason
+          highlight: [approval.rule, approval.reason]
       do: >-
         `outsideReadDenial` ใช้กฎ `path-outside-workspace` เดียวกับ `cat` ของ path นั้น ในโหมด Ask คือถาม
         และเสนอโฟลเดอร์ `/Users/me/shared-lib/src` ให้อนุญาตตลอด session เพราะ path ไม่ใช่ไฟล์ลับ

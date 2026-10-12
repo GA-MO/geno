@@ -71,7 +71,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a1/child-181ba39b-227d-4bba-814b-cfb5a5eb66be.jsonl#seq=16
           select: content[0]
           highlight:
@@ -124,7 +123,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a1/session.jsonl#seq=6
           highlight:
             - output

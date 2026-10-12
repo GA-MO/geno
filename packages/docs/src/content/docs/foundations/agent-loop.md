@@ -52,7 +52,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=4
           select: messages[-1].content[-1]
           highlight: [text]
@@ -68,7 +67,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=4
           select: content
           highlight: ['[2].input', '[3].input']
@@ -104,7 +102,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=8
           select: messages[-1].content
           highlight: ['[0].tool_use_id', '[1].tool_use_id']
@@ -120,7 +117,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=8
           select: content[-1]
           highlight: [input.path, input.new_str]
@@ -141,9 +137,9 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: tool_result
-          source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=9
-          select: output
+          source: docs/results/real-usecases/runs/A13-fail-then-fix/1/requests.jsonl#seq=11
+          select: messages[-1].content[0]
+          highlight: [content]
       do: >-
         `editExecutor` เขียนไฟล์ แล้ว `afterEdit` รัน check ของโปรเจกต์ (`node --test`) และต่อผลท้ายผลของ `edit`
       ref: packages/engine/src/tools/agent.ts#editExecutor
@@ -176,7 +172,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=11
           select: content[-1]
           highlight: [input.command, input.description]
@@ -197,7 +192,6 @@ scenario:
         to: machine
         sees:
           kind: payload
-          direction: tool_result
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=12
           highlight: [status, output]
           collapse: [timing]
@@ -233,7 +227,6 @@ scenario:
         to: engine
         sees:
           kind: payload
-          direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=14
           select: content[-1]
           highlight: [text]

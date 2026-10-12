@@ -129,7 +129,6 @@ scenario:
         to: model
         sees:
           kind: payload
-          direction: request
           source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
           select: messages[-1].content[3]
       do: >-

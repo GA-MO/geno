@@ -108,12 +108,8 @@ scenario:
                   to: panel
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=19
-                    select: approval
-                    highlight:
-                      - classifier.verdict
-                      - classifier.reason
+                    highlight: [approval.classifier.verdict, approval.classifier.reason]
                 do: >-
                   `CLASSIFIER_OUTCOMES` ให้ `allow` เป็น `run` สถานะ Auto รีเซ็ตตัวนับการบล็อกติดกัน
                   `settle` คืนบันทึก `decidedBy: classifier, verdict: allow` พร้อมเหตุผลของ classifier ไม่มีการ์ดและไม่ถามใคร
@@ -173,12 +169,8 @@ scenario:
                   to: model
                   sees:
                     kind: payload
-                    direction: tool_result
                     source: docs/results/real-usecases/runs/A09-auto-classifier/1/session.jsonl#seq=24
-                    select: approval
-                    highlight:
-                      - classifier.verdict
-                      - classifier.reason
+                    highlight: [approval.classifier.verdict, approval.classifier.reason]
                 do: >-
                   `CLASSIFIER_OUTCOMES` ให้ `deny` เป็น `refuse` `settle` คืนบันทึก `decidedBy: classifier, verdict: deny`
                   `refusalOf` สร้าง `ToolDenied` ไม่ใช่ `ToolRejected` คำสั่งไม่ได้รัน แต่ turn ไม่จบ
