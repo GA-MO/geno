@@ -133,6 +133,8 @@ scenario:
       do: >-
         `mcpResultText` แปลงผลเป็นข้อความ (รูปภาพเก็บเป็นไฟล์แนบ) ถ้า server ตอบว่า `isError` ผลเป็น error ให้โมเดลอ่าน
         ผลที่ยาวเกินถูกเก็บลงไฟล์พร้อมคำแนะนำให้ใช้ filter หรือหน้าของ server แทน
+        call นี้ผ่านการถาม ผลจึงแนบบันทึกว่าผู้ใช้อนุญาต update ปิดของมันมี `APPROVAL_META`
+        (call ถัดไปที่อนุญาตไว้ตลอด session ไม่ถาม จึงไม่มีบันทึกนี้)
       ref: packages/core/src/mcp.ts#mcpResultText
 
     - use: tool-result-returns
