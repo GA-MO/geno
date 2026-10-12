@@ -309,10 +309,10 @@ describe('the offered rule', () => {
     ['auto', '$TOOL run', undefined],
     ['plan', 'git push', undefined],
     ['non-interactive', 'git push', undefined],
-    ['ask', 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12', 'node --check'],
+    ['ask', 'for f in server.js lib/*.js; do node --import tsx $f; done && npm test 2>&1 | tail -12', 'node --import'],
     ['ask', 'if [ -f a.js ]; then node a.js; fi', 'node a.js'],
     ['ask', 'node scan.js; echo ok', 'node scan.js'],
-    ['ask', 'grep -c x a.txt; echo scan exit: $?', undefined],
+    ['ask', 'grep -c x a.txt; ls $DIR', undefined],
     ['ask', 'while true; do git push; done', 'git push'],
     ['ask', 'for f in ../x/*.js; do echo $f; done', undefined],
   ];
@@ -322,9 +322,9 @@ describe('the offered rule', () => {
   });
 
   it('asks about the flagged part beside the whole line, which one yes runs', () => {
-    const line = 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12';
-    expect(ruledDenial(` ${line} `, scope, 'ask', [])).toMatchObject({ command: 'node --check $f', line });
-    expect(ruledDenial('grep -c x a.txt; echo scan exit: $?', scope, 'ask', [])).toMatchObject({ command: 'echo scan exit: $?', line: 'grep -c x a.txt; echo scan exit: $?' });
+    const line = 'for f in server.js lib/*.js; do node --import tsx $f; done && npm test 2>&1 | tail -12';
+    expect(ruledDenial(` ${line} `, scope, 'ask', [])).toMatchObject({ command: 'node --import tsx $f', line });
+    expect(ruledDenial('grep -c x a.txt; ls $DIR', scope, 'ask', [])).toMatchObject({ command: 'ls $DIR', line: 'grep -c x a.txt; ls $DIR' });
     expect(ruledDenial('git push', scope, 'ask', [])).not.toHaveProperty('line');
   });
 
