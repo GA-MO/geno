@@ -1,9 +1,6 @@
 ---
 title: "Model เรียก tool ที่ไม่มีจริง หรือส่ง input ผิด"
 description: model เรียก tool ที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

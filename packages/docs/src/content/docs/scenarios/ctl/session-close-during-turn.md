@@ -1,9 +1,6 @@
 ---
 title: "ปิด session จากอีกหน้าต่างขณะ turn ทำงาน"
 description: client ส่ง session/close ถึงแชตที่มี turn ทำงานอยู่ engine หยุด turn นั้นทันทีและถือว่า session ปิด แม้ turn จะเป็นของหน้าต่างอื่น
-tableOfContents: false
-sidebar:
-  order: 9
 scenario:
   surface: vscode
   given:

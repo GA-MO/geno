@@ -1,8 +1,6 @@
 ---
 title: "โค้ดอยู่ที่ไหน"
 description: แต่ละเรื่องของระบบอยู่ในไฟล์ไหนของ monorepo
-sidebar:
-  order: 4
 ---
 
 monorepo มีสามแพ็กเกจหลัก `packages/core` เป็นโค้ดบริสุทธิ์ที่ไม่แตะ I/O (ใช้ได้แค่ `node:path` และ `node:crypto`)

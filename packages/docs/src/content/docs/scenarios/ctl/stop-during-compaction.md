@@ -1,9 +1,6 @@
 ---
 title: "กด Stop ขณะ Geno ทำ compaction"
 description: ผู้ใช้กด Stop ระหว่างที่ loop สรุปบริบทอัตโนมัติก่อนเรียก model การสรุปถูกยกเลิกโดยไม่บันทึกอะไร การเรียกที่ตามมาจบทันที และ turn จบแบบ stopped
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

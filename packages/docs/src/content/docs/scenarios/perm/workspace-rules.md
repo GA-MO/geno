@@ -1,9 +1,6 @@
 ---
 title: "กฎของ workspace อนุญาตหรือปฏิเสธคำสั่ง"
 description: กฎ allow ที่ผู้ใช้บันทึกไว้ทำให้คำสั่งรันโดยไม่ถาม กฎ deny ปฏิเสธคำสั่งก่อนถึงการ์ดหรือ classifier และแผงขึ้นป้าย Denied by a rule
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: Cmd-K แก้โค้ดที่เลือก
 description: ผู้ใช้เลือกบรรทัดในไฟล์แล้วกด Cmd-K Cmd-I พิมพ์คำสั่ง engine รัน turn สั้นที่มีแค่ tool edit การแก้ลงใน buffer และ turn แสดงในแผงแชตเหมือน turn อื่น
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

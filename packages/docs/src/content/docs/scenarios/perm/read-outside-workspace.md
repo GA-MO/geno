@@ -1,9 +1,6 @@
 ---
 title: "Model อ่านไฟล์นอก workspace"
 description: model อ่านไฟล์ในโปรเจกต์อื่น Geno ถามก่อนเหมือน cat ของ path นั้น ผู้ใช้อนุญาตครั้งเดียว อนุญาตทั้งโฟลเดอร์ตลอด session หรือปฏิเสธ
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

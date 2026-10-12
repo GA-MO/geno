@@ -1,9 +1,6 @@
 ---
 title: "ผู้ให้บริการล้มชั่วคราว Geno retry เอง"
 description: การเรียก model ได้ 529 หรือ model เงียบไป gateway ลองใหม่เองพร้อมแจ้งในแผงแชต ส่วนเครดิตหมดหรือคีย์ผิดจบ turn ทันที
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

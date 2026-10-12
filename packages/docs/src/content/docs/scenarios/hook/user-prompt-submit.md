@@ -1,9 +1,6 @@
 ---
 title: "hook UserPromptSubmit บล็อกหรือเพิ่มบริบท"
 description: hook ที่ตั้งไว้ได้อ่าน prompt ก่อน model ถ้าบล็อก prompt ไม่ถึง model และ turn จบแบบ failed ถ้าพิมพ์ข้อความออกมา ข้อความนั้นไปกับ prompt
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

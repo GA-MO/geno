@@ -1,9 +1,6 @@
 ---
 title: "Model ดึงหน้าเว็บด้วย web_fetch"
 description: model เรียก web_fetch กับหน้าเว็บของโฮสต์อื่น โหมด Ask ถามผู้ใช้ก่อน แล้ว engine ดึงหน้า ให้ model ผู้ช่วยอ่านและตอบคำถาม ผลไปถึง model ในรั้วข้อมูล
-tableOfContents: false
-sidebar:
-  order: 9
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "Turn ครบ 40 ครั้งของการเรียก model หรือเกินงบ $0.40"
 description: รอบการทำงานหนึ่งรอบใกล้ขีดจำกัด Geno ปิด tool ในการเรียกครั้งสุดท้ายให้ model เขียนรายงาน ถ้าไม่ได้รายงานหรือค่าใช้จ่ายเลยงบ turn จบแบบ failed
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

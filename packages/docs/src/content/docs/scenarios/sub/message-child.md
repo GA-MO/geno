@@ -1,9 +1,6 @@
 ---
 title: "ส่งข้อความถึง subagent ที่กำลังทำงานหรือจบแล้ว"
 description: แม่ใช้ message_agent ส่งข้อความถึงลูกที่เริ่มไว้ ลูกที่ยังทำงานได้ข้อความที่จุดปลอดภัยถัดไป ลูกที่จบแล้วถูกปลุกให้ทำต่อจาก transcript ของตัวเอง
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

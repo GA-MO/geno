@@ -1,9 +1,6 @@
 ---
 title: "ส่วนประกอบของ Geno"
 description: Geno มีหกส่วนที่คุยกันด้วยสามช่องทาง HTTP ไปหา model, ACP ผ่าน Unix socket ระหว่าง extension กับ engine และ postMessage ระหว่าง extension กับแผงแชต
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

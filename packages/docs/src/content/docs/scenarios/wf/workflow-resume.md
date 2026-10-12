@@ -1,9 +1,6 @@
 ---
 title: resume workflow จาก journal
 description: workflow รอบก่อนหยุดกลางทาง ผู้ใช้สั่ง /workflow --resume รอบใหม่อ่าน journal ของรอบเก่า ขั้นที่เสร็จแล้วได้ผลเดิมโดยไม่เรียก model แล้วรันต่อจากขั้นแรกที่ยังไม่เสร็จ
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

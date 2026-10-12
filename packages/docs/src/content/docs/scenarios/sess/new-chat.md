@@ -1,9 +1,6 @@
 ---
 title: "เริ่มแชตใหม่"
 description: ผู้ใช้กด New Chat Geno สร้าง session ใหม่ทันที แผงกลับเป็นหน้าเริ่มต้น และ turn ของแชตเดิมที่ยังทำงานไปต่อในเบื้องหลัง
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

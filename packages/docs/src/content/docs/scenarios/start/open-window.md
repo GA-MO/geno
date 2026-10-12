@@ -1,9 +1,6 @@
 ---
 title: "เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine"
 description: VS Code เปิดโฟลเดอร์ Geno เชื่อมกับ engine แล้วแผงแชตแสดงแชตเดิมหรือหน้าเริ่มต้น
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "พิมพ์ข้อความถัดไปเข้าคิวขณะ turn ทำงาน"
 description: ผู้ใช้กด Enter ระหว่างที่ turn ทำงาน ข้อความรอในคิวของแผง แล้วถูกส่งเมื่อ turn จบแบบ done หรือกลับไปที่ช่องพิมพ์ถ้าถูกหยุด
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

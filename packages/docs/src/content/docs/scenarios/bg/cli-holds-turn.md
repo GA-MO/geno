@@ -1,9 +1,6 @@
 ---
 title: CLI ถือ turn ไว้รอรายงาน
 description: ใน gcode agent ไม่มีอะไรปลุก session ทีหลัง turn ที่ model จบจึงค้างไว้จนลูกเบื้องหลังรายงาน แล้วเรียก model อีกรอบให้อ่านรายงานก่อน process จบ
-tableOfContents: false
-sidebar:
-  order: 9
 scenario:
   surface: cli
   given:

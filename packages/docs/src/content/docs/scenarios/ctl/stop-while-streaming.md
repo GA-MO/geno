@@ -1,9 +1,6 @@
 ---
 title: "กด Stop ขณะ model กำลังเขียน"
 description: ผู้ใช้กด Stop ระหว่างที่คำตอบกำลัง stream engine ตัดคำขอ model บันทึกการหยุด และ turn จบแบบ stopped
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

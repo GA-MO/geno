@@ -1,9 +1,6 @@
 ---
 title: "ตั้ง API key หรือเปลี่ยนการตั้งค่า แล้ว Geno ย้าย engine"
 description: ผู้ใช้เก็บคีย์ของ provider หรือเปลี่ยนการตั้งค่าที่ engine ใช้ แล้วหน้าต่างย้ายไปใช้ engine ตัวใหม่
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

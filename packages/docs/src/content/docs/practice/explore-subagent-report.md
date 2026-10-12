@@ -1,9 +1,6 @@
 ---
 title: "Model ส่งงานค้นหาให้ explore subagent"
 description: การรันจริง A11 model ของแม่สร้าง explore subagent ลูกเรียก model ของตัวเองสี่ครั้ง พลาดหนึ่งครั้ง ถูกบังคับให้ส่งรายงานในรอบสุดท้าย แล้วแม่ได้รายงานในรั้วกลับมา
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: cli
   given:

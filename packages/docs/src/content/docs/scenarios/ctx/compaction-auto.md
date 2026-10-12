@@ -1,9 +1,6 @@
 ---
 title: "Compaction อัตโนมัติก่อนเรียก model"
 description: context ใหญ่ถึง 80% ของหน้าต่าง model ก่อนเรียกครั้งถัดไป loop ให้ model สรุปส่วนเก่าแล้วส่งคำขอที่เล็กลง
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

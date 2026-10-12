@@ -1,9 +1,6 @@
 ---
 title: คำสั่ง / ที่กลายเป็น prompt
 description: ผู้ใช้พิมพ์ /ชื่อ ตามด้วยอาร์กิวเมนต์ engine แปลงเป็นข้อความจากไฟล์คำสั่ง หรือแนบ SKILL.md ไปกับข้อความ แล้ว turn เดินตามปกติ
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

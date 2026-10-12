@@ -1,9 +1,6 @@
 ---
 title: "Stop hook ให้ model ทำงานต่อ"
 description: model จบ turn แล้ว แต่ Stop hook บล็อกพร้อมเหตุผล ลูปเรียก model อีกรอบให้อ่านเหตุผลนั้น ได้ครั้งเดียวติดกันจนกว่า model จะเรียก tool
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

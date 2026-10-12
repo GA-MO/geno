@@ -1,9 +1,6 @@
 ---
 title: "คุณแก้ไฟล์ที่ model อ่านไปแล้ว"
 description: ระหว่าง turn ผู้ใช้แก้และบันทึกไฟล์ที่ model เคยอ่าน ก่อนเรียก model ครั้งถัดไป Geno แนบโน้ตบอกบรรทัดที่เปลี่ยน เพื่อไม่ให้ model แก้ทับหรือย้อนงานของผู้ใช้
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

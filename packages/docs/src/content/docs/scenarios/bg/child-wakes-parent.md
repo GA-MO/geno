@@ -1,9 +1,6 @@
 ---
 title: "subagent เบื้องหลังรายงานแล้วปลุก session"
 description: model เริ่ม explore แบบเบื้องหลังแล้วจบ turn ลูกทำงานต่อ เมื่อรายงานมาถึง engine บันทึกลง log แล้วเปิด turn ใหม่เองให้ model เล่าผล
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: งานเบื้องหลังต้องการความสนใจ
 description: งานที่ผู้ใช้ไม่ได้ดูอยู่ขออนุญาต เสร็จ หรือล้ม Geno แจ้งผ่าน VS Code และการแจ้งเตือนของ macOS แล้วพาไปยังจุดที่ต้องดู
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

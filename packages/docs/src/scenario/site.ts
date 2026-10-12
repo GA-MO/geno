@@ -7,7 +7,7 @@ import { LOOP_FILE, readEndTables, SERVE_FILE, type EndTables } from './ends.js'
 import { partKeyOf, type CodeRef, type Link, type PartKey, type Problem, type Scenario, type StepId } from './model.js';
 import { runFiles, type PayloadView, type RunFiles } from './payload.js';
 import { sourceIndex } from './refs.js';
-import { catalogSchema, fragmentSchema, isUse, lanesSchema, pagePayloadsSchema, payloadSpecSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
+import { catalogSchema, fragmentSchema, isUse, lanesSchema, pagePayloadsSchema, pageSchema, payloadSpecSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
 
 export interface SiteOptions {
   readonly docsRoot: string;
@@ -82,6 +82,8 @@ function pagesOf(options: SiteOptions, problems: Problem[]): Page[] {
   const root = path.join(options.docsRoot, PAGES);
   return filesUnder(root, /\.mdx?$/).map((file) => {
     const data = frontmatterOf(relative(options, file), readFileSync(file, 'utf8'), problems);
+    for (const key of Object.keys(data))
+      if (!(key in pageSchema.shape)) problems.push({ level: 'error', file: relative(options, file), path: key, message: `a page takes ${Object.keys(pageSchema.shape).join(', ')}; meta.json orders the sidebar` });
     const slug = path.relative(root, file).split(path.sep).join('/').replace(/\.mdx?$/, '').replace(/(^|\/)index$/, '');
     return { file: relative(options, file), id: path.basename(slug), href: `/${slug}/`, title: String(data['title'] ?? slug), scenario: data['scenario'], payloads: data['payloads'] };
   });

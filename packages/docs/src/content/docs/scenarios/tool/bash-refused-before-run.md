@@ -1,9 +1,6 @@
 ---
 title: "bash ปฏิเสธคำสั่งก่อนรัน แล้วบอกทางที่ถูก"
 description: bash ไม่รันคำสั่งที่ขึ้นต้นด้วย sleep นานๆ คำสั่งที่เปิด dev server ไว้ข้างหน้า หรือคำสั่งที่ออกนอก lane แต่ตอบ model ว่าควรใช้ tool ไหนแทน
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "Agent loop"
 description: ประกอบทุกชิ้นเข้าด้วยกัน เรียก model รัน tool ส่งผลกลับ แล้วเรียกอีก จนกว่า model จะจบ ผ่านการรันจริงที่เทสต์พัง แก้ แล้วรันเทสต์อีกรอบ
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: cli
   given:

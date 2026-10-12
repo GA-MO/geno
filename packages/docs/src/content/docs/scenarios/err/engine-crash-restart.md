@@ -1,9 +1,6 @@
 ---
 title: "Engine ตายกลาง turn แล้วเริ่มใหม่"
 description: process ของ engine จบกลาง turn แผงขึ้น error และ turn ล้ม หนึ่งวินาทีต่อมาหน้าต่างเปิด engine ใหม่ ซึ่งรับช่วงการรอและลูกที่ถูกตัด แต่ไม่ทำ turn ที่ตายต่อเอง
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

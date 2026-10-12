@@ -1,9 +1,6 @@
 ---
 title: "Model ค้นเว็บด้วย web_search"
 description: model เรียก web_search โหมด Plan ค้นทันที โหมด Ask ถามก่อนเพราะคำค้นออกจากเครื่องไป engine ถาม Brave Search แล้วส่งผลกลับในรั้วข้อมูล
-tableOfContents: false
-sidebar:
-  order: 10
 scenario:
   surface: vscode
   given:

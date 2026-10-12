@@ -1,9 +1,6 @@
 ---
 title: "subagent ใน worktree แยก"
 description: model ขอลูก worker แบบ isolation worktree ลูกได้ git worktree ของตัวเองบน branch geno/ แก้ไฟล์ที่นั่น แล้ว lane ถูกเก็บไว้ให้ผู้ใช้ตรวจหรือถูกลบถ้าไม่มีอะไรเปลี่ยน
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "คุณสั่ง /compact ระหว่าง turn"
 description: ผู้ใช้สั่งสรุปบริบทเองด้วย /compact หรือปุ่ม Compact engine สรุปโดยไม่เปิด loop และ turn จบแบบ done
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

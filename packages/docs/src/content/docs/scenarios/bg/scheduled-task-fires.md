@@ -1,9 +1,6 @@
 ---
 title: งานตามตารางเวลาเริ่มทำงาน
 description: งานที่ตั้งไว้ด้วย /schedule ถึงเวลา engine เปิด session ใหม่ให้มันในโหมด Plan หรือใน lane ของตัวเองในโหมด Auto รันจนจบภายในงบ แล้วจดผลไว้ในแผง Tasks
-tableOfContents: false
-sidebar:
-  order: 12
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "@mention เรียก subagent โดยตรง"
 description: ผู้ใช้พิมพ์ @explore ตามด้วยคำถาม ข้อความกลายเป็น call agent ของผู้ใช้เอง ลูกตอบ แล้ว turn จบโดยไม่เรียก model ของแม่เลย
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

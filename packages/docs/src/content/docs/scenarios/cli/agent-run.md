@@ -1,9 +1,6 @@
 ---
 title: "รัน agent จากเทอร์มินัล"
 description: gcode agent รันเอเจนต์หนึ่งรอบใน process เดียว ข้อความออก stdout คำถามขออนุญาตเป็น [y/N] บนเทอร์มินัล และผลจบเป็น exit code
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: cli
   given:

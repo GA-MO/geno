@@ -1,9 +1,6 @@
 ---
 title: "Model จบด้วย stop reason ที่ไม่ใช่การตอบหรือเรียก tool"
 description: ผู้ให้บริการพัก turn ด้วย pause_turn แล้ว Geno เรียกต่อทันที หรือคำตอบบอก tool_use โดยไม่มีการเรียก หรือไม่มี stop reason เลย ซึ่งจบ turn แบบ failed
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

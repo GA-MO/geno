@@ -1,9 +1,6 @@
 ---
 title: Keep หรือ Undo ทีละ hunk
 description: ในโหมด review แบบ review ทุก hunk ที่ Geno แก้รอการตัดสิน ผู้ใช้กด Keep หรือ Undo จาก CodeLens ในไฟล์หรือจากการ์ดในแผง และ engine บันทึกการตัดสินไว้ใน log
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

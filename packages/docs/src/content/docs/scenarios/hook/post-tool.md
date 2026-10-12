@@ -1,9 +1,6 @@
 ---
 title: "hook PostToolUse และ PostToolBatch หลังคำสั่งรัน"
 description: hook หลัง call เพิ่มข้อความให้ model อ่านคู่กับผล บล็อก หรือหยุด turn และ hook หลังทั้งชุดหยุดลูปก่อนเรียก model ได้
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

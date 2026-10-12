@@ -1,9 +1,6 @@
 ---
 title: "โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์"
 description: ในโหมด Plan คำสั่งนอก safe list ถูกปฏิเสธด้วยกฎ การแก้ไฟล์และงานเบื้องหลังถูกปฏิเสธเป็น error และ model ทำงานต่อโดยไม่จบ turn
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

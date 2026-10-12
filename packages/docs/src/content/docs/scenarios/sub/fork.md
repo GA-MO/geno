@@ -1,9 +1,6 @@
 ---
 title: "fork subagent จากบทสนทนา"
 description: model ขอลูกแบบ fork ลูกเริ่มจากสำเนาบทสนทนาของแม่ ใช้ system prompt และ tool ชุดเดียวกันเพื่อแชร์ cache แล้วส่งข้อความสุดท้ายกลับเป็นรายงาน
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: เสนองานแยกแล้วเริ่ม
 description: ระหว่างทำงาน model เจองานอีกชิ้นที่ควรทำแยก จึงเรียก spawn_task ซึ่งไม่เริ่มอะไร แค่ขึ้นการ์ดข้อเสนอ ผู้ใช้กด Start แล้ว Geno เปิด lane กับ session ใหม่ให้งานนั้น
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

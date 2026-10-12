@@ -1,9 +1,6 @@
 ---
 title: "คำสั่งที่ปลอดภัยรันโดยไม่ถาม"
 description: model ขอรัน pnpm test ซึ่งอยู่ใน safe list Geno รันใน sandbox ทันทีโดยไม่ถาม แล้วส่งผลกลับ ไม่ว่าคำสั่งจะผ่าน ล้มเหลว หรือเกินเวลา
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: บันทึกคำตอบเป็นหน้า HTML
 description: ผู้ใช้เลือก Save as page บนข้อความหนึ่ง ส่วนขยายสร้างไฟล์ HTML ไฟล์เดียวจากคำตอบของ turn นั้น พร้อมรูปและแผนภาพ แล้วบันทึกลงโฟลเดอร์ของ workspace ไม่มีอะไรถูกอัปโหลด
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: vscode
   given:

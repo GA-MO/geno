@@ -1,9 +1,6 @@
 ---
 title: "Model รันคำสั่งเบื้องหลัง"
 description: model รันคำสั่งที่ไม่จบเองด้วย run_in_background harness เปิดงาน bg-1 ใน sandbox แล้วคืนผลทันที งานรันต่อขณะที่ turn ทำงานอื่น
-tableOfContents: false
-sidebar:
-  order: 4
 scenario:
   surface: vscode
   given:

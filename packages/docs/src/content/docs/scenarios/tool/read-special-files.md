@@ -1,9 +1,6 @@
 ---
 title: "read อ่านรูป PDF notebook และไฟล์ไบนารี"
 description: read ดูนามสกุลและเนื้อไฟล์ก่อนอ่าน รูปส่งให้ model เป็นภาพ PDF และ notebook แบ่งเป็นหน้าหรือ cell ส่วนไฟล์ไบนารีถูกปฏิเสธ
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

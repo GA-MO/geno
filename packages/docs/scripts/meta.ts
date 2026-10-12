@@ -1,7 +1,8 @@
 /**
- * Writes the Fumadocs meta.json files that order the sidebar: folders sort their pages by frontmatter
- * `sidebar.order`, then by file name, and the scenario chapters follow catalog.yaml. Rerun after adding a page or a
- * chapter. Usage: pnpm --filter @g-code/docs meta
+ * Writes the Fumadocs meta.json files that order the sidebar. A folder keeps the order its meta.json already lists,
+ * drops pages that are gone and adds new ones at the end by file name; the scenario chapters follow catalog.yaml.
+ * Rerun after adding a page or a chapter, then move the new page where it belongs in its meta.json.
+ * Usage: pnpm --filter @g-code/docs meta
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -16,13 +17,13 @@ const catalog = catalogSchema.parse(parse(readFileSync(path.join(root, 'src/data
 function orderedPages(dir: string): string[] {
   const pages = readdirSync(path.join(docs, dir))
     .filter((name) => /\.mdx?$/.test(name) && name !== 'index.mdx' && name !== 'index.md')
-    .map((name) => {
-      const front = /^---\n([\s\S]*?)\n---/.exec(readFileSync(path.join(docs, dir, name), 'utf8'))?.[1] ?? '';
-      const order = (parse(front) as { sidebar?: { order?: number } } | null)?.sidebar?.order ?? Number.POSITIVE_INFINITY;
-      return { name: name.replace(/\.mdx?$/, ''), order };
-    });
+    .map((name) => name.replace(/\.mdx?$/, ''))
+    .sort();
+  const file = path.join(docs, dir, 'meta.json');
+  const listed = existsSync(file) ? ((JSON.parse(readFileSync(file, 'utf8')) as { pages?: string[] }).pages ?? []) : [];
+  const kept = listed.filter((name) => pages.includes(name));
   // The rest marker keeps a page added since the last run in the sidebar, at the end.
-  return [...pages.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name)).map((page) => page.name), '...'];
+  return [...kept, ...pages.filter((name) => !kept.includes(name)), '...'];
 }
 
 function write(dir: string, meta: object): void {

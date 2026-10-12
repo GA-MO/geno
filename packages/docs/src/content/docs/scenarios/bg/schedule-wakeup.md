@@ -1,9 +1,6 @@
 ---
 title: ตั้งเวลาปลุก
 description: model ตั้งเวลาปลุกตัวเองพร้อมเหตุผล แล้วจบ turn เมื่อถึงเวลา engine เปิด turn ใหม่ให้ model อ่านเหตุผลนั้นแล้วทำต่อ แม้ engine จะเริ่มใหม่ระหว่างรอ
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

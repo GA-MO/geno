@@ -1,9 +1,6 @@
 ---
 title: "Geno แบ่ง tool call แบบผสมเป็นชุดที่รันต่อกัน"
 description: model ขออ่านสองไฟล์ รันคำสั่ง แล้วอ่านอีกไฟล์ในคำตอบเดียว harness แบ่งเป็นสามชุดที่รันต่อกัน และหยุดชุดที่เหลือถ้าผู้ใช้ปฏิเสธคำสั่ง
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

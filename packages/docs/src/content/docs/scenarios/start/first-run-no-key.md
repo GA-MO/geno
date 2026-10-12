@@ -1,9 +1,6 @@
 ---
 title: "ส่งข้อความแรกโดยยังไม่มี API key"
 description: ติดตั้งใหม่แล้วส่งข้อความทันที Geno ตรวจคีย์ก่อนเปิด engine แสดง toast ให้ตั้งคีย์ และ turn จบแบบ failed
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

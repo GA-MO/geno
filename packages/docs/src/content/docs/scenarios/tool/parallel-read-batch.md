@@ -1,9 +1,6 @@
 ---
 title: "Model อ่านหลายไฟล์พร้อมกัน"
 description: model ขออ่านสามไฟล์และค้นข้อความสองครั้งในคำตอบเดียว harness รันทั้งห้าพร้อมกัน แล้วบันทึกผลตามลำดับที่ model ขอ
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

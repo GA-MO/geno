@@ -1,9 +1,6 @@
 ---
 title: "กด Ctrl-C ใน CLI ขณะรอรายงานของ subagent"
 description: ใน CLI model จบ turn แล้วแต่ turn ยังเปิดรอรายงานของลูกที่รันเบื้องหลัง ผู้ใช้กด Ctrl-C การรอจบ ลูกถูกหยุด รายงานไม่ถูกรับ และ process ออกด้วย 130
-tableOfContents: false
-sidebar:
-  order: 8
 scenario:
   surface: cli
   given:

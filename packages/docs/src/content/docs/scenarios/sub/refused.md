@@ -1,9 +1,6 @@
 ---
 title: "subagent ที่เริ่มไม่ได้"
 description: ใน run แบบ non-interactive ลูกที่แก้ไฟล์ได้ถูกปฏิเสธ และเมื่องบของลูกในรอบนี้หมด ลูกตัวใหม่ก็ถูกปฏิเสธ model ได้ error แล้วทำต่อเอง
-tableOfContents: false
-sidebar:
-  order: 9
 scenario:
   surface: cli
   given:

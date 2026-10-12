@@ -1,9 +1,6 @@
 ---
 title: อนุมัติ MCP server ของโปรเจกต์
 description: repo มี .mcp.json ที่กำหนด server ไว้ Geno ไม่รัน server นั้นจนกว่าผู้ใช้จะดูคำนิยามแล้วกด Allow และถามใหม่ถ้าคำนิยามเปลี่ยน
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

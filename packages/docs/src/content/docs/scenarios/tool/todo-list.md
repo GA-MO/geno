@@ -1,9 +1,6 @@
 ---
 title: "Model อัปเดตรายการ todo"
 description: model ตั้งรายการงานด้วย todo แผงแชตปักรายการไว้ท้าย turn ทันทีที่ call จบ และ harness เตือน model ถ้าไม่อัปเดตนาน
-tableOfContents: false
-sidebar:
-  order: 7
 scenario:
   surface: vscode
   given:

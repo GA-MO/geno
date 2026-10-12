@@ -1,9 +1,6 @@
 ---
 title: "Model ขอจดจำ"
 description: model เสนอโน้ตให้จำข้ามแชตด้วย remember Geno ถามผู้ใช้ทุกครั้งไม่ว่าโหมดไหน ถ้าผู้ใช้ตกลง โน้ตถูกบันทึกและ model ได้รู้ก่อนเรียกครั้งถัดไป
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:

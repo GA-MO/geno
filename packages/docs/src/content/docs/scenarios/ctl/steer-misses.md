@@ -1,9 +1,6 @@
 ---
 title: "Steer มาไม่ทัน turn"
 description: ผู้ใช้กด Send now ระหว่างที่ model เขียนคำตอบสุดท้าย turn จบก่อนถึงจุดปลอดภัย ถ้า turn จบเอง ข้อความกลายเป็น turn ถัดไป ถ้าผู้ใช้กด Stop ข้อความกลับไปที่ช่องพิมพ์
-tableOfContents: false
-sidebar:
-  order: 5
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: รัน workflow พร้อมความคืบหน้า
 description: ผู้ใช้พิมพ์ /workflow Geno แสดงการ์ดราคาก่อน แล้วรัน workflow เป็น session เบื้องหลัง ทีละรอบของขั้น แต่ละขั้นเป็น subagent เมื่อจบ รายงานปลุกแชตที่เริ่ม
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

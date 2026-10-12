@@ -1,9 +1,6 @@
 ---
 title: คำสั่ง / ที่ Geno ทำเอง
 description: คำสั่งในตัวบางคำสั่ง VS Code ทำเองโดยไม่ติดต่อ engine บางคำสั่ง engine ทำเองโดยไม่เรียก model ทั้งสองแบบไม่เปิดรอบของเอเจนต์
-tableOfContents: false
-sidebar:
-  order: 2
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "hook PermissionRequest ตอบ permission แทนคุณ"
 description: คำสั่งที่ปกติต้องขึ้นการ์ด hook PermissionRequest ได้ตอบก่อน มันอนุญาต อนุญาตพร้อมแก้ input ปฏิเสธ หรือปฏิเสธแล้วจบ turn ก็ได้
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

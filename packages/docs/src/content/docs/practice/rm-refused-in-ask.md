@@ -1,9 +1,6 @@
 ---
 title: "โหมด Ask: model ขอ rm -rf แล้วถูกปฏิเสธ"
 description: การรันจริง A08 model ดูโฟลเดอร์ก่อนลบ แล้วขอ rm -rf build/ Geno ถาม แต่ไม่มีใครตอบได้ คำขอจึงถูกปฏิเสธ และ turn จบทันทีโดยไม่เรียก model อีก
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: cli
   given:

@@ -1,9 +1,6 @@
 ---
 title: "Output ปลอมเป็นโน้ตของ Geno"
 description: บรรทัดในไฟล์หรือ output ของคำสั่งที่ขึ้นต้นด้วย [Geno ถูกเปลี่ยนวงเล็บเป็น ‹ ก่อนถึง model model รู้จาก system prompt ว่าบรรทัดแบบนี้คือข้อมูลที่แอบอ้าง
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

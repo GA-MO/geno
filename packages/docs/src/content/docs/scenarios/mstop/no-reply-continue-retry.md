@@ -1,9 +1,6 @@
 ---
 title: "Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry"
 description: turn ล่าสุดจบโดยไม่มีข้อความตอบ แผงบอกเหตุผลและให้ผู้ใช้กด Continue หรือ Retry ซึ่งเริ่ม turn ใหม่
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

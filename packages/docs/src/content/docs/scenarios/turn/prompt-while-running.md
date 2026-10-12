@@ -1,9 +1,6 @@
 ---
 title: "ส่ง prompt จากอีกหน้าต่างขณะ turn ยังทำงาน"
 description: อีกหน้าต่างหนึ่งส่ง session/prompt ถึงแชตที่มี turn ทำงานอยู่ engine ปฏิเสธทันที turn เดิมไม่ถูกแตะ
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

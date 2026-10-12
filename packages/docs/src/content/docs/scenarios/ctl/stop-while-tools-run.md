@@ -1,9 +1,6 @@
 ---
 title: "กด Stop ขณะ tool ทำงาน"
 description: ผู้ใช้กด Stop ระหว่างที่คำสั่งใน batch กำลังรัน engine ฆ่า process group ของคำสั่ง ตอบ call ที่ค้างว่าถูกหยุด แล้ว turn จบแบบ stopped
-tableOfContents: false
-sidebar:
-  order: 3
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "Sandbox กันคำสั่งที่คุณอนุญาตแล้ว"
 description: ผู้ใช้อนุญาตคำสั่งแล้ว แต่คำสั่งเขียนนอก workspace อ่านไฟล์กุญแจ หรือออกเน็ต sandbox ปฏิเสธ คำสั่งล้มด้วย exit code และ model ทำต่อ
-tableOfContents: false
-sidebar:
-  order: 1
 scenario:
   surface: vscode
   given:

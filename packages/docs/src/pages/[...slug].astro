@@ -16,13 +16,13 @@ export function getStaticPaths() {
 const page = source.getPage(Astro.props.slugs)!;
 const entry = page.data._raw;
 const { Content, headings } = await render(entry);
-const { title, description, hero, tableOfContents, scenario: authored } = entry.data;
+const { title, description, full: wide, scenario: authored } = entry.data;
 const scenario = authored === undefined ? undefined : scenarioFor(entry.filePath!);
 const site = siteFor();
 const parts = partLabels(site.lanes);
 const laneNames = Object.fromEntries(site.lanes.lanes.map((lane) => [lane.id, lane.english]));
-const toc: TOCItemType[] = tableOfContents === false || hero !== undefined ? [] : headings.filter((heading) => heading.depth <= 3).map((heading) => ({ depth: heading.depth, title: heading.text, url: `#${heading.slug}` }));
-const full = scenario !== undefined || entry.id === 'map';
+const full = scenario !== undefined || wide === true;
+const toc: TOCItemType[] = full ? [] : headings.filter((heading) => heading.depth <= 3).map((heading) => ({ depth: heading.depth, title: heading.text, url: `#${heading.slug}` }));
 ---
 
 <!doctype html>
@@ -36,18 +36,7 @@ const full = scenario !== undefined || entry.id === 'map';
   <body class="flex min-h-screen flex-col">
     <Docs tree={source.getPageTree()} pathname={page.url} page={{ toc, full }} client:load>
       <h1 class="text-3xl font-semibold tracking-tight">{title}</h1>
-      {(hero?.tagline ?? description) !== undefined && <p class="mb-4 max-w-[62ch] text-lg text-fd-muted-foreground">{hero?.tagline ?? description}</p>}
-      {
-        hero !== undefined && (
-          <div class="not-prose mb-6 flex flex-wrap gap-3">
-            {hero.actions.map((action) => (
-              <a class:list={['rounded-full px-4 py-2 text-sm font-medium', action.variant === 'minimal' ? 'border border-fd-border' : 'bg-fd-primary text-fd-primary-foreground']} href={action.link}>
-                {action.text}
-              </a>
-            ))}
-          </div>
-        )
-      }
+      {description !== undefined && <p class="mb-4 max-w-[62ch] text-lg text-fd-muted-foreground">{description}</p>}
       <div class="prose flex-1">
         {
           scenario === undefined ? (

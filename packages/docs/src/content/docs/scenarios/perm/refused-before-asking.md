@@ -1,9 +1,6 @@
 ---
 title: "Geno ปฏิเสธก่อนถึงการถาม"
 description: สองอย่างที่ไม่มีการ์ดและไม่มี classifier ในทุกโหมด tool ที่ไฟล์ settings ของ Claude Code ห้ามทั้งตัว และการค้นด้วย grep หรือ glob ที่จะแตะไฟล์ลับ
-tableOfContents: false
-sidebar:
-  order: 10
 scenario:
   surface: vscode
   given:

@@ -1,9 +1,6 @@
 ---
 title: "จบแผนแล้วคุณกด Start building"
 description: หลัง turn ในโหมด Plan จบ ผู้ใช้กด Start building ส่วนขยายสลับโหมดเป็น Ask หรือ Auto แล้วส่ง "Go ahead with the plan." เป็น turn ใหม่ ที่ model ได้ประกาศโหมดและรายการ todo ของแผน
-tableOfContents: false
-sidebar:
-  order: 6
 scenario:
   surface: vscode
   given:
