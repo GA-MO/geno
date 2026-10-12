@@ -52,11 +52,14 @@ async function stepFrames(page: Page, label: string): Promise<void> {
     return found === undefined ? undefined : { duration: Number(found.effect!.getTiming().duration), count: animations.length };
   });
   if (ride === undefined) return fail(label, 'stepping to the next beat started no dot');
+  const drawn = await page.evaluate(() => [...document.querySelectorAll('.ln-svg path[data-mo="draw-path"]')].filter((path) => path.getAnimations().length > 0).map((path) => path.getAttribute('d')));
+  const heads = () => page.evaluate((ds) => [...document.querySelectorAll('.ln-svg path[data-mo="draw-path"]')].filter((path) => ds.includes(path.getAttribute('d'))).map((path) => getComputedStyle(path).markerEnd), drawn);
   for (const [k, fraction] of [0, 0.25, 0.5, 0.75, 1].entries()) {
     await page.evaluate((time) => {
       for (const animation of document.getAnimations()) if (!(animation instanceof CSSAnimation) && !(animation instanceof CSSTransition)) animation.currentTime = time;
     }, Math.min(ride.duration * fraction, ride.duration - 1));
     await page.locator('.story-body > section').screenshot({ path: file(label, String(k)) });
+    if (fraction === 0.5 && (await heads()).some((head) => head !== 'none')) fail(label, 'an arrowhead shows before its line reaches it');
   }
   const landed = await page.evaluate(() => {
     const dot = document.querySelector('.sq-row.current .mo-dot, .ln-svg .mo-dot')!.getBoundingClientRect();
@@ -70,6 +73,8 @@ async function stepFrames(page: Page, label: string): Promise<void> {
   await page.evaluate(() => {
     for (const animation of document.getAnimations()) animation.play();
   });
+  await page.waitForTimeout(1_000);
+  if ((await heads()).some((head) => !head.startsWith('url('))) fail(label, 'an arrowhead stays hidden after its line is drawn');
 }
 
 async function rapid(page: Page, label: string): Promise<void> {

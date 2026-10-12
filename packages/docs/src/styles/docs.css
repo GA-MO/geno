@@ -251,7 +251,7 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
 .sq-ask { font-size: 13px; font-weight: 600; color: var(--ink); }
 .sq-branch, .sq-chosen { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 0; background: none; padding: 4px 8px 4px 0; cursor: pointer; text-align: left; max-width: calc(100% - 4px); }
 .sq-branch.leftward { padding: 4px 0 4px 8px; text-align: right; }
-.sq-branch { opacity: 0.72; transition: opacity 150ms; }
+.sq-branch { opacity: 0.4; transition: opacity 150ms; }
 .sq-branch:hover, .sq-branch:focus-visible { opacity: 1; }
 .sq-branch::before { content: ''; position: absolute; top: -4px; bottom: 50%; border-left: 2px solid var(--line); left: 0; }
 .sq-branch.leftward::before { left: auto; right: 0; }
