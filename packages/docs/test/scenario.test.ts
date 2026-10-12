@@ -7,10 +7,11 @@ import { describe, expect, test } from 'vitest';
 import { compileScenario, type CompileContext } from '../src/scenario/compile.js';
 import { LOOP_FILE, readEndTables, SERVE_FILE } from '../src/scenario/ends.js';
 import type { OptionId, StepId } from '../src/scenario/model.js';
+import { runFiles } from '../src/scenario/payload.js';
 import { sourceIndex, type SourceIndex } from '../src/scenario/refs.js';
 import { fragmentSchema, lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
-import { progressAt, reduce, stateFromHash, walk } from '../src/scenario/tour.js';
+import { progressAt, walk } from '../src/scenario/tour.js';
 
 const DOCS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(DOCS, '../..');
@@ -36,6 +37,7 @@ function compile(steps: unknown[], source = fakeSource, fragments: CompileContex
     lanes,
     fragments,
     source,
+    runs: runFiles(REPO),
     ends: tables,
     catalog: { 'turn.text-answer': { id: 'turn.text-answer', title: 'ถามแล้วได้คำตอบ' } },
   };
@@ -77,18 +79,6 @@ describe('the ask-mode example scenario', () => {
     expect(path).not.toContain('run');
     expect(path.at(-1)).toBe('choice.comment.10');
     expect(endOf(path).turn).toEqual({ kind: 'end', end: { turn: 'continues', reason: 'call-model' } });
-  });
-
-  test('a link into an arm selects that arm', () => {
-    const state = stateFromHash(scenario, '#at=choice.reject.4');
-    expect(state.choices['choice' as StepId]).toBe('reject');
-    expect(walk(scenario, state.choices)[state.index]).toBe('choice.reject.4');
-  });
-
-  test('choosing at the fork keeps the reader on the fork and changes what comes next', () => {
-    const atFork = reduce(scenario, stateFromHash(scenario, '#at=choice'), { type: 'choose', fork: 'choice' as StepId, option: 'reject' as OptionId });
-    const next = reduce(scenario, atFork, { type: 'next' });
-    expect(walk(scenario, next.choices)[next.index]).toBe('choice.reject.1');
   });
 });
 

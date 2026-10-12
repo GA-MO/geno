@@ -1,6 +1,7 @@
 import { z } from 'astro/zod';
 
 const PARTIES = ['user', 'ai', 'harness', 'outside'] as const;
+export const ACTORS = ['you', 'panel', 'engine', 'model', 'machine'] as const;
 const SURFACES = ['vscode', 'cli', 'acp-editor'] as const;
 const COUNTS = ['model-call', 'tool-run'] as const;
 
@@ -20,6 +21,7 @@ const laneKey = z.string().regex(/^[a-z][a-z-]*(@[a-z0-9][a-z0-9-]*)?$/, 'a lane
 const codeRef = z.string().regex(/^packages\/[^#\s]+#(?:[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*|".+")$/, 'path#symbol or path#"literal"');
 
 export type Party = (typeof PARTIES)[number];
+export type Actor = (typeof ACTORS)[number];
 export type Surface = (typeof SURFACES)[number];
 export type Counts = (typeof COUNTS)[number];
 export type Phase = (typeof PHASES)[number];
@@ -54,9 +56,13 @@ export interface ActingStepIn {
   readonly goto?: string | undefined;
   readonly end?: EndIn | undefined;
   readonly fork?: ForkIn | undefined;
+  /** Starts a story beat: this step and the ones after it on a walk, until the next header. */
+  readonly beat?: BeatIn | undefined;
 }
 export interface UseStepIn {
   readonly use: string;
+  /** Starts a story beat at the fragment's first step. */
+  readonly beat?: BeatIn | undefined;
 }
 export type StepIn = ActingStepIn | UseStepIn;
 export interface ForkIn {
@@ -73,6 +79,56 @@ export interface OptionIn {
 }
 
 export const isUse = (step: StepIn): step is UseStepIn => 'use' in step;
+
+const text = z.string().min(1);
+const segment = String.raw`(?:[A-Za-z_$][\w$-]*|\[-?\d+\])`;
+const jsonPath = z.string().regex(new RegExp(String.raw`^${segment}(?:\.?${segment})*$`), 'a JSON path such as messages[-1].content[0]');
+/** A recorded run's file and the record in it: `docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl#seq=<n>`. */
+const runSource = z.string().regex(/^docs\/results\/real-usecases\/runs\/[^#\s]+\.jsonl#seq=\d+$/, 'docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl#seq=<n>');
+
+/** What the user sees at a beat: a small copy of the real UI, in its English copy. */
+export const mockSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('permission'), command: text, reason: text.optional(), rule: text.optional(), options: z.array(text).min(1).optional(), chosen: text.optional(), note: text.optional() }).strict(),
+  z.object({ kind: z.literal('question'), question: text, options: z.array(text).min(1), chosen: text.optional() }).strict(),
+  z.object({ kind: z.literal('notice'), text, detail: text.optional(), actions: z.array(text).optional(), tone: z.enum(['info', 'warning', 'error']).optional() }).strict(),
+  z.object({ kind: z.literal('step'), label: text, status: z.enum(['running', 'done', 'failed', 'denied']), note: text.optional(), output: text.optional() }).strict(),
+  z.object({ kind: z.literal('message'), from: z.enum(['you', 'geno']), text, streaming: z.boolean().optional(), footer: z.array(text).optional() }).strict(),
+  z.object({ kind: z.literal('toast'), text, actions: z.array(text).optional() }).strict(),
+  z.object({ kind: z.literal('composer'), state: z.enum(['idle', 'working']), text: text.optional(), header: text.optional() }).strict(),
+  z.object({ kind: z.literal('task'), title: text, status: z.enum(['running', 'needs-input', 'done', 'failed']), detail: text.optional(), actions: z.array(text).optional() }).strict(),
+  z
+    .object({
+      kind: z.literal('payload'),
+      direction: z.enum(['request', 'response', 'tool_result']),
+      source: runSource,
+      /** A path into the record; the whole record when absent. */
+      select: jsonPath.optional(),
+      /** An inline excerpt in place of select; source still names where it came from. */
+      json: z.unknown().optional(),
+      highlight: z.array(jsonPath).optional(),
+      collapse: z.array(jsonPath).optional(),
+    })
+    .strict(),
+]);
+export type MockIn = z.infer<typeof mockSchema>;
+export type PayloadIn = Extract<MockIn, { kind: 'payload' }>;
+
+const beatSchema = z
+  .object({
+    /** English, a sentence with the actor as subject. */
+    title: text,
+    /** Thai, one to three sentences for a newcomer; no function names. */
+    text,
+    from: z.enum(ACTORS).optional(),
+    to: z.enum(ACTORS).optional(),
+    sees: z.union([text, mockSchema, z.array(mockSchema).min(1)]).optional(),
+    /** English: the decision diamond's label, when the beat ends at a fork. */
+    ask: text.optional(),
+    /** English: the end node's label, when a walk ends in this beat. */
+    end: text.optional(),
+  })
+  .strict();
+export type BeatIn = z.infer<typeof beatSchema>;
 
 const optionSchema: z.ZodType<OptionIn> = z.lazy(() =>
   z.object({ id, label: z.string().min(1), then: stepRef.optional(), steps: z.array(stepSchema).optional() }).strict(),
@@ -95,11 +151,12 @@ const actingSchema: z.ZodType<ActingStepIn> = z.lazy(() =>
       goto: catalogId.optional(),
       end: endIn.optional(),
       fork: z.object({ ask: z.string().min(1), options: z.array(optionSchema).min(2) }).strict().optional(),
+      beat: beatSchema.optional(),
     })
     .strict(),
 );
 
-const stepSchema: z.ZodType<StepIn> = z.lazy(() => z.union([z.object({ use: id }).strict(), actingSchema]));
+const stepSchema: z.ZodType<StepIn> = z.lazy(() => z.union([z.object({ use: id, beat: beatSchema.optional() }).strict(), actingSchema]));
 
 export const scenarioSchema = z
   .object({
@@ -142,6 +199,7 @@ export const lanesSchema = z
             english: z.string(),
             about: z.string(),
             party: z.enum(PARTIES),
+            actor: z.enum(ACTORS),
             process: id,
             surfaces: z.array(z.enum(SURFACES)).min(1),
             instanced: z.boolean().default(false),

@@ -1,4 +1,5 @@
-import type { Counts, EndIn, Party, Phase, Surface } from './schema.js';
+import type { PayloadView } from './payload.js';
+import type { Actor, Counts, EndIn, MockIn, Party, Phase, Surface } from './schema.js';
 
 type Brand<T, B extends string> = T & { readonly __brand: B };
 export type ScenarioId = Brand<string, 'ScenarioId'>;
@@ -44,12 +45,28 @@ export interface Link {
   readonly href?: string;
 }
 
+/** One thing the user sees at a beat. */
+export type Shown = { readonly kind: 'text'; readonly text: string } | Exclude<MockIn, { kind: 'payload' }> | PayloadView;
+
+export interface BeatHead {
+  readonly title: string;
+  readonly text: string;
+  readonly from?: Actor;
+  readonly to?: Actor;
+  readonly sees: readonly Shown[];
+  readonly ask?: string;
+  readonly end?: string;
+}
+
 export interface Step {
   readonly id: StepId;
   readonly lane: string;
   readonly column: number;
   readonly part: PartKey;
   readonly party: Party;
+  readonly actor: Actor;
+  /** Present on the step that starts a story beat. */
+  readonly beat?: BeatHead;
   readonly counts?: Counts;
   readonly runs?: number;
   readonly does: string;
@@ -85,6 +102,8 @@ export interface Scenario {
   readonly outline: readonly OutlineItem[];
   readonly via: Readonly<Record<StepId, Choices>>;
   readonly defaults: Choices;
+  /** The page has beat headers: the tour reads as a story. */
+  readonly story: boolean;
 }
 
 export interface Problem {

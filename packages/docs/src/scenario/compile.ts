@@ -1,7 +1,8 @@
-import { partKeyOf, type Choices, type CodeRef, type Flow, type LaneColumn, type Link, type OptionId, type OutlineItem, type Problem, type Result, type Scenario, type ScenarioId, type Step, type StepId } from './model.js';
+import { partKeyOf, type BeatHead, type Choices, type CodeRef, type Flow, type LaneColumn, type Link, type OptionId, type OutlineItem, type Problem, type Result, type Scenario, type ScenarioId, type Shown, type Step, type StepId } from './model.js';
 import { endProblems, type EndTables } from './ends.js';
+import type { RunFiles } from './payload.js';
 import type { SourceIndex } from './refs.js';
-import { isUse, type ActingStepIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
+import { isUse, type ActingStepIn, type BeatIn, type LaneIn, type LanesIn, type OptionIn, type Phase, type ScenarioIn, type StepIn, type Surface } from './schema.js';
 
 export interface CompileContext {
   readonly file: string;
@@ -11,6 +12,7 @@ export interface CompileContext {
   readonly lanes: LanesIn;
   readonly fragments: Readonly<Record<string, readonly StepIn[]>>;
   readonly source: SourceIndex;
+  readonly runs: RunFiles;
   readonly ends: EndTables;
   readonly catalog: Readonly<Record<string, Link>>;
 }
@@ -21,7 +23,11 @@ interface ExpandedStep {
   readonly path: string;
   readonly arms: readonly Arm[];
   readonly spliced: boolean;
+  /** The beat header this step starts, from the step itself or from the `use:` entry that spliced it in. */
+  readonly beat?: { readonly head: BeatIn; readonly path: string };
 }
+
+export const TITLE_MAX = 60;
 interface Arm {
   readonly option: OptionIn;
   readonly path: string;
@@ -65,6 +71,8 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
   if (walks.length > MAX_WALKS) problem('steps', `scenario "${ctx.id}" has more than ${MAX_WALKS} walks, and walks past the ${MAX_WALKS}th go unchecked: split it into smaller scenarios`);
   if (problems.length > 0) return { ok: false, problems };
 
+  const story = [...nodes.values()].some((node) => node.beat !== undefined);
+  if (story) storyProblems(top, nodes, walks, flows, problem);
   const phases = phasesOf(walks, nodes, problem);
   const via = viaOf(walks);
   for (const node of nodes.values()) {
@@ -96,6 +104,7 @@ export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Resu
       outline,
       via,
       defaults: walks[0]!.choices,
+      story,
     },
   };
 }
@@ -111,15 +120,17 @@ function expand(list: readonly StepIn[], scope: string, path: string, inFragment
       if (inFragment || fragment === undefined) return [];
       const nth = (uses.get(step.use) ?? 0) + 1;
       uses.set(step.use, nth);
-      return expand(fragment, `${scope}${step.use}${nth === 1 ? '' : `-${nth}`}.`, `${at}>${step.use}`, true, ctx, problem).map((node) => ({ ...node, spliced: true }));
+      const spliced = expand(fragment, `${scope}${step.use}${nth === 1 ? '' : `-${nth}`}.`, `${at}>${step.use}`, true, ctx, problem).map((node) => ({ ...node, spliced: true }));
+      return step.beat === undefined || spliced[0] === undefined ? spliced : [{ ...spliced[0], beat: { head: step.beat, path: `${at}.beat` } }, ...spliced.slice(1)];
     }
+    if (inFragment && step.beat !== undefined) problem(`${at}.beat`, 'a fragment carries no beat header: many pages share it; put the header on the page\'s `use:` entry');
     const id = `${scope}${step.id ?? i + 1}` as StepId;
     const arms = (step.fork?.options ?? []).map((option, o) => ({
       option,
       path: `${at}.fork.options[${o}]`,
       nodes: expand(option.steps ?? [], `${id}.${option.id}.`, `${at}.fork.options[${o}].steps`, inFragment, ctx, problem),
     }));
-    return [{ id, step, path: at, arms, spliced: false }];
+    return [{ id, step, path: at, arms, spliced: false, ...(step.beat === undefined || inFragment ? {} : { beat: { head: step.beat, path: `${at}.beat` } }) }];
   });
 }
 
@@ -221,6 +232,7 @@ function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, co
     const modelStops = party === 'ai' && !lane.instanced ? (step.emits ?? []) : [];
     for (const { field, message } of endProblems(step.end, modelStops, ctx.ends)) problem(field === 'reason' ? `${path}.end` : `${path}.emits`, message);
   }
+  const beat = node.beat === undefined ? undefined : beatOf(node.beat.head, node.beat.path, ctx, problem);
   if (flow === undefined) return undefined;
 
   const counts = part?.counts ?? lane.counts;
@@ -230,6 +242,8 @@ function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, co
     column: columns.findIndex((column) => column.key === step.lane),
     part: partKeyOf(lane.id, part?.id),
     party,
+    actor: lane.actor,
+    ...(beat === undefined ? {} : { beat }),
     ...(counts === undefined ? {} : { counts }),
     ...(step.runs === undefined ? {} : { runs: step.runs }),
     does: step.do.trim(),
@@ -240,6 +254,74 @@ function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, co
     ...(step.again === undefined ? {} : { again: step.again as StepId }),
     flow,
   };
+}
+
+const THAI = /[฀-๿]/;
+const englishProblem = (text: string): string | undefined => {
+  if (THAI.test(text)) return 'is Thai; story labels are English';
+  const letters = text.replace(/[^\p{L}]/gu, '');
+  const ascii = letters.replace(/[^A-Za-z]/g, '');
+  return letters.length > 0 && ascii.length / letters.length < 0.8 ? 'is not mostly English letters' : undefined;
+};
+
+function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path: string, message: string) => void): BeatHead {
+  const title = head.title.trim();
+  const titleProblem = englishProblem(title);
+  if (titleProblem !== undefined) problem(`${path}.title`, `"${title}" ${titleProblem}`);
+  if (title.length > TITLE_MAX) problem(`${path}.title`, `"${title}" is ${title.length} characters; keep a beat title to ${TITLE_MAX}`);
+  for (const field of ['ask', 'end'] as const) {
+    const label = head[field];
+    const labelProblem = label === undefined ? undefined : englishProblem(label);
+    if (labelProblem !== undefined) problem(`${path}.${field}`, `"${label}" ${labelProblem}`);
+  }
+  const listed = head.sees === undefined ? [] : typeof head.sees === 'string' ? [head.sees] : Array.isArray(head.sees) ? head.sees : [head.sees];
+  const sees = listed.flatMap((mock, i): Shown[] => {
+    if (typeof mock === 'string') return [{ kind: 'text', text: mock.trim() }];
+    if (mock.kind !== 'payload') return [mock];
+    const resolved = ctx.runs.resolve(mock);
+    if (!resolved.ok) problem(`${path}.sees${Array.isArray(head.sees) ? `[${i}]` : ''}`, resolved.reason);
+    return resolved.ok ? [resolved.view] : [];
+  });
+  return {
+    title,
+    text: head.text.trim(),
+    ...(head.from === undefined ? {} : { from: head.from }),
+    ...(head.to === undefined ? {} : { to: head.to }),
+    sees,
+    ...(head.ask === undefined ? {} : { ask: head.ask.trim() }),
+    ...(head.end === undefined ? {} : { end: head.end.trim() }),
+  };
+}
+
+/** The story rules, checked along every walk: beats are derived per walk, so a rule can hold on one and fail on another. */
+function storyProblems(top: readonly ExpandedStep[], nodes: ReadonlyMap<StepId, ExpandedStep>, walks: readonly Walk[], flows: ReadonlyMap<StepId, Flow>, problem: (path: string, message: string) => void): void {
+  if (top[0] !== undefined && top[0].beat === undefined) problem(top[0].path, 'a page with a story starts with a beat: put a beat header on its first step or `use:` entry');
+  for (const node of nodes.values()) {
+    for (const arm of node.arms) {
+      const first = arm.nodes[0];
+      if (first !== undefined && first.beat === undefined) problem(`${arm.path}.steps[0]`, `option "${arm.option.id}" starts no beat: a fork arm opens with its own beat header`);
+      const labelProblem = englishProblem(arm.option.label);
+      if (labelProblem !== undefined) problem(`${arm.path}.label`, `"${arm.option.label}" ${labelProblem}`);
+    }
+  }
+  const reported = new Set<string>();
+  const once = (path: string, message: string): void => {
+    if (reported.has(path + message)) return;
+    reported.add(path + message);
+    problem(path, message);
+  };
+  for (const walk of walks) {
+    const chosen = Object.entries(walk.choices).map(([fork, option]) => `${fork}=${option}`).join(', ') || 'the default walk';
+    const headers = walk.path.filter((id) => nodes.get(id)!.beat !== undefined);
+    if (headers.length < 2) once('steps', `the walk choosing ${chosen} has ${headers.length} beat(s); a story walk has 2 or more`);
+    let header: ExpandedStep | undefined;
+    for (const id of walk.path) {
+      const node = nodes.get(id)!;
+      if (node.beat !== undefined) header = node;
+      if (flows.get(id)?.kind === 'fork' && header?.beat !== undefined && header.beat.head.ask === undefined)
+        once(`${header.beat.path}.ask`, `beat "${header.beat.head.title}" ends at the fork "${id}": give it ask:, the English label of the decision`);
+    }
+  }
 }
 
 function successors(flow: Flow | undefined): StepId[] {
