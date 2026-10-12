@@ -38,9 +38,10 @@ scenario:
               - lane: loop
                 at: drive
                 beat:
-                  title: "Model เรียก monitor เลย"
+                  title: "Model เรียก monitor ทั้งที่ยังไม่โหลด"
                   text: >-
                     Geno บันทึกคำขอ แล้วแชตขึ้นขั้นของ `monitor` พร้อมจุดหมุน
+                  from: model
                 do: >-
                   `drive` บันทึก event `assistant` ที่มีบล็อก `tool_use` ของ `monitor`
                 ref: "packages/engine/src/drive.ts#\"await record({ kind: 'assistant', seq: nextSeq(events), at, ...result.turn\""
