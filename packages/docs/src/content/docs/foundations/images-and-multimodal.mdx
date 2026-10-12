@@ -1,0 +1,98 @@
+---
+title: "รูปภาพและ multimodal"
+description: model อ่านรูปได้ แต่สร้างรูปไม่ได้ รูปเข้าทางไหนบ้าง ถูกส่งซ้ำทุก request อย่างไร และภาพที่คุณเห็นในแชตใครเป็นคนวาด
+sidebar:
+  order: 10
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const asks = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=19', select: 'content', highlight: ['[1].input', '[2].input', '[3].input'] });
+export const imageResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=20', highlight: ['images[0].sha256', 'images[0].mediaType', 'output'], collapse: ['timing'] });
+export const sawIt = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=24', select: 'content', highlight: ['[0].thinking', '[2].input'] });
+
+**model ที่รองรับรูปอ่านรูปได้ แต่เขียนออกมาได้แค่ข้อความ**
+รูปเข้าสู่ model เป็นบล็อก `image` ที่เข้ารหัส base64 ใน request ส่วนภาพทุกภาพที่คุณเห็นในแชต
+Geno วาดจากข้อความที่ model เขียน หรือโหลดจากไฟล์ที่โปรแกรมสร้าง
+
+## รูปเข้าได้สี่ทาง
+
+| ทาง | ใครเริ่ม | ไปถึง model เป็น |
+| --- | --- | --- |
+| วางหรือลากรูปลงช่องพิมพ์ | คุณ | บล็อก `image` ในข้อความ user **ก่อน**ข้อความที่คุณพิมพ์ |
+| `read` ไฟล์ PNG JPEG GIF WebP | model | บล็อก `image` ใน `tool_result` ต่อจากข้อความบรรทัดเดียว |
+| `read` PDF ที่เป็นภาพสแกน หรือ notebook ที่มีรูปใน output | model | หน้าหรือ output ที่ไม่มีข้อความกลายเป็นบล็อก `image` |
+| MCP tool ที่ส่งรูปกลับ เช่น screenshot ของ browser ในตัว | model | Geno เก็บรูปแล้วส่งเป็นบล็อก `image` เหมือน `read` |
+
+Geno วางรูปก่อนข้อความในข้อความ user เพราะ model อ่านรูปได้ดีกว่าเมื่อเห็นรูปก่อนคำที่พูดถึงมัน (คอมเมนต์ที่ `userBlocks` ใน `packages/core/src/session.ts`)
+
+### รูปที่คุณวาง
+
+1. แผงอ่านชนิดและขนาดจากไบต์ของไฟล์ ถ้าด้านยาวเกิน 1,568 px หรือไฟล์เกิน 1 MB จะวาดใหม่บน canvas ให้ด้านยาวเหลือ 1,568 px
+   รูปถ่ายเป็น JPEG คุณภาพ 0.85 ภาพหน้าจอคงเป็น PNG เว้นแต่ JPEG เล็กกว่าครึ่ง (`chooseEncoding` ใน `packages/extension/src/chat/attachment-model.ts`)
+2. ข้อความหนึ่งมีรูปได้สูงสุด 8 รูป รวมไม่เกิน 5 MB (`MAX_IMAGES` และ `MAX_MESSAGE_BYTES` ใน `packages/core/src/attachments.ts`)
+   PDF ที่แนบถูกปฏิเสธด้วยข้อความ "is a PDF, which Geno cannot read yet" แต่ถ้า PDF อยู่ใน workspace model ใช้ `read` อ่านได้
+3. extension ส่งรูปเป็นบล็อก ACP `image` engine ตรวจซ้ำ แล้วเก็บไฟล์ไว้ที่ `<session>/attachments/<sha256>.<ext>`
+   event `user` ใน log เก็บแค่ hash ชื่อ ขนาด และชนิด ไม่เก็บไบต์
+
+## ดูของจริง: model ดูภาพหน้าจอของตัวเอง
+
+ในรายการ A35 รอบที่ 3 ผู้ใช้ขอให้ถ่ายภาพหน้าเว็บ ย้ายปุ่มเข้าในการ์ด ถ่ายอีกภาพ แล้วโชว์ก่อนกับหลังคู่กัน
+หลังถ่ายสองภาพด้วย `node shot.mjs` model ขออ่านทั้งสองภาพ พร้อมโหลด `show_files` ในคำตอบเดียว
+
+<Sees client:visible shown={[asks]} />
+
+ผลของ `read` ใน log มีแต่ข้อมูลอ้างอิงของรูป ไม่มีไบต์
+
+<Sees client:visible shown={[imageResult]} />
+
+ตอนสร้าง request ถัดไป `loadAttachments` ใน `packages/engine/src/attachments.ts` อ่านไฟล์นั้นแล้วเข้ารหัส base64
+นี่คือไบต์ที่ส่งจริง (`runs/A35-show-before-after/3/wire.jsonl` บรรทัด 13, engine `e7a483e3+dirty`) ตัดข้อมูลรูปให้สั้น
+
+```json
+{"type":"tool_result","tool_use_id":"toolu_c66d9b176609459db4404685","content":[
+  {"type":"text","text":"before.png is a 480x320 PNG image (3 KB), attached below."},
+  {"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAeAAAAFAC…"}}]}
+```
+
+request ถัดไป (บรรทัด 15 ของไฟล์เดียวกัน) มีบล็อกเดียวกันนี้อีกครั้ง เพราะทุก request ส่งบทสนทนาทั้งหมด ([หน้าที่ 1](/foundations/model-is-one-call/))
+รูปจึงกิน token ทุกครั้งที่ยังอยู่ในบทสนทนา ไม่ใช่แค่ครั้งแรก
+
+model เห็นพิกเซลจริง thinking ของมันบรรยายว่าปุ่มสีแดงล้นขอบขวาของการ์ดในภาพก่อน และปุ่มสีเขียวอยู่ในการ์ดในภาพหลัง แล้วเรียก `show_files`
+
+<Sees client:visible shown={[sawIt]} />
+
+## model สร้างรูปไม่ได้ แล้วภาพในแชตมาจากไหน
+
+คำตอบของ model มีแต่ `text` `thinking` และ `tool_use` ไม่มีบล็อกรูป ภาพในแชตจึงมาจากสามแหล่ง
+
+| model เขียน | Geno ทำ | คุณเห็น |
+| --- | --- | --- |
+| code fence ภาษา `mermaid` ในข้อความ | ไม่ทำอะไรพิเศษ ส่งเป็นข้อความธรรมดา แผงเป็นคนเห็น fence | แผนภาพ SVG ที่ mermaid วาดในโหมด `strict` เปิดในแท็บใหม่และคัดลอกได้ |
+| `show_widget` พร้อม HTML CSS และ script | เก็บ HTML ไว้ ตอบ model บรรทัดเดียว "Shown to the user in the chat" | กรอบ `<iframe sandbox="allow-scripts">` ที่ไม่มีเครือข่าย สีตามธีมของ VS Code |
+| `show_files` กับ path ของไฟล์ | ตรวจ path และขนาด ตอบ model บรรทัดละไฟล์ ไม่ส่งไบต์ | รูป PNG JPEG GIF WebP เป็นตารางหรือภาพใหญ่ ไฟล์อื่นเป็นการ์ดมีปุ่ม Open |
+| `bash` ที่รัน script สร้าง PNG | ได้ไฟล์บนดิสก์ | ยังไม่เห็นอะไร จนกว่าจะเรียก `show_files` |
+
+system prompt ทุกระดับชวนให้ใช้ mermaid ด้วย `MERMAID_LINE`
+"you may add a small mermaid diagram as a fenced code block with the language mermaid; the chat draws it"
+ส่วน `show_widget` ได้เฉพาะเมื่อ editor ประกาศว่ารองรับ widget และไม่ได้ในการรันแบบ non-interactive
+ในการรันจริงผ่านแผง `show_widget` เป็น deferred tool ที่ต้องโหลดด้วย `tool_search` ก่อน (`runs/B-panel/1/wire.jsonl.gz` record 1)
+
+model ไม่เคยเห็นผลที่ถูกวาด ถ้า widget พังตอนรัน คุณเห็นกรอบที่พัง แต่ model ได้แค่ "Shown to the user in the chat" เหมือนเดิม
+ถ้าอยากให้ model ตรวจหน้าตาจริง ต้องให้มันถ่ายภาพหน้าจอแล้ว `read` เหมือนในรายการ A35
+
+## จุดที่ยังขาด: Geno ไม่ตรวจว่า model รับรูปได้หรือไม่
+
+ตารางความสามารถของ model (`ModelCapabilities` ใน `packages/core/src/model-capabilities.ts`) ไม่มีช่องบอกว่ารองรับรูป
+Geno ส่งบล็อก `image` ให้ทุก model ถ้า model รับไม่ได้ ผู้ให้บริการปฏิเสธ request และคุณเห็น turn จบเป็น error
+qwen3.8-flash ที่ใช้ในการรันจริงรับรูปได้ จึงยังไม่มีการรันจริงที่แสดงข้อความ error ตอนนั้น
+
+บน wire แบบ Chat Completions รูปเป็น `image_url` แบบ data URL และเพราะข้อความ `tool` ของรูปแบบนั้นรับแต่ข้อความ
+รูปจากผลของ tool จึงถูกย้ายไปข้อความ user ถัดไปพร้อมบรรทัด `The result of <id> included this image:` (`packages/core/src/openai.ts`)
+MCP ที่ส่งเสียงกลับได้แค่ข้อความแทน `[audio …, not shown]`
+
+## อ่านต่อ
+
+- [จาก output สู่หน้าจอ](/foundations/output-to-screen/) เส้นทางของข้อความถึงจอ
+- ทัวร์ [แนบไฟล์และ @mention](/scenarios/start/attach-and-mention/)
+- ทัวร์ [อ่านรูป PDF notebook และไฟล์ไบนารี](/scenarios/tool/read-special-files/)

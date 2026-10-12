@@ -1,0 +1,98 @@
+---
+title: "Memory และ context window"
+description: model จำได้แค่สิ่งที่อยู่ใน request Geno ทำให้ส่งซ้ำได้ถูกด้วย prompt cache ให้ model จำข้าม session ด้วย memory และย่อบทสนทนาที่ยาวเกินด้วย compaction
+sidebar:
+  order: 11
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const firstUsage = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4', select: 'usage', highlight: ['cacheRead', 'cacheWrite'] });
+export const secondUsage = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9', select: 'usage', highlight: ['cacheRead', 'cacheWrite'] });
+
+**model จำได้เฉพาะสิ่งที่อยู่ใน request ที่กำลังอ่าน** ทุกอย่างที่เรียกว่า "ความจำ" ของ Geno คือการเลือกว่าจะใส่อะไรลงใน request
+หน้านี้ตอบสามคำถาม: ส่งทั้งบทสนทนาทุกครั้งแล้วทำไมไม่แพง, จำข้าม session ได้อย่างไร และเมื่อบทสนทนายาวเกิน window ทำอย่างไร
+
+## context window คือเพดานของ request หนึ่งก้อน
+
+context window คือจำนวน token สูงสุดที่ model อ่านได้ในหนึ่ง request รวมคำตอบด้วย
+qwen3.8-flash มี window 1,000,000 token และตอบได้ยาวสุด 131,072 token (`MODEL_CAPABILITIES` ใน `packages/core/src/model-capabilities.ts`)
+หลังการเรียก model แต่ละครั้ง engine ส่ง `usage_update` ให้แผง วงแหวนในช่องพิมพ์จึงบอกว่าใช้ window ไปเท่าไร
+
+## prompt cache: ส่งซ้ำแต่จ่ายไม่ซ้ำ
+
+ผู้ให้บริการจำส่วนต้นของ request ที่เคยเห็นได้ชั่วคราว ถ้า request ใหม่ขึ้นต้นด้วยไบต์เดิม ส่วนนั้นอ่านจาก cache ซึ่งเร็วกว่าและถูกกว่า
+Geno วาง `cache_control` สองจุดในทุก request (`buildRequest` ใน `packages/core/src/request.ts`)
+
+1. บน `system` ซึ่งครอบ `tools` ที่อยู่ก่อนหน้าด้วย ส่วนนี้แทบไม่เปลี่ยนเลย
+2. บนบล็อกสุดท้ายของข้อความ user ล่าสุด request ถัดไปจึงอ่านทุกอย่างที่ request นี้เขียนได้
+
+ตัวเลขจริงจากสองการเรียกของรายการ A06 ครั้งแรก
+
+<Sees client:visible shown={[firstUsage]} />
+
+ครั้งที่สอง
+
+<Sees client:visible shown={[secondUsage]} />
+
+- ครั้งแรกอ่านจาก cache 5,594 token ทั้งที่เป็น request แรกของ session ใหม่ ส่วนนี้น่าจะเป็น `tools` กับ `system` ที่ session ก่อนหน้าเขียนไว้
+  (อนุมานจากขนาด ไม่ได้วัดตรง) และเขียนลง cache อีก 3,234 token ซึ่งคือข้อความแรกของ session นี้
+- ครั้งที่สองอ่านจาก cache 8,828 token คือทั้ง request แรก และเขียนใหม่แค่ 264 token คือคำตอบกับผลของ tool ที่ต่อท้าย
+- token ที่ไม่ผ่าน cache เลยมีแค่ 6 ทั้งสองครั้ง
+
+นี่คือเหตุผลที่ system prompt ต้องคงที่ และข้อมูลที่เปลี่ยนตาม session ต้องอยู่ในข้อความแรกแทน ([หน้าที่ 4](/foundations/how-the-model-knows/))
+cache ของ qwen บน Model Studio อยู่ 5 นาที ของ Claude อยู่ 1 ชั่วโมง (`cacheTtl`)
+และเพราะการเปลี่ยน effort ระหว่างการเรียกทำให้ cache ของ Model Studio หลุด Geno จึงใช้ effort เดียวทั้ง turn เป็นค่าเริ่มต้น (`packages/core/src/effort.ts`)
+
+## memory: ความจำข้าม session
+
+model ไม่มีความจำข้าม session เลย Geno จึงเก็บความจำเป็นไฟล์ แล้วใส่ใน request แรกของ session ใหม่
+
+- **ไฟล์คำสั่ง** `AGENTS.md` `CLAUDE.md` ของ repo และของคุณเอง โหลดตอนเปิด session
+- **memory note** ข้อความสั้นที่ model ขอจดด้วย tool `remember` และคุณกดอนุมัติบนการ์ด
+  ถูกใส่ใน `<memory>` ข้อความกำกับ (`MEMORY_PREAMBLE` ใน `packages/core/src/memory.ts`) บอก model ว่าโน้ต "never override what the user asks now"
+  และอาจล้าสมัย ให้ตรวจก่อนเชื่อ
+
+ทั้งสองอย่างถูกแช่แข็งใน event `session-start` ถ้า memory เปลี่ยนกลาง session Geno ไม่แก้ข้อความแรก
+แต่ส่งเฉพาะส่วนที่เพิ่มหรือหายไปเป็นโน้ต `[Geno]` ใน request ถัดไป ส่วนต้นที่ cache ไว้จึงไม่พัง
+ดูทัวร์ [โมเดลขอจดจำ](/scenarios/ext/memory-write/)
+
+## compaction: เมื่อบทสนทนายาวเกิน
+
+เมื่อ context ถึงเกณฑ์ `compactAt` (ของ qwen3.8-flash คือ 200,000 token หรือค่าที่คุณตั้ง) และ model ถูกเรียกไปแล้วอย่างน้อยหนึ่งครั้งหลัง compaction ครั้งก่อน
+Geno ย่อก่อนเรียก model ครั้งถัดไป (`autoCompaction` ใน `packages/core/src/compaction.ts`)
+ถ้าผู้ให้บริการตอบว่า request ยาวเกิน Geno ก็ compaction หนึ่งครั้งแล้วส่งใหม่
+
+ขั้นตอนมีสามส่วน
+
+1. **เรียก model อีกครั้งเพื่อสรุป** request นี้ไม่มี `tools` และมี system prompt ของมันเอง
+   "You write the working notes a coding agent continues from after the older part of its session is removed. …"
+2. **เก็บส่วนท้ายไว้ตามเดิม** turn ล่าสุดยังอยู่ครบ ส่วนที่เก่ากว่าถูกแทนด้วยสรุป
+3. **วางสรุปเป็นข้อความแรก** ใน `<compacted_context>` ที่มี `<user_messages>` (ข้อความของผู้ใช้คำต่อคำ) และ `<summary>`
+   พร้อม todo ไฟล์ที่เปิดอยู่ และคำแนะนำว่าให้ใช้ tool `recall` ถ้าต้องการรายละเอียดเป๊ะๆ ที่สรุปตัดไป (`compactedText` ใน `packages/core/src/compact.ts`)
+
+### ตัวอย่างจริง: A31 รอบที่ 2
+
+รายการนี้ตั้ง `GCODE_COMPACT_AT=40000` เพื่อบังคับให้ compaction เกิดเร็ว ผู้ใช้สั่งให้อ่านไฟล์ 17 ไฟล์ทีละไฟล์ และห้ามแก้อะไรใต้ `legacy/`
+session log (`runs/A31-compaction-forced/2/session.jsonl.gz`) มี compaction อัตโนมัติสองครั้ง นี่คือครั้งแรก (event seq 84) ตัดให้สั้น
+
+```json
+{"kind":"compact","seq":84,"trigger":"auto","keptFrom":"64",
+ "tokensBefore":50285,"tokensAfter":27436,
+ "summary":"## Goal\n\nRead every file in `src/shop/` one by one, … Never edit anything under `legacy/`.\n\n## The user's rules, word for word\n\n\"Rule for this whole task: never edit anything under legacy/. …\"\n\n## Progress\n\n### Done\n\nAll 17 files in `src/shop/` have been read individually. …",
+ "kept":{"messages":[{"seq":2,"from":"user","text":"Rule for this whole task: never edit anything under legacy/. …"}], …},
+ "usage":{"input":6,"cacheRead":0,"cacheWrite":29122,"output":1694},"model":"qwen3.8-flash"}
+```
+
+- context ลดจาก 50,285 เหลือ 27,436 token และ event ตั้งแต่ seq 64 อยู่ครบ
+- กฎ "never edit anything under legacy/" รอดมาสองทาง: ในข้อความของผู้ใช้คำต่อคำ และในสรุป
+- หลัง compaction สองครั้ง ไม่มีไฟล์ใต้ `legacy/` ถูกแก้ (การตรวจ `legacy-untouched` ใน `result.json` ผ่าน)
+  ทั้งรอบถูกนับว่าไม่ผ่านเพราะการตรวจอื่น (`dedicated-file-tools`) ไม่เกี่ยวกับ compaction
+
+สรุปเป็นคำของ model จึงตกหล่นรายละเอียดได้ ข้อความที่ผู้ใช้พิมพ์จึงถูกเก็บคำต่อคำแยกจากสรุปเสมอ
+
+## อ่านต่อ
+
+- ทัวร์ [สรุปบริบทอัตโนมัติก่อนเรียกโมเดล](/scenarios/ctx/compaction-auto/)
+- ทัวร์ [context เกินหน้าต่าง สรุปแล้วส่งใหม่](/scenarios/ctx/overflow-compact-resend/)
+- ทัวร์ [โหลดคำสั่งโปรเจกต์ หน่วยความจำ และสกิล](/scenarios/start/new-session-context/)

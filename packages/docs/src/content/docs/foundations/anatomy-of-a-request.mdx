@@ -1,0 +1,81 @@
+---
+title: "ผ่า request หนึ่งก้อน"
+description: ทุก field ใน request ที่ Geno ส่งให้ model ทำอะไร ใครเป็นคนเติม และ field ไหนที่ Geno ตั้งใจไม่ส่ง
+sidebar:
+  order: 3
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const whole = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', highlight: ['model', 'max_tokens', 'output_config'], collapse: ['tools', 'system', 'messages'] });
+
+**request หนึ่งก้อนคือ JSON ที่มีแค่ไม่กี่ field** แต่ละ field ตอบคำถามหนึ่งข้อ:
+คุยกับ model ตัวไหน ตอบยาวได้เท่าไร model มี tool อะไรให้ใช้ model ควรประพฤติอย่างไร และคุยอะไรกันมาแล้ว
+ทุก field ถูกเติมที่เดียว คือ `buildRequest` ใน `packages/core/src/request.ts`
+
+## request จริงหนึ่งก้อน
+
+นี่คือ request แรกของรายการ A06 ทั้งก้อน สาม field ใหญ่ (`tools` `system` `messages`) พับไว้ คลิกเพื่อเปิดดูได้
+
+<Sees client:visible shown={[whole]} />
+
+ดูสาม field ที่ไฮไลต์ก่อน
+
+- `model` คือชื่อ model ของ session นี้ ที่นี่คือ `qwen3.8-flash` บน Model Studio
+- `max_tokens` คือเพดานความยาวของคำตอบ 131,072 คือเพดาน output ทั้งหมดของ model ตัวนี้ ไม่ใช่งบที่ Geno ตั้ง
+- `output_config.effort` บอก model ว่าให้คิดหนักแค่ไหน (`low` ถึง `max`) ค่ามาจาก effort ของ session
+
+## ทุก field และใครเติม
+
+| field | ทำอะไร | Geno เติมจากไหน |
+| --- | --- | --- |
+| `model` | เลือก model | `session.model` ที่คุณเลือกในแผงหรือในการตั้งค่า |
+| `max_tokens` | เพดานความยาวของคำตอบ | `maxTokensFor`: เพดาน output ของ model หรือที่ว่างที่เหลือใน context window ถ้าน้อยกว่า (หักกันไว้ 1,000 token) |
+| `thinking` | เปิดหรือปิดการคิดก่อนตอบ | ส่ง `adaptive` เฉพาะ model ที่ตาราง `MODEL_CAPABILITIES` บอกว่ารองรับ ส่ง `disabled` เมื่อบังคับให้เรียก tool และไม่ส่งเลยสำหรับ model อื่น เช่น qwen |
+| `tools` | รายการ tool ที่ model ขอเรียกได้ | ชุดที่ `runAgent` ประกอบ ดู[หน้าที่ 5](/foundations/tools-are-contracts/) |
+| `tool_choice` | บังคับหรือห้ามเรียก tool | ปกติไม่ส่ง ส่ง `{type: tool}` เมื่อบังคับ เช่น subagent ที่ต้องส่งรายงาน และ `{type: none}` ในรอบสุดท้ายที่งบยังเหลือ |
+| `system` | system prompt หนึ่งบล็อก | ข้อความคงที่ตามระดับ prompt ของ model ดู[หน้าที่ 4](/foundations/how-the-model-knows/) |
+| `messages` | บทสนทนาทั้งหมด | `replayMessages` สร้างจาก session log ทุกครั้ง |
+| `output_config.effort` | ความหนักของการคิด | effort ของ session ส่งเฉพาะ model ที่รองรับ |
+| `stream` | ขอคำตอบแบบไหลมาเรื่อยๆ | wire เติม `stream: true` ตอนส่ง ไม่ใช่ `buildRequest` |
+
+`system` และบล็อกล่าสุดของข้อความ user ล่าสุดมี `cache_control` ติดอยู่ เป็นจุดที่บอกผู้ให้บริการว่าให้ cache ถึงตรงนี้
+อธิบายใน[หน้าที่ 11](/foundations/memory-and-context/)
+
+## สิ่งที่ไม่มีใน request
+
+Geno ไม่ส่ง `temperature` `top_p` `stop_sequences` หรือ `metadata` ใน request ของ chat
+ข้อมูลของ session (โฟลเดอร์ วันที่ git status ไฟล์ `AGENTS.md`) ก็ไม่อยู่ใน `system` แต่อยู่ในข้อความแรกของ `messages`
+เหตุผลอยู่ใน[หน้าที่ 4](/foundations/how-the-model-knows/)
+
+## request หน้าตาไม่เหมือนกันทุกก้อน
+
+field ชุดเดียวกันนี้ประกอบได้หลายแบบ ตารางนี้นับจาก `wire.jsonl` ของทุกการรันจริงที่มี wire log (ไบต์ที่ส่งจริง)
+มี 2 บรรทัดใน A09 ที่อ่านไม่ได้เพราะการลบข้อมูลลับตอนเก็บผลทำให้ JSON เสีย จึงไม่ได้นับ
+
+| จำนวน | ลักษณะ | คือ |
+| --- | --- | --- |
+| 1,033 | ไม่มี `tool_choice` effort `medium` | การเรียกปกติของ agent |
+| 13 | effort `low` | subagent `explore` |
+| 10 | `tool_choice` บังคับ `verdict` `max_tokens` 400 `temperature` 0 | classifier ของโหมด Auto ตัดสินคำสั่ง |
+| 8 | `tool_choice: none` | รอบสุดท้ายที่งบอนุญาต model ต้องตอบโดยไม่เรียก tool |
+| 2 | `tool_choice` บังคับ `report` | subagent ถูกบังคับให้ส่งรายงานกลับ |
+| 2 | ไม่มี `tools` | การเรียกเพื่อสรุปบทสนทนาตอน compaction |
+| 1 | ไม่มี `tools` `max_tokens` 1,200 | model ตัวช่วยของ `web_fetch` อ่านหน้าเว็บ |
+
+ตัวอย่างละหนึ่งไฟล์: `A01-fix-failing-test/fix-a2/wire.jsonl` บรรทัด 1, `A11-explore-subagent/fix-a1/wire.jsonl` บรรทัด 3 และ 9,
+`A09-auto-classifier/fix-a1/wire.jsonl.gz` บรรทัด 15, `A17-budget-reminder/fix-a1/wire.jsonl.gz` บรรทัด 11,
+`A31-compaction-forced/2/wire.jsonl.gz` บรรทัด 43 และ `A12-background-server/fix-s1-2/wire.jsonl` บรรทัด 11
+
+## รูปแบบเดียว สอง wire
+
+request ข้างบนอยู่ในรูปแบบ Anthropic Messages ซึ่งเป็นรูปแบบภายในของ Geno ทั้งระบบ
+"Anthropic wire" ไม่ได้แปลว่า Claude: Model Studio (qwen) OpenRouter Bedrock และ Vertex ก็รับรูปแบบนี้
+ผู้ให้บริการที่รับแต่ Chat Completions (OpenAI Gemini DeepSeek Ollama และอื่นๆ) ได้ request ที่ `toChatRequest` ใน `packages/core/src/openai.ts` แปลให้
+wire นั้นไม่ส่ง `thinking` `effort` `cache_control` และ `max_tokens` เลย ทุกการรันจริงในตัวอย่างใช้ Anthropic wire
+
+## อ่านต่อ
+
+- [Model รู้ได้อย่างไรว่าต้องทำอะไร](/foundations/how-the-model-knows/) ข้างใน `system` และข้อความแรกมีอะไร
+- [Model ตอบกลับอะไรได้บ้าง](/foundations/what-comes-back/) ฝั่งคำตอบของ request นี้
+- ทัวร์ [ครบ 40 ครั้งของการเรียกโมเดล หรือเกินงบ $0.40](/scenarios/mstop/limits/) ตอนที่ `tool_choice: none` ถูกใช้จริง
