@@ -126,7 +126,7 @@ describe('gcode serve slash commands', () => {
 
     expect(firstMessage(transport.requests[0]!.body)).toEqual([{ type: 'text', text: 'Review src/app.ts for error paths.' }]);
     expect(await userEvents(sessionId)).toEqual([
-      expect.objectContaining({ content: 'Review src/app.ts for error paths.', command: { name: 'review', args: 'src/app.ts "error paths"' }, context: [] }),
+      expect.objectContaining({ content: 'Review src/app.ts for error paths.', command: { name: 'review', args: 'src/app.ts "error paths"', description: 'Review a file' }, context: [] }),
     ]);
   });
 
@@ -148,10 +148,28 @@ describe('gcode serve slash commands', () => {
     expect(await userEvents(sessionId)).toEqual([
       expect.objectContaining({
         content: '/add-i18n th',
-        command: { name: 'add-i18n', args: 'th' },
+        command: { name: 'add-i18n', args: 'th', description: 'Add a locale to the site' },
         context: [{ kind: 'skill', name: 'add-i18n', path: '.claude/skills/add-i18n/SKILL.md', text: SKILL }],
       }),
     ]);
+  });
+
+  it('titles a chat started with a command by the text after it, else by what the command does', async () => {
+    const { workspace, updates, connect, say } = await setup([answer('Adding th.', usage), answer('Which locale?', usage), answer('Adding th.', usage), answer('Reviewed.', usage), answer('Created.', usage)]);
+    const titled = async (...prompts: string[]) => {
+      updates.length = 0;
+      const { sessionId, listed } = await connect(async (ctx, sessionId) => {
+        for (const prompt of prompts) await say(ctx, sessionId, prompt);
+        return { sessionId, listed: await ctx.request(acp.methods.agent.session.list, { cwd: workspace }) };
+      });
+      const shown = updates.flatMap((u) => (u.sessionUpdate === 'session_info_update' && u.title != null ? [u.title] : []));
+      return { shown, listed: listed.sessions.find((s) => s.sessionId === sessionId)?.title };
+    };
+
+    expect(await titled('/add-i18n เพิ่มภาษาไทย')).toEqual({ shown: ['เพิ่มภาษาไทย'], listed: 'เพิ่มภาษาไทย' });
+    expect(await titled('/add-i18n', 'th, for the Bangkok office')).toEqual({ shown: ['Add a locale to the site'], listed: 'Add a locale to the site' });
+    expect(await titled('/review src/app.ts')).toEqual({ shown: ['src/app.ts'], listed: 'src/app.ts' });
+    expect(await titled('/init')).toEqual({ shown: ['Create or update AGENTS.md for this project'], listed: 'Create or update AGENTS.md for this project' });
   });
 
   it('runs /mode in the engine without a model call, answers an editor built-in, and passes unknown names through', async () => {
@@ -197,7 +215,7 @@ describe('gcode serve slash commands', () => {
     expect(updates.filter((u) => u.sessionUpdate === 'user_message_chunk')).toEqual([
       expect.objectContaining({
         content: { type: 'text', text: 'Review src/app.ts for bugs.' },
-        _meta: { [REPLAYED_TURN_META]: expect.objectContaining({ command: { name: 'review', args: 'src/app.ts' } }) },
+        _meta: { [REPLAYED_TURN_META]: expect.objectContaining({ command: { name: 'review', args: 'src/app.ts', description: 'Review a file' } }) },
       }),
     ]);
   });

@@ -107,7 +107,7 @@ import {
   type SearchSessionsResponse,
   SESSION_SUMMARY_META,
   summarizeSession,
-  titleFrom,
+  promptTitle,
   titleOf,
   type SessionScope,
   type SessionSummary,
@@ -1570,6 +1570,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       return { end: 'end_turn', response: turnResponse('end_turn', usageOf(spent, undefined)) };
     }
     if (slash?.content.trim() === '') throw acp.RequestError.invalidParams({ sessionId }, `/${slash.command.name} expands to no text`);
+    const firstTitle = promptTitle({ content: text, command: slash?.command });
 
     const controller = new AbortController();
     turns.set(sessionId, controller);
@@ -1592,7 +1593,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
       live.set(sessionId, shown.live);
       tasks.start({
         sessionId,
-        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : titleFrom(resume ? (header.events.findLast((e) => startsTurn(e) && isUsersOwn(e))?.content ?? '') : text)),
+        title: titleOf(header.events) ?? (target !== undefined ? 'Inline edit' : resume ? promptTitle(header.events.findLast((e) => startsTurn(e) && isUsersOwn(e)) ?? { content: '' }) : firstTitle),
         workspace: header.session.workspace,
         lane: lane?.record.name ?? null,
         startedAt: Date.now(),
@@ -1609,7 +1610,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           await dropTornTail(log);
           session = log.session;
           shown.live.events.push(...log.events);
-          if (titleOf(log.events) === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+          if (titleOf(log.events) === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: firstTitle });
           if (rawLane !== undefined) {
             const repo = await laneRepoOf(log.session.workspace).catch(refused({ sessionId }));
             await applyLaneTurn(store, { log }, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));
@@ -1652,7 +1653,7 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
         if (start === 'wake' && wake?.kind === 'user') {
           shown.updates.send({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text: wake.content }, _meta: wakeMetaOf(wake) });
         }
-        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: titleFrom(text) });
+        if (titleOf(resumed.log.events) === undefined && target === undefined && rawLane === undefined && !resume) shown.updates.send({ sessionUpdate: 'session_info_update', title: firstTitle });
         if (rawLane !== undefined) {
           const repo = await laneRepoOf(resumed.log.session.workspace).catch(refused({ sessionId }));
           await applyLaneTurn(store, resumed, repo, rawLane, shown.surface.files, shown.surface.watcher, tasks, graft?.data.hunks).catch(refused({ lane: rawLane }));

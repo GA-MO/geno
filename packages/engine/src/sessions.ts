@@ -307,7 +307,7 @@ const turnEventSchema = z.union([
       content: z.string(),
       context: z.array(contextItemSchema).optional(),
       attachments: z.array(attachmentSchema).optional(),
-      command: z.strictObject({ name: z.string().min(1), args: z.string() }).optional(),
+      command: z.strictObject({ name: z.string().min(1), args: z.string(), description: z.string().optional() }).optional(),
       steer: z.literal(true).optional(),
       action: z.enum(PROMPT_ACTION_IDS).optional(),
       from: z.enum(['parent', 'child', 'wake']).optional(),
