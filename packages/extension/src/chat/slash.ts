@@ -49,6 +49,12 @@ export function movePicker(picker: Picker, by: number): Picker {
   return { ...picker, active: (picker.active + by + count) % count };
 }
 
+/**
+ * Whether Enter on the picker sends the command as well as choosing it: only a built-in that takes no arguments,
+ * such as `/new`. A skill or prompt template takes free text after its name whether or not it declares a hint.
+ */
+export const sendsWhenPicked = (command: CommandOption): boolean => command.hint === undefined && (command.route === 'editor' || command.route === 'engine');
+
 /** The draft with the typed name replaced by `/name ` and the caret after it; the rest of the draft stays. */
 export function insertCommand(text: string, caret: number, name: string): { readonly text: string; readonly caret: number } {
   const inserted = `/${name} `;
