@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอแก้ `src/date.ts`
         text: โมเดลส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน
+        from: model
         to: engine
       lane: model
       do: >-
@@ -38,6 +39,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น edit
         text: Geno จัดคิวการแก้ให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: edit src/date.ts
@@ -67,6 +70,7 @@ scenario:
         title: Geno เทียบกับข้อความที่ model เห็น
         text: Geno หาข้อความที่โมเดลเห็นครั้งล่าสุดจากการอ่านหรือการแก้ก่อนหน้า แล้วเทียบกับไฟล์ตอนนี้ ถ้าผ่าน จึงหา `old_str` ในไฟล์
         from: engine
+        to: engine
         ask: การแก้ติดตรงไหน
       lane: tool
       at: executor
@@ -86,6 +90,8 @@ scenario:
                 beat:
                   title: Model ยังไม่ได้อ่านไฟล์
                   text: Geno ไม่รู้ว่าโมเดลแก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร การ์ดเป็นผลจริงจากการรันที่โมเดลแก้สามไฟล์โดยไม่อ่านก่อน
+                  from: engine
+                  to: model
                   sees:
                     kind: payload
                     direction: tool_result
@@ -104,8 +110,10 @@ scenario:
             steps:
               - lane: tool
                 beat:
-                  title: คุณพิมพ์ในไฟล์หลัง model อ่าน
+                  title: ไฟล์เปลี่ยนหลัง model อ่าน
                   text: ข้อความตอนนี้ไม่ตรงกับที่โมเดลเห็น Geno จึงไม่แทนอะไร และบอกให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
+                  from: engine
+                  to: model
                 at: executor
                 do: >-
                   ผู้ใช้พิมพ์ใน buffer หลังจากโมเดลอ่านไฟล์ hash ของข้อความปัจจุบันจึงไม่ตรงกับฐาน `proposeChange` ล้มเหลวแบบ `stale-base`
@@ -120,6 +128,8 @@ scenario:
                 beat:
                   title: หา `old_str` ไม่เจอ
                   text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ส่งช่วงบรรทัดที่ใกล้ที่สุดกลับไป ให้โมเดลคัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงจากการรันหนึ่ง
+                  from: engine
+                  to: model
                   sees:
                     kind: payload
                     direction: tool_result
@@ -142,6 +152,8 @@ scenario:
                 beat:
                   title: "`old_str` ตรงหลายที่"
                   text: "Geno ไม่เดาว่าจะแก้ที่ไหน มันบอกจำนวนและบรรทัดที่เจอ ให้โมเดลใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
+                  from: engine
+                  to: model
                 at: executor
                 runs: 1
                 do: >-
@@ -154,6 +166,7 @@ scenario:
       beat:
         title: Geno ไม่เขียนอะไรเลย
         text: ทุกทางจบที่ error ที่บอกเหตุผล ไฟล์และ buffer ไม่เปลี่ยน และไม่มี diff ให้รีวิว ขั้นของ edit ในแชตขึ้นว่าล้มเหลว
+        from: engine
         to: panel
         sees:
           kind: step
@@ -172,7 +185,8 @@ scenario:
       beat:
         title: Model อ่านเหตุผลแล้วลองใหม่
         text: turn ไม่จบ ผลไปถึงโมเดลเป็น error โมเดลมักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง
-        to: model
+        from: model
+        to: engine
         end: Model อ่านไฟล์ใหม่แล้วลองอีกครั้ง
       lane: loop
       at: step

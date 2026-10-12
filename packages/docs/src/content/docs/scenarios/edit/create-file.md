@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอสร้าง `src/slug.ts`
         text: "โมเดลเรียก edit ด้วย `create: true` และเนื้อหาทั้งไฟล์ใน `new_str` ไม่มี `old_str` เพราะยังไม่มีอะไรให้แทน การ์ดเป็นคำขอจริงจากการรันที่สร้าง `src/clamp.ts`"
+        from: model
         to: engine
         sees:
           kind: payload
@@ -46,6 +47,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น edit
         text: Geno จัดคิวการแก้นี้ให้รันทีละตัว เพราะมันเขียนไฟล์ แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: edit src/slug.ts
@@ -55,6 +58,8 @@ scenario:
       beat:
         title: Geno เห็นว่าไฟล์ยังไม่มี
         text: Geno ถาม VS Code หาไฟล์ แล้วได้คำตอบว่าไม่มี ไฟล์ที่ยังไม่มีจึงไม่ต้องอ่านก่อน ต่างจากไฟล์ที่มีอยู่แล้ว เนื้อหาใหม่คือ `new_str` ทั้งก้อน
+        from: engine
+        to: engine
       lane: tool
       at: executor
       do: >-
@@ -74,6 +79,8 @@ scenario:
       beat:
         title: VS Code สร้างไฟล์แล้วแชตแสดง diff
         text: Geno ส่งเนื้อหาให้ VS Code เขียน ขั้นของ edit บอกจำนวนบรรทัดที่เพิ่ม และท้าย turn มีการ์ดการเปลี่ยนแปลงให้รีวิว
+        from: engine
+        to: panel
         sees:
           kind: step
           label: Edited slug.ts
@@ -84,6 +91,7 @@ scenario:
       beat:
         title: Geno บอก model ว่าสร้างแล้ว
         text: ผลขึ้นต้นด้วย "Created" แทน "Edited" และบอกโมเดลว่าไม่ต้องอ่านไฟล์ซ้ำ ในการรันจริงนี้ check ของโปรเจกต์ล้มเหลวจากเทสต์เดิม ผลจึงมีรายงานของ check ต่อท้าย
+        from: engine
         to: model
         sees:
           kind: payload
@@ -102,6 +110,8 @@ scenario:
       beat:
         title: Geno เรียก model อีกครั้ง
         text: checkpoint ถัดไปรวมไฟล์ใหม่นี้ คุณจึงย้อนการสร้างได้ แล้วโมเดลอ่านผลเพื่อทำงานต่อ
+        from: engine
+        to: model
         end: Model อ่านผลแล้วทำต่อ
       lane: loop
       at: step

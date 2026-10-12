@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอแก้ไฟล์
         text: โมเดลขอ edit ไฟล์หนึ่ง Geno ต้องตัดสินก่อนว่าไฟล์นั้นอยู่ในที่ที่แก้ได้หรือไม่
+        from: model
         to: engine
       lane: model
       do: >-
@@ -30,6 +31,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น edit
         text: Geno จัดคิวการแก้ให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: edit
@@ -40,6 +43,7 @@ scenario:
         title: Geno หาว่าไฟล์อยู่ที่ไหนและกฎไหนครอบ
         text: Geno อ่านกฎ path ของ workspace ใหม่ทุกครั้ง หาที่อยู่จริงของไฟล์ แล้วดูว่ามีกฎ `Edit(...)` ข้อไหนครอบ คำตอบขึ้นกับไฟล์ที่โมเดลขอ
         from: engine
+        to: engine
         ask: Model ขอแก้ไฟล์ไหน
       lane: policy
       at: rules
@@ -58,6 +62,8 @@ scenario:
                 beat:
                   title: ไฟล์อยู่นอก workspace
                   text: edit เขียนได้เฉพาะใน workspace และโฟลเดอร์ที่คุณตั้งให้เขียนได้ ที่อื่นถูกปฏิเสธทันทีโดยไม่มีการ์ด symlink ที่ชี้ออกไปนอก workspace ก็ถูกจับแบบเดียวกัน
+                  from: engine
+                  to: model
                 at: executor
                 runs: 0
                 do: >-
@@ -73,6 +79,8 @@ scenario:
                 beat:
                   title: กฎของคุณสั่งให้ถามก่อนแก้
                   text: กฎ `Edit(src/generated/**)` แบบ ask ครอบไฟล์นี้ แม้ในโหมด Auto Geno ก็ไม่ให้ classifier ตัดสินแทน เพราะกฎบอกให้ถามคุณ
+                  from: engine
+                  to: engine
                 at: rules
                 do: >-
                   `pathRuleFor` เจอกฎ ask `Edit(src/generated/**)` `userRuleDenial` สร้างคำถาม `workspace-ask` สำหรับ `edit src/generated/api.ts`
@@ -88,6 +96,7 @@ scenario:
                 beat:
                   title: Geno หยุด turn แล้วถามคุณ
                   text: Geno ส่งคำขอ permission ให้ VS Code แผงแชตเลื่อนมาให้เห็นและรอคำตอบของคุณ
+                  from: engine
                   to: panel
                 at: approvals
                 do: >-
@@ -105,6 +114,7 @@ scenario:
                 beat:
                   title: คุณเห็นการ์ด “Run this command?”
                   text: การ์ดใช้หน้าตาเดียวกับการขอรันคำสั่ง และบอกว่ากฎข้อไหนของคุณทำให้ Geno ถาม
+                  from: panel
                   to: you
                   sees:
                     kind: permission
@@ -127,6 +137,7 @@ scenario:
                   title: คุณกด Allow แล้ว Geno แก้ไฟล์ตามปกติ
                   text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต แล้วการแก้เดินต่อแบบเดียวกับไฟล์ที่ไม่มีกฎครอบ
                   from: you
+                  to: panel
                   end: แก้ไฟล์ตามปกติ
                 do: ผู้ใช้กด Allow
               - lane: editor
@@ -155,6 +166,8 @@ scenario:
                 beat:
                   title: กฎของคุณปฏิเสธทันที
                   text: กฎ `Edit(src/generated/**)` แบบ deny ครอบไฟล์นี้ Geno ไม่ถามใคร และจดว่ากฎเป็นคนปฏิเสธ
+                  from: engine
+                  to: model
                 at: rules
                 do: >-
                   กฎเป็น deny `settle` ไม่ถามใครและบันทึก `decidedBy: rule, verdict: deny` `refusalOf` โยน `ToolDenied`
@@ -166,6 +179,7 @@ scenario:
       beat:
         title: Geno ไม่เขียนอะไรเลย
         text: ไฟล์ไม่ถูกแตะ Geno ไม่ได้อ่านมันด้วยซ้ำ ขั้นของ edit ในแชตขึ้นว่าล้มเหลวหรือถูกปฏิเสธ และผลบอกเหตุผลให้โมเดล
+        from: engine
         to: panel
         sees:
           kind: step
@@ -185,7 +199,8 @@ scenario:
       beat:
         title: Model อ่านเหตุผลแล้วตัดสินใจต่อ
         text: turn ไม่จบ โมเดลอ่านเหตุผลแล้วบอกคุณ หรือหาทางอื่นที่อยู่ในที่ที่แก้ได้
-        to: model
+        from: model
+        to: engine
         end: Model อ่านเหตุผลแล้วทำต่อ
       lane: loop
       at: step
