@@ -60,7 +60,7 @@ scenario:
       alongside: true
       do: >-
         `errorBlock` วาดบล็อก error สีแดงด้วยข้อความของ refusal ที่ขึ้นต้นด้วยตัวพิมพ์ใหญ่
-      sees: บล็อก error ไอคอนสีแดง เช่น "The model refused" เมื่อผู้ให้บริการไม่ได้ให้คำอธิบายหรือข้อความมา
+      sees: บล็อก error ไอคอนสีแดง เช่น "The model refused" เมื่อผู้ให้บริการไม่ได้ให้คำอธิบาย ข้อความ หรือ category มา (มี category จะต่อท้ายในวงเล็บ)
       ref: packages/extension/src/chat/render.ts#errorBlock
 
     - id: done
@@ -85,9 +85,9 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `turnEndOf` อ่านได้ `failed` ข้อความสำรอง "The model declined to continue." ใน `STOP_MESSAGES` ไม่ถูกเพิ่ม
+        `prompt()` ใช้ `turnEndOf` อ่านได้ `failed` ข้อความสำรอง "The model declined to continue." ใน `STOP_MESSAGES` ไม่ถูกเพิ่ม
         เพราะ turn มีบล็อก error ของ engine อยู่แล้ว แล้วส่ง action `turn-end` สถานะ `failed`
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: shown

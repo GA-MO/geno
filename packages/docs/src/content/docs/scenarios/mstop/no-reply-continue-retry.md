@@ -19,7 +19,7 @@ scenario:
       at: rail
       do: >-
         `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้ายของ turn และไม่มีบล็อก error จึงเลือกเหตุผลจากวิธีที่ turn จบ
-        turn นี้จบแบบ stopped เพราะเป็น turn ล่าสุดและไม่มีข้อความรอในคิว `noReplyNotice` จึงใส่ปุ่ม Continue และ Retry
+        turn นี้จบแบบ stopped และเพราะเป็น turn ล่าสุดที่ช่องพิมพ์ไม่มีข้อความรอในคิว `noReplyNotice` จึงใส่ปุ่ม Continue และ Retry
       sees: >-
         กล่อง "Geno stopped without a reply" เหตุผล "You stopped it before it answered." และปุ่ม [Continue] [Retry]
       ref: packages/extension/src/chat/render.ts#noReplyNotice
@@ -73,8 +73,9 @@ scenario:
       lane: server
       at: turns
       do: >-
-        `runTurn` รับเป็น turn ใหม่ที่มาจากผู้ใช้ จึงล้างขีดจำกัดของรอบก่อน turn นี้ได้ 40 ครั้งและ $0.40 เต็ม
-      ref: "packages/engine/src/serve.ts#\"if (start === 'prompt') runLimits.delete(sessionId);\""
+        `runTurn` รับเป็น turn ใหม่ที่มาจากผู้ใช้ และ `drive` เริ่มนับการเรียกโมเดลและค่าใช้จ่ายจาก seq ของ prompt ใหม่
+        turn นี้จึงได้ 40 ครั้งและ $0.40 เต็ม (`runTurn` ยังล้างงบของงานตามเวลาที่อาจค้างไว้ด้วย)
+      ref: "packages/engine/src/drive.ts#\"const run: Run = { firstSeq: limits.countFrom ?? nextSeq(events),\""
       phase: starting
 
     - id: record
@@ -89,8 +90,8 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ข้าม error `abort` ของรอบก่อน เพราะ error ชนิดนี้เก็บ prompt ที่ยังไม่ได้คำตอบไว้ แล้วตัดสิน `call-model`
-      ref: packages/core/src/loop.ts#lastLiveEvent
+        `loopStep` เห็น event `user` ใหม่เป็น event ล่าสุดของบทสนทนา จึงตัดสิน `call-model`
+      ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
 
