@@ -717,6 +717,17 @@ scenarios:
       - editor
       - tool
     terminal: Next model call
+  - id: tool.todo-rename-run
+    thai: การรันจริง เปลี่ยนชื่อทั้ง monorepo โดยวางแผนด้วย todo
+    english: "Real run: a monorepo-wide rename planned with todo"
+    chapter: 7
+    priority: P2
+    lanes:
+      - user
+      - loop
+      - model
+      - tool
+    terminal: '`done` / `end_turn`'
   - id: perm.ask-allow
     thai: โหมด Ask ถามแล้วผู้ใช้อนุญาต
     english: "Ask mode: user allows"
