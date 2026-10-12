@@ -170,6 +170,11 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
 }
 
 const DIRECTION_LABELS: Readonly<Record<PayloadView['direction'], string>> = { request: 'Request ที่ส่งให้ model', response: 'คำตอบของ model', tool_result: 'ผลของ tool' };
+const PROVENANCE_LABELS: Readonly<Record<PayloadView['provenance'], string>> = {
+  recorded: 'ไบต์จริงจาก wire log',
+  rebuilt: 'request ที่ engine สร้างใหม่จาก session log ตอนเก็บผล',
+  logged: 'event ใน session log',
+};
 
 function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
   const [tab, setTab] = useState(0);
@@ -205,10 +210,11 @@ function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
         <Json value={view.value} path="" view={view} open={open} toggle={toggle} depth={0} />
       </pre>
       <p className="mk-caption">
-        จากการรันจริง:{' '}
+        ที่มา:{' '}
         <a href={view.url} title={view.file}>
           {view.caption}
         </a>
+        {` · ${PROVENANCE_LABELS[view.provenance]}${view.engine === undefined ? '' : ` · engine ${view.engine}`}`}
       </p>
     </div>
   );
@@ -271,7 +277,7 @@ export default function Sees({ shown }: { readonly shown: readonly Shown[] }) {
       )}
       {payloads.length === 0 ? null : (
         <figure className="sees">
-          <figcaption>ข้อมูลที่ส่งจริง</figcaption>
+          <figcaption>ข้อมูลจากการรันจริง</figcaption>
           <Payloads views={payloads} />
         </figure>
       )}

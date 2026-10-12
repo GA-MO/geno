@@ -3,13 +3,39 @@ title: "รูปภาพและ multimodal"
 description: model อ่านรูปได้ แต่สร้างรูปไม่ได้ รูปเข้าทางไหนบ้าง ถูกส่งซ้ำทุก request อย่างไร และภาพที่คุณเห็นในแชตใครเป็นคนวาด
 sidebar:
   order: 10
+payloads:
+  asks:
+    direction: response
+    source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=19
+    select: content
+    highlight:
+      - "[1].input"
+      - "[2].input"
+      - "[3].input"
+  imageResult:
+    direction: tool_result
+    source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=20
+    highlight:
+      - images[0].sha256
+      - images[0].mediaType
+      - output
+    collapse:
+      - timing
+  imageSent:
+    direction: tool_result
+    source: docs/results/real-usecases/runs/A35-show-before-after/3/wire.jsonl#line=13
+    select: messages[-1].content[0]
+    highlight:
+      - content[1].source
+  sawIt:
+    direction: response
+    source: docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=24
+    select: content
+    highlight:
+      - "[0].thinking"
+      - "[2].input"
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const asks = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=19', select: 'content', highlight: ['[1].input', '[2].input', '[3].input'] });
-export const imageResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=20', highlight: ['images[0].sha256', 'images[0].mediaType', 'output'], collapse: ['timing'] });
-export const sawIt = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/3/session.jsonl#seq=24', select: 'content', highlight: ['[0].thinking', '[2].input'] });
+import Payload from '../../../components/Payload.astro';
 
 **model ที่รองรับรูปอ่านรูปได้ แต่เขียนออกมาได้แค่ข้อความ**
 รูปเข้าสู่ model เป็นบล็อก `image` ที่เข้ารหัส base64 ใน request ส่วนภาพทุกภาพที่คุณเห็นในแชต
@@ -40,27 +66,23 @@ Geno วางรูปก่อนข้อความในข้อควา
 ในรายการ A35 รอบที่ 3 ผู้ใช้ขอให้ถ่ายภาพหน้าเว็บ ย้ายปุ่มเข้าในการ์ด ถ่ายอีกภาพ แล้วโชว์ก่อนกับหลังคู่กัน
 หลังถ่ายสองภาพด้วย `node shot.mjs` model ขออ่านทั้งสองภาพ พร้อมโหลด `show_files` ในคำตอบเดียว
 
-<Sees client:visible shown={[asks]} />
+<Payload of={frontmatter.payloads.asks} />
 
 ผลของ `read` ใน log มีแต่ข้อมูลอ้างอิงของรูป ไม่มีไบต์
 
-<Sees client:visible shown={[imageResult]} />
+<Payload of={frontmatter.payloads.imageResult} />
 
 ตอนสร้าง request ถัดไป `loadAttachments` ใน `packages/engine/src/attachments.ts` อ่านไฟล์นั้นแล้วเข้ารหัส base64
-นี่คือไบต์ที่ส่งจริง (`runs/A35-show-before-after/3/wire.jsonl` บรรทัด 13, engine `e7a483e3+dirty`) ตัดข้อมูลรูปให้สั้น
+นี่คือไบต์ที่ส่งจริงในบรรทัด 13 ของ wire log การ์ดตัดข้อมูลรูปให้สั้น
 
-```json
-{"type":"tool_result","tool_use_id":"toolu_c66d9b176609459db4404685","content":[
-  {"type":"text","text":"before.png is a 480x320 PNG image (3 KB), attached below."},
-  {"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAeAAAAFAC…"}}]}
-```
+<Payload of={frontmatter.payloads.imageSent} />
 
 request ถัดไป (บรรทัด 15 ของไฟล์เดียวกัน) มีบล็อกเดียวกันนี้อีกครั้ง เพราะทุก request ส่งบทสนทนาทั้งหมด ([หน้าที่ 1](/foundations/model-is-one-call/))
 รูปจึงกิน token ทุกครั้งที่ยังอยู่ในบทสนทนา ไม่ใช่แค่ครั้งแรก
 
 model เห็นพิกเซลจริง thinking ของมันบรรยายว่าปุ่มสีแดงล้นขอบขวาของการ์ดในภาพก่อน และปุ่มสีเขียวอยู่ในการ์ดในภาพหลัง แล้วเรียก `show_files`
 
-<Sees client:visible shown={[sawIt]} />
+<Payload of={frontmatter.payloads.sawIt} />
 
 ## model สร้างรูปไม่ได้ แล้วภาพในแชตมาจากไหน
 

@@ -3,12 +3,35 @@ title: "Memory และ context window"
 description: model จำได้แค่สิ่งที่อยู่ใน request Geno ทำให้ส่งซ้ำได้ถูกด้วย prompt cache ให้ model จำข้าม session ด้วย memory และย่อบทสนทนาที่ยาวเกินด้วย compaction
 sidebar:
   order: 11
+payloads:
+  firstUsage:
+    direction: response
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4
+    select: usage
+    highlight:
+      - cacheRead
+      - cacheWrite
+  secondUsage:
+    direction: response
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9
+    select: usage
+    highlight:
+      - cacheRead
+      - cacheWrite
+  compaction:
+    direction: response
+    source: docs/results/real-usecases/runs/A31-compaction-forced/2/session.jsonl.gz#seq=84
+    highlight:
+      - keptFrom
+      - tokensBefore
+      - tokensAfter
+      - kept.messages[0].text
+    collapse:
+      - kept.todo
+      - kept.files
+      - kept.attached
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const firstUsage = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4', select: 'usage', highlight: ['cacheRead', 'cacheWrite'] });
-export const secondUsage = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=9', select: 'usage', highlight: ['cacheRead', 'cacheWrite'] });
+import Payload from '../../../components/Payload.astro';
 
 **model จำได้เฉพาะสิ่งที่อยู่ใน request ที่กำลังอ่าน** ทุกอย่างที่เรียกว่า "ความจำ" ของ Geno คือการเลือกว่าจะใส่อะไรลงใน request
 หน้านี้ตอบสามคำถาม: ส่งทั้งบทสนทนาทุกครั้งแล้วทำไมไม่แพง, จำข้าม session ได้อย่างไร และเมื่อบทสนทนายาวเกิน window ทำอย่างไร
@@ -29,11 +52,11 @@ Geno วาง `cache_control` สองจุดในทุก request (`build
 
 ตัวเลขจริงจากสองการเรียกของรายการ A06 ครั้งแรก
 
-<Sees client:visible shown={[firstUsage]} />
+<Payload of={frontmatter.payloads.firstUsage} />
 
 ครั้งที่สอง
 
-<Sees client:visible shown={[secondUsage]} />
+<Payload of={frontmatter.payloads.secondUsage} />
 
 - ครั้งแรกอ่านจาก cache 5,594 token ทั้งที่เป็น request แรกของ session ใหม่ ส่วนนี้น่าจะเป็น `tools` กับ `system` ที่ session ก่อนหน้าเขียนไว้
   (อนุมานจากขนาด ไม่ได้วัดตรง) และเขียนลง cache อีก 3,234 token ซึ่งคือข้อความแรกของ session นี้
@@ -74,15 +97,10 @@ Geno ย่อก่อนเรียก model ครั้งถัดไป (
 ### ตัวอย่างจริง: A31 รอบที่ 2
 
 รายการนี้ตั้ง `GCODE_COMPACT_AT=40000` เพื่อบังคับให้ compaction เกิดเร็ว ผู้ใช้สั่งให้อ่านไฟล์ 17 ไฟล์ทีละไฟล์ และห้ามแก้อะไรใต้ `legacy/`
-session log (`runs/A31-compaction-forced/2/session.jsonl.gz`) มี compaction อัตโนมัติสองครั้ง นี่คือครั้งแรก (event seq 84) ตัดให้สั้น
+session log (`runs/A31-compaction-forced/2/session.jsonl.gz`) มี compaction อัตโนมัติสองครั้ง นี่คือครั้งแรก (event seq 84) สรุปยาว 3,108 ตัวอักษร การ์ดแสดงแค่ต้น
+ส่วนหัวข้อ "The user's rules, word for word" อยู่ในสรุปถัดลงไป เปิดไฟล์จากลิงก์ใต้การ์ดเพื่ออ่านทั้งหมด
 
-```json
-{"kind":"compact","seq":84,"trigger":"auto","keptFrom":"64",
- "tokensBefore":50285,"tokensAfter":27436,
- "summary":"## Goal\n\nRead every file in `src/shop/` one by one, … Never edit anything under `legacy/`.\n\n## The user's rules, word for word\n\n\"Rule for this whole task: never edit anything under legacy/. …\"\n\n## Progress\n\n### Done\n\nAll 17 files in `src/shop/` have been read individually. …",
- "kept":{"messages":[{"seq":2,"from":"user","text":"Rule for this whole task: never edit anything under legacy/. …"}], …},
- "usage":{"input":6,"cacheRead":0,"cacheWrite":29122,"output":1694},"model":"qwen3.8-flash"}
-```
+<Payload of={frontmatter.payloads.compaction} />
 
 - context ลดจาก 50,285 เหลือ 27,436 token และ event ตั้งแต่ seq 64 อยู่ครบ
 - กฎ "never edit anything under legacy/" รอดมาสองทาง: ในข้อความของผู้ใช้คำต่อคำ และในสรุป

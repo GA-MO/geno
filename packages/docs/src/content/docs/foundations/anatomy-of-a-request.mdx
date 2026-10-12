@@ -3,11 +3,20 @@ title: "ผ่า request หนึ่งก้อน"
 description: ทุก field ใน request ที่ Geno ส่งให้ model ทำอะไร ใครเป็นคนเติม และ field ไหนที่ Geno ตั้งใจไม่ส่ง
 sidebar:
   order: 3
+payloads:
+  whole:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
+    highlight:
+      - model
+      - max_tokens
+      - output_config
+    collapse:
+      - tools
+      - system
+      - messages
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const whole = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', highlight: ['model', 'max_tokens', 'output_config'], collapse: ['tools', 'system', 'messages'] });
+import Payload from '../../../components/Payload.astro';
 
 **request หนึ่งก้อนคือ JSON ที่มีแค่ไม่กี่ field** แต่ละ field ตอบคำถามหนึ่งข้อ:
 คุยกับ model ตัวไหน ตอบยาวได้เท่าไร model มี tool อะไรให้ใช้ model ควรประพฤติอย่างไร และคุยอะไรกันมาแล้ว
@@ -17,7 +26,7 @@ export const whole = card({ direction: 'request', source: 'docs/results/real-use
 
 นี่คือ request แรกของรายการ A06 ทั้งก้อน สาม field ใหญ่ (`tools` `system` `messages`) พับไว้ คลิกเพื่อเปิดดูได้
 
-<Sees client:visible shown={[whole]} />
+<Payload of={frontmatter.payloads.whole} />
 
 ดูสาม field ที่ไฮไลต์ก่อน
 

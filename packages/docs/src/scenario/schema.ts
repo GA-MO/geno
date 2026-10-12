@@ -83,8 +83,29 @@ export const isUse = (step: StepIn): step is UseStepIn => 'use' in step;
 const text = z.string().min(1);
 const segment = String.raw`(?:[A-Za-z_$][\w$-]*|\[-?\d+\])`;
 const jsonPath = z.string().regex(new RegExp(String.raw`^${segment}(?:\.?${segment})*$`), 'a JSON path such as messages[-1].content[0]');
-/** A recorded run's file and the record in it: `docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl#seq=<n>`. */
-const runSource = z.string().regex(/^docs\/results\/real-usecases\/runs\/[^#\s]+\.jsonl#seq=\d+$/, 'docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl#seq=<n>');
+/**
+ * A record in a recorded run: `docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl[.gz]#seq=<n>` for the record
+ * with that `seq`, or `#line=<n>` for the record on that line, counting from 1.
+ */
+const runSource = z.string().regex(/^docs\/results\/real-usecases\/runs\/[^#\s]+\.jsonl(?:\.gz)?#(?:seq|line)=\d+$/, 'docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl[.gz]#seq=<n> or #line=<n>');
+
+/** Real wire data from a recorded run, on a beat or on any page's `payloads`. */
+export const payloadSpecSchema = z
+  .object({
+    direction: z.enum(['request', 'response', 'tool_result']),
+    source: runSource,
+    /** A path into the record; the whole record when absent. */
+    select: jsonPath.optional(),
+    /** An inline excerpt in place of select; source still names where it came from. */
+    json: z.unknown().optional(),
+    highlight: z.array(jsonPath).optional(),
+    collapse: z.array(jsonPath).optional(),
+  })
+  .strict();
+export type PayloadSpec = z.infer<typeof payloadSpecSchema>;
+
+/** A page's named payloads, which its `<Payload>` elements show. */
+export const pagePayloadsSchema = z.record(z.string().regex(/^[a-z][A-Za-z0-9]*$/, 'a name such as firstUsage'), payloadSpecSchema);
 
 /** What the user sees at a beat: a small copy of the real UI, in its English copy. */
 export const mockSchema = z.discriminatedUnion('kind', [
@@ -96,22 +117,9 @@ export const mockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('toast'), text, actions: z.array(text).optional() }).strict(),
   z.object({ kind: z.literal('composer'), state: z.enum(['idle', 'working']), text: text.optional(), header: text.optional() }).strict(),
   z.object({ kind: z.literal('task'), title: text, status: z.enum(['running', 'needs-input', 'done', 'failed']), detail: text.optional(), actions: z.array(text).optional() }).strict(),
-  z
-    .object({
-      kind: z.literal('payload'),
-      direction: z.enum(['request', 'response', 'tool_result']),
-      source: runSource,
-      /** A path into the record; the whole record when absent. */
-      select: jsonPath.optional(),
-      /** An inline excerpt in place of select; source still names where it came from. */
-      json: z.unknown().optional(),
-      highlight: z.array(jsonPath).optional(),
-      collapse: z.array(jsonPath).optional(),
-    })
-    .strict(),
+  payloadSpecSchema.extend({ kind: z.literal('payload') }),
 ]);
 export type MockIn = z.infer<typeof mockSchema>;
-export type PayloadIn = Extract<MockIn, { kind: 'payload' }>;
 
 const beatSchema = z
   .object({

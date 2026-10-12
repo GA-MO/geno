@@ -3,12 +3,35 @@ title: "Model คือ API call หนึ่งครั้ง"
 description: Model ไม่มีความจำ ทุกครั้งที่ Geno เรียก model คือ HTTP request หนึ่งก้อนที่มีบทสนทนาทั้งหมด ส่วนอื่นทั้งหมดเป็นงานของ harness
 sidebar:
   order: 1
+payloads:
+  first:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
+    select: messages
+    highlight:
+      - "[0].content[3].text"
+  second:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9
+    select: messages
+    highlight:
+      - "[1].role"
+      - "[1].content[2].name"
+      - "[2].role"
+      - "[2].content[0].tool_use_id"
+    collapse:
+      - "[0]"
+  secondSent:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3
+    select: messages
+    highlight:
+      - "[1].role"
+      - "[2].role"
+    collapse:
+      - "[0]"
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const first = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', select: 'messages', highlight: ['[0].content[3].text'] });
-export const second = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9', select: 'messages', highlight: ['[1].role', '[1].content[2].name', '[2].role', '[2].content[0].tool_use_id'], collapse: ['[0]'] });
+import Payload from '../../../components/Payload.astro';
 
 **AI model ที่ Geno ใช้คือ API ที่ไม่มีความจำ** Geno ส่ง request หนึ่งก้อนไป model ส่งคำตอบหนึ่งก้อนกลับมา แล้วจบ
 model ไม่รู้ว่าเคยคุยอะไรกับคุณมาก่อน ไม่รู้ว่าอยู่ในเครื่องไหน และไม่เคยรันคำสั่งเองแม้แต่ครั้งเดียว
@@ -25,12 +48,12 @@ turn นี้เรียก model สองครั้ง
 **ครั้งที่ 1** `messages` มีข้อความเดียวจากฝั่ง user ข้างในมีสี่บล็อก บล็อกสุดท้ายคือคำถามของผู้ใช้
 สามบล็อกแรกเป็นสิ่งที่ Geno ใส่ให้: ไฟล์คำสั่งของผู้ใช้ สภาพแวดล้อมของเครื่อง และข้อความจาก hook (อธิบายใน[หน้าที่ 4](/foundations/how-the-model-knows/))
 
-<Sees client:visible shown={[first]} />
+<Payload of={frontmatter.payloads.first} />
 
 model ตอบว่าจะดูไฟล์ก่อน แล้วขอเรียก tool สามตัว: `read` `list` และ `glob`
 Geno รันทั้งสามบนเครื่องของคุณ แล้วเรียก model **ครั้งที่ 2**
 
-<Sees client:visible shown={[second]} />
+<Payload of={frontmatter.payloads.second} />
 
 สังเกตสามข้อความใน `messages`
 
@@ -42,8 +65,9 @@ model ไม่ได้ "จำ" ว่าเคยขออ่าน `package.
 ถ้า Geno ไม่ส่งข้อความที่สอง model จะไม่รู้เลยว่าตัวเองเคยตอบอะไร
 
 การ์ดสองใบนี้มาจาก `requests.jsonl` ซึ่ง engine สร้างใหม่จาก session log ตอนเก็บผล ไม่ใช่ไบต์ที่ส่งจริง
-ไบต์จริงของรายการเดียวกันที่รันซ้ำบน engine `84461d3b` อยู่ใน `runs/A06-read-not-cat/fix-a1/wire.jsonl`
-request ที่สองในไฟล์นั้นก็มี `messages` สามข้อความแบบเดียวกัน
+นี่คือไบต์ที่ส่งจริงของรายการเดียวกันที่รันซ้ำ: request ที่สองใน wire log ก็มี `messages` สามข้อความแบบเดียวกัน
+
+<Payload of={frontmatter.payloads.secondSent} />
 
 ## ทำไมต้องส่งทั้งหมดทุกครั้ง
 

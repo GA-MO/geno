@@ -5,9 +5,9 @@ import type { z } from 'astro/zod';
 import { compileScenario } from './compile.js';
 import { LOOP_FILE, readEndTables, SERVE_FILE, type EndTables } from './ends.js';
 import { partKeyOf, type CodeRef, type Link, type PartKey, type Problem, type Scenario, type StepId } from './model.js';
-import { runFiles } from './payload.js';
+import { runFiles, type PayloadView, type RunFiles } from './payload.js';
 import { sourceIndex } from './refs.js';
-import { catalogSchema, fragmentSchema, isUse, lanesSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
+import { catalogSchema, fragmentSchema, isUse, lanesSchema, pagePayloadsSchema, payloadSpecSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
 
 export interface SiteOptions {
   readonly docsRoot: string;
@@ -37,6 +37,7 @@ interface Page {
   readonly href: string;
   readonly title: string;
   readonly scenario: unknown;
+  readonly payloads: unknown;
 }
 
 const DATA = 'src/data';
@@ -79,11 +80,44 @@ function frontmatterOf(file: string, text: string, problems: Problem[]): Record<
 
 function pagesOf(options: SiteOptions, problems: Problem[]): Page[] {
   const root = path.join(options.docsRoot, PAGES);
-  return filesUnder(root, /\.mdx?$/).flatMap((file) => {
+  return filesUnder(root, /\.mdx?$/).map((file) => {
     const data = frontmatterOf(relative(options, file), readFileSync(file, 'utf8'), problems);
-    if (data['scenario'] === undefined) return [];
     const slug = path.relative(root, file).split(path.sep).join('/').replace(/\.mdx?$/, '').replace(/(^|\/)index$/, '');
-    return [{ file: relative(options, file), id: path.basename(slug), href: `/${slug}/`, title: String(data['title'] ?? slug), scenario: data['scenario'] }];
+    return { file: relative(options, file), id: path.basename(slug), href: `/${slug}/`, title: String(data['title'] ?? slug), scenario: data['scenario'], payloads: data['payloads'] };
+  });
+}
+
+/** Checks a page's `payloads` frontmatter: each one parses and its source resolves. */
+function checkPayloads(page: Page, runs: RunFiles, problems: Problem[]): void {
+  if (page.payloads === undefined) return;
+  if (page.payloads === null || typeof page.payloads !== 'object' || Array.isArray(page.payloads)) {
+    problems.push({ level: 'error', file: page.file, path: 'payloads', message: 'payloads maps a name to a payload' });
+    return;
+  }
+  // One entry at a time, so a typo in one does not hide a bad source in another.
+  for (const [name, raw] of Object.entries(page.payloads)) {
+    const parsed = pagePayloadsSchema.safeParse({ [name]: raw });
+    if (!parsed.success) {
+      problems.push(...issuesOf(page.file, parsed.error, 'payloads'));
+      continue;
+    }
+    const resolved = runs.resolve(parsed.data[name]!);
+    if (!resolved.ok) problems.push({ level: 'error', file: page.file, path: `payloads.${name}`, message: resolved.reason });
+  }
+}
+
+let pageRuns: RunFiles | undefined;
+
+/** The views a `<Payload>` shows, from its page's `payloads` frontmatter. Throws on one that docs:check would fail. */
+export function payloadViews(specs: readonly unknown[]): PayloadView[] {
+  pageRuns ??= runFiles(siteOptions().repoRoot);
+  const runs = pageRuns;
+  return specs.map((spec, i) => {
+    const parsed = payloadSpecSchema.safeParse(spec);
+    if (!parsed.success) throw new Error(`payload ${i}: ${parsed.error.issues.map((issue) => issue.message).join('; ')}; name one under the page's payloads`);
+    const resolved = runs.resolve(parsed.data);
+    if (!resolved.ok) throw new Error(`payload ${parsed.data.source}: ${resolved.reason}`);
+    return resolved.view;
   });
 }
 
@@ -111,6 +145,7 @@ export function loadSite(options: SiteOptions): Site {
   const coveredBy = new Map<string, Page>();
   const seenIds = new Map<string, Page>();
   const authored = pages.flatMap((page) => {
+    if (page.scenario === undefined) return [];
     const parsed = scenarioSchema.safeParse(page.scenario);
     if (!parsed.success) {
       problems.push(...issuesOf(page.file, parsed.error, 'scenario'));
@@ -137,6 +172,7 @@ export function loadSite(options: SiteOptions): Site {
 
   const source = sourceIndex(options.repoRoot);
   const runs = runFiles(options.repoRoot);
+  for (const page of pages) checkPayloads(page, runs, problems);
   const partRefs: Record<PartKey, CodeRef> = {};
   lanes.lanes.forEach((lane, i) =>
     lane.parts.forEach((part, j) => {
