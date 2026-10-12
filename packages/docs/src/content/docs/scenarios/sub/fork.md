@@ -105,7 +105,7 @@ scenario:
       lane: server
       at: updates
       do: >-
-        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` แถวของลูกขึ้น Done พร้อมจำนวนรอบและค่าใช้จ่าย
+        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` พร้อมจำนวนรอบและค่าใช้จ่าย แถวของลูกขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย
       ref: packages/engine/src/subagent-acp.ts#acpChildHost
       emits: [subagent_update, idle]
 

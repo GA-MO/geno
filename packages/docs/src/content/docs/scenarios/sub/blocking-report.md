@@ -207,10 +207,10 @@ scenario:
               - lane: panel
                 at: rail
                 do: >-
-                  แถวของลูกเป็น Done ขั้นของ `agent` เป็นล้มเหลว (ไม่มีป้าย "Denied by you" เพราะผลของแม่ไม่มีบันทึกการอนุญาต)
+                  แถวของลูกขึ้นเครื่องหมายถูกของ `done` ขั้นของ `agent` เป็นล้มเหลว (ไม่มีป้าย "Denied by you" เพราะผลของแม่ไม่มีบันทึกการอนุญาต)
                   `missingReply` จึงบอกว่าคำตอบไม่มีข้อความ แทนที่จะบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
                 sees: >-
-                  แถว "worker · Done" และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
+                  แถว "✓ worker · <โมเดล> · <เวลา>" (คำว่า Done อยู่แค่ใน tooltip ของแถว) และประกาศ "Geno stopped without a reply · Its last reply had no text." [Continue] [Retry]
                 ref: packages/extension/src/chat/rail.ts#missingReply
                 end: { turn: done, reason: end_turn }
 
