@@ -6,8 +6,9 @@
   do: >-
     สิ่งที่มาถึงเข้ากล่องข้อความของ session ไม่มี turn รันอยู่ `inbox.arrived` จึงให้ `logArrivals` บันทึกลง log
     ต่อจากงานเขียนที่ค้างของ session นั้น ตามชนิดของสิ่งที่มา: โน้ต `wake` ของ monitor wake-up หรือ PR,
-    `background-end` ของคำสั่ง หรือ `child-end` กับรายงานของลูก แล้ว `wakes.soon` ให้ตัวปลุกดูประตู
-  ref: packages/engine/src/background-hooks.ts#logArrivals
+    `background-end` ของคำสั่ง หรือรายงานของลูกเป็น event `user` แบบ steer จากลูก (มี `child-end` นำหน้าเฉพาะเมื่อการมาถึงมีสถานะจบของลูกติดมา
+    รายงานของ workflow ไม่มี) แล้ว `wakes.soon` ให้ตัวปลุกดูประตู
+  ref: packages/engine/src/inbox.ts#arrivalEvents
 
 - id: gate
   lane: server
