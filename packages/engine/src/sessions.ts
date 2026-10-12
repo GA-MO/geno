@@ -179,6 +179,7 @@ const approvalSchema = z.strictObject({
   rule: z.enum(APPROVAL_RULE_IDS),
   reason: z.string(),
   command: z.string(),
+  line: z.string().optional(),
   classifier: z
     .strictObject({ verdict, reason: z.string(), model: z.string(), latencyMs: count, costUsd: z.number().nonnegative().nullable() })
     .optional(),

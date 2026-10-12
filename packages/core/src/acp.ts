@@ -47,11 +47,11 @@ export const APPROVAL_META = 'gcode/approval';
 export const TURN_ERROR_META = 'gcode/turnError';
 
 /**
- * session/request_permission's `toolCall.rawInput`: the command asked about, why it needs asking, and the bash call's
- * own description, for display only. `rule` is the pattern "Always allow in this workspace" saves, when offered.
- * `subject` names the path, host or MCP tool a question asks about when it is not a command line.
+ * session/request_permission's `toolCall.rawInput`: the command asked about, the whole line when the command is only part
+ * of it, why it needs asking, and the bash call's own description, for display only. `rule` is the pattern "Always
+ * allow in this workspace" saves, when offered. `subject` names the path, host or MCP tool a question asks about when it is not a command line.
  */
-export type PermissionInput = { readonly command: string; readonly reason: string; readonly description?: string; readonly rule?: string; readonly subject?: ApprovalSubject };
+export type PermissionInput = { readonly command: string; readonly line?: string; readonly reason: string; readonly description?: string; readonly rule?: string; readonly subject?: ApprovalSubject };
 
 /** The JSON-RPC error a client answers fs/write_text_file with when the file no longer holds that text. */
 export const STALE_BASE_ERROR = { code: -32010, reason: 'stale-base' } as const;

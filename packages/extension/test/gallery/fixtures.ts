@@ -866,6 +866,23 @@ export const FIXTURES: readonly Fixture[] = [
       asking(host, { command: 'pnpm publish --tag next', reason: 'a package publish', description: 'Publish the package under the next tag', rule: 'Bash(pnpm publish:*)', options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT] }),
   },
   {
+    id: 'approve-compound',
+    group: 'Approval cards',
+    title: 'One part of a compound line',
+    play: async ({ host }) =>
+      asking(
+        host,
+        {
+          command: 'node --check $f',
+          line: 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12',
+          reason: 'a command not on the safe list',
+          rule: 'node --check',
+          options: [...PERMISSION_OPTIONS, WORKSPACE_RULE, COMMENT],
+        },
+        { narration: 'Checking the syntax, then running the tests.', name: 'bash', input: { command: 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12' } },
+      ),
+  },
+  {
     id: 'approve-classifier',
     group: 'Approval cards',
     title: 'Auto could not decide',

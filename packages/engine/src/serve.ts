@@ -788,6 +788,7 @@ function editorTurn(
       const description = asker === undefined ? runningDescription : undefined;
       const rawInput: PermissionInput = {
         command: denial.command,
+        ...(denial.line === undefined ? {} : { line: denial.line }),
         reason: denial.reason,
         ...(description === undefined ? {} : { description }),
         ...(denial.offer === undefined ? (denial.keeps === undefined ? {} : { rule: denial.keeps }) : { rule: patternText(denial.offer) }),

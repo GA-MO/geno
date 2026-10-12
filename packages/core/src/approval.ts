@@ -97,7 +97,10 @@ export type ApprovalSubject =
 export type Denial = {
   readonly rule: ApprovalRuleId;
   readonly reason: string;
+  /** What needs the answer: one simple command of the line, or the whole line. */
   readonly command: string;
+  /** The whole command line, which one yes runs, when `command` is only part of it. */
+  readonly line?: string;
   readonly verdict: Exclude<RuleVerdict, 'allow'>;
   /** The workspace allow rule the question offers to save: a program and its fixed arguments. */
   readonly offer?: readonly string[];
@@ -348,7 +351,7 @@ const SAFE_PROGRAMS: ReadonlyMap<string, (args: readonly string[]) => boolean> =
     'uniq', 'cut', 'tr', 'jq', 'nl', 'column', 'date', 'sleep', 'cd', 'pushd', 'popd', 'mkdir', 'touch', 'tee',
     'mktemp', 'comm', 'paste', 'seq', 'od', 'xxd', 'shasum', 'sha256sum', 'md5', 'md5sum',
     'tsc', 'vue-tsc', 'svelte-check', 'vitest', 'jest', 'mocha', 'eslint', 'prettier', 'biome', 'stylelint', 'oxlint',
-    'pytest', 'mypy', 'ruff', 'for', 'fi', 'done',
+    'pytest', 'mypy', 'ruff', 'for', 'fi', 'done', 'esac', '}',
   ].map((program) => [program, always] as const),
   ['find', (args) => !args.some((arg) => FIND_ACTIONS.has(arg))],
   ['rg', (args) => !args.some((arg) => arg === '--pre' || arg.startsWith('--pre='))],
@@ -365,7 +368,7 @@ const SAFE_PROGRAMS: ReadonlyMap<string, (args: readonly string[]) => boolean> =
 ]);
 
 // Wrappers that leave the command as it is; sudo, env, xargs and exec change who runs it or what it receives.
-const SAFE_PREFIXES = new Set(['npx', 'bunx', 'time', 'command', 'nohup', 'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{']);
+const SAFE_PREFIXES = new Set(['npx', 'bunx', 'time', 'command', 'nohup']);
 // Variables that choose which code a program loads or runs.
 const CODE_VARIABLES = /^(?:PATH|LD_\w+|DYLD_\w+|NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|SHELLOPTS|PS4|PROMPT_COMMAND|IFS|GIT_\w+|npm_config_\w+|PAGER|EDITOR|VISUAL|PYTHON\w*|RUBYOPT|PERL5\w*)=/i;
 // Where a project or a home keeps credentials, as a whole path segment, globs included.
@@ -583,12 +586,18 @@ export function mcpDenialFor(call: { readonly name: string; readonly readOnly: b
 const SEPARATORS = ['&&', '||', ';;', ';', '&', '|', '\n', '(', ')'];
 const REDIRECTS = ['>>', '>&', '&>', '>', '<'];
 
+// Reserved words that a command follows, as in `do node a.js`. `time` is left to the wrappers, as it takes options.
+const OPENING_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{']);
+/** The shell's reserved words; an allow rule never starts with one. */
+export const SHELL_KEYWORDS: ReadonlySet<string> = new Set([...OPENING_KEYWORDS, 'fi', 'done', 'for', 'in', 'case', 'esac', 'select', 'function', '}', '[[', ']]', 'time', 'coproc']);
+
 type Heredoc = { readonly delimiter: string; readonly quoted: boolean; readonly stripTabs: boolean };
 
 /**
  * Splits a shell command into simple commands of words. Quotes group and are removed. A command substitution stays in
  * its word as text and its commands are split out ahead of it. Heredoc bodies are data, except for the substitutions
- * of an unquoted one.
+ * of an unquoted one. A reserved word that opens a command, such as `do` or `then`, is dropped; one that closes a
+ * compound command, such as `done`, stays as a command of its own.
  */
 export function splitCommand(command: string): string[][] {
   return split(command).commands;
@@ -621,9 +630,12 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
   // After `&&`, `||` or `|` with no command yet: a line that ends here is cut short.
   let dangling = false;
   const heredocs: Heredoc[] = [];
+  // Whether a quote or a backslash wrote part of the word, which makes it a plain word, never a keyword.
+  let quoted = false;
   const endWord = () => {
-    if (word !== null) words.push(word);
+    if (word !== null && !(words.length === 0 && !quoted && OPENING_KEYWORDS.has(word))) words.push(word);
     word = null;
+    quoted = false;
   };
   const endCommand = () => {
     endWord();
@@ -642,6 +654,7 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       if (close === -1) out.broken = true;
       const end = close === -1 ? src.length : close;
       word = (word ?? '') + src.slice(i + 1, end);
+      quoted = true;
       i = end;
       continue;
     }
@@ -661,11 +674,13 @@ function scan(src: string, start: number, closer: ')' | '`' | undefined, out: Sp
       }
       if (j >= src.length) out.broken = true;
       word = (word ?? '') + text;
+      quoted = true;
       i = j;
       continue;
     }
     if (ch === '\\' && i + 1 < src.length) {
       word = (word ?? '') + src[++i];
+      quoted = true;
       continue;
     }
     const substitution = substitutionAt(src, i, out);
@@ -782,11 +797,8 @@ function substitutionsIn(text: string, out: Split): void {
   }
 }
 
-// Programs that run the next word as the command, and shell keywords that start a command.
-const WRAPPERS = new Set([
-  'sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice',
-  'if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{',
-]);
+// Programs that run the next word as the command.
+const WRAPPERS = new Set(['sudo', 'env', 'command', 'exec', 'time', 'nohup', 'npx', 'bunx', 'xargs', 'nice']);
 const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd']);
 const isAssignment = (word: string) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(word);
 
@@ -958,7 +970,13 @@ export function lineDenial(command: string, mode: ApprovalMode): Denial | undefi
 /** The first command in the line a rule denies in this mode, else the line's own question, else the merged question or classification. */
 export function denialFor(command: string, scope: CommandScope, mode: ApprovalMode): Denial | undefined {
   const flags = flagsOf(parseCommandLine(command, scope), scope, mode);
-  return flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags));
+  return withLine(flags.kind === 'deny' ? flags.denial : (lineDenial(command, mode) ?? mergedDenial(command, flags.flags)), command);
+}
+
+/** The denial with the whole line beside it, when it names one simple command of several. */
+export function withLine(denial: Denial | undefined, command: string): Denial | undefined {
+  const line = command.trim();
+  return denial === undefined || denial.command === line || splitCommand(command).length < 2 ? denial : { ...denial, line };
 }
 
 /** The rules that flag one simple command on its own in this mode. */
