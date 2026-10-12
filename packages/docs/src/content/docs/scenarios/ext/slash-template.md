@@ -16,8 +16,19 @@ scenario:
   related: [ext.slash-builtin-engine, ext.slash-builtin-editor, ext.skill-by-model, turn.text-answer]
   steps:
     - use: ext-slash-sent
+      beat:
+        title: คุณพิมพ์ `/fix-issue 42`
+        text: แชตขึ้นข้อความที่ขึ้นต้นด้วยชิปชื่อคำสั่ง แล้วส่งเป็น prompt ไปที่ engine
+        sees:
+          kind: message
+          from: you
+          text: /fix-issue 42
 
     - id: kind
+      beat:
+        title: Geno หาคำสั่งด้วยชื่อ
+        text: คำสั่งที่ไม่ใช่คำสั่งในตัวกลายเป็นข้อความของ turn เสมอ วิธีแปลงขึ้นกับว่ามันมาจากไหน
+        ask: มาจากไหน
       lane: server
       at: turns
       do: >-
@@ -31,6 +42,9 @@ scenario:
             then: prompt-logged
             steps:
               - lane: server
+                beat:
+                  title: Geno แทน `$1` ด้วย 42
+                  text: '`/fix-issue` มาจากไฟล์ใน `commands/` ข้อความของ turn จึงเป็น "Read issue #42 with gh, find the cause, and fix it."'
                 at: turns
                 do: >-
                   `/fix-issue` มาจากไฟล์ใน `commands/` `expandTemplate` แทน `$1` ด้วย `42` ข้อความของ turn จึงเป็น
@@ -43,6 +57,9 @@ scenario:
             then: prompt-logged
             steps:
               - lane: server
+                beat:
+                  title: Geno แนบ SKILL.md เป็น context
+                  text: ถ้าคุณพิมพ์ `/pstack:how` ซึ่งเป็น skill ข้อความของ turn คือสิ่งที่คุณพิมพ์ และ SKILL.md ไปเป็น context item
                 at: turns
                 do: >-
                   `/pstack:how` เป็นสกิล ข้อความของ turn ยังเป็นสิ่งที่ผู้ใช้พิมพ์ทั้งบรรทัด และเนื้อหา `SKILL.md` ไปเป็น context item
@@ -51,6 +68,9 @@ scenario:
                 emits: [skill]
 
     - id: prompt-logged
+      beat:
+        title: Geno บันทึก prompt ที่แปลงแล้ว
+        text: Geno บันทึกข้อความ ชื่อคำสั่งกับอาร์กิวเมนต์ และ context ของ skill ถ้ามี ก่อนเปิดรอบ
       lane: server
       at: turns
       do: >-
@@ -60,6 +80,10 @@ scenario:
       emits: [user]
 
     - id: build
+      beat:
+        title: Turn เดินตามปกติ
+        text: tool และ system prompt เหมือน turn อื่นทุกอย่าง hook UserPromptSubmit ได้อ่านข้อความที่แปลงแล้วก่อน model แล้ว Geno ส่งให้ model
+        to: model
       lane: loop
       at: agent
       do: >-
@@ -78,6 +102,10 @@ scenario:
     - use: model-call
 
     - id: answer
+      beat:
+        title: Model ทำตามข้อความที่แปลงแล้ว
+        text: model เห็นข้อความหลังแปลง ไม่ใช่ `/fix-issue 42` ดิบๆ แล้วทำงานตามนั้น
+        to: panel
       lane: model
       do: >-
         โมเดลเห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
@@ -87,6 +115,13 @@ scenario:
 
     - use: answer-streams
     - use: turn-ends
+      beat:
+        title: Turn จบ
+        text: ปุ่ม Send กลับมา และท้ายคำตอบมีแถวสรุป model token และค่าใช้จ่าย
+        sees:
+          kind: composer
+          state: idle
+        end: Turn จบ
 ---
 
 คำสั่งทั้งสองแบบไม่มีทางเฉพาะของตัวเองหลังจาก engine แปลงเสร็จ ทุกอย่างหลัง `logPrompt` คือ

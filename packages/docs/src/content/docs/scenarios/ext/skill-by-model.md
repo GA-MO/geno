@@ -1,5 +1,5 @@
 ---
-title: โมเดลเรียกสกิล
+title: "Model เรียก skill"
 description: โมเดลเห็นรายชื่อสกิลในข้อความแรกของ session แล้วเรียก skill เพื่อโหลด SKILL.md สกิลที่ตั้ง context fork รันเป็นเอเจนต์ลูกแทน
 tableOfContents: false
 sidebar:
@@ -15,6 +15,15 @@ scenario:
   related: [ext.skill-typed, ext.slash-template, sub.blocking-report, ctx.large-output-spill]
   steps:
     - id: wants
+      beat:
+        title: Model เลือก skill release-notes
+        text: รายชื่อ skill พร้อมคำอธิบายอยู่ในข้อความแรกของ session model เห็นว่า release-notes ตรงกับงาน การ์ดเป็น call จริงจากการรันที่ model โหลด skill changelog
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A18-project-skill/fix-b2/session.jsonl#seq=15
+          select: content[3]
       lane: model
       do: >-
         โมเดลเลือกสกิลจากรายชื่อที่เห็น แล้วขอเรียก `skill` ด้วย `name: "release-notes"` และ `args: "v1.4"`
@@ -24,8 +33,19 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น skill
+        text: แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: skill release-notes
+          status: running
 
     - id: load
+      beat:
+        title: Geno โหลด skill จากโฟลเดอร์
+        text: Geno อ่านโฟลเดอร์ skill ตามที่เป็นตอนนี้ และตรวจว่า model เรียก skill นี้ได้ ทางต่อไปขึ้นกับ frontmatter ของ skill
+        ask: skill ตั้ง fork ไหม
       lane: tool
       at: executor
       do: >-
@@ -40,6 +60,15 @@ scenario:
             label: ไม่ตั้ง (โหลดเข้า context)
             steps:
               - lane: loop
+                beat:
+                  title: ข้อความของ skill เป็นผลของ call
+                  text: ผลยาวได้ถึง 100,000 ตัวอักษรก่อนถูกเก็บลงไฟล์ model จึงอ่านคำสั่งของ skill ได้ทั้งก้อน การ์ดเป็นผลจริงของ skill changelog
+                  to: model
+                  sees:
+                    kind: payload
+                    direction: tool_result
+                    source: docs/results/real-usecases/runs/A18-project-skill/fix-b2/session.jsonl#seq=17
+                    select: output
                 at: tools
                 do: >-
                   ข้อความของสกิลเป็นผลของ call โดยตรง ผลของ `skill` ยาวได้ถึง 100,000 ตัวอักษรก่อนถูกเก็บลงไฟล์
@@ -47,6 +76,10 @@ scenario:
                 ref: packages/core/src/tools.ts#spillLimitOf
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Model ทำตามขั้นใน skill
+                  text: Geno เรียก model อีกครั้ง model ทำตามขั้น เช่นรัน `git log` และเขียนไฟล์ release notes ด้วย tool ของตัวเอง
+                  end: Model ทำตาม skill
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `call-model` โมเดลอ่าน "Skill release-notes, from ..." แล้วทำตามขั้นในสกิล
@@ -60,6 +93,9 @@ scenario:
             label: "context: fork (รันเป็นเอเจนต์ลูก)"
             steps:
               - lane: tool
+                beat:
+                  title: Geno ส่ง skill เป็นงานให้ worker
+                  text: "skill ตั้ง `context: fork` Geno ไม่คืนข้อความ แต่ส่งข้อความของ skill เป็นงานให้ subagent ทางนี้ทำงานแม้ model จะเรียก agent เองไม่ได้"
                 at: executor
                 do: >-
                   สกิลตั้ง `context: fork` executor จึงไม่คืนข้อความ แต่ส่งข้อความของสกิลเป็นงานให้ลูก
@@ -67,18 +103,33 @@ scenario:
                   เพราะเรียก executor ของลูกตรงๆ (ในตัวลูกเองซึ่งสร้างลูกไม่ได้ สกิลจะโหลดเข้า context แทน)
                 ref: "packages/engine/src/tools/skill.ts#\"return start(skill.fork.agent ?? 'worker', text, ctx);\""
               - lane: loop
+                beat:
+                  title: แชตขึ้นแถวของ worker
+                  text: worker เปิดเป็น session ใหม่แบบรอผล รันทีละตัวบน checkout หลัก
+                  sees:
+                    kind: task
+                    title: worker
+                    status: running
                 at: tools
                 do: >-
                   `launch` เปิด `worker` เป็น session ใหม่ แบบรอผล รันทีละตัวบน checkout หลัก แถวของลูกขึ้นใต้ขั้น `skill`
                 ref: packages/engine/src/subagents.ts#runChild
                 emits: [child-start, subagent_update]
               - lane: child@worker
+                beat:
+                  title: worker ทำตาม skill แล้วรายงาน
+                  text: worker ได้ข้อความของ skill เป็นงาน ทำตามขั้นใน session ของตัวเอง แล้วส่งรายงาน
+                  to: engine
                 at: model
                 do: >-
                   ลูกได้ข้อความของสกิลเป็นงาน ทำตามขั้นในสกิลใน session ของตัวเอง แล้วเรียก `report`
                 ref: packages/core/src/subagent.ts#childSystemPrompt
                 emits: [report]
               - lane: loop
+                beat:
+                  title: รายงานกลับมาแทน SKILL.md
+                  text: ผลของ call คือรายงานในรั้ว context ของแม่จึงไม่บวมด้วยคำสั่งของ skill และงานระหว่างทาง
+                  to: model
                 at: tools
                 do: >-
                   ผลของ call `skill` คือรายงานในรั้ว `<subagent_report agent="worker" ...>` ไม่ใช่เนื้อหา SKILL.md
@@ -87,6 +138,10 @@ scenario:
                 emits: [subagent_report, child-end]
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Model เล่ารายงานให้คุณ
+                  text: Geno เรียก model ของแม่อีกครั้ง มันอ่านรายงานแล้วเล่าให้คุณ
+                  end: Model เล่ารายงาน
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `call-model` โมเดลของแม่อ่านรายงานแล้วเล่าให้ผู้ใช้

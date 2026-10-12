@@ -1,5 +1,5 @@
 ---
-title: โมเดลขอจดจำ
+title: "Model ขอจดจำ"
 description: โมเดลเสนอโน้ตให้จำข้ามแชตด้วย remember Geno ถามผู้ใช้ทุกครั้งไม่ว่าโหมดไหน ถ้าผู้ใช้ตกลง โน้ตถูกบันทึกและโมเดลได้รู้ก่อนเรียกครั้งถัดไป
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [start.new-session-context, ext.mcp-tool-call, perm.auto-classifier-allows]
   steps:
     - id: wants
+      beat:
+        title: Model เสนอโน้ตให้จำ
+        text: คุณเพิ่งบอกว่าโปรเจกต์นี้ใช้ pnpm model เห็นว่าควรจำไว้ในแชตต่อๆ ไป มันเรียก `remember` ด้วยโน้ตและขอบเขต project
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `remember` ด้วย `text: "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้"` และ `scope: "project"`
@@ -26,6 +30,9 @@ scenario:
     - use: tool-call-opens
 
     - id: check
+      beat:
+        title: Geno ตรวจโน้ตแล้วถามคุณเสมอ
+        text: โน้ตละไม่เกิน 500 ตัวอักษร รวมทั้งหมดไม่เกิน 4,000 ไม่มีโหมด กฎ หรือ classifier ตอบแทนคุณ แม้ในโหมด Auto
       lane: tool
       at: executor
       do: >-
@@ -34,6 +41,10 @@ scenario:
       ref: packages/engine/src/tools/user.ts#BUILD.remember
 
     - id: ask
+      beat:
+        title: Geno หยุด turn แล้วถามคุณ
+        text: Geno ส่งคำขอ permission ที่มีข้อความของโน้ต แชตใช้ข้อความนั้นแทนคำสั่ง
+        to: panel
       lane: server
       at: approvals
       do: >-
@@ -52,6 +63,12 @@ scenario:
       emits: [permission]
 
     - id: card
+      beat:
+        title: คุณเห็นการ์ด “Remember this?”
+        text: การ์ดแสดงโน้ตตรงตัวและขอบเขตของมัน
+        to: you
+        sees: '"Remember this?" ข้อความ "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้" และ "Geno will follow this note in every later chat in this project. You can change or delete it in /memory."'
+        ask: คุณกดปุ่มไหน
       lane: panel
       at: card
       do: แผงแชตแสดงการ์ดแบบหน่วยความจำ พร้อมข้อความของโน้ตตรงตัวและขอบเขตของมัน
@@ -70,6 +87,10 @@ scenario:
             label: Remember
             steps:
               - lane: tool
+                beat:
+                  title: Geno บันทึกโน้ต
+                  text: โน้ตไปอยู่ในไฟล์หน่วยความจำของโปรเจกต์นี้ ผลของ call บอก model ว่าบันทึกแล้ว
+                  from: engine
                 at: executor
                 do: >-
                   `memory.add` เขียนโน้ตลงไฟล์หน่วยความจำของโปรเจกต์นี้ในโฟลเดอร์ของ Geno ผลของ call คือ
@@ -78,6 +99,11 @@ scenario:
                 phase: running-tools
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Geno บอก model ก่อนเรียกครั้งถัดไป
+                  text: Geno ไม่แก้ข้อความแรกของ session cache จึงไม่หลุด แต่ใส่ข้อความแจ้งว่าคุณอนุมัติโน้ตใหม่ model ใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตด้วย
+                  to: model
+                  end: Model ใช้ pnpm ต่อจากนี้
                 at: drive
                 do: >-
                   ที่จุดปลอดภัยก่อนเรียกโมเดล `deliver()` บันทึก event `notice` ที่มีการเปลี่ยนแปลงของหน่วยความจำ
@@ -96,6 +122,10 @@ scenario:
             label: Don't remember
             steps:
               - lane: tool
+                beat:
+                  title: ไม่มีอะไรถูกบันทึก
+                  text: ผลของ call บอกว่าคุณไม่ตกลง และอย่าเสนอซ้ำเว้นแต่คุณขอ ผลนี้ไม่จบ turn
+                  from: engine
                 at: executor
                 do: >-
                   ไม่มีอะไรถูกบันทึก ผลของ call คือ "The user declined. Nothing was saved; do not propose it again unless they ask."
@@ -104,6 +134,11 @@ scenario:
                 phase: running-tools
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Model ทำงานต่อ
+                  text: Geno เรียก model อีกครั้ง model ทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
+                  to: model
+                  end: Model ทำต่อ
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `call-model` โมเดลทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ

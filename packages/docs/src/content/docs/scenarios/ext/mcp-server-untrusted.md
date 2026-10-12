@@ -15,6 +15,9 @@ scenario:
   related: [ext.mcp-tool-call, ext.mcp-server-down, hook.project-untrusted]
   steps:
     - id: register
+      beat:
+        title: Geno อ่านคำนิยาม server ทุกแหล่ง
+        text: คุณเปิดแชตใหม่ใน repo ที่เพิ่ง clone มา server ที่มาจาก `.mcp.json` ของ repo ต้องได้รับอนุมัติก่อนรัน เพราะคนเขียน repo เป็นคนเลือกมัน
       lane: server
       at: turns
       do: >-
@@ -25,6 +28,9 @@ scenario:
       phase: idle
 
     - id: untrusted
+      beat:
+        title: server `db` ยังไม่ได้รับอนุมัติ
+        text: ไม่มีการอนุมัติที่ตรงกับคำนิยามนี้ใน workspace นี้ Geno จึงไม่เริ่ม process ของมัน และ model ไม่ได้ tool ของมัน
       lane: policy
       at: rules
       do: >-
@@ -42,6 +48,14 @@ scenario:
       emits: [_gcode/mcpServers]
 
     - id: notice
+      beat:
+        title: แชตขึ้นแถบรออนุมัติ
+        text: เหนือบทสนทนาขึ้นแถบพร้อมไอคอนโล่ แชตยังใช้ได้ตามปกติ แค่ไม่มี tool ของ `db`
+        sees:
+          kind: notice
+          text: 1 MCP server in this workspace waits for your approval.
+          actions:
+            - Review
       lane: panel
       at: rail
       do: >-
@@ -51,10 +65,20 @@ scenario:
       ref: packages/extension/src/chat/mcp-panel.ts#mcpPanel
 
     - id: review
+      beat:
+        title: คุณกด Review
+        text: แผง MCP servers มาแทนบทสนทนา
+        to: panel
       lane: user
       do: ผู้ใช้กด Review
 
     - id: card
+      beat:
+        title: คุณเห็นการ์ด “Allow this server to run?”
+        text: การ์ดแสดงคำนิยามทั้งหมด คำสั่ง อาร์กิวเมนต์ ตัวแปรสภาพแวดล้อม และบอกว่าใครเป็นคนเลือก server นี้
+        to: you
+        sees: '"Allow this server to run?" พร้อมคำสั่ง `npx db-mcp --url $DATABASE_URL` และเหตุผลว่า .mcp.json ของ workspace นี้กำหนดมัน'
+        ask: คุณกดปุ่มไหน
       lane: panel
       at: card
       do: >-
@@ -77,22 +101,40 @@ scenario:
             label: Allow
             steps:
               - lane: editor
+                beat:
+                  title: คุณกด Allow
+                  text: การ์ดส่งคำนิยามที่คุณเห็นไปด้วย Geno จึงรู้ว่าคุณอนุมัติฉบับไหน
+                  from: you
+                  to: engine
                 at: chat
                 do: >-
                   การ์ดโพสต์ `mcp-trust` พร้อม hash ของคำนิยามที่ผู้ใช้เห็น `McpServers` ส่งคำขอ `_gcode/mcpTrust`
                 ref: packages/extension/src/chat/mcp-host.ts#McpServers.handlers
                 emits: [mcp-trust, _gcode/mcpTrust]
               - lane: policy
+                beat:
+                  title: Geno ตรวจว่าคำนิยามไม่เปลี่ยน
+                  text: ถ้าไฟล์เปลี่ยนหลังคุณเห็น Geno ปฏิเสธ คำนิยามตรง Geno จึงบันทึกการอนุมัติ
                 at: rules
                 do: >-
                   `hub.trust` เทียบ hash กับคำนิยามตอนนี้ ถ้าไฟล์เปลี่ยนหลังผู้ใช้เห็น จะปฏิเสธว่า "the definition of db changed since it was shown"
                   hash ตรง จึงบันทึกการอนุมัติ (workspace ชื่อ และ hash) ลง `mcp-trust.json` แล้วเปลี่ยนสถานะเป็นพร้อมเริ่ม
                 ref: packages/engine/src/mcp/trust.ts#approveServer
               - lane: external
+                beat:
+                  title: server `db` เริ่มทำงาน
+                  text: engine เริ่ม process ของ `db` นอก sandbox ของ Geno server ตอบรายชื่อ tool
+                  to: machine
                 do: >-
                   engine เริ่ม process ของ `db` (นอก sandbox ของ Geno) server ตอบรายชื่อเครื่องมือ
                 ref: packages/engine/src/mcp/hub.ts#openMcpHub
               - lane: panel
+                beat:
+                  title: แถวของ db พร้อมใช้
+                  text: แถบประกาศหายไป turn ถัดไปของ agent ได้ tool ของ `db` และ Geno บอก model ชื่อ tool ที่มาใหม่
+                  from: panel
+                  sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อ tool เช่น "query, list_tables"
+                  end: tool ของ db พร้อมใช้
                 at: rail
                 do: >-
                   แถวของ `db` เปลี่ยนเป็นพร้อมใช้และแสดงชื่อเครื่องมือ แถบประกาศหายไป
@@ -106,6 +148,11 @@ scenario:
             label: Turn off
             steps:
               - lane: editor
+                beat:
+                  title: คุณกด Turn off
+                  text: Geno จดว่า `db` ปิดไว้ใน workspace นี้ ไม่มีการอนุมัติเกิดขึ้น
+                  from: you
+                  to: engine
                 at: chat
                 do: >-
                   การ์ดโพสต์ `mcp-enable` ค่า false `McpServers.setEnabled` ส่งคำขอ `_gcode/mcpEnable`
@@ -117,6 +164,11 @@ scenario:
                   engine บันทึกชื่อ `db` ลงรายการ server ที่ปิดไว้ของ workspace นี้ (`mcp-disabled.json`) ไม่มีการอนุมัติเกิดขึ้น
                 ref: packages/engine/src/mcp/trust.ts#setDisabled
               - lane: panel
+                beat:
+                  title: แถวของ db ปิดอยู่
+                  text: แถบประกาศหายไป และ Geno ไม่ถามเรื่อง server นี้อีกจนกว่าคุณจะเปิดสวิตช์เอง
+                  sees: แถว "db" ที่สวิตช์ปิดอยู่
+                  end: server นี้ปิดไว้
                 at: rail
                 do: แถวของ `db` เป็นปิด แถบประกาศหายไป และ server นี้ไม่ถูกถามอีกจนกว่าผู้ใช้จะเปิดสวิตช์เอง
                 sees: แถว "db" ที่สวิตช์ปิดอยู่
