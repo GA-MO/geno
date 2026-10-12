@@ -35,7 +35,7 @@ scenario:
       beat:
         title: "คุณเลือกปุ่ม"
         text: >-
-          ทั้งสองปุ่มส่งข้อความใหม่เหมือนคุณพิมพ์เอง ต่างกันที่ข้อความ ลองเลือกดู
+          ทั้งสองปุ่มเริ่ม turn ใหม่ Retry ส่งข้อความเดิมของคุณซ้ำ Continue ส่งคำขอสำเร็จรูปของ Geno ในนามคุณ ลองเลือกดู
         from: you
         to: panel
         ask: "กดปุ่มไหน"
@@ -52,15 +52,17 @@ scenario:
                 beat:
                   title: "คุณกด Continue"
                   text: >-
-                    แผงส่งข้อความคงที่ที่บอก model ให้ทำต่อจากที่หยุดแล้วตอบให้จบ
+                    แผงส่งคำขอคงที่ที่บอก model ให้ทำต่อจากที่หยุดแล้วตอบให้จบ คำขอนี้เป็นคำของ Geno ไม่ใช่ของคุณ
+                    model จึงยังตอบเป็นภาษาที่คุณพิมพ์เอง
                   from: you
                   to: panel
                   sees: { kind: message, from: you, text: "Continue where you stopped, and finish with your answer." }
                 do: >-
-                  ปุ่ม Continue โพสต์ `send` ด้วยข้อความคงที่ `CONTINUE_PROMPT` เหมือนผู้ใช้พิมพ์ส่งเอง
+                  ปุ่ม Continue โพสต์ `continue` แล้ว `Chat.act` ส่งข้อความ `PROMPT_ACTIONS.continue` ผ่าน `prompt()`
+                  พร้อม `_meta` `gcode/action: continue` บับเบิลแสดงข้อความของปุ่ม
                 sees: บับเบิลใหม่ "Continue where you stopped, and finish with your answer."
-                ref: packages/extension/src/chat/render.ts#CONTINUE_PROMPT
-                emits: [send]
+                ref: packages/extension/src/chat/chat.ts#Chat.act
+                emits: [continue]
           - id: retry
             label: Retry
             then: route
@@ -91,7 +93,7 @@ scenario:
         to: engine
         sees: { kind: composer, state: working, header: working }
       do: >-
-        `Chat.send` ส่งต่อให้ `prompt()` ซึ่งส่ง action `turn-start` ทันที ปุ่มทั้งสองหายไปเพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว
+        Retry ผ่าน `Chat.send` ส่วน Continue ผ่าน `Chat.act` ทั้งสองเรียก `prompt()` ซึ่งส่ง action `turn-start` ทันที ปุ่มทั้งสองหายไปเพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว
       ref: packages/extension/src/chat/chat.ts#Chat.prompt
       emits: [turn-start]
 
@@ -123,12 +125,15 @@ scenario:
       beat:
         title: "Geno บันทึกข้อความใหม่"
         text: >-
-          Geno บันทึกข้อความใหม่ต่อท้ายบันทึกของ session แล้วตัดสินว่าขั้นต่อไปคือเรียก model
+          Geno บันทึกข้อความใหม่ต่อท้ายบันทึกของ session แล้วตัดสินว่าขั้นต่อไปคือเรียก model ข้อความจาก Continue
+          ถูกบันทึกพร้อมป้ายว่ามาจากปุ่ม
         from: engine
         to: engine
       do: >-
-        `drive` บันทึก event `user` ของข้อความใหม่ต่อท้าย log
-      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
+        กด Retry `drive` ได้ prompt ที่ไม่ว่าง จึงบันทึก event `user` ต่อท้าย log เอง กด Continue `logPrompt` ใน
+        `session/prompt` บันทึก event `user` ที่มี `action: continue` ไว้ก่อนเริ่ม run แล้ว `drive` ได้ prompt ว่าง
+        และเห็นว่า event ล่าสุดเป็นข้อความของผู้ใช้ จึงไม่บันทึกซ้ำ
+      ref: "packages/engine/src/drive.ts#\"if (prompt !== '') {\""
       emits: [user]
 
     - id: decide
@@ -147,12 +152,13 @@ scenario:
         title: "Geno รวม prompt เดิม โน้ต และข้อความใหม่"
         text: >-
           prompt เดิมยังไม่ได้คำตอบ Geno จึงรวมมันกับโน้ตที่บอกว่าคุณหยุด turn ที่แล้ว และข้อความใหม่ เป็นข้อความ user
-          เดียว กด Continue model เห็นว่าคุณอนุญาตให้ทำต่อ กด Retry model เห็น prompt เดิมสองครั้ง
+          เดียว กด Continue model เห็นว่าคุณอนุญาตให้ทำต่อ ในรูปโน้ตของ Geno กด Retry model เห็น prompt เดิมสองครั้ง
         from: engine
         to: engine
       do: >-
         `replayMessages` รวม prompt ที่ยังไม่ได้คำตอบ โน้ต `STOPPED_TURN_NOTE` และข้อความใหม่เป็นข้อความ user เดียว
-        กด Retry model จึงเห็น prompt เดิมสองครั้งโดยมีโน้ตคั่น กด Continue model เห็น prompt เดิม โน้ต แล้ว `CONTINUE_PROMPT`
+        กด Retry model จึงเห็น prompt เดิมสองครั้งโดยมีโน้ตคั่น กด Continue model เห็น prompt เดิม โน้ต แล้วข้อความ
+        Continue ที่ `userActionText` ห่อเป็นโน้ตของ Geno ว่าผู้ใช้กดปุ่ม และให้ตอบต่อในภาษาที่ผู้ใช้พิมพ์เอง
       ref: "packages/core/src/session.ts#\"if (stopped && event.from === undefined && event.steer !== true) prompts.push({ type: 'text', text: STOPPED_TURN_NOTE });\""
       emits: [STOPPED_TURN_NOTE]
 
@@ -186,7 +192,8 @@ scenario:
 สิ่งที่ควรสังเกต
 
 - **ปุ่มมีเฉพาะ turn ล่าสุด** และเฉพาะตอนที่ช่องพิมพ์ไม่มีข้อความรอในคิว turn เก่าแสดงแค่ประกาศ
-- **Continue กับ Retry เป็นข้อความธรรมดา** ทั้งสองปุ่มโพสต์ `send` เหมือนผู้ใช้พิมพ์เอง และ turn ใหม่ได้ขีดจำกัดเต็ม
+- **Retry เป็นข้อความธรรมดา Continue เป็นคำของ Geno** Retry โพสต์ `send` เหมือนผู้ใช้พิมพ์เอง Continue ส่งคำขอคงที่พร้อม
+  `gcode/action` engine จึงให้ model อ่านเป็นโน้ตของ Geno และภาษาของคำตอบยังตามข้อความที่ผู้ใช้พิมพ์เอง ทั้งสองปุ่มได้ turn ใหม่ที่มีขีดจำกัดเต็ม
   ต่างจาก "Retry now" ในช่องพิมพ์ ซึ่งเร่งการเรียก model ที่กำลังรอ backoff ใน turn เดิม
 - **หลัง Stop โน้ตเป็นตัวกำหนดน้ำเสียง** `STOPPED_TURN_NOTE` บอก model ว่าผู้ใช้หยุด turn ที่แล้ว ให้ตอบคำถามก่อนแล้วถามว่าจะทำต่อหรือไม่
   ข้อความ Continue ที่ตามมาจึงเป็นคำอนุญาตให้ทำต่อ

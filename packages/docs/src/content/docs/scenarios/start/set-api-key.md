@@ -43,7 +43,7 @@ scenario:
                   `pickSecret` เปิด quick pick ที่มีช่องลับของทุก provider ช่องของ provider ที่ใช้แชตอยู่ขึ้นก่อนและมีคำว่า chat กำกับ
                 sees: >-
                   quick pick หัวเรื่อง "Set a Geno key" ข้อความ "Which key?" แถวแรกคือ "Model Studio: API key  chat"
-                ref: packages/extension/src/extension.ts#pickSecret
+                ref: packages/extension/src/chat-activation.ts#pickSecret
               - lane: user
                 do: >-
                   ผู้ใช้เลือก "Model Studio: API key"
@@ -59,7 +59,7 @@ scenario:
                 do: >-
                   `setApiKey` เปิดช่องรับรหัสผ่านที่ซ่อนตัวอักษร และไม่หายไปเมื่อคลิกที่อื่น
                 sees: ช่องกรอกด้านบนของหน้าต่าง "Your Model Studio API key" ตัวอักษรแสดงเป็นจุด
-                ref: packages/extension/src/extension.ts#setApiKey
+                ref: packages/extension/src/chat-activation.ts#setApiKey
               - lane: user
                 do: ผู้ใช้วางคีย์แล้วกด Enter
               - lane: editor
@@ -74,13 +74,13 @@ scenario:
                 do: >-
                   คีย์ที่ตัดช่องว่างหัวท้ายแล้วถูกเก็บใน SecretStorage ของ VS Code ใต้ชื่อ `gcode.apiKey.modelstudio`
                   ไม่มีการเขียนลงไฟล์การตั้งค่า
-                ref: "packages/extension/src/extension.ts#\"await secrets.store(secretName(choice.provider, choice.field), key.trim());\""
+                ref: "packages/extension/src/chat-activation.ts#\"await secrets.store(secretName(choice.provider, choice.field), key.trim());\""
               - lane: editor
                 at: chat
                 do: >-
                   ตัวฟัง `secrets.onDidChange` เห็นชื่อที่ขึ้นต้นด้วย `gcode.apiKey.` จึงเรียก `chat.resetEngine()`
                   คีย์ของ agent ภายนอกไม่ได้ขึ้นต้นแบบนี้ จึงไม่ทำให้ engine เริ่มใหม่
-                ref: "packages/extension/src/extension.ts#\"if (event.key.startsWith(ENGINE_SECRETS)) chat.resetEngine();\""
+                ref: "packages/extension/src/chat-activation.ts#\"if (event.key.startsWith(ENGINE_SECRETS)) chat.resetEngine();\""
           - id: setting
             label: เปลี่ยนการตั้งค่า เช่น gcode.model
             then: reset
@@ -98,7 +98,7 @@ scenario:
                   ตัวฟัง `onDidChangeConfiguration` เห็นว่าการตั้งค่าที่เปลี่ยนอยู่ใน `ENGINE_SETTINGS`
                   (provider, baseUrl, model, providers, roles, การ resume, การปลุก, โดเมนของ sandbox, ไดเรกทอรีเพิ่ม)
                   จึงเรียก `chat.resetEngine()`
-                ref: "packages/extension/src/extension.ts#\"if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();\""
+                ref: "packages/extension/src/chat-activation.ts#\"if (ENGINE_SETTINGS.some((section) => event.affectsConfiguration(section))) chat.resetEngine();\""
 
     - id: reset
       lane: editor

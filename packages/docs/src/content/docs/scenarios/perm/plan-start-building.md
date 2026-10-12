@@ -92,15 +92,15 @@ scenario:
       beat:
         title: "VS Code ส่ง “Go ahead with the plan.”"
         text: >-
-          VS Code ส่งข้อความคงที่ผ่านทางเดียวกับข้อความที่คุณพิมพ์ แชตขึ้นบับเบิลใหม่และหัวข้อ working
+          VS Code ส่งคำขอคงที่ในนามคุณ พร้อมป้ายว่ามาจากปุ่ม Start building แชตขึ้นบับเบิลใหม่และหัวข้อ working
         from: panel
         to: engine
         sees: { kind: message, from: you, text: Go ahead with the plan. }
       do: >-
-        `startBuilding` ส่งข้อความคงที่ `START_BUILDING_PROMPT` ผ่านทางเดียวกับข้อความที่ผู้ใช้พิมพ์ `prompt()` ส่ง action `turn-start`
-        แล้วส่งคำขอ ACP `session/prompt`
+        `startBuilding` เรียก `act('start-building')` ซึ่งส่งข้อความ `PROMPT_ACTIONS['start-building']` ผ่าน `prompt()`
+        พร้อม `_meta` `gcode/action: start-building` `prompt()` ส่ง action `turn-start` แล้วส่งคำขอ ACP `session/prompt`
       sees: บับเบิลใหม่ "Go ahead with the plan." หัวข้อ "working"
-      ref: packages/extension/src/chat/chat.ts#START_BUILDING_PROMPT
+      ref: packages/extension/src/chat/chat.ts#Chat.act
       emits: [turn-start]
 
     - id: accept
@@ -109,12 +109,12 @@ scenario:
       beat:
         title: "Geno เริ่ม turn ใหม่ในโหมด Ask"
         text: >-
-          engine รับเป็น turn ใหม่ที่คุณส่ง ทุก call ใน turn นี้ตัดสินด้วยโหมด Ask และขีดจำกัดเริ่มนับใหม่ Geno
+          engine รับเป็น turn ใหม่ที่คุณส่ง ไม่อ่านข้อความเป็นคำสั่ง / ทุก call ใน turn นี้ตัดสินด้วยโหมด Ask และขีดจำกัดเริ่มนับใหม่ Geno
           บันทึกข้อความแล้วตัดสินว่าขั้นต่อไปคือเรียก model
         from: engine
         to: engine
       do: >-
-        `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง และเรียก `runAgent` ซึ่งตัดสินแต่ละ call ด้วยโหมด Ask ขีดจำกัดของรอบนับใหม่จาก prompt นี้
+        `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง เห็น `gcode/action` จึงไม่ขยายคำสั่ง / แล้วเรียก `runAgent` ซึ่งตัดสินแต่ละ call ด้วยโหมด Ask ขีดจำกัดของรอบนับใหม่จาก prompt นี้
       ref: packages/engine/src/serve.ts#runTurn
       phase: starting
 
@@ -122,8 +122,9 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `drive` บันทึก event `user` ของข้อความนี้
-      ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
+        `logPrompt` บันทึก event `user` ของข้อความนี้พร้อม `action: start-building` ก่อนเริ่ม run แล้ว `drive` ได้ prompt ว่าง
+        และไม่บันทึกซ้ำ
+      ref: packages/engine/src/serve.ts#logPrompt
       emits: [user]
 
     - id: decide
@@ -187,6 +188,8 @@ scenario:
 ---
 
 Start building คือทางลัดของสองอย่างที่ผู้ใช้ทำเองได้: สลับโหมดออกจาก Plan และส่งข้อความสั้นๆ ให้ลงมือ
+ต่างกันที่ข้อความนี้เป็นคำของ Geno ไม่ใช่ของผู้ใช้ `userActionText` ห่อมันเป็นโน้ตของ Geno ว่าผู้ใช้กดปุ่ม
+และให้ model ตอบต่อในภาษาที่ผู้ใช้พิมพ์เอง session ที่คุยภาษาไทยจึงไม่เปลี่ยนเป็นภาษาอังกฤษหลังกดปุ่ม
 แผนไม่ได้ถูกส่งซ้ำ มันอยู่ใน log แล้ว model เห็นแผนของตัวเองในบทสนทนา และเห็นรายการ todo ในประกาศ
 
 สิ่งที่ควรสังเกต

@@ -18,7 +18,7 @@ flowchart LR
 
 | เรื่อง | ไฟล์ |
 | --- | --- |
-| เปิดหน้าต่าง วงจรชีวิตของ engine | `packages/extension/src/extension.ts`, `chat/engine.ts`, `runtime.ts`; `packages/engine/src/daemon.ts`, `cli.ts`, `run.ts` |
+| เปิดหน้าต่าง วงจรชีวิตของ engine | `packages/extension/src/extension.ts`, `chat-activation.ts`, `chat/engine.ts`, `runtime.ts`; `packages/engine/src/daemon.ts`, `cli.ts`, `run.ts` |
 | แผงแชท | `packages/extension/src/chat/webview.ts`, `render.ts`, `rail.ts`, `transcript.ts`, `messages.ts` |
 | สะพาน host กับ engine | `packages/extension/src/chat/chat.ts`, `session-updates.ts`, `steer-host.ts`, `bridge.ts`, `tasks-host.ts` |
 | เซิร์ฟเวอร์ ACP | `packages/engine/src/serve.ts` (`runTurn`, `editorTurn`, `TURN_ENDS`, `takeUpWaits`), `viewers.ts`, `session-replay.ts`, `tasks.ts` |

@@ -21,9 +21,9 @@ scenario:
         from: panel
         to: panel
       do: >-
-        เมื่อ VS Code เปิดเสร็จ (`onStartupFinished`) `activate` เรียก `registerChat` ซึ่งสร้าง `Chat` กับตัวเชื่อม `Engine`
+        เมื่อ VS Code เปิดเสร็จ (`onStartupFinished`) `activate` เรียก `registerChat` ใน `chat-activation.ts` พร้อมรีวิวการแก้ของ editor `registerChat` สร้าง `Chat` กับตัวเชื่อม `Engine`
         ลงทะเบียนแผงแชต `gcode.chat` คำสั่งของ Geno และตัวฟังการเปลี่ยนคีย์กับการตั้งค่า ตอนนี้ยังไม่มีอะไรต่อ engine
-      ref: packages/extension/src/extension.ts#registerChat
+      ref: packages/extension/src/chat-activation.ts#registerChat
       phase: idle
 
     - id: stored
@@ -40,7 +40,7 @@ scenario:
       do: >-
         งานตอนเริ่มรับ session ที่หน้าต่างอื่นส่งต่อมาให้ (`takeHandoff`) ถ้ามี แล้วอ่านไฟล์ `session-id`
         ใน storage ของ workspace ว่าครั้งก่อนหน้าต่างนี้แสดงแชตไหนอยู่
-      ref: "packages/extension/src/extension.ts#\"if ((await chat.storedSession()) === undefined) return;\""
+      ref: "packages/extension/src/chat-activation.ts#\"if ((await chat.storedSession()) === undefined) return;\""
       fork:
         ask: หน้าต่างนี้จำแชตครั้งก่อนไว้หรือไม่
         options:

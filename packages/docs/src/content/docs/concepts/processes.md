@@ -10,7 +10,7 @@ Geno ไม่ได้รันลูปของเอเจนต์ใน VS
 flowchart LR
   subgraph Window["หน้าต่าง VS Code"]
     W["แผงแชท (webview)<br/>chat/webview.ts"]
-    X["Extension host<br/>extension.ts, chat/chat.ts<br/>+ toast, CodeLens,<br/>status bar, buffer"]
+    X["Extension host<br/>extension.ts, chat-activation.ts,<br/>chat/chat.ts<br/>+ toast, CodeLens,<br/>status bar, buffer"]
     T["Tab provider<br/>tab/provider.ts"]
   end
   L["llama-server<br/>(ในเครื่อง สำหรับ Tab)"]

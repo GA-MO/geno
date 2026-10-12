@@ -166,7 +166,7 @@ scenario:
                 do: >-
                   `openElsewhere` ตรวจว่าโฟลเดอร์ยังอยู่ เก็บ id ของแชตไว้ใน global state ของ extension ผูกกับโฟลเดอร์นั้น
                   แล้วสั่ง VS Code เปิดโฟลเดอร์ในหน้าต่างใหม่ หน้าต่างนี้ไม่เปลี่ยน
-                ref: packages/extension/src/extension.ts#openElsewhere
+                ref: packages/extension/src/chat-activation.ts#openElsewhere
               - lane: editor
                 beat:
                   title: หน้าต่างใหม่โหลดแชตนั้น
@@ -178,7 +178,7 @@ scenario:
                 do: >-
                   หน้าต่างใหม่ activate แล้ว `takeHandoff` รับ id ที่ฝากไว้ (ครั้งเดียว) จำเป็นแชตของหน้าต่าง โหลดมันทันที
                   และโฟกัสแผงแชต จากนั้นเป็นการเปิดหน้าต่างที่จำแชตไว้ตามปกติ
-                ref: packages/extension/src/extension.ts#takeHandoff
+                ref: packages/extension/src/chat-activation.ts#takeHandoff
                 goto: start.open-window
 ---
 

@@ -58,7 +58,7 @@ scenario:
       do: >-
         extension host ใหม่เริ่มทำงาน เห็นว่าหน้าต่างนี้เคยแสดง session ไว้ จึงเชื่อม engine ทันทีโดยไม่รอผู้ใช้
         การตั้งค่าเหมือนเดิม hash เดิม จึงต่อ socket ของ engine ตัวเดิม แล้วส่ง ACP `initialize`
-      ref: "packages/extension/src/extension.ts#\"if ((await chat.storedSession()) === undefined) return;\""
+      ref: "packages/extension/src/chat-activation.ts#\"if ((await chat.storedSession()) === undefined) return;\""
       emits: [initialize]
 
     - id: load
