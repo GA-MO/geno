@@ -20,6 +20,7 @@ scenario:
       beat:
         title: VS Code บอก Geno ว่ายังไม่เชื่อถือ workspace
         text: ตอนต่อ engine ครั้งแรก ส่วนขยายส่งสถานะ trust ของ workspace ไปด้วย engine จำค่านี้ไว้กับการเชื่อมต่อนี้ ทุก turn จากหน้าต่างนี้ใช้มัน
+        from: panel
         to: engine
       lane: editor
       at: engine-link
@@ -41,7 +42,8 @@ scenario:
       beat:
         title: คุณส่ง prompt แรก
         text: คุณพิมพ์คำถามในแชตใหม่แล้วกด Enter แชตส่ง prompt ไปที่ engine
-        to: engine
+        from: you
+        to: panel
       lane: user
       do: ผู้ใช้พิมพ์คำถามแล้วกด Enter
 
@@ -57,6 +59,8 @@ scenario:
       beat:
         title: Geno เริ่ม turn พร้อมสถานะ trust
         text: engine ส่งสถานะ trust ของการเชื่อมต่อนี้ไปให้ turn ใช้ตัดสินว่าอะไรรันได้
+        from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -68,6 +72,8 @@ scenario:
       beat:
         title: Geno อ่าน hook จากทุกที่
         text: session นี้เปิดครั้งแรก Geno จึงอ่านการตั้งค่า hook ทั้งหมด ทั้งของคุณ ของ plugin และของ repo
+        from: engine
+        to: engine
       lane: loop
       at: agent
       do: >-
@@ -79,6 +85,8 @@ scenario:
       beat:
         title: Geno คัด hook ที่รันได้
         text: hook ของคุณเองรันเสมอ hook ที่มาจากไฟล์ของ repo รันได้เฉพาะเมื่อเชื่อถือ workspace กฎ allow และโฟลเดอร์เพิ่มของ repo ก็รอแบบเดียวกัน
+        from: engine
+        to: engine
         ask: เชื่อถือ repo ไหม
       lane: policy
       at: hooks
@@ -100,6 +108,7 @@ scenario:
                 beat:
                   title: ทั้งสอง hook รัน
                   text: hook ของ repo รันใน sandbox เขียนได้แค่ใน workspace ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อนโมเดล
+                  from: engine
                   to: machine
                 at: hooks
                 do: >-
@@ -117,7 +126,8 @@ scenario:
                 beat:
                   title: Turn เดินต่อตามปกติ
                   text: ไม่มี hook บล็อก Geno ส่ง prompt ให้โมเดล
-                  to: model
+                  from: engine
+                  to: panel
                   end: Model ได้ prompt
                 at: step
                 do: >-
@@ -131,6 +141,7 @@ scenario:
       beat:
         title: เฉพาะ hook ของคุณที่รัน
         text: Geno บันทึก prompt แล้วรัน `~/bin/log-prompt.sh` ของคุณ `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอกโมเดลหรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
+        from: engine
         to: machine
       lane: loop
       at: drive
@@ -153,7 +164,8 @@ scenario:
       beat:
         title: คุณเปิด Settings ดูหัวข้อ Hooks
         text: ระหว่าง turn ทำงาน คุณเปิด Settings ในแผงแชตแล้วเลื่อนไปที่ Hooks แชตถาม engine ว่ามี hook อะไรบ้างและแต่ละตัวรันได้ไหม
-        to: engine
+        from: you
+        to: panel
       lane: user
       do: >-
         ระหว่างนั้นผู้ใช้เปิด Settings ในแผงแชตแล้วเลื่อนไปที่หัวข้อ Hooks
@@ -172,6 +184,7 @@ scenario:
       beat:
         title: Settings บอกว่า hook ของ repo รอ trust
         text: ทุก hook ขึ้นพร้อมที่มาและสถานะ hook ของ repo มีป้ายว่าต้องเชื่อถือ workspace ก่อน เมื่อคุณเชื่อถือ workspace ใน VS Code มันจะรันใน turn ถัดไป
+        from: panel
         to: you
         sees: แถว "UserPromptSubmit" `./scripts/hook.sh` ป้าย "Needs a trusted workspace" และแถวของ `~/bin/log-prompt.sh` ที่รันได้
         end: hook ของ repo ไม่รัน

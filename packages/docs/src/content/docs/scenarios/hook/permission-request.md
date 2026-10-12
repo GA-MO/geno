@@ -19,6 +19,7 @@ scenario:
       beat:
         title: Model ขอรัน `pnpm add zod`
         text: โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่งนี้บนเครื่องของคุณก่อน
+        from: model
         to: engine
       lane: model
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้นของคำสั่ง
         text: Geno จัดคิวคำสั่งให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: pnpm add zod
@@ -40,6 +43,8 @@ scenario:
       beat:
         title: Geno ตรวจคำสั่งกับกฎของคุณ
         text: คำสั่งนี้ไม่ตรงกับกฎของ workspace และไม่อยู่ในรายการคำสั่งปลอดภัย ในโหมด Ask แปลว่าต้องถามก่อนรัน
+        from: engine
+        to: engine
       lane: policy
       at: rules
       do: >-
@@ -52,6 +57,8 @@ scenario:
       beat:
         title: Geno ให้ hook ตอบก่อนขึ้นการ์ด
         text: hook PermissionRequest ตอบได้เฉพาะคำถามที่จะขึ้นการ์ดให้คุณ คำสั่งที่กฎ deny หรือโหมด Plan ปฏิเสธอยู่แล้วไม่ถึง hook
+        from: engine
+        to: engine
       lane: policy
       at: settle
       do: >-
@@ -63,6 +70,7 @@ scenario:
       beat:
         title: Geno ส่งคำถามให้ `approver.sh`
         text: Geno รันสคริปต์ของ hook แล้วส่ง JSON ที่มีชื่อ tool คำสั่ง และกฎที่บันทึกได้ไปทาง stdin สคริปต์ตอบได้ผ่าน JSON เท่านั้น exit 2 ไม่มีผลกับ hook นี้
+        from: engine
         to: machine
         ask: hook ตอบอะไร
       lane: policy
@@ -146,6 +154,7 @@ scenario:
                   title: แชตบอกว่า hook ปฏิเสธ
                   text: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมข้อความของ hook
                   from: panel
+                  to: you
                   sees:
                     kind: step
                     label: pnpm add zod
@@ -159,7 +168,8 @@ scenario:
                 beat:
                   title: Model อ่านเหตุผลของ hook
                   text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ Geno เรียกโมเดลอีกครั้ง โมเดลอ่านข้อความของ hook แล้วหาทางอื่น เช่นใช้ npm
-                  to: model
+                  from: model
+                  to: engine
                   end: Model หาทางอื่น
                 at: step
                 do: >-
@@ -196,6 +206,7 @@ scenario:
                 beat:
                   title: Turn จบโดยไม่เรียก model
                   text: Geno จบ turn ทันทีเพื่อรอคุณ ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ และแชตบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
+                  from: engine
                   to: panel
                   end: Turn จบเพราะ hook สั่งหยุด
                   sees:
@@ -238,6 +249,8 @@ scenario:
                 beat:
                   title: hook ไม่ตอบ
                   text: สคริปต์จบโดยไม่พิมพ์คำตอบ Geno จึงส่งคำถามต่อให้คุณ การ์ด “Run this command?” ขึ้นตามปกติ
+                  from: machine
+                  to: engine
                   end: การ์ดขึ้นให้คุณตอบ
                 at: settle
                 do: >-
@@ -251,7 +264,8 @@ scenario:
       beat:
         title: คำสั่งรันใน sandbox
         text: การอนุญาตของ hook ไม่ยกเว้น sandbox ผลของคำสั่งพาบันทึกว่า hook เป็นคนอนุญาตไปด้วย
-        from: machine
+        from: engine
+        to: machine
       lane: tool
       at: shell
       do: >-
@@ -266,7 +280,8 @@ scenario:
       beat:
         title: Model อ่านผลของคำสั่ง
         text: Geno ส่งผลกลับให้โมเดลเพื่อตัดสินว่าจะทำอะไรต่อ
-        to: model
+        from: model
+        to: engine
         end: Model อ่านผลแล้วทำต่อ
       lane: loop
       at: step

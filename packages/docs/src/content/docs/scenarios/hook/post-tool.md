@@ -19,6 +19,7 @@ scenario:
       beat:
         title: Model ขอรัน `pnpm test`
         text: "`pnpm test` อยู่ในรายการคำสั่งปลอดภัย Geno จึงรันได้โดยไม่ถามคุณ"
+        from: model
         to: engine
       lane: model
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น `pnpm test`
         text: Geno จัดคิวคำสั่งแล้วบอกแผงแชต ขั้นใหม่ขึ้นพร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: pnpm test
@@ -40,6 +43,8 @@ scenario:
       beat:
         title: "`pnpm test` รันใน sandbox"
         text: เทสต์ผ่าน คำสั่งจบด้วย exit 0
+        from: engine
+        to: machine
       lane: tool
       at: shell
       do: >-
@@ -72,6 +77,7 @@ scenario:
                   title: hook เพิ่มบริบทให้ model
                   text: สคริปต์พิมพ์ "2 snapshot files changed" Geno เก็บข้อความนี้ไว้ให้โมเดลอ่านคู่กับผล ไม่มีอะไรหยุด
                   from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON ที่มี `hookSpecificOutput.additionalContext: "2 snapshot files changed"`
@@ -88,6 +94,7 @@ scenario:
                   title: hook บล็อก แต่คำสั่งรันไปแล้ว
                   text: สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" คำสั่งรันไปแล้วจึงย้อนไม่ได้ การบล็อกกลายเป็นข้อความที่โมเดลต้องอ่าน และลูปไม่หยุด
                   from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "lint failed in src/date.ts" ลง stderr (หรือพิมพ์ `decision: "block"` พร้อม `reason`)
@@ -103,6 +110,7 @@ scenario:
                   title: hook สั่งหยุด turn
                   text: 'สคริปต์ตอบ `continue: false` พร้อมเหตุผล "CI is red, stop here" PostToolBatch hook ยังรันก่อน แล้ว Geno บันทึก error ว่า hook หยุด turn'
                   from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ `{"continue": false, "stopReason": "CI is red, stop here"}`
@@ -121,6 +129,7 @@ scenario:
                   title: แชตขึ้นแถบ error
                   text: ขั้นของคำสั่งขึ้นว่าเสร็จ แต่ท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
                   from: panel
+                  to: you
                   sees:
                     kind: notice
                     text: "A PostToolUse hook stopped the turn: CI is red, stop here"
@@ -141,6 +150,7 @@ scenario:
                 beat:
                   title: Turn ล้มเหลว
                   text: Geno ไม่เรียกโมเดลอีก โมเดลจึงไม่ได้อ่านผลของ `pnpm test` ปุ่ม Send กลับมา
+                  from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
                   sees:
@@ -189,6 +199,7 @@ scenario:
                   title: hook หลังทั้งชุดบล็อก
                   text: สคริปต์จบด้วย exit 2 และเขียน "too many commands in one turn" สำหรับ hook นี้ การบล็อกคือหยุดลูป
                   from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "too many commands in one turn" ลง stderr (หรือพิมพ์ `decision: "block"`)
@@ -207,6 +218,7 @@ scenario:
                   title: แชตขึ้นแถบ error
                   text: ขั้นของคำสั่งขึ้นว่าเสร็จ และท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
                   from: panel
+                  to: you
                   sees:
                     kind: notice
                     text: "A PostToolBatch hook stopped the turn: too many commands in one turn"
@@ -227,6 +239,7 @@ scenario:
                 beat:
                   title: Turn ล้มเหลว
                   text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
                   sees:
@@ -256,6 +269,8 @@ scenario:
       beat:
         title: Geno เก็บข้อความของ hook ไว้ให้ model
         text: Geno บันทึกผลของคำสั่งก่อน แล้วบันทึกข้อความของ hook ผูกกับ call นั้น แผงแชตแสดงแค่ผลเทสต์ ข้อความของ hook มีแต่โมเดลที่ได้อ่าน
+        from: engine
+        to: engine
         sees:
           kind: step
           label: pnpm test
@@ -280,12 +295,15 @@ scenario:
       beat:
         title: Geno ส่งผลพร้อมข้อความของ hook ให้ model
         text: ในคำขอถัดไป ข้อความของ hook ต่อท้ายผลของ `pnpm test` ขึ้นต้นด้วย `[Geno] PostToolUse:Bash hook`
+        from: engine
         to: model
 
     - id: reads
       beat:
         title: Model อ่านผลและข้อความของ hook
         text: โมเดลรู้ว่า snapshot เปลี่ยน หรือรู้ว่า lint ล้มเหลว แล้วตัดสินว่าจะทำอะไรต่อ
+        from: model
+        to: engine
         end: Model อ่านข้อความแล้วทำต่อ
       lane: model
       do: >-

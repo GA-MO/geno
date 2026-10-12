@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ขอรัน `pnpm deploy --prod`
         text: โมเดลอยากปล่อยงานขึ้น production จากเครื่องของคุณ
+        from: model
         to: engine
       lane: model
       do: >-
@@ -30,6 +31,8 @@ scenario:
       beat:
         title: Geno บันทึกคำขอแล้วเตรียมรัน
         text: ก่อน call แรกของรอบนี้จะเริ่ม Geno ให้ hook PreToolUse ดูทุก call ก่อน
+        from: engine
+        to: engine
       lane: loop
       at: step
       do: >-
@@ -42,6 +45,7 @@ scenario:
       beat:
         title: Geno ส่ง call ให้ `guard.sh`
         text: สคริปต์ได้ชื่อ tool และคำสั่งเป็น JSON ทาง stdin ถ้ามีหลาย hook Geno ใช้คำตอบที่เข้มที่สุด
+        from: engine
         to: machine
         ask: hook ตอบอะไร
       lane: policy
@@ -75,6 +79,8 @@ scenario:
                 beat:
                   title: Geno ไม่รันคำสั่ง
                   text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน ผลถึงโมเดลคือข้อความของ hook hook หลังรันก็ไม่ทำงานกับ call นี้
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   call ยังขึ้นเป็นขั้นในแผงแชต แต่ `callOf` ไม่รันอะไร ได้ผลสถานะ `denied` ทันที
@@ -88,6 +94,7 @@ scenario:
                   title: แชตบอกว่า hook ปฏิเสธ
                   text: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมเหตุผลของ hook
                   from: panel
+                  to: you
                   sees:
                     kind: step
                     label: pnpm deploy --prod
@@ -101,7 +108,8 @@ scenario:
                 beat:
                   title: Model อ่านเหตุผลของ hook
                   text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ โมเดลอ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
-                  to: model
+                  from: model
+                  to: engine
                   end: Model หาทางอื่น
                 at: step
                 do: >-
@@ -131,6 +139,8 @@ scenario:
                 beat:
                   title: กฎ deny ของคุณยังมีผล
                   text: Geno ยังตรวจกฎ deny ของ workspace แต่การอนุญาตของ hook ตอบคำถามแทนคุณ การ์ดจึงไม่ขึ้น ยกเว้นคำสั่งที่กฎกำหนดว่าต้องถามเสมอ
+                  from: engine
+                  to: engine
                 at: rules
                 do: >-
                   `ruledDenial` ยังตรวจกฎ deny ของ workspace ก่อน แต่การอนุญาตของ hook ตอบคำถามแทนผู้ใช้
@@ -140,7 +150,8 @@ scenario:
                 beat:
                   title: คำสั่งที่แก้แล้วรันใน sandbox
                   text: การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่โมเดลส่ง
-                  from: machine
+                  from: engine
+                  to: machine
                 at: shell
                 do: >-
                   `bash` รันคำสั่งที่ hook แก้แล้วใน sandbox การอนุญาตของ hook ไม่ยกเว้น sandbox
@@ -150,7 +161,8 @@ scenario:
                 beat:
                   title: Model อ่านผลของ `--dry-run`
                   text: Geno เรียกโมเดลอีกครั้ง โมเดลเห็นผลของคำสั่งที่ hook แก้
-                  to: model
+                  from: model
+                  to: engine
                   end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
@@ -192,6 +204,7 @@ scenario:
                 beat:
                   title: Geno หยุด turn แล้วถามคุณ
                   text: ถ้ามี hook PermissionRequest มันได้ตอบก่อน เมื่อไม่มี Geno ส่งคำขอ permission ให้ VS Code งานใน Tasks ขึ้นว่ารอคุณ
+                  from: engine
                   to: panel
                   sees:
                     kind: task
@@ -214,6 +227,7 @@ scenario:
                 beat:
                   title: คุณเห็นการ์ด “Run this command?”
                   text: เหตุผลบนการ์ดคือข้อความของ hook ต่อท้ายวลีมาตรฐานของการ์ด
+                  from: panel
                   to: you
                   sees:
                     kind: permission
@@ -236,7 +250,7 @@ scenario:
                   title: คุณกด Allow
                   text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต และ tool ไม่ถามซ้ำ แต่กฎ deny ของ workspace ยังมีผล
                   from: you
-                  to: engine
+                  to: panel
                 do: ผู้ใช้อ่านแล้วกด Allow
               - lane: editor
                 at: chat
@@ -255,7 +269,8 @@ scenario:
                 beat:
                   title: คำสั่งรันใน sandbox
                   text: "`pnpm deploy --prod` รัน ผลพาบันทึกว่าคุณเป็นคนอนุญาต"
-                  from: machine
+                  from: engine
+                  to: machine
                 at: shell
                 do: >-
                   `bash` รัน `pnpm deploy --prod` ใน sandbox ผลแนบบันทึกว่าผู้ใช้อนุญาต update ปิดจึงมี `APPROVAL_META`
@@ -265,7 +280,8 @@ scenario:
                 beat:
                   title: Model อ่านผลของคำสั่ง
                   text: Geno เรียกโมเดลอีกครั้ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
-                  to: model
+                  from: model
+                  to: engine
                   end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
@@ -303,6 +319,7 @@ scenario:
                   title: แชตขึ้นแถบ error
                   text: ขั้นของคำสั่งขึ้นป้ายปฏิเสธ และท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
                   from: panel
+                  to: you
                   sees:
                     - kind: step
                       label: pnpm deploy --prod
@@ -327,6 +344,7 @@ scenario:
                 beat:
                   title: Turn ล้มเหลว
                   text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  from: engine
                   to: panel
                   end: Turn ล้มเหลวเพราะ hook
                   sees:

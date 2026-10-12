@@ -19,6 +19,7 @@ scenario:
       beat:
         title: Model สรุปว่าแก้เสร็จแล้วจบ
         text: โมเดลแก้ `src/date.ts` แล้ว แต่ยังไม่ได้รันเทสต์ มันเขียนสรุปและบอกว่าจบ turn
+        from: model
         to: engine
       lane: model
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: แชตแสดงสรุปทีละส่วน
         text: ข้อความของโมเดลค่อยๆ ขึ้นในแชต หัวข้อยังเป็น working
+        from: panel
+        to: you
         sees:
           kind: message
           from: geno
@@ -41,6 +44,7 @@ scenario:
       beat:
         title: Geno ถาม Stop hook ก่อนจบ turn
         text: โมเดลเป็นคนจบ turn เอง ไม่ใช่คุณปฏิเสธ Geno จึงส่งข้อความสุดท้ายของโมเดลให้ `tests-ran.sh` พร้อมบอกว่า hook ยังไม่เคยบล็อกใน run นี้
+        from: engine
         to: machine
       lane: loop
       at: step
@@ -87,6 +91,8 @@ scenario:
                 beat:
                   title: hook ปล่อยให้จบ
                   text: สคริปต์จบด้วย exit 0 โดยไม่พิมพ์อะไร turn จบตามปกติ
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 0 โดยไม่พิมพ์อะไร (หรือพิมพ์ `continue: false` พร้อม `stopReason` ซึ่งไปที่ output channel "Geno engine")
@@ -102,6 +108,7 @@ scenario:
                 beat:
                   title: Turn จบ
                   text: หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน และปุ่ม Send กลับมา
+                  from: engine
                   to: panel
                   end: Turn จบตามปกติ
                   sees:
@@ -121,6 +128,8 @@ scenario:
                 beat:
                   title: hook บล็อกซ้ำ แต่ Geno ไม่ยอม
                   text: hook บล็อกไปแล้วครั้งหนึ่งใน run นี้ และหลังจากนั้นโมเดลไม่ได้เรียก tool เลย Geno ไม่ให้ hook ที่บล็อกทุกครั้งวนโมเดลไม่รู้จบ
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   hook บล็อกอีก แต่ run นี้มี `hook-context` ของ Stop อยู่แล้ว และหลังจากนั้นโมเดลไม่ได้เรียกเครื่องมือเลย
@@ -130,6 +139,7 @@ scenario:
                 beat:
                   title: Geno จบ turn และเขียนเหตุลง log
                   text: Geno เขียนเหตุผลลง output channel "Geno engine" แผงแชตไม่บอกว่า hook บล็อกซ้ำ turn จบเหมือนปกติ
+                  from: engine
                   to: panel
                   end: Turn จบ ไม่วนซ้ำ
                   sees:
@@ -172,6 +182,7 @@ scenario:
       beat:
         title: Geno เรียก model อีกครั้ง
         text: เหตุผลของ hook ทำให้ turn ทำต่อ ขีดจำกัดของรอบยังนับต่อจากเดิม Geno ใส่เหตุผลไว้ในข้อความถัดไปที่ส่งให้โมเดล
+        from: engine
         to: model
       lane: loop
       at: step
@@ -194,6 +205,8 @@ scenario:
       beat:
         title: Model ขอรัน `pnpm test`
         text: โมเดลอ่านเหตุผลแล้วขอรันเทสต์ ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน แชตไม่บอกว่า hook เป็นคนให้ทำต่อ
+        from: model
+        to: engine
         end: Turn ทำต่อ
       lane: model
       do: >-

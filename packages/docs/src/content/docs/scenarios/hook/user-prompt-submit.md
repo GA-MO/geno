@@ -19,6 +19,7 @@ scenario:
         title: คุณส่ง prompt
         text: คุณพิมพ์ในแชตแล้วกด Enter แชตเริ่ม turn และส่ง prompt ไปที่ engine
         from: you
+        to: panel
         sees:
           kind: composer
           state: working
@@ -27,6 +28,7 @@ scenario:
       beat:
         title: Geno ส่ง prompt ให้ hook ก่อน model
         text: Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึงโมเดล ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
+        from: engine
         to: machine
         ask: hook ตอบอะไร
       lane: policy
@@ -58,6 +60,8 @@ scenario:
                 beat:
                   title: Geno ไม่เรียก model
                   text: Geno บันทึก error ว่า hook บล็อก prompt และโมเดลไม่เห็นมัน prompt นี้ถูกทิ้ง ข้อความถัดไปของคุณจะไม่พามันไปด้วย
+                  from: engine
+                  to: engine
                 at: drive
                 do: >-
                   `submitted()` บันทึก event `error` ชนิด `blocked`: "A UserPromptSubmit hook blocked this prompt,
@@ -69,6 +73,7 @@ scenario:
                   title: แชตขึ้นแถบ error ใต้ข้อความของคุณ
                   text: แถบสีแดงบอกเหตุผลของ hook
                   from: panel
+                  to: you
                   sees:
                     kind: notice
                     text: "A UserPromptSubmit hook blocked this prompt, so the model did not see it: prompt มีสิ่งที่หน้าตาเหมือน API key"
@@ -95,6 +100,7 @@ scenario:
                 beat:
                   title: Turn ล้มเหลว
                   text: Stop hook ไม่ทำงานในทางนี้ แชตไม่ขึ้นปุ่ม Continue หรือ Retry เพราะมีแถบ error แล้ว ปุ่ม Send กลับมา
+                  from: engine
                   to: panel
                   end: prompt ไม่ถึง model
                   sees:
@@ -146,6 +152,8 @@ scenario:
                 beat:
                   title: Geno แนบข้อความไว้กับ prompt
                   text: Geno บันทึกข้อความของ hook ไว้ คุณไม่เห็นมันในแชต
+                  from: engine
+                  to: engine
                 at: drive
                 do: >-
                   `submitted()` บันทึก event `hook-context` ของ `UserPromptSubmit` ผู้ใช้ไม่เห็นโน้ตนี้ในแผงแชต
@@ -155,11 +163,14 @@ scenario:
                 beat:
                   title: Geno ส่ง prompt ให้ model
                   text: Geno เก็บ checkpoint แล้วส่งบทสนทนาให้โมเดล
+                  from: engine
                   to: model
               - lane: model
                 beat:
                   title: Model ตอบโดยรู้ว่าอยู่ branch ไหน
                   text: "โมเดลได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
+                  from: model
+                  to: panel
                   end: Model ตอบต่อ
                 do: >-
                   โมเดลได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"
