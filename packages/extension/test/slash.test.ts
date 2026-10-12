@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMMAND_META } from '@g-code/core';
 import { BUILTIN_OPTIONS, commandOptions, routeText } from '../src/chat/slash-route.js';
-import { CLOSED, insertCommand, movePicker, pickerAt, slashAtCaret, type CommandOption } from '../src/chat/slash.js';
+import { CLOSED, insertCommand, movePicker, pickerAt, sendsWhenPicked, slashAtCaret, type CommandOption } from '../src/chat/slash.js';
 
 const listed = commandOptions([
   { name: 'new', description: 'Start a new chat', _meta: { [COMMAND_META]: { kind: 'builtin', runs: 'client' } } },
@@ -24,6 +24,10 @@ describe('the / picker', () => {
       ['add-i18n', 'skill', undefined],
       ['other', 'prompt', undefined],
     ]);
+  });
+
+  it('sends on pick only a built-in that takes no arguments; a skill or prompt waits for its text', () => {
+    expect(listed.filter(sendsWhenPicked).map((c) => c.name)).toEqual(['new', 'model']);
   });
 
   it('opens only while a command name is typed at the start of the draft', () => {
