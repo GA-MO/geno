@@ -238,7 +238,7 @@ export const lanesSchema = z
   .object({
     processes: z.array(z.object({ id, label: z.string() }).strict()).min(1),
     /** The actor pairs a beat's arrow may join, either way; an actor acting alone needs no link. */
-    links: z.array(z.tuple([z.enum(ACTORS), z.enum(ACTORS)])).min(1),
+    links: z.array(z.union([z.tuple([z.enum(ACTORS), z.enum(ACTORS)]), z.tuple([z.enum(ACTORS), z.enum(ACTORS), z.object({ only: z.array(z.string()).min(1) }).strict()])])).min(1),
     lanes: z
       .array(
         z

@@ -25,9 +25,10 @@ links:
   - [you, panel]        # person - webview, terminal, VS Code
   - [you, machine]      # person - outside: an OS notification, a file saved in another editor
   - [panel, engine]     # webview, ext-host - engine daemon, over ACP
-  - [panel, machine]    # ext-host - outside: the disk, the OS, Tab's llama-server on your machine
+  - [panel, machine]    # ext-host - outside: the disk, the OS, 
   - [engine, model]     # engine - provider, and a child session's model inside the engine
   - [engine, machine]   # engine - tools, the sandbox, MCP servers, the web
+  - [panel, model, { only: [ed.tab-completion] }]  # Tab: the ext-host calls the local llama-server directly, no engine
 
 lanes:
   - id: user
