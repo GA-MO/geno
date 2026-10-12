@@ -1,5 +1,5 @@
 ---
-title: ตั้งค่า API key
+title: "ตั้ง API key หรือเปลี่ยนการตั้งค่า แล้ว Geno ย้าย engine"
 description: ผู้ใช้เก็บคีย์ของ provider หรือเปลี่ยนการตั้งค่าที่ engine ใช้ แล้วหน้าต่างย้ายไปใช้ engine ตัวใหม่
 tableOfContents: false
 sidebar:
@@ -15,6 +15,12 @@ scenario:
   steps:
     - id: what
       lane: user
+      beat:
+        title: "คุณเปลี่ยนสิ่งที่ engine ใช้"
+        text: >-
+          engine อ่าน API key และการตั้งค่าได้ครั้งเดียวตอนเริ่ม process
+          การเปลี่ยนสองอย่างนี้จึงทำให้หน้าต่างต้องย้ายไปหา engine ตัวใหม่ ลองเลือกว่าคุณเปลี่ยนอะไร
+        ask: "เปลี่ยนอะไร"
       do: ผู้ใช้เปลี่ยนสิ่งที่ engine ต้องใช้
       phase: idle
       fork:
@@ -26,6 +32,12 @@ scenario:
             steps:
               - lane: editor
                 at: vscode-ui
+                beat:
+                  title: "Geno ถามว่าจะตั้งคีย์ของ provider ไหน"
+                  text: >-
+                    คุณรันคำสั่ง "Geno: Set API Key" หรือกดปุ่มบน toast Geno เปิด quick pick ที่มีช่องลับของทุก provider ช่องของ
+                    provider ที่แชตใช้อยู่ขึ้นก่อน คุณเลือก "Model Studio: API key"
+                  sees: "quick pick หัวเรื่อง \"Set a Geno key\" ถามว่า \"Which key?\" แถวแรกคือ \"Model Studio: API key  chat\""
                 do: >-
                   `pickSecret` เปิด quick pick ที่มีช่องลับของทุก provider ช่องของ provider ที่ใช้แชตอยู่ขึ้นก่อนและมีคำว่า chat กำกับ
                 sees: >-
@@ -36,6 +48,11 @@ scenario:
                   ผู้ใช้เลือก "Model Studio: API key"
               - lane: editor
                 at: vscode-ui
+                beat:
+                  title: "คุณวางคีย์ในช่องที่ซ่อนตัวอักษร"
+                  text: >-
+                    VS Code เปิดช่องรับรหัสผ่านที่แสดงตัวอักษรเป็นจุด และไม่หายเมื่อคุณคลิกที่อื่น คุณวางคีย์แล้วกด Enter
+                  sees: "ช่องกรอกด้านบนของหน้าต่าง \"Your Model Studio API key\" ตัวอักษรแสดงเป็นจุด"
                 do: >-
                   `setApiKey` เปิดช่องรับรหัสผ่านที่ซ่อนตัวอักษร และไม่หายไปเมื่อคลิกที่อื่น
                 sees: ช่องกรอกด้านบนของหน้าต่าง "Your Model Studio API key" ตัวอักษรแสดงเป็นจุด
@@ -44,6 +61,11 @@ scenario:
                 do: ผู้ใช้วางคีย์แล้วกด Enter
               - lane: editor
                 at: vscode-ui
+                beat:
+                  title: "VS Code เก็บคีย์ไว้ใน SecretStorage"
+                  text: >-
+                    คีย์ไม่ถูกเขียนลงไฟล์การตั้งค่า VS Code เก็บไว้ในที่เก็บความลับของมัน แล้ว Geno เห็นว่าคีย์ของ engine เปลี่ยน
+                    จึงสั่งย้าย engine
                 do: >-
                   คีย์ที่ตัดช่องว่างหัวท้ายแล้วถูกเก็บใน SecretStorage ของ VS Code ใต้ชื่อ `gcode.apiKey.modelstudio`
                   ไม่มีการเขียนลงไฟล์การตั้งค่า
@@ -60,6 +82,11 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "VS Code เห็นว่าการตั้งค่าของ engine เปลี่ยน"
+                  text: >-
+                    คุณเปลี่ยน `gcode.model` หรือการตั้งค่าอื่นที่ engine ใช้ เช่น provider หรือโดเมนของ sandbox Geno จึงสั่งย้าย
+                    engine เหมือนตอนเปลี่ยนคีย์
                 do: >-
                   ตัวฟัง `onDidChangeConfiguration` เห็นว่าการตั้งค่าที่เปลี่ยนอยู่ใน `ENGINE_SETTINGS`
                   (provider, baseUrl, model, providers, roles, การ resume, การปลุก, โดเมนของ sandbox, ไดเรกทอรีเพิ่ม)
@@ -69,6 +96,12 @@ scenario:
     - id: reset
       lane: editor
       at: engine-link
+      beat:
+        title: "Geno ตัดสายกับ engine ตัวเดิม"
+        text: >-
+          Geno ปิดการเชื่อมต่อปัจจุบัน ครั้งหน้าที่ต่อจะไปหา engine ที่การตั้งค่าใหม่ชี้ ช่องพิมพ์ขึ้นชื่อโมเดลใหม่
+          และรายการโมเดลโหลดใหม่
+        ask: "ต่อ engine อยู่ก่อนไหม"
       do: >-
         `resetEngine` ทำลาย socket ของการเชื่อมต่อปัจจุบัน (ถ้ามี) เพื่อให้การเชื่อมต่อครั้งหน้าไปหา engine ที่การตั้งค่าใหม่ชี้
         แล้วส่ง action `model` ให้ช่องพิมพ์แสดงชื่อโมเดลใหม่ และให้รายการโมเดลโหลดใหม่
@@ -88,6 +121,12 @@ scenario:
             steps:
               - lane: editor
                 at: engine-link
+                beat:
+                  title: "Geno ต่อ engine ตัวใหม่ในอีก 1 วินาที"
+                  text: >-
+                    หน้าต่างนี้ต่อ engine อยู่ เมื่อสายถูกตัด Geno นัดต่อใหม่ ที่อยู่ของ engine คำนวณจาก hash ของการตั้งค่าและคีย์
+                    การตั้งค่าชุดใหม่จึงได้ socket ใหม่และ engine ตัวใหม่
+                  to: engine
                 do: >-
                   socket ปิด ตัวฟัง `close` เขียน "engine: connection closed" ลง output channel ล้างการเชื่อมต่อเดิม
                   แล้วนัด `restart` ในอีก 1 วินาที
@@ -95,6 +134,12 @@ scenario:
               - use: start-engine-connects
               - lane: server
                 at: turns
+                beat:
+                  title: "Engine ตัวเก่าทำงานค้างจนจบแล้วออกเอง"
+                  text: >-
+                    Geno ไม่ปิด engine ตัวเก่า turn ที่ค้างอยู่บนตัวเก่าทำต่อจนจบ แล้วมันออกเองเมื่อไม่มีหน้าต่างต่อและไม่มีงานครบ
+                    10 วินาที แชตที่แสดงอยู่จะไปต่อบนตัวใหม่เมื่อคุณส่งข้อความถัดไป
+                  end: "ย้ายไป engine ตัวใหม่"
                 do: >-
                   ที่อยู่ socket มาจาก hash ของการตั้งค่าและคีย์ การตั้งค่าใหม่จึงได้ engine อีกตัว
                   engine ตัวเก่าไม่ถูกปิด มันทำ turn ที่ค้างอยู่ต่อจนจบ แล้วออกเองเมื่อไม่มีหน้าต่างต่อและไม่มีงานครบ 10 วินาที
@@ -105,6 +150,12 @@ scenario:
             steps:
               - lane: editor
                 at: engine-link
+                beat:
+                  title: "ยังไม่มีอะไรให้ปิด"
+                  text: >-
+                    หน้าต่างนี้ยังไม่เคยต่อ engine เช่นเพิ่งติดตั้ง ข้อความถัดไปที่คุณส่งจะอ่านคีย์ใหม่และเปิด engine
+                    ด้วยการตั้งค่าใหม่
+                  end: "ใช้คีย์ใหม่ครั้งหน้า"
                 do: >-
                   ไม่มี socket ให้ปิด จึงไม่มีอะไรเกิดขึ้นตอนนี้ ข้อความถัดไปที่ส่งจะเรียก `Engine.connection()`
                   ซึ่งอ่านคีย์ใหม่และผ่าน `setupProblem` ถ้าไม่มีช่องอื่นขาด
@@ -125,3 +176,5 @@ engine ได้คีย์และการตั้งค่าตอนเ�
   เมื่อมีอะไรเรียก `link()` เช่นการส่งข้อความถัดไป
 - **turn ที่ทำงานอยู่ตอนเปลี่ยนคีย์** คำขอ `session/prompt` ของมันวิ่งอยู่บน socket ที่ถูกทำลาย
   ฝั่ง extension จึงได้ error และแผงแสดง turn นั้นว่าล้มเหลว ขณะที่ engine ตัวเก่าทำ turn นั้นต่อจนจบในเบื้องหลัง
+
+เมื่อมีคีย์แล้ว อ่านต่อที่ [เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine](/scenarios/start/open-window/)

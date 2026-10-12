@@ -1,5 +1,5 @@
 ---
-title: โหลดคำสั่งโปรเจกต์ หน่วยความจำ และสกิล
+title: "Session ใหม่โหลดคำสั่งโปรเจกต์ memory และ skill"
 description: ข้อความแรกของหน้าต่างสร้าง session ใหม่ engine อ่านไฟล์คำสั่ง หน่วยความจำ สกิล และสภาพแวดล้อมครั้งเดียว แล้วส่งไปกับข้อความ user แรก
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: type
       lane: user
+      beat:
+        title: "คุณส่งข้อความแรกของหน้าต่างนี้"
+        text: >-
+          หน้าต่างนี้ยังไม่มี session คุณพิมพ์ "เพิ่มเทสต์ให้ฟังก์ชัน parseDate" แล้วกด Enter
+        to: panel
       do: ผู้ใช้พิมพ์ข้อความแรกแล้วกด Enter
       phase: idle
 
@@ -30,6 +35,11 @@ scenario:
     - id: turn-start
       lane: editor
       at: chat
+      beat:
+        title: "แชตขึ้นข้อความของคุณกับแถว Thinking"
+        text: >-
+          แผงแสดงข้อความของคุณก่อนติดต่อ engine แล้ว VS Code เริ่มหา session ที่จะส่งข้อความนี้เข้าไป
+        sees: { kind: composer, state: working, header: working }
       do: >-
         `prompt()` ส่ง action `turn-start` ก่อนติดต่อ engine แล้วเรียก `link()`
       sees: บับเบิลข้อความของผู้ใช้ หัวข้อเป็น "working" และแถว "Thinking"
@@ -39,6 +49,12 @@ scenario:
     - id: fresh
       lane: editor
       at: chat
+      beat:
+        title: "VS Code ขอ session ใหม่จาก engine"
+        text: >-
+          ไม่มีแชตที่แสดงอยู่หรือที่จำไว้ VS Code จึงขอ session ใหม่ พร้อมโฟลเดอร์ของหน้าต่าง และ MCP server
+          ที่คุณตั้งไว้ใน VS Code
+        to: engine
       do: >-
         `openSession` ไม่พบแชตที่แสดงอยู่หรือที่จำไว้ จึงเรียก `fresh()` ซึ่งส่งคำขอ ACP `session/new`
         พร้อมโฟลเดอร์และ MCP server จาก `mcp.json` ของผู้ใช้ใน VS Code
@@ -47,6 +63,10 @@ scenario:
     - id: choose
       lane: server
       at: sessions
+      beat:
+        title: "Geno เลือก provider และ model"
+        text: >-
+          engine เลือก provider และโมเดลก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้และไม่มีไฟล์ session ค้างไว้
       do: >-
         `startSession` เลือก provider และโมเดลจาก `GCODE_PROVIDER` และ `GCODE_MODEL` (ค่าเริ่มต้น Model Studio)
         และสร้าง gateway ก่อนเขียนอะไร ถ้าคีย์ขาด error จะเกิดตรงนี้และไม่เหลือไฟล์ session ค้าง
@@ -55,6 +75,11 @@ scenario:
     - id: instructions
       lane: server
       at: sessions
+      beat:
+        title: "Geno อ่านไฟล์คำสั่งของคุณและของโปรเจกต์"
+        text: >-
+          Geno อ่านไฟล์คำสั่งของคุณก่อน แล้วเดินจากรากของดิสก์ลงมาถึง workspace เพื่อเก็บ `AGENTS.md` หรือ `CLAUDE.md`
+          ของแต่ละโฟลเดอร์ ไฟล์หนึ่งดึงไฟล์อื่นเข้ามาด้วยบรรทัด `@path` ได้อีกหลายชั้น
       do: >-
         `loadProjectContext` อ่านไฟล์คำสั่ง: ไฟล์ของผู้ใช้ก่อน (`AGENTS.md` ใน home ของ Geno แล้ว `CLAUDE.md` ของ Claude Code)
         แล้วเดินจากรากของดิสก์ลงมาถึง workspace เอาไฟล์แรกที่มีในแต่ละโฟลเดอร์จาก `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`
@@ -64,6 +89,11 @@ scenario:
     - id: rest
       lane: server
       at: sessions
+      beat:
+        title: "Geno โหลด skill, memory และสภาพแวดล้อม"
+        text: >-
+          พร้อมกันนั้น Geno โหลดรายการ skill ที่โมเดลเรียกได้ โน้ตใน memory ของคุณและของโปรเจกต์ และภาพของเครื่อง
+          เช่นสถานะ git, shell และวันที่
       do: >-
         พร้อมกันนั้น `newSession` โหลดรายการสกิลที่โมเดลเรียกได้ โน้ตในหน่วยความจำของผู้ใช้และของโปรเจกต์
         และภาพสภาพแวดล้อม: สถานะ git, platform, shell, ไดเรกทอรี scratchpad, วันที่ และโมเดล
@@ -72,6 +102,11 @@ scenario:
     - id: frozen
       lane: server
       at: sessions
+      beat:
+        title: "Geno เขียนทั้งหมดเป็นบรรทัดแรกของ session"
+        text: >-
+          ทุกอย่างถูกบันทึกเป็นบรรทัดแรกของไฟล์ session และไม่ถูกอ่านใหม่อีก ทุกคำขอต่อจากนี้ส่งข้อความชุดนี้ซ้ำทุกไบต์
+          prompt cache จึงไม่หลุด และการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
       do: >-
         ทั้งหมดถูกเขียนเป็น event `session-start` บรรทัดแรกของไฟล์ JSONL ของ session ทุกคำขอต่อจากนี้ส่งข้อความชุดนี้ซ้ำทุกไบต์
         prompt cache จึงไม่หลุด และการแก้ `AGENTS.md` ระหว่างแชตไม่มีผลกับแชตนี้
@@ -81,6 +116,12 @@ scenario:
     - id: created
       lane: editor
       at: chat
+      beat:
+        title: "VS Code ได้ session แล้วส่ง prompt"
+        text: >-
+          engine ตอบ id ของ session VS Code สลับโหมดให้ตรงกับที่แผงเลือกไว้ แล้วส่ง prompt ของคุณ คำขอนี้ค้างอยู่จนกว่า
+          turn จะจบ
+        to: engine
       do: >-
         engine ตอบ id ของ session โหมด และตัวเลือก effort `fresh()` สลับเป็นโหมดที่แผงเลือกไว้ก่อนมี session
         (ค่าเริ่มต้นมาจากการตั้งค่า) ถ้าต่างกัน
@@ -97,6 +138,11 @@ scenario:
     - id: accept
       lane: server
       at: turns
+      beat:
+        title: "Geno เริ่ม turn และตั้งชื่อแชต"
+        text: >-
+          engine รับ turn เปิดงานในแผง Tasks และตั้งชื่อแชตจากข้อความแรกของคุณ
+        to: panel
       do: >-
         `runTurn` รับ turn เริ่มงานในแผง Tasks และส่ง `session_info_update` ที่ตั้งชื่อแชตจากข้อความแรก
       ref: packages/engine/src/serve.ts#runTurn
@@ -106,6 +152,16 @@ scenario:
     - id: session-start-hooks
       lane: policy
       at: hooks
+      beat:
+        title: "hook ตอนเริ่ม session ได้ทำงาน"
+        text: >-
+          ถ้าคุณตั้ง SessionStart hook ไว้ มันทำงานครั้งแรกตรงนี้ สิ่งที่ hook พิมพ์ออกมาถูกบันทึก
+          และไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ข้ามไป
+        sees:
+          kind: payload
+          direction: request
+          source: docs/results/real-usecases/runs/A18-project-skill/1/requests.jsonl#seq=4
+          select: messages[0].content[2]
       do: >-
         `runAgent` เปิด hooks ของ session นี้ครั้งแรกใน process นี้ ถ้าตั้ง SessionStart hook ไว้ มันทำงานด้วย source `startup`
         เพราะโมเดลยังไม่เคยตอบ ข้อความที่ hook พิมพ์ออกมาถูกบันทึกและไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ไม่มีอะไรเกิดขึ้นตรงนี้
@@ -115,6 +171,10 @@ scenario:
     - id: record
       lane: loop
       at: drive
+      beat:
+        title: "Geno บันทึก prompt ต่อจากส่วนเปิด"
+        text: >-
+          Geno บันทึกข้อความของคุณต่อจากบรรทัดแรก แล้วตัดสินจากบันทึกว่าขั้นต่อไปคือเรียกโมเดล
       do: >-
         `drive` บันทึก event `user` ต่อจาก `session-start` แล้ว UserPromptSubmit hooks ได้อ่าน prompt ก่อนโมเดล
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
@@ -132,6 +192,22 @@ scenario:
     - id: opening
       lane: loop
       at: model-call
+      beat:
+        title: "Geno ประกอบข้อความ user แรก"
+        text: >-
+          ข้อความ user แรกเรียงคำสั่งของคุณ คำสั่งของโปรเจกต์ รายการ skill, memory และสภาพแวดล้อมไว้ก่อน แล้วจึงต่อด้วย
+          prompt ของคุณ system prompt เหมือนเดิมทุก session ส่วนเปิดนี้จึงถูก cache ไปด้วย
+        to: model
+        sees:
+          kind: payload
+          direction: request
+          source: docs/results/real-usecases/runs/A18-project-skill/1/requests.jsonl#seq=4
+          select: messages[0].content
+          highlight:
+            - "[3]"
+          collapse:
+            - "[0].text"
+            - "[1].text"
       do: >-
         `callModel` บันทึก `checkpoint` แล้ว `replayMessages` ประกอบข้อความ user แรก: บล็อกคำสั่ง (`global_instructions`
         สำหรับไฟล์ของผู้ใช้ `project_instructions` สำหรับไฟล์ของ repo และรายการสกิล) โน้ตหน่วยความจำ และสภาพแวดล้อม
@@ -148,6 +224,11 @@ scenario:
 
     - id: reads
       lane: model
+      beat:
+        title: "Model อ่านคำสั่งก่อนเริ่มงาน"
+        text: >-
+          โมเดลอ่านคำสั่งของคุณและของโปรเจกต์ก่อนถึงคำขอ แล้วเริ่มทำงาน จากตรงนี้ turn เดินเหมือน turn ปกติ
+        end: "turn ทำต่อตามปกติ"
       do: >-
         โมเดลอ่านคำสั่งของผู้ใช้และของโปรเจกต์ก่อนคำขอ แล้วเริ่มทำงานตามข้อความ turn ดำเนินต่อเหมือน turn ปกติ
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -173,3 +254,5 @@ context ของ session ถูกโหลด**ครั้งเดียว*
   ครั้งแรกของไฟล์ที่อยู่ใต้โฟลเดอร์นั้น
 - **หน่วยความจำที่เปลี่ยนระหว่างแชต** ไม่แก้ส่วนเปิด การเปลี่ยนไปถึงโมเดลเป็น notice ที่จุดปลอดภัยก่อนการเรียกโมเดลครั้งถัดไป
 - **แก้ `AGENTS.md` แล้วต้องเริ่มแชตใหม่** แชตเดิมยังส่งข้อความชุดที่ถูกบันทึกไว้ใน `session-start`
+
+อ่านต่อที่ [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) เพื่อดู turn ที่ตามมา
