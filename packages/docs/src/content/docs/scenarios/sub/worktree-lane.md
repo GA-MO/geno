@@ -1,5 +1,5 @@
 ---
-title: เอเจนต์ลูกใน worktree แยก
+title: "subagent ใน worktree แยก"
 description: โมเดลขอลูก worker แบบ isolation worktree ลูกได้ git worktree ของตัวเองบน branch geno/ แก้ไฟล์ที่นั่น แล้ว lane ถูกเก็บไว้ให้ผู้ใช้ตรวจหรือถูกลบถ้าไม่มีอะไรเปลี่ยน
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [wf.lane-apply, sub.blocking-report, sub.fork, wf.arena-best-of-n]
   steps:
     - id: wants
+      beat:
+        title: Model ขอ worker ใน worktree ของตัวเอง
+        text: 'คุณขอให้ลองย้าย `src/log.ts` ไปใช้ pino โดยไม่ยุ่งกับงานที่ค้างอยู่ model จึงขอ worker แบบ `isolation: "worktree"`'
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `agent` ด้วย `agent: "worker"`, `isolation: "worktree"` และ task ที่เขียนให้ครบในตัว
@@ -33,6 +37,9 @@ scenario:
       phase: running-tools
 
     - id: want
+      beat:
+        title: Geno ขอ lane ให้ worker
+        text: lane คือ checkout แยกของ worker มันไม่แตะ checkout หลัก worker จึงรันพร้อมลูกตัวอื่นได้ แทนที่จะรอคิว
       lane: loop
       at: tools
       runs: 1
@@ -42,6 +49,9 @@ scenario:
       ref: "packages/engine/src/subagents.ts#\"const laneWant = (agent: AgentDefinition\""
 
     - id: lane
+      beat:
+        title: Geno สร้าง git worktree บน branch `geno/`
+        text: worktree อยู่ใต้ `.geno/worktrees/` Geno คัดลอกไฟล์ที่ต้องใช้และ `node_modules` ไปให้ sandbox ของ worker ครอบแค่ lane และไฟล์ที่มันแก้ลงดิสก์ตรงๆ ไม่ผ่าน buffer ของ VS Code
       lane: loop
       at: agent
       do: >-
@@ -66,6 +76,16 @@ scenario:
       ref: packages/engine/src/subagents.ts#openSpawn
 
     - id: noted
+      beat:
+        title: แชตขึ้นแถวของ worker
+        text: แถวของ worker ขึ้นใต้ขั้นที่ส่งงาน ไฟล์ที่คุณเปิดอยู่ใน checkout หลักไม่ถูกแตะ
+        sees:
+          kind: task
+          title: worker
+          status: running
+          detail: 0:05
+          actions:
+            - Cancel
       lane: loop
       at: drive
       do: >-
@@ -83,6 +103,10 @@ scenario:
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: works
+      beat:
+        title: worker แก้ `src/log.ts` ใน lane
+        text: worker แก้ `src/log.ts` กับ `package.json` รันเทสต์ใน sandbox ของ lane แล้วรายงานสิ่งที่เปลี่ยน
+        to: engine
       lane: child@worker
       at: model
       do: >-
@@ -92,6 +116,10 @@ scenario:
       emits: [report]
 
     - id: settle
+      beat:
+        title: Geno ตรวจ lane หลัง worker จบ
+        text: สิ่งที่ Geno ทำกับ lane ขึ้นกับว่า worker เปลี่ยนไฟล์หรือไม่
+        ask: worker เปลี่ยนอะไรไหม
       lane: loop
       at: tools
       do: >-
@@ -105,6 +133,9 @@ scenario:
             then: row-done
             steps:
               - lane: loop
+                beat:
+                  title: Geno เก็บ lane ไว้ให้คุณตรวจ
+                  text: Geno จดว่างานอยู่ใน lane ไหน บน branch อะไร และยังไม่อยู่ใน checkout ของแม่ คุณนำกลับมาได้จากแผง Lanes
                 at: tools
                 do: >-
                   lane มีการเปลี่ยนแปลง จึงถูกเก็บไว้พร้อมรายการไฟล์ที่เปลี่ยน
@@ -117,12 +148,22 @@ scenario:
             then: row-done
             steps:
               - lane: loop
+                beat:
+                  title: Geno ลบ lane ทิ้ง
+                  text: lane ไม่มีอะไรจะเสีย Geno ลบ worktree และ branch และรายงานไม่มีโน้ตเรื่อง lane
                 at: tools
                 do: >-
                   lane ไม่มีอะไรจะเสีย `removeLane` ลบ worktree และ branch ทิ้ง รายงานไม่มีโน้ตเรื่อง lane
                 ref: packages/engine/src/lanes.ts#settleChildLane
 
     - id: row-done
+      beat:
+        title: แชตติดเครื่องหมายว่า worker เสร็จ
+        text: แถวของ worker หยุดนาฬิกาและขึ้นเครื่องหมายถูก
+        sees:
+          kind: task
+          title: worker
+          status: done
       lane: server
       at: updates
       do: >-
@@ -131,6 +172,10 @@ scenario:
       emits: [subagent_update, idle]
 
     - id: fenced
+      beat:
+        title: Geno ส่งรายงานพร้อมโน้ตของ lane ให้ model
+        text: รายงานกลับมาเป็นผลของ call ในรั้ว โน้ตของ lane ต่อท้ายรายงาน แล้ว Geno ส่งให้ model อ่าน
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -143,6 +188,11 @@ scenario:
     - use: model-call
 
     - id: relays
+      beat:
+        title: Model บอกให้คุณตรวจ lane
+        text: model เล่าว่า worker ทำอะไรใน lane ไหน การแก้ยังไม่เข้า checkout หลักจนกว่าคุณจะ Apply ทัวร์ถัดไปเล่าการตรวจและ Apply lane
+        to: panel
+        end: ไปตรวจและ Apply lane
       lane: model
       do: >-
         โมเดลของแม่เล่าว่า worker ทำอะไรใน lane ไหน และบอกให้ผู้ใช้ตรวจแล้วนำกลับมาจากแผง Lanes

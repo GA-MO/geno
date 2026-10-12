@@ -1,5 +1,5 @@
 ---
-title: fork เอเจนต์ลูกจากบทสนทนา
+title: "fork subagent จากบทสนทนา"
 description: โมเดลขอลูกแบบ fork ลูกเริ่มจากสำเนาบทสนทนาของแม่ ใช้ system prompt และเครื่องมือชุดเดียวกันเพื่อแชร์ cache แล้วส่งข้อความสุดท้ายกลับเป็นรายงาน
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [sub.blocking-report, sub.worktree-lane, ext.skill-fork]
   steps:
     - id: wants
+      beat:
+        title: Model ขอ fork subagent ชื่อ plan
+        text: model อยากได้แผนที่อิงข้อตกลงในบทสนทนานี้ มันขอ subagent `plan` แบบ fork คำสั่งงานจึงสั้นได้ เพราะลูกแบบ fork เห็นบทสนทนาทั้งหมด
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `agent` ด้วย `agent: "plan"`, `fork: true` และ `task` สั้นๆ ว่า "ร่างแผนการย้ายตามที่ตกลงกันข้างบน"
@@ -33,6 +37,9 @@ scenario:
       phase: running-tools
 
     - id: launch
+      beat:
+        title: Geno เปิด plan พร้อมงบของมัน
+        text: plan อ่านอย่างเดียว จึงรันพร้อมลูกอ่านอย่างเดียวตัวอื่นได้ งบของมันไม่เกิน 12 รอบและ $0.05 และไม่เกินงบที่รอบของแม่ยังเหลือ
       lane: loop
       at: tools
       runs: 1
@@ -42,6 +49,10 @@ scenario:
       ref: packages/engine/src/subagents.ts#runChild
 
     - id: copy
+      beat:
+        title: plan ได้สำเนาบทสนทนาของแม่
+        text: Geno คัดลอกบทสนทนาจนถึงคำตอบที่ขอ fork และใช้ model เดียวกับแม่เสมอ เพื่อให้ใช้ cache ร่วมกันได้
+        to: model
       lane: child@plan
       at: loop
       do: >-
@@ -60,6 +71,16 @@ scenario:
       emits: [child-start]
 
     - id: announce
+      beat:
+        title: แชตขึ้นแถวของ plan
+        text: ใต้ขั้นที่ส่งงานขึ้นแถวของ plan พร้อมนาฬิกาและปุ่ม Cancel แผง Tasks มีงานของมันเพิ่มขึ้น
+        sees:
+          kind: task
+          title: plan
+          status: running
+          detail: 0:03
+          actions:
+            - Cancel
       lane: server
       at: updates
       do: >-
@@ -77,6 +98,9 @@ scenario:
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: mode
+      beat:
+        title: plan ใช้ system prompt และ tool ชุดเดียวกับแม่
+        text: ส่วนต้นของคำขอจึงตรงกับ cache ของแม่ แต่ plan รันได้เฉพาะ tool ของตัวเอง มันไม่มี tool `report` และไม่ถูกเตือนให้รายงาน
       lane: child@plan
       at: loop
       do: >-
@@ -86,6 +110,10 @@ scenario:
       ref: packages/core/src/subagent.ts#forkTask
 
     - id: works
+      beat:
+        title: plan อ่านไฟล์แล้วเขียนแผน
+        text: คำขอของ plan อ่านส่วนต้นจาก cache มันอ่านไฟล์ที่เกี่ยวข้อง แล้วเขียนแผนเป็นข้อความสุดท้าย
+        to: engine
       lane: child@plan
       at: model
       do: >-
@@ -95,6 +123,13 @@ scenario:
       emits: [end_turn]
 
     - id: handed
+      beat:
+        title: ข้อความสุดท้ายของ plan กลายเป็นรายงาน
+        text: plan ไม่มี tool `report` Geno จึงใช้ข้อความสุดท้ายของมันเป็นรายงาน แถวของ plan ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย
+        sees:
+          kind: task
+          title: plan
+          status: done
       lane: child@plan
       at: loop
       do: >-
@@ -110,6 +145,10 @@ scenario:
       emits: [subagent_update, idle]
 
     - id: fenced
+      beat:
+        title: Geno ล้อมรั้วรายงานแล้วส่งให้ model
+        text: รายงานกลับมาเป็นผลของ call ในรั้วที่บอกว่ามันไม่ใช่คำสั่งของคุณ แล้ว Geno ส่งให้ model ของแม่อ่าน
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -122,6 +161,11 @@ scenario:
     - use: model-call
 
     - id: relays
+      beat:
+        title: Model เล่าแผนให้คุณฟัง
+        text: model ของแม่อ่านแผนแล้วเล่าให้คุณฟังด้วยคำของตัวเอง
+        to: panel
+        end: Turn จบ
       lane: model
       do: >-
         โมเดลของแม่อ่านรายงานแล้วเล่าแผนให้ผู้ใช้ด้วยคำของตัวเอง

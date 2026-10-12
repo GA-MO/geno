@@ -1,5 +1,5 @@
 ---
-title: ส่งข้อความถึงลูก ที่กำลังทำงานหรือจบแล้ว
+title: "ส่งข้อความถึง subagent ที่กำลังทำงานหรือจบแล้ว"
 description: แม่ใช้ message_agent ส่งข้อความถึงลูกที่เริ่มไว้ ลูกที่ยังทำงานได้ข้อความที่จุดปลอดภัยถัดไป ลูกที่จบแล้วถูกปลุกให้ทำต่อจาก transcript ของตัวเอง
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [sub.user-steers-child, bg.child-wakes-parent, sub.cut-off-by-engine-stop, ctl.steer-delivered]
   steps:
     - id: wants
+      beat:
+        title: Model ส่งข้อความถึง explore
+        text: คุณบอกให้ดู `packages/cli` ด้วย model จึงเรียก `message_agent` พร้อม session ของ explore และข้อความ "also cover packages/cli"
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `message_agent` ด้วย `agent_session` ของ explore และ `text: "also cover packages/cli"`
@@ -24,8 +28,19 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น message_agent
+        text: แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: message_agent explore
+          status: running
 
     - id: one-at-a-time
+      beat:
+        title: Geno ส่งข้อความถึง explore ทีละข้อความ
+        text: ถ้ามีข้อความถึงลูกตัวเดียวกันอีก มันต้องรอข้อความนี้จบก่อน เพื่อไม่ให้ปลุกลูกซ้อนกัน ทางที่ข้อความไปขึ้นกับว่า explore ยังทำงานอยู่ไหม
+        ask: explore ยังทำงานไหม
       lane: loop
       at: tools
       runs: 1
@@ -41,12 +56,20 @@ scenario:
             then: logged
             steps:
               - lane: loop
+                beat:
+                  title: ข้อความเข้ากล่องของ explore
+                  text: explore ยังทำงาน Geno ใส่ข้อความในกล่องของมัน แล้วรอจนมันรับ
+                  to: model
                 at: tools
                 do: >-
                   กล่องข้อความของลูกยังเปิดอยู่และแม่คือ session นี้ `inbox.push` ใส่ข้อความ (`from: 'parent'`) แล้วรอจนลูกรับ
                   call นี้จึงค้างจนลูกถึงจุดปลอดภัย
                 ref: "packages/engine/src/subagents.ts#\"const delivery = await inbox.push({ text, from: 'parent' });\""
               - lane: child@explore
+                beat:
+                  title: explore รับข้อความที่จุดปลอดภัย
+                  text: ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความจากแม่ พร้อมหมายเหตุว่าให้ถือเป็นการเปลี่ยนแผน ในบทสนทนาของ explore ข้อความขึ้นตรงที่ลงจริง
+                  sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
                 at: loop
                 do: >-
                   `deliver()` ของลูกที่จุดปลอดภัยก่อนเรียกโมเดลครั้งถัดไปบันทึก event `user` แบบ steer (`from: 'parent'`)
@@ -62,11 +85,18 @@ scenario:
                 sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
                 ref: packages/extension/src/chat/steer-view.ts#steerStep
               - lane: child@explore
+                beat:
+                  title: explore ค้น `packages/cli` เพิ่ม
+                  text: explore อ่านข้อความของแม่แล้วปรับการค้น
                 at: model
                 do: >-
                   ลูกเรียกโมเดลต่อโดยอ่านข้อความของแม่ แล้วค้นใน `packages/cli` เพิ่ม
                 ref: packages/core/src/fence.ts#arrivalText
               - lane: loop
+                beat:
+                  title: Geno ตอบ model ว่าข้อความถึงแล้ว
+                  text: ผลของ call บอกว่าข้อความไปถึงตอนไหนในบันทึกของ explore
+                  to: engine
                 at: tools
                 do: >-
                   `push` ได้ผล `delivered` พร้อมลำดับ event ในลูก ผลของ call คือ
@@ -80,12 +110,19 @@ scenario:
             then: logged
             steps:
               - lane: loop
+                beat:
+                  title: Geno ตรวจว่าปลุก explore ได้
+                  text: explore จบไปแล้ว Geno ตรวจว่ามันเป็นลูกของ session นี้ และนิยาม explore ยังอยู่
                 at: tools
                 do: >-
                   ไม่มีกล่องข้อความที่เปิดอยู่ `resumable` อ่าน log ของลูก ตรวจว่า `session-start` บอกว่าแม่คือ session นี้
                   (หรือ workflow ที่ session นี้เริ่ม) ลูกไม่ได้รันบน agent ภายนอก และนิยาม `explore` ยังมีอยู่
                 ref: "packages/engine/src/subagents.ts#\"const resumable = async (id: string, message: string\""
               - lane: child@explore
+                beat:
+                  title: explore ทำต่อจาก transcript ของตัวเอง
+                  text: Geno ต่อบันทึกของ explore ด้วยข้อความจากแม่ และบอกให้ส่งรายงานใหม่ explore ได้งบชุดใหม่
+                  to: model
                 at: loop
                 do: >-
                   `openResume` ต่อท้าย log ของลูกด้วย event `user` จากแม่ (`resumeEvent`) หมายเหตุบอกว่าข้อความนี้มาหลังรายงาน
@@ -99,6 +136,14 @@ scenario:
                 ref: "packages/engine/src/subagents.ts#\"await ctx.logNote!({ kind: 'child-start'\""
                 emits: [child-start]
               - lane: server
+                beat:
+                  title: แถวของ explore กลับมาหมุน
+                  text: แชตเห็นว่า explore รันอีกครั้ง
+                  sees:
+                    kind: task
+                    title: explore
+                    status: running
+                    detail: 0:01
                 at: updates
                 do: >-
                   `subagent_update` สถานะ `running` แถวของลูกกลับมาหมุนอีกครั้ง
@@ -111,6 +156,9 @@ scenario:
                 sees: แถว "explore · <โมเดล> · 0:01" พร้อมไดโนเสาร์ที่ขยับ
                 ref: packages/extension/src/chat/subagent-view.ts#childRow
               - lane: loop
+                beat:
+                  title: Geno ตอบ model ว่าปลุก explore แล้ว
+                  text: explore เดิมทำงานเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง session นี้รอรายงานใหม่ ซึ่งจะมาถึงทีหลัง
                 at: tools
                 do: >-
                   explore เดิมเป็นลูกเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง: session ติดหนี้รายงานใหม่ และผลของ call คือ
@@ -120,6 +168,13 @@ scenario:
                 emits: [Resumed]
 
     - id: logged
+      beat:
+        title: ขั้น message_agent เสร็จ
+        text: Geno บันทึกผลของ call และแชตขึ้นว่าขั้นนี้เสร็จ แล้วส่งผลให้ model อ่าน
+        sees:
+          kind: step
+          label: message_agent explore
+          status: done
       lane: loop
       at: tools
       do: >-
@@ -138,6 +193,11 @@ scenario:
     - use: model-call
 
     - id: tells
+      beat:
+        title: Model บอกคุณว่าส่งต่อแล้ว
+        text: model บอกว่าส่งข้อความถึง explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
+        to: panel
+        end: Turn จบ รอรายงาน
       lane: model
       do: >-
         โมเดลบอกผู้ใช้ว่าส่งต่อให้ explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
