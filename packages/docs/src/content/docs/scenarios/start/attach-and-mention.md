@@ -1,5 +1,5 @@
 ---
-title: แนบไฟล์และ @mention
+title: "แนบไฟล์และ @mention ใน prompt"
 description: ผู้ใช้ @mention ไฟล์ใน workspace และวางภาพหน้าจอในช่องพิมพ์ ส่วนขยายส่งเป็นบล็อก ACP engine อ่านไฟล์ เก็บภาพ บันทึก prompt พร้อมบริบท แล้วจึงเริ่ม turn
 tableOfContents: false
 sidebar:
@@ -16,12 +16,22 @@ scenario:
   steps:
     - id: at
       lane: user
+      beat:
+        title: "คุณพิมพ์ @ ตามด้วยชื่อไฟล์"
+        text: >-
+          คุณพิมพ์ `@date.t` ในช่องพิมพ์ เพื่อชี้ไฟล์ให้ Geno อ่านไปพร้อมคำถาม
+        to: panel
       do: ผู้ใช้พิมพ์ `@` ตามด้วยส่วนหนึ่งของชื่อไฟล์
       phase: idle
 
     - id: complete
       lane: panel
       at: composer
+      beat:
+        title: "แผงหาไฟล์ที่ตรงกับคำค้น"
+        text: >-
+          ทุกครั้งที่คุณกดแป้น แผงถาม VS Code ใหม่ว่ามีไฟล์ไหนใน workspace ตรงกับคำค้น และแสดงเฉพาะคำตอบของคำถามล่าสุด
+        to: panel
       do: >-
         `askCompletions` เห็นว่าเคอร์เซอร์อยู่ใน mention จึงโพสต์ `complete` พร้อมคำค้น ทุกการกดแป้นถามใหม่
         และแผงแสดงเฉพาะคำตอบของคำถามล่าสุด
@@ -40,6 +50,13 @@ scenario:
     - id: chips
       lane: panel
       at: composer
+      beat:
+        title: "คุณเลือกไฟล์แล้ววางภาพหน้าจอ"
+        text: >-
+          คุณเลือก `src/date.test.ts` จากรายการ แล้ววางภาพหน้าจอ error ด้วย Cmd-V ชิปของไฟล์และภาพขึ้นเหนือช่องพิมพ์
+          ไฟล์ที่ใหญ่เกินหรืออ่านไม่ได้ถูกปฏิเสธตั้งแต่ตรงนี้
+        from: you
+        sees: { kind: composer, state: idle, text: "@src/date.test.ts" }
       do: >-
         แผงแสดงรายการให้เลือก ผู้ใช้เลือก `src/date.test.ts` แล้ววางภาพด้วย Cmd-V ตัวจัดการ `paste` รับไฟล์จาก clipboard เป็นไฟล์แนบ
         ไฟล์ที่ใหญ่เกินหรืออ่านไม่ได้ถูกปฏิเสธพร้อมเหตุผลตั้งแต่ตรงนี้ (โฟลเดอร์ถูกปฏิเสธเมื่อลากหรือเลือกผ่าน "Attach file…")
@@ -50,6 +67,11 @@ scenario:
 
     - id: send
       lane: user
+      beat:
+        title: "คุณส่งข้อความพร้อมไฟล์แนบ"
+        text: >-
+          คุณพิมพ์ "test นี้พังตามภาพ ช่วยดูหน่อย" แล้วกด Enter แผงส่งข้อความกับภาพไปให้ VS Code
+        to: panel
       do: ผู้ใช้พิมพ์ "test นี้พังตามภาพ ช่วยดูหน่อย" แล้วกด Enter
 
     - id: submit
@@ -63,6 +85,12 @@ scenario:
     - id: blocks
       lane: editor
       at: chat
+      beat:
+        title: "VS Code แปลง mention เป็นบล็อกในคำขอ"
+        text: >-
+          `@path` ที่ชี้ไฟล์จริงถูกส่งเป็นแค่ที่อยู่ของไฟล์ ส่วนภาพถูกส่งเป็นบล็อกรูปภาพทั้งก้อน engine
+          จะเป็นคนอ่านเนื้อไฟล์เอง
+        to: engine
       do: >-
         `Chat.send` เรียก `prompt()` ซึ่งส่ง `turn-start` ก่อน แล้วจึงแปลง mention เป็นบล็อก ACP ตอนสร้างคำขอ `session/prompt`:
         `@path` ที่เป็นไฟล์จริงเป็น `resource_link` (`@selection` เป็น `resource` ที่มีข้อความของบรรทัดที่เลือก)
@@ -73,6 +101,11 @@ scenario:
     - id: bubble
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นข้อความพร้อมชิปรูปภาพ"
+        text: >-
+          บับเบิลของคุณแสดงข้อความและชิปของภาพที่แนบ หัวข้อขึ้น working
+        sees: { kind: message, from: you, text: test นี้พังตามภาพ ช่วยดูหน่อย }
       alongside: true
       do: บับเบิลของผู้ใช้แสดงข้อความพร้อมชิปของไฟล์แนบ
       sees: บับเบิล "test นี้พังตามภาพ ช่วยดูหน่อย" พร้อมชิปรูปภาพ หัวข้อ "working"
@@ -81,6 +114,12 @@ scenario:
     - id: parse
       lane: server
       at: turns
+      beat:
+        title: "Engine อ่านไฟล์ที่ mention และเก็บภาพ"
+        text: >-
+          engine แยก mention และไฟล์แนบออกจากคำขอ ภาพที่เกินจำนวนหรือขนาดรวมที่รับได้ทำให้คำขอถูกปฏิเสธ แล้ว engine
+          อ่านไฟล์ที่ mention ผ่าน editor
+        ask: "ไฟล์ยังอยู่ไหม"
       do: >-
         `runTurn` แยก mention และไฟล์แนบออกจากบล็อก ภาพเกินจำนวนหรือขนาดรวมที่รับได้ทำให้คำขอถูกปฏิเสธ (`invalidParams`)
         แล้ว `logPrompt` อ่านไฟล์ที่ mention ผ่าน editor และเก็บภาพลงที่เก็บไฟล์แนบของ session
@@ -94,6 +133,11 @@ scenario:
             steps:
               - lane: server
                 at: turns
+                beat:
+                  title: "Geno บันทึก prompt พร้อมเนื้อไฟล์"
+                  text: >-
+                    Geno บันทึกข้อความของคุณพร้อมเนื้อไฟล์ กฎของโปรเจกต์ที่ตรงกับไฟล์นั้น และภาพ ลงบันทึกของ session ครั้งเดียว
+                    ไฟล์ที่เปลี่ยนทีหลังจึงไม่ทำให้ prompt เดิมเปลี่ยน
                 do: >-
                   `logPrompt` บันทึก event `user` ที่มีข้อความ `context` (เนื้อไฟล์ที่ mention และกฎของโปรเจกต์ที่ตรงกับไฟล์นั้น)
                   และ `attachments` แล้ว `runTurn` เรียก `runAgent` ด้วย prompt ว่าง จึงไม่บันทึกซ้ำ
@@ -101,6 +145,12 @@ scenario:
                 emits: [user]
               - lane: loop
                 at: drive
+                beat:
+                  title: "Turn เดินต่อตามปกติ"
+                  text: >-
+                    Geno เห็นว่า prompt ถูกบันทึกแล้วจึงไม่บันทึกซ้ำ คำขอถัดไปที่ส่งให้โมเดลมีเนื้อไฟล์และภาพอยู่ในข้อความของคุณ
+                    จากตรงนี้ turn เดินเหมือนคำถามธรรมดา
+                  end: "ไปต่อที่ turn ปกติ"
                 do: >-
                   `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงไม่บันทึกซ้ำ แล้วให้ UserPromptSubmit hooks อ่านก่อน
                   คำขอถัดไปมีเนื้อไฟล์และภาพอยู่ในข้อความของผู้ใช้
@@ -111,6 +161,11 @@ scenario:
             steps:
               - lane: server
                 at: turns
+                beat:
+                  title: "Engine หาไฟล์ไม่เจอจึงปฏิเสธ"
+                  text: >-
+                    ไฟล์ที่คุณ mention ถูกลบไปก่อนส่ง engine อ่านไม่พบ จึงปฏิเสธคำขอทั้งก้อน ไม่มีอะไรถูกบันทึก
+                  to: panel
                 do: >-
                   `contextItems` อ่านไฟล์ไม่พบ จึงโยน `MentionError` ซึ่ง `logPrompt` แปลงเป็นการปฏิเสธคำขอแบบ `invalidParams`
                   ("no such file: src/date.test.ts") ไม่มีอะไรถูกบันทึกลง log
@@ -124,6 +179,13 @@ scenario:
                 emits: [turn-end]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้น error ว่าไม่มีไฟล์"
+                  text: >-
+                    แผงแสดง error ใต้ข้อความของคุณ และ turn จบแบบล้มเหลวในเสี้ยววินาที ข้อความขึ้นต้นด้วยคำนำของ JSON-RPC
+                    ก่อนเหตุผลจริง
+                  end: "ไฟล์หาย turn ล้มเหลว"
+                  sees: { kind: notice, text: "Invalid params: no such file: src/date.test.ts", tone: error }
                 do: แผงแสดงบล็อก error ใต้บับเบิล และ turn จบแบบล้มเหลว
                 sees: >-
                   บล็อก error สีแดง "Invalid params: no such file: src/date.test.ts" หัวข้อ "failed after" ตามด้วยเวลาที่ใช้ (เช่น "failed after 85ms") และท้าย turn ขึ้น "Failed"
@@ -148,3 +210,5 @@ mention กับไฟล์แนบต่างกันที่ใครอ
 - **ข้อความ error มีคำนำของ JSON-RPC** engine ปฏิเสธด้วย `invalidParams` ซึ่ง ACP SDK เติม "Invalid params:" หน้าข้อความ
   แผงแสดงข้อความนั้นตรงๆ ผู้ใช้จึงเห็นคำนำนี้ก่อนเหตุผลจริง
 - **mention ที่ไม่ใช่ไฟล์ยังเป็นข้อความ** คำที่ขึ้นต้นด้วย `@` แต่ไม่ตรงกับไฟล์ใน workspace ถูกส่งเป็นข้อความธรรมดา
+
+เมื่อ prompt ถูกบันทึกแล้ว turn เดินแบบเดียวกับ [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/)

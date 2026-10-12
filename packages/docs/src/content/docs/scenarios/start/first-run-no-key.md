@@ -1,5 +1,5 @@
 ---
-title: ส่งข้อความแรกโดยไม่มี API key
+title: "ส่งข้อความแรกโดยยังไม่มี API key"
 description: ติดตั้งใหม่แล้วส่งข้อความทันที Geno ตรวจคีย์ก่อนเปิด engine แสดง toast ให้ตั้งคีย์ และ turn จบแบบ failed
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: type
       lane: user
+      beat:
+        title: "คุณส่งข้อความแรก “สวัสดี”"
+        text: >-
+          คุณเพิ่งติดตั้ง Geno และพิมพ์ "สวัสดี" แล้วกด Enter ทันที แผงไม่มี turn ค้างอยู่ จึงส่งข้อความต่อให้ VS Code
+        to: panel
       do: ผู้ใช้พิมพ์ข้อความแรกในช่องพิมพ์แล้วกด Enter
       phase: idle
 
@@ -30,6 +35,11 @@ scenario:
     - id: turn-start
       lane: editor
       at: chat
+      beat:
+        title: "แชตขึ้นข้อความของคุณทันที"
+        text: >-
+          แผงแสดงข้อความของคุณก่อนติดต่อ engine ด้วยซ้ำ หัวข้อขึ้น working และปุ่ม Stop มาแทน Send
+        sees: { kind: composer, state: working, header: working }
       do: >-
         `Chat.send` ส่งต่อให้ `prompt()` ซึ่งส่ง action `turn-start` ไปที่แผงก่อนติดต่อ engine
         ผู้ใช้จึงเห็นข้อความของตัวเองทันที
@@ -40,6 +50,11 @@ scenario:
     - id: settings
       lane: editor
       at: engine-link
+      beat:
+        title: "Geno ตรวจการตั้งค่าก่อนเปิด engine"
+        text: >-
+          ก่อนเปิด engine ครั้งแรก Geno อ่าน provider โมเดล และ API key แล้วตรวจว่าครบไหม provider ตั้งต้นคือ Model
+          Studio และช่องแรกที่ขาดคือ API key
       do: >-
         `prompt()` เรียก `link()` ซึ่งเรียก `Engine.connection()` การเชื่อมต่อครั้งแรกเริ่มที่ `engineSettings`
         ซึ่งอ่าน provider โมเดล และคีย์ แล้วให้ `setupProblem` ตรวจ ช่องที่ขาดช่องแรกของ Model Studio คือ API key
@@ -48,6 +63,11 @@ scenario:
     - id: toast
       lane: editor
       at: vscode-ui
+      beat:
+        title: "VS Code ขึ้น toast ว่ายังไม่มี API key"
+        text: >-
+          Geno แสดง toast พร้อมปุ่มที่แก้ปัญหานั้นตรงๆ แล้วหยุด ไม่มี engine ถูกเปิด และไม่มี session ถูกสร้าง
+        sees: { kind: toast, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", actions: [ Set API Key ] }
       do: >-
         `engineSettings` แสดง toast เตือนพร้อมปุ่มที่แก้ปัญหานั้น แล้วโยน error ที่มีข้อความเดียวกัน
         engine ไม่ถูกเปิด และไม่มี session ใดถูกสร้าง
@@ -58,6 +78,11 @@ scenario:
     - id: failed
       lane: editor
       at: chat
+      beat:
+        title: "Turn นี้ล้มเหลวทันที"
+        text: >-
+          VS Code บอกแผงว่า turn ล้มเหลว พร้อมข้อความเดียวกับใน toast
+        to: panel
       do: >-
         `prompt()` จับ error ได้ จึงส่ง action `error` ที่มีข้อความเดียวกับ toast แล้วส่ง `turn-end` สถานะ `failed`
       ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status: 'failed', usage: undefined });\""
@@ -66,6 +91,12 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นบรรทัด error"
+        text: >-
+          ใต้ข้อความของคุณมีบรรทัด error สีแดง หัวข้อบอกว่าล้มเหลวในเสี้ยววินาที และปุ่ม Send กลับมา
+          ไม่มีการเรียกโมเดลเลย
+        sees: { kind: notice, text: "Geno has no Model Studio API key. Run Geno: Set API Key.", tone: error }
       do: >-
         turn ขึ้นบล็อก error และท้าย turn บอกว่าล้มเหลว `missingReply` ไม่แสดงประกาศ "stopped without a reply"
         เพราะ error บอกเหตุผลอยู่แล้ว
@@ -76,6 +107,11 @@ scenario:
 
     - id: choice
       lane: user
+      beat:
+        title: "คุณเลือกว่าจะกดปุ่มบน toast ไหม"
+        text: >-
+          toast ยังค้างอยู่มุมขวาล่าง ลองเลือกแต่ละทางเพื่อดูว่าไปต่อที่ไหน
+        ask: "กดปุ่มบน toast ไหม"
       do: ผู้ใช้เห็น toast และเลือกว่าจะกดปุ่มหรือไม่
       fork:
         ask: ผู้ใช้กดปุ่มบน toast หรือไม่
@@ -85,6 +121,12 @@ scenario:
             steps:
               - lane: editor
                 at: vscode-ui
+                beat:
+                  title: "คุณกด Set API Key"
+                  text: >-
+                    ปุ่มนี้เปิดคำสั่งเดียวกับ "Geno: Set API Key" ใน Command Palette ทัวร์ต่อไปเล่าว่า Geno เก็บคีย์ไว้ที่ไหน
+                  from: you
+                  end: "ไปตั้ง API key"
                 do: >-
                   ปุ่มบน toast เรียกคำสั่ง `gcode.setApiKey` (คำสั่งเดียวกับ "Geno: Set API Key" ใน Command Palette)
                 ref: "packages/extension/src/extension.ts#\"if (choice !== undefined) void vscode.commands.executeCommand(problem.fix.command, ...problem.fix.args);\""
@@ -94,6 +136,12 @@ scenario:
             steps:
               - lane: panel
                 at: rail
+                beat:
+                  title: "คุณปิด toast"
+                  text: >-
+                    toast หายไป turn ที่ล้มเหลวยังอยู่ในแผง ข้อความถัดไปจะเดินทางเดิมและได้ toast เดิม จนกว่าคุณจะตั้งคีย์
+                  from: you
+                  end: "ยังไม่มีคีย์ turn ล้มเหลว"
                 do: >-
                   toast หายไป turn ที่ล้มเหลวยังอยู่ในแผง ข้อความถัดไปที่ส่งจะเดินทางเดิมและได้ toast เดิม จนกว่าจะตั้งคีย์
                 ref: packages/extension/src/chat/rail.ts#headerOf
@@ -114,3 +162,5 @@ Geno ตรวจการตั้งค่าใน extension host ก่อ�
   ผู้ใช้ Model Studio ที่ตั้งคีย์แล้วจึงอาจได้ toast รอบที่สองเรื่อง `gcode.baseUrl` เมื่อส่งข้อความถัดไป
 - **turn ที่ล้มเหลวอยู่แค่ในแผง** มันไม่มีใน log ของ session ใด เมื่อส่งข้อความหลังตั้งคีย์แล้ว Geno สร้าง session ใหม่
   โดยเก็บบทสนทนาที่แผงแสดงอยู่ไว้ turn ที่ล้มเหลวจึงยังเห็นอยู่ แต่จะหายไปเมื่อ reload หน้าต่าง
+
+อ่านต่อที่ [ตั้ง API key หรือเปลี่ยนการตั้งค่า แล้ว Geno ย้าย engine](/scenarios/start/set-api-key/)

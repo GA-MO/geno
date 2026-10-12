@@ -1,5 +1,5 @@
 ---
-title: เปิดหน้าต่างและเชื่อม engine
+title: "เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine"
 description: VS Code เปิดโฟลเดอร์ Geno เชื่อมกับ engine แล้วแผงแชตแสดงแชตเดิมหรือหน้าเริ่มต้น
 tableOfContents: false
 sidebar:
@@ -17,6 +17,10 @@ scenario:
     - id: activate
       lane: editor
       at: vscode-ui
+      beat:
+        title: "VS Code เปิดเสร็จแล้วปลุก Geno"
+        text: >-
+          เมื่อ VS Code เปิดโฟลเดอร์เสร็จ Geno ลงทะเบียนแผงแชตและคำสั่งของตัวเอง ตอนนี้ยังไม่มีอะไรต่อ engine เลย
       do: >-
         เมื่อ VS Code เปิดเสร็จ (`onStartupFinished`) `activate` เรียก `registerChat` ซึ่งสร้าง `Chat` กับตัวเชื่อม `Engine`
         ลงทะเบียนแผงแชต `gcode.chat` คำสั่งของ Geno และตัวฟังการเปลี่ยนคีย์กับการตั้งค่า ตอนนี้ยังไม่มีอะไรต่อ engine
@@ -26,6 +30,12 @@ scenario:
     - id: stored
       lane: editor
       at: chat
+      beat:
+        title: "Geno ดูว่าหน้าต่างนี้จำแชตไหนไว้"
+        text: >-
+          Geno รับแชตที่หน้าต่างอื่นส่งต่อมาให้ถ้ามี แล้วอ่านว่าครั้งก่อนหน้าต่างนี้เปิดแชตไหนค้างไว้ คำตอบนี้ตัดสินว่า
+          Geno จะต่อ engine ตอนไหน
+        ask: "จำแชตไว้ไหม"
       do: >-
         งานตอนเริ่มรับ session ที่หน้าต่างอื่นส่งต่อมาให้ (`takeHandoff`) ถ้ามี แล้วอ่านไฟล์ `session-id`
         ใน storage ของ workspace ว่าครั้งก่อนหน้าต่างนี้แสดงแชตไหนอยู่
@@ -38,18 +48,40 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "Geno ต่อ engine ทันทีโดยไม่รอคุณ"
+                  text: >-
+                    หน้าต่างนี้จำแชตไว้ Geno จึงเริ่มต่อ engine ตั้งแต่ตอนนี้ โดยไม่รอให้คุณเปิดแผง บทสนทนาเดิมจะพร้อมก่อนคุณมองหา
                 do: >-
                   เรียก `chat.link()` ทันทีโดยไม่รอให้ผู้ใช้เปิดแผง บทสนทนาและสถานะ review จึงกลับมาพร้อมหน้าต่าง
                 ref: packages/extension/src/chat/chat.ts#Chat.link
               - use: start-engine-connects
+                beat:
+                  title: "Geno เปิด engine หรือต่อตัวที่มีอยู่"
+                  text: >-
+                    Geno ตรวจว่าตั้ง API key แล้ว แล้วต่อ socket ของ engine ที่หน้าต่างอื่นของโฟลเดอร์นี้อาจเปิดไว้แล้ว
+                    ถ้ายังไม่มี Geno เปิด engine เป็น process แยกที่อยู่ต่อได้แม้หน้าต่างปิด
+                  to: engine
+
               - lane: editor
                 at: chat
+                beat:
+                  title: "Geno ขอโหลดแชตที่จำไว้"
+                  text: >-
+                    VS Code ขอ engine ให้โหลดแชตนั้น ถ้าบันทึกของแชตหายไปแล้ว Geno เริ่มแชตใหม่แทน
+                  to: engine
                 do: >-
                   `openSession` เห็นว่ายังไม่มีแชตที่แสดงอยู่ จึงโหลดแชตที่จำไว้ด้วยคำขอ ACP `session/load`
                   (ถ้า log หายไปแล้ว จะเริ่มแชตใหม่แทน)
                 ref: packages/extension/src/chat/chat.ts#Chat.openSession
               - lane: server
                 at: sessions
+                beat:
+                  title: "Engine เล่นบันทึกของแชตซ้ำ"
+                  text: >-
+                    engine ตรวจว่าแชตเป็นของโฟลเดอร์นี้ แล้วส่งบันทึกทีละรายการกลับมา ปิดท้ายด้วยชื่อแชต VS Code เก็บบทสนทนาไว้รอ
+                    เพราะแผงยังไม่เปิด
+                  to: panel
                 do: >-
                   engine ตรวจว่า session เป็นของ workspace นี้ แล้วเล่น log ซ้ำเป็น `session/update` ทีละรายการ
                   ปิดท้ายด้วย `session_info_update` ที่มีชื่อแชต
@@ -63,6 +95,12 @@ scenario:
                 ref: packages/extension/src/chat/chat.ts#Chat.load
                 emits: [reset]
               - lane: user
+                beat:
+                  title: "คุณคลิกไอคอน Geno"
+                  text: >-
+                    คุณคลิกไอคอน Geno ใน activity bar เมื่อแผงพร้อม VS Code ส่งบทสนทนาทั้งชุดเข้าไปในครั้งเดียว
+                    แล้วจึงส่งอัปเดตสดตามมา
+                  to: panel
                 do: ผู้ใช้คลิกไอคอน Geno ใน activity bar เพื่อเปิดแผงแชต
               - lane: editor
                 at: chat
@@ -73,6 +111,13 @@ scenario:
                 emits: [ready, reset]
               - lane: panel
                 at: rail
+                beat:
+                  title: "บทสนทนาเดิมกลับมาครบ"
+                  text: >-
+                    แผงวาดบทสนทนาเดิมทั้งหมด ชื่อแชตอยู่บนหัวแผง และท้ายแต่ละ turn บอกโมเดล token และค่าใช้จ่าย
+                    คุณพิมพ์ต่อได้ทันที
+                  end: "แชตเดิมกลับมา"
+                  sees: { kind: composer, state: idle }
                 do: แผงวาดบทสนทนาเดิมทั้งหมด พร้อมท้าย turn ที่บอกโมเดล token และค่าใช้จ่ายของแต่ละ turn
                 sees: บทสนทนาครั้งก่อนกลับมาครบ ชื่อแชตอยู่บนหัวแผง และช่องพิมพ์พร้อมให้พิมพ์ต่อ
                 ref: packages/extension/src/chat/webview.ts#render
@@ -82,6 +127,12 @@ scenario:
             label: ไม่ได้จำไว้ (หน้าต่างแรกของโฟลเดอร์นี้)
             steps:
               - lane: user
+                beat:
+                  title: "คุณคลิกไอคอน Geno"
+                  text: >-
+                    หน้าต่างนี้ไม่ได้จำแชตไว้ จึงยังไม่มีอะไรต่อ engine จนคุณคลิกไอคอน Geno ใน activity bar VS Code
+                    ส่งหน้าแผงที่ยังว่างพร้อมชื่อโปรเจกต์ branch และโหมดเข้าไป
+                  to: panel
                 do: ผู้ใช้คลิกไอคอน Geno ใน activity bar เพื่อเปิดแผงแชต
               - lane: editor
                 at: chat
@@ -92,20 +143,41 @@ scenario:
                 emits: [ready, reset]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แผงวาดหน้าเริ่มต้นแล้วขอรายการแชต"
+                  text: >-
+                    บทสนทนายังว่าง แผงจึงวาดหน้าเริ่มต้น แล้วขอรายการแชตเก่าของโปรเจกต์นี้มาแสดง
                 do: >-
                   `render()` เห็นบทสนทนาว่างจึงวาดหน้าเริ่มต้น แล้วหน้าเริ่มต้นขอรายการแชตของโปรเจกต์นี้ด้วยข้อความ `list-sessions`
                 ref: "packages/extension/src/chat/start-page.ts#\"refresh: () => post({ type: 'list-sessions', scope: 'project' }),\""
                 emits: [list-sessions]
               - lane: editor
                 at: chat
+                beat:
+                  title: "ทั้งรายการแชตและสถานะ PR รอ engine"
+                  text: >-
+                    การขอรายการแชตต้องใช้ engine และแถบสถานะ PR ก็เพิ่งขอ engine ไปเหมือนกัน ทั้งสองรอการต่อครั้งแรกตัวเดียวกัน
+                    ยังไม่มี session ใหม่เกิดขึ้น แชตใหม่จะเกิดตอนคุณส่งข้อความแรก
                 do: >-
                   `listSessions` ต้องใช้ engine ตอน `ready` แผงสั่งดึงสถานะ PR (`prStatus.refresh(true)`) ไปแล้ว
                   ซึ่งเรียก `Engine.connection()` ก่อน ทั้งสองจึงรอการต่อ engine ครั้งแรกตัวเดียวกัน
                   ยังไม่มี session ใดถูกสร้าง แชตใหม่จะเกิดเมื่อผู้ใช้ส่งข้อความแรก
                 ref: packages/extension/src/chat/chat.ts#Chat.listSessions
               - use: start-engine-connects
+                beat:
+                  title: "Geno เปิด engine หรือต่อตัวที่มีอยู่"
+                  text: >-
+                    Geno ตรวจว่าตั้ง API key แล้ว แล้วต่อ socket ของ engine ถ้ายังไม่มี engine ฟังอยู่ Geno เปิดขึ้นมาเป็น process
+                    แยก
+                  to: engine
+
               - lane: editor
                 at: chat
+                beat:
+                  title: "Engine ตอบรายการแชตของโฟลเดอร์นี้"
+                  text: >-
+                    VS Code ขอรายการแชตของโฟลเดอร์ engine อ่านบันทึกทุกแชตแล้วตอบชื่อ จำนวน turn ค่าใช้จ่าย และเวลาแก้ล่าสุด
+                  to: panel
                 do: ส่งคำขอ ACP `session/list` พร้อมโฟลเดอร์ของหน้าต่าง
                 ref: packages/extension/src/chat/chat.ts#Chat.listSessions
               - lane: server
@@ -115,6 +187,13 @@ scenario:
                 ref: "packages/engine/src/serve.ts#\".onRequest(acp.methods.agent.session.list, async ({ params }): Promise<acp.ListSessionsResponse> => {\""
               - lane: panel
                 at: rail
+                beat:
+                  title: "หน้าเริ่มต้นขึ้นแชตล่าสุด"
+                  text: >-
+                    แผงเลือกแชตของโปรเจกต์นี้ที่มี turn แล้ว ใหม่สุด 3 แชต มาแสดงใต้หัวข้อ Continue ไดโนเสาร์ Noodle เดินไปมา
+                    และช่องพิมพ์รอข้อความแรก
+                  end: "หน้าเริ่มต้นพร้อม"
+                  sees: { kind: composer, state: idle }
                 do: >-
                   `recentSessions` เลือกแชตของโปรเจกต์นี้ที่มี turn แล้ว ใหม่สุด 3 แชต มาแสดงใต้หัวข้อ Continue
                 sees: >-
@@ -137,3 +216,5 @@ engine ไม่ได้อยู่ใน process ของ VS Code มัน�
   หน้าต่างที่ยังไม่มีคีย์จึงเห็น toast ตั้งแต่เปิดแผง ก่อนผู้ใช้จะส่งอะไร ดู [ส่งข้อความแรกโดยไม่มี API key](/scenarios/start/first-run-no-key/)
 - **ไม่มี session ใหม่เกิดขึ้นตอนเปิดแผง** แชตใหม่ (`session/new`) เกิดเมื่อผู้ใช้ส่งข้อความแรกหรือกด New Chat
   ดู [โหลดคำสั่งโปรเจกต์ หน่วยความจำ และสกิล](/scenarios/start/new-session-context/)
+
+อ่านต่อที่ [Session ใหม่โหลดคำสั่งโปรเจกต์ memory และ skill](/scenarios/start/new-session-context/) เพื่อดูว่าข้อความแรกสร้าง session อย่างไร
