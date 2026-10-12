@@ -5,6 +5,7 @@ import {
   isHardAsk,
   lineDenial,
   mcpDenialFor,
+  mcpSubject,
   mergedDenial,
   parseCommandLine,
   SHELL_KEYWORDS,
@@ -490,8 +491,8 @@ export function toolRuleOutcome(rule: DomainRule | McpToolRule | undefined, mode
   return { kind: 'ruled', denial: mode === 'plan' ? { ...denial, verdict: 'deny' } : denial };
 }
 
-/** One MCP call as the rules see it: its model-facing name, the server's names for server and tool, and its read-only hint. */
-export type McpCall = { readonly name: string; readonly server: string; readonly tool: string; readonly readOnly: boolean };
+/** One MCP call as the rules see it: its model-facing name, the server's names for server and tool, its read-only hint and its arguments. */
+export type McpCall = { readonly name: string; readonly server: string; readonly tool: string; readonly readOnly: boolean; readonly args: unknown };
 
 /**
  * What settles one MCP call before it runs, or undefined when it runs. The workspace's MCP rules come first: a deny
@@ -500,7 +501,7 @@ export type McpCall = { readonly name: string; readonly server: string; readonly
  * allow that one tool for the workspace.
  */
 export function mcpCallDenial(call: McpCall, mode: ApprovalMode, allowedForSession: boolean, rules: readonly PermissionRule[]): Denial | undefined {
-  const subject = { kind: 'mcp', server: call.server, tool: call.tool } as const;
+  const subject = mcpSubject(call.server, call.tool, call.args);
   const ruled = toolRuleOutcome(mcpRuleFor(call, rules), mode, call.name);
   if (ruled?.kind === 'ruled') return withSubject(ruled.denial, subject);
   const denial = mcpDenialFor(call, mode, allowedForSession || ruled?.kind === 'allowed');

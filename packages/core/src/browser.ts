@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BROWSER_RULES, withSubject, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
+import { BROWSER_RULES, mcpSubject, withSubject, type ApprovalMode, type BrowserRuleId, type Denial } from './approval.js';
 import { MAX_LONG_SIDE } from './attachments.js';
 import { domainRuleFor, mcpCallDenial, toolRuleOutcome, type PermissionRule } from './permission-rules.js';
 
@@ -158,7 +158,7 @@ function ruleDenial(rule: BrowserRuleId, mode: ApprovalMode, command: string, re
  */
 export function browserDenialFor(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext): Denial | undefined {
   const target = navigationTarget(call);
-  if (target === undefined) return withSubject(pageDenial(call, mode, ctx), { kind: 'mcp', server: BROWSER_SERVER, tool: call.tool });
+  if (target === undefined) return withSubject(pageDenial(call, mode, ctx), mcpSubject(BROWSER_SERVER, call.tool, call.args));
   const url = browserUrlOf(target, ctx.workspace);
   const denial = navigationDenial(call, url, mode, ctx);
   return url.kind === 'refused' ? denial : withSubject(denial, { kind: 'browse', url: url.url, host: new URL(url.url).hostname });
@@ -178,11 +178,11 @@ function pageDenial(call: BrowserCall, mode: ApprovalMode, ctx: BrowserContext):
   const readOnly = effectivelyReadOnly(call);
   const page = ctx.page;
   if (!readOnly && page !== undefined && page.url.kind !== 'local' && !page.approved) {
-    const denial = ruleDenial('browser-remote-page', mode, `${call.tool} on ${page.url.url}`);
+    const denial = ruleDenial('browser-remote-page', mode, `${call.tool} on ${page.url.url}`, `acting on ${page.url.url}, a page from another host the user did not approve`);
     if (denial !== undefined) return denial;
   }
   if (BROWSER_TOOL_KINDS[call.tool] === 'risky') return ruleDenial('browser-risky-tool', mode, call.name);
-  return mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly }, mode, ctx.allowedForSession, ctx.rules ?? []);
+  return mcpCallDenial({ name: call.name, server: BROWSER_SERVER, tool: call.tool, readOnly, args: call.args }, mode, ctx.allowedForSession, ctx.rules ?? []);
 }
 
 /** The package.json scripts that start a dev server by name. */
