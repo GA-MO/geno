@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as acp from '@agentclientprotocol/sdk';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { STEER_META } from '@g-code/core';
+import { PROMPT_ACTION_META, PROMPT_ACTIONS, STEER_META } from '@g-code/core';
 import { gcodeAgent } from '../../src/serve.js';
 import { call, say, scripted, WIRES, type Wire } from '../conformance/scripted.js';
 import { normalizeRequest } from '../request-normal.js';
@@ -97,6 +97,16 @@ const SCENARIOS: Readonly<Record<string, Scenario>> = {
       await prompt('Hi.');
       await prompt('/compact keep the greeting');
       await prompt('Go on.');
+    });
+    return run.bodies();
+  },
+
+  'prompt-action': async (wire) => {
+    const run = await scripted(wire, [say('แผน: เพิ่มปุ่มรีเซ็ต'), say('เพิ่มแล้ว'), say('เสร็จแล้ว')]);
+    await editor(run, async (prompt) => {
+      await prompt('วางแผนเพิ่มปุ่มรีเซ็ตในเกม');
+      await prompt(PROMPT_ACTIONS['start-building'], { [PROMPT_ACTION_META]: 'start-building' });
+      await prompt(PROMPT_ACTIONS.continue, { [PROMPT_ACTION_META]: 'continue' });
     });
     return run.bodies();
   },

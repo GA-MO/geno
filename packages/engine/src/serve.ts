@@ -72,6 +72,11 @@ import {
   DIAGNOSTICS_METHOD,
   HUNK_STATUSES,
   INLINE_EDIT_META,
+  isPromptAction,
+  PROMPT_ACTION_IDS,
+  PROMPT_ACTION_META,
+  PROMPT_ACTIONS,
+  type PromptAction,
   RESUME_AGENT_META,
   nextSeq,
   REVIEW_METHOD,
@@ -1032,6 +1037,7 @@ async function logPrompt(
   files: Files,
   sessionId: string,
   expanded: Expanded | undefined,
+  action: PromptAction | undefined,
 ): Promise<OpenSession> {
   const { log } = opened;
   let context: ContextItem[];
@@ -1051,6 +1057,7 @@ async function logPrompt(
     context: [...(expanded?.context ?? []), ...context],
     ...(attachments.length === 0 ? {} : { attachments }),
     ...(expanded === undefined ? {} : { command: expanded.command }),
+    ...(action === undefined ? {} : { action }),
   };
   await appendEvent(log.file, event);
   return { ...opened, log: { ...log, events: [...log.events, event] } };
@@ -1544,7 +1551,9 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
     if (rawLane !== undefined && typeof rawLane !== 'string') throw acp.RequestError.invalidParams({ sessionId }, `${LANE_APPLY_META} must be a lane name`);
     const resumeAgent = meta?.[RESUME_AGENT_META];
     if (resumeAgent !== undefined && (typeof resumeAgent !== 'string' || resumeAgent === '')) throw acp.RequestError.invalidParams({ sessionId }, `${RESUME_AGENT_META} must be a subagent's session id`);
-    const slash = target === undefined && rawLane === undefined && resumeAgent === undefined ? await commands.expand(sessionId, text) : undefined;
+    const action = meta?.[PROMPT_ACTION_META];
+    if (action !== undefined && !isPromptAction(action)) throw acp.RequestError.invalidParams({ sessionId }, `${PROMPT_ACTION_META} must be ${PROMPT_ACTION_IDS.join(' or ')}`);
+    const slash = target === undefined && rawLane === undefined && resumeAgent === undefined && action === undefined ? await commands.expand(sessionId, text) : undefined;
     if (slash?.kind === 'builtin') {
       let spent: Spent | undefined;
       const reply = await runBuiltin(slash, {
@@ -1651,8 +1660,8 @@ export function gcodeAgent(io: Io, store: Store, limits: Limits, mcp: McpSession
           return { reason: 'end_turn' };
         }
         const opened =
-          target === undefined && (hasAttached(attached) || slash !== undefined)
-            ? await logPrompt(store, base, slash?.content ?? text, attached, shown.surface.files, sessionId, slash)
+          target === undefined && (hasAttached(attached) || slash !== undefined || action !== undefined)
+            ? await logPrompt(store, base, slash?.content ?? (action === undefined ? text : PROMPT_ACTIONS[action]), attached, shown.surface.files, sessionId, slash, action)
             : base;
         const prompt = opened === base ? text : '';
         const approval: Approval = {

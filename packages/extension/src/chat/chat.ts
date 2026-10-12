@@ -49,6 +49,9 @@ import {
   ARENA_UPDATE_METHOD,
   LANE_GRAFT_META,
   RESUME_AGENT_META,
+  PROMPT_ACTION_META,
+  PROMPT_ACTIONS,
+  type PromptAction,
   laneGraftPrompt,
   type DetachRequest,
   type TaskRecord,
@@ -153,9 +156,6 @@ export const TASKS_COMMAND = 'gcode.chat.tasks';
 /** The settings the panel's look comes from. */
 export const LOOK_SETTINGS = ['gcode.ui.style', 'gcode.chat.detail', REVIEW_MODE_SETTING, TOKENS_SETTING] as const;
 export const APPROVAL_MODE_SETTING = 'gcode.approvalMode';
-
-/** What Start building sends once the session has left Plan. */
-export const START_BUILDING_PROMPT = 'Go ahead with the plan.';
 
 /** The approval modes the engine advertises, until it says so itself. */
 const MODE_FALLBACK: Modes['available'] = [
@@ -1061,7 +1061,13 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
   async startBuilding(): Promise<acp.StopReason> {
     this.idle();
     await this.setMode(this.defaultMode());
-    return this.send(START_BUILDING_PROMPT);
+    return this.act('start-building');
+  }
+
+  /** Sends a button's prompt, which the engine gives the model as Geno's words, so the reply keeps the user's language. */
+  private act(action: PromptAction): Promise<acp.StopReason> {
+    const text = PROMPT_ACTIONS[action];
+    return this.prompt(text, text, { [PROMPT_ACTION_META]: action }, async () => []);
   }
 
   private idle(): void {
@@ -1300,6 +1306,7 @@ export class Chat implements vscode.WebviewViewProvider, vscode.Disposable {
       'open-diagram': ({ source }) => openDiagram(this.extensionUri, source),
       'set-mode': ({ modeId }) => void this.setMode(modeId).catch(warn),
       'start-building': () => void this.startBuilding().catch(warn),
+      continue: () => void this.act('continue').catch(warn),
       'list-sessions': ({ scope }) => this.postHistory(view, scope),
       'search-sessions': ({ scope, query }) =>
         void this.searchSessions(scope, query).then(

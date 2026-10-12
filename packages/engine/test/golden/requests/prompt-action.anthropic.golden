@@ -1,0 +1,95 @@
+=== request 1
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools:
+  - = plain-prompt.anthropic.golden request 1 tools[0]
+  - = plain-prompt.anthropic.golden request 1 tools[1]
+  - = plain-prompt.anthropic.golden request 1 tools[2]
+  - = plain-prompt.anthropic.golden request 1 tools[3]
+  - = plain-prompt.anthropic.golden request 1 tools[4]
+  - = plain-prompt.anthropic.golden request 1 tools[5]
+  - = plain-prompt.anthropic.golden request 1 tools[6]
+  - = plain-prompt.anthropic.golden request 1 tools[7]
+  - = plain-prompt.anthropic.golden request 1 tools[8]
+  -
+    name: "tool_search"
+    description:
+      | Load the full definitions of the tools listed below by name only. A listed tool cannot be called until it is loaded; once loaded it stays callable for the rest of the session, so load each tool once. Pass select with exact names when you know them, or query with a few words to search the names and descriptions. Tools of MCP servers are not listed here: Geno names them in the conversation as their servers connect, and you load them the same way. The tools:
+      | - bash_output: Read a background command's output: whether it still runs, its exit code once it...
+      | - list_agents: List this session's subagents and background work, newest first: each subagent with...
+      | - monitor: Watch a command's output and wake this session when a line matches pattern, when the...
+      | - notebook_edit: Replace, insert or delete one cell of a Jupyter notebook (.ipynb).
+      | - preview_list: List the launch entries and the dev servers this session started, with whether each...
+      | - preview_logs: Read a dev server's stdout and stderr: its last lines, or only the lines at a level or...
+      | - preview_start: To check a change on the running app, start the project's dev server from its launch...
+      | - preview_stop: Stop a dev server this session started with preview_start: SIGTERM, then SIGKILL a few...
+      | - recall: Search for words or a phrase in what came before, such as "queue" or "ตัดสินใจ".
+      | - schedule_wakeup: Wake this session after delay_s seconds (60 to 3600), such as to check CI again in 8...
+      | - show_files: Show the user screenshots, charts, reports or other files in the chat, with a caption.
+      | - task_stop: Stop background work by the id it started with: a background command (bg-1), a...
+      | - watch_pr: Wait in the background for the CI checks of the current branch's pull request, read...
+      | - web_fetch: Fetch an http or https page, such as a library's documentation, and answer a question...
+    input_schema: = plain-prompt.anthropic.golden request 1 tools[9].input_schema
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  -
+    role: "user"
+    content:
+      - = plain-prompt.anthropic.golden request 1 messages[0].content[0]
+      - {"type":"text","text":"วางแผนเพิ่มปุ่มรีเซ็ตในเกม"}
+output_config: {"effort":"medium"}
+stream: true
+
+=== request 2
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools: = prompt-action.anthropic.golden request 1 tools
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  - = prompt-action.anthropic.golden request 1 messages[0]
+  -
+    role: "assistant"
+    content:
+      - {"type":"thinking","thinking":"pondering 20","signature":"sig-20"}
+      - {"type":"text","text":"แผน: เพิ่มปุ่มรีเซ็ต","citations":null}
+  -
+    role: "user"
+    content:
+      -
+        type: "text"
+        text:
+          | [Geno] The user pressed a button that sends this request for them, in Geno's words rather than their own:
+          | Go ahead with the plan.
+          | [Geno] Keep answering in the language the user writes their own messages in, not the language of this note.
+output_config: {"effort":"medium"}
+stream: true
+
+=== request 3
+model: "qwen3.8-flash"
+max_tokens: 131072
+tools: = prompt-action.anthropic.golden request 1 tools
+system: = plain-prompt.anthropic.golden request 1 system
+messages:
+  - = prompt-action.anthropic.golden request 1 messages[0]
+  -
+    role: "assistant"
+    content:
+      - {"type":"thinking","thinking":"pondering 20","signature":"sig-20"}
+      - {"type":"text","text":"แผน: เพิ่มปุ่มรีเซ็ต","citations":null}
+  - = prompt-action.anthropic.golden request 2 messages[2]
+  -
+    role: "assistant"
+    content:
+      - {"type":"thinking","thinking":"pondering 9","signature":"sig-9"}
+      - {"type":"text","text":"เพิ่มแล้ว","citations":null}
+  -
+    role: "user"
+    content:
+      -
+        type: "text"
+        text:
+          | [Geno] The user pressed a button that sends this request for them, in Geno's words rather than their own:
+          | Continue where you stopped, and finish with your answer.
+          | [Geno] Keep answering in the language the user writes their own messages in, not the language of this note.
+output_config: {"effort":"medium"}
+stream: true
