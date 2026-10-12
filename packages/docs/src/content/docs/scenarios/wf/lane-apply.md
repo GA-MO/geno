@@ -15,6 +15,10 @@ scenario:
   related: [sub.worktree-lane, wf.arena-best-of-n, ed.review-hunks, wf.spinoff]
   steps:
     - id: pane
+      beat:
+        title: คุณกด Apply บน lane ที่ worker ทิ้งไว้
+        text: แผง Lanes แสดงทุก lane ของโฟลเดอร์ พร้อม diff ผลของ check และค่าใช้จ่าย คุณกด Apply บน `worker-1a2b3c4d`
+        sees: แถว "worker-1a2b3c4d" บอกจำนวนไฟล์และบรรทัดที่เปลี่ยน และปุ่ม [Open] [Apply] [Discard]
       lane: panel
       at: lanes
       do: >-
@@ -29,6 +33,14 @@ scenario:
       do: ผู้ใช้กด Apply
 
     - id: ask
+      beat:
+        title: แชตเริ่ม turn ของการ apply
+        text: Apply ได้เฉพาะในแชตของ checkout หลัก แชตส่งคำสั่ง apply เป็น prompt
+        to: engine
+        sees:
+          kind: message
+          from: you
+          text: Apply lane worker-1a2b3c4d
       lane: editor
       at: chat
       do: >-
@@ -46,6 +58,9 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: turn
+      beat:
+        title: Geno apply เองโดยไม่เรียก model
+        text: lane ต้องอยู่ใน repository เดียวกับแชต และงานของ lane ต้องจบแล้ว
       lane: server
       at: turns
       do: >-
@@ -55,6 +70,10 @@ scenario:
       phase: running-tools
 
     - id: merge
+      beat:
+        title: Geno merge ทีละไฟล์
+        text: Geno merge สามทางระหว่างฐานของ lane ตัว lane และ checkout หลักตอนนี้ รวม buffer ที่ยังไม่บันทึก ไฟล์เดียวที่ชนทำให้ไม่มีอะไรถูกเขียนเลย
+        ask: merge ชนไหม
       lane: server
       at: turns
       do: >-
@@ -72,6 +91,9 @@ scenario:
             label: ชน
             steps:
               - lane: server
+                beat:
+                  title: ไฟล์หนึ่งชน Geno ไม่เขียนอะไร
+                  text: คุณแก้ `src/log.ts` บรรทัดเดียวกันใน checkout หลักไปแล้ว Geno จดไฟล์ที่ชน ไม่มี checkpoint ไม่มีไฟล์เปลี่ยน
                 at: turns
                 do: >-
                   ผู้ใช้แก้ `src/log.ts` บรรทัดเดียวกันใน checkout หลักไปแล้ว `applyLaneTurn` บันทึก event `lane-apply` ที่มีรายการที่ชน
@@ -79,6 +101,15 @@ scenario:
                 ref: packages/core/src/tasks.ts#laneApplyText
                 emits: [lane-apply]
               - lane: panel
+                beat:
+                  title: แชตบอกว่าไฟล์ไหนชน
+                  text: turn จบ lane ยังอยู่ครบ คุณแก้ที่ checkout หลักแล้ว Apply ใหม่ หรือเปิด lane ไปดูได้
+                  to: panel
+                  sees:
+                    kind: message
+                    from: geno
+                    text: "Nothing from lane worker-1a2b3c4d was applied: 1 file conflicts with the main checkout."
+                  end: ไม่มีอะไรถูก apply
                 at: rail
                 do: ข้อความของ turn บอกว่าไม่มีอะไรถูก apply และไฟล์ไหนชนเพราะอะไร
                 sees: >-
@@ -95,6 +126,9 @@ scenario:
                 end: { turn: done, reason: end_turn }
 
     - id: checkpoint
+      beat:
+        title: Geno เก็บ checkpoint ก่อนเขียน
+        text: Undo All ย้อนการ apply ทั้งหมดได้จาก checkpoint นี้
       lane: server
       at: turns
       do: >-
@@ -103,6 +137,14 @@ scenario:
       emits: [checkpoint]
 
     - id: steps
+      beat:
+        title: แต่ละไฟล์ขึ้นเป็นขั้น edit
+        text: แชตเห็นขั้นต่อไฟล์เหมือน agent แก้ VS Code เขียนแต่ละไฟล์และแสดง diff
+        to: panel
+        sees:
+          kind: step
+          label: Edited log.ts
+          status: done
       lane: server
       at: updates
       do: >-
@@ -113,6 +155,13 @@ scenario:
     - use: edit-write-lands
 
     - id: logged
+      beat:
+        title: Geno สรุปว่า apply กี่ไฟล์
+        text: Geno จดไฟล์ที่เขียนและที่ลบ แล้วส่งข้อความสรุปเป็นคำตอบของ turn
+        sees:
+          kind: message
+          from: geno
+          text: Applied 2 files from lane worker-1a2b3c4d.
       lane: server
       at: turns
       do: >-
@@ -130,6 +179,15 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: ends
+      beat:
+        title: Turn จบ hunk รอคุณตรวจ
+        text: ไม่มีการเรียก model การ์ดการเปลี่ยนแปลงแสดงทั้งสองไฟล์ และ editor แสดง hunk ที่รอ Keep หรือ Undo lane ยังอยู่จนคุณ Discard
+        to: panel
+        sees:
+          kind: composer
+          state: idle
+          header: worked for 1s
+        end: รอคุณ Keep หรือ Undo
       lane: server
       at: turns
       do: >-

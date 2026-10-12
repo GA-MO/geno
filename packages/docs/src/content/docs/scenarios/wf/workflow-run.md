@@ -15,6 +15,13 @@ scenario:
   related: [wf.workflow-resume, sub.blocking-report, bg.child-wakes-parent, bg.task-stop-or-list]
   steps:
     - use: ext-slash-sent
+      beat:
+        title: คุณพิมพ์ `/workflow fix-bug`
+        text: workflow นี้มีสามขั้น หาเทสต์ที่ล้ม แก้ และ gate ที่รัน check ของโปรเจกต์ งบรวม $0.50 Geno สร้าง call workflow ในนามคุณ ไม่ถาม model
+        sees:
+          kind: message
+          from: you
+          text: /workflow fix-bug "date parsing fails on leap years"
 
     - id: logged
       lane: loop
@@ -36,6 +43,10 @@ scenario:
       phase: running-tools
 
     - id: prepare
+      beat:
+        title: Geno อ่าน workflow และคำนวณราคา
+        text: Geno ตรวจว่า workflow รันที่นี่ได้ แล้วคำนวณราคาแต่ละขั้น ไม่มีโหมด กฎ หรือ classifier ตอบแทนคุณได้ แม้ในโหมด Auto ก็ถามคุณเสมอ
+        to: panel
       lane: loop
       at: tools
       do: >-
@@ -61,6 +72,12 @@ scenario:
       phase: waiting-user
 
     - id: card
+      beat:
+        title: คุณเห็นการ์ด “Run this workflow?”
+        text: การ์ดแสดงทีละขั้น role model อ่านอย่างเดียวหรือแก้ได้ ราคาประมาณ และราคารวมที่แย่ที่สุด
+        to: you
+        sees: การ์ด "Run this workflow?" รายการขั้น reproduce fix และ Gate บรรทัดราคาประมาณและเพดาน ปุ่ม [Run] [Don't run]
+        ask: คุณกดอะไร
       lane: panel
       at: card
       do: >-
@@ -85,6 +102,12 @@ scenario:
             label: Don't run
             steps:
               - lane: loop
+                beat:
+                  title: คุณกด Don't run
+                  text: การ์ดย่อเหลือบรรทัดเดียว turn จบโดยไม่มี session ใหม่และไม่เสียเงิน
+                  from: you
+                  sees: Not run
+                  end: ไม่มีอะไรรัน
                 at: tools
                 do: >-
                   `workflowExecutor` โยน `ToolRejected` "The user did not run the workflow. Nothing ran." พร้อมคำสั่งให้หยุดรอผู้ใช้
@@ -105,6 +128,9 @@ scenario:
                 end: { turn: done, reason: end_turn }
 
     - id: start
+      beat:
+        title: Geno เปิด session เบื้องหลังของ workflow
+        text: session ชื่อ "Workflow fix-bug" ใช้งบของ workflow แทนขีดจำกัดปกติ turn ของแชตจบทันที คุณติดตามได้ในแผง Tasks
       lane: server
       at: sessions
       runs: 1
@@ -126,6 +152,14 @@ scenario:
       phase: idle
 
     - id: round
+      beat:
+        title: Workflow รันทีละรอบ
+        text: ทุกรอบ Geno รับผลของรอบก่อน แล้วเลือกรอบถัดไป มันไม่เริ่มรอบที่งบที่เหลือไม่พอ แผง Tasks บอกขั้นที่รันและเงินที่ใช้
+        sees:
+          kind: task
+          title: Workflow fix-bug
+          status: running
+          detail: "Step 1 of 3: reproduce · $0.00 of $0.50"
       lane: child@workflow
       at: loop
       do: >-
@@ -145,6 +179,10 @@ scenario:
       ref: packages/core/src/workflow-progress.ts#progressLine
 
     - id: steps
+      beat:
+        title: แต่ละขั้นเป็น subagent
+        text: "`reproduce` หาเทสต์ที่ล้ม แล้ว `fix` ได้ผลของมันไปแก้ รอบสุดท้ายเป็น gate ที่รัน check ของโปรเจกต์ check ผ่าน"
+        from: model
       lane: child@worker
       at: model
       do: >-
@@ -163,6 +201,11 @@ scenario:
       emits: [end_turn]
 
     - id: report
+      beat:
+        title: Workflow จบแล้วปลุกแชต
+        text: รายงานของ workflow อยู่ในรั้วและเข้ากล่องของแชตที่เริ่ม แชตเปิด turn ใหม่ที่หัวมีกระดิ่ง
+        to: panel
+        sees: กระดิ่งกับป้ายที่ปลุก หัวข้อ "working" และปุ่ม Stop
       lane: server
       at: wakes
       do: >-
@@ -176,6 +219,10 @@ scenario:
     - use: model-call
 
     - id: relays
+      beat:
+        title: Model เล่าว่า workflow แก้อะไร
+        text: 'model อ่าน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น แล้วเล่าให้คุณ'
+        end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
         โมเดลของแชตอ่านรายงาน "Workflow fix-bug finished: 3 steps ran, $0.07 of its $0.50 cap." และรายการขั้น
