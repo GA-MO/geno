@@ -75,7 +75,7 @@ extension host กับ webview ใช้ reducer ตัวเดียวก�
 ตารางนี้สรุปจาก `UPDATES` ใน `session-updates.ts` และ `Chat.updated` ใน `chat/chat.ts`
 การ์ดต่างจาก update ตรงที่เป็น **request** engine รอคำตอบของคุณก่อนเดินต่อ
 
-<Sees shown={[{ kind: 'permission', command: 'rm -rf build', reason: 'Geno asks because it uses rm -rf of a path inside the workspace' }]} />
+<Sees shown={[{ kind: 'permission', command: 'rm -rf build', line: 'rm -rf build && ls -d build 2>&1; echo "exit: $?"', reason: 'Geno asks because it uses rm -rf of a path inside the workspace.', rule: 'rm -rf build' }]} />
 
 ## ข้อความ error ถึงจอได้สองแบบ
 

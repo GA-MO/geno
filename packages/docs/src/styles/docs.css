@@ -141,6 +141,7 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .mk-button { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 4px 11px; font-size: 12.5px; font-weight: 500; }
 .mk-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 :root[data-theme='dark'] .mk-button.primary { color: #06201b; }
+.mk-button.ghost { border-color: transparent; background: none; color: var(--ink-2); }
 .mk-button.stop { border-color: var(--deny); color: var(--deny); }
 .mk-button.chosen, .mk-choice.chosen { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 3px var(--accent); }
 .mk-choice { border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; }

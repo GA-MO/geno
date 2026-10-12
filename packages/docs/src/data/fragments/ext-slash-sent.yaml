@@ -4,6 +4,9 @@
   lane: user
   do: >-
     ผู้ใช้พิมพ์ `/` เลือกคำสั่งจากรายการ (รายการมาจาก engine ผ่าน `available_commands_update`) ใส่อาร์กิวเมนต์ แล้วกด Enter
+    การเลือกสกิลหรือ prompt template ด้วย Enter, Tab หรือคลิก ใส่ `/ชื่อ ` ลงช่องพิมพ์โดยยังไม่ส่ง
+    Enter ส่งทันทีเฉพาะคำสั่งในตัวที่ไม่รับอาร์กิวเมนต์ เช่น `/new`
+  ref: packages/extension/src/chat/slash.ts#sendsWhenPicked
   phase: idle
 
 - id: send

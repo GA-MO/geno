@@ -21,6 +21,12 @@ interface Face {
 }
 
 const TELL = 'No, and tell the agent…';
+/** The options the panel draws as a ghost button rather than a filled one (CHOICE_STYLES). */
+export const GHOST_OPTIONS: ReadonlySet<string> = new Set([TELL]);
+/** The line under a whole command line that names the one part which needs the answer. */
+export const NEEDS_APPROVAL = 'Needs approval: ';
+/** What an MCP card shows in place of its arguments when the call sends none. */
+export const NO_ARGUMENTS = 'No arguments';
 const RULE_OPTIONS = ['Allow', 'Deny', 'Always allow in this workspace', TELL];
 
 export const FACES: Readonly<Record<PermissionFace, Face>> = {

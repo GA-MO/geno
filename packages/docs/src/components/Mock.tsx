@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
-import { FACES, MEMORY_SCOPES } from '../scenario/faces.js';
+import { FACES, GHOST_OPTIONS, MEMORY_SCOPES, NEEDS_APPROVAL, NO_ARGUMENTS } from '../scenario/faces.js';
 import { codeSegments } from '../scenario/labels.js';
 import type { Shown } from '../scenario/model.js';
 import type { BlockChip, Long, More, PayloadView } from '../scenario/payload.js';
@@ -15,7 +15,19 @@ function Permission({ mock }: { readonly mock: Mock<'permission'> }) {
   return (
     <div className="mk-permission">
       <p className="mk-title">{face.title(mock)}</p>
-      <pre className="mk-command">{mock.command}</pre>
+      {mock.face === 'mcp' && mock.command === '' ? (
+        <p className="mk-muted">{NO_ARGUMENTS}</p>
+      ) : (
+        <pre className="mk-command" aria-label={mock.face === 'mcp' ? 'Arguments' : undefined}>
+          {mock.line ?? mock.command}
+        </pre>
+      )}
+      {mock.line === undefined ? null : (
+        <p className="mk-muted">
+          {NEEDS_APPROVAL}
+          <code>{mock.command}</code>
+        </p>
+      )}
       {mock.face === 'memory' ? <p className="mk-muted">{MEMORY_SCOPES[mock.scope ?? 'project']}</p> : null}
       {mock.reason === undefined ? null : <p className="mk-muted">{mock.reason}</p>}
       {mock.rule === undefined ? null : (
@@ -26,7 +38,7 @@ function Permission({ mock }: { readonly mock: Mock<'permission'> }) {
       {mock.note === undefined ? null : <p className="mk-input">{mock.note}</p>}
       <p className="mk-buttons">
         {options.map((option, i) => (
-          <span key={option} className={`mk-button${i === 0 ? ' primary' : ''}${option === mock.chosen ? ' chosen' : ''}`}>
+          <span key={option} className={`mk-button${i === 0 ? ' primary' : GHOST_OPTIONS.has(option) ? ' ghost' : ''}${option === mock.chosen ? ' chosen' : ''}`}>
             {option}
           </span>
         ))}

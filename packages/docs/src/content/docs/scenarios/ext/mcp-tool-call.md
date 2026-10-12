@@ -112,17 +112,32 @@ scenario:
     - id: card
       beat:
         title: คุณเห็นการ์ด “Use github tool create_issue?”
-        text: การ์ดบอก server และชื่อ tool คุณจะให้ Geno เปิด issue อีกหลายรายการใน session นี้
+        text: การ์ดบอก server ชื่อ tool และ argument ที่ server จะได้ คุณจะให้ Geno เปิด issue อีกหลายรายการใน session นี้
         from: panel
         to: you
-        sees: { kind: permission, face: mcp, server: github, tool: create_issue, command: 'mcp__github__create_issue {"owner":"acme","repo":"app","title":"Login is slow"}', reason: Geno asks about an MCP tool. }
+        sees:
+          kind: permission
+          face: mcp
+          server: github
+          tool: create_issue
+          command: |-
+            {
+              "owner": "acme",
+              "repo": "app",
+              "title": "Login is slow"
+            }
+          reason: Geno asks about a tool of an MCP server, which runs outside the sandbox.
+          rule: mcp__github__create_issue
         ask: คุณกดปุ่มไหน
       lane: panel
       at: card
-      do: แผงแชตแสดงการ์ดขออนุญาต `subject` ของคำขอบอก server และ tool การ์ดจึงใช้หัวข้อแบบ tool MCP
+      do: >-
+        แผงแชตแสดงการ์ดขออนุญาต `subject` ของคำขอบอก server, tool และ argument เป็น JSON ที่จัดย่อหน้าแล้ว
+        การ์ดจึงใช้หัวข้อแบบ tool MCP และแสดง argument แทนชื่อ tool ที่ model เห็น (call ที่ไม่มี argument ขึ้นว่า "No arguments")
       sees: >-
-        "Use github tool create_issue?" ชื่อ tool และ "Geno asks about an MCP tool."
-        [Allow] [Allow this tool for the session] [Deny] [Always allow in this workspace] [No, and tell the agent…]
+        "Use github tool create_issue?" argument ของ call, "Geno asks about a tool of an MCP server, which runs outside the sandbox."
+        และบรรทัด "Always allow saves the rule `mcp__github__create_issue` for this workspace."
+        ปุ่ม [Allow] [Allow this tool for the session] [Deny] [Always allow in this workspace] และ [No, and tell the agent…] แบบปุ่มจาง
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: choose
@@ -228,6 +243,7 @@ tool MCP ใช้ทางของ tool ทั่วไปทุกอย่�
 สิ่งที่ควรสังเกต
 
 - **ชุด tool เป็นภาพนิ่งของรอบ** `runAgent` เอา tool ของ server ที่พร้อมตอนเริ่มรอบเท่านั้น server ที่พร้อมกลางรอบได้ใช้ในรอบถัดไป
-- **"อ่านอย่างเดียว" มาจาก server** server เป็นคนบอกว่า tool ไหนอ่านอย่างเดียว Geno ใช้คำบอกนั้นตัดสินว่าจะถามไหม
+- **"อ่านอย่างเดียว" มาจาก server** server เป็นคนบอกว่า tool ไหนอ่านอย่างเดียว ซึ่ง Geno ตรวจไม่ได้ โหมด Ask จึงยังถาม
+  การ์ดบอกเหตุผลว่า "a tool its MCP server calls read-only, which Geno cannot check" ส่วน Auto และ Plan รัน tool นั้นโดยไม่ถาม
 - **"Allow this tool for the session" อยู่ในหน่วยความจำ** ชุด `allowed` อยู่ใน hub ของ session ไม่ได้บันทึกลงไฟล์
 - **ข้อความจาก server เป็นข้อมูล** คำแนะนำที่ server ส่งมาถูกล้อมใน `<mcp_instructions>` และบอก model ว่าไม่ได้มาจากผู้ใช้

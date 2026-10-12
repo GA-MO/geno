@@ -222,9 +222,10 @@ scenario:
       lane: tool
       at: shell
       do: >-
-        `node --test` ไม่อยู่ในรายการปลอดภัย แต่ run แบบ non-interactive ไม่มีใครให้ถาม กฎ `unlisted` จึงปล่อยให้รันใน sandbox
+        `node --test` อยู่ในรายการปลอดภัย ไม่มีกฎไหนติดธง จึงรันใน sandbox โดยไม่ต้องถาม
+        (ใน engine ของรอบนี้ `node` ยังไม่อยู่ในรายการ กฎ `unlisted` ของ run แบบ non-interactive จึงเป็นตัวปล่อยให้รัน)
         เทสต์ผ่าน 4 จาก 4
-      ref: "packages/core/src/approval.ts#\"unlisted: {\""
+      ref: packages/core/src/approval.ts#safeNode
       emits: [tool-result]
 
     - use: model-call

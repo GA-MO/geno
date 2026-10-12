@@ -156,6 +156,7 @@ scenario:
         to: panel
       do: >-
         `runTurn` รับ turn เริ่มงานในแผง Tasks และส่ง `session_info_update` ที่ตั้งชื่อแชตจากข้อความแรก
+        (`promptTitle`: ถ้าข้อความขึ้นต้นด้วยคำสั่ง `/` ชื่อคือข้อความหลังคำสั่ง หรือคำอธิบายของคำสั่งเมื่อไม่มีข้อความต่อท้าย)
       ref: packages/engine/src/serve.ts#runTurn
       emits: [session_info_update]
       phase: starting

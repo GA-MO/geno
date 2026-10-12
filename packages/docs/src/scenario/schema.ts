@@ -120,8 +120,13 @@ export const mockSchema = z.discriminatedUnion('kind', [
       kind: z.literal('permission'),
       /** Which card: its title and default buttons (faces.ts). Default: command. */
       face: z.enum(PERMISSION_FACES).optional(),
-      /** The command, path, URL, tool input, note or workflow the card shows. */
-      command: text,
+      /**
+       * The command, path, URL, note or workflow the card shows. An MCP card shows the call's arguments as indented JSON,
+       * or an empty string for none; when `line` is given, the one command of it that needs the answer.
+       */
+      command: z.string(),
+      /** The whole command line, when `command` is only the part that needs the answer. */
+      line: text.optional(),
       host: text.optional(),
       server: text.optional(),
       tool: text.optional(),

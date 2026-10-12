@@ -214,7 +214,9 @@ scenario:
 
 คำสั่งใน safe list ไม่ผ่านการตัดสินใดๆ นอกจากกฎของ workspace ไม่มีการ์ดในโหมด Ask และไม่มี classifier ในโหมด Auto
 safe list มีโปรแกรมอ่านอย่างเดียว (`ls`, `cat`, `grep`, `git status`, ...) และคำสั่งตรวจของโปรเจกต์ (`vitest`, `tsc`, `eslint`,
-`pnpm test`, `pnpm lint`, `pnpm build`, ...) คำสั่งอื่นต้องผ่านการขออนุญาต
+`pnpm test`, `pnpm lint`, `pnpm build`, `node --version`, `node --check`, `node --test`, ...) คำสั่งอื่นต้องผ่านการขออนุญาต
+ตัวแปรที่ยังไม่ได้แทนค่า เช่น `$?` อยู่ได้เฉพาะในข้อความของ `echo`, `printf`, `test` และ `[` อย่าง `echo "exit: $?"`
+ถ้าตัวแปรเป็นชื่อโปรแกรม ไฟล์ของ redirect หรือ argument อื่น คำสั่งนั้นต้องถาม และ `printf -v` ที่ตั้งค่าตัวแปรก็ต้องถาม
 ดู [โหมด Ask ขออนุญาตก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)
 
 สิ่งที่ควรสังเกต

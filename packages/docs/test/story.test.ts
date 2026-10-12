@@ -2,6 +2,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { parse } from 'yaml';
 import { describe, expect, test } from 'vitest';
 import { compileScenario, type CompileContext } from '../src/scenario/compile.js';
@@ -13,7 +15,8 @@ import { lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
 import { ACTORS, actorIndex, actorsOn, beatsOf, branchesAt, choose, LANE, layoutLanes, rowCenter, storyBeats, storyFromHash, storyHash, storyStart, type LaneItem, type Point } from '../src/scenario/story.js';
 import { walk } from '../src/scenario/tour.js';
-import { FACES, MEMORY_SCOPES, PERMISSION_FACES } from '../src/scenario/faces.js';
+import { FACES, GHOST_OPTIONS, MEMORY_SCOPES, NEEDS_APPROVAL, NO_ARGUMENTS, PERMISSION_FACES } from '../src/scenario/faces.js';
+import Sees from '../src/components/Mock.js';
 
 const DOCS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(DOCS, '../..');
@@ -217,10 +220,45 @@ describe('permission card faces', () => {
     expect(source).toContain('You can change or delete it in /memory.');
   });
 
+  test('the lines and button styles a mock draws are the ones render.ts draws', () => {
+    expect(source).toContain("h('code', {}, block.line ?? block.command)");
+    expect(quoted(NEEDS_APPROVAL)).toBe(true);
+    expect(quoted(NO_ARGUMENTS)).toBe(true);
+    expect(source).toContain("'aria-label': 'Arguments'");
+    expect([...GHOST_OPTIONS]).toEqual(['No, and tell the agent…']);
+    expect(source).toContain("{ optionId: COMMENT_OPTION, name: 'No, and tell the agent…'");
+    expect(source).toContain("[COMMENT_OPTION]: 'button ghost'");
+    expect(source).toContain("allow_always: 'button secondary'");
+  });
+
+  test('a command card shows the whole line and names the part that needs approval', () => {
+    const html = renderToStaticMarkup(createElement(Sees, { shown: [{ kind: 'permission', command: 'node build.js $f', line: 'for f in a.js; do node build.js $f; done', rule: 'node build.js' }] }));
+    expect(html).toContain('<pre class="mk-command">for f in a.js; do node build.js $f; done</pre>');
+    expect(html).toContain(`${NEEDS_APPROVAL}<code>node build.js $f</code>`);
+    expect(html).toContain('Always allow saves the rule <code>node build.js</code>');
+    expect(renderToStaticMarkup(createElement(Sees, { shown: [{ kind: 'permission', command: 'pnpm add zod' }] }))).not.toContain(NEEDS_APPROVAL);
+  });
+
+  test("an MCP card shows the call's arguments, and No arguments for none", () => {
+    const card = (command: string) => renderToStaticMarkup(createElement(Sees, { shown: [{ kind: 'permission', face: 'mcp', server: 'github', tool: 'create_issue', command }] }));
+    expect(card('{\n  "title": "x"\n}')).toContain('<pre class="mk-command" aria-label="Arguments">{\n  &quot;title&quot;: &quot;x&quot;\n}</pre>');
+    expect(card('')).toContain(`<p class="mk-muted">${NO_ARGUMENTS}</p>`);
+    expect(card('')).not.toContain('mk-command');
+    expect(card('')).toMatch(/class="mk-button">Allow this tool for the session<.*class="mk-button ghost">No, and tell the agent…</);
+  });
+
+  test("an MCP card's arguments are JSON, and only an MCP card may show nothing", () => {
+    const card = (sees: Record<string, unknown>) => [{ lane: 'user', do: 'x', ...beat('One', { sees: { kind: 'permission', ...sees } }) }, { lane: 'user', do: 'y', ...beat('Two'), ...end }];
+    const mcp = { face: 'mcp', server: 'github', tool: 'create_issue' };
+    expect(messages(card({ ...mcp, command: 'mcp__github__create_issue {"title":"x"}' }))).toEqual([expect.stringContaining("an MCP card shows the call's arguments as JSON")]);
+    expect(messages(card({ ...mcp, command: '' }))).toEqual([]);
+    expect(messages(card({ command: '' }))).toEqual([expect.stringContaining('only an MCP card')]);
+  });
+
   test('a face whose title names its subject needs it', () => {
     const card = (sees: Record<string, unknown>) => [{ lane: 'user', do: 'x', ...beat('One', { sees: { kind: 'permission', command: 'https://x.dev', ...sees } }) }, { lane: 'user', do: 'y', ...beat('Two'), ...end }];
     expect(messages(card({ face: 'fetch' }))).toEqual([expect.stringContaining("a fetch card's title names its host")]);
-    expect(messages(card({ face: 'mcp', server: 'github' }))).toEqual([expect.stringContaining("a mcp card's title names its tool")]);
+    expect(messages(card({ face: 'mcp', server: 'github', command: '{}' }))).toEqual([expect.stringContaining("a mcp card's title names its tool")]);
     expect(messages(card({ face: 'fetch', host: 'x.dev' }))).toEqual([]);
   });
 });
