@@ -57,6 +57,8 @@ export const BOUNDARIES: Boundaries = {
         'packages/engine/src/workspace.ts',
         // The installed Claude Code plugins, whose `.mcp.json` servers join the session's.
         'packages/engine/src/plugins.ts',
+        // Which lane a workspace is, whose main checkout's approvals hold in it.
+        'packages/engine/src/lanes.ts',
       ],
     },
   ],

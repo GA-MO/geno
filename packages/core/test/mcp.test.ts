@@ -77,6 +77,17 @@ describe('trust', () => {
     expect(isTrusted(stdio({ source: 'global' }), '/other', [])).toBe(true);
     expect(isTrusted(stdio({ source: 'acp' }), '/other', [])).toBe(true);
   });
+
+  it("takes the main checkout's approval in a lane, reading the lane's folder in the definition as the main checkout's", () => {
+    const lane = '/repo/.geno/worktrees/fix';
+    const at = (dir: string, extra: readonly string[] = []) =>
+      stdio({ source: 'mcp-json', transport: { kind: 'stdio', command: 'node', args: [`${dir}/server.js`, ...extra], env: { ROOT: dir }, cwd: dir } });
+    const approved = { workspace: '/repo', name: 'chrome-devtools', hash: definitionHash(at('/repo')), approvedAt: '2026-01-01T00:00:00Z' };
+    expect(isTrusted(at(lane), lane, [approved], ['/repo'])).toBe(true);
+    expect(isTrusted(at(lane), lane, [approved]), 'not a lane of /repo').toBe(false);
+    expect(isTrusted(at(lane, ['--write']), lane, [approved], ['/repo']), 'a changed definition').toBe(false);
+    expect(isTrusted(at(`${lane}-2`), lane, [approved], ['/repo']), 'another folder that starts with the lane').toBe(false);
+  });
 });
 
 describe('what the trust card shows', () => {

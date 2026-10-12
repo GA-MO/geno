@@ -11,11 +11,13 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attachmentFileName, type ImageAttachment, type ClassifierInput, type ClassifierRun, type Denial, type SessionMode } from '@g-code/core';
 import { openMcpHub, type McpHub, type McpTokens } from '../src/mcp/hub.js';
+import { createLane, laneRepoOf } from '../src/lanes.js';
 import { openStore } from '../src/store.js';
 import { freshAuto, type Approval, type PermissionAnswer } from '../src/tools/agent.js';
 import type { ToolContext } from '../src/tools/context.js';
 import { fakeMcpServer } from './fake-mcp-server.js';
 import { fakeOAuth, type FakeOAuth } from './fake-oauth.js';
+import { makeRepo } from './git-fixture.js';
 import { runCli } from './helpers.js';
 
 const FIXTURE = fileURLToPath(new URL('./fake-mcp-server.ts', import.meta.url));
@@ -160,6 +162,40 @@ describe('MCP trust', () => {
     await writeFile(path.join(workspace, '.mcp.json'), JSON.stringify({ mcpServers: { fake: stdioServer({ MARKER: marker, CHANGED: '1' }) } }));
     const reopened = await open();
     expect(reopened.views()[0]!.state).toEqual({ status: 'untrusted' });
+  });
+
+  it("trusts in a lane what the user approved in its main checkout, for the same definition", async () => {
+    const { env, store } = await setup();
+    const mcpJson = JSON.stringify({ mcpServers: { plain: stdioServer(), rooted: { ...stdioServer(), cwd: '.' } } });
+    const main = await realpath(makeRepo('ws', [{ message: 'start', files: { '.mcp.json': mcpJson } }]));
+    const inMain = await openMcpHub({ store, env, workspace: main, acp: [] });
+    hubs.push(inMain);
+    await inMain.trust('plain');
+    await inMain.trust('rooted');
+
+    const lane = await createLane(await laneRepoOf(main), 'fix-login', 'head');
+    const inLane = await openMcpHub({ store, env, workspace: lane.path, acp: [] });
+    hubs.push(inLane);
+
+    expect(inLane.views().map((view) => [view.name, view.state.status])).toEqual([
+      ['plain', 'stopped'],
+      ['rooted', 'stopped'],
+    ]);
+  });
+
+  it("asks again in a lane whose .mcp.json differs from the one approved in the main checkout", async () => {
+    const { env, store } = await setup();
+    const main = await realpath(makeRepo('ws', [{ message: 'start', files: { '.mcp.json': JSON.stringify({ mcpServers: { fake: stdioServer() } }) } }]));
+    const inMain = await openMcpHub({ store, env, workspace: main, acp: [] });
+    hubs.push(inMain);
+    await inMain.trust('fake');
+
+    const lane = await createLane(await laneRepoOf(main), 'fix-login', 'head');
+    await writeFile(path.join(lane.path, '.mcp.json'), JSON.stringify({ mcpServers: { fake: stdioServer({ CHANGED: '1' }) } }));
+    const inLane = await openMcpHub({ store, env, workspace: lane.path, acp: [] });
+    hubs.push(inLane);
+
+    expect(inLane.views()[0]!.state).toEqual({ status: 'untrusted' });
   });
 
   it("reads a plugin's servers from its .mcp.json and its manifest, named plugin_<plugin>_<server>, and starts none until approved", async () => {
