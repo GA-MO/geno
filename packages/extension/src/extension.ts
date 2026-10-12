@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
-import { reviewModeOf } from './chat/chat.js';
 import { registerChat } from './chat-activation.js';
-import { registerReview } from './review/commands.js';
-import { ReviewController } from './review/controller.js';
+import { editorReview } from './review/commands.js';
 import type { CompletionId } from '@g-code/core/tab';
 import { EditHistoryTracker } from './tab/history.js';
 import { openTabLog, tabEventsFile } from './tab/log.js';
@@ -13,19 +11,7 @@ import { TAB_DOCUMENTS } from './tab/documents.js';
 import { ACCEPT_COMMAND, OutcomeTracker } from './tab/tracker.js';
 
 export function activate(context: vscode.ExtensionContext): void {
-  registerChat(context, (link, output) => {
-    const review = new ReviewController(link, output, () => reviewModeOf(vscode.workspace.getConfiguration('gcode')));
-    return {
-      track: (document, change) => review.track(document, change),
-      wire: (chat) => {
-        registerReview(context, chat, review);
-        return [
-          review.onDidChange(() => chat.reviewed(review.all())),
-          chat.onDidSwitch(() => void review.reset().catch((error: unknown) => output.appendLine(`review: could not restore the session: ${String(error)}`))),
-        ];
-      },
-    };
-  });
+  registerChat(context, editorReview(context));
   const output = vscode.window.createOutputChannel('Geno');
   const log = openTabLog(tabEventsFile(process.env), (error) => output.appendLine(`tab log: ${String(error)}`));
   const tracker = new OutcomeTracker(log);
