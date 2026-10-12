@@ -19,6 +19,7 @@ scenario:
         title: VS Code จด hunk ทั้งสองว่ารอตัดสิน
         text: ในโหมด review แบบ review ตอนที่การแก้ลง buffer ส่วนขยายจดตำแหน่งของแต่ละ hunk ตำแหน่งเลื่อนตามเมื่อคุณพิมพ์ในไฟล์
         from: panel
+        to: panel
       lane: editor
       at: review
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: Keep กับ Undo ขึ้นทั้งในไฟล์และในแชต
         text: CodeLens ขึ้นเหนือแต่ละ hunk ในไฟล์ และการ์ดท้าย turn มีปุ่มของแต่ละ hunk กับปุ่มสำหรับทุก hunk
+        from: panel
+        to: you
         sees: เหนือแต่ละ hunk ใน `src/date.ts` มีลิงก์ "Keep | Undo" และการ์ด "1 file changed" ที่มีปุ่ม [Undo] [Keep] ต่อ hunk
       lane: editor
       at: review
@@ -53,6 +56,8 @@ scenario:
       beat:
         title: คุณตัดสิน hunk แรก
         text: จาก CodeLens หรือจากการ์ดก็ได้ ทั้งสองทางไปที่คำสั่งเดียวกัน
+        from: you
+        to: panel
         ask: คุณกดอะไร
       lane: user
       do: ผู้ใช้ตัดสิน hunk แรก จาก CodeLens หรือจากการ์ดก็ได้ ทั้งสองทางไปที่คำสั่งเดียวกัน
@@ -67,6 +72,8 @@ scenario:
                 beat:
                   title: hunk ถูกเก็บ
                   text: สถานะของ hunk เปลี่ยนเป็น kept ข้อความในไฟล์ไม่เปลี่ยน
+                  from: panel
+                  to: panel
                 at: review
                 do: >-
                   ปุ่มในการ์ดส่ง `keep` ให้ extension host ซึ่งรันคำสั่ง `gcode.review.keep` แบบเดียวกับ CodeLens
@@ -81,6 +88,8 @@ scenario:
                 beat:
                   title: VS Code ใส่ข้อความเดิมกลับ
                   text: ส่วนขยายแทนช่วงของ hunk ด้วยข้อความเดิม และบันทึกไฟล์ถ้า buffer ไม่มีการแก้ค้างก่อนหน้า
+                  from: panel
+                  to: panel
                 at: review
                 do: >-
                   คำสั่ง `gcode.review.undo` ให้ `undo` ใส่ข้อความเดิมกลับแทนช่วงของ hunk ด้วย `WorkspaceEdit` หนึ่งครั้งต่อเอกสาร
@@ -92,6 +101,7 @@ scenario:
       beat:
         title: Geno บันทึกการตัดสินลง log
         text: engine บันทึกการตัดสินลง log ของ session แล้วตอบสถานะของทุก hunk แชตแสดงป้ายแทนปุ่ม CodeLens ของ hunk นั้นหายไป hunk ที่สองยังรออยู่
+        from: engine
         to: panel
         sees: hunk แรกขึ้นป้าย "Kept" หรือ "Undone" ส่วน hunk ที่สองยังมีปุ่ม [Undo] [Keep]
         end: hunk ที่สองยังรอ

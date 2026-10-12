@@ -18,6 +18,8 @@ scenario:
       beat:
         title: Model แก้ `src/date.ts`
         text: ก่อน turn นี้เรียก model ครั้งแรก Geno เก็บ checkpoint ของ workspace ไว้แล้ว Undo จะใช้ checkpoint นี้
+        from: model
+        to: engine
       lane: tool
       at: executor
       do: >-
@@ -30,6 +32,8 @@ scenario:
       beat:
         title: VS Code บันทึกการแก้ลงดิสก์ทันที
         text: ในโหมด review แบบ auto ไม่มี hunk ที่รอ Keep ใน editor จึงไม่มี CodeLens หรือแถบสีของการแก้
+        from: engine
+        to: panel
         sees:
           kind: step
           label: Edited date.ts
@@ -48,6 +52,8 @@ scenario:
       beat:
         title: Turn จบ
         text: model ตอบจบ แชตปิด turn แบบ done
+        from: engine
+        to: panel
       lane: editor
       at: chat
       do: >-
@@ -60,6 +66,8 @@ scenario:
       beat:
         title: ท้าย turn มีแถวพร้อม Undo
         text: แชตรวมการแก้ทั้งหมดของ turn เป็นรายการไฟล์ และจำ checkpoint ก่อนการแก้ครั้งแรก
+        from: panel
+        to: you
         sees: แถว "1 file changed · Undo" ใต้คำตอบ เหนือแถวสรุปโมเดล token และค่าใช้จ่าย
       lane: panel
       at: rail
@@ -74,6 +82,8 @@ scenario:
       beat:
         title: คุณดู diff แล้วตัดสินใจ
         text: คลิกชื่อไฟล์เพื่อเปิด diff ระหว่างก่อน turn กับตอนนี้
+        from: panel
+        to: you
         ask: เก็บหรือ Undo
       lane: user
       do: ผู้ใช้ดูการแก้ (คลิกชื่อไฟล์บนการ์ดเพื่อเปิด diff ก่อน turn กับตอนนี้) แล้วตัดสินใจ
@@ -87,6 +97,8 @@ scenario:
                 beat:
                   title: คุณเก็บไว้
                   text: ไม่มีปุ่ม Keep เพราะการแก้อยู่บนดิสก์แล้ว แถวยังมี Undo ให้กดภายหลัง ตราบที่ไม่มี turn ทำงาน
+                  from: you
+                  to: panel
                   end: เก็บการแก้
                 at: rail
                 do: >-
@@ -102,6 +114,7 @@ scenario:
                   title: คุณกด Undo
                   text: แชตส่ง checkpoint ของ turn และบอกว่า turn หลังจากนี้แก้ไฟล์ไว้ด้วยไหม
                   from: you
+                  to: panel
                 at: rail
                 do: >-
                   ปุ่ม Undo โพสต์ `undo-turn` พร้อม checkpoint ของ turn และบอกว่า turn หลังจากนี้แก้ไฟล์ไว้ด้วยหรือไม่
@@ -111,6 +124,7 @@ scenario:
                 beat:
                   title: VS Code ถามยืนยันเมื่อจำเป็น
                   text: ถ้า turn หลังจากนี้แก้ไฟล์ไว้ด้วย การคืน checkpoint จะลบการแก้เหล่านั้น VS Code จึงถามก่อน turn นี้เป็น turn ล่าสุด จึงไม่ถาม
+                  from: panel
                   to: engine
                 at: vscode-ui
                 do: >-
@@ -126,6 +140,8 @@ scenario:
                 beat:
                   title: Geno คืน workspace จาก checkpoint
                   text: Geno ปฏิเสธถ้ามี turn ทำงาน ไม่อย่างนั้นคืนไฟล์ที่เปลี่ยนตั้งแต่ checkpoint และลบไฟล์ที่เกิดทีหลัง แล้วนับทุก hunk หลัง checkpoint ว่า undone
+                  from: engine
+                  to: machine
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้ามี turn ทำงานอยู่ หา checkpoint แรกของ turn ที่ทำการแก้นั้น แล้วคืน workspace ทั้งก้อน:
@@ -143,6 +159,8 @@ scenario:
                 beat:
                   title: แถวขึ้นว่า Undone
                   text: VS Code โหลดไฟล์ที่เปลี่ยนบนดิสก์ใหม่
+                  from: panel
+                  to: you
                   sees: แถว "1 file changed · Undone" และแต่ละ hunk ในการ์ดขึ้นป้าย "Undone"
                   end: ไฟล์กลับเป็นก่อน turn
                 at: rail
