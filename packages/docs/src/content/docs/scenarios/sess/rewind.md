@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณเปิดเมนูบนข้อความของ turn ที่สอง
         text: เมนูขึ้นเฉพาะตอนที่ไม่มี turn ทำงาน แต่ละรายการมีคำอธิบายสั้นๆ Restore both ทำทั้งสองทาง ยืนยันแบบ Restore files แล้วคืนไฟล์ก่อนตัดบทสนทนา
+        from: you
+        to: panel
         sees: เมนู Restore files, Restore conversation, Restore both และ Fork from here
         ask: คุณเลือกอะไร
       lane: panel
@@ -44,6 +46,7 @@ scenario:
                 beat:
                   title: แชตถามว่าจะเขียนทับไฟล์ไหน
                   text: การย้อนไฟล์ต้องยืนยันก่อน แชตถาม engine ก่อนทำอะไร
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -54,6 +57,8 @@ scenario:
                 beat:
                   title: Geno เทียบกับ checkpoint
                   text: Geno เทียบ workspace กับ checkpoint ก่อนการเรียก model ครั้งแรกของ turn นั้น และหาไฟล์ที่ไม่มีใน checkpoint ใด ซึ่งจะหายถ้าย้อน
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   `rewindPreview` เทียบ workspace กับ checkpoint ก่อนการเรียกโมเดลครั้งแรกของ turn นั้นใน repository เงาของ checkpoint
@@ -63,6 +68,7 @@ scenario:
                 beat:
                   title: คุณเห็นกล่องยืนยัน
                   text: กล่องบอกจำนวนและชื่อไฟล์ ถ้ามีการแก้ที่จะหาย กล่องเตือนและแป้นพิมพ์เริ่มที่ Cancel
+                  from: panel
                   to: you
                   sees: '"Restore 2 files to before this message: src/date.ts, src/date.test.ts." ปุ่ม [Cancel] [Restore files]'
                 at: rail
@@ -75,7 +81,8 @@ scenario:
                 beat:
                   title: คุณกด Restore files
                   text: แชตส่งคำขอย้อนไฟล์พร้อมลำดับของข้อความ
-                  to: engine
+                  from: you
+                  to: panel
                 do: ผู้ใช้กด Restore files
               - lane: editor
                 at: chat
@@ -87,6 +94,8 @@ scenario:
                 beat:
                   title: Geno คืนไฟล์จาก checkpoint
                   text: Geno ปฏิเสธถ้ามี turn ทำงาน แล้วคืนไฟล์ ลบไฟล์ที่สร้างทีหลัง แชตโหลด session ใหม่ให้ hunk ของรีวิวตรงกัน
+                  from: engine
+                  to: machine
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้า session มี turn ทำงาน ("stop the running turn before rewinding the session")
@@ -102,6 +111,8 @@ scenario:
                 beat:
                   title: บรรทัดบอกไฟล์ที่คืน
                   text: บทสนทนายังอยู่ครบ คำขอถัดไปของ model มีประกาศว่าคุณย้อน workspace และให้อ่านไฟล์ใหม่ก่อนแก้
+                  from: panel
+                  to: you
                   sees: 'บรรทัด "Restored 2 files: src/date.ts, src/date.test.ts." ใต้ข้อความ'
                   end: ไฟล์ย้อนแล้ว
                 at: rail
@@ -119,6 +130,7 @@ scenario:
                 beat:
                   title: แชตขอย้อนบทสนทนาทันที
                   text: การย้อนบทสนทนาไม่ต้องยืนยัน
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -129,6 +141,8 @@ scenario:
                 beat:
                   title: Geno หยุดงานของ turn ที่ถูกตัด
                   text: งานเบื้องหลังและการปลุกที่ turn นั้นเริ่มไว้ถูกหยุด เพราะไม่มี turn ให้รายงานแล้ว
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้า session มี turn ทำงาน แล้วหยุดงานเบื้องหลังและการปลุกที่ turn ที่ถูกตัดเริ่มไว้ เพราะไม่มี turn ให้รายงานแล้ว
@@ -137,6 +151,8 @@ scenario:
                 beat:
                   title: Geno บันทึกจุดตัดลง log
                   text: log ไม่ลบอะไรทิ้ง ผู้อ่าน log เห็นมุมมองที่ตัดแล้ว Geno คืนข้อความที่คุณพิมพ์ไว้ในข้อความนั้น
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   `rewindSession` บันทึก event `cut` ที่เลขลำดับของข้อความ log ไม่ลบอะไรทิ้ง ผู้อ่าน log เห็นมุมมองที่ตัดแล้ว
@@ -152,6 +168,8 @@ scenario:
                 beat:
                   title: ข้อความเดิมกลับไปที่ช่องพิมพ์
                   text: turn ตั้งแต่ข้อความนั้นหายจากแผง คำสั่งแบบ slash กลับมาเป็น `/ชื่อ อาร์กิวเมนต์`
+                  from: panel
+                  to: you
                   sees: บทสนทนาเหลือแค่ turn แรก และช่องพิมพ์มีข้อความของ turn ที่สอง
                   end: แก้แล้วส่งใหม่
                 at: composer
@@ -168,6 +186,7 @@ scenario:
                 beat:
                   title: แชตขอ fork จากข้อความนี้
                   text: ใต้ข้อความขึ้น "Forking…" แชตส่งลำดับของข้อความไปที่ engine
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -178,6 +197,8 @@ scenario:
                 beat:
                   title: Geno เขียน log ใหม่
                   text: Geno ปฏิเสธถ้ามี turn รัน หรือเป็น session ของ agent ภายนอกหรือของ subagent log ใหม่ชี้กลับมาที่แชตเดิม และแชตเดิมไม่ถูกแตะ
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้ามี turn รันอยู่ หรือถ้าเป็น session ของ agent ภายนอกหรือของเอเจนต์ลูก
@@ -194,7 +215,8 @@ scenario:
                 beat:
                   title: แผงเปิดแชตใหม่
                   text: engine เล่น log ของแชตใหม่ซ้ำ บทสนทนาจบที่คำตอบของข้อความที่เลือก History บอกที่มาของมัน
-                  to: panel
+                  from: panel
+                  to: you
                   sees: แชตใหม่ที่จบที่คำตอบของข้อความนั้น และบรรทัด "Forked from <ชื่อแชตเดิม>" ใน History
                   end: แชตใหม่แยกออกมา
                 at: chat

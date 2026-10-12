@@ -17,6 +17,8 @@ scenario:
       beat:
         title: รายการ History มาแทนบทสนทนา
         text: คุณเปิด History จากปุ่มบนแผงหรือ `/history` รายการมีช่องค้นหา ปุ่มสลับขอบเขต และแถวของแต่ละแชตพร้อมปุ่ม Rename และ Delete
+        from: panel
+        to: you
         sees: ช่องค้นหา ปุ่ม [This project] [All projects] และแถวแชตที่มีชื่อ เวลา จำนวน turn และค่าใช้จ่าย
       lane: panel
       at: rail
@@ -31,6 +33,8 @@ scenario:
       beat:
         title: คุณเลือกสิ่งที่จะทำ
         text: คุณจัดการแชตที่ไม่มี turn ทำงานอยู่ได้สามแบบ
+        from: you
+        to: panel
         ask: คุณทำอะไร
       lane: user
       do: ผู้ใช้เลือกสิ่งที่จะทำ
@@ -44,7 +48,8 @@ scenario:
                 beat:
                   title: คุณเปลี่ยนชื่อเป็น “Leap-year fix”
                   text: แถวกลายเป็นช่องแก้ชื่อ คุณพิมพ์ชื่อใหม่แล้วกด Enter แชตส่งชื่อให้ engine
-                  to: engine
+                  from: you
+                  to: panel
                 at: rail
                 do: >-
                   กดปุ่ม Rename แล้วแถวกลายเป็นช่องแก้ชื่อ ผู้ใช้พิมพ์ "Leap-year fix" แล้วกด Enter แผงโพสต์ `rename-session`
@@ -60,6 +65,8 @@ scenario:
                 beat:
                   title: Geno ต่อท้าย log ด้วยชื่อใหม่
                   text: Geno ตัดชื่อให้เหลือบรรทัดเดียว ชื่อว่างถูกปฏิเสธ แล้วบันทึกชื่อใหม่ต่อท้าย log โดยไม่แก้บรรทัดเดิม งานในแผง Tasks ได้ชื่อใหม่ด้วย
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   `renameSession` ตัดชื่อให้เป็นบรรทัดเดียว (ชื่อว่างถูกปฏิเสธ) แล้วต่อท้าย log ด้วย event `title` ไม่แก้บรรทัดเดิม
@@ -70,6 +77,8 @@ scenario:
                 beat:
                   title: แถวขึ้นชื่อใหม่
                   text: รายการโหลดใหม่
+                  from: panel
+                  to: you
                   sees: แถว "Leap-year fix"
                   end: ชื่อใหม่ขึ้นในรายการ
                 at: rail
@@ -85,6 +94,8 @@ scenario:
                 beat:
                   title: คุณยืนยัน Move to trash
                   text: แถวกลายเป็นการยืนยัน แป้นพิมพ์เริ่มที่ Cancel เพื่อกันการลบโดยไม่ตั้งใจ
+                  from: you
+                  to: panel
                   sees: '"Move <ชื่อแชต> to the trash?" ปุ่ม [Cancel] [Move to trash]'
                 at: rail
                 do: >-
@@ -102,6 +113,8 @@ scenario:
                 beat:
                   title: Geno ย้ายแชตไปถังขยะ
                   text: Geno ปฏิเสธถ้าแชตนั้นมี turn รันอยู่ ไม่อย่างนั้นลืมการรอและการปลุกทั้งหมด และหยุดคำสั่งเบื้องหลังของมัน
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้าแชตนั้นมี turn รันอยู่ ("stop the running turn before deleting its session")
@@ -112,6 +125,8 @@ scenario:
                 beat:
                   title: แถวนั้นหายไป
                   text: รายการโหลดใหม่โดยไม่มีแชตนั้น
+                  from: panel
+                  to: you
                   sees: รายการที่ไม่มีแชตนั้นแล้ว
                   end: แชตอยู่ในถังขยะ
                 at: rail
@@ -127,7 +142,8 @@ scenario:
                 beat:
                   title: คุณพิมพ์ “leap year”
                   text: ชื่อแชตกรองทันที เมื่อคุณหยุดพิมพ์ 120 ms แชตขอให้ engine ค้นเนื้อหา
-                  to: engine
+                  from: you
+                  to: panel
                 at: rail
                 do: >-
                   ผู้ใช้พิมพ์ "leap year" ในช่องค้นหา ชื่อแชตกรองทันที และเมื่อหยุดพิมพ์ 120 ms แผงโพสต์ `search-sessions` เพื่อค้นเนื้อหา
@@ -143,6 +159,8 @@ scenario:
                 beat:
                   title: Geno ค้นในทุกแชต
                   text: Geno อ่านใหม่เฉพาะ log ที่เปลี่ยน แล้วค้นทุกคำในขอบเขตที่เลือก ได้ไม่เกิน 50 แชต พร้อมข้อความตัวอย่าง
+                  from: engine
+                  to: panel
                 at: sessions
                 do: >-
                   `SessionIndex.search` อ่านใหม่เฉพาะ log ที่ขนาดหรือเวลาแก้เปลี่ยน แล้วค้นทุกคำในข้อความของแชตที่อยู่ในขอบเขต
@@ -152,6 +170,8 @@ scenario:
                 beat:
                   title: แถวที่เจอแสดงข้อความตัวอย่าง
                   text: คลิกแถวเพื่อเปิดแชตนั้นที่ turn ที่ตรง
+                  from: panel
+                  to: you
                   sees: แถวแชตพร้อมข้อความตัวอย่างที่มีคำว่า "leap year"
                   end: เจอแชตที่ค้น
                 at: rail

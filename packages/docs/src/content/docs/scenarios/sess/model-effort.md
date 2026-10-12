@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณเปิดเมนู model ในช่องพิมพ์
         text: เมนูรวม backend ที่คุยกับแชต model ของ Geno และ effort ของ session สองอย่างหลังมีผลต่างกัน
+        from: you
+        to: panel
         ask: คุณเลือกอะไร
       lane: panel
       at: composer
@@ -39,7 +41,8 @@ scenario:
                 beat:
                   title: คุณเลือก effort high
                   text: แชตส่งค่าใหม่ให้ engine
-                  to: engine
+                  from: you
+                  to: panel
                 at: composer
                 do: เมนูโพสต์ `set-effort` พร้อมค่า `high`
                 ref: "packages/extension/src/chat/composer-view.ts#\"if (!e.current) post({ type: 'set-effort', value: e.value });\""
@@ -53,6 +56,8 @@ scenario:
                 beat:
                   title: Geno บันทึก effort ลง log
                   text: effort เป็นของ session ถ้า turn ทำงานอยู่ Geno บันทึกข้าง turn นั้น ช่องพิมพ์แสดง effort ใหม่
+                  from: engine
+                  to: engine
                   sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
                 at: sessions
                 do: >-
@@ -70,6 +75,8 @@ scenario:
                 beat:
                   title: มีผลตั้งแต่การเรียก model ครั้งถัดไป
                   text: ทุกการเรียก model อ่าน effort ล่าสุดจาก log แล้วปรับระดับตามชนิดของการเรียก
+                  from: engine
+                  to: model
                   end: effort ใหม่มีผล
                 at: model-call
                 do: >-
@@ -84,6 +91,7 @@ scenario:
                 beat:
                   title: คุณเลือก model อื่น
                   text: model ของ Geno เป็นการตั้งค่าของ VS Code ไม่ใช่ของ session VS Code เขียนการตั้งค่าระดับผู้ใช้ โดยไม่ส่งอะไรถึง engine
+                  from: you
                   to: panel
                 at: composer
                 do: เมนูโพสต์ `set-model` พร้อม provider และโมเดล
@@ -98,6 +106,8 @@ scenario:
                 beat:
                   title: ส่วนขยายเปลี่ยนไปใช้ engine ตัวใหม่
                   text: การตั้งค่าที่ engine ใช้เปลี่ยน ส่วนขยายจึงตัดการเชื่อมต่อ และเปิด engine ตัวใหม่ตามการตั้งค่าชุดใหม่ ปุ่มในช่องพิมพ์ขึ้นชื่อ model ใหม่
+                  from: panel
+                  to: engine
                   sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
                 at: engine-link
                 do: >-
@@ -114,6 +124,8 @@ scenario:
                 beat:
                   title: engine ตัวเดิมปิดตัวเอง
                   text: engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวหลังว่าง 10 วินาที engine ตัวใหม่รับแชตที่เปิดอยู่ model ใหม่มีผลกับแชตใหม่
+                  from: engine
+                  to: engine
                   end: model ใหม่ใช้กับแชตใหม่
                 at: sessions
                 do: >-

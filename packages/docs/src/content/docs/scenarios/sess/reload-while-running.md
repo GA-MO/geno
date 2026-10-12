@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณ reload หน้าต่าง
         text: 'model เขียนคำตอบไปได้ครึ่งหนึ่ง คุณรัน "Developer: Reload Window"'
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้ reload หน้าต่าง
@@ -27,6 +28,8 @@ scenario:
       beat:
         title: ส่วนขยายตัดการเชื่อมต่อ แต่ engine อยู่ต่อ
         text: engine เป็น process แยกที่อยู่ต่อแม้หน้าต่างปิด
+        from: panel
+        to: engine
       lane: editor
       at: engine-link
       do: >-
@@ -38,6 +41,8 @@ scenario:
       beat:
         title: turn ทำงานต่อโดยไม่มีคนดู
         text: ไม่มีใครแสดง session นี้ engine จึงทิ้งอัปเดตสด แต่ log เก็บทุกอย่าง และ engine เก็บ event ของ turn นี้ไว้เล่นซ้ำ
+        from: engine
+        to: engine
       lane: server
       at: updates
       do: >-
@@ -49,6 +54,7 @@ scenario:
       beat:
         title: หน้าต่างใหม่ต่อ engine ตัวเดิม
         text: ส่วนขยายตัวใหม่เห็นว่าหน้าต่างนี้เคยแสดง session ไว้ จึงต่อ engine ทันที การตั้งค่าเหมือนเดิม จึงได้ engine ตัวเดิม
+        from: panel
         to: engine
       lane: editor
       at: engine-link
@@ -62,6 +68,7 @@ scenario:
       beat:
         title: แชตขอโหลด session ที่จำไว้
         text: แชตขอ engine เล่น session นี้ซ้ำ
+        from: panel
         to: engine
       lane: editor
       at: chat
@@ -73,6 +80,7 @@ scenario:
       beat:
         title: Geno เล่นซ้ำ turn ที่กำลังทำงาน
         text: engine ส่ง event ของ turn ข้อความที่ stream ค้างไว้ การรอ และงานเบื้องหลัง อัปเดตสดรอจนเล่นซ้ำจบ แชตจึงเห็นตามลำดับ
+        from: engine
         to: panel
       lane: server
       at: sessions
@@ -87,6 +95,8 @@ scenario:
       beat:
         title: แผงรับช่วง turn
         text: แผงเห็นว่า turn ยังทำงาน มันรับ turn เป็นของตัว ปุ่ม Stop ใช้ได้ ข้อความครึ่งแรกกลับมาแล้วข้อความใหม่ต่อท้าย
+        from: panel
+        to: you
         sees: บทสนทนาเดิม หัวข้อ "working" ข้อความครึ่งแรกของคำตอบตามด้วยส่วนที่ stream ต่อ และปุ่ม Stop แทนปุ่ม Send
       lane: editor
       at: chat
@@ -109,6 +119,7 @@ scenario:
       beat:
         title: turn จบ Geno บอกผ่าน Tasks
         text: คำขอเดิมที่เริ่ม turn อยู่กับการเชื่อมต่อที่ปิดไปแล้ว engine จึงบอกการจบผ่านงานในแผง Tasks
+        from: engine
         to: panel
       lane: server
       at: tasks
@@ -132,6 +143,8 @@ scenario:
       beat:
         title: แผงปิด turn ตามปกติ
         text: หัวข้อบอกเวลา ท้าย turn มีแถวสรุป model token และค่าใช้จ่าย เหมือน turn ที่ส่งจากหน้าต่างนี้
+        from: panel
+        to: you
         sees:
           kind: composer
           state: idle

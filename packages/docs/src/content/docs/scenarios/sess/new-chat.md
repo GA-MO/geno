@@ -17,6 +17,7 @@ scenario:
       beat:
         title: คุณกด +
         text: คุณกดปุ่ม New Chat บนหัวแผง `/new` ไปถึงที่เดียวกัน ถ้าแชตที่แสดงยังไม่มี turn เลย ไม่มีอะไรต้องทำ
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้กดปุ่ม + บนหัวแผงแชต
@@ -26,6 +27,8 @@ scenario:
       beat:
         title: แชตดูว่า turn เดิมยังทำงานไหม
         text: ก่อนออกจากแชตเดิม แชตตรวจว่ามี turn ที่แผงนี้เริ่มไว้และยังทำงานอยู่หรือไม่
+        from: panel
+        to: panel
         ask: turn เดิมยังทำไหม
       lane: editor
       at: vscode-ui
@@ -52,6 +55,7 @@ scenario:
                 beat:
                   title: แชตปล่อย turn เดิมไว้
                   text: การ์ดและคำถามที่เปิดอยู่ถูกตอบว่าไม่ได้แสดง engine จะถามใหม่ในหน้าต่างถัดไปที่แสดง session นั้น turn ทำงานต่อจนจบ และเห็นได้ในแผง Tasks
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -68,6 +72,7 @@ scenario:
       beat:
         title: Geno สร้าง session ใหม่
         text: engine สร้าง session ทันที โหลดไฟล์คำสั่ง หน่วยความจำ skill และสภาพแวดล้อม แล้วเขียนบรรทัดแรกของ log
+        from: engine
         to: engine
       lane: editor
       at: chat
@@ -88,7 +93,8 @@ scenario:
       beat:
         title: แผงกลับเป็นหน้าเริ่มต้น
         text: บทสนทนาว่าง ชื่อแชตถูกล้าง แชตที่เพิ่งออกมาอยู่บนสุดของรายการ Continue
-        to: panel
+        from: panel
+        to: you
         sees: หน้าเริ่มต้นกับ Noodle คำว่า "geno" และรายการ "Continue" ที่มีแชตเดิมอยู่บนสุด ช่องพิมพ์ว่างและพร้อมพิมพ์
       lane: editor
       at: chat
@@ -111,6 +117,8 @@ scenario:
       beat:
         title: Geno ปิด session เดิมถ้าว่าง
         text: ถ้าแชตเดิมไม่มี turn ทำงาน engine ปิด MCP server ของมัน log ยังอยู่ เปิดจาก History ได้เสมอ
+        from: engine
+        to: engine
         end: แชตใหม่พร้อม
       lane: server
       at: sessions
