@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Scenario } from '../scenario/model.js';
 import {
   ACTOR_NAME,
@@ -26,6 +26,7 @@ import {
   type StoryState,
 } from '../scenario/story.js';
 import Sees, { Code, showsToolUse } from './Mock.js';
+import { autoStep, cueOf, perform } from './motion.js';
 
 export interface StoryProps {
   readonly scenario: Scenario;
@@ -57,16 +58,30 @@ function SeqRow({ beat, i, at, go }: { readonly beat: Beat; readonly i: number; 
   const self = a === z;
   const lo = Math.min(a, z);
   const hi = Math.max(a, z);
+  const current = i === at;
+  const dir = z > a ? 'right' : 'left';
   const label: CSSProperties = self ? (a <= 50 ? { marginLeft: `calc(${a}% + 48px)` } : { marginRight: `calc(${100 - a}% + 48px)`, textAlign: 'right', justifyContent: 'flex-end' }) : 100 - lo >= 45 ? { marginLeft: `calc(${lo}% + 10px)` } : { marginRight: `calc(${100 - hi}% + 10px)`, textAlign: 'right', justifyContent: 'flex-end' };
   return (
-    <button type="button" className={`sq-row ${place(i, at)} w-${beat.who}${self ? ' self' : ''}`} onClick={() => go(i)} aria-current={i === at ? 'step' : undefined}>
-      <span className="sq-label" style={label}>
+    <button type="button" className={`sq-row ${place(i, at)} w-${beat.who}${self ? ' self' : ''}`} onClick={() => go(i)} aria-current={current ? 'step' : undefined}>
+      <span className="sq-label" style={label} data-mo={current ? 'label' : undefined}>
         <span className="sq-n">{i + 1}</span>
         <span>
           <Code text={beat.head.title} />
         </span>
       </span>
-      {self ? <span className="sq-self" style={{ left: `${a}%` }} /> : <span className={`sq-arrow ${z > a ? 'right' : 'left'}`} style={{ left: `${lo}%`, width: `${hi - lo}%` }} />}
+      {self ? (
+        <span className="sq-self" style={{ left: `${a}%` }} data-mo={current ? 'land' : undefined} />
+      ) : (
+        <span className={`sq-arrow ${dir}`} style={{ left: `${lo}%`, width: `${hi - lo}%` }}>
+          <i className="sq-shaft" data-mo={current ? 'draw-x' : undefined} />
+          <i className="sq-tip" data-mo={current ? 'land' : undefined} />
+          {current ? (
+            <i className="sq-ride" data-mo="ride" data-dir={dir}>
+              <b className="mo-dot" />
+            </i>
+          ) : null}
+        </span>
+      )}
     </button>
   );
 }
@@ -85,7 +100,7 @@ function SeqDecision({ beat, branches, past, pick }: { readonly beat: Beat; read
       {branches
         .filter((branch) => !branch.chosen)
         .map((branch) => (
-          <button key={branch.option.id} type="button" className={`sq-branch${leftward ? ' leftward' : ''}`} style={side} onClick={() => pick(branch)} title={`เดินทาง ${branch.option.label}`}>
+          <button key={branch.option.id} type="button" className={`sq-branch${leftward ? ' leftward' : ''}`} style={side} data-mo="recede" data-mo-fork={branch.fork} onClick={() => pick(branch)} title={`เดินทาง ${branch.option.label}`}>
             <span className="br-line" aria-hidden="true" />
             <span className="br-label">{branch.option.label}</span>
             <span className="br-arrow" aria-hidden="true" />
@@ -94,8 +109,10 @@ function SeqDecision({ beat, branches, past, pick }: { readonly beat: Beat; read
         ))}
       {chosen === undefined ? null : (
         <div className="sq-chosen" style={leftward ? { justifyContent: 'flex-end', marginRight: `calc(${100 - x}% - 1px)` } : { marginLeft: `calc(${x}% - 1px)` }}>
-          <span className="br-stem" aria-hidden="true" />
-          <span className="br-label chosen">{chosen.option.label}</span>
+          <span className="br-stem" aria-hidden="true" data-mo="draw-y" data-mo-fork={chosen.fork} />
+          <span className="br-label chosen" data-mo="label" data-mo-fork={chosen.fork}>
+            {chosen.option.label}
+          </span>
         </div>
       )}
     </div>
@@ -136,7 +153,7 @@ function Sequence({ scenario, beats, state, go, pick }: { readonly scenario: Sce
             </div>
           ))}
           {ending === undefined ? null : (
-            <div className={`sq-end ${state.at === beats.length - 1 ? 'current' : 'future'}`} style={xOf(last.to) > 50 ? { justifyContent: 'flex-end', marginRight: `calc(${100 - xOf(last.to)}% - 12px)` } : { marginLeft: `calc(${xOf(last.to)}% - 12px)` }}>
+            <div className={`sq-end ${state.at === beats.length - 1 ? 'current' : 'future'}`} data-mo={state.at === beats.length - 1 ? 'end' : undefined} style={xOf(last.to) > 50 ? { justifyContent: 'flex-end', marginRight: `calc(${100 - xOf(last.to)}% - 12px)` } : { marginLeft: `calc(${xOf(last.to)}% - 12px)` }}>
               <EndPill ending={ending} />
             </div>
           )}
@@ -290,7 +307,11 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
     const element = scroller.current;
     if (element !== null) element.scrollTo({ left: x - element.clientWidth / 2, behavior: reduced() ? 'auto' : 'smooth' });
   };
-  const current = layout.items.find((item) => item.kind === 'beat' && item.beat === state.at);
+  const node = layout.items.findIndex((item) => item.kind === 'beat' && item.beat === state.at);
+  const current = layout.items[node];
+  const railId = useId();
+  /** The arrow the moving dot rides: the beat's hand-off, or the walk arriving when the actor works alone. */
+  const rail = layout.edges.find((edge) => edge.from === node && edge.beat === state.at) ?? layout.edges.find((edge) => edge.to === node);
   useLayoutEffect(() => {
     if (current !== undefined) centerOn(current.x + current.w / 2);
     track();
@@ -301,6 +322,11 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
   }, []);
 
   const toneOf = (item: LaneItem): Tone => (item.kind === 'branch' && !item.branch.chosen ? 'other' : place(item.beat, state.at));
+  const motion = (edge: LaneEdge, tone: Tone): { 'data-mo'?: string; 'data-mo-fork'?: string } => {
+    const to = layout.items[edge.to]!;
+    if (to.kind === 'branch') return { 'data-mo': to.branch.chosen ? 'draw-path' : 'recede', 'data-mo-fork': to.branch.fork };
+    return tone === 'current' ? { 'data-mo': 'draw-path' } : {};
+  };
   const edgeTone = (edge: LaneEdge): Tone => (edge.kind === 'branch' ? toneOf(layout.items[edge.to]!) : place(edge.beat, state.at));
   const order: Readonly<Record<Tone, number>> = { other: 0, future: 1, past: 2, current: 3 };
   const jump = (x: number) => {
@@ -344,21 +370,22 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
                 .map((edge) => ({ edge, tone: edgeTone(edge) }))
                 .sort((a, b) => order[a.tone] - order[b.tone])
                 .map(({ edge, tone }) => (
-                  <path key={`${edge.from}-${edge.to}`} className={`edge e-${edge.kind} e-${tone}`} d={rounded(edge.points)} markerEnd={`url(#ah-${edge.kind === 'flow' ? 'flow' : 'message'}-${tone})`} />
+                  <path key={`${edge.from}-${edge.to}`} id={edge === rail ? railId : undefined} className={`edge e-${edge.kind} e-${tone}`} d={rounded(edge.points)} markerEnd={`url(#ah-${edge.kind === 'flow' ? 'flow' : 'message'}-${tone})`} {...motion(edge, tone)} />
                 ))}
+              {rail === undefined ? null : <circle key={railId + state.at} className="mo-dot" r={4.5} data-mo="ride" data-rail={railId} />}
             </svg>
             {layout.items.map((item, index) => {
               const style: CSSProperties = { left: item.x, top: rowCenter(item.row), width: item.w };
               if (item.kind === 'end')
                 return (
-                  <div key={index} className={`ln-end ${toneOf(item)}`} style={style}>
+                  <div key={index} className={`ln-end ${toneOf(item)}`} style={style} data-mo={item.beat === state.at ? 'end' : undefined}>
                     <EndPill ending={item.ending} />
                   </div>
                 );
               if (item.kind === 'branch') {
                 const { option, ending, chosen } = item.branch;
                 return (
-                  <button key={index} type="button" className={`ln-chip ${toneOf(item)}`} style={style} onClick={() => pick(item.branch)} aria-pressed={chosen} title={chosen ? option.label : `เดินทาง ${option.label}: ${ending.label}`}>
+                  <button key={index} type="button" className={`ln-chip ${toneOf(item)}`} style={style} data-mo={chosen ? 'land' : 'recede'} data-mo-fork={item.branch.fork} onClick={() => pick(item.branch)} aria-pressed={chosen} title={chosen ? option.label : `เดินทาง ${option.label}: ${ending.label}`}>
                     <span className="chip-label">{option.label}</span>
                     {chosen ? null : (
                       <span className={`chip-end end-${ending.tone}`}>
@@ -373,14 +400,14 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
               const label = `จังหวะที่ ${item.beat + 1}: ${beat.head.title.replace(/`/g, '')}`;
               if (item.kind === 'decision')
                 return (
-                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={{ ...style, height: item.h }} onClick={() => go(item.beat)} aria-label={`${label}: ${beat.head.ask}`} title={beat.head.ask}>
+                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={{ ...style, height: item.h }} data-mo={item.beat === state.at ? 'land' : undefined} onClick={() => go(item.beat)} aria-label={`${label}: ${beat.head.ask}`} title={beat.head.ask}>
                     <span className="dm-shape" aria-hidden="true" />
                     <span className="dm-t">{beat.head.ask}</span>
                   </button>
                 );
               if (item.kind === 'receiver')
                 return (
-                  <button key={index} type="button" className={`ln-recv ${place(item.beat, state.at)}`} style={{ ...style, height: item.h }} onClick={() => go(item.beat)} aria-label={`${label}: ถึง ${ACTOR_NAME[beat.to]}`} title={`ถึง ${ACTOR_NAME[beat.to]}`} />
+                  <button key={index} type="button" className={`ln-recv ${place(item.beat, state.at)}`} style={{ ...style, height: item.h }} data-mo={item.beat === state.at ? 'land' : undefined} onClick={() => go(item.beat)} aria-label={`${label}: ถึง ${ACTOR_NAME[beat.to]}`} title={`ถึง ${ACTOR_NAME[beat.to]}`} />
                 );
               return (
                 <button key={index} type="button" className={`ln-node ${place(item.beat, state.at)} w-${beat.who}`} style={style} onClick={() => go(item.beat)} aria-current={item.beat === state.at ? 'step' : undefined} title={label}>
@@ -446,7 +473,16 @@ function Internals({ scenario, beat, laneNames }: { readonly scenario: Scenario;
   );
 }
 
-function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { readonly scenario: Scenario; readonly beats: readonly Beat[]; readonly state: StoryState; readonly laneNames: StoryProps['laneNames']; readonly go: (i: number) => void; readonly pick: (branch: Branch) => void; readonly restart: () => void }) {
+function PlayButton({ playing, toggle }: { readonly playing: boolean; readonly toggle: () => void }) {
+  return (
+    <button type="button" className="btn ghost play" onClick={toggle} aria-pressed={playing} title="เล่นอัตโนมัติ (Space)">
+      <span className={`play-icon${playing ? ' on' : ''}`} aria-hidden="true" />
+      {playing ? 'หยุด' : 'เล่น'}
+    </button>
+  );
+}
+
+function Reading({ scenario, beats, state, laneNames, go, pick, restart, playing, togglePlay }: { readonly scenario: Scenario; readonly beats: readonly Beat[]; readonly state: StoryState; readonly laneNames: StoryProps['laneNames']; readonly go: (i: number) => void; readonly pick: (branch: Branch) => void; readonly restart: () => void; readonly playing: boolean; readonly togglePlay: () => void }) {
   const beat = beats[state.at]!;
   const next = beats[state.at + 1];
   const ending = endingOf(beat);
@@ -520,6 +556,7 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
         <button type="button" className="btn ghost" onClick={() => go(state.at - 1)} disabled={state.at === 0}>
           <span aria-hidden="true">←</span> ย้อนกลับ
         </button>
+        <PlayButton playing={playing} toggle={togglePlay} />
         {nav}
       </nav>
     </article>
@@ -541,10 +578,34 @@ export default function Story({ scenario, laneNames }: StoryProps) {
   const [view, setView] = useState<View>(initialView);
   const beats = useMemo(() => storyBeats(scenario, state.choices), [scenario, state.choices]);
   const root = useRef<HTMLDivElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const shown = useRef(state);
+  const running = useRef<Animation[]>([]);
 
   const go = (i: number) => setState((current) => (i < 0 || i >= beats.length ? current : { ...current, at: i }));
   const pick = (branch: Branch) => setState((current) => choose(scenario, current, branch.fork, branch.option.id));
   const restart = () => setState(storyStart(scenario));
+  const togglePlay = () => {
+    if (!playing && state.at === beats.length - 1) setState((current) => ({ ...current, at: 0 }));
+    setPlaying(!playing);
+  };
+
+  useLayoutEffect(() => {
+    for (const animation of running.current) animation.cancel();
+    running.current = [];
+    const cue = cueOf(shown.current, state);
+    shown.current = state;
+    if (cue !== undefined && root.current !== null && !reduced()) running.current = perform(root.current, cue);
+  }, [state]);
+
+  useEffect(() => {
+    if (!playing) return;
+    const next = autoStep(beats, state.at);
+    if (next.kind === 'stop') setPlaying(false);
+    if (next.kind !== 'advance') return;
+    const timer = setTimeout(() => setState((current) => ({ ...current, at: current.at + 1 })), next.after);
+    return () => clearTimeout(timer);
+  }, [playing, state, beats]);
   const switchView = (next: View) => {
     setView(next);
     try {
@@ -570,6 +631,7 @@ export default function Story({ scenario, laneNames }: StoryProps) {
       if (event.altKey || event.ctrlKey || event.metaKey || typing) return;
       if (event.key === 'ArrowRight') go(state.at + 1);
       else if (event.key === 'ArrowLeft') go(state.at - 1);
+      else if (event.key === ' ') togglePlay();
       else return;
       event.preventDefault();
     };
@@ -590,12 +652,12 @@ export default function Story({ scenario, laneNames }: StoryProps) {
           </button>
         </div>
         <p className="story-keys">
-          <kbd>←</kbd> <kbd>→</kbd> เลื่อนทีละจังหวะ
+          <kbd>←</kbd> <kbd>→</kbd> เลื่อนทีละจังหวะ <kbd>Space</kbd> เล่น/หยุด
         </p>
       </div>
       <div className="story-body">
         {view === 'sequence' ? <Sequence {...props} /> : <Lanes {...props} />}
-        <Reading {...props} laneNames={laneNames} restart={restart} />
+        <Reading {...props} laneNames={laneNames} restart={restart} playing={playing} togglePlay={togglePlay} />
       </div>
     </div>
   );
