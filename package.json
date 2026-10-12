@@ -17,6 +17,7 @@
     "docs:dev": "pnpm --filter @g-code/docs dev",
     "docs:build": "pnpm --filter @g-code/docs site",
     "docs:check": "pnpm --filter @g-code/docs check",
+    "docs:record": "tsx packages/engine/test/docs-record/record.ts",
     "package": "pnpm --filter ./packages/extension package",
     "gcode": "tsx packages/engine/src/cli.ts",
     "tab:bench": "tsx scripts/tab-bench.mjs",
