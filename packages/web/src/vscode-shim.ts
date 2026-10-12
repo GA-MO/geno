@@ -202,7 +202,7 @@ export class MarkdownString {
   }
 }
 
-/** The review's Changes view and CodeLens are bundled with the chat host but never created here; these keep them loadable. */
+/** The review registers a CodeLens provider, and a Changes view when the setting asks for it; no editor shows them here. */
 export class TreeItem {
   constructor(
     readonly label: unknown,
@@ -396,13 +396,48 @@ class FileDocument {
 
 const documents = new Map<string, FileDocument>();
 
+type TextChange = { readonly from: number; readonly to: number; readonly text: string };
+
+const textChanged = new EventEmitter<vscode.TextDocumentChangeEvent>();
+
+/** `changes`, each at offsets into `text`, applied last first so the earlier offsets stay true. */
+const applied = (text: string, changes: readonly TextChange[]): string =>
+  changes.toSorted((a, b) => b.from - a.from).reduce((result, { from, to, text: put }) => result.slice(0, from) + put + result.slice(to), text);
+
+/**
+ * Puts `changes` into the document and tells listeners as VS Code does, so the review's hunks move with every write:
+ * the agent's, an undo's, and one made in another editor, seen when the file is next read.
+ */
+function change(document: FileDocument, changes: readonly TextChange[]): void {
+  if (changes.length === 0) return;
+  const contentChanges = changes.map(({ from, to, text }) => ({ range: new Range(document.positionAt(from), document.positionAt(to)), rangeOffset: from, rangeLength: to - from, text }));
+  document.text = applied(document.text, changes);
+  document.version++;
+  textChanged.fire({ document, contentChanges, reason: undefined } as unknown as vscode.TextDocumentChangeEvent);
+}
+
+/** The one change that turns `before` into `after`: everything between their common start and common end. */
+function difference(before: string, after: string): TextChange[] {
+  if (before === after) return [];
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+  return [{ from: start, to: before.length - end, text: after.slice(start, after.length - end) }];
+}
+
+/** The file as a document, read again from disk; a change made since the last read reaches listeners as one edit. */
 async function openTextDocument(target: Uri | string): Promise<FileDocument> {
   const uri = typeof target === 'string' ? Uri.file(target) : target;
   const text = new TextDecoder().decode(await fs.readFile(uri));
-  const document = documents.get(uri.fsPath) ?? new FileDocument(uri, text);
-  document.text = text;
-  documents.set(uri.fsPath, document);
-  return document;
+  const known = documents.get(uri.fsPath);
+  if (known === undefined) {
+    const document = new FileDocument(uri, text);
+    documents.set(uri.fsPath, document);
+    return document;
+  }
+  change(known, difference(known.text, text));
+  return known;
 }
 
 async function applyEdit(edit: WorkspaceEdit): Promise<boolean> {
@@ -410,12 +445,9 @@ async function applyEdit(edit: WorkspaceEdit): Promise<boolean> {
   for (const one of edit.edits) files.set(one.uri.fsPath, [...(files.get(one.uri.fsPath) ?? []), one]);
   for (const [file, edits] of files) {
     const document = await openTextDocument(Uri.file(file));
-    const spans = edits.map((one) => ({ from: document.offsetAt(one.range.start), to: document.offsetAt(one.range.end), text: one.text })).sort((a, b) => b.from - a.from);
-    let text = document.text;
-    for (const span of spans) text = text.slice(0, span.from) + span.text + text.slice(span.to);
-    await writeFile(file, text);
-    document.text = text;
-    document.version++;
+    const changes = edits.map((one) => ({ from: document.offsetAt(one.range.start), to: document.offsetAt(one.range.end), text: one.text }));
+    await writeFile(file, applied(document.text, changes));
+    change(document, changes);
   }
   return true;
 }
@@ -520,7 +552,7 @@ export const workspace = {
   openTextDocument,
   applyEdit,
   createFileSystemWatcher,
-  onDidChangeTextDocument: never<unknown>(),
+  onDidChangeTextDocument: textChanged.event,
   onDidOpenTextDocument: never<unknown>(),
   onDidCloseTextDocument: never<unknown>(),
   onDidSaveTextDocument: never<unknown>(),
@@ -560,10 +592,6 @@ export const commands = {
     if (run !== undefined) return (await run(...args)) as T;
     // The page is the only view, always shown, and nothing reads a context key here.
     if (id.endsWith('.focus') || id === 'setContext') return undefined;
-    if (id.startsWith('gcode.review.')) {
-      editorOnly('Keep and undo of reviewed changes run in VS Code’s review, which the web host does not load');
-      return undefined;
-    }
     editorOnly(EDITOR_COMMANDS[id]?.(...args) ?? `Run the command ${id}`);
     return undefined;
   },
