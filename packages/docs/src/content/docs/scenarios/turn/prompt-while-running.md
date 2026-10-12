@@ -64,7 +64,7 @@ scenario:
       do: >-
         turn ใหม่ในแผง B จบเป็น failed พร้อมแถบ error ข้อความของผู้ใช้ไม่ได้ไปถึงโมเดล ผู้ใช้ต้องรอให้ turn ของหน้าต่าง A จบแล้วส่งใหม่
       sees: >-
-        แถบ error สีแดง "Invalid request: a turn is already running" หัวข้อ "failed after 0.1s" และปุ่ม Send กลับมา
+        แถบ error สีแดง "Invalid request: a turn is already running" หัวข้อ "failed after" ตามด้วยเวลาไม่ถึงวินาทีเป็นมิลลิวินาที เช่น "failed after 90ms" และปุ่ม Send กลับมา
       ref: packages/extension/src/chat/render.ts#errorBlock
       end: { turn: failed, reason: a turn is already running }
 ---
