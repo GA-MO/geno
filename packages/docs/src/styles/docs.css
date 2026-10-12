@@ -73,11 +73,12 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .who-you { color: var(--you); background: var(--you-soft); }
 .who-ai { color: var(--ai); background: var(--ai-soft); }
 .who-geno { color: var(--geno); background: var(--geno-soft); }
-.end { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px; line-height: 1.35; }
+.end { position: relative; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 5px 12px; border-radius: 999px; line-height: 1.35; }
 .end-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .end-done { color: var(--accent); background: var(--accent-soft); }
 .end-stop { color: var(--deny); background: var(--deny-soft); }
 .end-go { color: var(--ai); background: var(--ai-soft); }
+[data-mo='end'] .end::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 2px solid currentColor; opacity: 0; pointer-events: none; }
 
 /* ---------- Reading card ---------- */
 
@@ -114,6 +115,9 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 8px 14px; font-size: 14px; font-weight: 500; cursor: pointer; text-align: left; color: var(--ink); }
 .btn:disabled { opacity: 0.4; cursor: default; }
 .btn.ghost { border-color: transparent; color: var(--ink-2); padding-inline: 6px; }
+.btn.play { display: inline-flex; align-items: center; gap: 7px; min-width: 4.6em; }
+.play-icon { width: 10px; height: 12px; flex: none; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.play-icon.on { clip-path: none; background: linear-gradient(90deg, currentColor 0 35%, transparent 35% 65%, currentColor 65%); }
 .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); display: inline-flex; gap: 8px; align-items: baseline; max-width: 100%; }
 .next-k { opacity: 0.65; font-weight: 400; flex: none; }
 .next-t { min-width: 0; }
@@ -220,10 +224,15 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
 .sq-label { position: relative; display: flex; gap: 8px; align-items: baseline; font-size: 14px; font-weight: 500; line-height: 1.4; padding-bottom: 7px; color: var(--ink-3); }
 .sq-n { font-size: 12px; font-variant-numeric: tabular-nums; flex: none; color: var(--ink-3); }
 .sq-arrow { position: relative; display: block; height: 10px; margin-bottom: 8px; }
-.sq-arrow::before { content: ''; position: absolute; left: 2px; right: 2px; top: 4px; border-top: 2px solid currentColor; }
-.sq-arrow::after { content: ''; position: absolute; top: 0; border: 5px solid transparent; }
-.sq-arrow.right::after { right: 0; border-left: 8px solid currentColor; border-right: 0; }
-.sq-arrow.left::after { left: 0; border-right: 8px solid currentColor; border-left: 0; }
+.sq-shaft { position: absolute; left: 2px; right: 2px; top: 4px; border-top: 2px solid currentColor; }
+.sq-arrow.right .sq-shaft { transform-origin: left; }
+.sq-arrow.left .sq-shaft { transform-origin: right; }
+.sq-tip { position: absolute; top: 0; border: 5px solid transparent; }
+.sq-arrow.right .sq-tip { right: 0; border-left: 8px solid currentColor; border-right: 0; transform-origin: right; }
+.sq-arrow.left .sq-tip { left: 0; border-right: 8px solid currentColor; border-left: 0; transform-origin: left; }
+.sq-ride { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.sq-ride .mo-dot { position: absolute; top: 0.5px; left: -4.5px; width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
+.sq-ride[data-dir='left'] .mo-dot { left: auto; right: -4.5px; }
 .sq-self { position: absolute; top: 6px; width: 36px; height: 24px; border: 2px solid currentColor; border-left: 0; border-radius: 0 10px 10px 0; }
 .sq-self::after { content: ''; position: absolute; left: -2px; bottom: -6px; border: 5px solid transparent; border-right: 8px solid currentColor; border-left: 0; }
 .sq-row.self { min-height: 46px; padding-bottom: 6px; }
@@ -242,6 +251,8 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
 .sq-ask { font-size: 13px; font-weight: 600; color: var(--ink); }
 .sq-branch, .sq-chosen { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 0; background: none; padding: 4px 8px 4px 0; cursor: pointer; text-align: left; max-width: calc(100% - 4px); }
 .sq-branch.leftward { padding: 4px 0 4px 8px; text-align: right; }
+.sq-branch { opacity: 0.72; transition: opacity 150ms; }
+.sq-branch:hover, .sq-branch:focus-visible { opacity: 1; }
 .sq-branch::before { content: ''; position: absolute; top: -4px; bottom: 50%; border-left: 2px solid var(--line); left: 0; }
 .sq-branch.leftward::before { left: auto; right: 0; }
 .br-line { width: 14px; border-top: 2px solid var(--line); flex: none; }
@@ -250,7 +261,7 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
 .br-arrow { width: 18px; height: 0; border-top: 2px dashed var(--line); flex: none; }
 .br-end { font-size: 12px; padding: 3px 10px; opacity: 0.8; }
 .sq-branch:hover .br-end, .sq-branch:hover .br-label { opacity: 1; border-color: var(--accent); }
-.br-stem { width: 2px; height: 14px; background: var(--accent); margin-left: 0; }
+.br-stem { width: 2px; height: 14px; background: var(--accent); margin-left: 0; transform-origin: top; }
 .sq-chosen { cursor: default; padding-top: 0; }
 .sq-end { display: flex; padding: 10px 0 4px; }
 .sq-end.future { opacity: 0.55; }
@@ -268,6 +279,7 @@ astro-island:has(.mk-legend) ~ astro-island .mk-legend, astro-island:has(.mk-leg
 .ln-canvas { position: relative; min-width: 100%; }
 .ln-band { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line-2); box-sizing: border-box; }
 .ln-svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.ln-svg .mo-dot { fill: var(--accent); stroke: var(--accent-soft); stroke-width: 6; paint-order: stroke; opacity: 0; }
 
 /* Messages carry the story; the walk's own connector stays a thinner, quieter line. */
 .edge { fill: none; stroke-linejoin: round; }

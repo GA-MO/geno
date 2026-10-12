@@ -12,6 +12,7 @@
     "ref": "tsx scripts/ref.ts",
     "typecheck": "astro check",
     "walk": "tsx scripts/walk.ts",
+    "motion": "tsx scripts/motion.ts",
     "meta": "tsx scripts/meta.ts"
   },
   "dependencies": {
