@@ -35,7 +35,7 @@ const LANE_H = 128;
 const CAPTION = 24;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const place = (i: number, at: number): 'past' | 'current' | 'future' => (i < at ? 'past' : i === at ? 'current' : 'future');
-const hopText = (beat: Beat): string => (beat.from === beat.to ? `${ACTOR_NAME[beat.from]}, on its own` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`);
+const hopText = (beat: Beat): string => (beat.from === beat.to ? `${ACTOR_NAME[beat.from]} ทำเอง` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`);
 const xOf = (actor: Beat['from']): number => 10 + actorIndex(actor) * 20;
 
 function EndPill({ ending, className = '' }: { readonly ending: Ending; readonly className?: string }) {
@@ -60,7 +60,9 @@ function SeqRow({ beat, i, at, go }: { readonly beat: Beat; readonly i: number; 
     <button type="button" className={`sq-row ${place(i, at)} w-${beat.who}${self ? ' self' : ''}`} onClick={() => go(i)} aria-current={i === at ? 'step' : undefined}>
       <span className="sq-label" style={label}>
         <span className="sq-n">{i + 1}</span>
-        <span>{beat.head.title}</span>
+        <span>
+          <Code text={beat.head.title} />
+        </span>
       </span>
       {self ? <span className="sq-self" style={{ left: `${a}%` }} /> : <span className={`sq-arrow ${z > a ? 'right' : 'left'}`} style={{ left: `${lo}%`, width: `${hi - lo}%` }} />}
     </button>
@@ -81,7 +83,7 @@ function SeqDecision({ beat, branches, past, pick }: { readonly beat: Beat; read
       {branches
         .filter((branch) => !branch.chosen)
         .map((branch) => (
-          <button key={branch.option.id} type="button" className={`sq-branch${leftward ? ' leftward' : ''}`} style={side} onClick={() => pick(branch)} title={`Follow ${branch.option.label}`}>
+          <button key={branch.option.id} type="button" className={`sq-branch${leftward ? ' leftward' : ''}`} style={side} onClick={() => pick(branch)} title={`เดินทาง ${branch.option.label}`}>
             <span className="br-line" aria-hidden="true" />
             <span className="br-label">{branch.option.label}</span>
             <span className="br-arrow" aria-hidden="true" />
@@ -188,7 +190,7 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
       <div className="ln-captions" aria-hidden="true">
         {[...Array(layout.rows).keys()].map((row) => (
           <p key={row} className="ln-caption" style={{ top: row * LANE_H }}>
-            {ACTORS[row] === undefined ? <strong>Other endings</strong> : <><strong>{ACTORS[row].name}</strong> <span>{ACTORS[row].sub}</span></>}
+            {ACTORS[row] === undefined ? <strong>ทางจบอื่น</strong> : <><strong>{ACTORS[row].name}</strong> <span>{ACTORS[row].sub}</span></>}
           </p>
         ))}
       </div>
@@ -218,7 +220,7 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
               const beat = beats[item.beat]!;
               if (item.fork)
                 return (
-                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={{ ...style, height: 64 }} onClick={() => go(item.beat)} aria-label={`Beat ${item.beat + 1}: ${beat.head.title}`}>
+                  <button key={index} type="button" className={`ln-diamond ${place(item.beat, state.at)}`} style={{ ...style, height: 64 }} onClick={() => go(item.beat)} aria-label={`จังหวะที่ ${item.beat + 1}: ${beat.head.title.replace(/`/g, '')}`}>
                     <span className="dm-shape" aria-hidden="true" />
                     <span className="dm-t">{beat.head.ask}</span>
                   </button>
@@ -229,14 +231,14 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
                   <span className="ln-t">
                     {branch === undefined ? null : <span className="ln-branch">{branch.option.label}</span>}
                     <span className="ln-num">{item.beat + 1}</span>
-                    {beat.head.title}
+                    <Code text={beat.head.title} />
                   </span>
                 </button>
               );
             }
             if (item.kind === 'stub')
               return (
-                <button key={index} type="button" className="ln-stub" style={style} onClick={() => pick(item.branch)} title={`Follow ${item.branch.option.label}`}>
+                <button key={index} type="button" className="ln-stub" style={style} onClick={() => pick(item.branch)} title={`เดินทาง ${item.branch.option.label}`}>
                   <span className="ln-branch">{item.branch.option.label}</span>
                   <EndPill ending={item.branch.ending} />
                 </button>
@@ -263,7 +265,7 @@ function Internals({ scenario, beat, laneNames }: { readonly scenario: Scenario;
   return (
     <details className="int">
       <summary>
-        Show internals <span>{beat.steps.length === 1 ? '1 step' : `${beat.steps.length} steps`}</span>
+        ดูขั้นในโค้ด <span>{beat.steps.length} ขั้น</span>
       </summary>
       <ol>
         {beat.steps.map((id) => {
@@ -277,11 +279,11 @@ function Internals({ scenario, beat, laneNames }: { readonly scenario: Scenario;
                 </p>
                 {step.sees === undefined ? null : (
                   <p className="int-sees">
-                    Shows: <Code text={step.sees} />
+                    บนจอ: <Code text={step.sees} />
                   </p>
                 )}
                 {step.ref === undefined ? null : (
-                  <a className="ref" href={step.ref.url} title="Open this line in VS Code">
+                  <a className="ref" href={step.ref.url} title="เปิดบรรทัดนี้ใน VS Code">
                     {step.ref.path}:{step.ref.line}
                   </a>
                 )}
@@ -305,11 +307,11 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
     nav = (
       <span className="nav-end">
         <button type="button" className="btn ghost" onClick={restart}>
-          Start over
+          เริ่มใหม่
         </button>
         {lastFork === -1 ? null : (
           <button type="button" className="btn" onClick={() => go(lastFork)}>
-            Try another branch
+            ลองทางอื่น
           </button>
         )}
       </span>
@@ -317,8 +319,10 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
   else if (next !== undefined)
     nav = (
       <button type="button" className="btn primary" onClick={() => go(state.at + 1)}>
-        <span className="next-k">Next</span>
-        <span className="next-t">{next.head.title}</span>
+        <span className="next-k">ถัดไป</span>
+        <span className="next-t">
+          <Code text={next.head.title} />
+        </span>
         <span aria-hidden="true">→</span>
       </button>
     );
@@ -327,10 +331,12 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
       <div className="bh">
         <span className={`who who-${beat.who}`}>{WHO_LABEL[beat.who]}</span>
         <span className="count">
-          Beat {state.at + 1} of {beats.length}
+          จังหวะที่ {state.at + 1} จาก {beats.length}
         </span>
       </div>
-      <h2 className="bt">{beat.head.title}</h2>
+      <h2 className="bt">
+        <Code text={beat.head.title} />
+      </h2>
       <p className="hop">{hopText(beat)}</p>
       <p className="th">
         <Code text={beat.head.text} />
@@ -360,9 +366,9 @@ function Reading({ scenario, beats, state, laneNames, go, pick, restart }: { rea
         </p>
       )}
       <Internals scenario={scenario} beat={beat} laneNames={laneNames} />
-      <nav className="nav" aria-label="Beats">
+      <nav className="nav" aria-label="จังหวะ">
         <button type="button" className="btn ghost" onClick={() => go(state.at - 1)} disabled={state.at === 0}>
-          <span aria-hidden="true">←</span> Back
+          <span aria-hidden="true">←</span> ย้อนกลับ
         </button>
         {nav}
       </nav>
@@ -425,16 +431,16 @@ export default function Story({ scenario, laneNames }: StoryProps) {
   return (
     <div className={`story not-content view-${view}`} ref={root}>
       <div className="story-bar">
-        <div className="view-switch" role="tablist" aria-label="Diagram">
+        <div className="view-switch" role="tablist" aria-label="มุมมอง">
           <button type="button" role="tab" aria-selected={view === 'sequence'} onClick={() => switchView('sequence')}>
             Sequence
           </button>
           <button type="button" role="tab" aria-selected={view === 'lanes'} onClick={() => switchView('lanes')}>
-            Swim lanes
+            Swim lane
           </button>
         </div>
         <p className="story-keys">
-          <kbd>←</kbd> <kbd>→</kbd> to move between beats
+          <kbd>←</kbd> <kbd>→</kbd> เลื่อนทีละจังหวะ
         </p>
       </div>
       <div className="story-body">

@@ -131,7 +131,7 @@ export function loadSite(options: SiteOptions): Site {
   const links: Record<string, Link> = Object.fromEntries(
     catalog.scenarios.map((row) => {
       const page = coveredBy.get(row.id);
-      return [row.id, page === undefined ? { id: row.id, title: row.thai } : { id: row.id, title: row.thai, href: page.href }];
+      return [row.id, page === undefined ? { id: row.id, title: row.thai } : { id: row.id, title: page.title, href: page.href }];
     }),
   );
 

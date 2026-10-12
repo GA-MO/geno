@@ -2,7 +2,7 @@
 
 A tour has two layers. The fine steps (`lane`, `do`, `ref`, `emits`, forks, fragments) stay the truth that
 `docs:check` verifies against the code. The story layer groups those steps into 8 to 15 beats that a newcomer reads
-first. The fine steps of a beat open on demand under "Show internals".
+first. The fine steps of a beat open on demand under "ดูขั้นในโค้ด" (show internals).
 
 ## Data shape
 
@@ -13,12 +13,12 @@ steps:
   - id: wants
     lane: model
     beat:
-      title: Model asks to run pnpm add zod      # English, at most 60 characters
+      title: Model ขอรัน `pnpm add zod`          # Thai with English terms, at most 60 characters
       text: >-                                  # Thai, 1 to 3 sentences, no function names
         โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
       from: model                               # optional; default: the actor of the beat's first step
       to: engine                                # optional; default: the actor of the beat's last step
-      sees: { kind: step, label: pnpm add zod, status: running }   # optional, see "What you see"
+      sees: { kind: step, label: pnpm add zod, status: running }   # optional, see "What the reader sees"
       ask: Which button?                        # required when the beat ends at a fork: the diamond's label
       end: Denied by you                        # optional: the end node's label when a walk ends in this beat
     do: ...
@@ -47,18 +47,18 @@ Five story actors come from `lanes.yaml`. Each lane has an `actor:` field. Pages
 
 | actor | name | lanes |
 | --- | --- | --- |
-| `you` | You | user |
+| `you` | คุณ | user |
 | `panel` | Geno panel | panel, editor |
 | `engine` | Geno engine | server, loop, policy |
 | `model` | AI model | model, child |
-| `machine` | Your machine | tool, external |
+| `machine` | เครื่องของคุณ | tool, external |
 
-The who-acts badge comes from `from`: `you` is You, `model` is AI, and anything else is Geno.
+The who-acts badge comes from `from`: `you` is คุณ, `model` is AI, and anything else is Geno.
 
-## What you see
+## What the reader sees
 
 `sees` is either plain text or one typed mock, or a list of them. Each mock renders as a small, faithful copy of the
-real UI. Mock text is the UI's English copy.
+real UI. Mock text quotes the UI exactly, so it stays in the product's English.
 
 | kind | props |
 | --- | --- |
@@ -108,7 +108,7 @@ On a page with any beat header:
 - the first step (or `use:` entry) carries a header, so no step comes before the first beat;
 - every fork arm starts with a header;
 - every walk has 2 or more beats;
-- every title is English (ASCII letters dominate) and at most 60 characters;
+- every title is at most 60 characters (graphemes, so Thai marks do not count twice);
 - a beat whose last step forks has `ask`;
 - every mock validates, and every `payload` source resolves;
 - fragments carry no headers, because many pages share them.
@@ -119,9 +119,29 @@ A page with no header keeps working. Its tour shows a "story coming" state and t
 
 `Story.tsx` replaces the old tour island. It has two views over the same beats, Sequence (default) and Swim lanes,
 with the choice kept in `localStorage`. Both draw a fork as a diamond whose branches end in end nodes. The reading
-card shows the beat, its mock, the internals and Back / "Next: <title> →". The hash is `#at=<step id>` plus `&c=` for
+card shows the beat, its mock, the internals and ย้อนกลับ / "ถัดไป <title> →". The hash is `#at=<step id>` plus `&c=` for
 non-default choices, so old step links still land on the beat that holds the step. With JS off, `StoryStatic.astro`
 prints the beats as an ordered list with nested branches.
+
+## Language and navigation
+
+One rule for all content: the sidebar, page titles, beat titles, `ask`, `end`, arrow labels, the reading card, page
+prose and this site's own buttons. Write Thai, and keep in English only the words a Thai developer already says in
+English: model, API, request, system prompt, tool, tool call, turn, permission, hook, subagent, session, context,
+compaction, error, retry, stream, schema, JSON, sandbox, workflow, MCP, skill, memory, Tab, CLI, file names, commands
+and code ids. Write "สร้าง subagent แล้วรอรายงาน", not "สร้างเอเจนต์ลูกแล้วรอรายงาน".
+
+Beat titles look like "Model ขอรัน `pnpm add zod`", "Geno ตรวจคำสั่งกับกฎของคุณ", "Geno หยุด turn แล้วถามคุณ" and
+"คุณเห็นการ์ด “Run this command?”". `docs:check` limits a title to 60 characters, counted as a reader counts them:
+a Thai vowel or tone mark rides on its consonant.
+
+The one exception is a quote of real UI text. Mocks, fork option labels that name a real button, and quoted messages
+stay exactly as the product shows them: Allow, Deny, "Run this command?", "Denied by you".
+
+A page's `title:` is its H1, tab title and sidebar label; apply the rule above when you touch one. The page's Thai
+`description` shows as one line under the H1. Chapter names are the `thai` column of the chapters in
+`src/data/catalog.yaml`. The sidebar groups are, in order: เริ่มต้น, พื้นฐาน, Tool ในการใช้งานจริง, สถานการณ์,
+แผนที่ระบบ, แนวคิดหลัก, อ้างอิง. `locales.root.lang` stays `th`.
 
 ## Writing beats for a page
 
@@ -129,7 +149,9 @@ prints the beats as an ordered list with nested branches.
    actors, a thing the user sees, or a decision.
 2. Put a header there. Put one on the first step, on every fork arm's first step, and after a rejoin when the arms'
    last beats would read wrong for the shared steps.
-3. Write the title as an English sentence with the actor as subject ("Geno pauses the turn and asks you"). Write the
-   Thai text for a reader who has never seen the code. Keep function names out of both; they belong in the internals.
+3. Write the title as a short Thai sentence with the actor as subject ("Geno หยุด turn แล้วถามคุณ"), per the language
+   rule above. Write the text for a reader who has never seen the code. Keep function names out of both; they belong
+   in the internals.
 4. Add `sees` where the user's screen changes. Use a typed mock if one fits, plain text otherwise.
-5. Run `pnpm docs:check`, then walk every branch on the dev server.
+5. Run `pnpm docs:check`, then `pnpm --filter @g-code/docs walk <base-url> <page path>` against a running dev
+   server. It walks every branch in both views at 1440 and 390 and fails on spilled text or lanes that do not fit.

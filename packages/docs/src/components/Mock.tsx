@@ -130,7 +130,6 @@ function Composer({ mock }: { readonly mock: Mock<'composer'> }) {
 
 const isLong = (value: unknown): value is Long => typeof value === 'object' && value !== null && '$long' in value;
 const isMore = (value: unknown): value is More => typeof value === 'object' && value !== null && '$more' in value;
-const plural = (n: number, one: string) => `${n.toLocaleString('en-US')} ${n === 1 ? one : `${one}s`}`;
 
 function Json({ value, path, view, open, toggle, depth }: { readonly value: unknown; readonly path: string; readonly view: PayloadView; readonly open: ReadonlySet<string>; readonly toggle: (path: string) => void; readonly depth: number }): ReactNode {
   const marked = view.highlight.includes(path) ? ' mark' : '';
@@ -138,10 +137,10 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
     return (
       <span className={`js-str${marked}`}>
         {JSON.stringify(value.$long).slice(0, -1)}
-        <span className="js-cut">… {plural(value.chars, 'char')}</span>"
+        <span className="js-cut">… {`${value.chars.toLocaleString('en-US')} ตัวอักษร`}</span>"
       </span>
     );
-  if (isMore(value)) return <span className="js-cut">… {value.$more} more</span>;
+  if (isMore(value)) return <span className="js-cut">… อีก {value.$more} รายการ</span>;
   if (value === null || typeof value !== 'object') return <span className={`js-${value === null ? 'null' : typeof value}${marked}`}>{JSON.stringify(value)}</span>;
   const entries: [string, unknown][] = Array.isArray(value) ? value.map((item, i) => [String(i), item]) : Object.entries(value);
   const [start, end] = Array.isArray(value) ? ['[', ']'] : ['{', '}'];
@@ -150,7 +149,7 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
   if (folded)
     return (
       <button type="button" className="js-fold" onClick={() => toggle(path)}>
-        {start} {Array.isArray(value) ? plural(value.length, 'item') : plural(entries.length, 'key')} {end}
+        {start} {Array.isArray(value) ? `${value.length} รายการ` : `${entries.length} key`} {end}
       </button>
     );
   return (
@@ -170,7 +169,7 @@ function Json({ value, path, view, open, toggle, depth }: { readonly value: unkn
   );
 }
 
-const DIRECTION_LABELS: Readonly<Record<PayloadView['direction'], string>> = { request: 'Request to the model', response: 'Model response', tool_result: 'Tool result' };
+const DIRECTION_LABELS: Readonly<Record<PayloadView['direction'], string>> = { request: 'Request ที่ส่งให้ model', response: 'คำตอบของ model', tool_result: 'ผลของ tool' };
 
 function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
   const [tab, setTab] = useState(0);
@@ -199,14 +198,14 @@ function Payloads({ views }: { readonly views: readonly PayloadView[] }) {
           </span>
         )}
         <button type="button" className="mk-copy" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? 'คัดลอกแล้ว' : 'คัดลอก'}
         </button>
       </div>
       <pre className="mk-json">
         <Json value={view.value} path="" view={view} open={open} toggle={toggle} depth={0} />
       </pre>
       <p className="mk-caption">
-        From a real run:{' '}
+        จากการรันจริง:{' '}
         <a href={view.url} title={view.file}>
           {view.caption}
         </a>
@@ -262,7 +261,7 @@ export default function Sees({ shown }: { readonly shown: readonly Shown[] }) {
     <>
       {screens.length === 0 ? null : (
         <figure className="sees">
-          <figcaption>What you see</figcaption>
+          <figcaption>สิ่งที่คุณเห็น</figcaption>
           <div className="mk">
             {screens.map((mock, i) => (
               <One key={i} mock={mock} />
@@ -272,7 +271,7 @@ export default function Sees({ shown }: { readonly shown: readonly Shown[] }) {
       )}
       {payloads.length === 0 ? null : (
         <figure className="sees">
-          <figcaption>On the wire</figcaption>
+          <figcaption>ข้อมูลที่ส่งจริง</figcaption>
           <Payloads views={payloads} />
         </figure>
       )}

@@ -96,7 +96,7 @@ describe('beats along a walk', () => {
   test('a fork lists every option with the beat it opens and where its walk ends', () => {
     const branches = branchesAt(scenario, scenario.defaults, 'ask' as StepId);
     expect(branches.map((branch) => [branch.option.id, branch.chosen, branch.first.head.title, branch.ending.label, branch.beats])).toEqual([
-      ['yes', true, 'You say yes', 'Turn continues', 4],
+      ['yes', true, 'You say yes', 'Turn ทำต่อ', 4],
       ['no', false, 'You say no', 'Refused', 3],
     ]);
   });
@@ -148,15 +148,10 @@ describe('story checks reject', () => {
     expect(messages([{ lane: 'user', do: 'x', ...beat('Only one'), ...end }])).toEqual([expect.stringContaining('1 beat(s)')]);
   });
 
-  test('a Thai title, a long title and a Thai option label', () => {
-    const long = 'A title that keeps going well past the sixty characters a beat may have';
-    expect(messages([{ lane: 'user', do: 'x', ...beat('ผู้ใช้พิมพ์') }, { lane: 'user', do: 'y', ...beat(long), ...end }])).toEqual([
-      expect.stringContaining('is Thai'),
-      expect.stringContaining(`is ${long.length} characters`),
-    ]);
-    const steps = structuredClone(forked) as unknown as ForkPage;
-    steps[2]!.fork.options[1]!.label = 'ไม่';
-    expect(messages(steps as unknown as unknown[])).toEqual([expect.stringMatching(/options\[1\]\.label: "ไม่" is Thai/)]);
+  test('a title over 60 characters, counting a Thai vowel or tone mark with its consonant', () => {
+    const sixty = 'ที่'.repeat(60);
+    expect(messages([{ lane: 'user', do: 'x', ...beat(sixty) }, { lane: 'user', do: 'y', ...beat('Model ขอรัน `pnpm add zod`'), ...end }])).toEqual([]);
+    expect(messages([{ lane: 'user', do: 'x', ...beat(`${sixty}ก`) }, { lane: 'user', do: 'y', ...beat('จบ'), ...end }])).toEqual([expect.stringContaining('is 61 characters')]);
   });
 
   test('a beat that ends at a fork without ask', () => {

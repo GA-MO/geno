@@ -22,11 +22,11 @@ const catalog = catalogSchema.parse(parse(readFileSync(path.join(root, 'src/data
 const pagesIn = (dir: string): boolean => existsSync(dir) && readdirSync(dir).some((name) => /\.mdx?$/.test(name));
 
 const chapters = catalog.chapters.map((chapter) => {
-  const label = `${chapter.number}. ${chapter.thai}`;
+  const label = chapter.thai;
   const directory = `scenarios/${chapter.prefix}`;
   return pagesIn(path.join(root, 'src/content/docs', directory))
     ? { label, items: [{ autogenerate: { directory } }] }
-    : { label, collapsed: true, items: [{ label: 'ยังไม่มีหน้า ดูในดัชนี', link: `/scenarios/#ch-${chapter.number}` }] };
+    : { label, collapsed: true, items: [{ label: 'ยังไม่มีหน้า', link: `/scenarios/#ch-${chapter.number}` }] };
 });
 
 const scenarioGate = (): AstroIntegration => ({
@@ -61,12 +61,15 @@ export default defineConfig({
       defaultLocale: 'root',
       locales: { root: { label: 'ไทย', lang: 'th' } },
       customCss: ['@fontsource-variable/inter', '@fontsource/noto-sans-thai/400.css', '@fontsource/noto-sans-thai/600.css', './src/styles/docs.css'],
-      components: { MarkdownContent: './src/overrides/MarkdownContent.astro', ThemeProvider: './src/overrides/ThemeProvider.astro', ThemeSelect: './src/overrides/ThemeSelect.astro' },
+      components: { MarkdownContent: './src/overrides/MarkdownContent.astro', ThemeProvider: './src/overrides/ThemeProvider.astro', ThemeSelect: './src/overrides/ThemeSelect.astro', PageTitle: './src/overrides/PageTitle.astro' },
       sidebar: [
-        { label: 'เริ่มต้น', items: [{ label: 'หน้าแรก', link: '/' }, 'start/how-to-read'] },
+        { label: 'เริ่มต้น', items: [{ label: 'หน้าแรก', link: '/' }, { label: 'วิธีอ่านทัวร์', link: '/start/how-to-read/' }] },
+        { label: 'พื้นฐาน', items: [] },
+        { label: 'Tool ในการใช้งานจริง', items: [] },
+        { label: 'สถานการณ์', items: chapters },
         { label: 'แผนที่ระบบ', link: '/map/' },
         { label: 'แนวคิดหลัก', items: [{ autogenerate: { directory: 'concepts' } }] },
-        { label: 'สถานการณ์', items: [{ label: 'ดัชนีสถานการณ์', link: '/scenarios/' }, ...chapters] },
+        { label: 'อ้างอิง', items: [{ label: 'ดัชนีสถานการณ์', link: '/scenarios/' }] },
       ],
     }),
     react(),

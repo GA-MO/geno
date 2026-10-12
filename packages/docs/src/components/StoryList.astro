@@ -18,9 +18,9 @@ const first = items[0]?.number ?? 1;
         <li id={`beat-${beat.id}`}>
           <p class="story-list-head">
             <span class={`who who-${beat.who}`}>{WHO_LABEL[beat.who]}</span>
-            <a href={`#at=${beat.id}`}>{beat.head.title}</a>
+            <a href={`#at=${beat.id}`}>{codeSegments(beat.head.title).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</a>
           </p>
-          <p class="hop">{beat.from === beat.to ? `${ACTOR_NAME[beat.from]}, on its own` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`}</p>
+          <p class="hop">{beat.from === beat.to ? `${ACTOR_NAME[beat.from]} ทำเอง` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`}</p>
           <p class="th">{codeSegments(beat.head.text).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</p>
           <Sees shown={beat.head.sees} />
           {ending !== undefined && (

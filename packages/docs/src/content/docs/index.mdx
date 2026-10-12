@@ -1,0 +1,32 @@
+---
+title: "Geno ทำงานอย่างไร"
+description: ทัวร์ทีละจังหวะผ่าน Geno ว่าใครทำอะไร ตั้งแต่คุณกด Enter จนจบ turn
+template: splash
+hero:
+  tagline: >-
+    เดินผ่าน Geno ทีละจังหวะ ดูว่าตอนไหนคุณเป็นคนทำ ตอนไหน AI ตอนไหน Geno
+    และหน้าจอของคุณเห็นอะไรในแต่ละตอน
+  actions:
+    - text: เริ่มทัวร์แรก
+      link: /scenarios/turn/with-tools/
+      icon: right-arrow
+    - text: วิธีอ่านทัวร์
+      link: /start/how-to-read/
+      variant: minimal
+---
+import Home from '../../components/Home.astro';
+
+<Home />
+
+## Geno คืออะไร
+
+Geno เป็นเอเจนต์เขียนโค้ดใน VS Code ที่มีลูปของตัวเอง
+ลูปนั้นไม่ได้รันใน extension host แต่รันใน **engine** แยกต่างหาก (`gcode serve --socket`)
+แผงแชตคุยกับ extension host และ extension host คุยกับ engine ผ่าน Unix socket
+
+prompt หนึ่งข้อของคุณกลายเป็นหนึ่ง turn ระหว่างนั้น engine ผลัดกันทำงานกับโมเดล
+โมเดลตอบหรือขอเรียกเครื่องมือ Geno ตรวจสิทธิ์ รันเครื่องมือ แล้วส่งผลกลับไปให้โมเดล
+วนอย่างนี้จนโมเดลจบ turn หรือมีอะไรมาหยุด
+
+ทุกทัวร์เล่าด้วยผู้เล่นห้าฝ่ายเดียวกัน: **You** **Geno panel** **Geno engine** **AI model** และ **Your machine**
+แต่ละจังหวะมีรายละเอียดของโค้ดซ่อนอยู่ใต้ "Show internals" พร้อมลิงก์ไปยังบรรทัดที่ทำงานจริง

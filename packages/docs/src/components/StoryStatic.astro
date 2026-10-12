@@ -26,13 +26,13 @@ const steps = Object.keys(scenario.via).length;
     ) : (
       <>
         <div class="story-coming not-content">
-          <p class="story-coming-title">Story coming</p>
+          <p class="story-coming-title">เรื่องเล่ากำลังตามมา</p>
           <p>
             หน้านี้ยังไม่มีเรื่องเล่าแบบทีละจังหวะ ระหว่างนี้อ่านได้ทุกขั้นของโค้ด {steps} ขั้นด้านล่าง ตามลำดับที่เกิดขึ้นจริง
             ทุกทางแยกอยู่ในรายการเดียวกัน
           </p>
         </div>
-        <h2 id="ทุกขั้น">ทุกขั้นและทุกทางแยก</h2>
+        <h2 id="every-step">ทุกขั้นและทุกทางแยก</h2>
         <StepList scenario={scenario} items={scenario.outline} parts={parts} />
       </>
     )
@@ -62,7 +62,7 @@ const steps = Object.keys(scenario.via).length;
   {
     scenario.related.length > 0 && (
       <>
-        <h2 id="อ่านต่อ">อ่านต่อ</h2>
+        <h2 id="read-next">อ่านต่อ</h2>
         <ul class="tour-related">
           {scenario.related.map((link) => (
             <li>

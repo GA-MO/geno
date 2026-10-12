@@ -1,5 +1,5 @@
 ---
-title: สร้างเอเจนต์ลูกแล้วรอรายงาน
+title: "สร้าง subagent แล้วรอรายงาน"
 description: โมเดลส่งงานให้ worker ลูกทำงานใน session ของตัวเอง ขออนุญาตผ่านการ์ดเดียวกับแม่ แล้วส่งรายงานที่ถูกล้อมรั้วกลับมาเป็นผลของ call
 tableOfContents: false
 sidebar:
@@ -17,7 +17,7 @@ scenario:
     - id: wants
       lane: model
       beat:
-        title: The model hands the job to a worker
+        title: "Model ส่งงานให้ subagent ชื่อ worker"
         text: >-
           แทนที่จะเขียนเทสต์เอง โมเดลขอให้ Geno ส่งงานนี้ให้เอเจนต์ลูกชื่อ worker
           มันเขียนคำสั่งงานให้ครบในตัว เพราะลูกไม่เห็นบทสนทนานี้
@@ -43,7 +43,7 @@ scenario:
       at: tools
       runs: 1
       beat:
-        title: Geno starts the worker in its own session
+        title: "Geno เปิด session ใหม่ให้ worker"
         text: >-
           ลูกได้บันทึกของตัวเองและงบที่แบ่งมาจากงบของ turn นี้ ไม่เกิน 30 รอบและ $0.20
           เพราะ worker แก้ไฟล์ได้ Geno จึงให้มันทำงานทีละตัวบนโฟลเดอร์หลัก
@@ -73,7 +73,7 @@ scenario:
       lane: server
       at: updates
       beat:
-        title: Your chat shows a row for the worker
+        title: "แชตขึ้นแถวของ worker"
         text: >-
           ใต้ขั้นที่ส่งงานขึ้นแถวของลูกพร้อมนาฬิกาและปุ่ม Cancel แผง Tasks ก็มีงานของลูกเพิ่มขึ้น
           คลิกแถวเพื่อเปิดบทสนทนาของลูกได้
@@ -107,7 +107,7 @@ scenario:
       lane: child@worker
       at: model
       beat:
-        title: The worker reads the code and asks to install vitest
+        title: "Worker อ่านโค้ดแล้วขอติดตั้ง vitest"
         text: >-
           ลูกคุยกับโมเดลผ่านการเชื่อมต่อเดียวกับแม่ มันอ่านไฟล์ แล้วขอรัน `pnpm add -D vitest`
           ซึ่งเป็นคำสั่งที่ต้องขออนุญาต
@@ -122,7 +122,7 @@ scenario:
       lane: policy
       at: rules
       beat:
-        title: Geno pauses both agents to ask you
+        title: "Geno หยุดทั้งสอง agent แล้วถามคุณ"
         text: >-
           ลูกใช้กฎและโหมดเดียวกับแม่ คำสั่งนี้ไม่อยู่ในรายการปลอดภัย Geno จึงหยุดลูกไว้และส่งคำถามมาที่แชตของแม่
           แถวของงานใน Tasks ขึ้นว่ารอคุณ
@@ -156,12 +156,12 @@ scenario:
       lane: panel
       at: card
       beat:
-        title: You see “Run this command?”
+        title: "คุณเห็นการ์ด “Run this command?”"
         text: >-
           การ์ดเดียวกับที่แม่ใช้ขึ้นในแชตของแม่ ทั้งแม่และลูกรอคำตอบของคุณ
           การ์ดไม่บอกว่าลูกตัวไหนเป็นคนขอ
         to: you
-        ask: Which button?
+        ask: กดปุ่มไหน
         sees: { kind: permission, command: pnpm add -D vitest, reason: Geno asks because it uses a command not on the safe list. }
       do: >-
         การ์ดขออนุญาตขึ้นในบทสนทนาของแม่ หัวข้อของคำขอ ACP ขึ้นต้นด้วย `[worker]` แต่การ์ดใช้หัวข้อของตัวเอง
@@ -184,7 +184,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Allow, and the worker installs vitest
+                  title: "คุณกด Allow แล้ว worker ติดตั้ง vitest"
                   text: >-
                     คำตอบของคุณไปถึงลูก ลูกรันคำสั่งใน sandbox แล้วทำงานต่อ
                     มันเขียนเทสต์และรันเทสต์จนผ่าน
@@ -212,7 +212,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Deny
+                  title: "คุณกด Deny"
                   text: >-
                     คำสั่งไม่ได้รัน คำปฏิเสธเปล่าๆ แปลว่าคุณอยากเป็นคนพูดต่อ ไม่ใช่แค่ลูก
                   from: you
@@ -231,7 +231,7 @@ scenario:
               - lane: child@worker
                 at: loop
                 beat:
-                  title: The worker stops, and so does the parent's call
+                  title: "Worker หยุด และ tool call ของแม่ก็หยุดด้วย"
                   text: >-
                     ลูกจบทันทีโดยไม่มีรายงาน Geno ถือว่าคำปฏิเสธนี้เป็นของแม่ด้วย
                     งานที่แม่ส่งให้ลูกจึงล้มเหลวแบบเดียวกับที่คุณปฏิเสธคำสั่งของแม่เอง
@@ -251,12 +251,12 @@ scenario:
               - lane: loop
                 at: step
                 beat:
-                  title: The turn ends without a reply
+                  title: "Turn จบโดยไม่มีคำตอบ"
                   text: >-
                     Geno จบ turn โดยไม่เรียกโมเดลอีก แถวของลูกขึ้นว่าเสร็จ แต่ประกาศในแชตบอกว่าคำตอบไม่มีข้อความ
                     แทนที่จะบอกว่าหยุดเพราะคุณปฏิเสธ
                   to: panel
-                  end: Ended by your Deny
+                  end: Turn จบเพราะคุณกด Deny
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [Continue, Retry], tone: warning }
                 do: >-
                   call `agent` ของแม่มีผล `rejected` `loopStep` ของแม่จึงตัดสิน `done(end_turn)` โดยไม่เรียกโมเดล
@@ -284,7 +284,7 @@ scenario:
       lane: child@worker
       at: model
       beat:
-        title: The worker writes its report and finishes
+        title: "Worker เขียนรายงานแล้วจบงาน"
         text: >-
           เมื่อเทสต์ผ่าน ลูกส่งรายงานว่าแก้อะไรที่ไหนและตรวจอย่างไร แล้วจบงานของตัวเอง
           Geno คืนงบส่วนที่ลูกไม่ได้ใช้ให้ turn ของแม่
@@ -307,7 +307,7 @@ scenario:
       lane: server
       at: updates
       beat:
-        title: Your chat marks the worker done
+        title: "แชตติดเครื่องหมายว่า worker เสร็จ"
         text: >-
           แถวของลูกหยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย ปุ่ม Cancel หายไป
         sees: { kind: task, title: worker, status: done, detail: 1m 48s · $0.06 }
@@ -328,7 +328,7 @@ scenario:
       lane: loop
       at: tools
       beat:
-        title: Geno hands the report to the model, fenced off
+        title: "Geno ล้อมรั้วรายงานแล้วส่งให้ model"
         text: >-
           รายงานกลับมาเป็นผลของเครื่องมือที่แม่เรียก Geno ล้อมรายงานไว้ในรั้วและเตือนว่ามันไม่ใช่คำสั่งของคุณ
           ข้อความที่ลูกไปเจอในไฟล์จึงปลอมเป็นคุณไม่ได้ แล้ว Geno ส่งทั้งหมดให้โมเดลของแม่อ่าน
@@ -346,11 +346,11 @@ scenario:
     - id: relay
       lane: model
       beat:
-        title: The model tells you what the worker did
+        title: "Model เล่าให้คุณฟังว่า worker ทำอะไร"
         text: >-
           โมเดลของแม่อ่านรายงานแล้วเล่าให้คุณฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหน และเทสต์ผ่านอย่างไร
         to: panel
-        sees: { kind: message, from: geno, text: The worker added vitest and a parser test file. All 12 tests pass., streaming: true }
+        sees: { kind: message, from: geno, text: "worker ติดตั้ง vitest และเพิ่มไฟล์เทสต์ของ parser แล้ว เทสต์ผ่านทั้งหมด", streaming: true }
       do: >-
         โมเดลของแม่อ่านรายงานในรั้ว แล้วเล่าให้ผู้ใช้ฟังด้วยคำของตัวเองว่าลูกแก้ไฟล์ไหนและเทสต์ผ่านอย่างไร
         จบด้วย `stop_reason: end_turn`
@@ -360,7 +360,7 @@ scenario:
     - use: answer-streams
     - use: turn-ends
       beat:
-        title: The turn ends
+        title: "Turn จบ"
         text: >-
           โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมา และค่าใช้จ่ายท้าย turn รวมของลูกไว้ด้วย
         to: panel
