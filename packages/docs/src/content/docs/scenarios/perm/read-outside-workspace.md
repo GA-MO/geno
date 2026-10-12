@@ -163,7 +163,7 @@ scenario:
       runs: 1
       do: >-
         `read` อ่านไฟล์โดยให้ราก filesystem เป็นโฟลเดอร์ที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
-        ผลมีบันทึกว่าผู้ใช้อนุญาต
+        ผลมีบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
       ref: "packages/engine/src/tools/agent.ts#\"const approval = await askOutside(name, outside, reach);\""
 
     - use: tool-result-returns

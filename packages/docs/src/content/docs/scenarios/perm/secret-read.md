@@ -78,7 +78,8 @@ scenario:
                 at: card
                 do: การ์ดขออนุญาตแสดงคำสั่งและเหตุผล
                 sees: >-
-                  Allow `read .env`? It uses a credentials file such as .env. [Allow] [Deny] [No, and tell the agent…]
+                  การ์ด "Run this command?" แสดง `read .env` พร้อมเหตุผล "Geno asks because it uses a credentials file such as .env."
+                  [Allow] [Deny] [No, and tell the agent…]
                 ref: packages/extension/src/chat/render.ts#permissionCard
               - lane: user
                 do: ผู้ใช้เลือกปุ่มบนการ์ด
@@ -166,7 +167,7 @@ scenario:
       runs: 1
       do: >-
         `read` เปิดไฟล์ผ่าน editor และคืนข้อความทั้งไฟล์พร้อมเลขบรรทัด ค่าในไฟล์ไม่ถูกปิดบัง
-        ผลมีบันทึกว่าใครอนุญาต
+        ผลมีบันทึกว่าใครอนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
       ref: packages/engine/src/tools/read.ts#readResolved
 
     - use: tool-result-returns

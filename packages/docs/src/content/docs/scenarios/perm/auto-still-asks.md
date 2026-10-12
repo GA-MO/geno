@@ -106,7 +106,7 @@ scenario:
       sees: >-
         การ์ด "Run this command?" กับคำสั่ง และเช่น "Geno asks because it uses rm -rf of the workspace, its .git or a path outside it."
         หรือบรรทัด "Auto could not decide: Runs a script whose effects are not visible in the conversation."
-        ปุ่ม [Allow] [Deny] [No, and tell the agent…]
+        ปุ่ม [Allow] [Deny] [No, and tell the agent…] (และ [Always allow in this workspace] เมื่อมีรูปแบบให้บันทึก)
       ref: packages/extension/src/chat/render.ts#permissionCard
 
     - id: choice
@@ -168,7 +168,7 @@ scenario:
       at: shell
       do: >-
         `bash` รันคำสั่งใน sandbox การอนุญาตไม่ได้ยกเว้น sandbox `rm -rf ../old-build` ยังลบนอก workspace ไม่ได้
-        ถ้า sandbox ไม่ได้เปิดสิทธิ์เขียนที่นั่นไว้ ผลแนบบันทึกว่าผู้ใช้อนุญาต
+        ถ้า sandbox ไม่ได้เปิดสิทธิ์เขียนที่นั่นไว้ ผลแนบบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
       ref: "packages/engine/src/tools/agent.ts#\"const result = await tools.sandbox.run(command, {\""
 
     - use: tool-result-returns
