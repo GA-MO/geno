@@ -30,7 +30,7 @@ scenario:
       lane: server
       at: updates
       do: >-
-        engine ส่ง `notice` "Compacting the context" ให้ทุกหน้าต่างที่เปิด session นี้อยู่
+        engine ส่ง `notice` "Compacting the context" ผ่าน `viewers.notify` ไปที่หน้าต่างที่แสดง session นี้อยู่ตอนนั้น (มีได้ทีละหนึ่ง)
       ref: "packages/engine/src/serve.ts#\"notify({ sessionUpdate: 'notice', severity: 'info', title: 'Compacting the context' });\""
       emits: [notice, Compacting the context]
       phase: compacting
@@ -69,7 +69,7 @@ scenario:
               - lane: server
                 at: updates
                 do: >-
-                  `compactUpdate` ส่ง `agent_message_chunk` ที่มี `COMPACT_META` ให้ทุกหน้าต่างที่เปิด session นี้
+                  `compactUpdate` ส่ง `agent_message_chunk` ที่มี `COMPACT_META` ไปที่หน้าต่างที่แสดง session นี้อยู่
                 ref: packages/engine/src/session-replay.ts#compactUpdate
                 emits: [agent_message_chunk, COMPACT_META]
               - lane: policy
@@ -103,8 +103,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` อ่านได้ `done` แล้วส่ง action `turn-end`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `prompt()` ใช้ `turnEndOf` อ่านได้ `done` แล้วส่ง action `turn-end`
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
@@ -160,8 +160,8 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `turnEndOf` อ่านได้ `done` แล้วส่ง action `turn-end`
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+        `prompt()` ใช้ `turnEndOf` อ่านได้ `done` แล้วส่ง action `turn-end`
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: footer
@@ -183,7 +183,8 @@ scenario:
 - **ระหว่าง turn ใช้ไม่ได้** ถ้ามี turn ทำงานอยู่ แผงแชตเก็บ `/compact` ไว้ในคิวรอจน turn จบ (ปุ่ม Compact ก็ถูกปิดไว้พร้อมคำอธิบาย)
   ถ้าคำขอมาถึง engine ขณะ turn ทำงาน `runTurn` ปฏิเสธด้วย "a turn is already running" ก่อนจะถึง `compactBetweenTurns`
   ข้อความ "A turn is running. /compact runs between turns..." ใน `compactBetweenTurns` จึงไม่ถูกใช้ในทางนี้
-- **ทุกหน้าต่างเห็นพร้อมกัน** ประกาศและเส้นคั่นส่งผ่าน `viewers.notify` ไปทุกหน้าต่างที่เปิด session นี้อยู่ ไม่ใช่เฉพาะหน้าต่างที่สั่ง
+- **ประกาศไปที่หน้าต่างที่แสดง session** ประกาศและเส้นคั่นส่งผ่าน `viewers.notify` ซึ่งมีผู้ดูได้ทีละหน้าต่าง คือหน้าต่างที่แสดง session นี้ล่าสุด
+  ไม่จำเป็นต้องเป็นหน้าต่างที่สั่ง ส่วนคำตอบของคำสั่งส่งตรงถึงหน้าต่างที่สั่ง
 - **Stop ได้ผลเป็น done** ทางของคำสั่ง builtin ตอบ `end_turn` เสมอ หัวข้อจึงเป็น "worked for" ไม่ใช่ "stopped"
   ข้อความ "Stopped. The context is as it was." เป็นที่เดียวที่บอกว่าหยุดแล้ว
 - **สรุปสำเร็จแล้วยังขึ้นประกาศ "Geno stopped without a reply"** คำตอบของคำสั่งที่สรุปสำเร็จเป็นข้อความว่าง
