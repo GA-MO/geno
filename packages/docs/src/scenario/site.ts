@@ -5,6 +5,7 @@ import type { z } from 'astro/zod';
 import { compileScenario } from './compile.js';
 import { LOOP_FILE, readEndTables, SERVE_FILE, type EndTables } from './ends.js';
 import { partKeyOf, type CodeRef, type Link, type PartKey, type Problem, type Scenario, type StepId } from './model.js';
+import { runFiles } from './payload.js';
 import { sourceIndex } from './refs.js';
 import { catalogSchema, fragmentSchema, isUse, lanesSchema, PRIORITIES, scenarioSchema, type CatalogIn, type LanesIn, type StepIn } from './schema.js';
 
@@ -135,6 +136,7 @@ export function loadSite(options: SiteOptions): Site {
   );
 
   const source = sourceIndex(options.repoRoot);
+  const runs = runFiles(options.repoRoot);
   const partRefs: Record<PartKey, CodeRef> = {};
   lanes.lanes.forEach((lane, i) =>
     lane.parts.forEach((part, j) => {
@@ -148,7 +150,7 @@ export function loadSite(options: SiteOptions): Site {
   const ends: EndTables = tables.ok ? tables.tables : { afterStop: new Map(), turnEnds: new Map(), goingOn: new Set() };
   const scenarios: Record<string, Scenario> = {};
   for (const { page, scenario } of authored) {
-    const result = compileScenario(scenario, { file: page.file, id: page.id, href: page.href, title: page.title, lanes, fragments, source, ends, catalog: links });
+    const result = compileScenario(scenario, { file: page.file, id: page.id, href: page.href, title: page.title, lanes, fragments, source, runs, ends, catalog: links });
     if (result.ok) scenarios[page.id] = result.value;
     else problems.push(...result.problems.map((problem) => ({ ...problem, path: `scenario.${problem.path}` })));
   }

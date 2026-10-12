@@ -2,6 +2,7 @@
 # Lanes are data. No component, layout or check names a lane id; they read party, process, counts and parts here.
 #
 # party     whose move a step in this lane is (user | ai | harness | outside). A part may override it.
+# actor     the story actor this lane belongs to (you | panel | engine | model | machine): who a beat shows acting.
 # process   the OS process the lane lives in. The system map orders its columns by process.
 # surfaces  where the lane exists. A scenario's surface must be in every lane it uses.
 # instanced the lane repeats per session, written child@explore.
@@ -23,6 +24,7 @@ lanes:
     english: User
     about: คนที่พิมพ์ คลิก ตอบการ์ด และกด Stop
     party: user
+    actor: you
     process: person
     surfaces: [vscode, cli, acp-editor]
 
@@ -33,6 +35,7 @@ lanes:
       หน้าบทสนทนาที่ผู้ใช้อ่านและพิมพ์ ใน VS Code คือ webview (ช่องพิมพ์ บทสนทนา การ์ด ปุ่ม Stop)
       ใน CLI คือเทอร์มินัล
     party: harness
+    actor: panel
     process: webview
     surfaces: [vscode, cli, acp-editor]
     parts:
@@ -52,6 +55,7 @@ lanes:
       process ของ extension host กับหน้าจอของ VS Code เอง (toast, quick pick, CodeLens, status bar, buffer)
       แปลงข้อความจากแผงแชทเป็นคำขอ ACP และแปลงอัปเดตจาก engine กลับเป็น action
     party: harness
+    actor: panel
     process: ext-host
     surfaces: [vscode]
     parts:
@@ -68,6 +72,7 @@ lanes:
       ฝั่ง ACP ของ engine daemon ถือสถานะที่ทุกหน้าต่างใช้ร่วมกัน: ทะเบียน turn, lock ต่อ session,
       steer และคิว, การเล่นซ้ำ, งานใน Tasks, การปลุก และการส่งคำขออนุญาตไปหา editor
     party: harness
+    actor: engine
     process: engine
     surfaces: [vscode, acp-editor]
     parts:
@@ -87,6 +92,7 @@ lanes:
       การทำงานหนึ่งรอบของเอเจนต์: runAgent ประกอบโหมด drive บันทึก event loopStep ตัดสินใจ
       deliver() คือจุดปลอดภัย gateway เรียกโมเดลพร้อม retry และ runTools รันเครื่องมือเป็นชุด
     party: harness
+    actor: engine
     process: engine
     surfaces: [vscode, cli, acp-editor]
     parts:
@@ -104,6 +110,7 @@ lanes:
       ลูปอีกตัวที่ทำงานพร้อมกันใน session ของตัวเอง: subagent, workflow, arena lane
       การเรียกโมเดลของลูกวาดอยู่ใน lane นี้
     party: harness
+    actor: model
     process: engine
     surfaces: [vscode, cli, acp-editor]
     instanced: true
@@ -116,6 +123,7 @@ lanes:
     english: Model
     about: LLM ที่ตอบคำขอ (stream ข้อความ tool_use และ stop reason) รวมถึงการสรุปตอน compaction และ llama-server ของ Tab
     party: ai
+    actor: model
     process: provider
     surfaces: [vscode, cli, acp-editor]
     counts: model-call
@@ -125,6 +133,7 @@ lanes:
     english: Tool
     about: ตัวเครื่องมือและสิ่งที่มันแตะโดยตรง เช่น shell ใน sandbox ไฟล์ งานเบื้องหลัง
     party: harness
+    actor: machine
     process: engine
     surfaces: [vscode, cli, acp-editor]
     counts: tool-run
@@ -140,6 +149,7 @@ lanes:
       ทุกการตัดสิน allow, ask, deny หรือ classify และสิ่งที่ทำให้เกิด: โหมด กฎ settle
       สถานะ Auto classifier และ hook ทุกชนิด
     party: harness
+    actor: engine
     process: engine
     surfaces: [vscode, cli, acp-editor]
     parts:
@@ -153,5 +163,6 @@ lanes:
     english: External
     about: ระบบนอก Geno ที่ผลลัพธ์กลับมาเป็นข้อมูล เช่น MCP server เว็บ gh และ GitHub การแจ้งเตือนของ OS
     party: outside
+    actor: machine
     process: outside
     surfaces: [vscode, cli, acp-editor]
