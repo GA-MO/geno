@@ -7,7 +7,7 @@ sidebar:
 scenario:
   surface: vscode
   given:
-    - ใน turn นี้ model เริ่ม `explore` แบบเบื้องหลังให้หาที่ใช้ API เก่า แล้วทำงานอื่นต่อ
+    - ใน turn นี้ model เริ่ม `explore` แบบเบื้องหลังให้หาที่เรียก `parseVersion` แล้วทำงานอื่นต่อ
     - ตอนนี้ model กำลังรัน `pnpm build` ด้วย `bash` ใน turn เดิม
   trigger: >-
     explore ค้นเสร็จและเรียก `report` ขณะที่ `pnpm build` ยังรันอยู่
@@ -17,18 +17,24 @@ scenario:
     - id: report
       beat:
         title: explore ส่งรายงานแล้วจบ
-        text: explore ที่ model เริ่มไว้เบื้องหลังค้นเสร็จ มันส่งรายการไฟล์ที่ใช้ API เก่า แถวของมันในแชตหยุดหมุนทันที
+        text: >-
+          explore ที่ model เริ่มไว้เบื้องหลังค้นเสร็จ มันเรียก `report` พร้อมรายการที่เรียก `parseVersion`
+          (การ์ด: block `tool_use` ชื่อ `report` ที่ stream มา) แถวของมันในแชตหยุดหมุนทันที
         from: model
         to: engine
         sees:
-          kind: task
-          title: explore
-          status: done
-          detail: 41s
+          - kind: task
+            title: explore
+            status: done
+            detail: 41s
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-steer.jsonl#line=11
+            select: '[4]'
+            highlight: [data.content_block.name]
       lane: child@explore
       at: model
       do: >-
-        ลูกเรียก `report` พร้อมรายการไฟล์ที่ใช้ API เก่า ลูกจบแบบ `done`
+        ลูกเรียก `report` พร้อมรายการที่เรียก `parseVersion` ลูกจบแบบ `done`
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
       phase: running-tools
@@ -143,9 +149,17 @@ scenario:
     - id: request
       beat:
         title: Geno ส่งทั้งสองอย่างให้ model
-        text: รายงานขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของคุณ ตามด้วยรั้ว `<subagent_report>`
+        text: >-
+          ข้อความสุดท้ายของ request มี `tool_result` ของ tool ที่เพิ่งจบ แล้วต่อด้วยโน้ตของ Geno ที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของคุณ
+          ตามด้วยรั้ว `<subagent_report>` และคำเตือน ในการบันทึกนี้ tool ที่จบคือ `read` ของ package.json ไม่ใช่ `pnpm build`
+          แต่ตำแหน่งของรายงานเหมือนกัน
         from: engine
         to: model
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/background-steer.jsonl#line=14
+          select: messages[8]
+          highlight: ['content[1].text']
       lane: loop
       at: model-call
       do: >-
