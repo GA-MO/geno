@@ -18,7 +18,7 @@ scenario:
       lane: server
       at: turns
       do: >-
-        engine หยุดทันที ไม่มีใครเขียนอะไรต่อ log ของลูกมี `child-start` ที่จด pid ของ engine (`by`) แต่ไม่มี `child-end`
+        engine หยุดทันที ไม่มีใครเขียนอะไรต่อ log ของแม่มี `child-start` ที่จด pid และโฟลเดอร์ของ engine (`by`) แต่ไม่มี `child-end`
         call ที่ลูกค้างไว้ไม่มีผล และ call `agent` ของแม่ก็ไม่มีผล
       ref: packages/core/src/interrupted.ts#openRunsOf
       phase: running-tools
@@ -38,7 +38,7 @@ scenario:
       alongside: true
       do: >-
         turn ขึ้นแถบ error กับหัวข้อ "failed after ..." แถวของ worker ถูกปิดเป็น Cancelled ไปพร้อม turn
-      sees: แถบ error สีแดงพร้อมข้อความ error ของคำขอที่ล้มเหลว หัวข้อ "failed after 2m 10s" และแถว worker ขึ้น Cancelled
+      sees: แถบ error สีแดงพร้อมข้อความ error ของคำขอที่ล้มเหลว หัวข้อ "failed after 2m 10s" และแถว worker ขึ้นไอคอน cancelled (คำว่า Cancelled อยู่ใน tooltip)
       ref: packages/extension/src/chat/render.ts#errorBlock
       phase: idle
 
@@ -167,7 +167,7 @@ scenario:
       at: rail
       do: >-
         turn จบแบบ done ผู้ใช้อ่านรายงานของ worker ได้จากผลของขั้น `message_agent`
-      sees: หัวข้อ "worked for 1m 4s" ขั้น "message_agent ..." และแถว worker ขึ้น Done
+      sees: หัวข้อ "worked for 1m 4s" ขั้น "message_agent ..." และแถว worker ขึ้นเครื่องหมายถูก
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: done, reason: end_turn }
 ---

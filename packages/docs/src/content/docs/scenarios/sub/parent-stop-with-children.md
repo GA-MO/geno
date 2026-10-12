@@ -93,6 +93,8 @@ scenario:
       do: >-
         `runTurn` เห็นว่า signal ถูก abort จึงใช้ `TURN_ENDS.cancelled`: `stopReason: cancelled` งานใน Tasks จบแบบ stopped
         และ error ชนิด `abort` พักการปลุกของ session นี้จนกว่าผู้ใช้จะพิมพ์ prompt ใหม่
+        แผง Tasks ขึ้น "Wake-ups paused after Stop" เฉพาะเมื่อ session ยังมีสิ่งที่รอปลุก เช่น monitor หรือ PR watch
+        ในทัวร์นี้ review ถูกหยุดไปแล้ว ไม่มีอะไรรอ จึงไม่มีบรรทัดนี้
       ref: packages/core/src/wake.ts#WAKE_PAUSE_TEXT
       emits: [cancelled, Wake-ups paused after Stop]
 
@@ -109,8 +111,8 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end`
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+        `turnEndOf` อ่าน `_meta` ได้ `stopped` แล้ว `prompt()` ส่ง action `turn-end`
+      ref: "packages/extension/src/chat/chat.ts#\"this.dispatch({ type: 'turn-end', at: Date.now(), status, usage: usageOf(response)\""
       emits: [turn-end]
 
     - id: footer
@@ -120,7 +122,7 @@ scenario:
         `turn-end` ปิดทุกอย่างที่ยังรันอยู่ใน turn: ขั้นที่ยังหมุนเป็น cancelled และลูกที่ยังรันเป็น Cancelled (`endedByParent`)
         turn ไม่มีข้อความตอบและไม่มีแถบ error `missingReply` จึงบอกว่าผู้ใช้หยุดก่อนได้คำตอบ
       sees: >-
-        หัวข้อ "stopped after 1m 05s" แถว explore และ review ขึ้น Cancelled และประกาศ
+        หัวข้อ "stopped after 1m 05s" แถว explore และ review ขึ้นไอคอน cancelled และประกาศ
         "Geno stopped without a reply · You stopped it before it answered." [Continue] [Retry]
       ref: "packages/extension/src/chat/transcript.ts#\"const children = Object.keys(settled.children\""
       end: { turn: stopped, reason: cancelled }
@@ -135,5 +137,6 @@ Stop ของแม่หยุดทุกอย่างที่ turn เร
   สิ่งที่ลูกทำไว้ยังอยู่ใน log ของลูก เปิดดูได้จากแถวของลูก
 - **ลูกเบื้องหลังรอดได้เฉพาะ turn ที่จบด้วย `end_turn`** ถ้าโมเดลจบ turn เอง ลูกเบื้องหลังทำงานต่อและปลุก session ได้
   ([ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน](/scenarios/bg/child-wakes-parent/)) ทุกการจบแบบอื่นหยุดลูกเบื้องหลังทั้งหมด
-- **การปลุกถูกพัก** แผง Tasks แสดง "Wake-ups paused after Stop" จนกว่าผู้ใช้จะส่ง prompt ใหม่
+- **การปลุกถูกพัก** จนกว่าผู้ใช้จะส่ง prompt ใหม่ ถ้า session ยังมีสิ่งที่รอปลุกอยู่ (monitor, schedule, PR watch)
+  แผง Tasks แสดง "Wake-ups paused after Stop" ถ้าไม่มีอะไรรอ ก็ไม่มีบรรทัดนี้
 - **Retry หลัง Stop** ส่ง prompt เดิมอีกครั้ง prompt เดิมยังค้างใน log (`abort` เป็นชนิดที่เก็บ prompt ไว้) พร้อมโน้ตว่า turn ก่อนถูกหยุด

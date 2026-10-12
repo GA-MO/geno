@@ -102,7 +102,7 @@ scenario:
         options:
           - id: changed
             label: เปลี่ยน
-            then: fenced
+            then: row-done
             steps:
               - lane: loop
                 at: tools
@@ -114,13 +114,21 @@ scenario:
 
           - id: unchanged
             label: ไม่เปลี่ยน
-            then: fenced
+            then: row-done
             steps:
               - lane: loop
                 at: tools
                 do: >-
                   lane ไม่มีอะไรจะเสีย `removeLane` ลบ worktree และ branch ทิ้ง รายงานไม่มีโน้ตเรื่อง lane
                 ref: packages/engine/src/lanes.ts#settleChildLane
+
+    - id: row-done
+      lane: server
+      at: updates
+      do: >-
+        `runPlaced` เรียก `acpChildHost.ended` ซึ่งส่ง `subagent_update` สถานะ `idle` แถวของลูกขึ้นเครื่องหมายถูก
+      ref: packages/engine/src/subagent-acp.ts#acpChildHost
+      emits: [subagent_update, idle]
 
     - id: fenced
       lane: loop
@@ -130,15 +138,6 @@ scenario:
         โน้ตของ lane (ถ้ามี) อยู่ในรั้วต่อจากรายงาน
       ref: packages/core/src/subagent.ts#childReport
       emits: [child-end, subagent_report]
-
-    - id: row-done
-      lane: server
-      at: updates
-      alongside: true
-      do: >-
-        `acpChildHost.ended` ส่ง `subagent_update` สถานะ `idle` แถวของลูกขึ้น Done
-      ref: packages/engine/src/subagent-acp.ts#acpChildHost
-      emits: [subagent_update, idle]
 
     - use: tool-result-returns
     - use: model-call
