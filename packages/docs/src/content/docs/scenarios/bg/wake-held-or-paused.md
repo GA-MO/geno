@@ -129,8 +129,9 @@ scenario:
       at: wakes
       do: >-
         ประตูตอบ `wake` `wakeTurn` เรียก `runTurn` แบบ `wake` และ `logWake` บันทึกข้อความแรกของ turn จาก engine
+        เป็น event `user` ที่มี `from: 'wake'` แล้ว `runTurn` ส่งข้อความนั้นเป็น `user_message_chunk` พร้อม `WAKE_META`
       ref: packages/engine/src/serve.ts#logWake
-      emits: [wake, user_message_chunk, WAKE_META]
+      emits: [user, user_message_chunk, WAKE_META]
       phase: starting
 
     - id: adopt

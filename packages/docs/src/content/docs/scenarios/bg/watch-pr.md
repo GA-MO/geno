@@ -90,9 +90,9 @@ scenario:
       at: wakes
       do: >-
         check สุดท้ายจบ มีตัวหนึ่งล้ม `prReport` เขียนรายงานพร้อม log ท้ายของ check ที่ล้ม (ไม่เกิน 50 บรรทัด 4,000 ตัวอักษรต่อตัว)
-        แล้ว `Wakes.pr` ใส่โน้ต `wake` ชนิด `pr` ผล `failed` ลงกล่องข้อความของ session
+        แล้ว `Wakes.pr` ใส่โน้ต `wake` ชนิด `pr` ผล `failed` ลงกล่องข้อความของ session โน้ตนี้ถูกบันทึกลง log เป็น event `wake` ในขั้นถัดไป
       ref: packages/engine/src/wakes.ts#Wakes.pr
-      emits: [pr, failed]
+      emits: [wake, pr, failed]
 
     - use: bg-wake-starts
     - use: model-call

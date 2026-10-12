@@ -76,12 +76,12 @@ scenario:
                 at: sessions
                 do: >-
                   engine ตัวเดิมจบไป (เช่นหลังปิดหน้าต่างทั้งหมด) เมื่อหน้าต่างต่อ engine ตัวใหม่ `takeUpWaits` เรียก `WakeDriver.takeUp`
-                  ซึ่งหาโน้ต `scheduled` ที่ยังไม่ถึงกำหนดใน log ที่แก้ภายใน 24 ชั่วโมงและ engine เจ้าของไม่อยู่แล้ว
+                  ซึ่งหาโน้ต `scheduled` ที่ยังไม่ดังและไม่ถูกยกเลิก ใน log ที่แก้ภายใน 24 ชั่วโมง ของ engine ที่เคยรับใช้โฟลเดอร์นี้และไม่อยู่แล้ว
                 ref: packages/engine/src/wake-hooks.ts#WakeDriver.takeUp
-              - lane: loop
-                at: drive
+              - lane: server
+                at: wakes
                 do: >-
-                  engine ตัวใหม่บันทึกโน้ต `scheduled` ของ `wake-1` ซ้ำโดยมี `by` เป็นตัวเอง แล้วตั้งนาฬิกาตามเวลาเดิม
+                  `takeUp` บันทึกโน้ต `scheduled` ของ `wake-1` ซ้ำโดยมี `by` เป็น engine ตัวใหม่ แล้ว `Wakes.schedule` ตั้งนาฬิกาตามเวลาเดิม
                   ถ้าเวลาผ่านไปแล้ว นาฬิกาดังทันที
                 ref: packages/engine/src/wakes.ts#Wakes.schedule
                 emits: [wake, scheduled]
@@ -91,8 +91,9 @@ scenario:
       at: wakes
       do: >-
         นาฬิกาดัง `Wakes.schedule` ลบการรอ แล้วใส่โน้ต `wake` ชนิด `due` พร้อมเหตุผลลงกล่องข้อความของ session
+        โน้ตนี้ถูกบันทึกลง log เป็น event `wake` ในขั้นถัดไป ซึ่งปิดโน้ต `scheduled` ของ `wake-1` ไม่ให้ engine ตัวอื่นรับช่วงอีก
       ref: packages/engine/src/wakes.ts#Wakes.schedule
-      emits: [due]
+      emits: [wake, due]
 
     - use: bg-wake-starts
     - use: model-call

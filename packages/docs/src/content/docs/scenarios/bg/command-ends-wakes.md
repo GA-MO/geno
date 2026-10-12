@@ -112,9 +112,10 @@ scenario:
                 at: wakes
                 do: >-
                   ไม่มี turn รันอยู่ `logArrivals` จึงบันทึก event `background-end` ลง log ทันที แล้ว `wakeGate` รอ 2 วินาที
-                  ไม่มีการ์ดค้าง ผู้ใช้ไม่ได้พิมพ์ จึงปลุก `logWake` เปิด turn ด้วยข้อความจาก engine
+                  ไม่มีการ์ดค้าง ผู้ใช้ไม่ได้พิมพ์ จึงปลุก `logWake` เปิด turn ด้วยข้อความจาก engine เป็น event `user` ที่มี `from: 'wake'`
+                  (การจบของคำสั่งไม่มี event `wake` ของตัวเอง) แล้ว `runTurn` ส่งข้อความนั้นพร้อม `WAKE_META`
                 ref: packages/engine/src/background-hooks.ts#logArrivals
-                emits: [wake, WAKE_META]
+                emits: [background-end, user, WAKE_META]
                 phase: starting
               - lane: panel
                 at: rail

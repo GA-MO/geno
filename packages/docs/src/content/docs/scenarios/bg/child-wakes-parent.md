@@ -47,8 +47,9 @@ scenario:
       at: tasks
       alongside: true
       do: >-
-        แผง Tasks แสดงว่า session นี้รอลูกอยู่
-      sees: แถวของ session ในแผง Tasks บอก "Wakes on explore"
+        งานของ session ในแผง Tasks จดว่ารอ explore อยู่ ระหว่างที่ turn ยังรัน แถวยังไม่บอกเรื่องนี้ (`wakesOf` ข้ามงานที่ยังรัน)
+        เมื่อ turn จบ แถวจึงบอกว่ารออะไร
+      sees: หลัง turn จบ แถวของ session ในแผง Tasks บอก "Wakes on explore"
       ref: packages/core/src/wake.ts#waitsForText
 
     - use: tool-result-returns
@@ -75,7 +76,7 @@ scenario:
       at: rail
       do: >-
         turn จบแบบ done `turn-end` ปิดทุกอย่างที่ยังรันอยู่ใน turn นั้น รวมถึงแถวของลูกเบื้องหลัง ซึ่งขึ้นเป็น Cancelled ทั้งที่ลูกยังทำงานอยู่
-      sees: หัวข้อ "worked for 12s" คำตอบของโมเดล และแถว explore ที่ขึ้น Cancelled
+      sees: หัวข้อ "worked for 12s" คำตอบของโมเดล และแถว explore ที่ขึ้นไอคอน cancelled
       ref: "packages/extension/src/chat/transcript.ts#\"const children = Object.keys(settled.children\""
       phase: idle
 
@@ -147,10 +148,11 @@ scenario:
       lane: server
       at: wakes
       do: >-
-        ประตูตอบ `wake` `WakeDriver` เลือกหน้าต่างที่แสดง session นี้ให้รัน `wakeTurn` ซึ่งเรียก `runTurn` แบบ `wake`
-        `logWake` บันทึกข้อความแรกของ turn จาก engine (`from: 'wake'`) และขีดจำกัดของ turn นับต่อจาก prompt ล่าสุดของผู้ใช้
+        ประตูตอบ `wake` `WakeDriver` เลือกหน้าต่างที่แสดง session นี้ (หรือหน้าต่างแรกที่ต่ออยู่) ให้รัน `wakeTurn` ซึ่งเรียก `runTurn` แบบ `wake`
+        `logWake` บันทึกข้อความแรกของ turn จาก engine เป็น event `user` ที่มี `from: 'wake'` (ไม่มี event `wake` เพราะสิ่งที่มาคือรายงานของลูก)
+        แล้ว `runTurn` ส่งข้อความนั้นเป็น `user_message_chunk` พร้อม `WAKE_META` ขีดจำกัดของ turn นับต่อจาก prompt ล่าสุดของผู้ใช้
       ref: packages/engine/src/serve.ts#logWake
-      emits: [wake, user_message_chunk, WAKE_META]
+      emits: [user, user_message_chunk, WAKE_META]
       phase: starting
 
     - id: adopt
@@ -192,12 +194,14 @@ scenario:
       phase: ending
 
     - id: ended
-      lane: panel
-      at: rail
+      lane: editor
+      at: chat
       do: >-
-        แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` อ่านการจบจากงานในแผง Tasks แทน แล้วแสดงท้าย turn ตามปกติ
+        แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` ใน extension host อ่านการจบจากงานในแผง Tasks แทน
+        แล้วส่ง action `turn-end` ให้แผงแสดงท้าย turn ตามปกติ
       sees: หัวข้อ "worked for 7s" และคำตอบที่เล่าผลของ explore
       ref: packages/extension/src/chat/chat.ts#Chat.adoptedEnded
+      emits: [turn-end]
       end: { turn: done, reason: end_turn }
 ---
 
