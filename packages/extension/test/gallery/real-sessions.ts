@@ -654,6 +654,7 @@ export const REAL_SESSIONS: readonly RealSession[] = [
         "type": "permission",
         "id": "0",
         "command": "rm -rf build",
+        "line": "rm -rf build && ls -d build 2>&1; echo \"exit: $?\"",
         "reason": "rm -rf of a path inside the workspace",
         "description": "Delete the build folder and confirm it is gone",
         "options": [
