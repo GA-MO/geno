@@ -132,9 +132,9 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `turnEndOf` อ่านได้ `failed` บล็อก error ของ engine บอกเหตุผลไว้แล้ว ข้อความสำรองใน `STOP_MESSAGES` จึงไม่ถูกเพิ่ม
+        `prompt()` ใช้ `turnEndOf` อ่านได้ `failed` บล็อก error ของ engine บอกเหตุผลไว้แล้ว ข้อความสำรองใน `STOP_MESSAGES` จึงไม่ถูกเพิ่ม
         แล้วส่ง action `turn-end` สถานะ `failed`
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: notice
@@ -165,7 +165,7 @@ scenario:
   `loopStep` จึงให้ `done(end_turn)` ไม่ใช่ `max-turns` ผู้ใช้เห็นรายงานโดยไม่มีแถบเตือนขีดจำกัด
 - **เตือนล่วงหน้าเมื่อเหลือ 20%** ก่อนการเรียกที่เหลือจำนวนครั้งหรืองบไม่เกิน 20% `deliver()` บันทึก `notice` ที่บอกโมเดลว่าเหลือเท่าไร
   ครั้งเดียวต่อรอบ ผู้ใช้ไม่เห็นประกาศนี้
-- **Continue ได้ขีดจำกัดใหม่** Continue และ Retry ส่ง prompt ใหม่ `runTurn` ล้างขีดจำกัดของรอบก่อน
+- **Continue ได้ขีดจำกัดใหม่** Continue และ Retry ส่ง prompt ใหม่ `drive` เริ่มนับรอบใหม่จาก prompt นั้น
   และ prompt เดิมยังอยู่ในคำขอ เพราะ error ของขีดจำกัดไม่ลบ prompt ที่ยังไม่ได้คำตอบ
 - **ประกาศแสดงเสมอเมื่อมีแถบขีดจำกัด** `missingReply` มองหาข้อความหลังขั้นสุดท้าย และแถบขีดจำกัดก็นับเป็นขั้น
   ข้อความใดๆ ที่โมเดลเขียนก่อนชนขีดจำกัดจึงไม่ทำให้ประกาศ "It reached its limit before it answered." หายไป

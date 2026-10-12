@@ -89,9 +89,9 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` เชื่อ meta มากกว่า stop reason จึงส่ง action `turn-end` สถานะ `failed`
+                  `turnEndOf` เชื่อ meta มากกว่า stop reason `prompt()` จึงส่ง action `turn-end` สถานะ `failed`
                   stop reason `end_turn` ไม่มีข้อความใน `STOP_MESSAGES` จึงไม่มีบล็อก error
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
