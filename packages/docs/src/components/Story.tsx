@@ -194,9 +194,93 @@ function Overview({ layout, at, view, jump }: { readonly layout: LaneLayout; rea
   );
 }
 
+/**
+ * Mouse drag pans the lanes and a flick keeps them gliding with friction, like a trackpad. A drag past a few pixels
+ * swallows the click it ends with, so it never opens a beat.
+ */
+function useDragScroll(ref: { readonly current: HTMLDivElement | null }): void {
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    let start: { readonly x: number; readonly left: number } | undefined;
+    let samples: { readonly x: number; readonly t: number }[] = [];
+    let dragged = false;
+    let frame = 0;
+    const stopGlide = () => cancelAnimationFrame(frame);
+    const glide = (velocity: number) => {
+      let v = velocity;
+      let last = performance.now();
+      const step = (now: number) => {
+        const dt = Math.min(now - last, 32);
+        last = now;
+        element.scrollLeft -= v * dt;
+        v *= Math.pow(GLIDE_FRICTION, dt / 16);
+        const atEdge = element.scrollLeft <= 0 || element.scrollLeft >= element.scrollWidth - element.clientWidth;
+        if (Math.abs(v) > GLIDE_STOP && !atEdge) frame = requestAnimationFrame(step);
+      };
+      frame = requestAnimationFrame(step);
+    };
+    const down = (event: PointerEvent) => {
+      stopGlide();
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      start = { x: event.clientX, left: element.scrollLeft };
+      samples = [{ x: event.clientX, t: event.timeStamp }];
+      dragged = false;
+    };
+    const move = (event: PointerEvent) => {
+      if (start === undefined) return;
+      const dx = event.clientX - start.x;
+      if (!dragged && Math.abs(dx) < 4) return;
+      if (!dragged) element.setPointerCapture(event.pointerId);
+      dragged = true;
+      element.classList.add('dragging');
+      element.scrollLeft = start.left - dx;
+      samples.push({ x: event.clientX, t: event.timeStamp });
+      samples = samples.filter((sample) => event.timeStamp - sample.t <= VELOCITY_WINDOW_MS * 2);
+    };
+    const up = (event: PointerEvent) => {
+      if (start === undefined) return;
+      start = undefined;
+      element.classList.remove('dragging');
+      const last = samples.at(-1);
+      if (!dragged || last === undefined || reduced() || event.timeStamp - last.t > HELD_BEFORE_RELEASE_MS) return;
+      const recent = samples.filter((sample) => last.t - sample.t <= VELOCITY_WINDOW_MS);
+      const first = recent[0]!;
+      if (last.t > first.t) glide((last.x - first.x) / (last.t - first.t));
+    };
+    const click = (event: MouseEvent) => {
+      if (!dragged) return;
+      dragged = false;
+      event.stopPropagation();
+      event.preventDefault();
+    };
+    element.addEventListener('pointerdown', down);
+    element.addEventListener('pointermove', move);
+    element.addEventListener('pointerup', up);
+    element.addEventListener('pointercancel', up);
+    element.addEventListener('wheel', stopGlide, { passive: true });
+    element.addEventListener('click', click, true);
+    return () => {
+      stopGlide();
+      element.removeEventListener('pointerdown', down);
+      element.removeEventListener('pointermove', move);
+      element.removeEventListener('pointerup', up);
+      element.removeEventListener('pointercancel', up);
+      element.removeEventListener('wheel', stopGlide);
+      element.removeEventListener('click', click, true);
+    };
+  }, [ref]);
+}
+
+const VELOCITY_WINDOW_MS = 100;
+const HELD_BEFORE_RELEASE_MS = 60;
+const GLIDE_FRICTION = 0.94;
+const GLIDE_STOP = 0.02;
+
 function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenario; readonly beats: readonly Beat[]; readonly state: StoryState; readonly go: (i: number) => void; readonly pick: (branch: Branch) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const layout = useMemo(() => layoutLanes(scenario, state.choices, beats), [scenario, state.choices, beats]);
+  useDragScroll(scroller);
   const [view, setView] = useState({ left: 0, width: 0 });
   const track = () => {
     const element = scroller.current;
@@ -311,6 +395,12 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
         </div>
       </div>
       <Overview layout={layout} at={state.at} view={view} jump={jump} />
+      <p className="ln-legend">
+        <span><i className="lg-node" /> จังหวะ อยู่ใน lane ของผู้ทำ</span>
+        <span><i className="lg-recv" /> ผู้รับของจังหวะนั้น</span>
+        <span><i className="lg-current" /> จังหวะที่กำลังอ่าน</span>
+        <span>ลากที่แผนภาพเพื่อเลื่อน</span>
+      </p>
     </section>
   );
 }
