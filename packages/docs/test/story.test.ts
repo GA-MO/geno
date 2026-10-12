@@ -210,19 +210,67 @@ describe('the exemplar stories', () => {
   });
 });
 
+/** The approval card's five buttons: the first goes on to run the command, the other four end the walk. */
+const fiveWay = [
+  { lane: 'user', do: 'พิมพ์', ...beat('You ask') },
+  { lane: 'loop', at: 'step', do: 'คิด', ref: REF, ...beat('Geno checks') },
+  {
+    id: 'ask',
+    lane: 'panel',
+    at: 'card',
+    do: 'ถาม',
+    ref: REF,
+    ...beat('Geno asks you', { ask: 'Which button?' }),
+    fork: {
+      ask: 'กดปุ่มไหน',
+      options: ['Allow', 'Always allow in this workspace', 'Deny', 'No, and tell the agent…', 'Stop'].map((label, k) => ({
+        id: `o${k}`,
+        label,
+        ...(k === 0 ? { then: 'run' } : {}),
+        steps: [{ lane: k % 2 === 0 ? 'user' : 'model', do: label, ref: REF, ...beat(`You press ${k}`), ...(k === 0 ? {} : end) }],
+      })),
+    },
+  },
+  { id: 'run', lane: 'tool', at: 'shell', do: 'รัน', ref: REF, ...beat('Command runs') },
+  { lane: 'loop', at: 'step', do: 'จบ', ref: REF, ...beat('Geno finishes'), ...end },
+];
+
 describe('the swim-lane layout', () => {
   const overlaps = (a: { x: number; w: number; row: number }, b: { x: number; w: number; row: number }) => a.row === b.row && a.x < b.x + b.w && b.x < a.x + a.w;
 
-  test.each(['ask-mode-bash-approval', 'with-tools', 'blocking-report'])('%s: no two items share space in a row, and time runs left to right', (id) => {
-    const site = loadSite(siteOptions(DOCS));
-    const scenario = site.scenarios[id]!;
+  /** Every choice at every fork: no two items share space in a row, time runs left to right, and a fork is one column of chips. */
+  function expectTidy(scenario: Scenario) {
     const forks = Object.values(scenario.steps).filter((step) => step.flow.kind === 'fork');
     const choiceSets = [scenario.defaults, ...forks.flatMap((step) => (step.flow.kind === 'fork' ? step.flow.options.map((option) => ({ ...scenario.defaults, [step.id]: option.id })) : []))];
     for (const choices of choiceSets) {
-      const layout = layoutLanes(scenario, choices, storyBeats(scenario, choices));
+      const beats = storyBeats(scenario, choices);
+      const layout = layoutLanes(scenario, choices, beats);
       layout.items.forEach((a, i) => layout.items.slice(i + 1).forEach((b) => expect(overlaps(a, b)).toBe(false)));
-      const beats = layout.items.filter((item) => item.kind === 'beat');
-      beats.slice(1).forEach((item, i) => expect(item.x).toBeGreaterThan(beats[i]!.x));
+      const placed = layout.items.filter((item) => item.kind === 'beat');
+      placed.slice(1).forEach((item, i) => expect(item.x).toBeGreaterThan(placed[i]!.x));
+      for (const diamond of placed.filter((item) => item.fork)) {
+        const chips = layout.items.flatMap((item) => (item.kind === 'branch' && item.beat === diamond.beat ? [item] : []));
+        expect(chips.map((chip) => chip.branch.option.id)).toEqual(branchesAt(scenario, choices, beats[diamond.beat]!.last).map((branch) => branch.option.id));
+        expect(chips.map((chip) => chip.row)).toEqual(chips.map((_, k) => chips[0]!.row + k));
+        expect(new Set(chips.map((chip) => chip.x)).size).toBe(1);
+        expect(chips[0]!.x).toBeGreaterThan(diamond.x + diamond.w);
+        for (const later of placed.filter((item) => item.beat > diamond.beat)) expect(later.x).toBeGreaterThan(chips[0]!.x + chips[0]!.w);
+        for (const chip of chips) {
+          const at = layout.items.indexOf(chip);
+          expect(layout.edges.filter((edge) => edge.to === at)).toEqual([{ from: layout.items.indexOf(diamond), to: at }]);
+          expect(layout.edges.filter((edge) => edge.from === at).length).toBe(chip.branch.chosen ? 1 : 0);
+        }
+      }
     }
+  }
+
+  test.each(['ask-mode-bash-approval', 'with-tools', 'blocking-report'])('%s lays out tidily on every walk', (id) => {
+    expectTidy(loadSite(siteOptions(DOCS)).scenarios[id]!);
+  });
+
+  test('a five-way fork stacks its options in one column, in order, and the walk goes on from the chosen one', () => {
+    const scenario = compiled(fiveWay);
+    expectTidy(scenario);
+    expect(layoutLanes(scenario, scenario.defaults, storyBeats(scenario, scenario.defaults)).rows).toBe(ACTORS.length);
   });
 });

@@ -118,7 +118,10 @@ A page with no header keeps working. Its tour shows a "story coming" state and t
 ## Rendering
 
 `Story.tsx` replaces the old tour island. It has two views over the same beats, Sequence (default) and Swim lanes,
-with the choice kept in `localStorage`. Both draw a fork as a diamond whose branches end in end nodes. The reading
+with the choice kept in `localStorage`. Both draw a fork as a diamond whose branches end in end nodes. In Swim lanes
+the diamond fans out to a column of its own: one chip per option, in option order, each non-chosen chip naming its
+ending, and the walk goes on from the chosen chip. Lanes stay compact (76px, titles clamped to 3 lines) so the reading
+card starts above the fold at 1440x900. The reading
 card shows the beat, its mock, the internals and ย้อนกลับ / "ถัดไป <title> →". The hash is `#at=<step id>` plus `&c=` for
 non-default choices, so old step links still land on the beat that holds the step. With JS off, `StoryStatic.astro`
 prints the beats as an ordered list with nested branches.
