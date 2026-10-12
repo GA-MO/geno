@@ -191,7 +191,7 @@ scenario:
       end: { turn: continues, reason: call-model }
 ---
 
-`web_search` ให้แค่รายการผลค้นหา ไม่ได้อ่านหน้าไหนให้ การอ่านหน้าเป็นงานของ [ดึงหน้าเว็บ](/scenarios/tool/web-fetch/)
+`web_search` ให้แค่รายการผลค้นหา ไม่ได้อ่านหน้าไหนให้ การอ่านหน้าเป็นงานของ [Model ดึงหน้าเว็บด้วย web_fetch](/scenarios/tool/web-fetch/)
 ซึ่งผ่านกฎและการถามของตัวเองทุกโฮสต์
 
 | โหมด | `web_search` |

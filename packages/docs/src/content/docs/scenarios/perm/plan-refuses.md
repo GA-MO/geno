@@ -174,13 +174,13 @@ scenario:
       end: { turn: continues, reason: call-model }
 ---
 
-โหมด Plan ไม่ได้ซ่อนเครื่องมือ ทุกโหมดได้เครื่องมือชุดเดียวกันเพื่อให้ prompt cache ไม่หลุดเมื่อสลับโหมด
+โหมด Plan ไม่ได้ซ่อน tool ทุกโหมดได้ tool ชุดเดียวกันเพื่อให้ prompt cache ไม่หลุดเมื่อสลับโหมด
 Plan ปฏิเสธตอน call รันแทน และประกาศของโหมดบอกโมเดลล่วงหน้าว่าอะไรจะถูกปฏิเสธ
 
 | call | ถูกปฏิเสธที่ | สถานะ | แผงแสดง |
 | --- | --- | --- | --- |
 | คำสั่งนอก safe list | กฎในตัว (`unlisted`) | `denied` | Denied by a rule |
-| `edit`, `notebook_edit`, `monitor`, `task_stop` และเครื่องมือที่เปลี่ยนสถานะอื่นๆ | `inMode` | `error` | ล้มเหลว |
+| `edit`, `notebook_edit`, `monitor`, `task_stop` และ tool ที่เปลี่ยนสถานะอื่นๆ | `inMode` | `error` | ล้มเหลว |
 | `bash` แบบ `run_in_background` | `approveCommand` | `error` | ล้มเหลว |
 | คำสั่งใน safe list, `read`, `grep`, `web_fetch` | ไม่ปฏิเสธ | `ok` | ปกติ |
 

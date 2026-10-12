@@ -236,7 +236,7 @@ gateway แยก error ของผู้ให้บริการเป็�
 | `transient` | 408, 5xx, 529, ข้อความ "overloaded" | ลองใหม่ 3 ครั้ง รอ 1, 2, 4 วินาที |
 | โมเดลเงียบ | ไม่มี byte 180 วินาที | ลองใหม่ 1 ครั้ง |
 | `quota`, `fatal` | 402, 401, 400 อื่น | ไม่ลอง จบ turn แบบ failed |
-| `offline`, `limited` | เชื่อมต่อไม่ได้, 429 | รอนานกว่า ดู [เครือข่ายหลุด หรือถูกจำกัดอัตรา](/scenarios/err/offline-wait/) |
+| `offline`, `limited` | เชื่อมต่อไม่ได้, 429 | รอนานกว่า ดู [เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ](/scenarios/err/offline-wait/) |
 | `overflow` | "prompt is too long" | สรุปบริบทแล้วส่งใหม่ ดู [สรุปบริบทระหว่าง turn](/scenarios/ctx/compaction-auto/) |
 
 สิ่งที่ควรสังเกต

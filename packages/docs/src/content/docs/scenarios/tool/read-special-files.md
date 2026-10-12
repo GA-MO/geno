@@ -156,7 +156,7 @@ scenario:
       end: { turn: continues, reason: call-model }
 ---
 
-`read` ตัวเดียวอ่านไฟล์ได้หลายชนิด โมเดลไม่ต้องเลือกเครื่องมือเอง
+`read` ตัวเดียวอ่านไฟล์ได้หลายชนิด โมเดลไม่ต้องเลือก tool เอง
 
 | ชนิด | ผล | ขีดจำกัด |
 | --- | --- | --- |
@@ -172,6 +172,6 @@ scenario:
 - **notebook กับข้อความผ่าน editor รูปและ PDF อ่านจากดิสก์** `read` ของ notebook และไฟล์ข้อความใช้ `ctx.files.read`
   ซึ่งได้ buffer ที่เปิดอยู่ใน VS Code ส่วนรูปและ PDF อ่านไบต์จากดิสก์ตรงๆ
 - **notebook ที่ระบุบรรทัดอ่านเป็น JSON** ถ้าส่ง `start_line` หรือ `end_line` มากับไฟล์ `.ipynb` `read` อ่านเป็นข้อความธรรมดา
-- **ไฟล์ลับยังผ่านด่านก่อน** ชนิดของไฟล์ไม่ได้ข้ามการตรวจไฟล์ลับ ดู [อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
+- **ไฟล์ลับยังผ่านด่านก่อน** ชนิดของไฟล์ไม่ได้ข้ามการตรวจไฟล์ลับ ดู [Model อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
 
-ไฟล์ลับและไฟล์นอก workspace ดู [อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
+ไฟล์ลับและไฟล์นอก workspace ดู [Model อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)

@@ -1,6 +1,6 @@
 ---
 title: "Steer ที่ไม่ถูกส่ง"
-description: ข้อความที่มีไฟล์แนบหรือ @mention กด Send now ไม่ได้และรอในคิวแทน ส่วนข้อความถึงเอเจนต์ลูกที่เพิ่งจบ engine ปฏิเสธว่าลูกจบไปแล้ว
+description: ข้อความที่มีไฟล์แนบหรือ @mention กด Send now ไม่ได้และรอในคิวแทน ส่วนข้อความถึง subagent ที่เพิ่งจบ engine ปฏิเสธว่าลูกจบไปแล้ว
 tableOfContents: false
 sidebar:
   order: 6

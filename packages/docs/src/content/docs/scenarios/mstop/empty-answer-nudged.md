@@ -1,6 +1,6 @@
 ---
 title: "Model จบ turn เปล่า Geno กระตุ้นหนึ่งครั้ง"
-description: โมเดลจบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียกเครื่องมือ loop บันทึกคำกระตุ้นแล้วเรียกโมเดลอีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
+description: โมเดลจบคำตอบด้วย end_turn โดยไม่มีข้อความและไม่เรียก tool loop บันทึกคำกระตุ้นแล้วเรียกโมเดลอีกครั้ง ถ้าเปล่าซ้ำ turn จบแบบ failed
 tableOfContents: false
 sidebar:
   order: 2
