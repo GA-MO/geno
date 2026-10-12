@@ -19,6 +19,7 @@ scenario:
       beat:
         title: Model โหลด tool ของ MCP ก่อน
         text: tool ของ MCP อยู่หลัง `tool_search` เสมอ เพื่อไม่ให้ cache หลุดเมื่อ server มาหรือไป การ์ดเป็นคำขอจริงจากการรันในแผงของ VS Code ที่โหลด tool echo ของ server ทดสอบ
+        from: model
         to: engine
         sees:
           kind: payload
@@ -37,6 +38,7 @@ scenario:
       beat:
         title: Geno ส่งนิยามเต็มของ tool กลับไป
         text: ผลมีนิยามพร้อม input schema tool นี้เรียกได้ตลอด session ถ้าเรียกก่อนโหลด จะได้ error ที่บอกให้โหลดก่อน
+        from: engine
         to: model
         sees:
           kind: payload
@@ -59,6 +61,7 @@ scenario:
       beat:
         title: Model ขอเปิด issue ใน acme/app
         text: model เรียก `mcp__github__create_issue` พร้อม owner repo title และ body แชตขึ้นขั้นของ call การ์ดเป็น call จริงของ tool echo ในการรันเดียวกัน
+        from: model
         to: engine
         sees:
           kind: payload
@@ -86,6 +89,7 @@ scenario:
       beat:
         title: Geno หยุด turn แล้วถามคุณ
         text: ไม่มีกฎ MCP ของ workspace ครอบ tool นี้ และมันไม่ได้บอกว่าอ่านอย่างเดียว โหมด Ask จึงต้องถาม การ์ดของ tool MCP มีปุ่มอนุญาตตลอด session เพิ่มมา
+        from: engine
         to: panel
       lane: policy
       at: settle
@@ -115,6 +119,7 @@ scenario:
       beat:
         title: คุณเห็นการ์ด “Use github tool create_issue?”
         text: การ์ดบอก server และชื่อ tool คุณจะให้ Geno เปิด issue อีกหลายรายการใน session นี้
+        from: panel
         to: you
         sees: '"Use github tool create_issue?" และ "Geno asks about an MCP tool." [Allow] [Allow this tool for the session] [Deny] [Always allow in this workspace] [No, and tell the agent…]'
         ask: คุณกดปุ่มไหน
@@ -141,6 +146,7 @@ scenario:
                   title: คุณอนุญาต tool นี้ตลอด session
                   text: Geno จำชื่อ tool ไว้ใน session นี้ call ถัดไปของ tool นี้ไม่ถามอีก
                   from: you
+                  to: panel
                 at: settle
                 do: >-
                   `permissionAnswerOf` ได้ `allow-session` `settle` คืนบันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อเครื่องมือ
@@ -157,6 +163,7 @@ scenario:
                   title: คุณอนุญาตใน workspace นี้เสมอ
                   text: Geno จำใน session และบันทึกกฎ allow ของ tool นี้ลงที่เก็บของ workspace session ต่อๆ ไปก็ไม่ถาม แต่กฎ allow ไม่ชนะโหมด Plan
                   from: you
+                  to: panel
                 at: rules
                 do: >-
                   `keepMcpAnswer` เพิ่มชื่อเครื่องมือลงชุดของ session และบันทึกกฎ allow ของเครื่องมือ MCP นี้ลงที่เก็บของ workspace
@@ -169,7 +176,8 @@ scenario:
       beat:
         title: server github เปิด issue
         text: server รันนอก sandbox ของ Geno และใช้ token ของมันเอง มันตอบด้วย URL ของ issue ใหม่
-        from: machine
+        from: engine
+        to: machine
       lane: external
       do: >-
         hub ส่ง `tools/call` ไปที่ process ของ server `github` server รันนอก sandbox ของ Geno และใช้ token ของมันเอง
@@ -180,6 +188,8 @@ scenario:
       beat:
         title: Geno ส่งผลให้ model
         text: Geno แปลงผลเป็นข้อความ ผลที่ยาวเกินถูกเก็บลงไฟล์ การ์ดเป็นผลจริงของ tool echo
+        from: engine
+        to: model
         sees:
           kind: payload
           direction: tool_result
@@ -200,7 +210,8 @@ scenario:
       beat:
         title: Model ส่งลิงก์ issue ให้คุณ
         text: Geno เรียก model อีกครั้ง model บอกว่าเปิด issue แล้วพร้อมลิงก์
-        to: model
+        from: model
+        to: panel
         end: Model ตอบพร้อมลิงก์
       lane: loop
       at: step

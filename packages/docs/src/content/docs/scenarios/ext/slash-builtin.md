@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณเลือกคำสั่งจากรายการ `/`
         text: รายการบอกว่าคำสั่งไหน VS Code ทำเอง และคำสั่งไหน engine ทำ คุณกด Enter แชตส่งข้อความทั้งบรรทัด
+        from: you
         to: panel
       lane: user
       do: >-
@@ -36,6 +37,8 @@ scenario:
       beat:
         title: แชตดูว่าใครทำคำสั่งนี้
         text: ก่อนทำอย่างอื่น แชตดูว่าคำสั่งเป็นของ VS Code หรือของ engine
+        from: panel
+        to: panel
         ask: คำสั่งไหน
       lane: editor
       at: chat
@@ -53,6 +56,8 @@ scenario:
                 beat:
                   title: VS Code เปิดแชตใหม่เอง
                   text: "`/new` ไม่ติดต่อ engine ไม่มี turn และไม่มีอะไรถูกบันทึกลง log session เดิมยังอยู่ในประวัติ"
+                  from: panel
+                  to: panel
                 at: chat
                 do: >-
                   `/new` ตรงกับ action `new-chat` `Chat.newChat` ซ่อนประวัติ แล้วเปิด session ใหม่ให้แผง
@@ -62,6 +67,8 @@ scenario:
                 beat:
                   title: แชตว่างพร้อมหน้าเริ่มต้น
                   text: ช่องพิมพ์ว่าง พร้อมรับ prompt แรกของแชตใหม่
+                  from: panel
+                  to: you
                   sees:
                     kind: composer
                     state: idle
@@ -79,6 +86,7 @@ scenario:
                 beat:
                   title: แชตส่ง `/mode plan` ไปที่ engine
                   text: "`/mode` ไม่ใช่คำสั่งของ VS Code แชตขึ้น turn ที่มีชิปของคำสั่ง แล้วส่งเป็น prompt"
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -89,6 +97,8 @@ scenario:
                 beat:
                   title: engine ทำเองโดยไม่เรียก model
                   text: คำสั่งในตัวไม่เปิดรอบของ agent ไม่มีงานในแผง Tasks และไม่มีการเรียก model
+                  from: engine
+                  to: engine
                 at: turns
                 do: >-
                   `runTurn` ให้ `commands.expand` แปลงข้อความ ได้ `builtin` จึงเรียก `runBuiltin` แทนการเปิดรอบของเอเจนต์
@@ -100,6 +110,8 @@ scenario:
                 beat:
                   title: Geno เปลี่ยนโหมดทันที
                   text: Geno ตรวจว่า plan เป็นโหมดที่มีจริง เปลี่ยนโหมดของ session บันทึกลง log และบอกแชตว่าโหมดเปลี่ยน
+                  from: engine
+                  to: engine
                 at: turns
                 do: >-
                   `ENGINE_ACTIONS.mode` ตรวจว่า `plan` เป็นโหมดที่มีจริง แล้ว `switchMode` เปลี่ยนโหมดของ session ทันที
@@ -110,6 +122,7 @@ scenario:
                 beat:
                   title: แชตขึ้นคำตอบหนึ่งบรรทัด
                   text: turn สั้นๆ จบแบบ done ตัวเลือกโหมดในช่องพิมพ์เป็น Plan
+                  from: engine
                   to: panel
                   sees:
                     kind: message
