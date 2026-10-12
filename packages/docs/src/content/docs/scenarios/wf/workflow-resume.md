@@ -15,8 +15,18 @@ scenario:
   related: [wf.workflow-run, sub.cut-off-by-engine-stop]
   steps:
     - use: ext-slash-sent
+      beat:
+        title: คุณพิมพ์ `/workflow fix-bug --resume`
+        text: รอบก่อนหยุดที่ขั้น `fix` เพราะถึงเพดาน คุณสั่งให้ทำต่อจากรอบนั้น
+        sees:
+          kind: message
+          from: you
+          text: /workflow fix-bug --resume 5f1c...
 
     - id: issued
+      beat:
+        title: Geno สร้าง call workflow ในนามคุณ
+        text: Geno ไม่ถาม model มันสร้าง call ที่บอกให้ resume รอบเก่าเอง
       lane: loop
       at: drive
       do: >-
@@ -27,6 +37,10 @@ scenario:
       phase: running-tools
 
     - id: earlier
+      beat:
+        title: Geno เปิด log ของรอบเก่า
+        text: Geno ตรวจว่า id เป็นรอบของ `fix-bug` จริง แล้วอ่าน journal และ input เดิมของรอบนั้น
+        ask: id ถูกไหม
       lane: loop
       at: tools
       do: >-
@@ -44,6 +58,14 @@ scenario:
             label: ไม่ใช่รอบของ workflow นี้
             steps:
               - lane: loop
+                beat:
+                  title: ไม่ใช่รอบของ fix-bug
+                  text: Geno ตอบ error ไม่มีการ์ด ไม่มี session ใหม่ ขั้นของ workflow ขึ้นว่าล้มเหลว และ turn จบโดยไม่เรียก model
+                  sees:
+                    kind: step
+                    label: workflow fix-bug --resume ...
+                    status: failed
+                  end: ไม่มีอะไรรัน
                 at: tools
                 do: >-
                   `prepare` โยน `ToolError` เช่น "run ... is a run of workflow lint-all, not of fix-bug"
@@ -58,6 +80,10 @@ scenario:
                 end: { turn: done, reason: end_turn }
 
     - id: replay-plan
+      beat:
+        title: Geno คำนวณขั้นที่ได้ผลเดิม
+        text: ขั้นที่อยู่ใน journal ได้ผลเดิมโดยไม่เรียก model Geno หาขั้นแรกที่ต้องรันจริง แล้วขอ permission
+        to: panel
       lane: loop
       at: tools
       do: >-
@@ -66,6 +92,11 @@ scenario:
       ref: packages/core/src/workflow.ts#replayedBeforeLive
 
     - id: card
+      beat:
+        title: คุณเห็นการ์ด “Run this workflow?”
+        text: การ์ดหน้าตาเหมือนการรันใหม่ ไม่บอกว่าเป็นการ resume และราคาคิดจากทุกขั้น รวมขั้นที่จะได้ผลเดิมฟรี
+        to: you
+        sees: การ์ด "Run this workflow?" รายการขั้นและราคาเหมือนรอบใหม่ ปุ่ม [Run] [Don't run]
       lane: panel
       at: card
       do: >-
@@ -77,6 +108,10 @@ scenario:
       phase: waiting-user
 
     - id: run
+      beat:
+        title: คุณกด Run
+        text: Geno เปิด session ใหม่ของ workflow ที่จดว่ามัน resume รอบเก่า
+        to: engine
       lane: user
       do: ผู้ใช้กด Run
 
@@ -91,6 +126,15 @@ scenario:
       phase: idle
 
     - id: replay
+      beat:
+        title: ขั้นที่เสร็จแล้วได้ผลเดิมฟรี
+        text: "`reproduce` ได้ผลเดิมจาก journal Geno ข้ามไปจนเจอขั้นที่ต้องรันจริง แผง Tasks เริ่มที่ขั้นนั้น จากตรงนี้ workflow รันเหมือนรอบปกติ"
+        sees:
+          kind: task
+          title: Workflow fix-bug
+          status: running
+          detail: "Step 2 of 3: fix · $0.00 of $0.50"
+        end: รันต่อแบบ workflow ปกติ
       lane: child@workflow
       at: loop
       do: >-

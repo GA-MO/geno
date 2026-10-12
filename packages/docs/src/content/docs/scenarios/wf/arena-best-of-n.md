@@ -1,5 +1,5 @@
 ---
-title: Arena best-of-N
+title: "Arena: รันงานเดียวกันหลาย lane แล้วเลือกผู้ชนะ"
 description: ผู้ใช้สั่ง /best-of-n Geno รันงานเดียวกันใน 2 ถึง 4 lane พร้อมกัน ตรวจแต่ละ lane ด้วย check ของโปรเจกต์ ให้ review จัดอันดับ แล้วผู้ใช้ Pick ผู้ชนะ และ Graft hunk ของ lane อื่นทับได้
 tableOfContents: false
 sidebar:
@@ -15,6 +15,11 @@ scenario:
   related: [wf.lane-apply, sub.worktree-lane, wf.spinoff, ext.slash-builtin-editor]
   steps:
     - id: type
+      beat:
+        title: คุณพิมพ์ `/best-of-n 3` แล้วกด Start
+        text: คุณขอให้ย้าย `src/log.ts` ไปใช้ pino สามแบบ ให้แต่ละ lane ใช้ model ต่างกัน engine ประมาณราคาต่อ lane แล้วแผง Arena แสดงการ์ด คุณกด Start แล้ว Geno สร้างสาม lane แต่ละตัวมี worktree และ session ของตัวเอง
+        to: engine
+        sees: การ์ดของ best-of-3 ที่มี lane A B C กับโมเดลของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
       lane: user
       do: ผู้ใช้พิมพ์คำสั่งแล้วกด Enter
       phase: idle
@@ -69,6 +74,11 @@ scenario:
       phase: running-tools
 
     - id: race-a
+      beat:
+        title: สาม lane รันงานพร้อมกัน
+        text: แต่ละ lane ทำงานเดียวกันด้วย model ของตัวเองใน worktree ของตัวเอง ไม่มีแชตไหนรอมัน
+        from: model
+        ask: รอหรือหยุด
       lane: child@lane-a
       at: model
       do: >-
@@ -99,6 +109,10 @@ scenario:
             label: กด Stop
             steps:
               - lane: user
+                beat:
+                  title: คุณกด Stop
+                  text: แชตบอกทุก lane ที่ยังรันให้หยุด
+                  from: you
                 do: ผู้ใช้กด Stop ในแผง Arena ระหว่างที่ lane ยังรัน
               - lane: editor
                 at: engine-link
@@ -107,6 +121,12 @@ scenario:
                 ref: packages/extension/src/chat/arena-host.ts#ArenaHost
                 emits: [session/cancel]
               - lane: server
+                beat:
+                  title: ทุก lane หยุด
+                  text: lane ที่หยุดไม่ถูกตรวจและไม่ถูกจัดอันดับ run จบแบบ stopped lane ยังอยู่ให้เปิดดู
+                  to: panel
+                  sees: ป้าย "Stopped" บน run และบนแต่ละ lane
+                  end: Run หยุด lane ยังอยู่
                 at: turns
                 do: >-
                   turn ของแต่ละ lane ถูก abort lane ที่หยุดได้สถานะ stopped ไม่ถูกตรวจและไม่ถูกจัดอันดับ ทุก lane ยังรันอยู่ จึงหยุดหมด run จบแบบ stopped lane ยังอยู่ให้เปิดดู (ถ้ามี lane ที่จบไปก่อนแล้ว lane นั้นยังถูกตรวจและจัดอันดับ)
@@ -121,6 +141,10 @@ scenario:
                 end: { turn: stopped }
 
     - id: checked
+      beat:
+        title: Geno ตรวจแต่ละ lane แล้วนับที่ผ่าน
+        text: check ของโปรเจกต์รันใน sandbox ของแต่ละ lane แผงแสดง Checking แล้ว Passed หรือ Failed เมื่อทุก lane จบ Geno นับ lane ที่ผ่าน
+        ask: ผ่านกี่ lane
       lane: server
       at: sessions
       do: >-
@@ -146,6 +170,9 @@ scenario:
             then: results
             steps:
               - lane: server
+                beat:
+                  title: ไม่มีอะไรให้เทียบ
+                  text: lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่ต้องเรียก review ถ้าไม่มี lane ผ่านเลย run ได้ป้าย "No lane passed"
                 at: sessions
                 do: >-
                   ไม่มีอะไรให้เทียบ `trivialRanking` ให้ lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่เรียก review
@@ -153,6 +180,9 @@ scenario:
                 ref: packages/engine/src/arena.ts#startArena
 
     - id: review
+      beat:
+        title: review จัดอันดับ lane ที่ผ่าน
+        text: Geno ส่ง diff ของทุก lane ที่ผ่านให้ subagent review ซึ่งจัดอันดับและให้เหตุผล
       lane: child@review
       at: model
       runs: 1
@@ -163,6 +193,11 @@ scenario:
       emits: [agent]
 
     - id: results
+      beat:
+        title: Arena แสดงอันดับและ diff
+        text: lane เรียงตามอันดับพร้อมเหตุผล ผลของ check ค่าใช้จ่าย และ diff เทียบกัน ปุ่ม Pick ของอันดับหนึ่งเป็นปุ่มหลัก
+        to: you
+        sees: ป้าย "Ranked" แถว lane B อยู่บนสุดพร้อมป้าย "Passed" และปุ่ม [Pick B]
       lane: panel
       at: arena
       do: >-
@@ -173,6 +208,11 @@ scenario:
       phase: idle
 
     - id: pick
+      beat:
+        title: คุณกด Pick B
+        text: Geno จดผู้ชนะแล้ว apply lane B เข้าแชตของ checkout หลัก เมื่อเสร็จ แผงชวนให้ติ๊ก hunk ของ lane อื่นมาทับ
+        from: you
+        ask: ทำอะไรต่อ
       lane: editor
       at: chat
       do: >-
@@ -194,6 +234,10 @@ scenario:
             label: พอแค่ Pick
             steps:
               - lane: editor
+                beat:
+                  title: คุณพอแค่ Pick
+                  text: การเปลี่ยนของ lane B อยู่ในแชตของ checkout หลักแล้ว ทัวร์ถัดไปเล่าการ apply
+                  end: ไปดูการ apply lane
                 at: chat
                 do: >-
                   การเปลี่ยนแปลงของ lane B อยู่ในแชตของ checkout หลักแล้วผ่าน turn ของ apply
@@ -204,6 +248,11 @@ scenario:
             label: Graft hunk ที่เลือกต่อ
             steps:
               - lane: editor
+                beat:
+                  title: คุณ graft 2 hunk จาก lane C
+                  text: คุณติ๊ก 2 hunk ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แชตส่งคำสั่ง graft ซึ่ง apply แบบเดียวกับ lane
+                  from: you
+                  end: ไปดูการ apply lane
                 at: chat
                 do: >-
                   ผู้ใช้ติ๊ก 2 hunk ของ lane C ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แล้วกด `graftLane` ส่ง prompt "Graft 2 hunks from lane ..." ที่มี `gcode/laneGraft`
