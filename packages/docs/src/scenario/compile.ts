@@ -42,7 +42,9 @@ interface Walk {
 
 const MAX_WALKS = 256;
 
-export function compileScenario(authored: ScenarioIn, ctx: CompileContext): Result<Scenario> {
+export function compileScenario(authored: ScenarioIn, whole: CompileContext): Result<Scenario> {
+  const links = whole.lanes.links.filter((link) => link[2] === undefined || link[2].only.some((id) => authored.covers.includes(id)));
+  const ctx: CompileContext = { ...whole, lanes: { ...whole.lanes, links } };
   const problems: Problem[] = [];
   const problem = (path: string, message: string): void => void problems.push({ level: 'error', file: ctx.file, path, message });
 
