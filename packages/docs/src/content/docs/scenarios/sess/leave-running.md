@@ -24,7 +24,7 @@ scenario:
       at: chat
       do: >-
         `moveTo` เห็นว่าแชตที่กำลังจะออกมี turn ทำงาน `leaveRunning` ปล่อย turn นั้นจากแผง
-        การ์ดที่เปิดค้างถูกตอบว่าไม่ได้แสดงแล้ว (engine จะถามใหม่) แล้วส่งคำขอ `DETACH_METHOD`
+        การ์ดที่เปิดค้างถูกตอบว่าไม่ได้แสดงแล้ว (engine จะถามใหม่) จากนั้น `moveTo` ส่งคำขอ `DETACH_METHOD` ก่อนเปิดแชตถัดไป
       ref: packages/extension/src/chat/chat.ts#Chat.leaveRunning
       emits: [DETACH_METHOD]
 
