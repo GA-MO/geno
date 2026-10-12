@@ -44,8 +44,8 @@ scenario:
       lane: server
       at: turns
       do: >-
-        engine หา `AbortController` ของ turn นี้ในทะเบียน `turns` แล้วสั่ง abort และหยุดเอเจนต์ลูกของ session นี้ด้วย
-        สัญญาณนี้ไปถึง gateway การรอ backoff การรันเครื่องมือ และ compaction
+        engine หา `AbortController` ของ turn นี้ในทะเบียน `turns` แล้วสั่ง abort (ถ้า session id เป็นของเอเจนต์ลูก
+        `childCancels` หยุดลูกตัวนั้นแทน) สัญญาณนี้ไปถึง gateway การรอ backoff การรันเครื่องมือ และ compaction
       ref: "packages/engine/src/serve.ts#\".onNotification(acp.methods.agent.session.cancel, ({ params }) => {\""
 
     - id: gateway
@@ -103,9 +103,9 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        คำขอ `session/prompt` ได้คำตอบ `turnEndOf` อ่านได้ `stopped` stop reason `cancelled` ไม่มีข้อความเพิ่ม
+        คำขอ `session/prompt` ได้คำตอบ แล้ว `prompt()` ใช้ `turnEndOf` อ่านได้ `stopped` stop reason `cancelled` ไม่มีข้อความเพิ่ม
         จึงส่ง action `turn-end` สถานะ `stopped` อย่างเดียว
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: shown

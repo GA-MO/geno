@@ -59,15 +59,16 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        ใน extension host ของหน้าต่าง B คำขอ `session/prompt` ได้คำตอบ `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end`
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+        ใน extension host ของหน้าต่าง B คำขอ `session/prompt` ได้คำตอบ แล้ว `prompt()` ใช้ `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end`
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: shown
       lane: panel
       at: rail
       do: >-
-        แผงของหน้าต่าง B แสดง turn ที่ถูกหยุด เหมือนผู้ใช้ใน B กด Stop เอง ขั้นของคำสั่งล้มเหลวพร้อมข้อความว่าผู้ใช้หยุดมัน
+        แผงของหน้าต่าง B แสดง turn ที่ถูกหยุด เหมือนผู้ใช้ใน B กด Stop เอง `session/close` ถอดผู้ดูของแชต X ไปแล้ว
+        ผลของ `pnpm test` ที่บันทึกหลัง abort จึงไม่ถูกส่งมาที่ B reducer ของ `turn-end` เปลี่ยนขั้นที่ยังหมุนเป็น cancelled
       sees: >-
         หน้าต่าง B ขึ้นหัวข้อ "stopped after 1m 5s" กล่อง "Geno stopped without a reply · You stopped it before it answered."
         และท้าย turn ขึ้น "Stopped by you" ทั้งที่ไม่มีใครใน B กด Stop

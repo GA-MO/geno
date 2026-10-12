@@ -88,8 +88,8 @@ scenario:
       lane: editor
       at: chat
       do: >-
-        `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end` error ชนิด `abort` ไม่ขึ้นเป็นแถบ error
-      ref: packages/extension/src/chat/chat.ts#turnEndOf
+        `prompt()` ใช้ `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end` error ชนิด `abort` ไม่ขึ้นเป็นแถบ error
+      ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
       emits: [turn-end]
 
     - id: shown
