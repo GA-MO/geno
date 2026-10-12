@@ -1,0 +1,59 @@
+---
+import { siteFor } from '../scenario/site';
+import { ACTOR_NAME, storyBeats, WHO_LABEL } from '../scenario/story';
+
+const site = siteFor();
+const FLAGSHIP = ['with-tools', 'ask-mode-bash-approval', 'blocking-report'];
+const flagships = FLAGSHIP.flatMap((id) => {
+  const scenario = site.scenarios[id];
+  return scenario === undefined ? [] : [{ scenario, beats: storyBeats(scenario, scenario.defaults) }];
+});
+const pages = Object.values(site.scenarios);
+const chapters = site.catalog.chapters.map((chapter) => {
+  const mine = pages.filter((page) => page.href.split('/')[2] === chapter.prefix);
+  return { chapter, count: mine.length, stories: mine.filter((page) => page.story).length };
+});
+---
+
+<div class="home not-content">
+  <section class="home-flagships" aria-labelledby="flagships">
+    <h2 id="flagships">เริ่มจากทัวร์เหล่านี้</h2>
+    <ol class="flagship-grid">
+      {
+        flagships.map(({ scenario, beats }) => (
+          <li>
+            <a class="card flagship" href={scenario.href}>
+              <span class="card-title">{scenario.title}</span>
+              <span class="flagship-strip" aria-label={`${beats.length} จังหวะ`}>
+                {beats.map((beat) => (
+                  <span class={`strip-${beat.who}`} title={`${WHO_LABEL[beat.who]}: ${beat.head.title.replace(/`/g, '')}`} />
+                ))}
+              </span>
+              <span class="flagship-meta">
+                {beats.length} จังหวะ จาก {ACTOR_NAME[beats[0]!.from]} ถึง {ACTOR_NAME[beats.at(-1)!.to]}
+              </span>
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
+  <section aria-labelledby="chapters">
+    <h2 id="chapters">ทุกสถานการณ์ แยกตามหมวด</h2>
+    <ul class="card-grid chapters">
+      {
+        chapters.map(({ chapter, count, stories }) => (
+          <li>
+            <a class="card" href={`/scenarios/#ch-${chapter.number}`}>
+              <span class="card-title">{chapter.thai}</span>
+              <span class="card-state">
+                {count} ทัวร์{stories > 0 && <> มีเรื่องเล่า {stories}</>}
+              </span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</div>

@@ -256,24 +256,14 @@ function stepOf(node: ExpandedStep, flow: Flow | undefined, surface: Surface, co
   };
 }
 
-const THAI = /[฀-๿]/;
-const englishProblem = (text: string): string | undefined => {
-  if (THAI.test(text)) return 'is Thai; story labels are English';
-  const letters = text.replace(/[^\p{L}]/gu, '');
-  const ascii = letters.replace(/[^A-Za-z]/g, '');
-  return letters.length > 0 && ascii.length / letters.length < 0.8 ? 'is not mostly English letters' : undefined;
-};
+const graphemes = new Intl.Segmenter('th', { granularity: 'grapheme' });
+/** What a reader counts as characters: a Thai vowel or tone mark rides on its consonant. */
+export const lengthOf = (text: string): number => [...graphemes.segment(text)].length;
 
 function beatOf(head: BeatIn, path: string, ctx: CompileContext, problem: (path: string, message: string) => void): BeatHead {
   const title = head.title.trim();
-  const titleProblem = englishProblem(title);
-  if (titleProblem !== undefined) problem(`${path}.title`, `"${title}" ${titleProblem}`);
-  if (title.length > TITLE_MAX) problem(`${path}.title`, `"${title}" is ${title.length} characters; keep a beat title to ${TITLE_MAX}`);
-  for (const field of ['ask', 'end'] as const) {
-    const label = head[field];
-    const labelProblem = label === undefined ? undefined : englishProblem(label);
-    if (labelProblem !== undefined) problem(`${path}.${field}`, `"${label}" ${labelProblem}`);
-  }
+  const length = lengthOf(title);
+  if (length > TITLE_MAX) problem(`${path}.title`, `"${title}" is ${length} characters; keep a beat title to ${TITLE_MAX}`);
   const listed = head.sees === undefined ? [] : typeof head.sees === 'string' ? [head.sees] : Array.isArray(head.sees) ? head.sees : [head.sees];
   const sees = listed.flatMap((mock, i): Shown[] => {
     if (typeof mock === 'string') return [{ kind: 'text', text: mock.trim() }];
@@ -300,8 +290,6 @@ function storyProblems(top: readonly ExpandedStep[], nodes: ReadonlyMap<StepId, 
     for (const arm of node.arms) {
       const first = arm.nodes[0];
       if (first !== undefined && first.beat === undefined) problem(`${arm.path}.steps[0]`, `option "${arm.option.id}" starts no beat: a fork arm opens with its own beat header`);
-      const labelProblem = englishProblem(arm.option.label);
-      if (labelProblem !== undefined) problem(`${arm.path}.label`, `"${arm.option.label}" ${labelProblem}`);
     }
   }
   const reported = new Set<string>();
@@ -319,7 +307,7 @@ function storyProblems(top: readonly ExpandedStep[], nodes: ReadonlyMap<StepId, 
       const node = nodes.get(id)!;
       if (node.beat !== undefined) header = node;
       if (flows.get(id)?.kind === 'fork' && header?.beat !== undefined && header.beat.head.ask === undefined)
-        once(`${header.beat.path}.ask`, `beat "${header.beat.head.title}" ends at the fork "${id}": give it ask:, the English label of the decision`);
+        once(`${header.beat.path}.ask`, `beat "${header.beat.head.title}" ends at the fork "${id}": give it ask:, the short label of the decision`);
     }
   }
 }

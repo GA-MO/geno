@@ -3,18 +3,18 @@ import type { Actor } from './schema.js';
 import { walk } from './tour.js';
 
 export const ACTORS: readonly { readonly id: Actor; readonly name: string; readonly sub: string }[] = [
-  { id: 'you', name: 'You', sub: 'at the keyboard' },
-  { id: 'panel', name: 'Geno panel', sub: 'in VS Code' },
-  { id: 'engine', name: 'Geno engine', sub: 'runs the turn' },
-  { id: 'model', name: 'AI model', sub: 'thinks and asks' },
-  { id: 'machine', name: 'Your machine', sub: 'shell and files' },
+  { id: 'you', name: 'คุณ', sub: 'หน้าคีย์บอร์ด' },
+  { id: 'panel', name: 'Geno panel', sub: 'ใน VS Code' },
+  { id: 'engine', name: 'Geno engine', sub: 'เดิน turn' },
+  { id: 'model', name: 'AI model', sub: 'คิดและขอ tool' },
+  { id: 'machine', name: 'เครื่องของคุณ', sub: 'shell และไฟล์' },
 ];
 export const ACTOR_NAME: Readonly<Record<Actor, string>> = Object.fromEntries(ACTORS.map((actor) => [actor.id, actor.name])) as Record<Actor, string>;
 export const actorIndex = (actor: Actor): number => ACTORS.findIndex((candidate) => candidate.id === actor);
 
 /** Who the badge says acts: the person, the AI, or Geno's own code. */
 export type Who = 'you' | 'ai' | 'geno';
-export const WHO_LABEL: Readonly<Record<Who, string>> = { you: 'You', ai: 'AI', geno: 'Geno' };
+export const WHO_LABEL: Readonly<Record<Who, string>> = { you: 'คุณ', ai: 'AI', geno: 'Geno' };
 const whoOf = (actor: Actor): Who => (actor === 'you' ? 'you' : actor === 'model' ? 'ai' : 'geno');
 
 export interface Beat {
@@ -55,19 +55,19 @@ export interface Ending {
 }
 
 const END_LABELS: Readonly<Record<TurnEnd['turn'], string>> = {
-  done: 'Turn done',
-  failed: 'Turn failed',
-  stopped: 'Stopped',
-  waits: 'Turn waits',
-  continues: 'Turn continues',
-  none: 'Done',
+  done: 'Turn จบ',
+  failed: 'Turn ล้มเหลว',
+  stopped: 'Turn ถูกหยุด',
+  waits: 'Turn รอ',
+  continues: 'Turn ทำต่อ',
+  none: 'จบ',
 };
 const END_TONES: Readonly<Record<TurnEnd['turn'], Tone>> = { done: 'done', failed: 'stop', stopped: 'stop', waits: 'go', continues: 'go', none: 'done' };
 
 /** How the story ends after this beat, or nothing when it goes on. */
 export function endingOf(beat: Beat): Ending | undefined {
   if (beat.flow.kind === 'end') return { label: beat.head.end ?? END_LABELS[beat.flow.end.turn], tone: END_TONES[beat.flow.end.turn], end: beat.flow.end };
-  if (beat.flow.kind === 'leave') return { label: beat.head.end ?? 'Continues in another tour', tone: 'go', to: beat.flow.to };
+  if (beat.flow.kind === 'leave') return { label: beat.head.end ?? 'ไปต่อที่ทัวร์อื่น', tone: 'go', to: beat.flow.to };
   return undefined;
 }
 

@@ -1,5 +1,5 @@
 ---
-title: เครื่องมือและการขออนุญาต
+title: "Tool และ permission"
 description: เส้นทางของ tool call ตั้งแต่โมเดลขอ ผ่าน hook การจัดชุด กฎ settle และการ์ด จนผลกลับไปหาโมเดล
 sidebar:
   order: 3

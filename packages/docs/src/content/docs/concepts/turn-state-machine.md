@@ -1,5 +1,5 @@
 ---
-title: เครื่องสถานะของ turn
+title: "เครื่องสถานะของ turn"
 description: log ของ session คือเครื่องสถานะ loopStep อ่าน log แล้วตัดสินว่าจะทำอะไรต่อ และ turn จบได้กี่แบบ
 sidebar:
   order: 2

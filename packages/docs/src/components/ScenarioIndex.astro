@@ -2,56 +2,32 @@
 import { siteFor } from '../scenario/site';
 
 const site = siteFor();
-const covered = Object.values(site.links).filter((link) => link.href !== undefined).length;
+const pages = Object.values(site.scenarios);
+const chapterOf = (href: string) => href.split('/')[2];
 ---
 
-<p class="index-summary not-content">
-  มีหน้าแล้ว <strong>{covered}</strong> จาก <strong>{site.catalog.scenarios.length}</strong> สถานการณ์ใน catalog
-  แถวที่ยังไม่มีหน้าแสดงไว้ตรงๆ เพื่อให้เห็นว่าเหลืออะไรบ้าง
-</p>
-
-{
-  site.catalog.chapters.map((chapter) => {
-    const rows = site.catalog.scenarios.filter((row) => row.chapter === chapter.number);
-    const done = rows.filter((row) => site.links[row.id]?.href !== undefined).length;
-    return (
-      <section class="index-chapter">
-        <h2 id={`ch-${chapter.number}`}>
-          {chapter.number}. {chapter.thai}
-          <span class="index-count">
-            {done}/{rows.length}
-          </span>
-        </h2>
-        <table>
-          <thead>
-            <tr>
-              <th>สถานการณ์</th>
-              <th>ระดับ</th>
-              <th>จบแบบ</th>
-              <th>หน้า</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const href = site.links[row.id]?.href;
-              return (
-                <tr class={href === undefined ? 'index-missing' : undefined}>
-                  <td>
-                    {href === undefined ? row.thai : <a href={href}>{row.thai}</a>}
-                    <br />
-                    <code>{row.id}</code>
-                  </td>
-                  <td>
-                    <span class={`index-priority ${row.priority}`}>{row.priority}</span>
-                  </td>
-                  <td>{row.terminal.replace(/`/g, '')}</td>
-                  <td>{href === undefined ? <span class="tour-missing">ยังไม่มีหน้า</span> : <a href={href}>อ่าน</a>}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-    );
-  })
-}
+<div class="index not-content">
+  {
+    site.catalog.chapters.map((chapter) => {
+      const mine = pages.filter((page) => chapterOf(page.href) === chapter.prefix).sort((a, b) => a.title.localeCompare(b.title));
+      return (
+        <section class="index-chapter" id={`ch-${chapter.number}`}>
+          <header>
+            <h2>{chapter.thai}</h2>
+            <span class="index-count">{mine.length} ทัวร์</span>
+          </header>
+          <ul class="card-grid">
+            {mine.map((page) => (
+              <li>
+                <a class="card" href={page.href}>
+                  <span class="card-title">{page.title}</span>
+                  <span class={`card-state${page.story ? ' story' : ''}`}>{page.story ? 'มีเรื่องเล่า' : 'มีแต่ขั้นในโค้ด'}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      );
+    })
+  }
+</div>

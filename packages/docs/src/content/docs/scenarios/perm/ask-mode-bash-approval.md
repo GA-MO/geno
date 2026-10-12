@@ -1,5 +1,5 @@
 ---
-title: โหมด Ask ขออนุญาตก่อนรันคำสั่ง
+title: "โหมด Ask ขอ permission ก่อนรันคำสั่ง"
 description: โมเดลขอรันคำสั่งที่ไม่อยู่ใน safe list Geno หยุดถามผู้ใช้ก่อน และผู้ใช้เลือกได้สี่ทาง
 tableOfContents: false
 sidebar:
@@ -18,7 +18,7 @@ scenario:
     - id: wants
       lane: model
       beat:
-        title: The model asks to run pnpm add zod
+        title: "Model ขอรัน `pnpm add zod`"
         text: >-
           โมเดลตอบกลับมาว่ายังไม่จบ มันอยากรันคำสั่ง `pnpm add zod` บนเครื่องของคุณก่อน
           Geno จดคำขอนี้ไว้ในบันทึกของ turn
@@ -39,7 +39,7 @@ scenario:
 
     - use: tool-call-opens
       beat:
-        title: Geno shows the command in your chat
+        title: "Geno แสดงคำสั่งในแชตของคุณ"
         text: >-
           Geno จัดคิวคำสั่งนี้ให้รันทีละตัว แล้วบอกแผงแชตว่ามีขั้นใหม่
           คุณเห็นขั้นนั้นขึ้นมาพร้อมจุดหมุน
@@ -49,7 +49,7 @@ scenario:
       lane: policy
       at: rules
       beat:
-        title: Geno checks the command against your rules
+        title: "Geno ตรวจคำสั่งกับกฎของคุณ"
         text: >-
           ก่อนรันอะไร Geno เทียบคำสั่งกับกฎของ workspace และรายการคำสั่งปลอดภัย
           `pnpm add` ไม่อยู่ในทั้งสองที่ และโหมด Ask บอกว่าเรื่องแบบนี้ต้องถามคุณ
@@ -63,7 +63,7 @@ scenario:
       lane: policy
       at: settle
       beat:
-        title: Geno pauses the turn to ask you
+        title: "Geno หยุด turn แล้วถามคุณ"
         text: >-
           ไม่มีกฎหรือ hook ไหนตัดสินแทนได้ Geno จึงหยุด turn ไว้ตรงนี้และส่งคำถามไปที่แผงแชต
           งานในแผง Tasks ขึ้นว่ารอคุณ และถ้าหน้าต่างไม่ได้โฟกัสอยู่ ระบบจะแจ้งเตือน
@@ -95,12 +95,12 @@ scenario:
       lane: panel
       at: card
       beat:
-        title: You see “Run this command?”
+        title: "คุณเห็นการ์ด “Run this command?”"
         text: >-
           แผงแชตแสดงการ์ดขออนุญาต turn รออยู่ตรงนี้จนกว่าคุณจะเลือก
           ลองเลือกแต่ละทางเพื่อดูว่าไปจบที่ไหน
         to: you
-        ask: Which button?
+        ask: กดปุ่มไหน
         sees:
           kind: permission
           command: pnpm add zod
@@ -128,7 +128,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Allow
+                  title: "คุณกด Allow"
                   text: >-
                     การ์ดย่อเหลือบรรทัดเดียวว่า Allowed แผงแชตส่งคำตอบกลับไปที่ Geno ว่าอนุญาตครั้งนี้
                     Geno จดไว้ว่าคุณเป็นคนอนุญาต
@@ -157,7 +157,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Always allow
+                  title: "คุณกด Always allow"
                   text: >-
                     เหมือน Allow แต่ Geno บันทึกกฎ `pnpm add` ไว้ใน workspace ด้วย
                     ครั้งหน้าคำสั่งแบบนี้ผ่านโดยไม่ถาม ยกเว้นคำสั่งอันตรายอย่าง `rm -rf`
@@ -185,7 +185,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: You click Deny
+                  title: "คุณกด Deny"
                   text: >-
                     แผงแชตบอก Geno ว่าคุณปฏิเสธ คำสั่งไม่ได้รัน และไม่มีข้อความอะไรส่งต่อให้โมเดล
                   from: you
@@ -210,7 +210,7 @@ scenario:
               - lane: loop
                 at: tools
                 beat:
-                  title: Geno stops the rest of the turn
+                  title: "Geno หยุดส่วนที่เหลือของ turn"
                   text: >-
                     คำปฏิเสธเปล่าๆ แปลว่าคุณอยากเป็นคนพูดต่อ Geno จึงไม่เริ่มคำสั่งที่เหลือใน turn นี้
                 do: >-
@@ -221,7 +221,7 @@ scenario:
               - lane: server
                 at: updates
                 beat:
-                  title: Your chat marks the step Denied by you
+                  title: "แชตติดป้าย “Denied by you”"
                   text: >-
                     แผงแชตติดป้ายที่ขั้นของคำสั่งว่าคุณเป็นคนปฏิเสธ คนที่ย้อนมาอ่านจะไม่เข้าใจผิดว่าคำสั่งล้มเหลวเอง
                   sees: { kind: step, label: pnpm add zod, status: denied, note: "Denied by you · It did not run, and Geno waits for you." }
@@ -244,11 +244,11 @@ scenario:
               - lane: loop
                 at: step
                 beat:
-                  title: The turn ends and waits for you
+                  title: "Turn จบและรอคุณ"
                   text: >-
                     Geno จบ turn โดยไม่เรียกโมเดลอีก แผงแชตบอกว่าหยุดที่คำสั่งที่ถูกปฏิเสธ
                     และมีปุ่มให้ทำต่อเมื่อคุณพร้อม
-                  end: Denied by you
+                  end: คุณปฏิเสธ turn จบ
                   sees: { kind: notice, text: It stopped at the call that was denied., actions: [Continue, Retry] }
                 do: >-
                   `loopStep` รอบถัดไปตอบ call ที่ยังไม่ได้รัน (ถ้ามี) ด้วย `UNRUN_TEXTS.rejected` แล้วตัดสิน `done(end_turn)`
@@ -281,7 +281,7 @@ scenario:
               - lane: panel
                 at: card
                 beat:
-                  title: You write a note for the agent
+                  title: "คุณพิมพ์บอก agent"
                   text: >-
                     ปุ่มบนการ์ดเปลี่ยนเป็นช่องพิมพ์ คุณพิมพ์ว่า "ใช้ npm แทน" แล้วกด Send
                   from: you
@@ -294,7 +294,7 @@ scenario:
               - lane: editor
                 at: chat
                 beat:
-                  title: Geno refuses the command and keeps your note
+                  title: "Geno ไม่รันคำสั่ง แต่เก็บข้อความของคุณไว้"
                   text: >-
                     คำสั่งไม่ได้รัน แต่ต่างจาก Deny ตรงที่ turn ไม่จบ Geno เก็บข้อความของคุณไว้ส่งให้โมเดล
                     และคำสั่งอื่นใน turn เดียวกันยังรันต่อได้
@@ -326,7 +326,7 @@ scenario:
               - lane: server
                 at: updates
                 beat:
-                  title: Your chat shows your note on the step
+                  title: "แชตแสดงข้อความของคุณที่ขั้นนั้น"
                   text: >-
                     ขั้นของคำสั่งขึ้นป้ายปฏิเสธพร้อมข้อความที่คุณบอก คนที่ย้อนมาอ่านจะรู้ว่าทำไมคำสั่งไม่ได้รัน
                   sees: { kind: step, label: pnpm add zod, status: denied, note: "Denied by you · It did not run. You told Geno: ใช้ npm แทน" }
@@ -349,12 +349,12 @@ scenario:
               - lane: loop
                 at: step
                 beat:
-                  title: The model reads your note
+                  title: "Model อ่านข้อความของคุณ"
                   text: >-
                     Geno เรียกโมเดลต่อ ผลของคำสั่งบอกว่าไม่ได้รัน ตามด้วยข้อความของคุณ
                     โมเดลจะหาทางอื่นตามที่คุณบอก
                   to: model
-                  end: Model tries another way
+                  end: Model หาทางอื่น
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดและไม่มีการปฏิเสธเปล่าจากผู้ใช้ จึงตัดสิน `call-model`
                   โมเดลจะได้อ่านคำแนะนำของผู้ใช้ใน `tool_result` แล้วทำต่อ
@@ -364,12 +364,12 @@ scenario:
                 end: { turn: continues, reason: call-model }
 
           - id: stop
-            label: Stop instead
+            label: กด Stop แทน
             steps:
               - lane: panel
                 at: composer
                 beat:
-                  title: You press Stop instead of answering
+                  title: "คุณกด Stop แทนการตอบ"
                   text: >-
                     คุณไม่ตอบการ์ด แต่กด Stop แผงแชตตอบการ์ดว่ายกเลิก แล้วสั่งให้ Geno หยุด turn
                   from: you
@@ -394,7 +394,7 @@ scenario:
               - lane: server
                 at: turns
                 beat:
-                  title: Geno cancels the waiting command
+                  title: "Geno ยกเลิกคำสั่งที่รออยู่"
                   text: >-
                     Geno ยกเลิก turn ทันที คำสั่งไม่เคยเริ่มรัน แต่ข้อความที่โมเดลจะได้อ่านบอกว่ามันอาจรันไปบางส่วน
                     ซึ่งไม่ตรงกับที่เกิดขึ้น
@@ -419,11 +419,11 @@ scenario:
               - lane: loop
                 at: step
                 beat:
-                  title: Your chat shows Stopped by you
+                  title: "แชตขึ้นว่าคุณเป็นคนหยุด"
                   text: >-
                     turn จบแบบถูกหยุด ขั้นของคำสั่งขึ้นว่าล้มเหลว และแผงแชตมีปุ่มให้ทำต่อหรือลองใหม่
                   to: panel
-                  end: Stopped by you
+                  end: คุณหยุด turn
                   sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [Continue, Retry], tone: warning }
                 do: >-
                   `loopStep` เห็น error `abort` จึงได้ `done(error)` แล้ว `runTurn` เห็นว่าสัญญาณถูก abort จึงตอบ ACP ว่า
@@ -451,7 +451,7 @@ scenario:
       lane: tool
       at: shell
       beat:
-        title: The command runs on your machine
+        title: "คำสั่งรันบนเครื่องของคุณ"
         text: >-
           Geno รันคำสั่งใน sandbox การอนุญาตของคุณไม่ได้ปิด sandbox
           ผลที่ได้ติดบันทึกไว้ว่าใครเป็นคนอนุญาต
@@ -463,7 +463,7 @@ scenario:
 
     - use: tool-result-returns
       beat:
-        title: The output comes back to your chat
+        title: "ผลลัพธ์กลับมาที่แชต"
         text: >-
           เมื่อคำสั่งจบ Geno เก็บผลตามลำดับที่โมเดลขอ แล้วส่งไปที่แผงแชต
           ขั้นนั้นหยุดหมุนและมีผลลัพธ์พับอยู่ข้างใต้
@@ -474,12 +474,12 @@ scenario:
       lane: loop
       at: step
       beat:
-        title: Geno hands the output to the model
+        title: "Geno ส่งผลลัพธ์ให้ model"
         text: >-
           Geno เรียกโมเดลอีกรอบ คราวนี้ในคำขอมีผลของ `pnpm add zod` ให้โมเดลอ่านด้วย
           turn ยังเดินต่อจนโมเดลตอบคุณ
         to: model
-        end: Model reads the output
+        end: Model อ่านผลลัพธ์
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลจะได้อ่านผลของคำสั่งในคำขอถัดไป
       ref: packages/core/src/loop.ts#loopStep

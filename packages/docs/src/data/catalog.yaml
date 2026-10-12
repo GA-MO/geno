@@ -2,75 +2,75 @@
 chapters:
   - number: 1
     prefix: start
-    thai: เริ่มต้นใช้งาน
+    thai: "เริ่มต้นใช้งาน"
     english: Getting started
   - number: 2
     prefix: turn
-    thai: เทิร์นปกติ
+    thai: "Turn ปกติ"
     english: Normal turn
   - number: 3
     prefix: mstop
-    thai: การหยุดของโมเดล
+    thai: "Model หยุดแบบไหนบ้าง"
     english: How the model stops
   - number: 4
     prefix: err
-    thai: ข้อผิดพลาดและการลองใหม่
+    thai: "Error และการ retry"
     english: Errors and retry
   - number: 5
     prefix: ctl
-    thai: Stop / Steer / Queue
+    thai: "Stop / Steer / Queue"
     english: Stop / Steer / Queue
   - number: 6
     prefix: ctx
-    thai: Context และ compaction
-    english: Context และ compaction
+    thai: "Context และ compaction"
+    english: Context and compaction
   - number: 7
     prefix: tool
-    thai: เครื่องมือ
+    thai: "Tool"
     english: Tools
   - number: 8
     prefix: perm
-    thai: สิทธิ์และโหมด
+    thai: "Permission และโหมด"
     english: Permissions and modes
   - number: 9
     prefix: hook
-    thai: Hooks
+    thai: "Hook"
     english: Hooks
   - number: 10
     prefix: sec
-    thai: Sandbox และความปลอดภัย
+    thai: "Sandbox และความปลอดภัย"
     english: Sandbox and safety
   - number: 11
     prefix: edit
-    thai: การแก้ไฟล์
+    thai: "การแก้ไฟล์"
     english: File edits
   - number: 12
     prefix: sub
-    thai: Subagents
+    thai: "Subagent"
     english: Subagents
   - number: 13
     prefix: bg
-    thai: งานเบื้องหลังและการปลุก
+    thai: "งานเบื้องหลังและการปลุก"
     english: Background work and wakes
   - number: 14
     prefix: wf
-    thai: Workflows / Arena / Lanes
+    thai: "Workflow / Arena / Lane"
     english: Workflows / Arena / Lanes
   - number: 15
     prefix: ext
-    thai: Skills / Commands / MCP / Memory
+    thai: "Skill / Command / MCP / Memory"
     english: Skills / Commands / MCP / Memory
   - number: 16
     prefix: sess
-    thai: เซสชันและประวัติ
+    thai: "Session และประวัติ"
     english: Sessions and history
   - number: 17
     prefix: ed
-    thai: "ฟีเจอร์ editor: Tab / Cmd-K / Review"
-    english: "ฟีเจอร์ editor: Tab / Cmd-K / Review"
+    thai: "Editor: Tab / Cmd-K / Review"
+    english: "Editor features: Tab / Cmd-K / Review"
   - number: 18
     prefix: cli
-    thai: CLI
+    thai: "CLI"
     english: CLI
 scenarios:
   - id: start.open-window

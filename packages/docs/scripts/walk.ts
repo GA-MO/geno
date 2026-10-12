@@ -59,7 +59,7 @@ async function walkView(page: Page, url: string, view: string, width: number, fi
   await page.waitForSelector('.story');
   await page.getByRole('tab', { name: view }).click();
   await settle(page);
-  if (view === 'Swim lanes' && width >= 1440) {
+  if (view === 'Swim lane' && width >= 1440) {
     const fit = await page.evaluate(() => {
       const scroller = document.querySelector<HTMLElement>('.ln-scroll')!;
       return { beats: document.querySelectorAll('.ln-node, .ln-diamond').length, scroll: scroller.scrollWidth, client: scroller.clientWidth };
@@ -105,7 +105,7 @@ for (const size of SIZES) {
   const page = await context.newPage();
   page.on('console', (message) => message.type() === 'error' && findings.push({ where: `${page.url()} @${size.width}`, problem: `console: ${message.text()}` }));
   page.on('pageerror', (error) => findings.push({ where: `${page.url()} @${size.width}`, problem: `page error: ${error.message}` }));
-  for (const url of pages) for (const view of ['Sequence', 'Swim lanes']) beats += await walkView(page, url, view, size.width, findings);
+  for (const url of pages) for (const view of ['Sequence', 'Swim lane']) beats += await walkView(page, url, view, size.width, findings);
   await context.close();
 }
 await browser.close();

@@ -1,5 +1,5 @@
 ---
-title: process ของระบบ
+title: "Process ของระบบ"
 description: Geno แบ่งเป็น process ไหนบ้าง คุยกันด้วยอะไร และทำไม engine จึงอยู่รอดเมื่อปิดหน้าต่าง
 sidebar:
   order: 1

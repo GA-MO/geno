@@ -1,5 +1,5 @@
 ---
-title: โมเดลเรียกเครื่องมือแล้วตอบ
+title: "Model เรียก tool แล้วตอบ"
 description: โมเดลขออ่านไฟล์และค้นข้อความ harness รันทั้งสองพร้อมกัน ส่งผลกลับ แล้วโมเดลตอบจนจบ turn
 tableOfContents: false
 sidebar:
@@ -16,7 +16,7 @@ scenario:
   steps:
     - use: prompt-starts-turn
       beat:
-        title: You ask how the project runs its tests
+        title: "คุณถามว่าโปรเจกต์รันเทสต์ด้วยอะไร"
         text: >-
           คุณพิมพ์คำถามแล้วกด Enter แผงแชตแสดงข้อความของคุณทันที และปุ่ม Stop มาแทนปุ่ม Send
           Geno เปิด turn ใหม่และจดคำถามลงบันทึกของ session
@@ -25,7 +25,7 @@ scenario:
 
     - use: model-call
       beat:
-        title: Geno sends the conversation to the model
+        title: "Geno ส่งบทสนทนาให้ model"
         text: >-
           Geno ตรวจว่ายังไม่เกินจำนวนรอบและงบของ turn แล้วส่งบทสนทนาทั้งหมดไปให้โมเดล
           พร้อมรายชื่อเครื่องมือที่โมเดลขอใช้ได้
@@ -39,7 +39,7 @@ scenario:
     - id: asks-tools
       lane: model
       beat:
-        title: The model says it will look, and asks for two tools
+        title: "Model บอกว่าจะดูก่อน แล้วขอ tool สองตัว"
         text: >-
           โมเดลยังไม่ตอบทันที มันเขียนสั้นๆ ว่าจะดูไฟล์ก่อน แล้วขอใช้เครื่องมือสองตัว
           ตัวหนึ่งอ่าน `package.json` อีกตัวค้นหาคำว่า vitest ข้อความสั้นนั้นขึ้นในแชตของคุณ
@@ -58,7 +58,7 @@ scenario:
     - use: answer-streams
     - use: tool-call-opens
       beat:
-        title: Your chat shows both calls starting
+        title: "แชตขึ้น tool call ทั้งสอง"
         text: >-
           Geno จัดสองคำขอไว้ในชุดเดียวกัน เพราะเป็นการอ่านที่ไม่แก้อะไรและไม่ต้องขอสิทธิ์
           แชตของคุณขึ้นสองขั้นใหม่พร้อมจุดหมุน
@@ -69,7 +69,7 @@ scenario:
       at: executor
       runs: 2
       beat:
-        title: Both run at once on your machine
+        title: "ทั้งสองรันพร้อมกันบนเครื่องของคุณ"
         text: >-
           การอ่านไฟล์และการค้นหารันพร้อมกัน การอ่านไฟล์ใน workspace ที่ไม่ใช่ไฟล์ลับไม่ต้องถามคุณ
           และถ้าไฟล์เปิดค้างอยู่ใน editor Geno อ่านเนื้อหาที่ยังไม่บันทึกด้วย
@@ -81,7 +81,7 @@ scenario:
 
     - use: tool-result-returns
       beat:
-        title: The results come back to your chat
+        title: "ผลลัพธ์กลับมาที่แชต"
         text: >-
           Geno เก็บผลตามลำดับที่โมเดลขอ ไม่ใช่ลำดับที่เสร็จ ขั้นในแชตหยุดหมุน และผลลัพธ์พับอยู่ใต้แต่ละขั้น
         from: machine
@@ -89,7 +89,7 @@ scenario:
 
     - use: model-call
       beat:
-        title: Geno sends the results to the model
+        title: "Geno ส่งผลลัพธ์ให้ model"
         text: >-
           Geno เรียกโมเดลอีกรอบ คราวนี้คำขอมีผลของเครื่องมือทั้งสองต่อท้ายบทสนทนา
           ถ้าคุณพิมพ์ข้อความแทรกระหว่างที่เครื่องมือรัน ข้อความนั้นก็เข้ามาตรงนี้
@@ -105,10 +105,10 @@ scenario:
     - id: final
       lane: model
       beat:
-        title: The model writes its answer
+        title: "Model เขียนคำตอบ"
         text: >-
           โมเดลอ่านผลทั้งสองแล้วตอบว่าโปรเจกต์ใช้ vitest คำตอบค่อยๆ ขึ้นในแชตของคุณระหว่างที่โมเดลเขียน
-        sees: { kind: message, from: geno, text: This project runs its tests with vitest. The test script is vitest run., streaming: true }
+        sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", streaming: true }
       do: >-
         โมเดลอ่าน `tool_result` ทั้งสองบล็อก แล้ว stream คำตอบสุดท้ายว่าโปรเจกต์ใช้ vitest
         จบด้วย `stop_reason: end_turn`
@@ -118,12 +118,12 @@ scenario:
     - use: answer-streams
     - use: turn-ends
       beat:
-        title: The turn ends
+        title: "Turn จบ"
         text: >-
           โมเดลไม่ขอเครื่องมือเพิ่ม Geno จึงจบ turn ปุ่ม Send กลับมาแทน Stop
           และท้ายคำตอบมีแถวสรุปรุ่นโมเดล จำนวน token และค่าใช้จ่าย
         to: panel
-        sees: { kind: message, from: geno, text: This project runs its tests with vitest. The test script is vitest run., footer: [worked for 8s, claude-sonnet-4.5, 12.4k tokens, $0.02] }
+        sees: { kind: message, from: geno, text: "โปรเจกต์นี้รันเทสต์ด้วย vitest สคริปต์ test คือ vitest run", footer: [worked for 8s, claude-sonnet-4.5, 12.4k tokens, $0.02] }
 ---
 
 turn ที่มีเครื่องมือคือวงรอบเดิมของ [ถามแล้วได้คำตอบเป็นข้อความ](/scenarios/turn/text-answer/) ที่วนซ้ำ:

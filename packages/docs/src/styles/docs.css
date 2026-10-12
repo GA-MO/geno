@@ -114,7 +114,7 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 
 .story-page :where(button) { font: inherit; color: inherit; }
 .tour-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-.story { margin-block: 1.25rem 2rem; font-size: 15px; line-height: 1.6; color: var(--ink); }
+.story { margin-block: 0 2rem; font-size: 15px; line-height: 1.6; color: var(--ink); }
 .story-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
 .view-switch { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line-2); }
 .view-switch button { border: 0; background: none; padding: 6px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--ink-2); cursor: pointer; }
@@ -173,6 +173,8 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); display: inline-flex; gap: 8px; align-items: baseline; max-width: 100%; }
 .next-k { opacity: 0.65; font-weight: 400; flex: none; }
 .next-t { min-width: 0; }
+.btn.primary code { background: transparent; border-color: color-mix(in srgb, currentColor 35%, transparent); color: inherit; }
+.sq-label code, .ln-t code { font-size: 0.9em; padding: 0 0.25em; }
 .nav-end { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---------- What you see ---------- */
@@ -303,7 +305,7 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .ln-caption strong { font-weight: 600; color: var(--ink); }
 .ln-caption span { color: var(--ink-3); margin-left: 4px; }
 .ln-scroll { overflow-x: auto; scrollbar-width: thin; }
-.ln-canvas { position: relative; }
+.ln-canvas { position: relative; min-width: 100%; }
 .ln-band { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line-2); box-sizing: border-box; }
 .ln-band.alt { background: color-mix(in srgb, var(--sunk) 60%, transparent); }
 .ln-svg { position: absolute; left: 0; top: 0; overflow: visible; }
@@ -317,7 +319,7 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .mk-into path { fill: var(--accent); }
 .ln-node, .ln-stub, .ln-end, .ln-diamond { position: absolute; transform: translateY(-50%); box-sizing: border-box; z-index: 2; }
 .ln-node { display: grid; gap: 3px; text-align: left; padding: 7px 10px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color 160ms, box-shadow 160ms; }
-.ln-t { font-size: 12px; font-weight: 500; line-height: 16px; color: var(--ink); }
+.ln-t { font-size: 12px; font-weight: 500; line-height: 18px; color: var(--ink); }
 .ln-num { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .ln-branch { display: inline-block; margin-right: 6px; vertical-align: 1px; font-size: 11px; font-weight: 600; line-height: 16px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 7px; }
 .ln-node.past { border-color: color-mix(in srgb, var(--ink-3) 45%, var(--line)); }
@@ -458,6 +460,33 @@ body { -webkit-font-smoothing: antialiased; font-feature-settings: 'cv11', 'ss01
 .map-static > div.map-band { display: block; }
 .map-static > svg { position: absolute; left: 0; top: 0; }
 .map-static-edge { fill: none; stroke: var(--ink-3); stroke-width: 2; opacity: 0.5; }
+
+/* ---------- Cards: home and the scenario catalog ---------- */
+
+.card-grid, .flagship-grid { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.card-grid > li, .flagship-grid > li { margin: 0; }
+.card { display: grid; gap: 4px; align-content: start; height: 100%; box-sizing: border-box; padding: 14px 16px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); text-decoration: none; color: var(--ink); transition: border-color 150ms, box-shadow 150ms; }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: var(--shadow); }
+.card-title { font-weight: 600; font-size: 15px; line-height: 1.4; letter-spacing: -0.005em; }
+.card-thai { font-size: 13.5px; line-height: 1.7; color: var(--ink-2); }
+.card-state { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.card-state.story { color: var(--accent); font-weight: 600; }
+.home { margin-block: 1rem 2rem; }
+.home h2 { font-size: 1.35rem; letter-spacing: -0.015em; font-weight: 650; margin: 2.2rem 0 0; color: var(--ink); }
+.flagship-grid { grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+.flagship { padding: 18px 18px 16px; gap: 6px; }
+.flagship .card-title { font-size: 17px; }
+.flagship-strip { display: flex; gap: 3px; margin-top: 10px; }
+.flagship-strip span { flex: 1; height: 6px; border-radius: 3px; }
+.strip-you { background: var(--you); }
+.strip-ai { background: var(--ai); }
+.strip-geno { background: var(--geno); }
+.flagship-meta { font-size: 12.5px; color: var(--ink-3); }
+.index-chapter { margin-top: 2.4rem; }
+.index-chapter header { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.index-chapter h2 { margin: 0; font-size: 1.3rem; font-weight: 650; letter-spacing: -0.015em; color: var(--ink); }
+.index-chapter header p { margin: 0; color: var(--ink-3); font-size: 0.95rem; }
+.index-count { margin-left: auto; font-size: 0.85rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
 /* Mermaid SVGs inline at build: let wide diagrams scroll rather than shrink unreadably. */
 .sl-markdown-content svg[id^='mermaid'] { max-width: 100%; height: auto; }
