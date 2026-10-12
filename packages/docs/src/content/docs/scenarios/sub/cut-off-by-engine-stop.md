@@ -19,6 +19,7 @@ scenario:
         title: engine หยุดกลางทาง
         text: process ของ engine ถูก kill หรือ crash ขณะ worker กำลังรัน `pnpm test` log ของแม่จดว่า worker เริ่มแล้ว แต่ไม่มีบันทึกว่าจบ
         from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: แชตขึ้นว่า turn ล้มเหลว
         text: การเชื่อมต่อขาด คำขอของ turn ล้มเหลว แชตขึ้นแถบ error และแถวของ worker ถูกปิดไปพร้อม turn
+        from: panel
+        to: you
         sees:
           kind: composer
           state: idle
@@ -57,6 +60,7 @@ scenario:
       beat:
         title: VS Code เปิด engine ตัวใหม่
         text: หลังรอครู่หนึ่ง ส่วนขยายต่อใหม่ ไม่มี engine ฟังอยู่ จึงเปิดตัวใหม่
+        from: panel
         to: engine
       lane: editor
       at: engine-link
@@ -69,6 +73,8 @@ scenario:
       beat:
         title: engine ตัวใหม่หางานที่ค้าง
         text: การเชื่อมต่อแรกของ engine ตัวนี้หา subagent ที่เปิดค้างโดย engine ที่ไม่อยู่แล้ว
+        from: engine
+        to: engine
       lane: server
       at: sessions
       do: >-
@@ -80,6 +86,8 @@ scenario:
       beat:
         title: Geno ปิด call ที่ค้างทั้งของลูกและแม่
         text: "`pnpm test` ของ worker ได้ผลว่า Geno หยุดระหว่างที่มันรัน ผลอาจหายไป call ของแม่ได้ผลแบบเดียวกัน พร้อมโน้ตว่า worker ถูกตัดและทำต่อได้อย่างไร"
+        from: engine
+        to: engine
       lane: child@worker
       at: loop
       do: >-
@@ -101,6 +109,8 @@ scenario:
       beat:
         title: Tasks บอกว่า worker ถูกตัด
         text: งานของ session ขึ้นป้าย Cut off พร้อมสิ่งที่ worker ทำไปแล้ว ช่องข้อความ และปุ่ม Resume ปุ่มขึ้นเฉพาะตอนที่ session ไม่มี turn ทำงาน
+        from: panel
+        to: you
         sees:
           kind: task
           title: worker
@@ -130,7 +140,8 @@ scenario:
       beat:
         title: คุณกด Resume
         text: คุณไม่แก้ข้อความ "Continue where you stopped." แชตเปิด session นั้นแล้วส่งข้อความถึง worker
-        to: engine
+        from: you
+        to: panel
       lane: user
       do: ผู้ใช้อ่านแล้วกด Resume โดยไม่แก้ข้อความ
 
@@ -147,6 +158,8 @@ scenario:
       beat:
         title: Geno ส่งข้อความถึง worker ในนามคุณ
         text: Geno สร้าง call ส่งข้อความเอง ไม่ถาม model ของแม่ก่อน
+        from: engine
+        to: model
       lane: loop
       at: agent
       do: >-
@@ -160,6 +173,8 @@ scenario:
       beat:
         title: worker ทำต่อจาก transcript ของตัวเอง
         text: Geno ต่อบันทึกของ worker ด้วยข้อความของคุณและหมายเหตุว่ามันถูกตัด worker ได้งบชุดใหม่ แถวของมันกลับมาหมุน และป้าย Cut off หายไป
+        from: engine
+        to: model
         sees:
           kind: task
           title: worker
@@ -186,6 +201,8 @@ scenario:
       beat:
         title: worker รันเทสต์ใหม่แล้วรายงาน
         text: worker เห็นว่า `pnpm test` ไม่มีผล จึงรันใหม่ แล้วส่งรายงาน รายงานกลับมาเป็นผลของ call ที่ส่งข้อความ
+        from: model
+        to: engine
       lane: child@worker
       at: model
       do: >-
@@ -205,6 +222,8 @@ scenario:
       beat:
         title: Turn จบโดยไม่เรียก model ของแม่
         text: รายงานและโน้ตเรื่องการถูกตัดรออยู่ใน log ให้ model อ่านใน turn ถัดไปของคุณ คุณอ่านรายงานได้จากผลของขั้น message_agent
+        from: engine
+        to: panel
         sees:
           kind: composer
           state: idle

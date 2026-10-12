@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ส่งข้อความถึง explore
         text: คุณบอกให้ดู `packages/cli` ด้วย model จึงเรียก `message_agent` พร้อม session ของ explore และข้อความ "also cover packages/cli"
+        from: model
         to: engine
       lane: model
       do: >-
@@ -31,6 +32,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น message_agent
         text: แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: message_agent explore
@@ -40,6 +43,8 @@ scenario:
       beat:
         title: Geno ส่งข้อความถึง explore ทีละข้อความ
         text: ถ้ามีข้อความถึงลูกตัวเดียวกันอีก มันต้องรอข้อความนี้จบก่อน เพื่อไม่ให้ปลุกลูกซ้อนกัน ทางที่ข้อความไปขึ้นกับว่า explore ยังทำงานอยู่ไหม
+        from: engine
+        to: engine
         ask: explore ยังทำงานไหม
       lane: loop
       at: tools
@@ -59,6 +64,7 @@ scenario:
                 beat:
                   title: ข้อความเข้ากล่องของ explore
                   text: explore ยังทำงาน Geno ใส่ข้อความในกล่องของมัน แล้วรอจนมันรับ
+                  from: engine
                   to: model
                 at: tools
                 do: >-
@@ -69,6 +75,8 @@ scenario:
                 beat:
                   title: explore รับข้อความที่จุดปลอดภัย
                   text: ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความจากแม่ พร้อมหมายเหตุว่าให้ถือเป็นการเปลี่ยนแผน ในบทสนทนาของ explore ข้อความขึ้นตรงที่ลงจริง
+                  from: engine
+                  to: model
                   sees: ป้าย "Message from the parent agent" ตามด้วย "also cover packages/cli"
                 at: loop
                 do: >-
@@ -88,6 +96,8 @@ scenario:
                 beat:
                   title: explore ค้น `packages/cli` เพิ่ม
                   text: explore อ่านข้อความของแม่แล้วปรับการค้น
+                  from: model
+                  to: engine
                 at: model
                 do: >-
                   ลูกเรียกโมเดลต่อโดยอ่านข้อความของแม่ แล้วค้นใน `packages/cli` เพิ่ม
@@ -96,7 +106,8 @@ scenario:
                 beat:
                   title: Geno ตอบ model ว่าข้อความถึงแล้ว
                   text: ผลของ call บอกว่าข้อความไปถึงตอนไหนในบันทึกของ explore
-                  to: engine
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   `push` ได้ผล `delivered` พร้อมลำดับ event ในลูก ผลของ call คือ
@@ -113,6 +124,8 @@ scenario:
                 beat:
                   title: Geno ตรวจว่าปลุก explore ได้
                   text: explore จบไปแล้ว Geno ตรวจว่ามันเป็นลูกของ session นี้ และนิยาม explore ยังอยู่
+                  from: engine
+                  to: engine
                 at: tools
                 do: >-
                   ไม่มีกล่องข้อความที่เปิดอยู่ `resumable` อ่าน log ของลูก ตรวจว่า `session-start` บอกว่าแม่คือ session นี้
@@ -122,6 +135,7 @@ scenario:
                 beat:
                   title: explore ทำต่อจาก transcript ของตัวเอง
                   text: Geno ต่อบันทึกของ explore ด้วยข้อความจากแม่ และบอกให้ส่งรายงานใหม่ explore ได้งบชุดใหม่
+                  from: engine
                   to: model
                 at: loop
                 do: >-
@@ -139,6 +153,8 @@ scenario:
                 beat:
                   title: แถวของ explore กลับมาหมุน
                   text: แชตเห็นว่า explore รันอีกครั้ง
+                  from: panel
+                  to: you
                   sees:
                     kind: task
                     title: explore
@@ -159,6 +175,8 @@ scenario:
                 beat:
                   title: Geno ตอบ model ว่าปลุก explore แล้ว
                   text: explore เดิมทำงานเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง session นี้รอรายงานใหม่ ซึ่งจะมาถึงทีหลัง
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   explore เดิมเป็นลูกเบื้องหลัง จึงถูกปลุกแบบเบื้องหลังอีกครั้ง: session ติดหนี้รายงานใหม่ และผลของ call คือ
@@ -171,6 +189,8 @@ scenario:
       beat:
         title: ขั้น message_agent เสร็จ
         text: Geno บันทึกผลของ call และแชตขึ้นว่าขั้นนี้เสร็จ แล้วส่งผลให้ model อ่าน
+        from: panel
+        to: you
         sees:
           kind: step
           label: message_agent explore
@@ -196,6 +216,7 @@ scenario:
       beat:
         title: Model บอกคุณว่าส่งต่อแล้ว
         text: model บอกว่าส่งข้อความถึง explore แล้ว และจะเล่าเมื่อรายงานมาถึง โดยไม่เดาผล
+        from: model
         to: panel
         end: Turn จบ รอรายงาน
       lane: model
