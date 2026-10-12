@@ -12,8 +12,8 @@
   lane: policy
   at: hooks
   do: >-
-    ถ้ามี Stop hook `stopKeepsGoing` ให้ hook ตัดสินก่อนจบ ถ้า hook บล็อก loop จะเรียกโมเดลอีกรอบ
-    (บล็อกติดกันได้ครั้งเดียว จนกว่าโมเดลจะเรียกเครื่องมือ) เมื่อไม่มี hook หรือ hook ไม่บล็อก turn ก็จบ
+    ถ้ามี Stop hook `stopKeepsGoing` ให้ hook ตัดสินก่อนจบ ถ้า hook บล็อก loop จะเรียก model อีกรอบ
+    (บล็อกติดกันได้ครั้งเดียว จนกว่า model จะเรียก tool) เมื่อไม่มี hook หรือ hook ไม่บล็อก turn ก็จบ
   ref: packages/engine/src/drive.ts#stopKeepsGoing
 
 - id: response
@@ -38,8 +38,8 @@
   lane: panel
   at: rail
   do: >-
-    `headerOf` เปลี่ยนหัวข้อเป็นเวลาที่ทำงาน `turnFooter` ขึ้นรุ่นโมเดล จำนวน token และค่าใช้จ่ายท้าย turn
+    `headerOf` เปลี่ยนหัวข้อเป็นเวลาที่ทำงาน `turnFooter` ขึ้นรุ่น model จำนวน token และค่าใช้จ่ายท้าย turn
     ถ้ามีข้อความรอในคิว `sendQueued` ส่งต่อทันที
-  sees: หัวข้อ "worked for 8s" ปุ่ม Send กลับมาแทน Stop และท้ายคำตอบมีแถวสรุปโมเดล token และค่าใช้จ่าย
+  sees: หัวข้อ "worked for 8s" ปุ่ม Send กลับมาแทน Stop และท้ายคำตอบมีแถวสรุป model token และค่าใช้จ่าย
   ref: packages/extension/src/chat/rail.ts#headerOf
   end: { turn: done, reason: end_turn }

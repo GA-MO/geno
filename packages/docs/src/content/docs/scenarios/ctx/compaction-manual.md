@@ -71,14 +71,14 @@ scenario:
       beat:
         title: "Geno ให้ model สรุปโดยเน้นเรื่องที่คุณบอก"
         text: >-
-          Geno วางจุดตัดแบบเดียวกับ compaction อัตโนมัติ แล้วเรียกโมเดลหนึ่งครั้งโดยไม่มี tool
+          Geno วางจุดตัดแบบเดียวกับ compaction อัตโนมัติ แล้วเรียก model หนึ่งครั้งโดยไม่มี tool
           เรื่องที่คุณพิมพ์ไปกับคำขอ ให้สรุปเน้นเรื่องนั้น
         from: engine
         to: model
         ask: "ผลเป็นอย่างไร"
       do: >-
-        `compactContext` (ตัวเดียวกับที่ loop ใช้) วางจุดตัดด้วย `planCompaction` แล้วเรียกโมเดลหนึ่งครั้งด้วย `SUMMARY_SYSTEM`
-        ไม่มีเครื่องมือ focus ของผู้ใช้ถูกใส่ในคำขอให้สรุปเน้นเรื่องนั้น
+        `compactContext` (ตัวเดียวกับที่ loop ใช้) วางจุดตัดด้วย `planCompaction` แล้วเรียก model หนึ่งครั้งด้วย `SUMMARY_SYSTEM`
+        ไม่มี tool focus ของผู้ใช้ถูกใส่ในคำขอให้สรุปเน้นเรื่องนั้น
       ref: packages/engine/src/compact.ts#compactContext
       fork:
         ask: ผลของการสรุปเป็นอย่างไร
@@ -90,11 +90,11 @@ scenario:
                 beat:
                   title: "Model เขียนสรุปที่เน้น migration"
                   text: >-
-                    โมเดลสรุปส่วนเก่าของบทสนทนา โดยเก็บรายละเอียดเรื่อง migration ไว้ตามที่คุณขอ
+                    model สรุปส่วนเก่าของบทสนทนา โดยเก็บรายละเอียดเรื่อง migration ไว้ตามที่คุณขอ
                   from: model
                   to: engine
                 do: >-
-                  โมเดลเขียนสรุปส่วนเก่าของบทสนทนา โดยเน้นเรื่อง migration ตามที่ผู้ใช้ขอ
+                  model เขียนสรุปส่วนเก่าของบทสนทนา โดยเน้นเรื่อง migration ตามที่ผู้ใช้ขอ
                 ref: packages/core/src/compaction.ts#SUMMARY_SYSTEM
               - lane: server
                 at: turns
@@ -190,11 +190,11 @@ scenario:
                 beat:
                   title: "ยังไม่มีอะไรให้สรุป"
                   text: >-
-                    บทสนทนายังสั้น หรือโมเดลยังไม่เคยตอบ Geno หาจุดตัดไม่ได้ จึงไม่เรียกโมเดล
+                    บทสนทนายังสั้น หรือ model ยังไม่เคยตอบ Geno หาจุดตัดไม่ได้ จึงไม่เรียก model
                   from: engine
                   to: engine
                 do: >-
-                  `planCompaction` หาจุดตัดไม่ได้ เช่นบทสนทนายังสั้นหรือยังไม่มีคำตอบของโมเดล ไม่มีการเรียกโมเดล
+                  `planCompaction` หาจุดตัดไม่ได้ เช่นบทสนทนายังสั้นหรือยังไม่มีคำตอบของ model ไม่มีการเรียก model
                   คำตอบของคำสั่งคือ "Nothing to compact yet: the conversation is short enough to keep as it is."
                 ref: "packages/engine/src/serve.ts#\"if (outcome.kind === 'nothing') return\""
 
@@ -221,11 +221,11 @@ scenario:
                 beat:
                   title: "Geno ยกเลิกการสรุป"
                   text: >-
-                    การเรียกโมเดลเพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก context ยังเหมือนเดิม
+                    การเรียก model เพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก context ยังเหมือนเดิม
                   from: engine
                   to: engine
                 do: >-
-                  engine abort controller ที่ `/compact` ลงทะเบียนไว้ การเรียกโมเดลเพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก
+                  engine abort controller ที่ `/compact` ลงทะเบียนไว้ การเรียก model เพื่อสรุปถูกยกเลิก ไม่มีอะไรถูกบันทึก
                   คำตอบของคำสั่งคือ "Stopped. The context is as it was."
                 ref: "packages/engine/src/serve.ts#\"if (outcome.kind === 'failed') return controller.signal.aborted\""
 

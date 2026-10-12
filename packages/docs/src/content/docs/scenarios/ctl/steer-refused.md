@@ -7,7 +7,7 @@ sidebar:
 scenario:
   surface: vscode
   given:
-    - turn ของแชตนี้กำลังทำงาน และเรียก `agent` ให้เอเจนต์ลูก `explore` ทำงานอยู่
+    - turn ของแชตนี้กำลังทำงาน และเรียก `agent` ให้ subagent `explore` ทำงานอยู่
     - ช่องพิมพ์ไม่มีข้อความรอในคิว
   trigger: >-
     ผู้ใช้อยากส่งข้อความเข้า turn ที่กำลังทำงาน โดยไม่รอให้ turn จบ
@@ -69,7 +69,7 @@ scenario:
                 goto: ctl.queued-followup
 
           - id: finished-child
-            label: ถึงเอเจนต์ลูก ขณะที่ลูกกำลังจบ
+            label: ถึง subagent ขณะที่ลูกกำลังจบ
             steps:
               - lane: panel
                 at: rail

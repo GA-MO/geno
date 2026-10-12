@@ -1,6 +1,6 @@
 ---
 title: "ผลของ tool ยาวเกิน Geno เขียนลงไฟล์"
-description: คำสั่งพิมพ์ผลออกมายาวเกินขีดของโมเดล Geno เก็บทั้งหมดลงไฟล์ ส่งให้โมเดลแค่ต้น ท้าย และที่อยู่ไฟล์ แล้วโมเดลอ่านเฉพาะส่วนที่ต้องการ
+description: คำสั่งพิมพ์ผลออกมายาวเกินขีดของ model Geno เก็บทั้งหมดลงไฟล์ ส่งให้ model แค่ต้น ท้าย และที่อยู่ไฟล์ แล้ว model อ่านเฉพาะส่วนที่ต้องการ
 tableOfContents: false
 sidebar:
   order: 4
@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - เปิด Geno ในแผงแชตของ VS Code มี turn ทำงานอยู่
-    - โมเดลขอรัน `bash` ด้วยคำสั่ง `pnpm test` ซึ่งอยู่ใน safe list จึงไม่ต้องขออนุญาต
+    - model ขอรัน `bash` ด้วยคำสั่ง `pnpm test` ซึ่งอยู่ใน safe list จึงไม่ต้องขออนุญาต
   trigger: >-
     เทสต์ล้มหลายตัว คำสั่งพิมพ์ผลออกมาประมาณ 80,000 ตัวอักษร
   covers: [ctx.large-output-spill]
@@ -18,7 +18,7 @@ scenario:
       beat:
         title: "Geno เปิดขั้น pnpm test ในแชต"
         text: >-
-          โมเดลขอรัน `pnpm test` ซึ่งอยู่ในรายการคำสั่งปลอดภัย จึงไม่ต้องถามคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          model ขอรัน `pnpm test` ซึ่งอยู่ในรายการคำสั่งปลอดภัย จึงไม่ต้องถามคุณ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: engine
         to: panel
         sees: { kind: step, label: pnpm test, status: running }
@@ -42,12 +42,12 @@ scenario:
       beat:
         title: "Geno เก็บผลทั้งหมดลงไฟล์"
         text: >-
-          ผลยาวกว่าขีดของโมเดล ค่าตั้งต้น 24,000 ตัวอักษร Geno จึงเขียนทั้งหมดลงไฟล์ในโฟลเดอร์ของตัวเอง แล้วเก็บไว้แค่
+          ผลยาวกว่าขีดของ model ค่าตั้งต้น 24,000 ตัวอักษร Geno จึงเขียนทั้งหมดลงไฟล์ในโฟลเดอร์ของตัวเอง แล้วเก็บไว้แค่
           2,000 ตัวอักษรแรก 2,000 ตัวอักษรท้าย ขนาด และที่อยู่ไฟล์
         from: engine
         to: engine
       do: >-
-        ก่อนบันทึกผล `settle` เทียบความยาวกับ `spillChars` ของโมเดล (ค่าเริ่มต้น 24,000 ตัวอักษร)
+        ก่อนบันทึกผล `settle` เทียบความยาวกับ `spillChars` ของ model (ค่าเริ่มต้น 24,000 ตัวอักษร)
         ยาวกว่าจึงเขียนข้อความทั้งหมดลงไฟล์ `spill/<session>/<seq>-bash.txt` ในโฟลเดอร์ของ Geno
         แล้วเก็บแค่ 2,000 ตัวอักษรแรก 2,000 ตัวอักษรท้าย ขนาด และที่อยู่ไฟล์
       ref: packages/engine/src/tools/spill.ts#settle
@@ -72,7 +72,7 @@ scenario:
         to: you
         sees: { kind: step, label: pnpm test, status: done, output: "[The output was 80412 bytes, too long to show. The full text is in .../spill/<session>/12-bash.txt; read it with start_line and end_line to see more.]" }
       do: >-
-        เมื่อผู้ใช้เปิดผลของขั้นนั้น จะเห็นข้อความเดียวกับที่โมเดลได้รับ คือประกาศว่าผลถูกเก็บลงไฟล์ ตามด้วยต้นและท้ายของผล
+        เมื่อผู้ใช้เปิดผลของขั้นนั้น จะเห็นข้อความเดียวกับที่ model ได้รับ คือประกาศว่าผลถูกเก็บลงไฟล์ ตามด้วยต้นและท้ายของผล
       sees: >-
         "[The output was 80412 bytes, too long to show. The full text is in .../spill/<session>/12-bash.txt;
         read it with start_line and end_line to see more.]" ตามด้วย "--- first 2000 characters ---" และ "--- last 2000 characters ---"
@@ -99,11 +99,11 @@ scenario:
       beat:
         title: "Model ขออ่านเฉพาะช่วงที่ต้องการ"
         text: >-
-          โมเดลเห็นสรุปเทสต์ที่ล้มในส่วนท้าย จึงขออ่านไฟล์นั้นเฉพาะบรรทัดของเทสต์ตัวแรกที่ล้ม
+          model เห็นสรุปเทสต์ที่ล้มในส่วนท้าย จึงขออ่านไฟล์นั้นเฉพาะบรรทัดของเทสต์ตัวแรกที่ล้ม
         from: model
         to: engine
       do: >-
-        `tool_result` ที่โมเดลได้รับมาจาก `toolResultText`: ประกาศ ต้น และท้ายของผล โมเดลเห็นสรุปเทสต์ที่ล้มในส่วนท้าย
+        `tool_result` ที่ model ได้รับมาจาก `toolResultText`: ประกาศ ต้น และท้ายของผล model เห็นสรุปเทสต์ที่ล้มในส่วนท้าย
         จึงขอเรียก `read` ไฟล์ spill ด้วย `start_line` และ `end_line` เฉพาะช่วงของเทสต์ตัวแรกที่ล้ม
       ref: packages/core/src/session.ts#toolResultText
       emits: [tool_use]
@@ -127,14 +127,14 @@ scenario:
       end: { turn: continues }
 ---
 
-ผลที่ยาวเกินไม่ถูกตัดทิ้ง และไม่ถูกส่งทั้งก้อนเข้า context ข้อความเต็มอยู่ในไฟล์ โมเดลเลือกอ่านส่วนที่ต้องการเอง
+ผลที่ยาวเกินไม่ถูกตัดทิ้ง และไม่ถูกส่งทั้งก้อนเข้า context ข้อความเต็มอยู่ในไฟล์ model เลือกอ่านส่วนที่ต้องการเอง
 ทำให้ผลก้อนเดียวไม่ดัน context จนต้อง [สรุปบริบท](/scenarios/ctx/compaction-auto/)
 
 สิ่งที่ควรสังเกต
 
-- **ขีดเป็นของโมเดล ไม่ใช่ของ tool** `spillChars` มาจาก `capabilitiesOf(provider, model)` ทุก tool ใช้ขีดเดียวกัน
-  ยกเว้น `skill` ที่ได้ถึง 100,000 ตัวอักษร เพราะสกิลที่ถูกตัดทำให้โมเดลต้องอ่านคำสั่งของตัวเองเป็นท่อนๆ
-- **ผลจาก tool MCP มีคำแนะนำเพิ่ม** `toolResultText` ต่อท้ายด้วย `MCP_SPILL_NOTE` ให้โมเดลลองเรียก tool ใหม่
+- **ขีดเป็นของ model ไม่ใช่ของ tool** `spillChars` มาจาก `capabilitiesOf(provider, model)` ทุก tool ใช้ขีดเดียวกัน
+  ยกเว้น `skill` ที่ได้ถึง 100,000 ตัวอักษร เพราะสกิลที่ถูกตัดทำให้ model ต้องอ่านคำสั่งของตัวเองเป็นท่อนๆ
+- **ผลจาก tool MCP มีคำแนะนำเพิ่ม** `toolResultText` ต่อท้ายด้วย `MCP_SPILL_NOTE` ให้ model ลองเรียก tool ใหม่
   ด้วย filter หรือหน้าที่แคบลงก่อนจะอ่านไฟล์ทั้งไฟล์
 - **การตัดสินเกิดหลัง PostToolUse hook** hook เห็นข้อความเต็มก่อนจะถูกเขียนลงไฟล์
 - **log เก็บแค่ต้นและท้าย** event `tool-result` มี `spill` แทน `output` ไฟล์ spill จึงเป็นที่เดียวที่มีข้อความเต็ม

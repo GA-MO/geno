@@ -1,6 +1,6 @@
 ---
 title: "Geno แบ่ง tool call แบบผสมเป็นชุดที่รันต่อกัน"
-description: โมเดลขออ่านสองไฟล์ รันคำสั่ง แล้วอ่านอีกไฟล์ในคำตอบเดียว harness แบ่งเป็นสามชุดที่รันต่อกัน และหยุดชุดที่เหลือถ้าผู้ใช้ปฏิเสธคำสั่ง
+description: model ขออ่านสองไฟล์ รันคำสั่ง แล้วอ่านอีกไฟล์ในคำตอบเดียว harness แบ่งเป็นสามชุดที่รันต่อกัน และหยุดชุดที่เหลือถ้าผู้ใช้ปฏิเสธคำสั่ง
 tableOfContents: false
 sidebar:
   order: 3
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในโหมด Ask ในแผงแชตของ VS Code
     - ไม่มี hook ที่ตั้งไว้ ทุก path อยู่ใน workspace และ `pnpm add zod` ไม่อยู่ใน safe list และไม่ตรงกับกฎของ workspace
   trigger: >-
-    โมเดลตอบด้วยบล็อก `tool_use` สี่บล็อกตามลำดับ: `read package.json`, `read src/date.ts`, `bash pnpm add zod`, `read pnpm-lock.yaml`
+    model ตอบด้วยบล็อก `tool_use` สี่บล็อกตามลำดับ: `read package.json`, `read src/date.ts`, `bash pnpm add zod`, `read pnpm-lock.yaml`
   covers: [tool.mixed-batch-sequencing]
   related: [tool.parallel-read-batch, perm.ask-allow, perm.ask-deny-ends-turn, ctl.stop-while-tools-run]
   steps:
@@ -19,12 +19,12 @@ scenario:
       beat:
         title: "Model ขอ tool สี่ตัวในคำตอบเดียว"
         text: >-
-          โมเดลขออ่าน `package.json` และ `src/date.ts` รัน `pnpm add zod` แล้วอ่าน `pnpm-lock.yaml` ตามลำดับ Geno
+          model ขออ่าน `package.json` และ `src/date.ts` รัน `pnpm add zod` แล้วอ่าน `pnpm-lock.yaml` ตามลำดับ Geno
           บันทึกคำขอแล้วแชตขึ้นขั้นของแต่ละ call
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียกเครื่องมือสี่ตัวในคำตอบเดียว และจบด้วย `stop_reason: tool_use`
+        model ขอเรียก tool สี่ตัวในคำตอบเดียว และจบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -237,7 +237,7 @@ scenario:
                   title: "Geno ตอบ read ที่ค้างว่าไม่ได้รัน แล้วจบ turn"
                   text: >-
                     read ตัวสุดท้ายได้คำตอบว่าคุณปฏิเสธ call ก่อนหน้าของ turn นี้ ขั้นของมันขึ้นว่าล้มเหลว แล้ว Geno จบ turn
-                    โดยไม่เรียกโมเดลอีก Stop hook ไม่ทำงาน
+                    โดยไม่เรียก model อีก Stop hook ไม่ทำงาน
                   from: engine
                   to: panel
                 do: >-
@@ -249,7 +249,7 @@ scenario:
               - lane: loop
                 at: step
                 do: >-
-                  รอบถัดไป `loopStep` เห็นว่าผู้ใช้ปฏิเสธ call ของ turn นี้ จึงได้ `done(end_turn)` โดยไม่เรียกโมเดลอีก
+                  รอบถัดไป `loopStep` เห็นว่าผู้ใช้ปฏิเสธ call ของ turn นี้ จึงได้ `done(end_turn)` โดยไม่เรียก model อีก
                   และ Stop hook ไม่ทำงาน
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [end_turn]
@@ -277,7 +277,7 @@ scenario:
                   end: "คุณปฏิเสธ turn จบ"
                   sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                 do: >-
-                  `missingReply` ดูขั้นเครื่องมือสุดท้าย ซึ่งคือ `read pnpm-lock.yaml` ที่ล้มเหลว ไม่ใช่คำสั่งที่ถูกปฏิเสธ
+                  `missingReply` ดูขั้น tool สุดท้าย ซึ่งคือ `read pnpm-lock.yaml` ที่ล้มเหลว ไม่ใช่คำสั่งที่ถูกปฏิเสธ
                   จึงให้เหตุผลว่าคำตอบสุดท้ายไม่มีข้อความ แทนที่จะบอกว่าหยุดที่ call ที่ถูกปฏิเสธ
                 sees: >-
                   ขั้น "pnpm add zod" ขึ้นป้าย "Denied by you" ขั้น "read pnpm-lock.yaml" ล้มเหลว
@@ -292,7 +292,7 @@ scenario:
         title: "ชุดที่สามอ่าน lockfile ฉบับใหม่"
         text: >-
           หลังคำสั่งจบ Geno เริ่มชุดที่สาม `read` อ่าน `pnpm-lock.yaml` ที่เพิ่งถูกเขียน แล้ว Geno
-          บันทึกผลทั้งสี่ตามลำดับที่โมเดลขอ
+          บันทึกผลทั้งสี่ตามลำดับที่ model ขอ
         from: engine
         to: machine
       do: >-
@@ -315,19 +315,19 @@ scenario:
       beat:
         title: "Geno ส่งผลทั้งสี่ให้ model"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลได้ผลทั้งสี่เรียงตามที่มันขอ
+          Geno เรียก model ต่อ model ได้ผลทั้งสี่เรียงตามที่มันขอ
         from: engine
         to: model
         end: "ครบสามชุด model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ผลทั้งสี่ตามลำดับที่มันขอ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ผลทั้งสี่ตามลำดับที่มันขอ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-harness ไม่รันทุก call พร้อมกัน และไม่รันทีละตัวทั้งหมด มันแบ่ง call ของคำตอบหนึ่งเป็นชุดที่รันต่อกันตามลำดับที่โมเดลขอ
+harness ไม่รันทุก call พร้อมกัน และไม่รันทีละตัวทั้งหมด มันแบ่ง call ของคำตอบหนึ่งเป็นชุดที่รันต่อกันตามลำดับที่ model ขอ
 
 | ชุด | call | รันอย่างไร |
 | --- | --- | --- |
@@ -340,9 +340,9 @@ call ที่เปลี่ยนอะไรได้ (`bash`, `edit`) หร
 
 สิ่งที่ควรสังเกต
 
-- **ผลลง log ตามลำดับที่โมเดลขอ** สถานะจบของแต่ละ call ไปถึงแผงทันทีที่เสร็จ แต่ข้อความผลไปถึงหลังบันทึกทั้งคำตอบ
+- **ผลลง log ตามลำดับที่ model ขอ** สถานะจบของแต่ละ call ไปถึงแผงทันทีที่เสร็จ แต่ข้อความผลไปถึงหลังบันทึกทั้งคำตอบ
 - **Deny หยุดชุดที่เหลือ** ชุดที่อยู่หลังคำสั่งที่ผู้ใช้ปฏิเสธไม่เริ่ม `loopStep` ตอบ call เหล่านั้นว่าไม่ได้รันเพราะผู้ใช้ปฏิเสธก่อนหน้า
-  แล้วจบ turn โดยไม่เรียกโมเดล
+  แล้วจบ turn โดยไม่เรียก model
 - **ประกาศท้าย turn บอกเหตุผลผิด** เมื่อมี call ที่ยังไม่ได้รันตามหลังคำสั่งที่ถูกปฏิเสธ ขั้น tool สุดท้ายในแผงคือ call ที่ล้มเหลว
   ไม่ใช่ call ที่ถูกปฏิเสธ `missingReply` จึงขึ้น "Its last reply had no text." แทน "It stopped at the call that was denied."
 

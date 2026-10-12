@@ -118,7 +118,7 @@ scenario:
                 at: sessions
                 do: >-
                   engine ปฏิเสธถ้า session เป็นของ workspace อื่น แล้ว `replayUpdates` แปลง log เป็น `session/update` ตามลำดับ:
-                  ข้อความของผู้ใช้แต่ละ turn พร้อม `REPLAYED_TURN_META` (เวลา สถานะ usage) ข้อความของโมเดล เครื่องมือและผล
+                  ข้อความของผู้ใช้แต่ละ turn พร้อม `REPLAYED_TURN_META` (เวลา สถานะ usage) ข้อความของ model tool และผล
                   การแก้พร้อมสถานะ review ถ้า turn ยังทำงานอยู่ก็ส่งข้อความที่กำลัง stream ต่อท้าย แล้วปิดด้วยชื่อแชต
                 ref: packages/engine/src/session-replay.ts#replayUpdates
                 emits: [user_message_chunk, REPLAYED_TURN_META, session_info_update]
@@ -136,12 +136,12 @@ scenario:
                   text: ข้อความไม่ค่อยๆ ขึ้นเหมือนตอน stream ถ้าเปิดจากผลค้นหา แผงเลื่อนไปที่ turn ที่ตรง
                   from: panel
                   to: you
-                  sees: บทสนทนาเดิมครบทุก turn พร้อมท้าย turn (โมเดล token ค่าใช้จ่าย) diff ของการแก้ และชื่อแชตบนหัวแผง
+                  sees: บทสนทนาเดิมครบทุก turn พร้อมท้าย turn (model token ค่าใช้จ่าย) diff ของการแก้ และชื่อแชตบนหัวแผง
                 at: rail
                 do: >-
                   แผงวาดบทสนทนาทั้งหมดในครั้งเดียว ข้อความไม่ค่อยๆ ขึ้นเหมือนตอน stream ถ้าเปิดจากผลค้นหา แผงเลื่อนไปที่ turn ที่ตรง
                 sees: >-
-                  บทสนทนาเดิมครบทุก turn พร้อมท้าย turn (โมเดล token ค่าใช้จ่าย) diff ของการแก้ และชื่อแชตบนหัวแผง
+                  บทสนทนาเดิมครบทุก turn พร้อมท้าย turn (model token ค่าใช้จ่าย) diff ของการแก้ และชื่อแชตบนหัวแผง
                 ref: packages/extension/src/chat/webview.ts#render
               - lane: server
                 beat:
@@ -185,14 +185,14 @@ scenario:
                 goto: start.open-window
 ---
 
-แชตหนึ่งแชตผูกกับ workspace ของมัน เพราะเครื่องมือของมันอ่าน เขียน และรันคำสั่งใน workspace นั้น
+แชตหนึ่งแชตผูกกับ workspace ของมัน เพราะ tool ของมันอ่าน เขียน และรันคำสั่งใน workspace นั้น
 แชตของโปรเจกต์อื่นจึงไม่เปิดในหน้าต่างนี้ แต่เปิดในหน้าต่างของโปรเจกต์นั้น และ engine เองก็ปฏิเสธ `session/load`
 ของ session ที่เป็นของ workspace อื่น
 
 สิ่งที่ควรสังเกต
 
 - **การเล่นซ้ำมาจาก log ไม่ใช่จาก cache ของแผง** ทุกสิ่งที่แผงแสดงถูกสร้างใหม่จาก event ใน log
-  ข้อความที่โมเดลเขียนไม่จบเพราะถูก Stop จึงไม่กลับมา ดู [กด Stop ขณะโมเดลกำลังเขียน](/scenarios/ctl/stop-while-streaming/)
+  ข้อความที่ model เขียนไม่จบเพราะถูก Stop จึงไม่กลับมา ดู [กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/)
 - **turn ที่ยังทำงานถูกรับมาดูแล** ถ้าแชตที่เปิดมี turn ที่ยังไม่จบ (เช่นที่ปล่อยไว้ตอนกด New Chat) แผงแสดงสิ่งที่ทำไปแล้ว
   ต่อด้วยอัปเดตสด และ turn จบเมื่อแผง Tasks บอกว่างานจบ
-- **แชตนั้นทำต่อได้ทันที** ข้อความถัดไปเป็น turn ใหม่ของ session เดิม และโมเดลเห็นบทสนทนาทั้งหมดที่ผ่านมา
+- **แชตนั้นทำต่อได้ทันที** ข้อความถัดไปเป็น turn ใหม่ของ session เดิม และ model เห็นบทสนทนาทั้งหมดที่ผ่านมา

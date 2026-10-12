@@ -164,7 +164,7 @@ scenario:
       at: agent
       do: >-
         `runTurn` ส่ง id นี้ให้ `runAgent` ซึ่งใช้ `resumeCall` สร้าง call `message_agent` ในนามผู้ใช้ (`issuedBy: user`)
-        turn นี้จึงไม่เรียกโมเดลของแม่ก่อนรัน call
+        turn นี้จึงไม่เรียก model ของแม่ก่อนรัน call
       ref: packages/engine/src/subagents.ts#resumeCall
       emits: [message_agent]
       phase: running-tools
@@ -194,7 +194,7 @@ scenario:
       at: rail
       do: >-
         แถวของ worker ขึ้นใหม่ใต้ขั้นของ `message_agent` และป้าย Cut off ของแผง Tasks หายไปเพราะลูกเริ่มรันอีกครั้ง
-      sees: แถว "worker · <โมเดล> · 0:01" พร้อมไดโนเสาร์ที่ขยับ
+      sees: แถว "worker · <model> · 0:01" พร้อมไดโนเสาร์ที่ขยับ
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: works
@@ -232,8 +232,8 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `call-model` แต่ director ที่ออก call นี้ไม่มีอะไรจะออกอีก run จึงจบ `end_turn` โดยไม่เรียกโมเดลของแม่
-        รายงานกับโน้ต `interrupted` รออยู่ใน log ให้โมเดลอ่านใน turn ถัดไปของผู้ใช้
+        `loopStep` ตัดสิน `call-model` แต่ director ที่ออก call นี้ไม่มีอะไรจะออกอีก run จึงจบ `end_turn` โดยไม่เรียก model ของแม่
+        รายงานกับโน้ต `interrupted` รออยู่ใน log ให้ model อ่านใน turn ถัดไปของผู้ใช้
       ref: "packages/engine/src/drive.ts#\"if (issued === undefined) return end('end_turn');\""
       emits: [end_turn]
       phase: ending
@@ -253,7 +253,7 @@ engine ตัวถัดไปอ่าน log แล้วปิดสิ่�
 
 สิ่งที่ควรสังเกต
 
-- **ไม่มีอะไรทำต่อเอง** โน้ต `interrupted` ไม่ปลุก session ผู้ใช้ต้องกด Resume หรือโมเดลต้องเรียก `message_agent` เอง
+- **ไม่มีอะไรทำต่อเอง** โน้ต `interrupted` ไม่ปลุก session ผู้ใช้ต้องกด Resume หรือ model ต้องเรียก `message_agent` เอง
 - **บอกครั้งเดียว** engine สองตัวที่เริ่มพร้อมกันแย่งกันด้วย lock และ run ที่อยู่ในโน้ตแล้วไม่ถูกบอกซ้ำ ถ้า engine ตายกลางการปิด รอบถัดไปปิดต่อได้
 - **ลูกของ workflow** ถ้าลูกที่ถูกตัดเป็นขั้นของ workflow โน้ตไปที่ session ที่เริ่ม workflow และบอกว่ารายงานของ workflow จะไม่มา
-- **Resume ไม่เรียกโมเดลของแม่** turn ที่ Resume สร้างจบทันทีหลังลูกรายงาน ถ้าอยากให้แม่สรุป ผู้ใช้ต้องส่งข้อความต่อ
+- **Resume ไม่เรียก model ของแม่** turn ที่ Resume สร้างจบทันทีหลังลูกรายงาน ถ้าอยากให้แม่สรุป ผู้ใช้ต้องส่งข้อความต่อ

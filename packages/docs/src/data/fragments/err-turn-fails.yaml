@@ -41,9 +41,9 @@
   at: step
   do: >-
     `loopStep` เห็นว่า event ล่าสุดคือ `error` ตาราง `ERROR_REASON` แปลง `transport` และ `overflow` เป็น `done(error)`
-    Stop hook ไม่ทำงานในทางนี้ สิ่งที่โมเดลยังไม่ได้ตอบ (prompt หรือผลของเครื่องมือ) ยังอยู่ใน log เสมอ
+    Stop hook ไม่ทำงานในทางนี้ สิ่งที่ model ยังไม่ได้ตอบ (prompt หรือผลของ tool) ยังอยู่ใน log เสมอ
     `KEEPS_PENDING_PROMPT` เป็นตัวตัดสินว่ามันถูกส่งไปในคำขอถัดไปหรือไม่ และสำหรับ `transport` กับ `overflow` คำตอบคือส่ง
-    ครั้งหน้าที่ผู้ใช้ส่งข้อความ โมเดลจะเห็นทั้งของเดิมและข้อความใหม่
+    ครั้งหน้าที่ผู้ใช้ส่งข้อความ model จะเห็นทั้งของเดิมและข้อความใหม่
   ref: packages/core/src/loop.ts#ERROR_REASON
   emits: [error]
   phase: ending

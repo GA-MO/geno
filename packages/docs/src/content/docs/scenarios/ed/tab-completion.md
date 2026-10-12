@@ -54,7 +54,7 @@ scenario:
         to: panel
       lane: model
       do: >-
-        llama-server บนเครื่องรันโมเดลเติมโค้ดขนาดเล็กแล้ว stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
+        llama-server บนเครื่องรัน model เติมโค้ดขนาดเล็กแล้ว stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
       ref: packages/extension/src/tab/server.ts#TabServer
 
     - id: filter
@@ -146,7 +146,7 @@ scenario:
                 end: { turn: none }
 ---
 
-Tab อยู่ใน extension host ทั้งหมด ไม่ใช้ engine ไม่ใช้ ACP และไม่ใช้โมเดลของแชต
+Tab อยู่ใน extension host ทั้งหมด ไม่ใช้ engine ไม่ใช้ ACP และไม่ใช้ model ของแชต
 มันคุยกับ llama-server บนเครื่องผ่าน HTTP ซึ่งส่วนขยายเปิดเองถ้า endpoint เป็นเครื่องนี้และยังไม่มีใครตอบ `/health`
 
 | แถบสถานะ | ความหมาย |

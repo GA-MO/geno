@@ -82,7 +82,7 @@ Geno มี tool หลายสิบตัว ถ้าส่ง schema คร
 สังเกตว่า `tools` ของ request ถัดไปไม่เปลี่ยน schema มาถึง model เป็นข้อความใน `tool_result` เท่านั้น
 ทำให้ส่วนต้นของ request ที่ cache ไว้ไม่พัง ถ้า model เรียก deferred tool ก่อนโหลด Geno ตอบเป็น error ว่าให้เรียก `tool_search` ก่อน (`unloadedCallError`)
 ผลข้างเคียงหนึ่งคือ qwen เขียนตัวเลขและ boolean ของ tool แบบนี้เป็นสตริง Geno จึงแปลงตาม schema ให้ก่อนรัน (`coerceToSchema`)
-ดูทัวร์ [โหลดเครื่องมือที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
+ดูทัวร์ [โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
 
 ## Geno ตรวจ input ก่อนรันเสมอ
 
@@ -110,4 +110,4 @@ model ลองอีกสามครั้ง เปลี่ยน path เ�
 
 - [Model ตอบกลับอะไรได้บ้าง](/foundations/what-comes-back/) หน้าตาของ `tool_use` ในคำตอบ
 - [ผลของ tool ส่งกลับอย่างไร](/foundations/tool-results/) ขากลับของสัญญา
-- ทัวร์ [เครื่องมือไม่มีจริงหรือ input ผิด](/scenarios/tool/unknown-or-invalid/)
+- ทัวร์ [tool ไม่มีจริงหรือ input ผิด](/scenarios/tool/unknown-or-invalid/)

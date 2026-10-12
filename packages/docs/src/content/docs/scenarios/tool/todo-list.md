@@ -1,6 +1,6 @@
 ---
 title: "Model อัปเดตรายการ todo"
-description: โมเดลตั้งรายการงานด้วย todo แผงแชตปักรายการไว้ท้าย turn ทันทีที่ call จบ และ harness เตือนโมเดลถ้าไม่อัปเดตนาน
+description: model ตั้งรายการงานด้วย todo แผงแชตปักรายการไว้ท้าย turn ทันทีที่ call จบ และ harness เตือน model ถ้าไม่อัปเดตนาน
 tableOfContents: false
 sidebar:
   order: 7
@@ -9,7 +9,7 @@ scenario:
   given:
     - turn กำลังทำงานกับงานหลายขั้น และยังไม่มีรายการ todo
   trigger: >-
-    โมเดลขอเรียก `todo` พร้อม `read src/date.ts` ในคำตอบเดียว รายการมีสี่ข้อ ข้อแรก `done` ข้อที่สอง "Write tests" เป็น `in_progress`
+    model ขอเรียก `todo` พร้อม `read src/date.ts` ในคำตอบเดียว รายการมีสี่ข้อ ข้อแรก `done` ข้อที่สอง "Write tests" เป็น `in_progress`
   covers: [tool.todo-list]
   related: [tool.parallel-read-batch, turn.with-tools, perm.plan-start-building]
   steps:
@@ -18,7 +18,7 @@ scenario:
       beat:
         title: "Model ตั้งรายการ todo พร้อมอ่านไฟล์"
         text: >-
-          งานนี้มีหลายขั้น โมเดลส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts`
+          งานนี้มีหลายขั้น model ส่งรายการสี่ข้อ ข้อแรกเสร็จ ข้อ "Write tests" กำลังทำ พร้อมขออ่าน `src/date.ts`
           ในคำตอบเดียว run จริงด้านล่างส่ง todo กับ read คู่กันแบบนี้
         from: model
         to: engine
@@ -30,7 +30,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลส่ง `todo` ที่มี `items` สี่ข้อ (แต่ละข้อมี `id` `text` และ `status`) และ `read` อีกหนึ่ง call จบด้วย `stop_reason: tool_use`
+        model ส่ง `todo` ที่มี `items` สี่ข้อ (แต่ละข้อมี `id` `text` และ `status`) และ `read` อีกหนึ่ง call จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -109,7 +109,7 @@ scenario:
         sees: "กล่อง \"1 of 4 done · write tests\" ข้อที่เสร็จมีเครื่องหมายถูก ข้อ \"Write tests\" มีไอคอนหมุน ข้อที่เหลือเป็นวงกลมว่าง"
       alongside: true
       do: >-
-        `railOf` ไม่วาด `todo` เป็นขั้นของเครื่องมือ แต่ปักรายการล่าสุดไว้ก่อนขั้นสุดท้ายของ turn ที่กำลังทำงาน และเปิดรายการไว้
+        `railOf` ไม่วาด `todo` เป็นขั้นของ tool แต่ปักรายการล่าสุดไว้ก่อนขั้นสุดท้ายของ turn ที่กำลังทำงาน และเปิดรายการไว้
       sees: >-
         กล่อง "1 of 4 done · write tests" ข้อที่เสร็จมีเครื่องหมายถูก ข้อ "Write tests" มีไอคอนหมุน ข้อที่เหลือเป็นวงกลมว่าง
       ref: packages/extension/src/chat/todo-view.ts#todoStep
@@ -122,12 +122,12 @@ scenario:
       beat:
         title: "Model ทำต่อ Geno เตือนถ้าลืมอัปเดต"
         text: >-
-          Geno เรียกโมเดลต่อ ถ้าเรียกไป 10 ครั้งโดยที่โมเดลไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
+          Geno เรียก model ต่อ ถ้าเรียกไป 10 ครั้งโดยที่ model ไม่อัปเดตรายการที่ยังไม่เสร็จ Geno แนบรายการมาเตือน
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ถ้า loop เรียกโมเดลไป 10 ครั้งโดยที่โมเดลไม่อัปเดตรายการที่ยังไม่เสร็จ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ถ้า loop เรียก model ไป 10 ครั้งโดยที่ model ไม่อัปเดตรายการที่ยังไม่เสร็จ
         `deliver()` จะเพิ่ม `notice` ที่แนบรายการมาเตือน (`todoReminder`)
       ref: packages/core/src/loop.ts#todoReminder
       emits: [call-model]
@@ -149,7 +149,7 @@ scenario:
 - **รายการไปถึงแผงก่อนผลอื่น** สถานะจบของ call ส่งทันทีที่ call จบ และ `todo` ฝากรายการมากับสถานะนั้น
   ผู้ใช้จึงเห็นความคืบหน้าแม้ call อื่นในชุดยังทำงาน
 - **เตือนเมื่อรายการค้าง** นอกจากเตือนหลัง 10 ครั้งแล้ว ถ้าผู้ใช้พิมพ์ prompt ใหม่ขณะที่รายการยังไม่เสร็จ
-  การเรียกโมเดลครั้งแรกของ turn ใหม่ได้รายการเดิมพร้อมบอกว่า turn ก่อนจบก่อนรายการเสร็จหรือไม่
+  การเรียก model ครั้งแรกของ turn ใหม่ได้รายการเดิมพร้อมบอกว่า turn ก่อนจบก่อนรายการเสร็จหรือไม่
 - **ส่งรายการว่างคือการล้าง** `items: []` ได้ผล "Cleared the todo list." และแผงไม่ปักอะไร
 
 อ่านต่อที่ [Model อ่านหลายไฟล์พร้อมกัน](/scenarios/tool/parallel-read-batch/)

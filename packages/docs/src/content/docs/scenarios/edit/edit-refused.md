@@ -1,6 +1,6 @@
 ---
 title: การแก้ไฟล์ถูกปฏิเสธ
-description: edit ไม่เขียนอะไรถ้าโมเดลยังไม่ได้อ่านไฟล์ ถ้าไฟล์เปลี่ยนไปหลังอ่าน หรือถ้า old_str ไม่ตรงกับที่เดียวในไฟล์ ผลบอกโมเดลว่าต้องทำอะไรต่อ
+description: edit ไม่เขียนอะไรถ้า model ยังไม่ได้อ่านไฟล์ ถ้าไฟล์เปลี่ยนไปหลังอ่าน หรือถ้า old_str ไม่ตรงกับที่เดียวในไฟล์ ผลบอก model ว่าต้องทำอะไรต่อ
 tableOfContents: false
 sidebar:
   order: 3
@@ -10,19 +10,19 @@ scenario:
     - turn กำลังทำงานในโหมด Ask หรือ Auto และ `src/date.ts` อยู่ใน workspace
     - ผู้ใช้เปิด `src/date.ts` ไว้ใน VS Code
   trigger: >-
-    โมเดลขอเรียก `edit` กับ `src/date.ts` ด้วย `old_str` และ `new_str`
+    model ขอเรียก `edit` กับ `src/date.ts` ด้วย `old_str` และ `new_str`
   covers: [edit.without-read-or-stale, edit.old-str-mismatch]
   related: [edit.applied-as-diff, edit.create-file, ctx.file-changed-on-disk]
   steps:
     - id: asks
       beat:
         title: Model ขอแก้ `src/date.ts`
-        text: โมเดลส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน
+        text: model ส่ง `old_str` ที่มันคิดว่าอยู่ในไฟล์ และ `new_str` ที่จะใส่แทน
         from: model
         to: engine
       lane: model
       do: >-
-        โมเดลขอ `edit` ไฟล์ `src/date.ts` จบด้วย `stop_reason: tool_use`
+        model ขอ `edit` ไฟล์ `src/date.ts` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -68,7 +68,7 @@ scenario:
     - id: check
       beat:
         title: Geno เทียบกับข้อความที่ model เห็น
-        text: Geno หาข้อความที่โมเดลเห็นครั้งล่าสุดจากการอ่านหรือการแก้ก่อนหน้า แล้วเทียบกับไฟล์ตอนนี้ ถ้าผ่าน จึงหา `old_str` ในไฟล์
+        text: Geno หาข้อความที่ model เห็นครั้งล่าสุดจากการอ่านหรือการแก้ก่อนหน้า แล้วเทียบกับไฟล์ตอนนี้ ถ้าผ่าน จึงหา `old_str` ในไฟล์
         from: engine
         to: engine
         ask: การแก้ติดตรงไหน
@@ -76,20 +76,20 @@ scenario:
       at: executor
       runs: 0
       do: >-
-        `edit` หาฐานของการแก้: ข้อความที่โมเดลเห็นครั้งล่าสุดจาก `read` หรือจาก `edit` ก่อนหน้า (ในหน่วยความจำของรอบนี้ หรือจากบันทึกใน log)
+        `edit` หาฐานของการแก้: ข้อความที่ model เห็นครั้งล่าสุดจาก `read` หรือจาก `edit` ก่อนหน้า (ในหน่วยความจำของรอบนี้ หรือจากบันทึกใน log)
         แล้วให้ `proposeChange` เทียบ hash ของฐานกับข้อความปัจจุบันก่อนลองแทนข้อความ
       ref: packages/core/src/edit.ts#proposeChange
       fork:
         ask: การแก้ติดตรงไหน
         options:
           - id: not-read
-            label: โมเดลยังไม่ได้อ่านไฟล์
+            label: model ยังไม่ได้อ่านไฟล์
             then: failed
             steps:
               - lane: tool
                 beat:
                   title: Model ยังไม่ได้อ่านไฟล์
-                  text: Geno ไม่รู้ว่าโมเดลแก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร การ์ดเป็นผลจริงจากการรันที่โมเดลแก้สามไฟล์โดยไม่อ่านก่อน
+                  text: Geno ไม่รู้ว่า model แก้จากข้อความไหน จึงปฏิเสธก่อนเทียบอะไร การ์ดเป็นผลจริงจากการรันที่ model แก้สามไฟล์โดยไม่อ่านก่อน
                   from: engine
                   to: model
                   sees:
@@ -100,23 +100,23 @@ scenario:
                       - output
                 at: executor
                 do: >-
-                  `lastSeen` ไม่พบว่าโมเดลเคยเห็นไฟล์นี้ ทั้งในหน่วยความจำและใน log `edit` โยน `ToolError`
+                  `lastSeen` ไม่พบว่า model เคยเห็นไฟล์นี้ ทั้งในหน่วยความจำและใน log `edit` โยน `ToolError`
                   "read src/date.ts before editing it" ก่อนเทียบอะไร ไฟล์ใหม่ที่ยังไม่มีบนดิสก์ไม่ติดข้อนี้
                 ref: "packages/engine/src/tools/agent.ts#\"if (base === undefined) throw new ToolError(`read ${input.path} before editing it`);\""
                 emits: [ToolError]
           - id: stale
-            label: ไฟล์เปลี่ยนหลังโมเดลอ่าน
+            label: ไฟล์เปลี่ยนหลัง model อ่าน
             then: failed
             steps:
               - lane: tool
                 beat:
                   title: ไฟล์เปลี่ยนหลัง model อ่าน
-                  text: ข้อความตอนนี้ไม่ตรงกับที่โมเดลเห็น Geno จึงไม่แทนอะไร และบอกให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
+                  text: ข้อความตอนนี้ไม่ตรงกับที่ model เห็น Geno จึงไม่แทนอะไร และบอกให้อ่านไฟล์ใหม่ก่อน สิ่งที่คุณพิมพ์จึงไม่ถูกเขียนทับ
                   from: engine
                   to: model
                 at: executor
                 do: >-
-                  ผู้ใช้พิมพ์ใน buffer หลังจากโมเดลอ่านไฟล์ hash ของข้อความปัจจุบันจึงไม่ตรงกับฐาน `proposeChange` ล้มเหลวแบบ `stale-base`
+                  ผู้ใช้พิมพ์ใน buffer หลังจาก model อ่านไฟล์ hash ของข้อความปัจจุบันจึงไม่ตรงกับฐาน `proposeChange` ล้มเหลวแบบ `stale-base`
                   ("src/date.ts changed since it was last read; read it again before editing") ไม่มีการแทนข้อความ
                 ref: packages/core/src/edit.ts#staleBaseDetail
                 emits: [stale-base]
@@ -127,7 +127,7 @@ scenario:
               - lane: tool
                 beat:
                   title: หา `old_str` ไม่เจอ
-                  text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ส่งช่วงบรรทัดที่ใกล้ที่สุดกลับไป ให้โมเดลคัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงจากการรันหนึ่ง
+                  text: หาแบบตรงตัวไม่เจอ หาแบบไม่สนการเยื้องก็ไม่เจอ Geno ส่งช่วงบรรทัดที่ใกล้ที่สุดกลับไป ให้ model คัดลอกจากไฟล์ตรงๆ การ์ดเป็นผลจริงจากการรันหนึ่ง
                   from: engine
                   to: model
                   sees:
@@ -151,7 +151,7 @@ scenario:
               - lane: tool
                 beat:
                   title: "`old_str` ตรงหลายที่"
-                  text: "Geno ไม่เดาว่าจะแก้ที่ไหน มันบอกจำนวนและบรรทัดที่เจอ ให้โมเดลใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
+                  text: "Geno ไม่เดาว่าจะแก้ที่ไหน มันบอกจำนวนและบรรทัดที่เจอ ให้ model ใส่บรรทัดรอบข้างเพิ่ม หรือส่ง `replace_all: true` ถ้าตั้งใจแก้ทุกที่"
                   from: engine
                   to: model
                 at: executor
@@ -184,25 +184,25 @@ scenario:
     - id: next
       beat:
         title: Model อ่านเหตุผลแล้วลองใหม่
-        text: turn ไม่จบ ผลไปถึงโมเดลเป็น error โมเดลมักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง
+        text: turn ไม่จบ ผลไปถึง model เป็น error model มักอ่านไฟล์ใหม่ แล้วส่ง edit อีกครั้งด้วยข้อความที่ตรง
         from: model
         to: engine
         end: Model อ่านไฟล์ใหม่แล้วลองอีกครั้ง
       lane: loop
       at: step
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ผลไปถึงโมเดลเป็น `is_error: true`
-        โมเดลมักอ่านไฟล์ใหม่ แล้วส่ง `edit` อีกครั้งด้วยข้อความที่ตรง
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ผลไปถึง model เป็น `is_error: true`
+        model มักอ่านไฟล์ใหม่ แล้วส่ง `edit` อีกครั้งด้วยข้อความที่ตรง
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-`edit` ยอมเขียนเฉพาะเมื่อมั่นใจว่าโมเดลแก้ข้อความที่มันเห็นจริง การปฏิเสธทุกแบบเป็น `ToolError` ธรรมดา
+`edit` ยอมเขียนเฉพาะเมื่อมั่นใจว่า model แก้ข้อความที่มันเห็นจริง การปฏิเสธทุกแบบเป็น `ToolError` ธรรมดา
 แผงแสดงขั้นเป็นล้มเหลว และ turn ทำงานต่อ
 
-| เหตุ | ข้อความที่โมเดลได้ | ทางแก้ของโมเดล |
+| เหตุ | ข้อความที่ model ได้ | ทางแก้ของ model |
 | --- | --- | --- |
 | ยังไม่อ่าน | `read <path> before editing it` | `read` ก่อน |
 | ไฟล์เปลี่ยนหลังอ่าน | `<path> changed since it was last read; read it again before editing` | `read` อีกครั้ง |
@@ -211,7 +211,7 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **การแก้ที่ยังไม่บันทึกของผู้ใช้ชนะ** ฐานของการแก้เทียบกับ buffer ไม่ใช่ดิสก์ เมื่อผู้ใช้พิมพ์หลังโมเดลอ่าน `edit` ไม่ทับข้อความของผู้ใช้
+- **การแก้ที่ยังไม่บันทึกของผู้ใช้ชนะ** ฐานของการแก้เทียบกับ buffer ไม่ใช่ดิสก์ เมื่อผู้ใช้พิมพ์หลัง model อ่าน `edit` ไม่ทับข้อความของผู้ใช้
   ส่วนขยายยังตรวจซ้ำอีกครั้งตอนเขียน ถ้า buffer เปลี่ยนระหว่างนั้น `writeTextFile` ตอบว่า stale และได้ผลแบบเดียวกัน
 - **หาแบบหลวมได้ครั้งเดียว** ถ้าหาแบบตรงตัวไม่พบ `strReplace` ยอมรับการตรงแบบไม่สนการเยื้องเฉพาะเมื่อมีที่เดียว
 - **ส่งการแก้ซ้ำไม่ผิด** ถ้า `old_str` หายไปแล้วแต่ `new_str` หลายบรรทัดอยู่ในไฟล์ที่เดียว `strReplace` ถือว่าการแก้นี้ทำไปแล้วและไม่เปลี่ยนอะไร

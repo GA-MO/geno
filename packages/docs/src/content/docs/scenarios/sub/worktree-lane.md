@@ -1,6 +1,6 @@
 ---
 title: "subagent ใน worktree แยก"
-description: โมเดลขอลูก worker แบบ isolation worktree ลูกได้ git worktree ของตัวเองบน branch geno/ แก้ไฟล์ที่นั่น แล้ว lane ถูกเก็บไว้ให้ผู้ใช้ตรวจหรือถูกลบถ้าไม่มีอะไรเปลี่ยน
+description: model ขอลูก worker แบบ isolation worktree ลูกได้ git worktree ของตัวเองบน branch geno/ แก้ไฟล์ที่นั่น แล้ว lane ถูกเก็บไว้ให้ผู้ใช้ตรวจหรือถูกลบถ้าไม่มีอะไรเปลี่ยน
 tableOfContents: false
 sidebar:
   order: 6
@@ -10,7 +10,7 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน workspace เป็น git repository
     - เปิด Geno ในโหมด Auto ผู้ใช้กำลังแก้ไฟล์ใน checkout หลักอยู่
   trigger: >-
-    ผู้ใช้ขอให้ลองย้าย `src/log.ts` ไปใช้ pino โดยไม่ยุ่งกับงานที่ทำค้างอยู่ โมเดลขอ `agent` แบบ `isolation: "worktree"`
+    ผู้ใช้ขอให้ลองย้าย `src/log.ts` ไปใช้ pino โดยไม่ยุ่งกับงานที่ทำค้างอยู่ model ขอ `agent` แบบ `isolation: "worktree"`
   covers: [sub.worktree-lane]
   related: [wf.lane-apply, sub.blocking-report, sub.fork, wf.arena-best-of-n]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `agent` ด้วย `agent: "worker"`, `isolation: "worktree"` และ task ที่เขียนให้ครบในตัว
+        model ขอเรียก `agent` ด้วย `agent: "worker"`, `isolation: "worktree"` และ task ที่เขียนให้ครบในตัว
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
@@ -106,7 +106,7 @@ scenario:
       alongside: true
       do: >-
         แถวของลูกขึ้นใต้ขั้นของ `agent` ไฟล์ที่ผู้ใช้เปิดอยู่ใน checkout หลักไม่ถูกแตะ
-      sees: แถว "worker · <โมเดล> · 0:05" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
+      sees: แถว "worker · <model> · 0:05" พร้อมไดโนเสาร์ที่ขยับ และปุ่ม [Cancel]
       ref: packages/extension/src/chat/subagent-view.ts#childRow
 
     - id: works
@@ -118,7 +118,7 @@ scenario:
       lane: child@worker
       at: model
       do: >-
-        ลูกเรียกโมเดล อ่านและแก้ `src/log.ts` กับ `package.json` ใน lane แล้วรันเทสต์ใน sandbox ของ lane
+        ลูกเรียก model อ่านและแก้ `src/log.ts` กับ `package.json` ใน lane แล้วรันเทสต์ใน sandbox ของ lane
         จบด้วยการเรียก `report` ที่สรุปสิ่งที่เปลี่ยน
       ref: packages/engine/src/subagents.ts#reportExecutor
       emits: [report]
@@ -213,7 +213,7 @@ scenario:
         end: ไปตรวจและ Apply lane
       lane: model
       do: >-
-        โมเดลของแม่เล่าว่า worker ทำอะไรใน lane ไหน และบอกให้ผู้ใช้ตรวจแล้วนำกลับมาจากแผง Lanes
+        model ของแม่เล่าว่า worker ทำอะไรใน lane ไหน และบอกให้ผู้ใช้ตรวจแล้วนำกลับมาจากแผง Lanes
         การแก้ยังไม่เข้า checkout หลักจนกว่าผู้ใช้จะ Apply
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]

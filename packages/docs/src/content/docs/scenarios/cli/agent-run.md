@@ -60,7 +60,7 @@ scenario:
         sees: "> bash git reset --hard HEAD~1"
       lane: model
       do: >-
-        โมเดล stream ข้อความสั้นๆ แล้วขอเรียก `bash` ด้วย `git reset --hard HEAD~1` จบด้วย `stop_reason: tool_use`
+        model stream ข้อความสั้นๆ แล้วขอเรียก `bash` ด้วย `git reset --hard HEAD~1` จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
 
@@ -68,7 +68,7 @@ scenario:
       lane: panel
       at: terminal
       do: >-
-        ข้อความของโมเดลเขียนลง stdout ทีละส่วน และทุก call ที่เริ่มพิมพ์บรรทัด `> ` ตามด้วยชื่อขั้น
+        ข้อความของ model เขียนลง stdout ทีละส่วน และทุก call ที่เริ่มพิมพ์บรรทัด `> ` ตามด้วยชื่อขั้น
       sees: "> bash git reset --hard HEAD~1"
       ref: packages/engine/src/drive.ts#terminalSurface
 
@@ -138,7 +138,7 @@ scenario:
                   from: model
                   to: panel
                 do: >-
-                  โมเดลอ่านผลแล้วตอบว่าทิ้ง commit แล้ว จบด้วย `stop_reason: end_turn`
+                  model อ่านผลแล้วตอบว่าทิ้ง commit แล้ว จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: loop
@@ -224,7 +224,7 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  ผลของ call บอกโมเดลว่า "denied: `git reset --hard HEAD~1` uses git reset --hard, which needs the user's approval,
+                  ผลของ call บอก model ว่า "denied: `git reset --hard HEAD~1` uses git reset --hard, which needs the user's approval,
                   and nobody can answer here." ตามด้วยคำแนะนำว่าอย่าหาทางเลี่ยงเจตนาของการปฏิเสธ
                 ref: packages/core/src/loop.ts#DONT_ASK
                 emits: [denied]
@@ -236,7 +236,7 @@ scenario:
                   from: model
                   to: panel
                 do: >-
-                  โมเดลอธิบายว่าต้องให้ผู้ใช้อนุญาต และบอกคำสั่งที่ผู้ใช้รันเองได้ จบด้วย `stop_reason: end_turn`
+                  model อธิบายว่าต้องให้ผู้ใช้อนุญาต และบอกคำสั่งที่ผู้ใช้รันเองได้ จบด้วย `stop_reason: end_turn`
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
                 emits: [end_turn]
               - lane: panel
@@ -288,7 +288,7 @@ scenario:
       lane: loop
       at: step
       do: >-
-        ผล `rejected` บอกโมเดลให้หยุดรอผู้ใช้ `loopStep` ตัดสิน `done(end_turn)` ทันทีโดยไม่เรียกโมเดลอีก
+        ผล `rejected` บอก model ให้หยุดรอผู้ใช้ `loopStep` ตัดสิน `done(end_turn)` ทันทีโดยไม่เรียก model อีก
       ref: packages/core/src/loop.ts#loopStep
       emits: [rejected, end_turn]
       phase: ending
@@ -309,7 +309,7 @@ scenario:
 | exit code | เมื่อไร |
 | --- | --- |
 | 0 | รอบจบด้วย `end_turn` รวมถึงตอนที่ผู้ใช้ตอบไม่ หรือการปฏิเสธใน non-interactive |
-| 1 | error ของผู้ให้บริการ การปฏิเสธของโมเดล หรือ hook บล็อก |
+| 1 | error ของผู้ให้บริการ การปฏิเสธของ model หรือ hook บล็อก |
 | 2 | ใช้แฟล็กผิด |
 | 3 | ถึงขีดจำกัด `--max-turns` หรือ `--max-cost` |
 | 130 | ผู้ใช้กด Ctrl-C |

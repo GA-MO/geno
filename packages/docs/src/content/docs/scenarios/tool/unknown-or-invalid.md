@@ -1,6 +1,6 @@
 ---
 title: "Model เรียก tool ที่ไม่มีจริง หรือส่ง input ผิด"
-description: โมเดลเรียก tool ที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
+description: model เรียก tool ที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
 tableOfContents: false
 sidebar:
   order: 4
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในแผงแชตของ VS Code
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลจบคำตอบด้วย `stop_reason: tool_use` แต่บล็อก `tool_use` เรียกชื่อที่ไม่มี หรือมี input ผิดรูป
+    model จบคำตอบด้วย `stop_reason: tool_use` แต่บล็อก `tool_use` เรียกชื่อที่ไม่มี หรือมี input ผิดรูป
   covers: [tool.unknown-or-invalid]
   related: [tool.deferred-tool-load, mstop.max-tokens-cut-tool, turn.with-tools]
   steps:
@@ -23,7 +23,7 @@ scenario:
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียกเครื่องมือ ชื่อหรือ input ของมันมาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการเครื่องมือของ Geno
+        model ขอเรียก tool ชื่อหรือ input ของมันมาจากความเคยชินกับ harness อื่น ไม่ใช่จากรายการ tool ของ Geno
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -54,7 +54,7 @@ scenario:
         ask: call ผิดตรงไหน
         options:
           - id: unknown
-            label: ชื่อเครื่องมือไม่มีจริง
+            label: ชื่อ tool ไม่มีจริง
             then: result
             steps:
               - lane: tool
@@ -68,8 +68,8 @@ scenario:
                   to: model
                   sees: { kind: step, label: 'write_file {"path":"src/date.ts","content":"..."}', status: failed }
                 do: >-
-                  ไม่มี executor ชื่อ `write_file` `unknownTool` เห็นว่าเป็นชื่อเครื่องมือเขียนไฟล์ของ harness อื่น
-                  จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน ตามด้วยรายชื่อเครื่องมือทั้งหมด ชื่อขั้นในแผงเป็นชื่อกับ JSON ของ input
+                  ไม่มี executor ชื่อ `write_file` `unknownTool` เห็นว่าเป็นชื่อ tool เขียนไฟล์ของ harness อื่น
+                  จึงตอบว่าให้ใช้ `edit` กับ `create: true` แทน ตามด้วยรายชื่อ tool ทั้งหมด ชื่อขั้นในแผงเป็นชื่อกับ JSON ของ input
                 sees: ขั้น `write_file {"path":"src/date.ts","content":"..."}` ขึ้นเครื่องหมายล้มเหลว
                 ref: packages/engine/src/tools/index.ts#unknownTool
                 emits: [unknown tool]
@@ -89,7 +89,7 @@ scenario:
                 do: >-
                   `bash` ได้ `{"cmd": "ls"}` แทน `command` schema ของมันเป็น `strictObject` จึงไม่ผ่าน executor โยน `ToolError`
                   "invalid input: ..." ตามด้วยข้อความของ zod ที่บอกฟิลด์ที่ขาดและฟิลด์ที่ไม่รู้จัก
-                  ชื่อขั้นอ่าน input ไม่ได้ จึงเป็นชื่อเครื่องมือกับ JSON ของ input
+                  ชื่อขั้นอ่าน input ไม่ได้ จึงเป็นชื่อ tool กับ JSON ของ input
                 sees: ขั้น `bash {"cmd":"ls"}` ขึ้นเครื่องหมายล้มเหลว
                 ref: "packages/engine/src/tools/context.ts#\"if (!parsed.success) throw new ToolError(`invalid input: ${z.prettifyError(parsed.error)}`);\""
                 emits: [invalid input]
@@ -115,20 +115,20 @@ scenario:
       beat:
         title: "Model อ่านวิธีที่ถูกแล้วเรียกใหม่"
         text: >-
-          turn ไม่หยุด Geno เรียกโมเดลต่อ โมเดลได้ผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก
+          turn ไม่หยุด Geno เรียก model ต่อ model ได้ผลที่บอกว่าเป็น error พร้อมวิธีเรียกที่ถูก
         from: engine
         to: model
         end: "model เรียกใหม่"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้ `tool_result` ที่มี `is_error: true` และข้อความบอกวิธีที่ถูก
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้ `tool_result` ที่มี `is_error: true` และข้อความบอกวิธีที่ถูก
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-ทุกอย่างที่โมเดลเรียกผิดกลับไปเป็นผล `error` ให้โมเดลอ่าน ไม่มีอะไรทำให้ turn ล้ม
-Geno ไม่ซ่อมหรือเดา input ให้ โมเดลต้องเรียกใหม่เอง (ยกเว้น tool ที่เลื่อนไว้ ซึ่ง `gate` แปลงค่าที่เขียนเป็นข้อความให้ตรงชนิดตาม schema ก่อนตรวจ)
+ทุกอย่างที่ model เรียกผิดกลับไปเป็นผล `error` ให้ model อ่าน ไม่มีอะไรทำให้ turn ล้ม
+Geno ไม่ซ่อมหรือเดา input ให้ model ต้องเรียกใหม่เอง (ยกเว้น tool ที่เลื่อนไว้ ซึ่ง `gate` แปลงค่าที่เขียนเป็นข้อความให้ตรงชนิดตาม schema ก่อนตรวจ)
 
 สิ่งที่ควรสังเกต
 

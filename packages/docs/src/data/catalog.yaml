@@ -149,7 +149,7 @@ scenarios:
       - model
     terminal: "`done` / `end_turn`"
   - id: turn.with-tools
-    thai: โมเดลเรียกเครื่องมือแล้วตอบ
+    thai: model เรียก tool แล้วตอบ
     english: Model calls tools, then answers
     chapter: 2
     priority: P1
@@ -164,7 +164,7 @@ scenarios:
       - model
     terminal: "`done` / `end_turn`"
   - id: turn.prompt-while-running
-    thai: ส่งข้อความซ้อนขณะเทิร์นทำงาน (ถูกปฏิเสธ)
+    thai: ส่งข้อความซ้อนขณะ turn ทำงาน (ถูกปฏิเสธ)
     english: Second prompt while a turn runs is refused
     chapter: 2
     priority: P3
@@ -198,7 +198,7 @@ scenarios:
       - model
     terminal: "`done` / `end_turn`"
   - id: mstop.no-reply-continue-retry
-    thai: จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue/Retry
+    thai: จบ turn โดยไม่มีคำตอบ แล้วกด Continue/Retry
     english: Turn ends with no reply; Continue or Retry
     chapter: 3
     priority: P1
@@ -210,7 +210,7 @@ scenarios:
       - loop
     terminal: New turn (Continue = `CONTINUE_PROMPT`; Retry = the same text)
   - id: mstop.empty-answer-nudged
-    thai: โมเดลจบเทิร์นเปล่า ถูกกระตุ้นหนึ่งครั้ง
+    thai: model จบ turn เปล่า ถูกกระตุ้นหนึ่งครั้ง
     english: Empty answer nudged once
     chapter: 3
     priority: P2
@@ -221,7 +221,7 @@ scenarios:
       - panel
     terminal: Continues; or `failed` / `error` after a second empty answer, plus the no-reply notice
   - id: mstop.limit-max-turns
-    thai: ครบ 40 ครั้งของการเรียกโมเดล
+    thai: ครบ 40 ครั้งของการเรียก model
     english: Run reaches 40 model calls
     chapter: 3
     priority: P2
@@ -244,7 +244,7 @@ scenarios:
       - panel
     terminal: "`failed` / `budget`"
   - id: mstop.refusal
-    thai: โมเดลปฏิเสธ
+    thai: model ปฏิเสธ
     english: Model refuses
     chapter: 3
     priority: P2
@@ -267,7 +267,7 @@ scenarios:
       - panel
     terminal: "`failed` with no error block (see defect D3)"
   - id: mstop.max-tokens-cut-tool
-    thai: ขีดจำกัด output ตัดการเรียกเครื่องมือ
+    thai: ขีดจำกัด output ตัดการเรียก tool
     english: Output limit cuts a tool call
     chapter: 3
     priority: P3
@@ -277,7 +277,7 @@ scenarios:
       - tool
     terminal: Next model call; `failed` after a second cut in a row
   - id: mstop.pause-turn
-    thai: ผู้ให้บริการพักเทิร์นยาว
+    thai: ผู้ให้บริการพัก turn ยาว
     english: Provider pauses a long turn
     chapter: 3
     priority: P3
@@ -332,7 +332,7 @@ scenarios:
       - user
     terminal: Continues; held until Retry now or Stop; or `failed`
   - id: err.stream-stalled
-    thai: โมเดลเงียบ
+    thai: model เงียบ
     english: Stream stalls
     chapter: 4
     priority: P3
@@ -374,7 +374,7 @@ scenarios:
       - panel
     terminal: Prompt fails in the panel; on the new engine, wait sessions resume and children are marked interrupted
   - id: ctl.stop-while-streaming
-    thai: กด Stop ขณะโมเดลกำลังเขียน
+    thai: กด Stop ขณะ model กำลังเขียน
     english: Stop while the model streams
     chapter: 5
     priority: P1
@@ -387,7 +387,7 @@ scenarios:
       - model
     terminal: "`stopped` / `cancelled`; prompt stays pending"
   - id: ctl.queued-followup
-    thai: พิมพ์ต่อคิวไว้ขณะเทิร์นทำงาน
+    thai: พิมพ์ต่อคิวไว้ขณะ turn ทำงาน
     english: Queue a follow-up
     chapter: 5
     priority: P1
@@ -397,7 +397,7 @@ scenarios:
       - editor
     terminal: Sent as a new turn on `done`; put back in the composer on stopped or failed
   - id: ctl.stop-while-tools-run
-    thai: กด Stop ขณะเครื่องมือทำงาน
+    thai: กด Stop ขณะ tool ทำงาน
     english: Stop while tools run
     chapter: 5
     priority: P2
@@ -422,7 +422,7 @@ scenarios:
       - loop
     terminal: "`stopped`; card shows Cancelled"
   - id: ctl.steer-delivered
-    thai: ส่งข้อความแทรกเข้าเทิร์นที่กำลังทำงาน
+    thai: ส่งข้อความแทรกเข้า turn ที่กำลังทำงาน
     english: Steer delivered mid-turn
     chapter: 5
     priority: P2
@@ -435,7 +435,7 @@ scenarios:
       - model
     terminal: Turn continues with the steer logged
   - id: ctl.steer-missed-runs-next
-    thai: steer มาไม่ทัน กลายเป็นเทิร์นถัดไป
+    thai: steer มาไม่ทัน กลายเป็น turn ถัดไป
     english: Steer misses the turn and runs next
     chapter: 5
     priority: P3
@@ -477,7 +477,7 @@ scenarios:
       - loop
     terminal: "`stopped`"
   - id: ctl.stop-while-held-for-child
-    thai: กด Stop ขณะรอรายงานจากเอเจนต์ลูกเบื้องหลัง
+    thai: กด Stop ขณะรอรายงานจาก subagent เบื้องหลัง
     english: Stop while held for a background child
     chapter: 5
     priority: P3
@@ -499,7 +499,7 @@ scenarios:
       - model
     terminal: '`stopped`; "Stopped. The context is as it was." for manual compaction'
   - id: ctl.session-close-during-turn
-    thai: ปิดเซสชันขณะเทิร์นทำงาน
+    thai: ปิดเซสชันขณะ turn ทำงาน
     english: Session closed during a turn
     chapter: 5
     priority: P3
@@ -509,7 +509,7 @@ scenarios:
       - loop
     terminal: "`stopped`; session closed"
   - id: ctx.compaction-auto
-    thai: สรุปบริบทอัตโนมัติก่อนเรียกโมเดล
+    thai: สรุปบริบทอัตโนมัติก่อนเรียก model
     english: Auto compaction before a call
     chapter: 6
     priority: P2
@@ -530,7 +530,7 @@ scenarios:
       - panel
     terminal: Continues, or `failed` / `overflow`
   - id: ctx.compaction-manual
-    thai: /compact ระหว่างเทิร์น
+    thai: /compact ระหว่าง turn
     english: "`/compact [focus]` between turns"
     chapter: 6
     priority: P2
@@ -552,7 +552,7 @@ scenarios:
       - model
     terminal: Next model call
   - id: ctx.file-changed-on-disk
-    thai: ผู้ใช้แก้ไฟล์ที่โมเดลอ่านไปแล้ว
+    thai: ผู้ใช้แก้ไฟล์ที่ model อ่านไปแล้ว
     english: File changed on disk after a read
     chapter: 6
     priority: P2
@@ -624,7 +624,7 @@ scenarios:
       - panel
     terminal: Next model call
   - id: tool.deferred-tool-load
-    thai: โหลดเครื่องมือที่เลื่อนไว้ด้วย tool_search
+    thai: โหลด tool ที่เลื่อนไว้ด้วย tool_search
     english: Deferred tool must be loaded first
     chapter: 7
     priority: P2
@@ -645,7 +645,7 @@ scenarios:
       - loop
     terminal: Next model call
   - id: tool.ask-user-question
-    thai: โมเดลถามคำถามแบบฟอร์ม
+    thai: model ถามคำถามแบบฟอร์ม
     english: Model asks a structured question
     chapter: 7
     priority: P2
@@ -687,7 +687,7 @@ scenarios:
       - loop
     terminal: Next model call
   - id: tool.unknown-or-invalid
-    thai: เครื่องมือไม่มีจริงหรือ input ผิด
+    thai: tool ไม่มีจริงหรือ input ผิด
     english: Unknown tool or invalid input
     chapter: 7
     priority: P3
@@ -743,7 +743,7 @@ scenarios:
       - tool
     terminal: Next model call
   - id: perm.ask-deny-ends-turn
-    thai: ผู้ใช้กด Deny แล้วเทิร์นจบ
+    thai: ผู้ใช้กด Deny แล้ว turn จบ
     english: User denies; the turn ends
     chapter: 8
     priority: P1
@@ -766,7 +766,7 @@ scenarios:
       - panel
     terminal: Next model call
   - id: perm.mode-switch-mid-turn
-    thai: สลับโหมดระหว่างเทิร์น
+    thai: สลับโหมดระหว่าง turn
     english: Switch mode mid-turn
     chapter: 8
     priority: P2
@@ -925,7 +925,7 @@ scenarios:
       - user
     terminal: Per answer
   - id: perm.claude-bare-tool-deny
-    thai: ไฟล์ Claude ปฏิเสธทั้งเครื่องมือ
+    thai: ไฟล์ Claude ปฏิเสธทั้ง tool
     english: Claude settings bare-tool deny
     chapter: 8
     priority: P3
@@ -1020,7 +1020,7 @@ scenarios:
       - tool
     terminal: Next model call
   - id: hook.pretooluse-continue-false
-    thai: PreToolUse หยุดทั้งเทิร์น
+    thai: PreToolUse หยุดทั้ง turn
     english: PreToolUse stops the turn
     chapter: 9
     priority: P3
@@ -1060,7 +1060,7 @@ scenarios:
       - panel
     terminal: "`failed` / `blocked`"
   - id: hook.stop-keeps-going
-    thai: Stop hook ให้โมเดลทำงานต่อ
+    thai: Stop hook ให้ model ทำงานต่อ
     english: Stop hook keeps the turn going
     chapter: 9
     priority: P3
@@ -1199,7 +1199,7 @@ scenarios:
       - editor
     terminal: Next model call
   - id: sub.blocking-report
-    thai: สร้างเอเจนต์ลูกแล้วรอรายงาน
+    thai: สร้าง subagent แล้วรอรายงาน
     english: Spawn a subagent and get its report
     chapter: 12
     priority: P2
@@ -1213,7 +1213,7 @@ scenarios:
       - panel
     terminal: Parent continues to `end_turn`
   - id: sub.at-mention
-    thai: "@mention เรียกเอเจนต์ลูกโดยตรง"
+    thai: "@mention เรียก subagent โดยตรง"
     english: "`@agent task` (and `@review`)"
     chapter: 12
     priority: P2
@@ -1226,7 +1226,7 @@ scenarios:
       - child
     terminal: "`done`; parent model never called"
   - id: sub.asks-permission
-    thai: เอเจนต์ลูกขออนุญาต
+    thai: subagent ขออนุญาต
     english: Subagent needs approval
     chapter: 12
     priority: P2
@@ -1239,7 +1239,7 @@ scenarios:
       - user
     terminal: Child continues, or parent turn ends on Deny
   - id: sub.user-cancels-child
-    thai: ผู้ใช้ยกเลิกเอเจนต์ลูก
+    thai: ผู้ใช้ยกเลิก subagent
     english: User cancels a child row
     chapter: 12
     priority: P2
@@ -1252,7 +1252,7 @@ scenarios:
       - loop
     terminal: Parent continues with a partial report
   - id: sub.parent-stop-with-children
-    thai: หยุดเทิร์นแม่ขณะลูกทำงาน
+    thai: หยุด turn แม่ขณะลูกทำงาน
     english: Parent Stop with running children
     chapter: 12
     priority: P2
@@ -1265,7 +1265,7 @@ scenarios:
       - child
     terminal: "`stopped`; children cancelled; wakes paused"
   - id: sub.fork
-    thai: fork เอเจนต์ลูกจากบทสนทนา
+    thai: fork subagent จากบทสนทนา
     english: Fork subagent
     chapter: 12
     priority: P3
@@ -1275,7 +1275,7 @@ scenarios:
       - child
     terminal: Parent continues
   - id: sub.worktree-lane
-    thai: เอเจนต์ลูกใน worktree แยก
+    thai: subagent ใน worktree แยก
     english: Subagent in a worktree lane
     chapter: 12
     priority: P3
@@ -1386,7 +1386,7 @@ scenarios:
       - user
     terminal: Session opened by the user
   - id: bg.arrives-mid-turn
-    thai: รายงานมาถึงขณะเทิร์นทำงาน
+    thai: รายงานมาถึงขณะ turn ทำงาน
     english: Background report arrives mid-turn
     chapter: 13
     priority: P3
@@ -1396,7 +1396,7 @@ scenarios:
       - panel
     terminal: Turn continues
   - id: bg.cli-holds-turn
-    thai: CLI ถือเทิร์นไว้รอรายงาน
+    thai: CLI ถือ turn ไว้รอรายงาน
     english: CLI holds the turn for a report
     chapter: 13
     priority: P3
@@ -1585,7 +1585,7 @@ scenarios:
       - model
     terminal: "Normal turn (`context: fork` ignored)"
   - id: ext.skill-by-model
-    thai: โมเดลเรียกสกิล
+    thai: model เรียกสกิล
     english: Model invokes a skill
     chapter: 15
     priority: P2
@@ -1595,7 +1595,7 @@ scenarios:
       - loop
     terminal: Next model call
   - id: ext.mcp-tool-call
-    thai: เรียกเครื่องมือ MCP
+    thai: เรียก tool MCP
     english: MCP tool call (ask, allow for the session)
     chapter: 15
     priority: P2
@@ -1620,7 +1620,7 @@ scenarios:
       - external
     terminal: Server starts (from the next run)
   - id: ext.memory-write
-    thai: โมเดลขอจดจำ
+    thai: model ขอจดจำ
     english: Model proposes a memory note
     chapter: 15
     priority: P2
@@ -1635,7 +1635,7 @@ scenarios:
       - tool
     terminal: Saved (notice next call) or not
   - id: ext.skill-fork
-    thai: สกิลแบบ fork เป็นเอเจนต์ลูก
+    thai: สกิลแบบ fork เป็น subagent
     english: "`context: fork` skill runs as a subagent"
     chapter: 15
     priority: P3
@@ -1678,7 +1678,7 @@ scenarios:
       - server
     terminal: Transcript replayed; other project opens in another window
   - id: sess.reload-while-running
-    thai: reload หน้าต่างขณะเทิร์นทำงาน
+    thai: reload หน้าต่างขณะ turn ทำงาน
     english: Reload while a turn runs
     chapter: 16
     priority: P2
@@ -1722,7 +1722,7 @@ scenarios:
       - loop
     terminal: Applies from the next run (D6)
   - id: sess.model-change
-    thai: เปลี่ยนโมเดล
+    thai: เปลี่ยน model
     english: Change model or backend
     chapter: 16
     priority: P2
@@ -1764,7 +1764,7 @@ scenarios:
       - editor
     terminal: File on disk
   - id: ed.review-auto-undo
-    thai: ดูการเปลี่ยนแปลงของเทิร์นและ Undo
+    thai: ดูการเปลี่ยนแปลงของ turn และ Undo
     english: Turn changes row with Undo (auto review)
     chapter: 17
     priority: P1

@@ -50,9 +50,9 @@ stateDiagram-v2
 2. event `error` นำไปสู่ `done`
 3. `tool_use` ที่ยังไม่มีผลนำไปสู่ `answer-tools` ถ้า `unrunnable()` บอกว่ามี call ที่รันไม่ได้ ไม่เช่นนั้นเป็น `run-tools`
 4. `tool-result` หลังผู้ใช้ปฏิเสธนำไปสู่ `done(end_turn)` ผู้ใช้คือคนที่พูดต่อ
-5. ตาราง `AFTER_STOP`: `end_turn` และ `stop_sequence` จบ, `pause_turn` เรียกโมเดลต่อ, `max_tokens` และ stop ที่เป็น null จบแบบ error, `refusal` จบแบบ refusal
+5. ตาราง `AFTER_STOP`: `end_turn` และ `stop_sequence` จบ, `pause_turn` เรียก model ต่อ, `max_tokens` และ stop ที่เป็น null จบแบบ error, `refusal` จบแบบ refusal
 6. คำตอบที่ว่าง (มีแต่ความคิด) ได้ `nudge` หนึ่งครั้ง ครั้งที่สองจบแบบ error
-7. ก่อน `call-model` ทุกครั้ง ตรวจขีดจำกัดของรอบ: 40 ครั้งของการเรียกโมเดล และ $0.40 (นับรวม compaction และ classifier)
+7. ก่อน `call-model` ทุกครั้ง ตรวจขีดจำกัดของรอบ: 40 ครั้งของการเรียก model และ $0.40 (นับรวม compaction และ classifier)
 
 ## turn จบได้กี่แบบ
 
@@ -67,4 +67,4 @@ ACP บอก "failed" ไม่ได้ เซิร์ฟเวอร์จ�
 | `error` | `end_turn` | `failed` |
 | `cancelled` | `cancelled` | `stopped` |
 
-เดินดูการตัดสินใจเหล่านี้ทีละขั้นได้ใน [โมเดลเรียกเครื่องมือแล้วตอบ](/scenarios/turn/with-tools/)
+เดินดูการตัดสินใจเหล่านี้ทีละขั้นได้ใน [model เรียก tool แล้วตอบ](/scenarios/turn/with-tools/)

@@ -1,6 +1,6 @@
 ---
 title: Cmd-K แก้โค้ดที่เลือก
-description: ผู้ใช้เลือกบรรทัดในไฟล์แล้วกด Cmd-K Cmd-I พิมพ์คำสั่ง engine รัน turn สั้นที่มีแค่เครื่องมือ edit การแก้ลงใน buffer และ turn แสดงในแผงแชตเหมือน turn อื่น
+description: ผู้ใช้เลือกบรรทัดในไฟล์แล้วกด Cmd-K Cmd-I พิมพ์คำสั่ง engine รัน turn สั้นที่มีแค่ tool edit การแก้ลงใน buffer และ turn แสดงในแผงแชตเหมือน turn อื่น
 tableOfContents: false
 sidebar:
   order: 3
@@ -85,8 +85,8 @@ scenario:
       at: agent
       do: >-
         `runInlineEdit` ปฏิเสธไฟล์นอก workspace อ่านไฟล์ผ่าน editor และ problem ของไฟล์จาก VS Code
-        แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่ง รอบนี้มีแค่เครื่องมือ `edit`
-        system prompt ของการแก้ checkpoint ก่อนทุกการเรียก และเรียกโมเดลได้ไม่เกิน 4 ครั้ง
+        แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่ง รอบนี้มีแค่ tool `edit`
+        system prompt ของการแก้ checkpoint ก่อนทุกการเรียก และเรียก model ได้ไม่เกิน 4 ครั้ง
       ref: packages/engine/src/inline.ts#runInlineEdit
 
     - id: record
@@ -107,7 +107,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลอ่านไฟล์จาก prompt แล้วขอ `edit` ด้วย `old_str` และ `new_str` จบด้วย `stop_reason: tool_use`
+        model อ่านไฟล์จาก prompt แล้วขอ `edit` ด้วย `old_str` และ `new_str` จบด้วย `stop_reason: tool_use`
         ฐานของการแก้คือข้อความที่อยู่ใน prompt จึงไม่ต้อง `read` ก่อน
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
@@ -152,7 +152,7 @@ scenario:
                   from: model
                   to: panel
                 do: >-
-                  โมเดลตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
+                  model ตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
                 ref: "packages/engine/src/drive.ts#\"onText: (delta) => watcher.text(delta),\""
                 emits: [end_turn]
               - use: turn-ends
@@ -188,8 +188,8 @@ scenario:
                   end: Turn จบโดยแก้ไม่ลง
                 at: step
                 do: >-
-                  `loopStep` เรียกโมเดลอีกครั้งให้ลองใหม่ ถ้าลองครบสามครั้งแล้วยังไม่ลง การเรียกครั้งที่สี่ซึ่งเป็นครั้งสุดท้ายออกไปพร้อมเครื่องมือปิด
-                  โมเดลจึงเขียนได้แค่ประโยคปิดท้ายว่าแก้ไม่ได้เพราะอะไร แล้ว turn จบแบบ done โดยไม่มีการแก้
+                  `loopStep` เรียก model อีกครั้งให้ลองใหม่ ถ้าลองครบสามครั้งแล้วยังไม่ลง การเรียกครั้งที่สี่ซึ่งเป็นครั้งสุดท้ายออกไปพร้อม tool ปิด
+                  model จึงเขียนได้แค่ประโยคปิดท้ายว่าแก้ไม่ได้เพราะอะไร แล้ว turn จบแบบ done โดยไม่มีการแก้
                 ref: packages/core/src/inline-edit.ts#INLINE_EDIT_MAX_TURNS
                 emits: [call-model]
                 phase: calling-model
@@ -197,13 +197,13 @@ scenario:
 ---
 
 Cmd-K ไม่ใช่ระบบแยก มันคือ turn หนึ่งของแชตที่แผงแสดงอยู่ ใช้ log ใช้ checkpoint และใช้ทางเขียนไฟล์เดียวกับ `edit` ของเอเจนต์
-ต่างกันที่ engine สร้าง prompt เองจากไฟล์และการเลือก และให้โมเดลมีแค่ `edit`
+ต่างกันที่ engine สร้าง prompt เองจากไฟล์และการเลือก และให้ model มีแค่ `edit`
 
 | | turn ปกติ | Cmd-K |
 | --- | --- | --- |
 | prompt | ข้อความที่ผู้ใช้พิมพ์ | ไฟล์ทั้งไฟล์ ช่วงบรรทัด problem และคำสั่ง |
-| เครื่องมือ | ทุกเครื่องมือ | `edit` อย่างเดียว |
-| การเรียกโมเดล | ไม่เกิน 40 | ไม่เกิน 4 (แก้ ลองใหม่สองครั้ง และประโยคปิดท้าย) |
+| tool | ทุก tool | `edit` อย่างเดียว |
+| การเรียก model | ไม่เกิน 40 | ไม่เกิน 4 (แก้ ลองใหม่สองครั้ง และประโยคปิดท้าย) |
 
 สิ่งที่ควรสังเกต
 

@@ -1,6 +1,6 @@
 ---
 title: "read อ่านรูป PDF notebook และไฟล์ไบนารี"
-description: read ดูนามสกุลและเนื้อไฟล์ก่อนอ่าน รูปส่งให้โมเดลเป็นภาพ PDF และ notebook แบ่งเป็นหน้าหรือ cell ส่วนไฟล์ไบนารีถูกปฏิเสธ
+description: read ดูนามสกุลและเนื้อไฟล์ก่อนอ่าน รูปส่งให้ model เป็นภาพ PDF และ notebook แบ่งเป็นหน้าหรือ cell ส่วนไฟล์ไบนารีถูกปฏิเสธ
 tableOfContents: false
 sidebar:
   order: 5
@@ -9,7 +9,7 @@ scenario:
   given:
     - turn กำลังทำงานในโหมดใดก็ได้ ไฟล์อยู่ใน workspace และไม่ใช่ไฟล์ลับ
   trigger: >-
-    โมเดลขอเรียก `read` กับไฟล์ที่ไม่ใช่ข้อความธรรมดา เช่น `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o`
+    model ขอเรียก `read` กับไฟล์ที่ไม่ใช่ข้อความธรรมดา เช่น `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o`
   covers: [tool.read-special-files]
   related: [tool.parallel-read-batch, perm.secret-read, perm.read-outside-workspace]
   steps:
@@ -18,12 +18,12 @@ scenario:
       beat:
         title: "Model ขออ่านไฟล์ที่ไม่ใช่ข้อความ"
         text: >-
-          โมเดลขอ `read` ไฟล์อย่าง `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o` ถ้าเป็น
+          model ขอ `read` ไฟล์อย่าง `assets/logo.png`, `docs/spec.pdf`, `notebooks/eda.ipynb` หรือ `build/app.o` ถ้าเป็น
           PDF ระบุหน้าได้ ถ้าเป็น notebook ระบุ cell ได้
         from: model
         to: engine
       do: >-
-        โมเดลขอ `read` ไฟล์หนึ่งไฟล์ (ใส่ `pages` ได้ถ้าเป็น PDF หรือ `cells` ถ้าเป็น notebook) จบด้วย `stop_reason: tool_use`
+        model ขอ `read` ไฟล์หนึ่งไฟล์ (ใส่ `pages` ได้ถ้าเป็น PDF หรือ `cells` ถ้าเป็น notebook) จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -155,21 +155,21 @@ scenario:
       beat:
         title: "Model เห็นภาพจริง"
         text: >-
-          Geno เรียกโมเดลต่อ รูปไปถึงโมเดลเป็นบล็อกภาพในผลของ tool โมเดลที่อ่านรูปได้จึงเห็นภาพจริง
+          Geno เรียก model ต่อ รูปไปถึง model เป็นบล็อกภาพในผลของ tool model ที่อ่านรูปได้จึงเห็นภาพจริง
           ผลที่ล้มเหลวไปถึงพร้อมป้ายว่าเป็น error
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` รูปไปถึงโมเดลเป็นบล็อก image ใน `tool_result`
-        โมเดลที่อ่านรูปได้จึงเห็นภาพจริง ผลที่ล้มเหลวไปถึงเป็น `is_error: true`
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` รูปไปถึง model เป็นบล็อก image ใน `tool_result`
+        model ที่อ่านรูปได้จึงเห็นภาพจริง ผลที่ล้มเหลวไปถึงเป็น `is_error: true`
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-`read` ตัวเดียวอ่านไฟล์ได้หลายชนิด โมเดลไม่ต้องเลือก tool เอง
+`read` ตัวเดียวอ่านไฟล์ได้หลายชนิด model ไม่ต้องเลือก tool เอง
 
 | ชนิด | ผล | ขีดจำกัด |
 | --- | --- | --- |

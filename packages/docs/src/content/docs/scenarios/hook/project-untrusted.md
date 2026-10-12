@@ -107,7 +107,7 @@ scenario:
               - lane: policy
                 beat:
                   title: ทั้งสอง hook รัน
-                  text: hook ของ repo รันใน sandbox เขียนได้แค่ใน workspace ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อนโมเดล
+                  text: hook ของ repo รันใน sandbox เขียนได้แค่ใน workspace ส่วน hook ของคุณรันตรงๆ ทั้งสองตัวได้อ่าน prompt ก่อน model
                   from: engine
                   to: machine
                 at: hooks
@@ -119,13 +119,13 @@ scenario:
               - lane: loop
                 at: drive
                 do: >-
-                  `drive` บันทึก event `user` แล้ว UserPromptSubmit ของทั้งสองตัวได้อ่าน prompt ก่อนโมเดล
+                  `drive` บันทึก event `user` แล้ว UserPromptSubmit ของทั้งสองตัวได้อ่าน prompt ก่อน model
                 ref: packages/engine/src/drive.ts#submitted
                 emits: [user, UserPromptSubmit]
               - lane: loop
                 beat:
                   title: Turn เดินต่อตามปกติ
-                  text: ไม่มี hook บล็อก Geno ส่ง prompt ให้โมเดล
+                  text: ไม่มี hook บล็อก Geno ส่ง prompt ให้ model
                   from: engine
                   to: panel
                   end: Model ได้ prompt
@@ -140,14 +140,14 @@ scenario:
     - id: record
       beat:
         title: เฉพาะ hook ของคุณที่รัน
-        text: Geno บันทึก prompt แล้วรัน `~/bin/log-prompt.sh` ของคุณ `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอกโมเดลหรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
+        text: Geno บันทึก prompt แล้วรัน `~/bin/log-prompt.sh` ของคุณ `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอก model หรือแชตว่ามันถูกข้าม turn เดินต่อตามปกติ
         from: engine
         to: machine
       lane: loop
       at: drive
       do: >-
         `drive` บันทึก event `user` แล้ว `submitted()` รัน UserPromptSubmit เฉพาะของผู้ใช้ `~/bin/log-prompt.sh`
-        `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอกโมเดลหรือแผงแชตว่ามันถูกข้าม
+        `./scripts/hook.sh` ของ repo ไม่รัน และไม่มีอะไรบอก model หรือแผงแชตว่ามันถูกข้าม
       ref: packages/engine/src/drive.ts#submitted
       emits: [user, UserPromptSubmit]
 
@@ -201,7 +201,7 @@ scenario:
 
 trust ของ VS Code คือเส้นแบ่งระหว่างการตั้งค่าที่ผู้ใช้เขียนเองกับการตั้งค่าที่มากับ repo
 hook ของ repo เป็นคำสั่ง shell ที่คนอื่นเขียน Geno จึงไม่รันมันจนกว่าผู้ใช้จะบอก VS Code ว่าเชื่อถือโฟลเดอร์นี้
-และเมื่อรัน ก็รันใน sandbox เหมือนคำสั่งของโมเดล
+และเมื่อรัน ก็รันใน sandbox เหมือนคำสั่งของ model
 
 | ที่มาของ hook | workspace ไม่เชื่อถือ | workspace เชื่อถือ |
 | --- | --- | --- |

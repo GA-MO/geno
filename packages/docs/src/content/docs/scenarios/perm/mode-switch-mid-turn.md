@@ -1,6 +1,6 @@
 ---
 title: "สลับโหมดระหว่าง turn"
-description: ผู้ใช้เปลี่ยนจาก Ask เป็น Auto ขณะที่ turn ทำงาน engine ใช้โหมดใหม่กับ call ถัดไปทันที และบอกโมเดลที่จุดปลอดภัยถัดไป
+description: ผู้ใช้เปลี่ยนจาก Ask เป็น Auto ขณะที่ turn ทำงาน engine ใช้โหมดใหม่กับ call ถัดไปทันที และบอก model ที่จุดปลอดภัยถัดไป
 tableOfContents: false
 sidebar:
   order: 3
@@ -103,7 +103,7 @@ scenario:
       beat:
         title: "pnpm test จบ ผลกลับมาที่แชต"
         text: >-
-          คำสั่งจบ Geno บันทึกผลแล้วส่งไปที่แชต ขั้นต่อไปคือเรียกโมเดล
+          คำสั่งจบ Geno บันทึกผลแล้วส่งไปที่แชต ขั้นต่อไปคือเรียก model
         from: engine
         to: panel
         sees: { kind: step, label: pnpm test, status: done }
@@ -123,7 +123,7 @@ scenario:
       beat:
         title: "Geno บอก model ว่าโหมดเปลี่ยน"
         text: >-
-          ที่จุดปลอดภัยก่อนเรียกโมเดล Geno เห็นว่าโหมดต่างจากที่โมเดลรู้ จึงเพิ่มประกาศต่อจากผลของ tool
+          ที่จุดปลอดภัยก่อนเรียก model Geno เห็นว่าโหมดต่างจากที่ model รู้ จึงเพิ่มประกาศต่อจากผลของ tool
           ประกาศนี้ไม่ขึ้นในแชต ใน run จริงด้านล่างโหมดถูกตั้งก่อนข้อความแรก แต่ประกาศมีข้อความเดียวกัน
         from: engine
         to: model
@@ -133,8 +133,8 @@ scenario:
           source: docs/results/real-usecases/runs/A09-auto-classifier/1/requests.jsonl#seq=6
           select: messages[-1].content[3]
       do: >-
-        ที่จุดปลอดภัย `deliver()` ถาม `noticeFor` ว่าโหมดตอนนี้ต่างจากที่โมเดลรู้หรือไม่ ต่างจริง จึงบันทึก event `notice`
-        ที่มีโหมด Auto ซึ่งคำขอถัดไปแสดงเป็นข้อความ `MODE_NOTICES.auto` ต่อจากผลของเครื่องมือ ประกาศนี้ไม่แสดงในแผง
+        ที่จุดปลอดภัย `deliver()` ถาม `noticeFor` ว่าโหมดตอนนี้ต่างจากที่ model รู้หรือไม่ ต่างจริง จึงบันทึก event `notice`
+        ที่มีโหมด Auto ซึ่งคำขอถัดไปแสดงเป็นข้อความ `MODE_NOTICES.auto` ต่อจากผลของ tool ประกาศนี้ไม่แสดงในแผง
       ref: packages/core/src/notice.ts#noticeFor
       emits: [notice]
 
@@ -144,12 +144,12 @@ scenario:
         title: "Model ทำต่อในโหมด Auto"
         text: >-
           คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด
-          โมเดลทำงานต่อโดยรู้ว่าตอนนี้ถามคุณด้วยฟอร์มไม่ได้แล้ว
+          model ทำงานต่อโดยรู้ว่าตอนนี้ถามคุณด้วยฟอร์มไม่ได้แล้ว
         from: model
         to: engine
         end: "turn ทำต่อในโหมดใหม่"
       do: >-
-        คำขอยังส่งเครื่องมือชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด โมเดลอ่าน
+        คำขอยังส่ง tool ชุดเดิมและ system prompt เดิม prompt cache จึงไม่หลุด model อ่าน
         "[Geno] The user switched this session to Auto mode. ..." แล้วทำงานต่อโดยรู้ว่า `ask_user` ใช้ไม่ได้แล้ว
       ref: packages/core/src/notice.ts#MODE_NOTICES
       end: { turn: continues, reason: call-model }
@@ -160,14 +160,14 @@ scenario:
 | ที่ไหน | เมื่อไร |
 | --- | --- |
 | การตัดสินของนโยบาย (การ์ด classifier การปฏิเสธ) | call ถัดไปที่ถูกตัดสิน แม้อยู่ใน turn เดิม |
-| สิ่งที่โมเดลรู้ | การเรียกโมเดลครั้งถัดไป ผ่าน `notice` ที่จุดปลอดภัย |
+| สิ่งที่ model รู้ | การเรียก model ครั้งถัดไป ผ่าน `notice` ที่จุดปลอดภัย |
 
 สิ่งที่ควรสังเกต
 
 - **ทุกโหมดได้ tool เหมือนกัน** Plan ไม่ได้เอา `edit` ออกจากคำขอ มันปฏิเสธตอน call รัน
   การสลับโหมดจึงไม่เปลี่ยนไบต์ของ system prompt และรายการ tool
 - **การ์ดที่เปิดอยู่ไม่เปลี่ยน** ถ้าการ์ดขออนุญาตรออยู่ตอนสลับเป็น Auto การ์ดนั้นยังรอผู้ใช้ตอบ โหมดใหม่มีผลกับ call ที่ถูกตัดสินหลังจากนี้
-- **effort ต่างจากโหมด** การเปลี่ยน effort ระหว่าง turn มีผลกับรอบถัดไป ไม่ใช่การเรียกโมเดลครั้งถัดไป
+- **effort ต่างจากโหมด** การเปลี่ยน effort ระหว่าง turn มีผลกับรอบถัดไป ไม่ใช่การเรียก model ครั้งถัดไป
   ดู [เปลี่ยน effort](/scenarios/sess/model-effort/)
 
 อ่านต่อที่ [โหมด Auto ให้ classifier ตัดสินคำสั่ง](/scenarios/perm/auto-classifier/)

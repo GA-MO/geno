@@ -15,7 +15,7 @@
   do: >-
     แผงไม่มีคำขอ `session/prompt` ของ turn นี้ `adoptedEnded` อ่านการจบจากงานในแผง Tasks แทน
     แล้วส่ง action `turn-end` ให้แผงแสดงท้าย turn ตามปกติ
-  sees: หัวข้อ "worked for 6s" และคำตอบของโมเดลใต้หัวที่มีกระดิ่ง
+  sees: หัวข้อ "worked for 6s" และคำตอบของ model ใต้หัวที่มีกระดิ่ง
   ref: packages/extension/src/chat/chat.ts#Chat.adoptedEnded
   emits: [turn-end]
   end: { turn: done, reason: end_turn }

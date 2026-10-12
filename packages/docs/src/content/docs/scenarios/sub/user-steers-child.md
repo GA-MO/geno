@@ -119,8 +119,8 @@ scenario:
       lane: child@explore
       at: loop
       do: >-
-        ที่จุดปลอดภัยก่อนเรียกโมเดลครั้งถัดไป `deliver()` ของลูกบันทึก event `user` แบบ steer โดยไม่มี `from`
-        เพราะเป็นคำของผู้ใช้เอง ลูกที่กำลังรันเครื่องมือรับข้อความหลังเครื่องมือชุดนั้นจบ
+        ที่จุดปลอดภัยก่อนเรียก model ครั้งถัดไป `deliver()` ของลูกบันทึก event `user` แบบ steer โดยไม่มี `from`
+        เพราะเป็นคำของผู้ใช้เอง ลูกที่กำลังรัน tool รับข้อความหลัง tool ชุดนั้นจบ
       ref: packages/core/src/steer.ts#steerEvent
       emits: [user]
 
@@ -177,7 +177,7 @@ scenario:
       lane: child@explore
       at: model
       do: >-
-        ลูกเรียกโมเดลต่อ ข้อความถูกห่อด้วย `userSteerText`: "[Geno] The user sent a new message while you were working: ..."
+        ลูกเรียก model ต่อ ข้อความถูกห่อด้วย `userSteerText`: "[Geno] The user sent a new message while you were working: ..."
         ลูกปรับการค้นตาม แม่ไม่รู้เรื่องข้อความนี้จนกว่าจะอ่านรายงานของลูก
       ref: packages/core/src/fence.ts#userSteerText
       emits: [tool_use]
@@ -190,5 +190,5 @@ scenario:
 สิ่งที่ควรสังเกต
 
 - **ช่องของลูกมีเฉพาะตอนลูก Running** หลังลูกจบช่องซ่อน แต่บรรทัดสถานะสุดท้ายยังอยู่จนผู้ใช้พิมพ์ใหม่
-- **ข้อความไม่หยุดลูก** ลูกทำเครื่องมือชุดที่รันอยู่จนจบก่อน แล้วจึงอ่านข้อความ
+- **ข้อความไม่หยุดลูก** ลูกทำ tool ชุดที่รันอยู่จนจบก่อน แล้วจึงอ่านข้อความ
 - **ข้อความแบบเดียวกันส่งจากแผง Tasks ได้** ปุ่ม Message บนงานในแผง Tasks ใช้ `steerSession` ทางเดียวกัน

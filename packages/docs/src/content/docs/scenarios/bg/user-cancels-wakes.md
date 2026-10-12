@@ -93,7 +93,7 @@ scenario:
       at: loop
       do: >-
         หลังจากนั้น explore ที่ถูก abort ปิดตัวเสร็จ จบแบบ `cancelled` `child-end` มาถึงทางกล่องข้อความและถูกบันทึกลง log หลังโน้ต `cancelled`
-        ไม่มีรายงานให้โมเดลได้ยิน และ `child-end` ไม่ใช่สิ่งที่ปลุก
+        ไม่มีรายงานให้ model ได้ยิน และ `child-end` ไม่ใช่สิ่งที่ปลุก
       ref: "packages/engine/src/subagents.ts#\"const report = async (text: string, ended: ChildEndNote | undefined) => {\""
       emits: [cancelled, child-end]
 
@@ -127,6 +127,6 @@ Cancel ในแผง Tasks คือคำตอบของผู้ใช้
 
 สิ่งที่ควรสังเกต
 
-- **ต่างจาก `task_stop`** `task_stop` ของโมเดลหยุดทีละตัวและได้ผลกลับเป็นข้อความ Cancel ของผู้ใช้หยุดทุกตัวพร้อมกันและโมเดลไม่ได้รับรู้ทันที
-  ครั้งหน้าที่โมเดลถูกเรียก log มี `child-end` แบบ cancelled ให้ `list_agents` เห็น
+- **ต่างจาก `task_stop`** `task_stop` ของ model หยุดทีละตัวและได้ผลกลับเป็นข้อความ Cancel ของผู้ใช้หยุดทุกตัวพร้อมกันและ model ไม่ได้รับรู้ทันที
+  ครั้งหน้าที่ model ถูกเรียก log มี `child-end` แบบ cancelled ให้ `list_agents` เห็น
 - **Rewind ใช้ทางเดียวกัน** การ rewind บทสนทนาเรียก `Wakes.cancel` เฉพาะสิ่งที่ turn ที่ถูกตัดเริ่มไว้

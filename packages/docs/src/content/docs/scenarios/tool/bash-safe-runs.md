@@ -1,6 +1,6 @@
 ---
 title: "คำสั่งที่ปลอดภัยรันโดยไม่ถาม"
-description: โมเดลขอรัน pnpm test ซึ่งอยู่ใน safe list Geno รันใน sandbox ทันทีโดยไม่ถาม แล้วส่งผลกลับ ไม่ว่าคำสั่งจะผ่าน ล้มเหลว หรือเกินเวลา
+description: model ขอรัน pnpm test ซึ่งอยู่ใน safe list Geno รันใน sandbox ทันทีโดยไม่ถาม แล้วส่งผลกลับ ไม่ว่าคำสั่งจะผ่าน ล้มเหลว หรือเกินเวลา
 tableOfContents: false
 sidebar:
   order: 2
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในโหมด Ask หรือ Auto
     - ไม่มี hook ที่ตั้งไว้ และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm test`
+    model ขอเรียก `bash` ด้วยคำสั่ง `pnpm test`
   covers: [tool.bash-safe-runs, tool.bash-nonzero-exit, tool.bash-timeout]
   related: [perm.ask-allow, perm.auto-classifier-allows, tool.parallel-read-batch, sec.sandbox-blocks-network]
   steps:
@@ -19,7 +19,7 @@ scenario:
       beat:
         title: "Model ขอรัน pnpm test"
         text: >-
-          โมเดลอยากรู้ว่าเทสต์ผ่านไหม จึงขอรันคำสั่งด้วย `bash` และจบคำตอบด้วย tool_use run จริงด้านล่างขอรัน `npm test`
+          model อยากรู้ว่าเทสต์ผ่านไหม จึงขอรันคำสั่งด้วย `bash` และจบคำตอบด้วย tool_use run จริงด้านล่างขอรัน `npm test`
           แบบเดียวกัน
         from: model
         to: engine
@@ -33,7 +33,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm test` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` ด้วยคำสั่ง `pnpm test` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -166,12 +166,12 @@ scenario:
                 beat:
                   title: "เทสต์ค้างจนครบเวลา Geno ฆ่าทิ้ง"
                   text: >-
-                    ครบ 120 วินาที โมเดลขอได้ถึง 600 Geno ฆ่าทั้งกลุ่ม process ผลขึ้นต้นด้วย Killed after 120 seconds ตามด้วย
+                    ครบ 120 วินาที model ขอได้ถึง 600 Geno ฆ่าทั้งกลุ่ม process ผลขึ้นต้นด้วย Killed after 120 seconds ตามด้วย
                     output ที่ได้ก่อนถูกฆ่า
                   from: engine
                   to: machine
                 do: >-
-                  เทสต์ค้างจนครบ `timeout_seconds` (ค่าเริ่มต้น 120 วินาที โมเดลขอได้ถึง 600) timer ของ `runShell` ส่ง SIGKILL
+                  เทสต์ค้างจนครบ `timeout_seconds` (ค่าเริ่มต้น 120 วินาที model ขอได้ถึง 600) timer ของ `runShell` ส่ง SIGKILL
                   ให้ทั้ง process group คำสั่งลูกที่มันเปิดไว้จึงจบไปด้วย
                 ref: "packages/engine/src/process.ts#\"options.timeoutMs === undefined\""
               - lane: tool
@@ -203,13 +203,13 @@ scenario:
       beat:
         title: "Model อ่านผลแล้วทำต่อ"
         text: >-
-          Geno เรียกโมเดลต่อ ถ้าคำสั่งล้มเหลว ผลไปถึงโมเดลพร้อมป้ายว่าเป็น error โมเดลอ่าน output แล้วหาทางแก้ต่อ
+          Geno เรียก model ต่อ ถ้าคำสั่งล้มเหลว ผลไปถึง model พร้อมป้ายว่าเป็น error model อ่าน output แล้วหาทางแก้ต่อ
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ผลของคำสั่งที่ล้มเหลวไปถึงโมเดลเป็น `tool_result`
-        ที่มี `is_error: true` โมเดลอ่าน output แล้วหาทางแก้ต่อ
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` ผลของคำสั่งที่ล้มเหลวไปถึง model เป็น `tool_result`
+        ที่มี `is_error: true` model อ่าน output แล้วหาทางแก้ต่อ
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model, is_error]
       phase: calling-model
@@ -223,12 +223,12 @@ safe list มีโปรแกรมอ่านอย่างเดียว 
 
 สิ่งที่ควรสังเกต
 
-- **exit code ไม่ใช่ 0 ไม่ได้แปลว่าถูกปฏิเสธ** สถานะ `error` ทำให้แผงแสดงขั้นนั้นว่าล้มเหลว และโมเดลได้ `is_error: true`
+- **exit code ไม่ใช่ 0 ไม่ได้แปลว่าถูกปฏิเสธ** สถานะ `error` ทำให้แผงแสดงขั้นนั้นว่าล้มเหลว และ model ได้ `is_error: true`
   แต่ turn ทำงานต่อ ต่างจากคำสั่งที่ผู้ใช้ปฏิเสธ ซึ่งไม่ได้รันเลย
 - **sandbox ไม่มี event ของตัวเอง** ถ้าคำสั่งพยายามเขียนนอก workspace หรือต่อเครือข่าย มันล้มเหลวภายในคำสั่งเอง
-  โมเดลเห็นเป็น exit code ที่ไม่ใช่ 0 ธรรมดา
+  model เห็นเป็น exit code ที่ไม่ใช่ 0 ธรรมดา
 - **hook หลังรันขึ้นกับสถานะ** สถานะ `ok` เรียก PostToolUse สถานะ `error` เรียก PostToolUseFailure คำสั่งที่ถูกปฏิเสธไม่เรียกทั้งสองแบบ
-- **เกินเวลาก็เป็นแค่ผลที่ล้มเหลว** การฆ่าเมื่อครบเวลาไม่หยุด turn โมเดลอ่าน "Killed after 120 seconds" แล้วเลือกเองว่าจะขอเวลามากขึ้น
+- **เกินเวลาก็เป็นแค่ผลที่ล้มเหลว** การฆ่าเมื่อครบเวลาไม่หยุด turn model อ่าน "Killed after 120 seconds" แล้วเลือกเองว่าจะขอเวลามากขึ้น
   ด้วย `timeout_seconds` หรือรันเป็นงานเบื้องหลัง
 
 คำสั่งที่ต้องถามคุณก่อน ดู [โหมด Ask ขอ permission ก่อนรันคำสั่ง](/scenarios/perm/ask-mode-bash-approval/)

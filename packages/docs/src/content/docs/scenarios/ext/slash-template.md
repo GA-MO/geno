@@ -71,7 +71,7 @@ scenario:
                 at: turns
                 do: >-
                   `/pstack:how` เป็นสกิล ข้อความของ turn ยังเป็นสิ่งที่ผู้ใช้พิมพ์ทั้งบรรทัด และเนื้อหา `SKILL.md` ไปเป็น context item
-                  ชนิด `skill` ค่า `context: fork` ในสกิลไม่มีผลในทางนี้ สกิลไม่ถูกแยกไปรันเป็นเอเจนต์ลูก
+                  ชนิด `skill` ค่า `context: fork` ในสกิลไม่มีผลในทางนี้ สกิลไม่ถูกแยกไปรันเป็น subagent
                 ref: "packages/core/src/commands.ts#\"skill: ({ name, path, text: skill }, text, args) => ({\""
                 emits: [skill]
 
@@ -98,14 +98,14 @@ scenario:
       lane: loop
       at: agent
       do: >-
-        `runAgent` ประกอบรอบนี้ตามปกติ ชุดเครื่องมือและ system prompt เหมือน turn อื่นทุกอย่าง
+        `runAgent` ประกอบรอบนี้ตามปกติ ชุด tool และ system prompt เหมือน turn อื่นทุกอย่าง
       ref: packages/engine/src/agent.ts#runAgent
 
     - id: submit-hooks
       lane: policy
       at: hooks
       do: >-
-        `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงให้ UserPromptSubmit hook อ่านข้อความที่แปลงแล้วก่อนโมเดล
+        `drive` เห็นว่า log จบด้วย prompt ที่ผู้ใช้พิมพ์ จึงให้ UserPromptSubmit hook อ่านข้อความที่แปลงแล้วก่อน model
         เมื่อไม่มี hook ก็ผ่านไป
       ref: packages/engine/src/drive.ts#submitted
       emits: [UserPromptSubmit]
@@ -120,8 +120,8 @@ scenario:
         to: panel
       lane: model
       do: >-
-        โมเดลเห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
-        ต่อจากข้อความของผู้ใช้ แล้วทำงานตามนั้น ในตัวอย่างนี้ตอบเป็นข้อความโดยไม่เรียกเครื่องมือ จบด้วย `stop_reason: end_turn`
+        model เห็นข้อความที่แปลงแล้ว สำหรับสกิล เนื้อหา `SKILL.md` อยู่ใน `<context_item kind="skill" name="pstack:how" ...>`
+        ต่อจากข้อความของผู้ใช้ แล้วทำงานตามนั้น ในตัวอย่างนี้ตอบเป็นข้อความโดยไม่เรียก tool จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/context.ts#ITEM_RENDER
       emits: [end_turn]
 
@@ -139,7 +139,7 @@ scenario:
 ---
 
 คำสั่งทั้งสองแบบไม่มีทางเฉพาะของตัวเองหลังจาก engine แปลงเสร็จ ทุกอย่างหลัง `logPrompt` คือ
-[ถามแล้วได้คำตอบเป็นข้อความ](/scenarios/turn/text-answer/) หรือ turn ที่มีเครื่องมือตามปกติ
+[ถามแล้วได้คำตอบเป็นข้อความ](/scenarios/turn/text-answer/) หรือ turn ที่มี tool ตามปกติ
 
 | | prompt template | สกิล |
 | --- | --- | --- |
@@ -154,4 +154,4 @@ scenario:
   ส่วนรายการใน `/` ของแผงอัปเดตผ่าน `available_commands_update` เมื่อโฟลเดอร์เปลี่ยน
 - **แม่แบบที่แปลงแล้วว่างถูกปฏิเสธ** `runTurn` ตอบ "/name expands to no text" และไม่เปิด turn
 - **ชิปในบับเบิลมาจาก log** event `user` เก็บชื่อคำสั่งไว้ การเปิด session ซ้ำจึงยังแสดงชิปของคำสั่ง ไม่ใช่ข้อความที่แปลงแล้ว
-- **คำสั่งที่ไม่รู้จักไปเป็นข้อความธรรมดา** `/อะไรก็ได้` ที่ไม่ตรงกับคำสั่งใด ถูกส่งให้โมเดลตามที่พิมพ์
+- **คำสั่งที่ไม่รู้จักไปเป็นข้อความธรรมดา** `/อะไรก็ได้` ที่ไม่ตรงกับคำสั่งใด ถูกส่งให้ model ตามที่พิมพ์

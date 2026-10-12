@@ -15,7 +15,7 @@ processes:
   - { id: webview, label: แผงแชท (webview หรือเทอร์มินัล) }
   - { id: ext-host, label: Extension host ของ VS Code }
   - { id: engine, label: Engine daemon (gcode serve) }
-  - { id: provider, label: ผู้ให้บริการโมเดล }
+  - { id: provider, label: ผู้ให้บริการ model }
   - { id: outside, label: ระบบภายนอก }
 
 lanes:
@@ -90,7 +90,7 @@ lanes:
     english: Agent loop
     about: >-
       การทำงานหนึ่งรอบของเอเจนต์: runAgent ประกอบโหมด drive บันทึก event loopStep ตัดสินใจ
-      deliver() คือจุดปลอดภัย gateway เรียกโมเดลพร้อม retry และ runTools รันเครื่องมือเป็นชุด
+      deliver() คือจุดปลอดภัย gateway เรียก model พร้อม retry และ runTools รัน tool เป็นชุด
     party: harness
     actor: engine
     process: engine
@@ -99,16 +99,16 @@ lanes:
       - { id: agent, label: ประกอบการทำงาน (runAgent), ref: packages/engine/src/agent.ts#runAgent }
       - { id: drive, label: บันทึก event (drive), ref: packages/engine/src/drive.ts#drive }
       - { id: step, label: ตัดสินใจขั้นต่อไป (loopStep), ref: packages/core/src/loop.ts#loopStep }
-      - { id: model-call, label: เตรียมและส่งคำขอโมเดล, ref: packages/engine/src/drive.ts#callModel }
+      - { id: model-call, label: เตรียมและส่งคำขอ model, ref: packages/engine/src/drive.ts#callModel }
       - { id: gateway, label: Gateway (retry และรอ), ref: packages/engine/src/gateway.ts#gatewayFor }
-      - { id: tools, label: รันเครื่องมือเป็นชุด, ref: packages/engine/src/drive.ts#runTools }
+      - { id: tools, label: รัน tool เป็นชุด, ref: packages/engine/src/drive.ts#runTools }
 
   - id: child
-    label: เอเจนต์ลูก
+    label: subagent
     english: Child session
     about: >-
       ลูปอีกตัวที่ทำงานพร้อมกันใน session ของตัวเอง: subagent, workflow, arena lane
-      การเรียกโมเดลของลูกวาดอยู่ใน lane นี้
+      การเรียก model ของลูกวาดอยู่ใน lane นี้
     party: harness
     actor: model
     process: engine
@@ -116,10 +116,10 @@ lanes:
     instanced: true
     parts:
       - { id: loop, label: ลูปของลูก, ref: packages/engine/src/subagents.ts#launch }
-      - { id: model, label: โมเดลของลูก, party: ai, counts: model-call, ref: packages/engine/src/gateway.ts#gatewayFor }
+      - { id: model, label: model ของลูก, party: ai, counts: model-call, ref: packages/engine/src/gateway.ts#gatewayFor }
 
   - id: model
-    label: โมเดล
+    label: model
     english: Model
     about: LLM ที่ตอบคำขอ (stream ข้อความ tool_use และ stop reason) รวมถึงการสรุปตอน compaction และ llama-server ของ Tab
     party: ai
@@ -129,16 +129,16 @@ lanes:
     counts: model-call
 
   - id: tool
-    label: เครื่องมือ
+    label: tool
     english: Tool
-    about: ตัวเครื่องมือและสิ่งที่มันแตะโดยตรง เช่น shell ใน sandbox ไฟล์ งานเบื้องหลัง
+    about: ตัว tool และสิ่งที่มันแตะโดยตรง เช่น shell ใน sandbox ไฟล์ งานเบื้องหลัง
     party: harness
     actor: machine
     process: engine
     surfaces: [vscode, cli, acp-editor]
     counts: tool-run
     parts:
-      - { id: executor, label: ตัวรันเครื่องมือ, ref: packages/engine/src/tools/index.ts#runExecutor }
+      - { id: executor, label: ตัวรัน tool, ref: packages/engine/src/tools/index.ts#runExecutor }
       - { id: shell, label: Shell ใน sandbox, ref: packages/engine/src/process.ts#runShell }
       - { id: sandbox, label: Sandbox, ref: packages/engine/src/sandbox.ts#openSandbox }
 

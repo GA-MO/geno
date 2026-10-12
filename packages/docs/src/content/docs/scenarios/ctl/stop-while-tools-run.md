@@ -7,7 +7,7 @@ sidebar:
 scenario:
   surface: vscode
   given:
-    - turn กำลังทำงาน โมเดลขอเรียก `bash` ด้วย `pnpm test` ตามด้วย `read` ของ `src/date.ts` ใน turn เดียวกัน
+    - turn กำลังทำงาน model ขอเรียก `bash` ด้วย `pnpm test` ตามด้วย `read` ของ `src/date.ts` ใน turn เดียวกัน
     - "`pnpm test` ผ่านการตรวจสิทธิ์แล้วและกำลังรันอยู่ในชุดของตัวเอง `read` รออยู่ในชุดถัดไป"
   trigger: >-
     ผู้ใช้คลิกปุ่ม Stop กด Escape หรือรันคำสั่ง "Geno: Stop the Chat Turn" ขณะที่ `pnpm test` ยังไม่จบ
@@ -20,7 +20,7 @@ scenario:
       beat:
         title: "pnpm test รันอยู่บนเครื่องของคุณ"
         text: >-
-          โมเดลขอรัน `pnpm test` แล้วอ่าน `src/date.ts` คำสั่งผ่านการตรวจสิทธิ์แล้วและรันอยู่ในกลุ่ม process ของตัวเอง
+          model ขอรัน `pnpm test` แล้วอ่าน `src/date.ts` คำสั่งผ่านการตรวจสิทธิ์แล้วและรันอยู่ในกลุ่ม process ของตัวเอง
           ส่วนการอ่านไฟล์รออยู่ในชุดถัดไป
         from: engine
         to: machine
@@ -71,7 +71,7 @@ scenario:
         from: engine
         to: engine
       do: >-
-        engine หา `AbortController` ของ turn ใน `turns` แล้วสั่ง abort สัญญาณเดียวกันนี้อยู่ใน `ctx.signal` ของทุกเครื่องมือ
+        engine หา `AbortController` ของ turn ใน `turns` แล้วสั่ง abort สัญญาณเดียวกันนี้อยู่ใน `ctx.signal` ของทุก tool
       ref: "packages/engine/src/serve.ts#\".onNotification(acp.methods.agent.session.cancel, ({ params }) => {\""
 
     - id: race
@@ -84,7 +84,7 @@ scenario:
         from: engine
         to: engine
       do: >-
-        `runTools` รอทั้ง batch ผ่าน `unlessAborted` ซึ่งจบทันทีที่สัญญาณถูก abort โดยไม่รอให้เครื่องมือหยุดเสร็จ
+        `runTools` รอทั้ง batch ผ่าน `unlessAborted` ซึ่งจบทันทีที่สัญญาณถูก abort โดยไม่รอให้ tool หยุดเสร็จ
       ref: packages/engine/src/drive.ts#unlessAborted
 
     - id: kill
@@ -155,7 +155,7 @@ scenario:
         from: engine
         to: engine
       do: >-
-        `drive` บันทึก event `error` ชนิด `abort` ที่มีรายการเครื่องมือที่ถูกตัดพร้อมเวลาเริ่มและเวลาหยุด
+        `drive` บันทึก event `error` ชนิด `abort` ที่มีรายการ tool ที่ถูกตัดพร้อมเวลาเริ่มและเวลาหยุด
       ref: "packages/engine/src/drive.ts#\"error: 'abort', message: 'interrupted by the user', tools: interrupted\""
       emits: [error, abort]
 
@@ -225,7 +225,7 @@ scenario:
       end: { turn: stopped, reason: cancelled }
 ---
 
-Stop ระหว่างรัน tool ใช้สัญญาณเดียวกับ Stop ระหว่างโมเดลเขียน ต่างกันที่ปลายทาง:
+Stop ระหว่างรัน tool ใช้สัญญาณเดียวกับ Stop ระหว่าง model เขียน ต่างกันที่ปลายทาง:
 สัญญาณไปถึง `unlessAborted` ของ batch และ `ctx.signal` ของ tool แต่ละตัว
 
 สิ่งที่ควรสังเกต
@@ -233,7 +233,7 @@ Stop ระหว่างรัน tool ใช้สัญญาณเดีย
 - **loop ไม่รอให้ tool หยุด** `unlessAborted` จบทันทีที่ abort แม้ tool ยังทำงานอยู่
   tool แต่ละตัวต้องฟัง `ctx.signal` เอง `bash` ฟัง และฆ่าทั้ง process group
 - **ทุก call ของ turn ได้คำตอบ** log ไม่มี `tool_use` ที่ค้างโดยไม่มีผล ข้อความถัดไปของผู้ใช้จึงไม่ทำให้ call เก่ารันอีก
-  และโมเดลรู้จากคำตอบว่า call ไหนอาจรันไปบางส่วน call ไหนไม่ได้รันเลย
+  และ model รู้จากคำตอบว่า call ไหนอาจรันไปบางส่วน call ไหนไม่ได้รันเลย
 - **ขั้นที่ถูกหยุดขึ้นเป็นล้มเหลว** engine ส่งคำตอบของ call ที่ถูกหยุดเป็น `tool_call_update` สถานะ `failed`
   ก่อนที่ `turn-end` จะเปลี่ยนขั้นที่ยังหมุนเป็น cancelled ขั้นเหล่านี้จึงขึ้นไอคอน error แบบเดียวกับคำสั่งที่ล้มเหลวจริง
   ความต่างอยู่ในข้อความผลที่พับไว้

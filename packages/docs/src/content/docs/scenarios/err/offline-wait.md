@@ -1,6 +1,6 @@
 ---
 title: "เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ"
-description: การเรียกโมเดลไปไม่ถึงผู้ให้บริการหรือได้ 429 turn ไม่ล้ม แต่รอพร้อมปุ่ม Retry now จนเครือข่ายกลับมา ถึงเวลา ผู้ใช้กด หรือหมดเวลารอ
+description: การเรียก model ไปไม่ถึงผู้ให้บริการหรือได้ 429 turn ไม่ล้ม แต่รอพร้อมปุ่ม Retry now จนเครือข่ายกลับมา ถึงเวลา ผู้ใช้กด หรือหมดเวลารอ
 tableOfContents: false
 sidebar:
   order: 2
@@ -10,7 +10,7 @@ scenario:
     - เปิด Geno ในแผงแชตของ VS Code มี turn ทำงานอยู่
     - ค่า `gcode.resume.afterLimit` เป็นค่าเริ่มต้น `short`
   trigger: >-
-    loop ส่งคำขอโมเดล แต่เครือข่ายหลุด หรือผู้ให้บริการตอบ 429
+    loop ส่งคำขอ model แต่เครือข่ายหลุด หรือผู้ให้บริการตอบ 429
   covers: [err.offline-wait, err.rate-limited, ctl.stop-while-waiting]
   related: [err.transient-retried, ctl.stop-while-streaming, bg.task-attention]
   steps:
@@ -18,7 +18,7 @@ scenario:
       beat:
         title: "Geno ส่งคำขอให้ model"
         text: >-
-          turn กำลังทำงาน Geno ส่งคำขอให้โมเดลตามปกติ
+          turn กำลังทำงาน Geno ส่งคำขอให้ model ตามปกติ
         from: engine
         to: model
 
@@ -388,7 +388,7 @@ scenario:
   เกินกว่านั้นการรอไม่มีเวลาปลุก แถวสถานะขึ้น "Limited until ..." และรอผู้ใช้กด Retry now หรือ Stop
   ค่า `always` ให้ปลุกเองเสมอ ค่า `off` ไม่ปลุกเองเลย
 - **Retry now ไม่ตรวจ host** ปุ่มนี้ส่งการเรียกทันที ถ้าเครือข่ายยังไม่กลับ การรอเดิมทำต่อ เวลารอรอบถัดไปยาวขึ้น และเวลาเลิกยังนับจากตอนเริ่มรอครั้งแรก
-- **การรอไม่นับเป็นการเรียกโมเดล** ขีดจำกัดของรอบนับเฉพาะคำตอบที่ได้
+- **การรอไม่นับเป็นการเรียก model** ขีดจำกัดของรอบนับเฉพาะคำตอบที่ได้
 - **Stop ได้ผลเดียวกันในทุกการรอของ gateway** ทาง "ผู้ใช้กด Stop" ในทัวร์นี้เกิดระหว่าง `nap` ของการรอเครือข่ายหรือ rate limit
   การรอสั้นๆ ก่อนลองใหม่ของ [ข้อผิดพลาดชั่วคราว](/scenarios/err/transient-retried/) (`backOff`) และการรอคิว slot ของผู้ให้บริการ (`slots.run`)
   ฟัง signal เดียวกัน ทุกทางคืน `ABORTED` แล้ว turn จบแบบ `stopped` เหมือนกัน

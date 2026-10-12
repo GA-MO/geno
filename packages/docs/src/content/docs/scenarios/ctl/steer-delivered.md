@@ -1,6 +1,6 @@
 ---
 title: "ส่งข้อความแทรก (steer) เข้า turn ที่กำลังทำงาน"
-description: ผู้ใช้กด Send now ระหว่างที่คำสั่งรันอยู่ ข้อความรอที่ inbox ของ turn แล้วเข้าสู่ log ที่จุดปลอดภัยก่อนการเรียกโมเดลครั้งถัดไป
+description: ผู้ใช้กด Send now ระหว่างที่คำสั่งรันอยู่ ข้อความรอที่ inbox ของ turn แล้วเข้าสู่ log ที่จุดปลอดภัยก่อนการเรียก model ครั้งถัดไป
 tableOfContents: false
 sidebar:
   order: 4
@@ -81,7 +81,7 @@ scenario:
         from: engine
         to: engine
       do: >-
-        loop กำลังรันเครื่องมือ ตาราง `STEER_AT` บอกว่าระหว่าง `run-tools` ให้ถือข้อความไว้ก่อน คำสั่งที่รันอยู่ไม่ถูกขัด
+        loop กำลังรัน tool ตาราง `STEER_AT` บอกว่าระหว่าง `run-tools` ให้ถือข้อความไว้ก่อน คำสั่งที่รันอยู่ไม่ถูกขัด
       ref: packages/core/src/steer.ts#STEER_AT
 
     - use: tool-result-returns
@@ -99,7 +99,7 @@ scenario:
       beat:
         title: "ถึงจุดปลอดภัยก่อนเรียก model"
         text: >-
-          ผลของ tool กลับมาครบ ขั้นต่อไปคือเรียกโมเดล ตรงนี้คือจุดเดียวที่ข้อความแทรกเข้า turn ได้
+          ผลของ tool กลับมาครบ ขั้นต่อไปคือเรียก model ตรงนี้คือจุดเดียวที่ข้อความแทรกเข้า turn ได้
         from: engine
         to: engine
       do: >-
@@ -114,13 +114,13 @@ scenario:
       beat:
         title: "Geno บันทึกข้อความของคุณต่อจากผล"
         text: >-
-          Geno รับข้อความจาก inbox แล้วบันทึกต่อจากผลของ tool เพราะมีของใหม่มาถึง Geno จึงอ่านบันทึกอีกรอบก่อนเรียกโมเดล
+          Geno รับข้อความจาก inbox แล้วบันทึกต่อจากผลของ tool เพราะมีของใหม่มาถึง Geno จึงอ่านบันทึกอีกรอบก่อนเรียก model
           แล้วแจ้งแชตว่าข้อความเข้า turn แล้ว
         from: engine
         to: panel
       do: >-
-        `deliver()` รับข้อความจาก inbox บันทึกเป็น event `user` ที่มี `steer: true` ต่อจากผลของเครื่องมือ
-        แล้วตอบ inbox ว่า `delivered` พร้อม seq เพราะมีของมาถึง loop จึงวนอ่าน log อีกรอบก่อนเรียกโมเดล
+        `deliver()` รับข้อความจาก inbox บันทึกเป็น event `user` ที่มี `steer: true` ต่อจากผลของ tool
+        แล้วตอบ inbox ว่า `delivered` พร้อม seq เพราะมีของมาถึง loop จึงวนอ่าน log อีกรอบก่อนเรียก model
       ref: packages/engine/src/drive.ts#deliver
       emits: [user, delivered]
 
@@ -186,31 +186,31 @@ scenario:
       beat:
         title: "Model ปรับงานตามที่คุณบอก"
         text: >-
-          โมเดลอ่านข้อความของคุณแล้วปรับงานใน turn เดิม ไม่ต้องรอ turn ใหม่
+          model อ่านข้อความของคุณแล้วปรับงานใน turn เดิม ไม่ต้องรอ turn ใหม่
         from: model
         to: engine
         end: "turn ทำต่อตามที่คุณบอก"
       do: >-
         คำขอนี้มีผลของ `pnpm test` ตามด้วยข้อความของผู้ใช้ห่อด้วย `userSteerText`
-        ("The user sent a new message while you were working: ...") โมเดลปรับงานตามนั้นใน turn เดิม
+        ("The user sent a new message while you were working: ...") model ปรับงานตามนั้นใน turn เดิม
       ref: packages/core/src/fence.ts#userSteerText
       end: { turn: continues, reason: call-model }
 ---
 
 steer คือข้อความที่ผู้ใช้ส่งเข้า turn ที่กำลังทำงาน แทนที่จะรอให้ turn จบแบบข้อความ Queued
-ข้อความไม่ได้ไปถึงโมเดลทันที มันรอที่ inbox ของ turn จนถึงจุดปลอดภัย `deliver()` ซึ่งอยู่ระหว่างผลของ tool ชุดล่าสุดกับการเรียกโมเดลครั้งถัดไป
+ข้อความไม่ได้ไปถึง model ทันที มันรอที่ inbox ของ turn จนถึงจุดปลอดภัย `deliver()` ซึ่งอยู่ระหว่างผลของ tool ชุดล่าสุดกับการเรียก model ครั้งถัดไป
 
 | loop กำลังทำอะไรตอนข้อความมาถึง | ผล |
 | --- | --- |
-| รัน tool หรือตอบ call ที่รันไม่ได้ | ถือไว้จนถึงการเรียกโมเดลครั้งถัดไป |
-| จะเรียกโมเดล | ส่งเข้า log ทันทีที่ `deliver()` |
+| รัน tool หรือตอบ call ที่รันไม่ได้ | ถือไว้จนถึงการเรียก model ครั้งถัดไป |
+| จะเรียก model | ส่งเข้า log ทันทีที่ `deliver()` |
 | turn จบแล้ว | กลายเป็น turn ถัดไป |
 
 สิ่งที่ควรสังเกต
 
-- **ไม่มีการขัดกลาง stream** steer เข้าได้เฉพาะก่อนการเรียกโมเดล ถ้าโมเดลกำลังเขียนคำตอบสุดท้ายอยู่ steer จะไม่ทัน
+- **ไม่มีการขัดกลาง stream** steer เข้าได้เฉพาะก่อนการเรียก model ถ้า model กำลังเขียนคำตอบสุดท้ายอยู่ steer จะไม่ทัน
   และกลายเป็น turn ถัดไปแทน
-- **ส่งถึงแล้ว loop ตรวจขีดจำกัดอีกรอบ** `deliver()` คืนค่า true เมื่อมีของมาถึง loop จึงเรียก `loopStep` ใหม่ก่อนเรียกโมเดล
+- **ส่งถึงแล้ว loop ตรวจขีดจำกัดอีกรอบ** `deliver()` คืนค่า true เมื่อมีของมาถึง loop จึงเรียก `loopStep` ใหม่ก่อนเรียก model
   Stop และขีดจำกัดของรอบจึงยังมีผลกับข้อความที่เพิ่งเข้า
 - **steer เป็นข้อความล้วน** ร่างที่มีไฟล์แนบหรือ `@` mention กด Send now ไม่ได้ ต้องรอในคิวเป็นข้อความ Queued
   (engine ก็ปฏิเสธ steer ที่มีบล็อกอื่นนอกจากข้อความ แต่ mention ที่ส่งเป็นข้อความล้วนผ่านไปเป็นข้อความธรรมดา)

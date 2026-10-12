@@ -1,6 +1,6 @@
 ---
 title: "เรียก tool ของ MCP"
-description: โมเดลโหลดเครื่องมือ MCP ด้วย tool_search แล้วเรียกมัน ในโหมด Ask Geno ถามก่อน ผู้ใช้อนุญาตเครื่องมือนี้ตลอด session และ server ภายนอกทำงาน
+description: model โหลด tool MCP ด้วย tool_search แล้วเรียกมัน ในโหมด Ask Geno ถามก่อน ผู้ใช้อนุญาต tool นี้ตลอด session และ server ภายนอกทำงาน
 tableOfContents: false
 sidebar:
   order: 4
@@ -8,7 +8,7 @@ scenario:
   surface: vscode
   given:
     - ตั้ง MCP server ชื่อ `github` ไว้ใน `~/.g-code/mcp.json` server พร้อมทำงานตั้งแต่ต้นรอบ
-    - ข้อความแจ้งของ Geno บอกโมเดลแล้วว่ามีเครื่องมือ `mcp__github__create_issue` แต่บอกแค่ชื่อ
+    - ข้อความแจ้งของ Geno บอก model แล้วว่ามี tool `mcp__github__create_issue` แต่บอกแค่ชื่อ
     - เปิด Geno ในโหมด Ask
   trigger: >-
     ผู้ใช้ขอว่า "เปิด issue เรื่อง login ช้าใน repo acme/app ให้หน่อย"
@@ -28,8 +28,8 @@ scenario:
           select: content[1]
       lane: model
       do: >-
-        เครื่องมือ MCP ไม่อยู่ในรายการเครื่องมือของคำขอ (อยู่ข้างหลัง `tool_search` เสมอ เพื่อไม่ให้ cache หลุดเมื่อ server มาหรือไป)
-        โมเดลจึงขอเรียก `tool_search` ด้วย `select: ["mcp__github__create_issue"]`
+        tool MCP ไม่อยู่ในรายการ tool ของคำขอ (อยู่ข้างหลัง `tool_search` เสมอ เพื่อไม่ให้ cache หลุดเมื่อ server มาหรือไป)
+        model จึงขอเรียก `tool_search` ด้วย `select: ["mcp__github__create_issue"]`
       ref: packages/core/src/deferred-tools.ts#toolSearchDefinition
       emits: [tool_use, tool_search]
       phase: calling-model
@@ -48,8 +48,8 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        `searchTools` คืนนิยามเต็มของเครื่องมือพร้อม `input_schema` ผลของ call บันทึกชื่อที่โหลดแล้ว
-        เครื่องมือนี้เรียกได้ตลอด session ถ้าเรียกก่อนโหลด จะได้ error ที่บอกให้โหลดก่อน
+        `searchTools` คืนนิยามเต็มของ tool พร้อม `input_schema` ผลของ call บันทึกชื่อที่โหลดแล้ว
+        tool นี้เรียกได้ตลอด session ถ้าเรียกก่อนโหลด จะได้ error ที่บอกให้โหลดก่อน
       ref: packages/core/src/deferred-tools.ts#searchTools
       emits: [Loaded]
       phase: running-tools
@@ -70,7 +70,7 @@ scenario:
           select: content[1]
       lane: model
       do: >-
-        โมเดลขอเรียก `mcp__github__create_issue` ด้วย owner, repo, title และ body จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `mcp__github__create_issue` ด้วย owner, repo, title และ body จบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
 
@@ -80,8 +80,8 @@ scenario:
       lane: policy
       at: rules
       do: >-
-        executor ของเครื่องมือ MCP ถาม `mcpCallDenial`: กฎ MCP ของ workspace มาก่อน (ไม่มี) แล้วจึงกฎของโหมด
-        เครื่องมือนี้ไม่ได้บอกว่าอ่านอย่างเดียว จึงเป็น `mcp-tool` ซึ่งโหมด Ask ต้องถาม และแนบชื่อกฎไว้ให้บันทึกได้
+        executor ของ tool MCP ถาม `mcpCallDenial`: กฎ MCP ของ workspace มาก่อน (ไม่มี) แล้วจึงกฎของโหมด
+        tool นี้ไม่ได้บอกว่าอ่านอย่างเดียว จึงเป็น `mcp-tool` ซึ่งโหมด Ask ต้องถาม และแนบชื่อกฎไว้ให้บันทึกได้
       ref: packages/core/src/permission-rules.ts#mcpCallDenial
       emits: [mcp-tool]
 
@@ -101,7 +101,7 @@ scenario:
       lane: server
       at: approvals
       do: >-
-        `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` ตัวเลือกมาจาก `choicesFor` ซึ่งสำหรับเครื่องมือ MCP
+        `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` ตัวเลือกมาจาก `choicesFor` ซึ่งสำหรับ tool MCP
         มีปุ่ม "Allow this tool for the session" เพิ่ม
       ref: packages/engine/src/serve.ts#editorTurn.approve
       emits: [requestPermission, allow-session]
@@ -125,9 +125,9 @@ scenario:
         ask: คุณกดปุ่มไหน
       lane: panel
       at: card
-      do: แผงแชตแสดงการ์ดขออนุญาต `subject` ของคำขอบอก server และเครื่องมือ การ์ดจึงใช้หัวข้อแบบเครื่องมือ MCP
+      do: แผงแชตแสดงการ์ดขออนุญาต `subject` ของคำขอบอก server และ tool การ์ดจึงใช้หัวข้อแบบ tool MCP
       sees: >-
-        "Use github tool create_issue?" ชื่อเครื่องมือ และ "Geno asks about an MCP tool."
+        "Use github tool create_issue?" ชื่อ tool และ "Geno asks about an MCP tool."
         [Allow] [Allow this tool for the session] [Deny] [Always allow in this workspace] [No, and tell the agent…]
       ref: packages/extension/src/chat/render.ts#permissionCard
 
@@ -149,8 +149,8 @@ scenario:
                   to: panel
                 at: settle
                 do: >-
-                  `permissionAnswerOf` ได้ `allow-session` `settle` คืนบันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อเครื่องมือ
-                  ลงชุด `allowed` ของ session call ถัดไปของเครื่องมือนี้ไม่ถาม จนกว่า session จะปิด
+                  `permissionAnswerOf` ได้ `allow-session` `settle` คืนบันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อ tool
+                  ลงชุด `allowed` ของ session call ถัดไปของ tool นี้ไม่ถาม จนกว่า session จะปิด
                 ref: packages/engine/src/mcp/browser.ts#keepMcpAnswer
                 phase: running-tools
 
@@ -166,8 +166,8 @@ scenario:
                   to: panel
                 at: rules
                 do: >-
-                  `keepMcpAnswer` เพิ่มชื่อเครื่องมือลงชุดของ session และบันทึกกฎ allow ของเครื่องมือ MCP นี้ลงที่เก็บของ workspace
-                  session ต่อๆ ไปก็ไม่ถาม แต่กฎ allow ไม่ชนะโหมด Plan ซึ่งยังปฏิเสธเครื่องมือที่ไม่ได้อ่านอย่างเดียว
+                  `keepMcpAnswer` เพิ่มชื่อ tool ลงชุดของ session และบันทึกกฎ allow ของ tool MCP นี้ลงที่เก็บของ workspace
+                  session ต่อๆ ไปก็ไม่ถาม แต่กฎ allow ไม่ชนะโหมด Plan ซึ่งยังปฏิเสธ tool ที่ไม่ได้อ่านอย่างเดียว
                 ref: packages/engine/src/mcp/browser.ts#keepMcpAnswer
                 emits: [allow-workspace]
                 phase: running-tools
@@ -198,7 +198,7 @@ scenario:
       lane: tool
       at: executor
       do: >-
-        `mcpResultText` แปลงผลเป็นข้อความ (รูปภาพเก็บเป็นไฟล์แนบ) ถ้า server ตอบว่า `isError` ผลเป็น error ให้โมเดลอ่าน
+        `mcpResultText` แปลงผลเป็นข้อความ (รูปภาพเก็บเป็นไฟล์แนบ) ถ้า server ตอบว่า `isError` ผลเป็น error ให้ model อ่าน
         ผลที่ยาวเกินถูกเก็บลงไฟล์พร้อมคำแนะนำให้ใช้ filter หรือหน้าของ server แทน
         call นี้ผ่านการถาม ผลจึงแนบบันทึกว่าผู้ใช้อนุญาต update ปิดของมันมี `APPROVAL_META`
         (call ถัดไปที่อนุญาตไว้ตลอด session ไม่ถาม จึงไม่มีบันทึกนี้)
@@ -216,17 +216,17 @@ scenario:
       lane: loop
       at: step
       do: >-
-        `loopStep` ตัดสิน `call-model` โมเดลบอกผู้ใช้ว่าเปิด issue แล้วพร้อมลิงก์
+        `loopStep` ตัดสิน `call-model` model บอกผู้ใช้ว่าเปิด issue แล้วพร้อมลิงก์
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-เครื่องมือ MCP ใช้ทางของเครื่องมือทั่วไปทุกอย่าง: PreToolUse hook การจัดชุด การ์ด และผลใน log
+tool MCP ใช้ทางของ tool ทั่วไปทุกอย่าง: PreToolUse hook การจัดชุด การ์ด และผลใน log
 ต่างกันสามจุด คือต้องโหลดก่อนด้วย `tool_search` ตัดสินด้วยกฎ MCP และงานจริงเกิดใน process ของ server
 
-| โหมด | เครื่องมืออ่านอย่างเดียว | เครื่องมืออื่น |
+| โหมด | tool อ่านอย่างเดียว | tool อื่น |
 | --- | --- | --- |
 | Ask | ถาม | ถาม |
 | Auto | รัน | classifier ตัดสิน |
@@ -234,7 +234,7 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **ชุดเครื่องมือเป็นภาพนิ่งของรอบ** `runAgent` เอาเครื่องมือของ server ที่พร้อมตอนเริ่มรอบเท่านั้น server ที่พร้อมกลางรอบได้ใช้ในรอบถัดไป
-- **"อ่านอย่างเดียว" มาจาก server** server เป็นคนบอกว่าเครื่องมือไหนอ่านอย่างเดียว Geno ใช้คำบอกนั้นตัดสินว่าจะถามไหม
+- **ชุด tool เป็นภาพนิ่งของรอบ** `runAgent` เอา tool ของ server ที่พร้อมตอนเริ่มรอบเท่านั้น server ที่พร้อมกลางรอบได้ใช้ในรอบถัดไป
+- **"อ่านอย่างเดียว" มาจาก server** server เป็นคนบอกว่า tool ไหนอ่านอย่างเดียว Geno ใช้คำบอกนั้นตัดสินว่าจะถามไหม
 - **"Allow this tool for the session" อยู่ในหน่วยความจำ** ชุด `allowed` อยู่ใน hub ของ session ไม่ได้บันทึกลงไฟล์
-- **ข้อความจาก server เป็นข้อมูล** คำแนะนำที่ server ส่งมาถูกล้อมใน `<mcp_instructions>` และบอกโมเดลว่าไม่ได้มาจากผู้ใช้
+- **ข้อความจาก server เป็นข้อมูล** คำแนะนำที่ server ส่งมาถูกล้อมใน `<mcp_instructions>` และบอก model ว่าไม่ได้มาจากผู้ใช้

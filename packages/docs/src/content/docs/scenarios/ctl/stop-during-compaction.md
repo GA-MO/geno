@@ -1,14 +1,14 @@
 ---
 title: "กด Stop ขณะ Geno ทำ compaction"
-description: ผู้ใช้กด Stop ระหว่างที่ loop สรุปบริบทอัตโนมัติก่อนเรียกโมเดล การสรุปถูกยกเลิกโดยไม่บันทึกอะไร การเรียกที่ตามมาจบทันที และ turn จบแบบ stopped
+description: ผู้ใช้กด Stop ระหว่างที่ loop สรุปบริบทอัตโนมัติก่อนเรียก model การสรุปถูกยกเลิกโดยไม่บันทึกอะไร การเรียกที่ตามมาจบทันที และ turn จบแบบ stopped
 tableOfContents: false
 sidebar:
   order: 7
 scenario:
   surface: vscode
   given:
-    - turn ทำงานมานาน context ถึงเกณฑ์การสรุปอัตโนมัติ (80% ของหน้าต่างโมเดล)
-    - ผลของเครื่องมือชุดล่าสุดถูกบันทึกแล้ว และ `callModel` เริ่มสรุปบริบทก่อนเรียกโมเดล
+    - turn ทำงานมานาน context ถึงเกณฑ์การสรุปอัตโนมัติ (80% ของหน้าต่าง model)
+    - ผลของ tool ชุดล่าสุดถูกบันทึกแล้ว และ `callModel` เริ่มสรุปบริบทก่อนเรียก model
   trigger: >-
     ผู้ใช้กด Stop ขณะแถว "Compacting the context" ยังหมุนอยู่
   covers: [ctl.stop-during-compaction]
@@ -19,13 +19,13 @@ scenario:
       beat:
         title: "Geno ให้ model สรุปบทสนทนาเก่า"
         text: >-
-          context ถึง 80% ของหน้าต่าง Geno จึงส่งส่วนเก่าของบทสนทนาให้โมเดลสรุปก่อนเรียกรอบถัดไป แชตขึ้นแถว Compacting
+          context ถึง 80% ของหน้าต่าง Geno จึงส่งส่วนเก่าของบทสนทนาให้ model สรุปก่อนเรียกรอบถัดไป แชตขึ้นแถว Compacting
           the context พร้อมไอคอนหมุน
         from: engine
         to: model
         sees: { kind: notice, text: Compacting the context, tone: info }
       do: >-
-        `compactContext` ส่งส่วนเก่าของบทสนทนาไปให้โมเดลสรุป การเรียกนี้ใช้ signal เดียวกับ turn
+        `compactContext` ส่งส่วนเก่าของบทสนทนาไปให้ model สรุป การเรียกนี้ใช้ signal เดียวกับ turn
       ref: packages/engine/src/compact.ts#compactContext
       sees: แถวประกาศ "Compacting the context" พร้อมไอคอนหมุนท้าย turn
       phase: compacting
@@ -154,7 +154,7 @@ scenario:
       end: { turn: stopped, reason: cancelled }
 ---
 
-การสรุปอัตโนมัติเป็นส่วนหนึ่งของการเรียกโมเดลหนึ่งครั้ง Stop ระหว่างสรุปจึงจบ turn แบบเดียวกับ
+การสรุปอัตโนมัติเป็นส่วนหนึ่งของการเรียก model หนึ่งครั้ง Stop ระหว่างสรุปจึงจบ turn แบบเดียวกับ
 [กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/) ต่างกันแค่ไม่มีข้อความครึ่งเดียวค้าง
 
 สิ่งที่ควรสังเกต
@@ -162,7 +162,7 @@ scenario:
 - **การสรุปที่ถูกยกเลิกไม่เหลือร่องรอย** ไม่มี event `compact` ไม่มีเส้นคั่น และไม่มีบรรทัด "compact: ..." ใน stderr
   การกด Continue เริ่ม turn ใหม่ด้วย context เต็มเท่าเดิม และ `callModel` ของ turn นั้นจะสรุปใหม่ตั้งแต่ต้น
 - **ยังมี checkpoint หนึ่งจุดหลัง Stop** `callModel` บันทึก `checkpoint` ก่อนรู้ว่าการเรียกจะไม่ออกไป
-  Rewind และ Undo จึงเห็นจุดนี้เพิ่มขึ้นหนึ่งจุดโดยไม่มีการเรียกโมเดลตามมา
+  Rewind และ Undo จึงเห็นจุดนี้เพิ่มขึ้นหนึ่งจุดโดยไม่มีการเรียก model ตามมา
 - **`/compact` ที่ผู้ใช้สั่งเองต่างออกไป** ทางนั้นไม่ใช่ turn ของ loop Stop ได้คำตอบ "Stopped. The context is as it was."
   และหัวข้อเป็น "worked for ..." ดู [คุณสั่ง /compact ระหว่าง turn](/scenarios/ctx/compaction-manual/)
 

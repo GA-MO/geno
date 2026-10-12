@@ -207,7 +207,7 @@ scenario:
       lane: server
       at: turns
       do: >-
-        turn จบ `end_turn` โดยไม่มีการเรียกโมเดล hunk ของทุกไฟล์รอผู้ใช้ Keep หรือ Undo ตามโหมด review ของ editor
+        turn จบ `end_turn` โดยไม่มีการเรียก model hunk ของทุกไฟล์รอผู้ใช้ Keep หรือ Undo ตามโหมด review ของ editor
         lane ยังอยู่จนผู้ใช้ Discard
       ref: packages/engine/src/serve.ts#TURN_ENDS
       emits: [TURN_END_META]
@@ -223,7 +223,7 @@ scenario:
       end: { turn: done, reason: end_turn }
 ---
 
-Apply คือ turn ของแชตที่ไม่มีโมเดล: engine merge แล้วเขียนผ่าน editor เหมือนการแก้ของเอเจนต์
+Apply คือ turn ของแชตที่ไม่มี model: engine merge แล้วเขียนผ่าน editor เหมือนการแก้ของเอเจนต์
 การเปลี่ยนแปลงของ lane จึงได้ทุกอย่างที่การแก้ปกติได้: diff ในแชต hunk ที่รอตรวจ และ checkpoint ให้ Undo All
 
 สิ่งที่ควรสังเกต

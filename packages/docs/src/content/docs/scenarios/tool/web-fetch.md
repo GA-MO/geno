@@ -1,6 +1,6 @@
 ---
 title: "Model ดึงหน้าเว็บด้วย web_fetch"
-description: โมเดลเรียก web_fetch กับหน้าเว็บของโฮสต์อื่น โหมด Ask ถามผู้ใช้ก่อน แล้ว engine ดึงหน้า ให้โมเดลผู้ช่วยอ่านและตอบคำถาม ผลไปถึงโมเดลในรั้วข้อมูล
+description: model เรียก web_fetch กับหน้าเว็บของโฮสต์อื่น โหมด Ask ถามผู้ใช้ก่อน แล้ว engine ดึงหน้า ให้ model ผู้ช่วยอ่านและตอบคำถาม ผลไปถึง model ในรั้วข้อมูล
 tableOfContents: false
 sidebar:
   order: 9
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในโหมด Ask
     - ยังไม่มีกฎ `WebFetch(domain:date-fns.org)` ของ workspace
   trigger: >-
-    โมเดลเรียก `web_fetch` ด้วย `url` "https://date-fns.org/docs/format" และ `question` "รูปแบบ token ของวันในสัปดาห์คืออะไร"
+    model เรียก `web_fetch` ด้วย `url` "https://date-fns.org/docs/format" และ `question` "รูปแบบ token ของวันในสัปดาห์คืออะไร"
   covers: [tool.web-fetch]
   related: [perm.ask-allow, perm.always-allow-workspace, perm.ask-deny-ends-turn]
   steps:
@@ -19,7 +19,7 @@ scenario:
       beat:
         title: "Model ขอดึงหน้าเว็บพร้อมคำถาม"
         text: >-
-          โมเดลขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร" run
+          model ขอดึง https://date-fns.org/docs/format พร้อมคำถามว่า "รูปแบบ token ของวันในสัปดาห์คืออะไร" run
           จริงด้านล่างเรียก `web_fetch` แบบเดียวกันกับ example.com
         from: model
         to: engine
@@ -31,7 +31,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลส่งบล็อก `tool_use` ของ `web_fetch` พร้อม URL และคำถามที่อยากรู้จากหน้านั้น จบด้วย `stop_reason: tool_use`
+        model ส่งบล็อก `tool_use` ของ `web_fetch` พร้อม URL และคำถามที่อยากรู้จากหน้านั้น จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -223,12 +223,12 @@ scenario:
       beat:
         title: "Model ผู้ช่วยอ่านหน้าแล้วตอบคำถาม"
         text: >-
-          หน้าถูกแปลงเป็น markdown แล้วให้โมเดลผู้ช่วยที่ถูกที่สุดอ่านและตอบคำถาม โมเดลหลักจึงไม่ต้องอ่านทั้งหน้า
+          หน้าถูกแปลงเป็น markdown แล้วให้ model ผู้ช่วยที่ถูกที่สุดอ่านและตอบคำถาม model หลักจึงไม่ต้องอ่านทั้งหน้า
         from: model
         to: engine
       do: >-
-        โมเดลผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` เลือกโมเดลที่ถูกที่สุดก่อน:
-        โมเดลของบทบาท explore ถ้าตั้งไว้ แล้ว classifier แล้วจึงเป็นโมเดลของ session
+        model ผู้ช่วยอ่านหน้าที่แปลงเป็น markdown แล้วตอบ `question` เลือก model ที่ถูกที่สุดก่อน:
+        model ของบทบาท explore ถ้าตั้งไว้ แล้ว classifier แล้วจึงเป็น model ของ session
       ref: packages/engine/src/tools/web.ts#readerChoices
 
     - id: answer
@@ -254,20 +254,20 @@ scenario:
       beat:
         title: "Model ได้คำตอบจากหน้าเว็บ"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
+          Geno เรียก model ต่อ model ได้คำตอบของคำถาม ไม่ใช่หน้าเว็บทั้งหน้า
         from: engine
         to: model
         end: "model ทำต่อ"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้คำตอบจากหน้าเว็บ ไม่ใช่หน้าเว็บทั้งหน้า
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้คำตอบจากหน้าเว็บ ไม่ใช่หน้าเว็บทั้งหน้า
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
       end: { turn: continues, reason: call-model }
 ---
 
-`web_fetch` ไม่ส่งหน้าเว็บให้โมเดลหลัก มันส่งหน้าให้โมเดลผู้ช่วยตัวเล็กอ่านแล้วตอบคำถาม
-โมเดลหลักจึงได้คำตอบสั้นๆ ในรั้วข้อมูล ซึ่งกันไม่ให้ข้อความในหน้าเว็บกลายเป็นคำสั่ง
+`web_fetch` ไม่ส่งหน้าเว็บให้ model หลัก มันส่งหน้าให้ model ผู้ช่วยตัวเล็กอ่านแล้วตอบคำถาม
+model หลักจึงได้คำตอบสั้นๆ ในรั้วข้อมูล ซึ่งกันไม่ให้ข้อความในหน้าเว็บกลายเป็นคำสั่ง
 
 | โหมด | URL ของโฮสต์อื่น |
 | --- | --- |

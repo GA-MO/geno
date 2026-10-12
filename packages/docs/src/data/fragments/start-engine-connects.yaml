@@ -4,7 +4,7 @@
   lane: editor
   at: engine-link
   do: >-
-    `Engine.start` เรียก `engineSettings` ซึ่งอ่าน provider โมเดล และคีย์จาก SecretStorage แล้วให้ `setupProblem` ตรวจว่าครบหรือไม่
+    `Engine.start` เรียก `engineSettings` ซึ่งอ่าน provider model และคีย์จาก SecretStorage แล้วให้ `setupProblem` ตรวจว่าครบหรือไม่
     รอบนี้ครบ จึงคำนวณที่อยู่ socket จาก hash ของโฟลเดอร์และการตั้งค่า (คีย์เข้าไปในรูป hash เท่านั้น)
   ref: packages/extension/src/chat/engine.ts#Engine.start
 
@@ -30,6 +30,6 @@
   lane: server
   at: sessions
   do: >-
-    engine จดความสามารถของ editor นี้เป็น `peer` ซึ่งกำหนดว่า turn ของหน้าต่างนี้ได้เครื่องมือชุดไหน
+    engine จดความสามารถของ editor นี้เป็น `peer` ซึ่งกำหนดว่า turn ของหน้าต่างนี้ได้ tool ชุดไหน
     ถ้าเป็นการเชื่อมต่อแรกของ process `takeUpWaits` จะรับช่วงงานที่ engine ตัวก่อนค้างไว้ในเบื้องหลัง
   ref: "packages/engine/src/serve.ts#\".onRequest(acp.methods.agent.initialize, ({ params }) => {\""

@@ -1,6 +1,6 @@
 ---
 title: "เปลี่ยน effort หรือเปลี่ยน model"
-description: เมนูโมเดลในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วนโมเดลเป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
+description: เมนู model ในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วน model เป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
 tableOfContents: false
 sidebar:
   order: 6
@@ -8,9 +8,9 @@ scenario:
   surface: vscode
   given:
     - แชตนี้มี turn ที่จบแล้ว และไม่มี turn ทำงาน
-    - provider ของแชตคือ Model Studio และมีอีกโมเดลของ provider เดียวกันพร้อมใช้
+    - provider ของแชตคือ Model Studio และมีอีก model ของ provider เดียวกันพร้อมใช้
   trigger: >-
-    ผู้ใช้คลิกปุ่มชื่อโมเดลในช่องพิมพ์ เมนูแสดง backend โมเดลของ provider ที่พร้อมใช้ และระดับ effort
+    ผู้ใช้คลิกปุ่มชื่อ model ในช่องพิมพ์ เมนูแสดง backend model ของ provider ที่พร้อมใช้ และระดับ effort
   covers: [sess.effort-change, sess.model-change]
   related: [perm.mode-switch-mid-turn, start.set-api-key, sess.new-chat]
   steps:
@@ -24,7 +24,7 @@ scenario:
       lane: panel
       at: composer
       do: >-
-        เมนูโมเดลรวมสามเรื่องไว้ที่เดียว: backend ที่ใช้คุยกับแชต โมเดลของ Geno และ effort ของ session
+        เมนู model รวมสามเรื่องไว้ที่เดียว: backend ที่ใช้คุยกับแชต model ของ Geno และ effort ของ session
       ref: packages/extension/src/chat/composer-view.ts#modelMenu
       phase: idle
 
@@ -58,7 +58,7 @@ scenario:
                   text: effort เป็นของ session ถ้า turn ทำงานอยู่ Geno บันทึกข้าง turn นั้น ช่องพิมพ์แสดง effort ใหม่
                   from: engine
                   to: engine
-                  sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
+                  sees: ปุ่ม model ในช่องพิมพ์บอก effort "high"
                 at: sessions
                 do: >-
                   engine บันทึก event `effort` ลง log ของ session (ถ้า turn ทำงานอยู่ บันทึกข้าง turn นั้น)
@@ -68,8 +68,8 @@ scenario:
               - lane: panel
                 at: composer
                 alongside: true
-                do: ช่องพิมพ์แสดง effort ใหม่ข้างชื่อโมเดล
-                sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
+                do: ช่องพิมพ์แสดง effort ใหม่ข้างชื่อ model
+                sees: ปุ่ม model ในช่องพิมพ์บอก effort "high"
                 ref: packages/extension/src/chat/composer-view.ts#modelMenu
               - lane: loop
                 beat:
@@ -80,12 +80,12 @@ scenario:
                   end: effort ใหม่มีผล
                 at: model-call
                 do: >-
-                  ตั้งแต่รอบถัดไป ทุกการเรียกโมเดลอ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` ซึ่งขยับระดับตาม policy ของชนิดการเรียก
-                  (หลัง prompt หลังเครื่องมือ หรือหลังเครื่องมือล้ม) แล้วส่งเป็น `output_config.effort` สำหรับโมเดลที่รองรับ effort
+                  ตั้งแต่รอบถัดไป ทุกการเรียก model อ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` ซึ่งขยับระดับตาม policy ของชนิดการเรียก
+                  (หลัง prompt หลัง tool หรือหลัง tool ล้ม) แล้วส่งเป็น `output_config.effort` สำหรับ model ที่รองรับ effort
                 ref: packages/core/src/effort.ts#withTurnEffort
                 end: { turn: none }
           - id: model
-            label: โมเดลอื่นของ provider เดียวกัน
+            label: model อื่นของ provider เดียวกัน
             steps:
               - lane: panel
                 beat:
@@ -94,7 +94,7 @@ scenario:
                   from: you
                   to: panel
                 at: composer
-                do: เมนูโพสต์ `set-model` พร้อม provider และโมเดล
+                do: เมนูโพสต์ `set-model` พร้อม provider และ model
                 ref: "packages/extension/src/chat/composer-view.ts#\"if (!m.current) post(m.pick.kind === 'geno' ? { type: 'set-model', provider: m.pick.provider, model: m.pick.model } : { type: 'set-agent-model', value: m.pick.value });\""
                 emits: [set-model]
               - lane: editor
@@ -108,7 +108,7 @@ scenario:
                   text: การตั้งค่าที่ engine ใช้เปลี่ยน ส่วนขยายจึงตัดการเชื่อมต่อ และเปิด engine ตัวใหม่ตามการตั้งค่าชุดใหม่ ปุ่มในช่องพิมพ์ขึ้นชื่อ model ใหม่
                   from: panel
                   to: engine
-                  sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
+                  sees: ปุ่ม model ในช่องพิมพ์เปลี่ยนเป็นชื่อ model ใหม่
                 at: engine-link
                 do: >-
                   การตั้งค่าที่ engine ใช้เปลี่ยน `resetEngine` จึงตัดการเชื่อมต่อ socket ครั้งต่อไปที่ต้องใช้ engine
@@ -117,8 +117,8 @@ scenario:
               - lane: panel
                 at: composer
                 alongside: true
-                do: แผงได้ action `model` ที่มีชื่อโมเดลใหม่
-                sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
+                do: แผงได้ action `model` ที่มีชื่อ model ใหม่
+                sees: ปุ่ม model ในช่องพิมพ์เปลี่ยนเป็นชื่อ model ใหม่
                 ref: packages/extension/src/chat/composer-view.ts#modelMenu
               - lane: server
                 beat:
@@ -130,8 +130,8 @@ scenario:
                 at: sessions
                 do: >-
                   engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวเองหลังว่างและไม่มีการเชื่อมต่อ 10 วินาที
-                  engine ตัวใหม่รับแชตที่เปิดอยู่ด้วย `session/resume` แต่ provider และโมเดลของ session อ่านจาก `session-start` ใน log
-                  แชตนี้จึงยังใช้โมเดลเดิม โมเดลใหม่มีผลกับแชตที่สร้างหลังจากนี้
+                  engine ตัวใหม่รับแชตที่เปิดอยู่ด้วย `session/resume` แต่ provider และ model ของ session อ่านจาก `session-start` ใน log
+                  แชตนี้จึงยังใช้ model เดิม model ใหม่มีผลกับแชตที่สร้างหลังจากนี้
                 ref: packages/engine/src/chat.ts#resumeSession
                 end: { turn: none }
 ---
@@ -141,14 +141,14 @@ scenario:
 | เปลี่ยน | เก็บที่ | มีผลกับ | เมื่อไร |
 | --- | --- | --- | --- |
 | effort | event `effort` ใน log ของ session | แชตนี้ | รอบถัดไป |
-| โมเดล | การตั้งค่า `gcode.model` ของ VS Code | แชตใหม่ | หลัง engine ตัวใหม่เริ่ม |
+| model | การตั้งค่า `gcode.model` ของ VS Code | แชตใหม่ | หลัง engine ตัวใหม่เริ่ม |
 
 สิ่งที่ควรสังเกต
 
 - **effort ระหว่าง turn ไม่มีผลกับ turn นั้น** engine บันทึก effort ข้าง turn ที่ทำงานทันที แต่ `drive` ทำงานกับสำเนาของ event
-  ที่อ่านตอนเริ่มรอบ การเรียกโมเดลที่เหลือของ turn นั้นจึงใช้ effort เดิม ต่างจากโหมดที่มีผลกับ call ถัดไปทันที
-- **ชื่อในช่องพิมพ์ไม่ตรงกับโมเดลของแชตที่เปิดอยู่** หลังเปลี่ยนโมเดล ปุ่มแสดงชื่อโมเดลใหม่
-  แต่ turn ถัดไปของแชตที่เปิดอยู่ยังเรียกโมเดลเดิมที่บันทึกไว้ตอนสร้าง session ผู้ใช้ต้องเปิดแชตใหม่จึงได้โมเดลใหม่
+  ที่อ่านตอนเริ่มรอบ การเรียก model ที่เหลือของ turn นั้นจึงใช้ effort เดิม ต่างจากโหมดที่มีผลกับ call ถัดไปทันที
+- **ชื่อในช่องพิมพ์ไม่ตรงกับ model ของแชตที่เปิดอยู่** หลังเปลี่ยน model ปุ่มแสดงชื่อ model ใหม่
+  แต่ turn ถัดไปของแชตที่เปิดอยู่ยังเรียก model เดิมที่บันทึกไว้ตอนสร้าง session ผู้ใช้ต้องเปิดแชตใหม่จึงได้ model ใหม่
 - **เปลี่ยน provider อาจทำให้แชตเดิมใช้ไม่ได้** engine ตัวใหม่ได้คีย์ของ provider ที่เลือกใหม่ (และของบทบาทอื่นที่ตั้งไว้)
   ถ้าแชตเดิมใช้ provider อื่น ตามโค้ด `resumeSession` จะหาคีย์ของ provider เดิมไม่พบในสภาพแวดล้อมของ engine ตัวใหม่
-  ทัวร์นี้เลือกโมเดลของ provider เดียวกันจึงไม่เจอกรณีนี้
+  ทัวร์นี้เลือก model ของ provider เดียวกันจึงไม่เจอกรณีนี้

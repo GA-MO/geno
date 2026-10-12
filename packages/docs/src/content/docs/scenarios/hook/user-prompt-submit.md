@@ -1,6 +1,6 @@
 ---
 title: "hook UserPromptSubmit บล็อกหรือเพิ่มบริบท"
-description: hook ที่ตั้งไว้ได้อ่าน prompt ก่อนโมเดล ถ้าบล็อก prompt ไม่ถึงโมเดลและ turn จบแบบ failed ถ้าพิมพ์ข้อความออกมา ข้อความนั้นไปกับ prompt
+description: hook ที่ตั้งไว้ได้อ่าน prompt ก่อน model ถ้าบล็อก prompt ไม่ถึง model และ turn จบแบบ failed ถ้าพิมพ์ข้อความออกมา ข้อความนั้นไปกับ prompt
 tableOfContents: false
 sidebar:
   order: 1
@@ -27,7 +27,7 @@ scenario:
     - id: run
       beat:
         title: Geno ส่ง prompt ให้ hook ก่อน model
-        text: Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึงโมเดล ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
+        text: Geno รัน `check-prompt.sh` พร้อม prompt ทาง stdin ถ้ามี hook ใดบล็อก prompt ไม่ไปถึง model ไม่เช่นนั้นข้อความของทุก hook ไปกับ prompt
         from: engine
         to: machine
         ask: hook ตอบอะไร
@@ -59,13 +59,13 @@ scenario:
               - lane: loop
                 beat:
                   title: Geno ไม่เรียก model
-                  text: Geno บันทึก error ว่า hook บล็อก prompt และโมเดลไม่เห็นมัน prompt นี้ถูกทิ้ง ข้อความถัดไปของคุณจะไม่พามันไปด้วย
+                  text: Geno บันทึก error ว่า hook บล็อก prompt และ model ไม่เห็นมัน prompt นี้ถูกทิ้ง ข้อความถัดไปของคุณจะไม่พามันไปด้วย
                   from: engine
                   to: engine
                 at: drive
                 do: >-
                   `submitted()` บันทึก event `error` ชนิด `blocked`: "A UserPromptSubmit hook blocked this prompt,
-                  so the model did not see it: prompt มีสิ่งที่หน้าตาเหมือน API key" ไม่มีการเรียกโมเดล
+                  so the model did not see it: prompt มีสิ่งที่หน้าตาเหมือน API key" ไม่มีการเรียก model
                 ref: packages/engine/src/drive.ts#submitted
                 emits: [blocked]
               - lane: server
@@ -162,31 +162,31 @@ scenario:
               - use: model-call
                 beat:
                   title: Geno ส่ง prompt ให้ model
-                  text: Geno เก็บ checkpoint แล้วส่งบทสนทนาให้โมเดล
+                  text: Geno เก็บ checkpoint แล้วส่งบทสนทนาให้ model
                   from: engine
                   to: model
               - lane: model
                 beat:
                   title: Model ตอบโดยรู้ว่าอยู่ branch ไหน
-                  text: "โมเดลได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
+                  text: "model ได้ข้อความของคุณตามด้วย `[Geno] UserPromptSubmit hook success: branch: feat/login` ในข้อความเดียวกัน"
                   from: model
                   to: panel
                   end: Model ตอบต่อ
                 do: >-
-                  โมเดลได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"
+                  model ได้ข้อความของผู้ใช้ตามด้วยโน้ต "[Geno] UserPromptSubmit hook success: branch: feat/login"
                   ในข้อความผู้ใช้เดียวกัน แล้วตอบโดยรู้ว่าอยู่ branch ไหน
                 ref: packages/core/src/hooks.ts#hookNoteText
                 end: { turn: continues }
 ---
 
-UserPromptSubmit เป็น hook ตัวเดียวที่ทำงานก่อนโมเดลเห็นอะไรเลย และทำงานเฉพาะกับ prompt ที่ผู้ใช้พิมพ์
+UserPromptSubmit เป็น hook ตัวเดียวที่ทำงานก่อน model เห็นอะไรเลย และทำงานเฉพาะกับ prompt ที่ผู้ใช้พิมพ์
 ข้อความ steer turn ที่ถูกปลุก และการ resume ไม่ผ่าน hook นี้ (`isTyped`)
 
 สิ่งที่ควรสังเกต
 
-- **บล็อกแล้ว prompt หายจากบทสนทนาของโมเดล** `KEEPS_PENDING_PROMPT.blocked` เป็น false
+- **บล็อกแล้ว prompt หายจากบทสนทนาของ model** `KEEPS_PENDING_PROMPT.blocked` เป็น false
   ต่างจาก error ของผู้ให้บริการที่ prompt ยังค้างอยู่ให้ไปกับข้อความถัดไป
 - **โน้ตไปและหายพร้อม prompt** โน้ตของ UserPromptSubmit ถูกวางไว้ข้าง prompt ของมัน ถ้า prompt ถูกทิ้ง โน้ตก็ถูกทิ้งด้วย
-- **โน้ตอยู่ใน log** event `hook-context` ทำให้ resume หรือเล่นซ้ำส่ง byte เดิมให้โมเดล โดยไม่ต้องรัน hook ใหม่
+- **โน้ตอยู่ใน log** event `hook-context` ทำให้ resume หรือเล่นซ้ำส่ง byte เดิมให้ model โดยไม่ต้องรัน hook ใหม่
 - **โน้ตยาวถูกตัด** ข้อความของ hook ยาวเกิน 10,000 ตัวอักษรถูกตัด และมีบรรทัดบอกว่าตัดแล้ว
 - **hook ของโปรเจกต์ต้องเชื่อถือ workspace ก่อน** hook ใน `.claude/settings.json` ของ repo ไม่รันใน workspace ที่ไม่เชื่อถือ

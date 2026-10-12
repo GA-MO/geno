@@ -104,7 +104,7 @@ scenario:
         to: engine
         ask: "บันทึกจบด้วยอะไร"
       do: >-
-        การเชื่อมต่อแรกของ engine ตัวใหม่เรียก `takeUpWaits`: `recoverInterrupted` ตอบ call ที่ค้างใน log ของเอเจนต์ลูกที่ถูกตัด
+        การเชื่อมต่อแรกของ engine ตัวใหม่เรียก `takeUpWaits`: `recoverInterrupted` ตอบ call ที่ค้างใน log ของ subagent ที่ถูกตัด
         บอก session แม่ด้วยโน้ต `interrupted` และให้แผง Tasks มีปุ่มให้ทำต่อ แล้วจึงหา session ที่ log จบด้วยการรอ
         และรับช่วงการปลุกที่ตั้งไว้
       ref: packages/engine/src/interrupted.ts#recoverInterrupted
@@ -134,25 +134,25 @@ scenario:
                 beat:
                   title: "Geno เรียก model ต่อหลังรอ"
                   text: >-
-                    การรอเครือข่ายตรวจ host ทันที การรอ rate limit รอต่อจนถึงเวลาเดิม แล้วการเรียกโมเดลออกไปตามปกติ
+                    การรอเครือข่ายตรวจ host ทันที การรอ rate limit รอต่อจนถึงเวลาเดิม แล้วการเรียก model ออกไปตามปกติ
                   from: engine
                   to: model
                   end: "Geno ทำ turn ต่อเอง"
                 do: >-
                   `callModel` ส่งการรอที่ค้างให้ gateway การรอออฟไลน์ตรวจ host ทันที การรอ rate limit รอต่อจนถึงเวลาเดิม
-                  แล้วการเรียกโมเดลจึงออกไปตามปกติ
+                  แล้วการเรียก model จึงออกไปตามปกติ
                 ref: "packages/engine/src/gateway.ts#\"if (input.waiting !== undefined) {\""
                 end: { turn: continues, reason: call-model }
 
           - id: mid-turn
-            label: การเรียกโมเดลหรือเครื่องมือที่ยังไม่จบ
+            label: การเรียก model หรือ tool ที่ยังไม่จบ
             steps:
               - lane: server
                 at: sessions
                 beat:
                   title: "ไม่มีใครทำ turn ที่ตายต่อ"
                   text: >-
-                    turn ตายระหว่างเรียกโมเดลหรือรัน tool engine ตัวใหม่ไม่ทำต่อเอง บันทึกยังจบที่ prompt ที่ไม่มีคำตอบ หรือที่
+                    turn ตายระหว่างเรียก model หรือรัน tool engine ตัวใหม่ไม่ทำต่อเอง บันทึกยังจบที่ prompt ที่ไม่มีคำตอบ หรือที่
                     tool call ที่ไม่มีผล
                   from: engine
                   to: engine
@@ -185,15 +185,15 @@ scenario:
                 beat:
                   title: "Geno รันคำสั่งที่ค้างอีกครั้ง"
                   text: >-
-                    ถ้า engine ตายขณะ tool รัน tool call นั้นยังไม่มีผล Geno จึงรันคำสั่งเดิมซ้ำก่อนโมเดลจะเห็นข้อความใหม่
-                    คำสั่งที่มีผลข้างเคียงอาจรันสองครั้ง ถ้าตายขณะเรียกโมเดล โมเดลเห็นทั้ง prompt เดิมและ prompt ใหม่
+                    ถ้า engine ตายขณะ tool รัน tool call นั้นยังไม่มีผล Geno จึงรันคำสั่งเดิมซ้ำก่อน model จะเห็นข้อความใหม่
+                    คำสั่งที่มีผลข้างเคียงอาจรันสองครั้ง ถ้าตายขณะเรียก model model เห็นทั้ง prompt เดิมและ prompt ใหม่
                   from: engine
                   to: machine
                   end: "turn ใหม่ทำต่อ"
                 do: >-
-                  `drive` บันทึก prompt ใหม่ แล้ว `loopStep` หา `tool_use` ของคำตอบล่าสุดที่ยังไม่มีผล ถ้า engine ตายขณะเครื่องมือรัน
-                  call นั้นยังค้าง และไม่เข้าเงื่อนไขของ `unrunnable` จึงได้ `run-tools` คำสั่งเดิมรันอีกครั้งก่อนโมเดลจะเห็น prompt ใหม่
-                  ถ้า engine ตายขณะเรียกโมเดล ได้ `call-model` และโมเดลเห็นทั้ง prompt เดิมและ prompt ใหม่
+                  `drive` บันทึก prompt ใหม่ แล้ว `loopStep` หา `tool_use` ของคำตอบล่าสุดที่ยังไม่มีผล ถ้า engine ตายขณะ tool รัน
+                  call นั้นยังค้าง และไม่เข้าเงื่อนไขของ `unrunnable` จึงได้ `run-tools` คำสั่งเดิมรันอีกครั้งก่อน model จะเห็น prompt ใหม่
+                  ถ้า engine ตายขณะเรียก model ได้ `call-model` และ model เห็นทั้ง prompt เดิมและ prompt ใหม่
                 ref: packages/core/src/loop.ts#pendingToolUses
                 emits: [run-tools, call-model]
                 phase: running-tools
@@ -208,7 +208,7 @@ engine ตัวใหม่จึงรู้ทุกอย่างที่�
 | การรอเครือข่ายหรือ rate limit (`wait`) | เปิด turn แบบ `resume` ทันที |
 | subagent ที่กำลังทำงาน | ตอบ call ที่ค้างของลูกว่า "[Geno stopped] ..." บอกแม่ และให้ทำต่อได้จากแผง Tasks |
 | การปลุกที่ตั้งไว้ | รับช่วงไปปลุกตามเวลา |
-| turn ของแชตที่กำลังเรียกโมเดลหรือรัน tool | ไม่ทำอะไร จนกว่าผู้ใช้จะส่งข้อความ |
+| turn ของแชตที่กำลังเรียก model หรือรัน tool | ไม่ทำอะไร จนกว่าผู้ใช้จะส่งข้อความ |
 
 สิ่งที่ควรสังเกต
 

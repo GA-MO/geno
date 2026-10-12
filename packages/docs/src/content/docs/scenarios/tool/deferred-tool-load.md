@@ -1,16 +1,16 @@
 ---
 title: "Model โหลด tool ที่เลื่อนไว้ด้วย tool_search"
-description: tool นอกชุดหลักส่งให้โมเดลแค่ชื่อ โมเดลต้องเรียก tool_search ก่อนใช้ ถ้าเรียกเลยจะถูกปฏิเสธพร้อมคำบอกให้โหลดก่อน
+description: tool นอกชุดหลักส่งให้ model แค่ชื่อ model ต้องเรียก tool_search ก่อนใช้ ถ้าเรียกเลยจะถูกปฏิเสธพร้อมคำบอกให้โหลดก่อน
 tableOfContents: false
 sidebar:
   order: 6
 scenario:
   surface: vscode
   given:
-    - turn กำลังทำงาน และรอบนี้เลื่อนเครื่องมือนอกชุดหลักไว้ (หรือมี MCP server เปิดอยู่) จึงมี `tool_search` ในรายการเครื่องมือ
-    - "`monitor` เป็นเครื่องมือที่เลื่อนไว้ โมเดลเห็นแค่ชื่อและคำอธิบายสั้นในคำอธิบายของ `tool_search` และยังไม่เคยโหลดใน session นี้"
+    - turn กำลังทำงาน และรอบนี้เลื่อน tool นอกชุดหลักไว้ (หรือมี MCP server เปิดอยู่) จึงมี `tool_search` ในรายการ tool
+    - "`monitor` เป็น tool ที่เลื่อนไว้ model เห็นแค่ชื่อและคำอธิบายสั้นในคำอธิบายของ `tool_search` และยังไม่เคยโหลดใน session นี้"
   trigger: >-
-    โมเดลต้องการรอบรรทัด "listening" จากงานเบื้องหลัง `bg-1` ด้วย `monitor`
+    model ต้องการรอบรรทัด "listening" จากงานเบื้องหลัง `bg-1` ด้วย `monitor`
   covers: [tool.deferred-tool-load]
   related: [tool.bash-background, ext.mcp-tool-call, turn.with-tools]
   steps:
@@ -19,18 +19,18 @@ scenario:
       beat:
         title: "Model อยากใช้ monitor"
         text: >-
-          `monitor` เป็น tool ที่เลื่อนไว้ โมเดลเห็นแค่ชื่อและคำอธิบายสั้นในคำอธิบายของ `tool_search` ยังไม่รู้ input
-          ของมัน ลองเลือกว่าโมเดลเรียกอะไรก่อน
+          `monitor` เป็น tool ที่เลื่อนไว้ model เห็นแค่ชื่อและคำอธิบายสั้นในคำอธิบายของ `tool_search` ยังไม่รู้ input
+          ของมัน ลองเลือกว่า model เรียกอะไรก่อน
         from: model
         to: engine
         ask: "เรียกอะไรก่อน"
       do: >-
-        โมเดลตัดสินใจว่าจะใช้ `monitor` และส่งบล็อก `tool_use` ออกมา จบด้วย `stop_reason: tool_use`
+        model ตัดสินใจว่าจะใช้ `monitor` และส่งบล็อก `tool_use` ออกมา จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
       fork:
-        ask: โมเดลเรียกอะไรก่อน
+        ask: model เรียกอะไรก่อน
         options:
           - id: direct
             label: เรียก monitor เลย
@@ -71,11 +71,11 @@ scenario:
                 beat:
                   title: "Geno เรียก model ต่อ"
                   text: >-
-                    turn ไม่หยุด Geno เรียกโมเดลอีกรอบ โมเดลได้อ่านว่าต้องโหลดก่อน
+                    turn ไม่หยุด Geno เรียก model อีกรอบ model ได้อ่านว่าต้องโหลดก่อน
                   from: engine
                   to: model
                 do: >-
-                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้อ่านว่าต้องโหลดก่อน
+                  `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ได้อ่านว่าต้องโหลดก่อน
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -88,7 +88,7 @@ scenario:
       beat:
         title: "Model เรียก tool_search เพื่อโหลด"
         text: >-
-          โมเดลเรียก `tool_search` ด้วยชื่อ tool ที่ต้องการ หรือด้วยคำบรรยายสิ่งที่ต้องการ run จริงด้านล่างโหลด
+          model เรียก `tool_search` ด้วยชื่อ tool ที่ต้องการ หรือด้วยคำบรรยายสิ่งที่ต้องการ run จริงด้านล่างโหลด
           `web_fetch` แบบเดียวกัน
         from: model
         to: engine
@@ -102,7 +102,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลเรียก `tool_search` ด้วย `select: ["monitor"]` (หรือ `query` ที่บรรยายสิ่งที่ต้องการ)
+        model เรียก `tool_search` ด้วย `select: ["monitor"]` (หรือ `query` ที่บรรยายสิ่งที่ต้องการ)
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -135,7 +135,7 @@ scenario:
           collapse:
             - content
       do: >-
-        `searchTools` หา `monitor` ในเครื่องมือที่เลื่อนไว้ แล้วคืนนิยามเต็มของมันเป็นข้อความ JSON (ชื่อ คำอธิบาย และ `input_schema`)
+        `searchTools` หา `monitor` ใน tool ที่เลื่อนไว้ แล้วคืนนิยามเต็มของมันเป็นข้อความ JSON (ชื่อ คำอธิบาย และ `input_schema`)
         พร้อมรายการ `loaded` ที่ติดไปกับ `tool-result` ถ้าไม่พบอะไรเลย ผลเป็น error
       ref: packages/core/src/deferred-tools.ts#searchTools
       emits: [loaded]
@@ -148,7 +148,7 @@ scenario:
       beat:
         title: "Geno จำว่าโหลดแล้วทั้ง session"
         text: >-
-          การโหลดอยู่ในบันทึกของ session จึงมีผลตลอด session รวมถึงหลัง reload Geno เรียกโมเดลต่อ
+          การโหลดอยู่ในบันทึกของ session จึงมีผลตลอด session รวมถึงหลัง reload Geno เรียก model ต่อ
         from: engine
         to: model
       do: >-
@@ -164,7 +164,7 @@ scenario:
       beat:
         title: "Model เรียก monitor ตาม schema"
         text: >-
-          คราวนี้ Geno ปล่อยผ่าน และแปลงค่าที่โมเดลเขียนเป็นข้อความ เช่น "2" หรือ "False" ให้เป็นชนิดตาม schema
+          คราวนี้ Geno ปล่อยผ่าน และแปลงค่าที่ model เขียนเป็นข้อความ เช่น "2" หรือ "False" ให้เป็นชนิดตาม schema
           ก่อนส่งต่อ run จริงด้านล่างเรียก `web_fetch` ที่เพิ่งโหลด
         from: model
         to: engine
@@ -177,8 +177,8 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลเรียก `monitor` ด้วย input ตาม schema ที่เพิ่งได้อ่าน คราวนี้ `gate` ปล่อยผ่าน
-        และแปลงค่าที่โมเดลเขียนเป็นข้อความ เช่น `"2"` หรือ `"False"` ให้เป็นชนิดตาม schema ก่อนส่งต่อ
+        model เรียก `monitor` ด้วย input ตาม schema ที่เพิ่งได้อ่าน คราวนี้ `gate` ปล่อยผ่าน
+        และแปลงค่าที่ model เขียนเป็นข้อความ เช่น `"2"` หรือ `"False"` ให้เป็นชนิดตาม schema ก่อนส่งต่อ
       ref: "packages/engine/src/tools/tool-search.ts#\"const typed = (raw: unknown) => coerceToSchema(roster.deferred.get(name)!.definition.input_schema, raw);\""
       emits: [tool_use]
       end: { turn: continues, reason: run-tools }

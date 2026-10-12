@@ -11,7 +11,7 @@ scenario:
     - workspace มีกฎสองข้อที่ผู้ใช้ตั้งใน Settings ส่วน Permissions คือ allow `make` และ deny `git push`
     - ไม่มี hook ที่ตั้งไว้
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วยคำสั่งที่กฎข้อใดข้อหนึ่งครอบคลุม
+    model ขอเรียก `bash` ด้วยคำสั่งที่กฎข้อใดข้อหนึ่งครอบคลุม
   covers: [perm.allow-rule-covers, perm.deny-rule]
   related: [perm.always-allow-workspace, perm.ask-allow, perm.auto-classifier-allows, tool.bash-safe-runs]
   steps:
@@ -21,11 +21,11 @@ scenario:
         title: "Model ขอรันคำสั่ง"
         text: >-
           คุณตั้งกฎไว้ใน Settings ส่วน Permissions สองข้อ อนุญาต `make` และห้าม `git push`
-          โมเดลขอรันคำสั่งที่กฎข้อใดข้อหนึ่งครอบ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+          model ขอรันคำสั่งที่กฎข้อใดข้อหนึ่งครอบ แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -55,7 +55,7 @@ scenario:
         แล้วกฎในตัวของ Geno แล้วจึงกฎ allow
       ref: packages/core/src/permission-rules.ts#ruledDenial
       fork:
-        ask: โมเดลขอรันคำสั่งไหน
+        ask: model ขอรันคำสั่งไหน
         options:
           - id: allow
             label: make check (กฎ allow ครอบคลุม)
@@ -92,7 +92,7 @@ scenario:
                 beat:
                   title: "Model อ่านผลของคำสั่ง"
                   text: >-
-                    Geno เรียกโมเดลต่อ โมเดลได้อ่านผล
+                    Geno เรียก model ต่อ model ได้อ่านผล
                   from: engine
                   to: model
                   end: "กฎอนุญาต turn ทำต่อ"
@@ -145,13 +145,13 @@ scenario:
                 beat:
                   title: "คำสั่งไม่รัน ผลบอกให้อย่าลองซ้ำ"
                   text: >-
-                    ผลบอกโมเดลว่ากฎของ workspace ห้ามคำสั่งนี้ อย่าลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎหยุดไว้ Geno
+                    ผลบอก model ว่ากฎของ workspace ห้ามคำสั่งนี้ อย่าลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎหยุดไว้ Geno
                     บันทึกผลพร้อมบันทึกการปฏิเสธแล้วส่งไปที่แชต
                   from: engine
                   to: model
                 runs: 0
                 do: >-
-                  คำสั่งไม่ได้รัน ข้อความผลบอกโมเดลว่าอย่าลองซ้ำ ("denied: `git push origin main` matches the workspace rule
+                  คำสั่งไม่ได้รัน ข้อความผลบอก model ว่าอย่าลองซ้ำ ("denied: `git push origin main` matches the workspace rule
                   that denies `git push`, ... Do not retry it; find another way, or say in your answer that the rule stops you.")
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied]
@@ -178,13 +178,13 @@ scenario:
                 beat:
                   title: "แชตขึ้นป้าย Denied by a rule (git push)"
                   text: >-
-                    VS Code รู้ว่าเป็นกฎของคุณเอง จึงแสดงชื่อกฎ คำอธิบาย และปุ่มดูข้อความที่โมเดลได้รับ
+                    VS Code รู้ว่าเป็นกฎของคุณเอง จึงแสดงชื่อกฎ คำอธิบาย และปุ่มดูข้อความที่ model ได้รับ
                   from: panel
                   to: you
                   sees: { kind: step, label: git push origin main, status: denied, note: Denied by a rule (git push) · Your rule in Settings under Permissions blocks it. }
                 alongside: true
                 do: >-
-                  ขั้นของคำสั่งขึ้นป้ายปฏิเสธพร้อมชื่อกฎ คำอธิบาย และปุ่มดูข้อความที่โมเดลได้รับ
+                  ขั้นของคำสั่งขึ้นป้ายปฏิเสธพร้อมชื่อกฎ คำอธิบาย และปุ่มดูข้อความที่ model ได้รับ
                 sees: >-
                   ป้าย "Denied by a rule (git push)" ใต้ขั้นมี "Your rule in Settings under Permissions blocks it." และลิงก์ Show details
                 ref: packages/extension/src/chat/render.ts#DENIED_BY
@@ -193,13 +193,13 @@ scenario:
                 beat:
                   title: "Model หาทางอื่นหรือบอกคุณ"
                   text: >-
-                    คุณไม่ได้เป็นคนปฏิเสธ turn จึงไม่จบ Geno เรียกโมเดลต่อ โมเดลอ่านว่ากฎหยุดมันไว้
+                    คุณไม่ได้เป็นคนปฏิเสธ turn จึงไม่จบ Geno เรียก model ต่อ model อ่านว่ากฎหยุดมันไว้
                   from: engine
                   to: model
                   end: "กฎห้าม turn ทำต่อ"
                 do: >-
                   `loopStep` เห็น `tool-result` ล่าสุดและไม่มีการปฏิเสธจากผู้ใช้ จึงตัดสิน `call-model`
-                  โมเดลอ่านว่ากฎหยุดมันไว้ แล้วหาทางอื่นหรือบอกผู้ใช้
+                  model อ่านว่ากฎหยุดมันไว้ แล้วหาทางอื่นหรือบอกผู้ใช้
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -219,7 +219,7 @@ scenario:
 
 สิ่งที่ควรสังเกต
 
-- **deny ไม่จบ turn** การปฏิเสธโดยกฎเป็น `ToolDenied` โมเดลทำต่อ ต่างจากผู้ใช้กด Deny บนการ์ดซึ่งเป็น `ToolRejected` และจบ turn
+- **deny ไม่จบ turn** การปฏิเสธโดยกฎเป็น `ToolDenied` model ทำต่อ ต่างจากผู้ใช้กด Deny บนการ์ดซึ่งเป็น `ToolRejected` และจบ turn
 - **allow ไม่ครอบคลุมทุกอย่าง** คำสั่งที่ต้องถามเสมอ เช่น `rm -rf` ของ workspace หรือคำสั่งที่มี path นอก workspace ซึ่งรูปแบบของกฎไม่ได้ครอบคลุม ยังถามอยู่
   `pnpm vitest run ../../x` จึงไม่ผ่านด้วยกฎ `pnpm vitest run`
 - **Plan ไม่อ่านกฎเลย** โหมด Plan ใช้เฉพาะคำตัดสินในตัว กฎ allow จึงไม่ทำให้คำสั่งรันใน Plan

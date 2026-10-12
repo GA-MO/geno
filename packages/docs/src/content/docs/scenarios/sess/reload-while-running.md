@@ -7,7 +7,7 @@ sidebar:
 scenario:
   surface: vscode
   given:
-    - turn ของแชตนี้กำลังทำงาน โมเดลเขียนคำตอบไปได้ครึ่งหนึ่ง
+    - turn ของแชตนี้กำลังทำงาน model เขียนคำตอบไปได้ครึ่งหนึ่ง
     - หน้าต่างนี้เป็นหน้าต่างเดียวที่แสดง session นี้
   trigger: >-
     ผู้ใช้รันคำสั่ง "Developer: Reload Window" (หรือปิดหน้าต่างแล้วเปิดโฟลเดอร์เดิมใหม่)
@@ -110,7 +110,7 @@ scenario:
       at: rail
       alongside: true
       do: >-
-        แผงได้ action `reset` ที่มีบทสนทนาทั้งหมด turn สุดท้ายยังไม่จบ ข้อความที่โมเดลเขียนไว้กลับมา แล้วข้อความใหม่ต่อท้าย
+        แผงได้ action `reset` ที่มีบทสนทนาทั้งหมด turn สุดท้ายยังไม่จบ ข้อความที่ model เขียนไว้กลับมา แล้วข้อความใหม่ต่อท้าย
       sees: >-
         บทสนทนาเดิม หัวข้อ "working" ข้อความครึ่งแรกของคำตอบตามด้วยส่วนที่ stream ต่อ และปุ่ม Stop แทนปุ่ม Send
       ref: packages/extension/src/chat/webview.ts#render
@@ -154,7 +154,7 @@ scenario:
       at: rail
       do: >-
         turn ปิดเหมือน turn ที่ส่งจากหน้าต่างนี้ หัวข้อบอกเวลา และท้าย turn มี usage
-      sees: หัวข้อ "worked for 1m 4s" ปุ่ม Send กลับมา และแถวสรุปโมเดล token และค่าใช้จ่าย
+      sees: หัวข้อ "worked for 1m 4s" ปุ่ม Send กลับมา และแถวสรุป model token และค่าใช้จ่าย
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: done, reason: end_turn }
 ---

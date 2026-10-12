@@ -1,6 +1,6 @@
 ---
 title: "subagent เบื้องหลังรายงานแล้วปลุก session"
-description: โมเดลเริ่ม explore แบบเบื้องหลังแล้วจบ turn ลูกทำงานต่อ เมื่อรายงานมาถึง engine บันทึกลง log แล้วเปิด turn ใหม่เองให้โมเดลเล่าผล
+description: model เริ่ม explore แบบเบื้องหลังแล้วจบ turn ลูกทำงานต่อ เมื่อรายงานมาถึง engine บันทึกลง log แล้วเปิด turn ใหม่เองให้ model เล่าผล
 tableOfContents: false
 sidebar:
   order: 1
@@ -10,7 +10,7 @@ scenario:
     - ค่า `agentTool` มีโหมดปัจจุบัน และการปลุกอัตโนมัติ (`gcode.wake.auto`) เปิดอยู่ตามค่าเริ่มต้น
     - หน้าต่าง VS Code ที่แสดง session นี้ยังเปิดอยู่
   trigger: >-
-    ผู้ใช้ขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า โมเดลเริ่ม `explore` แบบเบื้องหลัง
+    ผู้ใช้ขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า model เริ่ม `explore` แบบเบื้องหลัง
   covers: [bg.child-wakes-parent]
   related: [bg.command-ends-wakes, bg.task-attention, bg.wake-held-or-paused, bg.arrives-mid-turn, sub.blocking-report]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/subagent.ts#agentToolDefinition
       emits: [tool_use]
       phase: calling-model
@@ -80,7 +80,7 @@ scenario:
     - id: says
       lane: model
       do: >-
-        โมเดลตอบผู้ใช้ว่า explore กำลังสำรวจอยู่และจะเล่าเมื่อรายงานมาถึง แล้วจบด้วย `stop_reason: end_turn`
+        model ตอบผู้ใช้ว่า explore กำลังสำรวจอยู่และจะเล่าเมื่อรายงานมาถึง แล้วจบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -107,7 +107,7 @@ scenario:
       at: rail
       do: >-
         turn จบแบบ done `turn-end` ปิดทุกอย่างที่ยังรันอยู่ใน turn นั้น รวมถึงแถวของลูกเบื้องหลัง ซึ่งขึ้นเป็น Cancelled ทั้งที่ลูกยังทำงานอยู่
-      sees: หัวข้อ "worked for 12s" คำตอบของโมเดล และแถว explore ที่ขึ้นไอคอน cancelled
+      sees: หัวข้อ "worked for 12s" คำตอบของ model และแถว explore ที่ขึ้นไอคอน cancelled
       ref: "packages/extension/src/chat/transcript.ts#\"const children = Object.keys(settled.children\""
       phase: idle
 
@@ -248,7 +248,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
-        โมเดลอ่านรายงานที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ ตามด้วยข้อความ "Geno started this turn by itself (woke: 1 task finished)..."
+        model อ่านรายงานที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ ตามด้วยข้อความ "Geno started this turn by itself (woke: 1 task finished)..."
         แล้วเล่าผลของ explore ให้ผู้ใช้ จบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNotice
       emits: [end_turn]

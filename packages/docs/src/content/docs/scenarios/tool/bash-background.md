@@ -1,6 +1,6 @@
 ---
 title: "Model รันคำสั่งเบื้องหลัง"
-description: โมเดลรันคำสั่งที่ไม่จบเองด้วย run_in_background harness เปิดงาน bg-1 ใน sandbox แล้วคืนผลทันที งานรันต่อขณะที่ turn ทำงานอื่น
+description: model รันคำสั่งที่ไม่จบเองด้วย run_in_background harness เปิดงาน bg-1 ใน sandbox แล้วคืนผลทันที งานรันต่อขณะที่ turn ทำงานอื่น
 tableOfContents: false
 sidebar:
   order: 4
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในโหมด Ask หรือ Auto
     - session นี้ยังไม่มีงานเบื้องหลัง ไม่มี hook และไม่มีกฎของ workspace ที่ตรงกับคำสั่ง
   trigger: >-
-    โมเดลขอเรียก `bash` ด้วย `pnpm tsc --watch` และ `run_in_background: true`
+    model ขอเรียก `bash` ด้วย `pnpm tsc --watch` และ `run_in_background: true`
   covers: [tool.bash-background]
   related: [tool.bash-safe-runs, bg.command-ends-wakes, perm.plan-edit-refused]
   steps:
@@ -19,7 +19,7 @@ scenario:
       beat:
         title: "Model ขอรันคำสั่งที่ไม่จบเองเบื้องหลัง"
         text: >-
-          `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง โมเดลจึงขอรันเป็นงานเบื้องหลัง run จริงด้านล่างขอรัน dev server
+          `pnpm tsc --watch` เฝ้าไฟล์และไม่จบเอง model จึงขอรันเป็นงานเบื้องหลัง run จริงด้านล่างขอรัน dev server
           แบบเดียวกัน
         from: model
         to: engine
@@ -33,7 +33,7 @@ scenario:
           collapse:
             - "[0].thinking"
       do: >-
-        โมเดลขอรัน `pnpm tsc --watch` เป็นงานเบื้องหลัง เพราะคำสั่งนี้เฝ้าไฟล์และไม่จบเอง จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอรัน `pnpm tsc --watch` เป็นงานเบื้องหลัง เพราะคำสั่งนี้เฝ้าไฟล์และไม่จบเอง จบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -136,7 +136,7 @@ scenario:
       beat:
         title: "bash คืนผลทันทีโดยไม่รอ"
         text: >-
-          ผลบอกชื่องานและที่อยู่ไฟล์ output และบอกโมเดลว่าไม่ต้องคอยถาม Geno จะบอกเองเมื่องานจบ
+          ผลบอกชื่องานและที่อยู่ไฟล์ output และบอก model ว่าไม่ต้องคอยถาม Geno จะบอกเองเมื่องานจบ
         from: engine
         to: model
         sees:
@@ -147,7 +147,7 @@ scenario:
           highlight:
             - content
       do: >-
-        `bash` คืนผลทันทีโดยไม่รอคำสั่ง ข้อความผลบอกชื่องาน ที่อยู่ไฟล์ output และบอกโมเดลว่าไม่ต้องคอยถาม
+        `bash` คืนผลทันทีโดยไม่รอคำสั่ง ข้อความผลบอกชื่องาน ที่อยู่ไฟล์ output และบอก model ว่าไม่ต้องคอยถาม
         ("Started background command bg-1. ... Geno tells you when it ends, so do not poll it.")
       ref: packages/core/src/background.ts#backgroundStartText
 
@@ -159,12 +159,12 @@ scenario:
       beat:
         title: "Model ทำงานอื่นต่อ"
         text: >-
-          Geno เรียกโมเดลต่อ ขณะที่ bg-1 ยังรันอยู่ โมเดลทำอย่างอื่นใน turn เดิมได้
+          Geno เรียก model ต่อ ขณะที่ bg-1 ยังรันอยู่ model ทำอย่างอื่นใน turn เดิมได้
         from: engine
         to: model
         end: "งานรันต่อเบื้องหลัง"
       do: >-
-        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลทำงานอื่นต่อขณะที่ `bg-1` ยังรันอยู่
+        `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` model ทำงานอื่นต่อขณะที่ `bg-1` ยังรันอยู่
       ref: packages/core/src/loop.ts#loopStep
       emits: [call-model]
       phase: calling-model
@@ -177,13 +177,13 @@ scenario:
 | --- | --- |
 | อ่าน output | `bash_output` หรือ `read` ไฟล์ output |
 | รอบรรทัดที่ต้องการ เช่น "listening" | `monitor` |
-| หยุดงาน | `task_stop` (โมเดล) หรือปุ่ม Stop ใต้กล่องคำสั่ง (ผู้ใช้) |
+| หยุดงาน | `task_stop` (model) หรือปุ่ม Stop ใต้กล่องคำสั่ง (ผู้ใช้) |
 
 สิ่งที่ควรสังเกต
 
 - **sandbox เดียวกับคำสั่งปกติ** งานเบื้องหลังเขียนได้เฉพาะใน workspace และไดเรกทอรีชั่วคราว และใช้เครือข่ายไม่ได้ถ้าไม่ได้อนุญาตโดเมนไว้
   ความต่างคือไม่มีเวลาสูงสุด
-- **การจบของงานกลับมาหาโมเดลเอง** เมื่อ `bg-1` จบ engine ส่งข่าวเข้า inbox ของ session ซึ่ง `deliver()` บันทึกที่จุดปลอดภัยถัดไป
+- **การจบของงานกลับมาหา model เอง** เมื่อ `bg-1` จบ engine ส่งข่าวเข้า inbox ของ session ซึ่ง `deliver()` บันทึกที่จุดปลอดภัยถัดไป
   หรือปลุก session ขึ้นมาใหม่ถ้าไม่มี turn ทำงาน
 - **โหมด Plan ไม่มีงานเบื้องหลัง** `approveCommand` ปฏิเสธด้วย `ToolError` ก่อนดูกฎใดๆ
   ("background commands are not available: ...")

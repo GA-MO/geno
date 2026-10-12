@@ -1,6 +1,6 @@
 ---
 title: เฝ้าดู CI ของ PR
-description: โมเดลเรียก watch_pr หลัง push engine ถาม gh เป็นระยะจนทุก check จบ แล้วปลุก session พร้อมรายงานและ log ของ check ที่ล้ม
+description: model เรียก watch_pr หลัง push engine ถาม gh เป็นระยะจนทุก check จบ แล้วปลุก session พร้อมรายงานและ log ของ check ที่ล้ม
 tableOfContents: false
 sidebar:
   order: 6
@@ -8,9 +8,9 @@ scenario:
   surface: vscode
   given:
     - การปลุกอัตโนมัติเปิดอยู่ ติดตั้งและล็อกอิน `gh` แล้ว branch ปัจจุบันมี PR #42 บน GitHub
-    - โมเดลเพิ่ง push commit ใหม่ CI กำลังรัน
+    - model เพิ่ง push commit ใหม่ CI กำลังรัน
   trigger: >-
-    โมเดลเรียก `watch_pr` เพื่อรอผล CI
+    model เรียก `watch_pr` เพื่อรอผล CI
   covers: [bg.watch-pr]
   related: [bg.monitor-wakes, bg.schedule-wakeup, bg.user-cancels-wakes]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `watch_pr` (เฝ้าได้นานสุดตามค่าเริ่มต้น 1 ชั่วโมง ตั้งได้ถึง 2 ชั่วโมง) จบคำตอบด้วย `stop_reason: tool_use`
+        model ขอเรียก `watch_pr` (เฝ้าได้นานสุดตามค่าเริ่มต้น 1 ชั่วโมง ตั้งได้ถึง 2 ชั่วโมง) จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/engine/src/tools/pr.ts#watchPrExecutor
       emits: [tool_use, watch_pr]
       phase: calling-model
@@ -40,7 +40,7 @@ scenario:
       at: executor
       do: >-
         executor ถาม `gh` หนึ่งครั้งด้วย argv ที่ประกอบเองทั้งชุด (`gh pr view --json ...` และ `gh pr checks --json ...`)
-        ไม่มีข้อความจากโมเดลหรือจาก log เข้าไปใน argv
+        ไม่มีข้อความจาก model หรือจาก log เข้าไปใน argv
       ref: packages/engine/src/gh.ts#lookUpPr
       fork:
         ask: CI เป็นอย่างไรตอนดูครั้งแรก
@@ -72,7 +72,7 @@ scenario:
                   end: Turn ทำต่อ
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลอ่านผล CI ใน turn เดิม
+                  `loopStep` ตัดสิน `call-model` model อ่านผล CI ใน turn เดิม
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -105,7 +105,7 @@ scenario:
         sees: แถวของ session บอก "Wakes on ..." พร้อมปุ่ม [Cancel]
       lane: model
       do: >-
-        โมเดลบอกผู้ใช้ว่ากำลังรอ CI ของ PR #42 แล้วจบด้วย `stop_reason: end_turn`
+        model บอกผู้ใช้ว่ากำลังรอ CI ของ PR #42 แล้วจบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -155,7 +155,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
-        หัวของ turn บอก "woke: CI failed" โมเดลอ่าน "PR watch wake-1 ended." ตามด้วยรายงานและ log ของ check ที่ล้ม
+        หัวของ turn บอก "woke: CI failed" model อ่าน "PR watch wake-1 ended." ตามด้วยรายงานและ log ของ check ที่ล้ม
         แล้วเปิดไฟล์ที่ทำให้เทสต์ล้ม เล่าสาเหตุให้ผู้ใช้ และจบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNoteText
       emits: [end_turn]
@@ -164,8 +164,8 @@ scenario:
     - use: bg-woken-ends
 ---
 
-`watch_pr` ใช้ `gh` ที่ผู้ใช้ล็อกอินไว้ อ่านอย่างเดียว และ engine เป็นคนถามซ้ำ ไม่ใช่โมเดล
-โมเดลจึงไม่ต้องวนรอและไม่เสียค่าเรียกโมเดลระหว่าง CI รัน
+`watch_pr` ใช้ `gh` ที่ผู้ใช้ล็อกอินไว้ อ่านอย่างเดียว และ engine เป็นคนถามซ้ำ ไม่ใช่ model
+model จึงไม่ต้องวนรอและไม่เสียค่าเรียก model ระหว่าง CI รัน
 
 | CI จบแบบ | ป้ายบนหัวของ turn |
 | --- | --- |

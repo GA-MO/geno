@@ -120,7 +120,7 @@ scenario:
       do: >-
         `startScheduled` เปิด session ใหม่ชื่อตามงาน งานอ่านอย่างเดียวรันใน checkout หลักโหมด Plan
         (งานที่แก้ไฟล์ได้ lane ใหม่และรันโหมด Auto) ขีดจำกัดของ turn คืองบของงาน ไม่ใช่ 40 ครั้งและ $0.40 ของ `gcode serve`
-        ในทัวร์นี้คือเรียกโมเดลได้ 20 ครั้ง และ $0.20 การตรวจขีดจำกัดก่อนเรียกโมเดลแต่ละครั้งในขั้นถัดไปใช้ตัวเลขนี้
+        ในทัวร์นี้คือเรียก model ได้ 20 ครั้ง และ $0.20 การตรวจขีดจำกัดก่อนเรียก model แต่ละครั้งในขั้นถัดไปใช้ตัวเลขนี้
       ref: "packages/engine/src/serve.ts#\"const startScheduled = async (workspace: string, task: ScheduledTask) => {\""
       phase: starting
 
@@ -134,8 +134,8 @@ scenario:
       lane: loop
       at: agent
       do: >-
-        `runAgent` ของรอบตามตารางไม่มี `ask_user` และ `remember` ไม่ขยับ editor ไม่เปิด terminal และไม่มีเครื่องมือ schedule หรือ workflow
-        ข้อความแรกบอกโมเดลว่าไม่มีใครอ่านจนกว่าจะจบ ไม่มีใครตอบคำถาม ให้ทำตามที่ขอแล้วจบด้วยรายงานสั้นๆ
+        `runAgent` ของรอบตามตารางไม่มี `ask_user` และ `remember` ไม่ขยับ editor ไม่เปิด terminal และไม่มี tool schedule หรือ workflow
+        ข้อความแรกบอก model ว่าไม่มีใครอ่านจนกว่าจะจบ ไม่มีใครตอบคำถาม ให้ทำตามที่ขอแล้วจบด้วยรายงานสั้นๆ
       ref: packages/core/src/schedule.ts#SCHEDULED_RUN_NOTE
 
     - id: running
@@ -158,7 +158,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลทำตาม prompt ด้วยเครื่องมืออ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของเครื่องมือไว้) แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
+        model ทำตาม prompt ด้วย tool อ่านที่โหมด Plan ยอม (ทัวร์นี้ย่อรอบของ tool ไว้) แล้วเขียนรายงานสั้นๆ ว่ามีอะไรล้าสมัย
         จบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]

@@ -70,11 +70,11 @@ scenario:
       beat:
         title: "Geno เลือก provider และ model"
         text: >-
-          engine เลือก provider และโมเดลก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้และไม่มีไฟล์ session ค้างไว้
+          engine เลือก provider และ model ก่อนเขียนอะไรลงดิสก์ ถ้าคีย์ขาด error เกิดตรงนี้และไม่มีไฟล์ session ค้างไว้
         from: engine
         to: engine
       do: >-
-        `startSession` เลือก provider และโมเดลจาก `GCODE_PROVIDER` และ `GCODE_MODEL` (ค่าเริ่มต้น Model Studio)
+        `startSession` เลือก provider และ model จาก `GCODE_PROVIDER` และ `GCODE_MODEL` (ค่าเริ่มต้น Model Studio)
         และสร้าง gateway ก่อนเขียนอะไร ถ้าคีย์ขาด error จะเกิดตรงนี้และไม่เหลือไฟล์ session ค้าง
       ref: packages/engine/src/chat.ts#startSession
 
@@ -100,13 +100,13 @@ scenario:
       beat:
         title: "Geno โหลด skill, memory และสภาพแวดล้อม"
         text: >-
-          พร้อมกันนั้น Geno โหลดรายการ skill ที่โมเดลเรียกได้ โน้ตใน memory ของคุณและของโปรเจกต์ และภาพของเครื่อง
+          พร้อมกันนั้น Geno โหลดรายการ skill ที่ model เรียกได้ โน้ตใน memory ของคุณและของโปรเจกต์ และภาพของเครื่อง
           เช่นสถานะ git, shell และวันที่
         from: engine
         to: engine
       do: >-
-        พร้อมกันนั้น `newSession` โหลดรายการสกิลที่โมเดลเรียกได้ โน้ตในหน่วยความจำของผู้ใช้และของโปรเจกต์
-        และภาพสภาพแวดล้อม: สถานะ git, platform, shell, ไดเรกทอรี scratchpad, วันที่ และโมเดล
+        พร้อมกันนั้น `newSession` โหลดรายการสกิลที่ model เรียกได้ โน้ตในหน่วยความจำของผู้ใช้และของโปรเจกต์
+        และภาพสภาพแวดล้อม: สถานะ git, platform, shell, ไดเรกทอรี scratchpad, วันที่ และ model
       ref: packages/engine/src/chat.ts#newSession
 
     - id: frozen
@@ -180,7 +180,7 @@ scenario:
           select: messages[0].content[2]
       do: >-
         `runAgent` เปิด hooks ของ session นี้ครั้งแรกใน process นี้ ถ้าตั้ง SessionStart hook ไว้ มันทำงานด้วย source `startup`
-        เพราะโมเดลยังไม่เคยตอบ ข้อความที่ hook พิมพ์ออกมาถูกบันทึกและไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ไม่มีอะไรเกิดขึ้นตรงนี้
+        เพราะ model ยังไม่เคยตอบ ข้อความที่ hook พิมพ์ออกมาถูกบันทึกและไปต่อท้ายส่วนเปิดของข้อความแรก ไม่มี hook ก็ไม่มีอะไรเกิดขึ้นตรงนี้
       ref: packages/engine/src/hooks.ts#HookSessions.open
       emits: [SessionStart]
 
@@ -190,11 +190,11 @@ scenario:
       beat:
         title: "Geno บันทึก prompt ต่อจากส่วนเปิด"
         text: >-
-          Geno บันทึกข้อความของคุณต่อจากบรรทัดแรก แล้วตัดสินจากบันทึกว่าขั้นต่อไปคือเรียกโมเดล
+          Geno บันทึกข้อความของคุณต่อจากบรรทัดแรก แล้วตัดสินจากบันทึกว่าขั้นต่อไปคือเรียก model
         from: engine
         to: engine
       do: >-
-        `drive` บันทึก event `user` ต่อจาก `session-start` แล้ว UserPromptSubmit hooks ได้อ่าน prompt ก่อนโมเดล
+        `drive` บันทึก event `user` ต่อจาก `session-start` แล้ว UserPromptSubmit hooks ได้อ่าน prompt ก่อน model
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
       emits: [user]
 
@@ -246,12 +246,12 @@ scenario:
       beat:
         title: "Model อ่านคำสั่งก่อนเริ่มงาน"
         text: >-
-          โมเดลอ่านคำสั่งของคุณและของโปรเจกต์ก่อนถึงคำขอ แล้วเริ่มทำงาน จากตรงนี้ turn เดินเหมือน turn ปกติ
+          model อ่านคำสั่งของคุณและของโปรเจกต์ก่อนถึงคำขอ แล้วเริ่มทำงาน จากตรงนี้ turn เดินเหมือน turn ปกติ
         from: model
         to: engine
         end: "turn ทำต่อตามปกติ"
       do: >-
-        โมเดลอ่านคำสั่งของผู้ใช้และของโปรเจกต์ก่อนคำขอ แล้วเริ่มทำงานตามข้อความ turn ดำเนินต่อเหมือน turn ปกติ
+        model อ่านคำสั่งของผู้ใช้และของโปรเจกต์ก่อนคำขอ แล้วเริ่มทำงานตามข้อความ turn ดำเนินต่อเหมือน turn ปกติ
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       end: { turn: continues }
 ---
@@ -263,9 +263,9 @@ context ของ session ถูกโหลด**ครั้งเดียว*
 | --- | --- | --- |
 | คำสั่งของผู้ใช้ | `AGENTS.md` ใน home ของ Geno, `CLAUDE.md` ของ Claude Code | `global_instructions` มีอำนาจเท่าคำพูดของผู้ใช้ |
 | คำสั่งของโปรเจกต์ | `AGENTS.override.md` / `AGENTS.md` / `CLAUDE.md` จากรากถึง workspace, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.cursor/rules` | `project_instructions` ขยายสิทธิ์ไม่ได้ |
-| สกิล | สกิลที่โมเดลเรียกได้ของผู้ใช้ ของ workspace และของ plugin | รายการชื่อและคำอธิบาย |
+| สกิล | สกิลที่ model เรียกได้ของผู้ใช้ ของ workspace และของ plugin | รายการชื่อและคำอธิบาย |
 | หน่วยความจำ | โน้ตของผู้ใช้และของโปรเจกต์นี้ | `memory` |
-| สภาพแวดล้อม | git, platform, shell, scratchpad, วันที่, โมเดล | ส่วน environment |
+| สภาพแวดล้อม | git, platform, shell, scratchpad, วันที่, model | ส่วน environment |
 
 สิ่งที่ควรสังเกต
 
@@ -273,7 +273,7 @@ context ของ session ถูกโหลด**ครั้งเดียว*
   context จึงถูกอ่านตอนกดปุ่ม ไม่ใช่ตอนพิมพ์ ดู [เริ่มแชทใหม่](/scenarios/sess/new-chat/)
 - **ไฟล์คำสั่งในโฟลเดอร์ย่อย** ไม่ถูกส่งตั้งแต่ต้น ข้อความแรกบอกแค่ว่ามีไฟล์ไหนบ้าง แต่ละไฟล์ถูกแนบไปกับผล `read`
   ครั้งแรกของไฟล์ที่อยู่ใต้โฟลเดอร์นั้น
-- **หน่วยความจำที่เปลี่ยนระหว่างแชต** ไม่แก้ส่วนเปิด การเปลี่ยนไปถึงโมเดลเป็น notice ที่จุดปลอดภัยก่อนการเรียกโมเดลครั้งถัดไป
+- **หน่วยความจำที่เปลี่ยนระหว่างแชต** ไม่แก้ส่วนเปิด การเปลี่ยนไปถึง model เป็น notice ที่จุดปลอดภัยก่อนการเรียก model ครั้งถัดไป
 - **แก้ `AGENTS.md` แล้วต้องเริ่มแชตใหม่** แชตเดิมยังส่งข้อความชุดที่ถูกบันทึกไว้ใน `session-start`
 
 อ่านต่อที่ [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) เพื่อดู turn ที่ตามมา

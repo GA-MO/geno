@@ -1,6 +1,6 @@
 ---
 title: "Model อ่านไฟล์นอก workspace"
-description: โมเดลอ่านไฟล์ในโปรเจกต์อื่น Geno ถามก่อนเหมือน cat ของ path นั้น ผู้ใช้อนุญาตครั้งเดียว อนุญาตทั้งโฟลเดอร์ตลอด session หรือปฏิเสธ
+description: model อ่านไฟล์ในโปรเจกต์อื่น Geno ถามก่อนเหมือน cat ของ path นั้น ผู้ใช้อนุญาตครั้งเดียว อนุญาตทั้งโฟลเดอร์ตลอด session หรือปฏิเสธ
 tableOfContents: false
 sidebar:
   order: 7
@@ -10,7 +10,7 @@ scenario:
     - turn กำลังทำงานในโหมด Ask
     - "`/Users/me/shared-lib` ไม่อยู่ใน workspace ไม่ได้อยู่ใน `additionalDirectories` และยังไม่เคยอนุญาตใน session นี้"
   trigger: >-
-    โมเดลขอเรียก `read` ด้วย path `/Users/me/shared-lib/src/date.ts`
+    model ขอเรียก `read` ด้วย path `/Users/me/shared-lib/src/date.ts`
   covers: [perm.read-outside-workspace]
   related: [perm.secret-read, perm.ask-allow, perm.ask-deny-ends-turn, tool.read-special-files]
   steps:
@@ -19,12 +19,12 @@ scenario:
       beat:
         title: "Model ขออ่านไฟล์ในโปรเจกต์อื่น"
         text: >-
-          โมเดลขอ `read` ไฟล์ `/Users/me/shared-lib/src/date.ts` ซึ่งอยู่นอก workspace และยังไม่เคยอนุญาตใน session นี้
+          model ขอ `read` ไฟล์ `/Users/me/shared-lib/src/date.ts` ซึ่งอยู่นอก workspace และยังไม่เคยอนุญาตใน session นี้
           แชตขึ้นขั้นใหม่พร้อมจุดหมุน
         from: model
         to: engine
       do: >-
-        โมเดลขอ `read` ไฟล์ด้วย path แบบเต็มนอก workspace จบด้วย `stop_reason: tool_use`
+        model ขอ `read` ไฟล์ด้วย path แบบเต็มนอก workspace จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       phase: calling-model
@@ -239,7 +239,7 @@ scenario:
       beat:
         title: "Model อ่านไฟล์แล้วทำต่อ"
         text: >-
-          Geno เรียกโมเดลต่อ โมเดลได้เนื้อไฟล์จากโปรเจกต์อื่น
+          Geno เรียก model ต่อ model ได้เนื้อไฟล์จากโปรเจกต์อื่น
         from: engine
         to: model
         end: "คุณอนุญาต turn ทำต่อ"

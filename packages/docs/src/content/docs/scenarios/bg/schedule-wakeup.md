@@ -1,6 +1,6 @@
 ---
 title: ตั้งเวลาปลุก
-description: โมเดลตั้งเวลาปลุกตัวเองพร้อมเหตุผล แล้วจบ turn เมื่อถึงเวลา engine เปิด turn ใหม่ให้โมเดลอ่านเหตุผลนั้นแล้วทำต่อ แม้ engine จะเริ่มใหม่ระหว่างรอ
+description: model ตั้งเวลาปลุกตัวเองพร้อมเหตุผล แล้วจบ turn เมื่อถึงเวลา engine เปิด turn ใหม่ให้ model อ่านเหตุผลนั้นแล้วทำต่อ แม้ engine จะเริ่มใหม่ระหว่างรอ
 tableOfContents: false
 sidebar:
   order: 5
@@ -8,9 +8,9 @@ scenario:
   surface: vscode
   given:
     - การปลุกอัตโนมัติเปิดอยู่ หน้าต่างที่แสดง session นี้ยังเปิดอยู่
-    - โมเดลเพิ่ง deploy ไป staging และ staging ใช้เวลาราว 10 นาทีกว่าจะพร้อม
+    - model เพิ่ง deploy ไป staging และ staging ใช้เวลาราว 10 นาทีกว่าจะพร้อม
   trigger: >-
-    โมเดลเรียก `schedule_wakeup` เพื่อกลับมาตรวจ staging ทีหลัง
+    model เรียก `schedule_wakeup` เพื่อกลับมาตรวจ staging ทีหลัง
   covers: [bg.schedule-wakeup]
   related: [bg.monitor-wakes, bg.task-stop-or-list, bg.user-cancels-wakes, bg.scheduled-task-fires]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `schedule_wakeup` ด้วย `delay_s: 600` และ `reason: "check staging health after the deploy"`
+        model ขอเรียก `schedule_wakeup` ด้วย `delay_s: 600` และ `reason: "check staging health after the deploy"`
         (ช่วงที่รับได้คือ 60 ถึง 3600 วินาที) จบคำตอบด้วย `stop_reason: tool_use`
       ref: packages/core/src/wake.ts#SCHEDULE_WAKEUP_TOOL
       emits: [tool_use, schedule_wakeup]
@@ -73,7 +73,7 @@ scenario:
           header: worked for 9s
       lane: model
       do: >-
-        โมเดลบอกผู้ใช้ว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบด้วย `stop_reason: end_turn`
+        model บอกผู้ใช้ว่าจะกลับมาตรวจในอีก 10 นาที แล้วจบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
 
@@ -154,7 +154,7 @@ scenario:
         end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
-        โมเดลอ่าน "Scheduled wake-up wake-1 is due: check staging health after the deploy" กับข้อความว่า Geno เริ่ม turn นี้เอง (woke: scheduled)
+        model อ่าน "Scheduled wake-up wake-1 is due: check staging health after the deploy" กับข้อความว่า Geno เริ่ม turn นี้เอง (woke: scheduled)
         แล้วเรียก `web_fetch` หน้า health ของ staging เล่าผลให้ผู้ใช้ และจบด้วย `stop_reason: end_turn`
       ref: packages/core/src/wake.ts#wakeNoteText
       emits: [end_turn]
@@ -170,6 +170,6 @@ monitor และการเฝ้า PR อยู่แค่ในหน่�
 
 - **ไม่ปลุกเกินกำหนด** ถ้าตอนถึงเวลามี turn รันอยู่ ผู้ใช้กำลังพิมพ์ หรือมีการ์ดค้าง ประตูรอจนว่าง
   ดู [การปลุกถูกพักหรือรอ](/scenarios/bg/wake-held-or-paused/)
-- **ยกเลิกได้สองทาง** โมเดลเรียก `task_stop wake-1` (ได้โน้ต `stopped` และไม่ดัง) หรือผู้ใช้กด Cancel ในแผง Tasks
+- **ยกเลิกได้สองทาง** model เรียก `task_stop wake-1` (ได้โน้ต `stopped` และไม่ดัง) หรือผู้ใช้กด Cancel ในแผง Tasks
 - **ต้องมี engine ที่มีหน้าต่างต่ออยู่** engine จบเองหลังหน้าต่างสุดท้ายปิดไป 10 วินาที ถ้าไม่มีหน้าต่างเปิดเลยตอนถึงเวลา
   การปลุกเกิดเมื่อมีหน้าต่างต่อ engine ใหม่ ซึ่งรับช่วงการปลุกที่ค้างไว้ (ภายใน 24 ชั่วโมง)

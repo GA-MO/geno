@@ -10,8 +10,8 @@ monorepo มีสามแพ็กเกจหลัก `packages/core` เป
 
 ```mermaid
 flowchart LR
-  core["packages/core<br/>loopStep, กฎสิทธิ์, คำขอโมเดล<br/>(บริสุทธิ์ ไม่มี I/O)"]
-  engine["packages/engine<br/>serve.ts, drive.ts, gateway,<br/>เครื่องมือ, sandbox, hooks"]
+  core["packages/core<br/>loopStep, กฎสิทธิ์, คำขอ model<br/>(บริสุทธิ์ ไม่มี I/O)"]
+  engine["packages/engine<br/>serve.ts, drive.ts, gateway,<br/>tool, sandbox, hooks"]
   ext["packages/extension<br/>chat.ts, webview, bridge,<br/>review, Tab"]
   engine --> core
   ext --> core
@@ -25,9 +25,9 @@ flowchart LR
 | สะพาน host กับ engine | `packages/extension/src/chat/chat.ts`, `session-updates.ts`, `steer-host.ts`, `bridge.ts`, `tasks-host.ts` |
 | เซิร์ฟเวอร์ ACP | `packages/engine/src/serve.ts` (`runTurn`, `editorTurn`, `TURN_ENDS`, `takeUpWaits`), `viewers.ts`, `session-replay.ts`, `tasks.ts` |
 | ลูป | `packages/engine/src/agent.ts`, `drive.ts`; `packages/core/src/loop.ts`, `session.ts`, `request.ts`, `steer.ts` |
-| การเรียกโมเดล | `packages/engine/src/gateway.ts`, `wire.ts`, `wire-openai.ts`, `stream-watch.ts`; `packages/core/src/model-error.ts` |
+| การเรียก model | `packages/engine/src/gateway.ts`, `wire.ts`, `wire-openai.ts`, `stream-watch.ts`; `packages/core/src/model-error.ts` |
 | Compaction | `packages/core/src/compaction.ts`; `packages/engine/src/compact.ts` |
-| เครื่องมือ | `packages/engine/src/tools/*.ts`, `process.ts`, `files.ts`; `packages/core/src/tool-batch.ts`, `edit.ts` |
+| tool | `packages/engine/src/tools/*.ts`, `process.ts`, `files.ts`; `packages/core/src/tool-batch.ts`, `edit.ts` |
 | นโยบาย | `packages/core/src/approval.ts`, `permission-rules.ts`, `auto.ts`, `classifier.ts`; `packages/engine/src/tools/agent.ts`, `permissions.ts` |
 | Hooks | `packages/core/src/hooks.ts`; `packages/engine/src/hooks.ts`, `hook-config.ts` |
 | Sandbox | `packages/engine/src/sandbox.ts`, `sandbox-host.ts` |

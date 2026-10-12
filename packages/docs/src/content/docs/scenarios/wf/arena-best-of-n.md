@@ -20,7 +20,7 @@ scenario:
         text: คุณขอให้ย้าย `src/log.ts` ไปใช้ pino สามแบบ ให้แต่ละ lane ใช้ model ต่างกัน engine ประมาณราคาต่อ lane แล้วแผง Arena แสดงการ์ด คุณกด Start แล้ว Geno สร้างสาม lane แต่ละตัวมี worktree และ session ของตัวเอง
         from: you
         to: panel
-        sees: การ์ดของ best-of-3 ที่มี lane A B C กับโมเดลของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
+        sees: การ์ดของ best-of-3 ที่มี lane A B C กับ model ของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
       lane: user
       do: ผู้ใช้พิมพ์คำสั่งแล้วกด Enter
       phase: idle
@@ -39,7 +39,7 @@ scenario:
       do: >-
         `ArenaHost` ส่งคำขอ `_gcode/arena/preview` engine ประมาณราคาต่อ lane จากค่ามัธยฐานของค่าใช้จ่าย session ล่าสุด 50 ตัว
         (ถ้ามี session ที่เสียเงินไม่ถึง 3 ตัว ใช้ค่าตั้งต้น $0.032 ต่อ lane) แล้วบวกเพดานของ review เข้าไป
-        แล้วตอบพร้อมรายการ variant ของแต่ละ lane (ที่นี่คือโมเดลต่างกัน)
+        แล้วตอบพร้อมรายการ variant ของแต่ละ lane (ที่นี่คือ model ต่างกัน)
       ref: packages/engine/src/arena.ts#arenaPreview
       emits: [_gcode/arena/preview]
 
@@ -48,7 +48,7 @@ scenario:
       at: arena
       do: >-
         แผง Arena เปิดขึ้นพร้อมการ์ดก่อนเริ่ม: งาน lane แต่ละตัวกับ variant ของมัน และราคาประมาณ
-      sees: การ์ดของ best-of-3 ที่มี lane A B C กับโมเดลของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
+      sees: การ์ดของ best-of-3 ที่มี lane A B C กับ model ของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
       ref: packages/extension/src/chat/arena-panel.ts#arenaPanel
 
     - id: start
@@ -84,21 +84,21 @@ scenario:
       lane: child@lane-a
       at: model
       do: >-
-        lane A รันงานด้วยโมเดลของตัวเองใน worktree ของตัวเอง เป็น session ระดับบนสุดที่ไม่มีแชตไหนรอ
+        lane A รันงานด้วย model ของตัวเองใน worktree ของตัวเอง เป็น session ระดับบนสุดที่ไม่มีแชตไหนรอ
       ref: packages/core/src/arena.ts#variantPrompt
 
     - id: race-b
       lane: child@lane-b
       at: model
       alongside: true
-      do: lane B รันงานเดียวกันพร้อมกันด้วยโมเดลอีกตัว
+      do: lane B รันงานเดียวกันพร้อมกันด้วย model อีกตัว
       ref: packages/core/src/arena.ts#variantPrompt
 
     - id: race-c
       lane: child@lane-c
       at: model
       alongside: true
-      do: lane C รันงานเดียวกันพร้อมกันด้วยโมเดลตัวที่สาม
+      do: lane C รันงานเดียวกันพร้อมกันด้วย model ตัวที่สาม
       ref: packages/core/src/arena.ts#variantPrompt
       fork:
         ask: ผู้ใช้รอหรือหยุด
@@ -284,10 +284,10 @@ Arena คือการแข่งของหลาย lane บนงาน�
 | race | แต่ละ lane รันงานใน worktree ของตัวเอง | session ระดับบนสุด หนึ่งตัวต่อ lane |
 | check | check ของโปรเจกต์ใน sandbox ของ lane | engine |
 | rank | review จัดอันดับ lane ที่ผ่าน (เมื่อผ่าน 2 ตัวขึ้นไป) | เอเจนต์ `review` ใน session ที่ไม่มีใครตอบการ์ด |
-| pick แล้ว graft | merge lane ผู้ชนะ แล้ว (ถ้าเลือก) hunk ของ lane อื่นทับ เข้าแชตของ checkout หลัก | turn ของแชตที่ไม่มีโมเดล |
+| pick แล้ว graft | merge lane ผู้ชนะ แล้ว (ถ้าเลือก) hunk ของ lane อื่นทับ เข้าแชตของ checkout หลัก | turn ของแชตที่ไม่มี model |
 
 สิ่งที่ควรสังเกต
 
-- **`/best-of-n` ไม่ถึงโมเดลของแชต** editor จัดการเองทั้งหมด แชตไม่มี turn จนกว่าผู้ใช้จะ Pick
+- **`/best-of-n` ไม่ถึง model ของแชต** editor จัดการเองทั้งหมด แชตไม่มี turn จนกว่าผู้ใช้จะ Pick
 - **lane ที่แพ้ยังอยู่** แผง Lanes ยังแสดงทุก lane ผู้ใช้ Discard เองหรือใช้ `gcode lane sweep` ลบ lane ที่ไม่มีอะไรจะเสีย
 - **lane ที่ชนเพดานยังถูกตรวจ** งานที่ไม่เสร็จแต่ผ่าน check ก็ได้ลงแข่งในอันดับ

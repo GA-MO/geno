@@ -1,6 +1,6 @@
 ---
 title: "Model ขอจดจำ"
-description: โมเดลเสนอโน้ตให้จำข้ามแชตด้วย remember Geno ถามผู้ใช้ทุกครั้งไม่ว่าโหมดไหน ถ้าผู้ใช้ตกลง โน้ตถูกบันทึกและโมเดลได้รู้ก่อนเรียกครั้งถัดไป
+description: model เสนอโน้ตให้จำข้ามแชตด้วย remember Geno ถามผู้ใช้ทุกครั้งไม่ว่าโหมดไหน ถ้าผู้ใช้ตกลง โน้ตถูกบันทึกและ model ได้รู้ก่อนเรียกครั้งถัดไป
 tableOfContents: false
 sidebar:
   order: 6
@@ -10,7 +10,7 @@ scenario:
     - เปิด Geno ในโหมด Auto มี turn ทำงานอยู่
     - ผู้ใช้เพิ่งบอกว่า "โปรเจกต์นี้ใช้ pnpm อย่าใช้ npm"
   trigger: >-
-    โมเดลเห็นว่าเป็นความชอบที่ควรจำไว้ในแชตต่อๆ ไป
+    model เห็นว่าเป็นความชอบที่ควรจำไว้ในแชตต่อๆ ไป
   covers: [ext.memory-write]
   related: [start.new-session-context, ext.mcp-tool-call, perm.auto-classifier-allows]
   steps:
@@ -22,7 +22,7 @@ scenario:
         to: engine
       lane: model
       do: >-
-        โมเดลขอเรียก `remember` ด้วย `text: "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้"` และ `scope: "project"`
+        model ขอเรียก `remember` ด้วย `text: "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้"` และ `scope: "project"`
         จบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
@@ -113,7 +113,7 @@ scenario:
                   end: Model ใช้ pnpm ต่อจากนี้
                 at: drive
                 do: >-
-                  ที่จุดปลอดภัยก่อนเรียกโมเดล `deliver()` บันทึก event `notice` ที่มีการเปลี่ยนแปลงของหน่วยความจำ
+                  ที่จุดปลอดภัยก่อนเรียก model `deliver()` บันทึก event `notice` ที่มีการเปลี่ยนแปลงของหน่วยความจำ
                   ข้อความแรกของ session ที่ตรึงไว้ไม่ถูกแก้ cache ของ prompt จึงไม่หลุด
                 ref: packages/core/src/memory.ts#memoryDelta
                 emits: [notice]
@@ -121,7 +121,7 @@ scenario:
               - lane: model
                 do: >-
                   คำขอถัดไปมีข้อความ "The user approved new notes for you to remember. Follow them where they apply..."
-                  พร้อมโน้ตใหม่ โมเดลใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตตั้งแต่ข้อความแรก
+                  พร้อมโน้ตใหม่ model ใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตตั้งแต่ข้อความแรก
                 ref: packages/core/src/memory.ts#renderMemoryDelta
                 end: { turn: continues }
 
@@ -150,7 +150,7 @@ scenario:
                   end: Model ทำต่อ
                 at: step
                 do: >-
-                  `loopStep` ตัดสิน `call-model` โมเดลทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
+                  `loopStep` ตัดสิน `call-model` model ทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
                 phase: calling-model
@@ -162,7 +162,7 @@ Geno จึงให้ผู้ใช้เห็นข้อความตร
 
 สิ่งที่ควรสังเกต
 
-- **ไม่มีทางลัด** การ์ดนี้ไม่มี "Always allow" และไม่ผ่าน classifier ของ Auto ใน run แบบ non-interactive เครื่องมือนี้ไม่มีให้โมเดลเลย
+- **ไม่มีทางลัด** การ์ดนี้ไม่มี "Always allow" และไม่ผ่าน classifier ของ Auto ใน run แบบ non-interactive tool นี้ไม่มีให้ model เลย
 - **ไม่ใช่ deny แบบจบ turn** "Don't remember" ให้ผลเป็นข้อความธรรมดา turn ทำต่อ ต่างจาก Deny บนการ์ดคำสั่ง
 - **ลบหรือแก้ได้ภายหลัง** `/memory` เปิดรายการโน้ต เมื่อผู้ใช้ลบโน้ต การเรียกครั้งถัดไปได้ข้อความว่า
   "These notes were deleted from memory or replaced; stop following them"

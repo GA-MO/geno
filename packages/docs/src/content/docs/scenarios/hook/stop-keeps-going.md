@@ -1,6 +1,6 @@
 ---
 title: "Stop hook ให้ model ทำงานต่อ"
-description: โมเดลจบ turn แล้ว แต่ Stop hook บล็อกพร้อมเหตุผล ลูปเรียกโมเดลอีกรอบให้อ่านเหตุผลนั้น ได้ครั้งเดียวติดกันจนกว่าโมเดลจะเรียกเครื่องมือ
+description: model จบ turn แล้ว แต่ Stop hook บล็อกพร้อมเหตุผล ลูปเรียก model อีกรอบให้อ่านเหตุผลนั้น ได้ครั้งเดียวติดกันจนกว่า model จะเรียก tool
 tableOfContents: false
 sidebar:
   order: 5
@@ -9,21 +9,21 @@ scenario:
   given:
     - workspace ที่เชื่อถือแล้ว `.claude/settings.json` มี Stop hook ที่รัน `tests-ran.sh`
       สคริปต์ตรวจว่า turn นี้รันเทสต์หรือยังจาก `transcript_path`
-    - turn กำลังทำงาน โมเดลแก้ `src/date.ts` ไปแล้วแต่ยังไม่ได้รันเทสต์
+    - turn กำลังทำงาน model แก้ `src/date.ts` ไปแล้วแต่ยังไม่ได้รันเทสต์
   trigger: >-
-    โมเดลเขียนสรุปว่าแก้เสร็จแล้ว และจบคำตอบด้วย `stop_reason: end_turn`
+    model เขียนสรุปว่าแก้เสร็จแล้ว และจบคำตอบด้วย `stop_reason: end_turn`
   covers: [hook.stop-keeps-going]
   related: [hook.post-tool, hook.user-prompt-submit, turn.with-tools]
   steps:
     - id: says
       beat:
         title: Model สรุปว่าแก้เสร็จแล้วจบ
-        text: โมเดลแก้ `src/date.ts` แล้ว แต่ยังไม่ได้รันเทสต์ มันเขียนสรุปและบอกว่าจบ turn
+        text: model แก้ `src/date.ts` แล้ว แต่ยังไม่ได้รันเทสต์ มันเขียนสรุปและบอกว่าจบ turn
         from: model
         to: engine
       lane: model
       do: >-
-        โมเดล stream สรุปการแก้ แล้วจบด้วย `stop_reason: end_turn`
+        model stream สรุปการแก้ แล้วจบด้วย `stop_reason: end_turn`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [end_turn]
       phase: calling-model
@@ -31,7 +31,7 @@ scenario:
     - use: answer-streams
       beat:
         title: แชตแสดงสรุปทีละส่วน
-        text: ข้อความของโมเดลค่อยๆ ขึ้นในแชต หัวข้อยังเป็น working
+        text: ข้อความของ model ค่อยๆ ขึ้นในแชต หัวข้อยังเป็น working
         from: panel
         to: you
         sees:
@@ -43,7 +43,7 @@ scenario:
     - id: done
       beat:
         title: Geno ถาม Stop hook ก่อนจบ turn
-        text: โมเดลเป็นคนจบ turn เอง ไม่ใช่คุณปฏิเสธ Geno จึงส่งข้อความสุดท้ายของโมเดลให้ `tests-ran.sh` พร้อมบอกว่า hook ยังไม่เคยบล็อกใน run นี้
+        text: model เป็นคนจบ turn เอง ไม่ใช่คุณปฏิเสธ Geno จึงส่งข้อความสุดท้ายของ model ให้ `tests-ran.sh` พร้อมบอกว่า hook ยังไม่เคยบล็อกใน run นี้
         from: engine
         to: machine
       lane: loop
@@ -58,7 +58,7 @@ scenario:
       lane: loop
       at: drive
       do: >-
-        `stopKeepsGoing` ตรวจว่าโมเดลเป็นคนจบ turn เอง (`modelEndedTurn`) ไม่ใช่การปฏิเสธของผู้ใช้
+        `stopKeepsGoing` ตรวจว่า model เป็นคนจบ turn เอง (`modelEndedTurn`) ไม่ใช่การปฏิเสธของผู้ใช้
         แล้วส่ง `stop_hook_active: false` (ยังไม่เคยบล็อกใน run นี้) และ `last_assistant_message` ให้ hook
       ref: packages/engine/src/drive.ts#stopKeepsGoing
       emits: [stop_hook_active, last_assistant_message]
@@ -116,24 +116,24 @@ scenario:
                     state: idle
                     header: worked for 31s
                 at: rail
-                do: หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน ท้ายคำตอบมีแถวสรุปโมเดล token และค่าใช้จ่าย
+                do: หัวข้อเปลี่ยนเป็นเวลาที่ทำงาน ท้ายคำตอบมีแถวสรุป model token และค่าใช้จ่าย
                 sees: หัวข้อ "worked for 31s" และปุ่ม Send กลับมาแทน Stop
                 ref: packages/extension/src/chat/rail.ts#headerOf
                 end: { turn: done, reason: end_turn }
 
           - id: again
-            label: บล็อกซ้ำทั้งที่โมเดลไม่ได้เรียกเครื่องมือ
+            label: บล็อกซ้ำทั้งที่ model ไม่ได้เรียก tool
             steps:
               - lane: policy
                 beat:
                   title: hook บล็อกซ้ำ แต่ Geno ไม่ยอม
-                  text: hook บล็อกไปแล้วครั้งหนึ่งใน run นี้ และหลังจากนั้นโมเดลไม่ได้เรียก tool เลย Geno ไม่ให้ hook ที่บล็อกทุกครั้งวนโมเดลไม่รู้จบ
+                  text: hook บล็อกไปแล้วครั้งหนึ่งใน run นี้ และหลังจากนั้น model ไม่ได้เรียก tool เลย Geno ไม่ให้ hook ที่บล็อกทุกครั้งวน model ไม่รู้จบ
                   from: machine
                   to: engine
                 at: hooks
                 do: >-
-                  hook บล็อกอีก แต่ run นี้มี `hook-context` ของ Stop อยู่แล้ว และหลังจากนั้นโมเดลไม่ได้เรียกเครื่องมือเลย
-                  `stopMayContinue` ตอบว่าไม่ได้ hook ที่บล็อกทุกครั้งจึงวนโมเดลไม่ได้
+                  hook บล็อกอีก แต่ run นี้มี `hook-context` ของ Stop อยู่แล้ว และหลังจากนั้น model ไม่ได้เรียก tool เลย
+                  `stopMayContinue` ตอบว่าไม่ได้ hook ที่บล็อกทุกครั้งจึงวน model ไม่ได้
                 ref: packages/core/src/loop.ts#stopMayContinue
               - lane: loop
                 beat:
@@ -181,7 +181,7 @@ scenario:
     - id: decide
       beat:
         title: Geno เรียก model อีกครั้ง
-        text: เหตุผลของ hook ทำให้ turn ทำต่อ ขีดจำกัดของรอบยังนับต่อจากเดิม Geno ใส่เหตุผลไว้ในข้อความถัดไปที่ส่งให้โมเดล
+        text: เหตุผลของ hook ทำให้ turn ทำต่อ ขีดจำกัดของรอบยังนับต่อจากเดิม Geno ใส่เหตุผลไว้ในข้อความถัดไปที่ส่งให้ model
         from: engine
         to: model
       lane: loop
@@ -197,36 +197,36 @@ scenario:
       lane: loop
       at: model-call
       do: >-
-        `buildRequest` ประกอบคำขอจาก log (`replayMessages` วางโน้ตของ Stop ไว้ใน user message ถัดไป) โมเดลอ่าน:
+        `buildRequest` ประกอบคำขอจาก log (`replayMessages` วางโน้ตของ Stop ไว้ใน user message ถัดไป) model อ่าน:
         "[Geno] Stop hook blocking error: run pnpm test before you finish"
       ref: packages/core/src/hooks.ts#hookNoteText
 
     - id: continues
       beat:
         title: Model ขอรัน `pnpm test`
-        text: โมเดลอ่านเหตุผลแล้วขอรันเทสต์ ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน แชตไม่บอกว่า hook เป็นคนให้ทำต่อ
+        text: model อ่านเหตุผลแล้วขอรันเทสต์ ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน แชตไม่บอกว่า hook เป็นคนให้ทำต่อ
         from: model
         to: engine
         end: Turn ทำต่อ
       lane: model
       do: >-
-        โมเดลอ่านเหตุผล แล้วขอรัน `bash` ด้วย `pnpm test` ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน
+        model อ่านเหตุผล แล้วขอรัน `bash` ด้วย `pnpm test` ข้อความใหม่ต่อท้ายคำตอบเดิมใน turn เดียวกัน
         แผงแชตไม่มีอะไรบอกว่า hook เป็นคนให้ทำต่อ
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
       emits: [tool_use]
       end: { turn: continues, reason: call-model }
 ---
 
-Stop hook คือจุดตรวจตอนท้าย turn: โมเดลบอกว่าเสร็จ แต่ hook ตัดสินว่ายัง
+Stop hook คือจุดตรวจตอนท้าย turn: model บอกว่าเสร็จ แต่ hook ตัดสินว่ายัง
 
-"ครั้งเดียวติดกัน" นับแบบนี้: หลังการบล็อก ถ้าโมเดลเรียกเครื่องมืออย่างน้อยหนึ่งตัว (ไม่นับ `report` ของเอเจนต์ลูก) การบล็อกครั้งถัดไปนับใหม่
-ถ้าโมเดลตอบเป็นข้อความเฉยๆ แล้วจบอีก การบล็อกครั้งที่สองถูกข้าม ทัวร์นี้จบตรงที่โมเดลรันเทสต์
-เมื่อโมเดลจบอีกครั้ง hook จะได้ `stop_hook_active: true` และตัดสินใหม่
+"ครั้งเดียวติดกัน" นับแบบนี้: หลังการบล็อก ถ้า model เรียก tool อย่างน้อยหนึ่งตัว (ไม่นับ `report` ของ subagent) การบล็อกครั้งถัดไปนับใหม่
+ถ้า model ตอบเป็นข้อความเฉยๆ แล้วจบอีก การบล็อกครั้งที่สองถูกข้าม ทัวร์นี้จบตรงที่ model รันเทสต์
+เมื่อ model จบอีกครั้ง hook จะได้ `stop_hook_active: true` และตัดสินใหม่
 
 สิ่งที่ควรสังเกต
 
 - **Stop hook ไม่ทำงานเมื่อ turn จบด้วยเหตุอื่น** เช่นผู้ใช้กด Deny บนการ์ด error ขีดจำกัด หรือผู้ใช้กด Stop
-- **ขีดจำกัดของรอบยังนับ** hook ที่บล็อกหลังทุกครั้งที่โมเดลเรียกเครื่องมือหยุดได้ด้วยขีดจำกัด 40 ครั้งหรือ $0.40
+- **ขีดจำกัดของรอบยังนับ** hook ที่บล็อกหลังทุกครั้งที่ model เรียก tool หยุดได้ด้วยขีดจำกัด 40 ครั้งหรือ $0.40
 - **`additionalContext` อย่างเดียวก็ทำให้ทำต่อ** (อ่านจากโค้ด) `stopDecision` นับทุกโน้ตเป็นเหตุให้ทำต่อ
-  hook ที่แค่พิมพ์ `hookSpecificOutput.additionalContext` โดยไม่บล็อกจึงทำให้โมเดลถูกเรียกอีกรอบเหมือนการบล็อก
-- **เอเจนต์ลูกใช้ SubagentStop** ทางเดียวกันนี้ใช้กับลูกเมื่อมันส่งรายงาน โดย hook ได้ข้อความรายงานเป็น `last_assistant_message`
+  hook ที่แค่พิมพ์ `hookSpecificOutput.additionalContext` โดยไม่บล็อกจึงทำให้ model ถูกเรียกอีกรอบเหมือนการบล็อก
+- **subagent ใช้ SubagentStop** ทางเดียวกันนี้ใช้กับลูกเมื่อมันส่งรายงาน โดย hook ได้ข้อความรายงานเป็น `last_assistant_message`
