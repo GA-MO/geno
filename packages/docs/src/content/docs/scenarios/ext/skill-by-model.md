@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model เลือก skill release-notes
         text: รายชื่อ skill พร้อมคำอธิบายอยู่ในข้อความแรกของ session model เห็นว่า release-notes ตรงกับงาน การ์ดเป็น call จริงจากการรันที่ model โหลด skill changelog
+        from: model
         to: engine
         sees:
           kind: payload
@@ -36,6 +37,8 @@ scenario:
       beat:
         title: แชตขึ้นขั้น skill
         text: แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        from: panel
+        to: you
         sees:
           kind: step
           label: skill release-notes
@@ -45,6 +48,8 @@ scenario:
       beat:
         title: Geno โหลด skill จากโฟลเดอร์
         text: Geno อ่านโฟลเดอร์ skill ตามที่เป็นตอนนี้ และตรวจว่า model เรียก skill นี้ได้ ทางต่อไปขึ้นกับ frontmatter ของ skill
+        from: engine
+        to: engine
         ask: skill ตั้ง fork ไหม
       lane: tool
       at: executor
@@ -63,6 +68,7 @@ scenario:
                 beat:
                   title: ข้อความของ skill เป็นผลของ call
                   text: ผลยาวได้ถึง 100,000 ตัวอักษรก่อนถูกเก็บลงไฟล์ model จึงอ่านคำสั่งของ skill ได้ทั้งก้อน การ์ดเป็นผลจริงของ skill changelog
+                  from: engine
                   to: model
                   sees:
                     kind: payload
@@ -79,6 +85,8 @@ scenario:
                 beat:
                   title: Model ทำตามขั้นใน skill
                   text: Geno เรียก model อีกครั้ง model ทำตามขั้น เช่นรัน `git log` และเขียนไฟล์ release notes ด้วย tool ของตัวเอง
+                  from: model
+                  to: engine
                   end: Model ทำตาม skill
                 at: step
                 do: >-
@@ -96,6 +104,8 @@ scenario:
                 beat:
                   title: Geno ส่ง skill เป็นงานให้ worker
                   text: "skill ตั้ง `context: fork` Geno ไม่คืนข้อความ แต่ส่งข้อความของ skill เป็นงานให้ subagent ทางนี้ทำงานแม้ model จะเรียก agent เองไม่ได้"
+                  from: engine
+                  to: model
                 at: executor
                 do: >-
                   สกิลตั้ง `context: fork` executor จึงไม่คืนข้อความ แต่ส่งข้อความของสกิลเป็นงานให้ลูก
@@ -106,6 +116,8 @@ scenario:
                 beat:
                   title: แชตขึ้นแถวของ worker
                   text: worker เปิดเป็น session ใหม่แบบรอผล รันทีละตัวบน checkout หลัก
+                  from: panel
+                  to: you
                   sees:
                     kind: task
                     title: worker
@@ -119,6 +131,7 @@ scenario:
                 beat:
                   title: worker ทำตาม skill แล้วรายงาน
                   text: worker ได้ข้อความของ skill เป็นงาน ทำตามขั้นใน session ของตัวเอง แล้วส่งรายงาน
+                  from: model
                   to: engine
                 at: model
                 do: >-
@@ -129,6 +142,7 @@ scenario:
                 beat:
                   title: รายงานกลับมาแทน SKILL.md
                   text: ผลของ call คือรายงานในรั้ว context ของแม่จึงไม่บวมด้วยคำสั่งของ skill และงานระหว่างทาง
+                  from: engine
                   to: model
                 at: tools
                 do: >-
@@ -141,6 +155,8 @@ scenario:
                 beat:
                   title: Model เล่ารายงานให้คุณ
                   text: Geno เรียก model ของแม่อีกครั้ง มันอ่านรายงานแล้วเล่าให้คุณ
+                  from: model
+                  to: panel
                   end: Model เล่ารายงาน
                 at: step
                 do: >-

@@ -18,6 +18,8 @@ scenario:
       beat:
         title: Geno อ่านคำนิยาม server ทุกแหล่ง
         text: คุณเปิดแชตใหม่ใน repo ที่เพิ่ง clone มา server ที่มาจาก `.mcp.json` ของ repo ต้องได้รับอนุมัติก่อนรัน เพราะคนเขียน repo เป็นคนเลือกมัน
+        from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -31,6 +33,8 @@ scenario:
       beat:
         title: server `db` ยังไม่ได้รับอนุมัติ
         text: ไม่มีการอนุมัติที่ตรงกับคำนิยามนี้ใน workspace นี้ Geno จึงไม่เริ่ม process ของมัน และ model ไม่ได้ tool ของมัน
+        from: engine
+        to: engine
       lane: policy
       at: rules
       do: >-
@@ -51,6 +55,8 @@ scenario:
       beat:
         title: แชตขึ้นแถบรออนุมัติ
         text: เหนือบทสนทนาขึ้นแถบพร้อมไอคอนโล่ แชตยังใช้ได้ตามปกติ แค่ไม่มี tool ของ `db`
+        from: panel
+        to: you
         sees:
           kind: notice
           text: 1 MCP server in this workspace waits for your approval.
@@ -68,6 +74,7 @@ scenario:
       beat:
         title: คุณกด Review
         text: แผง MCP servers มาแทนบทสนทนา
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้กด Review
@@ -76,6 +83,7 @@ scenario:
       beat:
         title: คุณเห็นการ์ด “Allow this server to run?”
         text: การ์ดแสดงคำนิยามทั้งหมด คำสั่ง อาร์กิวเมนต์ ตัวแปรสภาพแวดล้อม และบอกว่าใครเป็นคนเลือก server นี้
+        from: panel
         to: you
         sees: '"Allow this server to run?" พร้อมคำสั่ง `npx db-mcp --url $DATABASE_URL` และเหตุผลว่า .mcp.json ของ workspace นี้กำหนดมัน'
         ask: คุณกดปุ่มไหน
@@ -105,7 +113,7 @@ scenario:
                   title: คุณกด Allow
                   text: การ์ดส่งคำนิยามที่คุณเห็นไปด้วย Geno จึงรู้ว่าคุณอนุมัติฉบับไหน
                   from: you
-                  to: engine
+                  to: panel
                 at: chat
                 do: >-
                   การ์ดโพสต์ `mcp-trust` พร้อม hash ของคำนิยามที่ผู้ใช้เห็น `McpServers` ส่งคำขอ `_gcode/mcpTrust`
@@ -115,6 +123,8 @@ scenario:
                 beat:
                   title: Geno ตรวจว่าคำนิยามไม่เปลี่ยน
                   text: ถ้าไฟล์เปลี่ยนหลังคุณเห็น Geno ปฏิเสธ คำนิยามตรง Geno จึงบันทึกการอนุมัติ
+                  from: engine
+                  to: engine
                 at: rules
                 do: >-
                   `hub.trust` เทียบ hash กับคำนิยามตอนนี้ ถ้าไฟล์เปลี่ยนหลังผู้ใช้เห็น จะปฏิเสธว่า "the definition of db changed since it was shown"
@@ -124,6 +134,7 @@ scenario:
                 beat:
                   title: server `db` เริ่มทำงาน
                   text: engine เริ่ม process ของ `db` นอก sandbox ของ Geno server ตอบรายชื่อ tool
+                  from: engine
                   to: machine
                 do: >-
                   engine เริ่ม process ของ `db` (นอก sandbox ของ Geno) server ตอบรายชื่อเครื่องมือ
@@ -133,6 +144,7 @@ scenario:
                   title: แถวของ db พร้อมใช้
                   text: แถบประกาศหายไป turn ถัดไปของ agent ได้ tool ของ `db` และ Geno บอก model ชื่อ tool ที่มาใหม่
                   from: panel
+                  to: you
                   sees: แถว "db · .mcp.json" สถานะพร้อม พร้อมรายชื่อ tool เช่น "query, list_tables"
                   end: tool ของ db พร้อมใช้
                 at: rail
@@ -152,7 +164,7 @@ scenario:
                   title: คุณกด Turn off
                   text: Geno จดว่า `db` ปิดไว้ใน workspace นี้ ไม่มีการอนุมัติเกิดขึ้น
                   from: you
-                  to: engine
+                  to: panel
                 at: chat
                 do: >-
                   การ์ดโพสต์ `mcp-enable` ค่า false `McpServers.setEnabled` ส่งคำขอ `_gcode/mcpEnable`
@@ -167,6 +179,8 @@ scenario:
                 beat:
                   title: แถวของ db ปิดอยู่
                   text: แถบประกาศหายไป และ Geno ไม่ถามเรื่อง server นี้อีกจนกว่าคุณจะเปิดสวิตช์เอง
+                  from: panel
+                  to: you
                   sees: แถว "db" ที่สวิตช์ปิดอยู่
                   end: server นี้ปิดไว้
                 at: rail

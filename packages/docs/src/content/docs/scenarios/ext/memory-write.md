@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model เสนอโน้ตให้จำ
         text: คุณเพิ่งบอกว่าโปรเจกต์นี้ใช้ pnpm model เห็นว่าควรจำไว้ในแชตต่อๆ ไป มันเรียก `remember` ด้วยโน้ตและขอบเขต project
+        from: model
         to: engine
       lane: model
       do: >-
@@ -33,6 +34,8 @@ scenario:
       beat:
         title: Geno ตรวจโน้ตแล้วถามคุณเสมอ
         text: โน้ตละไม่เกิน 500 ตัวอักษร รวมทั้งหมดไม่เกิน 4,000 ไม่มีโหมด กฎ หรือ classifier ตอบแทนคุณ แม้ในโหมด Auto
+        from: engine
+        to: engine
       lane: tool
       at: executor
       do: >-
@@ -44,6 +47,7 @@ scenario:
       beat:
         title: Geno หยุด turn แล้วถามคุณ
         text: Geno ส่งคำขอ permission ที่มีข้อความของโน้ต แชตใช้ข้อความนั้นแทนคำสั่ง
+        from: engine
         to: panel
       lane: server
       at: approvals
@@ -66,6 +70,7 @@ scenario:
       beat:
         title: คุณเห็นการ์ด “Remember this?”
         text: การ์ดแสดงโน้ตตรงตัวและขอบเขตของมัน
+        from: panel
         to: you
         sees: '"Remember this?" ข้อความ "ใช้ pnpm ไม่ใช่ npm ในโปรเจกต์นี้" และ "Geno will follow this note in every later chat in this project. You can change or delete it in /memory."'
         ask: คุณกดปุ่มไหน
@@ -91,6 +96,7 @@ scenario:
                   title: Geno บันทึกโน้ต
                   text: โน้ตไปอยู่ในไฟล์หน่วยความจำของโปรเจกต์นี้ ผลของ call บอก model ว่าบันทึกแล้ว
                   from: engine
+                  to: engine
                 at: executor
                 do: >-
                   `memory.add` เขียนโน้ตลงไฟล์หน่วยความจำของโปรเจกต์นี้ในโฟลเดอร์ของ Geno ผลของ call คือ
@@ -102,6 +108,7 @@ scenario:
                 beat:
                   title: Geno บอก model ก่อนเรียกครั้งถัดไป
                   text: Geno ไม่แก้ข้อความแรกของ session cache จึงไม่หลุด แต่ใส่ข้อความแจ้งว่าคุณอนุมัติโน้ตใหม่ model ใช้ pnpm ต่อจากนี้ และแชตใหม่ในโปรเจกต์นี้ได้โน้ตด้วย
+                  from: engine
                   to: model
                   end: Model ใช้ pnpm ต่อจากนี้
                 at: drive
@@ -126,6 +133,7 @@ scenario:
                   title: ไม่มีอะไรถูกบันทึก
                   text: ผลของ call บอกว่าคุณไม่ตกลง และอย่าเสนอซ้ำเว้นแต่คุณขอ ผลนี้ไม่จบ turn
                   from: engine
+                  to: model
                 at: executor
                 do: >-
                   ไม่มีอะไรถูกบันทึก ผลของ call คือ "The user declined. Nothing was saved; do not propose it again unless they ask."
@@ -137,7 +145,8 @@ scenario:
                 beat:
                   title: Model ทำงานต่อ
                   text: Geno เรียก model อีกครั้ง model ทำงานต่อโดยไม่เสนอโน้ตเดิมซ้ำ
-                  to: model
+                  from: model
+                  to: engine
                   end: Model ทำต่อ
                 at: step
                 do: >-
