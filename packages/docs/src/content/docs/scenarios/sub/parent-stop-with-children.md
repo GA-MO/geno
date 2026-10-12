@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณกด Stop
         text: แถวของ explore ยังหมุนอยู่ใต้ขั้นที่ส่งงาน และ review ทำงานเบื้องหลังอยู่ คุณกด Stop
+        from: you
         to: panel
         sees:
           kind: composer
@@ -38,6 +39,7 @@ scenario:
       beat:
         title: แชตส่งคำขอยกเลิกไปที่ engine
         text: แชตยกเลิกการ์ดและคำถามที่เปิดอยู่ แล้วบอก engine ให้หยุด turn ของแม่
+        from: panel
         to: engine
       lane: editor
       at: chat
@@ -50,6 +52,8 @@ scenario:
       beat:
         title: Geno หยุด turn ของแม่
         text: สัญญาณหยุดไหลไปถึงทุกอย่างที่ turn นี้เริ่มไว้
+        from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -60,6 +64,8 @@ scenario:
       beat:
         title: explore หยุดทันที
         text: explore ผูกกับ call ที่แม่รออยู่ มันจึงหยุดพร้อม turn และจบแบบ cancelled
+        from: engine
+        to: model
       lane: child@explore
       at: loop
       do: >-
@@ -72,6 +78,8 @@ scenario:
       beat:
         title: Geno ปิด call ที่ค้างแล้วบันทึกการหยุด
         text: Geno เลิกรอ explore ทันที call ของแม่ได้คำตอบว่าถูกหยุด แทนรายงาน
+        from: engine
+        to: engine
       lane: loop
       at: tools
       do: >-
@@ -94,6 +102,8 @@ scenario:
       beat:
         title: Geno หยุด review ที่ทำงานเบื้องหลัง
         text: turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย review ไม่ส่งรายงาน จึงไม่มีอะไรปลุก session ทีหลัง
+        from: engine
+        to: model
       lane: loop
       at: agent
       do: >-
@@ -114,6 +124,8 @@ scenario:
       beat:
         title: Turn จบแบบ stopped
         text: งานใน Tasks จบแบบ stopped และการปลุกของ session นี้ถูกพักจนกว่าคุณจะพิมพ์ prompt ใหม่
+        from: engine
+        to: panel
       lane: server
       at: turns
       do: >-
@@ -145,6 +157,8 @@ scenario:
       beat:
         title: แชตปิดทุกแถวเป็น Cancelled
         text: ขั้นที่ยังหมุนและแถวของลูกทั้งสองขึ้นว่ายกเลิก turn ไม่มีข้อความตอบ แชตจึงบอกว่าคุณหยุดก่อนได้คำตอบ
+        from: panel
+        to: you
         sees:
           - kind: composer
             state: idle

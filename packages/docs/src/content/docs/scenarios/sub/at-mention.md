@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณพิมพ์ `@explore` ตามด้วยคำถาม
         text: คุณพิมพ์ "@explore parseConfig ถูกนิยามไว้ที่ไหน" แล้วกด Enter `@` ใช้ได้ทุกโหมด แม้ model จะเรียก subagent เองไม่ได้
+        from: you
+        to: panel
         sees:
           kind: message
           from: you
@@ -27,6 +29,8 @@ scenario:
       beat:
         title: Geno สร้าง tool call `agent` ในนามคุณ
         text: Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ มันสร้าง call ส่งงานให้ explore เอง งานคือข้อความหลังชื่อ
+        from: engine
+        to: engine
       lane: loop
       at: step
       do: >-
@@ -49,6 +53,8 @@ scenario:
       beat:
         title: Geno เปิด session ให้ explore
         text: explore ได้บันทึกและงบของตัวเอง แชตขึ้นแถวของมันใต้ขั้นที่ส่งงาน พร้อมนาฬิกาและปุ่ม Cancel explore ค้นโค้ดด้วย tool ที่อ่านอย่างเดียว
+        from: engine
+        to: model
         sees:
           kind: task
           title: explore
@@ -61,6 +67,7 @@ scenario:
       beat:
         title: explore ส่งรายงานที่อ้าง `path:line`
         text: รอบสุดท้าย explore เรียก tool `report` พร้อมคำตอบ แล้วจบงานของตัวเอง การ์ดเป็นรายงานจริงจากการรันที่ explore หาจุดเรียก `getUser`
+        from: model
         to: engine
         sees:
           kind: payload
@@ -87,6 +94,8 @@ scenario:
       beat:
         title: แชตติดเครื่องหมายว่า explore เสร็จ
         text: แถวของ explore หยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย
+        from: panel
+        to: you
         sees:
           kind: task
           title: explore
@@ -111,6 +120,8 @@ scenario:
       beat:
         title: Geno ล้อมรั้วรายงานเป็นผลของ call
         text: รายงานอยู่ในรั้ว `<subagent_report>` ที่บอกว่ามันเป็นข้อมูล ไม่ใช่คำสั่งของคุณ การ์ดเป็นผลจริงจากการรันเดียวกัน ซึ่ง model เป็นคนเรียก explore
+        from: engine
+        to: engine
         sees:
           kind: payload
           direction: tool_result
@@ -130,6 +141,8 @@ scenario:
       beat:
         title: Turn จบโดยไม่เรียก model ของแม่
         text: call ที่ Geno สร้างให้คุณมีตัวเดียว เมื่อได้ผลแล้ว turn จึงจบทันที model ของแม่ไม่ถูกเรียกเลย รายงานอยู่ใน log ให้ prompt ถัดไปของคุณ
+        from: engine
+        to: panel
       lane: loop
       at: step
       do: >-
@@ -159,6 +172,8 @@ scenario:
       beat:
         title: แชตบอกว่าไม่มีคำตอบ ทั้งที่ explore ตอบแล้ว
         text: คำตอบของ explore อยู่ในผลของขั้น agent และในบทสนทนาของมัน ไม่มีข้อความของ Geno ตามหลัง แชตจึงขึ้นประกาศว่าคำตอบไม่มีข้อความ
+        from: panel
+        to: you
         sees:
           kind: notice
           text: Geno stopped without a reply

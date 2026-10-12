@@ -19,6 +19,7 @@ scenario:
       beat:
         title: Model ขอเรียก agent อีกครั้ง
         text: ใน run แบบ non-interactive ของ `gcode agent` model ขอส่งงานให้ subagent ลูกตัวก่อนหน้าใน run นี้ใช้งบไปแล้ว
+        from: model
         to: engine
       lane: model
       do: >-
@@ -31,7 +32,8 @@ scenario:
       beat:
         title: เทอร์มินัลพิมพ์ชื่อขั้น
         text: Geno ตัดสินว่าจะรัน tool call นี้ เทอร์มินัลพิมพ์บรรทัดของขั้นที่เริ่ม
-        to: panel
+        from: panel
+        to: you
         sees: "> agent worker: migrate src/log.ts to pino"
       lane: loop
       at: step
@@ -54,6 +56,8 @@ scenario:
       beat:
         title: Geno ตรวจว่าเริ่ม subagent ได้ไหม
         text: ก่อนเปิดอะไร Geno ตรวจสองอย่าง subagent แก้ไฟล์ได้ไหม และงบของลูกใน run นี้เหลือไหม
+        from: engine
+        to: engine
         ask: Model ขอตัวไหน
       lane: loop
       at: tools
@@ -71,6 +75,8 @@ scenario:
                 beat:
                   title: worker แก้ไฟล์ได้ แต่ไม่มีใครตอบการ์ด
                   text: run นี้ไม่มีคนตอบ permission และไม่ได้ส่ง `--allow-worker` Geno จึงปฏิเสธ worker ทันที
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   `worker` ไม่ใช่ลูกอ่านอย่างเดียว และ run นี้ไม่มีใครตอบการ์ด (`non-interactive`) โดยไม่มี `--allow-worker`
@@ -87,6 +93,8 @@ scenario:
                 beat:
                   title: explore ผ่าน แต่งบหมดแล้ว
                   text: ลูกแต่ละตัวจองงบทั้งก้อนตอนเริ่ม และคืนส่วนที่ไม่ได้ใช้ตอนจบ งบ `--max-cost` ที่เหลือเป็นศูนย์ Geno จึงไม่เปิด session ของลูก
+                  from: engine
+                  to: model
                 at: tools
                 do: >-
                   `explore` ผ่านด่านแรก `runChild` คำนวณเพดานด้วย `childCaps` จากงบ `--max-cost` ลบด้วยที่ลูกก่อนหน้าจองไว้
@@ -104,6 +112,7 @@ scenario:
       beat:
         title: Geno ส่ง error ให้ model อ่าน
         text: ผลของ call เป็น error ที่บอกเหตุผล เทอร์มินัลไม่พิมพ์ผลนี้
+        from: engine
         to: model
       lane: loop
       at: tools
@@ -119,6 +128,8 @@ scenario:
       beat:
         title: Model ทำงานนั้นเอง
         text: model อ่าน error แล้วทำงานเอง หรือบอกในคำตอบว่าต้องการอะไรจากคุณ เช่นให้รันใหม่ด้วย `--allow-worker`
+        from: model
+        to: engine
         end: Model ทำต่อเอง
       lane: model
       do: >-

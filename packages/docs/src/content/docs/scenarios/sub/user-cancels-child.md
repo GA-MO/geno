@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model ส่งงานค้นหาให้ explore
         text: model ของแม่ส่งคำถามกว้างๆ ให้ explore แล้วรอรายงาน
+        from: model
         to: engine
       lane: model
       do: >-
@@ -39,6 +40,8 @@ scenario:
       beat:
         title: Geno เปิด session ให้ explore
         text: แชตขึ้นแถวของ explore พร้อมนาฬิกาและปุ่ม Cancel explore ค้นอยู่นาน
+        from: engine
+        to: model
         sees:
           kind: task
           title: explore
@@ -51,6 +54,7 @@ scenario:
       beat:
         title: คุณกด Cancel บนแถวของ explore
         text: คุณเห็นว่า explore ค้นผิดทาง ปุ่มบอกว่ามันหยุดแค่ explore และ turn ทำต่อด้วยสิ่งที่มันหาได้
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้กด Cancel บนแถวของ explore (ปุ่มบอกว่า "Stop explore; the turn goes on with what it found")
@@ -67,6 +71,7 @@ scenario:
       beat:
         title: แชตยกเลิกแค่ session ของ explore
         text: คำขอยกเลิกใช้ session ของ explore ไม่ใช่ของแม่ engine หาตัวยกเลิกของ explore เจอ turn ของแม่ไม่ถูกแตะ
+        from: panel
         to: engine
       lane: editor
       at: chat
@@ -87,6 +92,8 @@ scenario:
       beat:
         title: explore หยุด
         text: สิ่งที่ explore กำลังรอหยุดทันที มันจบแบบ cancelled
+        from: engine
+        to: model
       lane: child@explore
       at: loop
       do: >-
@@ -99,6 +106,8 @@ scenario:
       beat:
         title: Geno ส่งรายงานเท่าที่ explore มี
         text: Geno รวมข้อความที่ explore เขียนไว้เป็นรายงานบางส่วน และบอกว่ามันถูกยกเลิกก่อนเสร็จ
+        from: engine
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -112,6 +121,8 @@ scenario:
       beat:
         title: แถวของ explore ขึ้นว่ายกเลิก
         text: แถวหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
+        from: panel
+        to: you
         sees: แถว "⊘ explore · <โมเดล> · 41s" สถานะ Cancelled
       lane: server
       at: updates
@@ -134,7 +145,8 @@ scenario:
       beat:
         title: Model อ่านรายงานบางส่วนแล้วทำต่อ
         text: การยกเลิกลูกไม่ใช่การปฏิเสธ turn ของแม่ไม่จบ model ทำงานต่อเอง หรือถามคุณว่าจะไปทางไหน
-        to: model
+        from: model
+        to: engine
         end: Turn ทำต่อ
       lane: loop
       at: step
