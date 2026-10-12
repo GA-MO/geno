@@ -15,6 +15,7 @@ import { gcodeHome } from '../../extension/src/tab/log.js';
 import { newToken } from './security.js';
 import { WebServer } from './server.js';
 import { defaultsOf, SettingsFile } from './settings.js';
+import { titleActions } from './title-actions.js';
 import { CancellationTokenSource, configureShim, EventEmitter, settingsChanged, Uri, viewProvider, webviewView } from './vscode-shim.js';
 
 export type WebOptions = { readonly workspace: string; readonly trusted: boolean; readonly port: number | undefined };
@@ -94,11 +95,11 @@ export async function startWeb(options: WebOptions, extension: string, client: s
     if (!existsSync(path.join(extension, file))) throw new Error(`${path.join(extension, file)} is missing; run pnpm --filter ./packages/extension build`);
   }
   if (!existsSync(options.workspace)) throw new Error(`${options.workspace} does not exist`);
+  const manifest = JSON.parse(readFileSync(path.join(extension, 'package.json'), 'utf8')) as Parameters<typeof defaultsOf>[0] & Parameters<typeof titleActions>[0];
   const token = newToken();
-  const server = new WebServer(token, client);
+  const server = new WebServer(token, client, titleActions(manifest, CHAT_VIEW));
   const port = await server.listen(options.port);
   const home = gcodeHome(process.env);
-  const manifest = JSON.parse(readFileSync(path.join(extension, 'package.json'), 'utf8')) as Parameters<typeof defaultsOf>[0];
   const settings = await SettingsFile.open(path.join(home, 'web-settings.json'), defaultsOf(manifest), settingsChanged);
   const rg = process.env['GCODE_RG'] ?? (await findExecutable('rg', process.env));
   configureShim({ workspace: options.workspace, trusted: options.trusted, settings, page: server, rg });

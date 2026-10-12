@@ -5,8 +5,9 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { admit, sessionCookie, type Gate } from './security.js';
 import { browserPage } from './page.js';
+import type { TitleAction } from './title-actions.js';
 import type { Note, Page, UiAnswer, UiRequest } from './vscode-shim.js';
-import { webviews } from './vscode-shim.js';
+import { commands, webviews } from './vscode-shim.js';
 
 const TYPES: Readonly<Record<string, string>> = {
   '.js': 'text/javascript',
@@ -78,6 +79,8 @@ export class WebServer implements Page {
   constructor(
     private readonly token: string,
     private readonly client: string,
+    /** The chat view's title-bar actions: the page draws them, and they are the only commands it may run. */
+    private readonly actions: readonly TitleAction[],
   ) {}
 
   get origin(): string {
@@ -162,6 +165,13 @@ export class WebServer implements Page {
       this.answer(body.id, body.answer);
       return send(res, 204, 'text/plain', '');
     }
+    if (req.method === 'POST' && url.pathname === '/command') {
+      const { command } = ((await bodyOf(req)) ?? {}) as { command?: unknown };
+      const action = this.actions.find((each) => each.command === command);
+      if (action === undefined) return send(res, 400, 'text/plain', 'not a title action');
+      send(res, 204, 'text/plain', '');
+      return void commands.executeCommand(action.command).catch((error: unknown) => process.stderr.write(`[command] ${action.command}: ${String(error)}\n`));
+    }
     if (req.method === 'GET' && url.pathname.startsWith('/vscode-resource/')) return this.resource(res, decodeURIComponent(url.pathname.slice('/vscode-resource'.length)));
     send(res, 404, 'text/plain', 'Not found.');
   }
@@ -170,7 +180,7 @@ export class WebServer implements Page {
     const webview = webviews.get(view);
     if (webview === undefined || webview.html === '') return send(res, 404, 'text/plain', 'That view is closed.');
     const nonce = randomBytes(16).toString('base64');
-    send(res, 200, 'text/html', browserPage({ html: webview.html, nonce, origin: this.origin, view, theme: theme === 'light' ? 'light' : 'dark' }));
+    send(res, 200, 'text/html', browserPage({ html: webview.html, nonce, origin: this.origin, view, theme: theme === 'light' ? 'light' : 'dark', actions: view === 'chat' ? this.actions : [] }));
   }
 
   private events(req: IncomingMessage, res: ServerResponse, view: string): void {

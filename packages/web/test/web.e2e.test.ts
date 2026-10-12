@@ -12,7 +12,9 @@ import { answer, sseBody, toolCall, type Reply } from '../../engine/test/fake-tr
 import { makeRepo } from '../../engine/test/git-fixture.js';
 import { rgCommand } from '../../engine/test/helpers.js';
 import { buildExtension } from '../../extension/build.mjs';
+import manifest from '../../extension/package.json' with { type: 'json' };
 import { buildWeb, DIST } from '../build.mjs';
+import { titleActions } from '../src/title-actions.js';
 
 const EXTENSION = fileURLToPath(new URL('../../extension', import.meta.url));
 const usage = { input: 1000, cacheRead: 0, cacheWrite: 0 };
@@ -238,7 +240,7 @@ describe('the web host', () => {
     const cookie = await signIn();
     const page = await (await fetch(`${origin}/`, { headers: { cookie } })).text();
     expect(page).toContain(`connect-src ${origin};`);
-    expect(page).toMatch(new RegExp(`<script nonce="[^"]+" src="${origin}/web-client.js" data-view="chat">`));
+    expect(page).toMatch(new RegExp(`<script nonce="[^"]+" src="${origin}/web-client.js" data-view="chat" data-actions="[^"]+">`));
     expect(page).toContain(`src="${origin}/vscode-resource${encodeURI(path.join(EXTENSION, 'dist/webview.js'))}"`);
     const script = await fetch(`${origin}/vscode-resource${encodeURI(path.join(EXTENSION, 'dist/webview.js'))}`, { headers: { cookie } });
     expect(script.status).toBe(200);
@@ -327,6 +329,45 @@ describe('the web host', () => {
       await browser.close();
     }
   }, 90_000);
+
+  it('runs only the chat view’s title actions, from the header icons and, when narrow, from its … menu', async ({ skip }) => {
+    const cookie = await signIn();
+    const run = (command: string) => fetch(`${origin}/command`, { method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' }, body: JSON.stringify({ command }) });
+    expect((await run('workbench.action.openSettings')).status, 'a command outside the title bar is refused').toBe(400);
+    const browser = await chromium.launch(process.env['GCODE_CHROMIUM'] ? { executablePath: process.env['GCODE_CHROMIUM'] } : {}).catch((error: unknown) => skip(`no Chromium for playwright: ${String(error)}`));
+    try {
+      const page = await browser.newPage({ viewport: { width: 360, height: 700 } });
+      await page.goto(address);
+      const view = () => page.evaluate(() => document.body.dataset['view']);
+      const lanes = page.locator('.geno-web-actions button[data-command="gcode.chat.lanes"]');
+      await lanes.waitFor();
+      const shown = await page.locator('.geno-web-actions button').evaluateAll((buttons) => buttons.map((b) => (b as HTMLElement).dataset['command'] ?? 'more'));
+      expect(shown, 'at 360px every action shows as an icon, in the manifest’s order').toEqual(titleActions(manifest, 'gcode.chat').map((action) => action.command));
+      const fit = await page.evaluate(() => {
+        const header = document.querySelector('.chat-header')!.getBoundingClientRect();
+        const bar = document.querySelector('.geno-web-actions')!.getBoundingClientRect();
+        return { inside: bar.right <= header.right + 0.5 && bar.top >= header.top && bar.bottom <= header.bottom, title: document.querySelector('.header-title')!.getBoundingClientRect().width };
+      });
+      expect(fit.inside, 'the icons sit inside the header’s one row').toBe(true);
+      expect(fit.title, 'and the chat’s title keeps room').toBeGreaterThan(40);
+      await lanes.click();
+      await page.waitForFunction(() => document.body.dataset['view'] === 'lanes');
+
+      await page.setViewportSize({ width: 260, height: 700 });
+      const more = page.locator('.geno-web-actions button[aria-haspopup="menu"]');
+      await more.waitFor();
+      expect(await page.locator('.geno-web-actions button[data-command]').count(), 'a narrow header keeps two icons and the menu').toBe(2);
+      await more.click();
+      const items = await page.locator('.geno-web-menu [role="menuitem"]').allTextContents();
+      expect(items).toEqual(['Lanes', 'Tasks', 'MCP Servers', 'Models and Keys']);
+      await page.locator('.geno-web-menu [role="menuitem"]', { hasText: 'MCP Servers' }).click();
+      await page.waitForFunction(() => document.body.dataset['view'] === 'mcp');
+      expect(await page.locator('.geno-web-menu').count(), 'the menu closes once an item runs').toBe(0);
+      expect(await view()).toBe('mcp');
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
 });
 
 describe('the web host in review mode', () => {

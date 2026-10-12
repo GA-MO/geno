@@ -4,6 +4,7 @@
  * the server, the server's events arrive as the window messages a webview gets, and an overlay shows the questions,
  * toasts and links the host's `vscode.window` calls make.
  */
+import type { TitleAction } from './title-actions.js';
 import type { Note, UiAnswer, UiRequest } from './vscode-shim.js';
 
 type Asked = UiRequest & { readonly id: string };
@@ -11,6 +12,7 @@ type Asked = UiRequest & { readonly id: string };
 const script = document.currentScript as HTMLScriptElement;
 const view = script.dataset['view'] ?? 'chat';
 const nonce = script.nonce ?? '';
+const actions = JSON.parse(script.dataset['actions'] ?? '[]') as readonly TitleAction[];
 const stateKey = `geno-web-state:${view}`;
 
 let open = false;
@@ -50,7 +52,7 @@ events.addEventListener('answered', (event) => {
 
 const STYLE = `
 .geno-web-toasts { position: fixed; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2147483646; max-width: min(360px, calc(100vw - 16px)); }
-.geno-web-toast, .geno-web-dialog { font: var(--vscode-font-size) var(--vscode-font-family); color: var(--vscode-notifications-foreground, var(--vscode-foreground));
+.geno-web-toast, .geno-web-dialog, .geno-web-menu { font: var(--vscode-font-size) var(--vscode-font-family); color: var(--vscode-notifications-foreground, var(--vscode-foreground));
   background: var(--vscode-notifications-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-notifications-border, var(--vscode-widget-border, transparent));
   box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,.4)); border-radius: 6px; }
 .geno-web-toast { padding: 8px 10px; display: flex; gap: 8px; align-items: baseline; }
@@ -67,6 +69,15 @@ const STYLE = `
 .geno-web-dialog .pick button { text-align: left; background: transparent; color: inherit; }
 .geno-web-dialog .pick button:hover, .geno-web-dialog .pick button:focus { background: var(--vscode-list-hoverBackground); }
 .geno-web-dialog .pick small { color: var(--vscode-descriptionForeground); margin-left: 6px; }
+.geno-web-actions { flex: none; margin-left: auto; display: flex; gap: 2px; align-items: center; }
+.geno-web-actions button, .geno-web-menu button { font: inherit; color: var(--vscode-icon-foreground, var(--vscode-foreground)); background: transparent; border: none; cursor: pointer; }
+.geno-web-actions button { min-width: 24px; height: 24px; padding: 0; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; }
+.geno-web-actions button.text { padding: 0 6px; }
+.geno-web-actions button:hover, .geno-web-actions button[aria-expanded="true"] { background: var(--vscode-toolbar-hoverBackground); }
+.geno-web-actions .codicon, .geno-web-menu .codicon { font-size: 16px; }
+.geno-web-menu { position: fixed; z-index: 2147483646; min-width: 180px; padding: 4px; display: flex; flex-direction: column; }
+.geno-web-menu button { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 4px; text-align: left; color: var(--vscode-menu-foreground, inherit); }
+.geno-web-menu button:hover, .geno-web-menu button:focus { background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground)); color: var(--vscode-menu-selectionForeground, inherit); }
 `;
 
 const element = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] => {
@@ -207,3 +218,84 @@ async function asked(request: Asked): Promise<void> {
   document.body.append(backdrop);
   (dialog.querySelector('input, button') as HTMLElement | null)?.focus();
 }
+
+/** What the header keeps for the project and the chat's title before the actions take the rest; each icon takes one slot. */
+const TITLE_ROOM = 160;
+const SLOT = 26;
+
+const iconOf = (name: string) => element('span', { className: `codicon codicon-${name}` });
+
+const runAction = (action: TitleAction): void =>
+  void fetch('/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ command: action.command }) });
+
+/**
+ * The view's title-bar actions, which VS Code draws above the webview, in the panel's own header: the navigation group
+ * as icons while they fit, and the rest in a `…` menu, as VS Code does in a narrow side bar.
+ */
+function titleBar(header: HTMLElement): void {
+  const bar = element('div', { className: 'geno-web-actions', role: 'toolbar', ariaLabel: 'Chat actions' });
+  const more = element('button', { type: 'button', title: 'More Actions…', ariaLabel: 'More Actions…', ariaHasPopup: 'menu', ariaExpanded: 'false' }, iconOf('ellipsis'));
+  let hidden: readonly TitleAction[] = [];
+  let menu: HTMLElement | undefined;
+
+  const closeMenu = (refocus = false): void => {
+    menu?.remove();
+    menu = undefined;
+    more.ariaExpanded = 'false';
+    if (refocus) more.focus();
+  };
+  const openMenu = (): void => {
+    const box = more.getBoundingClientRect();
+    menu = element(
+      'div',
+      { className: 'geno-web-menu', role: 'menu' },
+      ...hidden.map((action) =>
+        element('button', { type: 'button', role: 'menuitem', onclick: () => (closeMenu(), runAction(action)) }, ...(action.icon === undefined ? [] : [iconOf(action.icon)]), action.title),
+      ),
+    );
+    menu.style.top = `${box.bottom + 2}px`;
+    menu.style.right = `${Math.max(4, innerWidth - box.right)}px`;
+    document.body.append(menu);
+    more.ariaExpanded = 'true';
+    (menu.querySelector('button') as HTMLElement | null)?.focus();
+  };
+  more.addEventListener('click', () => (menu === undefined ? openMenu() : closeMenu()));
+  document.addEventListener('pointerdown', (event) => menu !== undefined && !menu.contains(event.target as Node) && !more.contains(event.target as Node) && closeMenu(), true);
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'Escape' || menu === undefined) return;
+      event.stopPropagation();
+      closeMenu(true);
+    },
+    true,
+  );
+
+  const iconButton = (action: TitleAction) => {
+    const shown = element('button', { type: 'button', title: action.title, ariaLabel: action.title, className: action.icon === undefined ? 'text' : '', onclick: () => runAction(action) });
+    shown.dataset['command'] = action.command;
+    shown.append(action.icon === undefined ? action.title : iconOf(action.icon));
+    return shown;
+  };
+
+  const layout = (): void => {
+    const inline = actions.filter((action) => action.inline);
+    const rest = actions.filter((action) => !action.inline);
+    const slots = Math.max(1, Math.floor((header.clientWidth - TITLE_ROOM) / SLOT));
+    const fits = inline.length + (rest.length > 0 ? 1 : 0) <= slots;
+    const shown = fits ? inline : inline.slice(0, slots - 1);
+    hidden = [...inline.slice(shown.length), ...rest];
+    closeMenu();
+    bar.replaceChildren(...shown.map(iconButton), ...(hidden.length > 0 ? [more] : []));
+  };
+  header.append(bar);
+  layout();
+  new ResizeObserver(layout).observe(header);
+}
+
+void ready().then(async () => {
+  const header = document.querySelector<HTMLElement>('.chat-header');
+  if (header === null || actions.length === 0) return;
+  await overlay();
+  titleBar(header);
+});
