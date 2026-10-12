@@ -1,0 +1,47 @@
+---
+import { codeSegments } from '../scenario/labels';
+import { ACTOR_NAME, endingOf, WHO_LABEL, type StoryItem } from '../scenario/story';
+import Sees from './Mock';
+
+interface Props {
+  items: readonly StoryItem[];
+}
+const { items } = Astro.props;
+const first = items[0]?.number ?? 1;
+---
+
+<ol class="story-list" start={first}>
+  {
+    items.map(({ beat, branches }) => {
+      const ending = endingOf(beat);
+      return (
+        <li id={`beat-${beat.id}`}>
+          <p class="story-list-head">
+            <span class={`who who-${beat.who}`}>{WHO_LABEL[beat.who]}</span>
+            <a href={`#at=${beat.id}`}>{beat.head.title}</a>
+          </p>
+          <p class="hop">{beat.from === beat.to ? `${ACTOR_NAME[beat.from]}, on its own` : `${ACTOR_NAME[beat.from]} → ${ACTOR_NAME[beat.to]}`}</p>
+          <p class="th">{codeSegments(beat.head.text).map((segment) => (segment.code ? <code>{segment.text}</code> : segment.text))}</p>
+          <Sees shown={beat.head.sees} />
+          {ending !== undefined && (
+            <p class={`end end-${ending.tone}`}>
+              <span class="end-dot" />
+              {ending.label}
+            </p>
+          )}
+          {branches !== undefined && (
+            <div class="story-list-branches">
+              <p class="fork-q">{beat.head.ask}</p>
+              {branches.map(({ branch, items: inner }) => (
+                <section class="story-list-branch">
+                  <h3>{branch.option.label}</h3>
+                  <Astro.self items={inner} />
+                </section>
+              ))}
+            </div>
+          )}
+        </li>
+      );
+    })
+  }
+</ol>

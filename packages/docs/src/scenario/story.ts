@@ -22,6 +22,8 @@ export interface Beat {
   readonly id: StepId;
   readonly head: BeatHead;
   readonly steps: readonly StepId[];
+  /** The beat's last step; at a fork, the step that forks. */
+  readonly last: StepId;
   readonly from: Actor;
   readonly to: Actor;
   readonly who: Who;
@@ -40,7 +42,7 @@ export function beatsOf(scenario: Scenario, path: readonly StepId[]): Beat[] {
     const head = scenario.steps[steps[0]!]!.beat;
     if (head === undefined) return [];
     const from = head.from ?? scenario.steps[steps[0]!]!.actor;
-    return [{ id: steps[0]!, head, steps, from, to: head.to ?? scenario.steps[steps.at(-1)!]!.actor, who: whoOf(from), flow: scenario.steps[steps.at(-1)!]!.flow }];
+    return [{ id: steps[0]!, head, steps, last: steps.at(-1)!, from, to: head.to ?? scenario.steps[steps.at(-1)!]!.actor, who: whoOf(from), flow: scenario.steps[steps.at(-1)!]!.flow }];
   });
 }
 
@@ -70,6 +72,7 @@ export function endingOf(beat: Beat): Ending | undefined {
 }
 
 export interface Branch {
+  readonly fork: StepId;
   readonly option: ForkOption;
   readonly chosen: boolean;
   /** The beat the option opens. */
@@ -93,7 +96,7 @@ export function branchesAt(scenario: Scenario, choices: Choices, fork: StepId): 
   return flow.options.map((option) => {
     const beats = beatsOf(scenario, walk(scenario, { ...choices, [fork]: option.id }));
     const first = beats.find((beat) => beat.steps.includes(option.to))!;
-    return { option, chosen: option.id === current, first, ending: endingOf(beats.at(-1)!)!, beats: beats.length };
+    return { fork, option, chosen: option.id === current, first, ending: endingOf(beats.at(-1)!)!, beats: beats.length };
   });
 }
 
@@ -162,7 +165,7 @@ export interface LaneLayout {
   readonly width: number;
 }
 
-export const LANE = { node: 128, diamond: 84, stub: 120, end: 116, step: 86, gap: 12, branch: 9, pad: 14 } as const;
+export const LANE = { node: 116, diamond: 76, stub: 112, end: 104, step: 72, gap: 8, branch: 7, pad: 10 } as const;
 
 /**
  * Places beats left to right in their actor's row. A beat moves right by at least `step` from the one before it and
@@ -196,7 +199,7 @@ export function layoutLanes(scenario: Scenario, choices: Choices, beats: readonl
     minX = self.x + LANE.step;
     if (!fork) return;
 
-    const branches = branchesAt(scenario, choices, beat.id);
+    const branches = branchesAt(scenario, choices, beat.last);
     const next = beats[i + 1];
     const taken = new Set<number>(next === undefined ? [] : [actorIndex(next.from)]);
     const column = self.x + self.w / 2 + LANE.branch * branches.length + 2 * LANE.gap;
@@ -206,7 +209,7 @@ export function layoutLanes(scenario: Scenario, choices: Choices, beats: readonl
       const natural = actorIndex(branch.first.from);
       const free = [...Array(rows).keys()].filter((candidate) => !taken.has(candidate)).sort((a, b) => Math.abs(a - natural) - Math.abs(b - natural) || a - b)[0] ?? rows++;
       taken.add(free);
-      const stub = place({ kind: 'stub', branch, fork: beat.id, x: leftOf(free, column), row: free, w: LANE.stub });
+      const stub = place({ kind: 'stub', branch, fork: beat.last, x: leftOf(free, column), row: free, w: LANE.stub });
       edges.push({ from: index, to: stub, lane: k + 1 });
     });
     lane = branches.findIndex((branch) => branch.chosen) + 1;
@@ -221,5 +224,31 @@ export function layoutLanes(scenario: Scenario, choices: Choices, beats: readonl
   }
   const width = Math.max(...items.map((item) => item.x + item.w)) + LANE.pad;
   return { items, edges, rows, width };
+}
+
+export interface StoryItem {
+  readonly beat: Beat;
+  readonly number: number;
+  readonly branches?: readonly { readonly branch: Branch; readonly items: readonly StoryItem[] }[];
+}
+
+/** The whole story for print and no-JS: the default walk, and at a fork each option nested with its beats to the end. */
+export function storyOutline(scenario: Scenario, choices: Choices = scenario.defaults, from = 0): StoryItem[] {
+  const beats = storyBeats(scenario, choices);
+  const items: StoryItem[] = [];
+  for (let i = from; i < beats.length; i++) {
+    const beat = beats[i]!;
+    if (beat.flow.kind !== 'fork') {
+      items.push({ beat, number: i + 1 });
+      continue;
+    }
+    const branches = branchesAt(scenario, choices, beat.last).map((branch) => {
+      const picked = { ...choices, [beat.last]: branch.option.id };
+      return { branch, items: storyOutline(scenario, picked, storyBeats(scenario, picked).findIndex((candidate) => candidate.id === branch.first.id)) };
+    });
+    items.push({ beat, number: i + 1, branches });
+    break;
+  }
+  return items;
 }
 

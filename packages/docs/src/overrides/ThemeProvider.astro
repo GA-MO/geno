@@ -1,0 +1,7 @@
+{/* Light paper unless the reader chose dark with the toggle (ThemeSelect.astro). Inline, so the page never flashes. */}
+<script is:inline>
+  window.StarlightThemeProvider = (() => {
+    document.documentElement.dataset.theme = typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme') === 'dark' ? 'dark' : 'light';
+    return { updatePickers() {} };
+  })();
+</script>
