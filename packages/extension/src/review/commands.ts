@@ -2,7 +2,8 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import type { CheckpointRef, HunkId, InlineEditTarget } from '@g-code/core';
 import { realOrSelf } from '../chat/bridge.js';
-import type { Chat } from '../chat/chat.js';
+import { reviewModeOf, type Chat, type SessionLink } from '../chat/chat.js';
+import type { ChatReview } from '../chat-activation.js';
 import { CheckpointDocuments, CHECKPOINT_SCHEME, openDiff } from './checkpoint.js';
 import { KEEP_COMMAND, OPEN_CHANGE_COMMAND, ReviewController, UNDO_COMMAND, UNDO_TURN_COMMAND, type Tracked } from './controller.js';
 import { REVIEW_DOCUMENTS, ReviewDecorations, ReviewLenses } from './editor.js';
@@ -123,3 +124,20 @@ export function registerReview(context: vscode.ExtensionContext, chat: Chat, rev
     }),
   );
 }
+
+/** The review of the chat's edits that registerChat wires up: the same one in VS Code's window and in the web host. */
+export const editorReview =
+  (context: vscode.ExtensionContext) =>
+  (link: () => Promise<SessionLink>, output: vscode.OutputChannel): ChatReview => {
+    const review = new ReviewController(link, output, () => reviewModeOf(vscode.workspace.getConfiguration('gcode')));
+    return {
+      track: (document, change) => review.track(document, change),
+      wire: (chat) => {
+        registerReview(context, chat, review);
+        return [
+          review.onDidChange(() => chat.reviewed(review.all())),
+          chat.onDidSwitch(() => void review.reset().catch((error: unknown) => output.appendLine(`review: could not restore the session: ${String(error)}`))),
+        ];
+      },
+    };
+  };
