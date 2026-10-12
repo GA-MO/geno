@@ -3,11 +3,25 @@ title: "Model รู้ได้อย่างไรว่าต้องทำ
 description: system prompt คือคู่มือคงที่ ข้อมูลของ session อยู่ในข้อความแรก ระหว่างทาง Geno แทรกโน้ต [Geno] และกฎที่บังคับจริงอยู่นอก model ทั้งหมด
 sidebar:
   order: 4
+payloads:
+  opening:
+    direction: request
+    source: docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6
+    select: messages[0].content
+    highlight:
+      - "[3].text"
+      - "[4].text"
+      - "[5].text"
+    collapse:
+      - "[0]"
+      - "[1]"
+      - "[2]"
+  system:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=1
+    select: system
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const opening = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6', select: 'messages[0].content', highlight: ['[3].text', '[4].text', '[5].text'], collapse: ['[0]', '[1]', '[2]'] });
+import Payload from '../../../components/Payload.astro';
 
 **model รู้เรื่องงานจากข้อความใน request เท่านั้น** ไม่มีช่องทางลับ ไม่มีการตั้งค่าที่ model มองเห็นจากที่อื่น
 Geno บอก model ผ่านสามชั้น และกฎที่สำคัญที่สุดไม่ได้อยู่ในชั้นไหนเลย เพราะ Geno บังคับใช้เองข้างนอก
@@ -30,8 +44,11 @@ system prompt ของ Geno เป็นคำอธิบายงานทั
 4. `pstackNote` เมื่อเครื่องมี pstack skill
 5. ข้อความที่คุณต่อท้ายเองด้วย `--append-system-prompt` หรือการตั้งค่า `appendSystemPrompt`
 
-นี่คือ system prompt ที่ส่งจริงในรายการ A06 ที่รันซ้ำบน engine `84461d3b`
-(`runs/A06-read-not-cat/fix-a1/wire.jsonl` บรรทัด 1 ไบต์จริง ยาว 11,134 ตัวอักษร) แต่ละส่วนจับคู่กับโค้ดที่เขียนมัน
+นี่คือ system prompt ที่ส่งจริงในรายการ A06 ที่รันซ้ำ (บรรทัด 1 ของ wire log ยาว 11,134 ตัวอักษร การ์ดแสดงแค่ต้น)
+
+<Payload of={frontmatter.payloads.system} />
+
+ตารางนี้จับคู่แต่ละส่วนของข้อความกับโค้ดที่เขียนมัน
 
 | ข้อความใน request | โค้ดที่เขียน |
 | --- | --- |
@@ -68,7 +85,7 @@ Geno จึงไม่ให้มันมีน้ำหนักเท่า
 ตัวอย่างจริงจากรายการ A10 ผู้ใช้สลับเป็นโหมด Plan ก่อนส่งคำขอ request จึงมีสองโน้ตก่อนคำขอของผู้ใช้:
 โน้ตบอกว่าตอนนี้เป็นโหมดอ่านอย่างเดียว และโน้ตบอกว่า MCP server หนึ่งตัวยังใช้ไม่ได้
 
-<Sees client:visible shown={[opening]} />
+<Payload of={frontmatter.payloads.opening} />
 
 การ์ดนี้สร้างใหม่จาก log ด้วย engine รุ่นตอนเก็บผล engine ปัจจุบันใส่ "[Geno] End of Geno's notes. The user's message follows." (`USER_PROMPT_FOLLOWS`)
 ระหว่างโน้ตกับคำขอของผู้ใช้ด้วย การ์ดนี้ยังไม่มีบรรทัดนั้น

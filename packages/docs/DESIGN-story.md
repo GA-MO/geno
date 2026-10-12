@@ -93,13 +93,32 @@ sees:
 
 - `requests.jsonl#seq=N` is the request with that `seq`, expanded (`$prefix`, `$same`) the way the runs README says.
 - `session.jsonl#seq=N` is the session event with that `seq`.
+- `wire.jsonl#line=N` is line N, counting from 1: a request body, expanded the same way, or a response stream as a
+  list of `{ event, data }`, one per SSE event. Any file takes `#line=N`.
+- A `.jsonl.gz` file reads the same as its `.jsonl`.
 - Paths use dots and brackets. `[-1]` counts from the end.
 - Instead of `source` + `select`, a page may give an inline `json:` excerpt. It still names `source`, which must exist.
 
-`docs:check` fails when the file, the `seq`, the `select` path or a `highlight`/`collapse` path does not resolve.
-The build trims the excerpt: strings over 240 characters keep their start and show "… 10,905 chars", and arrays over 6
-items show "… 6 more". Several payloads in one `sees` render as tabs. The caption reads "From a real run: A06
-read-not-cat, qwen3.8-flash" and links the source file.
+`docs:check` fails when the file, the `seq` or line, the `select` path or a `highlight`/`collapse` path does not
+resolve. The build trims the excerpt: strings over 240 characters keep their start and show "… 10,905 chars", and
+arrays over 6 items show "… 6 more". Several payloads in one `sees` render as tabs. The caption names the run and model
+("A06 read-not-cat, qwen3.8-flash"), links the source file, and says where the bytes come from: recorded bytes
+(`wire.jsonl`), a request rebuilt from the session log (`requests.jsonl`) or a logged event (a session log), plus the
+engine commit when `runs/index.json` records it.
+
+A page that is not a tour lists its payloads by name in its frontmatter and shows them with the `Payload` component.
+`docs:check` reads them on every page:
+
+```mdx
+---
+title: …
+payloads:
+  sent: { direction: request, source: "docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3", select: messages }
+---
+import Payload from '../../../components/Payload.astro';
+
+<Payload of={frontmatter.payloads.sent} />
+```
 
 ## Checks
 

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -191,6 +192,54 @@ describe('payload mocks read real runs', () => {
     expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/session.jsonl#seq=999` }))).toEqual([expect.stringContaining('no record with seq 999')]);
     expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/session.jsonl#seq=4`, select: 'content[9]' }))).toEqual([expect.stringContaining('index 9 is outside')]);
     expect(messages(story({ kind: 'payload', direction: 'response', source: `${RUN}/nope.jsonl#seq=4` }))).toEqual([expect.stringContaining('does not exist')]);
+  });
+
+  const runs = runFiles(REPO);
+  const view = (source: string, select?: string): PayloadView => {
+    const result = runs.resolve({ direction: 'request', source: `docs/results/real-usecases/runs/${source}`, ...(select === undefined ? {} : { select }) });
+    if (!result.ok) throw new Error(result.reason);
+    return result.view;
+  };
+
+  test('a wire.jsonl line is the request sent, expanded, with its engine commit', () => {
+    const sent = view('A06-read-not-cat/fix-a1/wire.jsonl#line=3', 'messages');
+    expect((sent.value as { role: string }[]).map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
+    expect(sent.provenance).toBe('recorded');
+    expect(sent.engine).toBe('84461d3b');
+  });
+
+  test('a wire.jsonl response line is its stream, one event per item', () => {
+    expect(view('A01-fix-failing-test/fix-a2/wire.jsonl#line=2', '[-2]').value).toMatchObject({ event: 'message_delta', data: { delta: { stop_reason: 'tool_use' } } });
+    expect(view('A01-fix-failing-test/fix-a2/wire.jsonl#line=2', '[-1].event').value).toBe('message_stop');
+  });
+
+  test('a gzipped session log reads by seq, and each file names where its bytes came from', () => {
+    const compact = view('A31-compaction-forced/2/session.jsonl.gz#seq=84');
+    expect(compact.value).toMatchObject({ kind: 'compact', tokensBefore: 50285, tokensAfter: 27436 });
+    expect(compact.provenance).toBe('logged');
+    expect(compact.caption).toBe('A31 compaction-forced (run 2), qwen3.8-flash');
+    expect(view('A06-read-not-cat/1/requests.jsonl#seq=9').provenance).toBe('rebuilt');
+    expect(view('A06-read-not-cat/1/requests.jsonl#seq=9').engine).toBeUndefined();
+  });
+
+  test('a line past the end of the file fails docs:check', () => {
+    expect(messages(story({ kind: 'payload', direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=7' }))).toEqual([expect.stringContaining('has no line 7; it has 6')]);
+  });
+
+  test("docs:check reads the payloads of a page that is not a scenario", () => {
+    const docs = mkdtempSync(path.join(tmpdir(), 'gdocs-'));
+    cpSync(path.join(DOCS, 'src/data'), path.join(docs, 'src/data'), { recursive: true });
+    mkdirSync(path.join(docs, 'src/content/docs/foundations'), { recursive: true });
+    const source = 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=3';
+    writeFileSync(
+      path.join(docs, 'src/content/docs/foundations/page.mdx'),
+      `---\ntitle: Page\npayloads:\n  good: { direction: request, source: "${source}", select: messages }\n  bad: { direction: request, source: "${source}", select: "messages[9]" }\n  typo: { direction: request, source: "${source}", selects: messages }\n---\n`,
+    );
+    const errors = loadSite({ docsRoot: docs, repoRoot: REPO }).problems.filter((problem) => problem.file === 'src/content/docs/foundations/page.mdx');
+    expect(errors).toEqual([
+      expect.objectContaining({ path: 'payloads.bad', message: expect.stringContaining('index 9 is outside') }),
+      expect.objectContaining({ path: 'payloads.typo', message: expect.stringContaining('selects') }),
+    ]);
   });
 });
 

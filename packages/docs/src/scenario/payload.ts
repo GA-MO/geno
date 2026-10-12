@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { PayloadIn } from './schema.js';
+import { gunzipSync } from 'node:zlib';
+import type { PayloadSpec } from './schema.js';
 
 /** A long string cut at build: its start, and how long it was. */
 export interface Long {
@@ -12,15 +13,24 @@ export interface More {
   readonly $more: number;
 }
 
+/**
+ * Where a record's bytes come from: `recorded` went over the wire (`wire.jsonl`), `rebuilt` is a request the engine
+ * rebuilt from the session log when the run was archived (`requests.jsonl`), `logged` is an event in a session log.
+ */
+export type Provenance = 'recorded' | 'rebuilt' | 'logged';
+
 export interface PayloadView {
   readonly kind: 'payload';
-  readonly direction: PayloadIn['direction'];
+  readonly direction: PayloadSpec['direction'];
   /** The excerpt, with long strings as `Long` and long arrays ending in a `More`. */
   readonly value: unknown;
   /** Canonical paths into `value`, keys and indexes joined by dots: `content.0.id`. */
   readonly highlight: readonly string[];
   readonly collapse: readonly string[];
   readonly caption: string;
+  readonly provenance: Provenance;
+  /** The engine commit of the run, when the runs index records it. */
+  readonly engine?: string;
   readonly file: string;
   readonly url: string;
 }
@@ -28,7 +38,7 @@ export interface PayloadView {
 export type PayloadResult = { readonly ok: true; readonly view: PayloadView } | { readonly ok: false; readonly reason: string };
 
 export interface RunFiles {
-  resolve(mock: PayloadIn): PayloadResult;
+  resolve(mock: PayloadSpec): PayloadResult;
 }
 
 const LONG = 240;
@@ -82,46 +92,113 @@ function survivesTrim(root: unknown, keys: readonly Key[]): boolean {
   return true;
 }
 
-/** Expands `$prefix` and `$same` the way docs/results/real-usecases/runs/README.md says. */
-export function expandRequests(lines: readonly unknown[]): Map<number, Record<string, unknown>> {
-  const last = new Map<string, Record<string, unknown>>();
-  const bySeq = new Map<number, Record<string, unknown>>();
-  for (const entry of lines as { seq?: number; url?: string; request?: Record<string, unknown> }[]) {
-    const request = entry.request;
-    if (request?.['messages'] === undefined) continue;
-    const kind = `${entry.url ?? ''}|${request['tools'] === undefined ? 'no-tools' : 'tools'}|${request['tool_choice'] === undefined ? '' : 'forced'}`;
-    const previous = last.get(kind);
-    const messages = request['messages'] as unknown[] | { $prefix: number; tail: unknown[] };
-    const expanded: Record<string, unknown> = { ...request };
-    if (!Array.isArray(messages)) expanded['messages'] = [...((previous?.['messages'] as unknown[] | undefined) ?? []).slice(0, messages.$prefix), ...messages.tail];
-    if ((request['system'] as { $same?: boolean } | undefined)?.$same === true) expanded['system'] = previous?.['system'];
-    if ((request['tools'] as { $same?: boolean } | undefined)?.$same === true) expanded['tools'] = previous?.['tools'];
-    last.set(kind, expanded);
-    if (entry.seq !== undefined) bySeq.set(entry.seq, expanded);
-  }
-  return bySeq;
+/** A run file's records, by line (from 0) and by `seq`. */
+export interface Records {
+  readonly byLine: readonly unknown[];
+  readonly bySeq: ReadonlyMap<number, unknown>;
 }
 
+/** An SSE body as its events, each `data` parsed when it is JSON; any other body parsed as JSON, or kept as text. */
+export function responseOf(body: string): unknown {
+  if (!/^(?:event|data):/m.test(body)) {
+    try {
+      return JSON.parse(body) as unknown;
+    } catch {
+      return body;
+    }
+  }
+  return body
+    .split(/\r?\n\r?\n/)
+    .filter((block) => block.trim() !== '')
+    .map((block) => {
+      const lines = block.split(/\r?\n/);
+      const field = (name: string): string =>
+        lines
+          .filter((line) => line.startsWith(`${name}:`))
+          .map((line) => line.slice(name.length + 1).replace(/^ /, ''))
+          .join('\n');
+      const data = field('data');
+      try {
+        return { event: field('event'), data: JSON.parse(data) as unknown };
+      } catch {
+        return { event: field('event'), data };
+      }
+    });
+}
+
+/**
+ * A run file's lines as records. A request line (`requests.jsonl`, `wire.jsonl`) becomes its body with `$prefix` and
+ * `$same` expanded the way docs/results/real-usecases/runs/README.md says; a `wire.jsonl` response line becomes its
+ * body through `responseOf`; any other line stays as it is.
+ */
+export function readRecords(lines: readonly unknown[]): Records {
+  const last = new Map<string, Record<string, unknown>>();
+  const byLine: unknown[] = [];
+  const bySeq = new Map<number, unknown>();
+  for (const entry of lines as { seq?: unknown; url?: string; request?: Record<string, unknown>; response?: unknown }[]) {
+    let record: unknown = entry;
+    const request = entry.request;
+    if (request?.['messages'] !== undefined) {
+      const kind = `${entry.url ?? ''}|${request['tools'] === undefined ? 'no-tools' : 'tools'}|${request['tool_choice'] === undefined ? '' : 'forced'}`;
+      const previous = last.get(kind);
+      const messages = request['messages'] as unknown[] | { $prefix: number; tail: unknown[] };
+      const expanded: Record<string, unknown> = { ...request };
+      if (!Array.isArray(messages)) expanded['messages'] = [...((previous?.['messages'] as unknown[] | undefined) ?? []).slice(0, messages.$prefix), ...messages.tail];
+      if ((request['system'] as { $same?: boolean } | undefined)?.$same === true) expanded['system'] = previous?.['system'];
+      if ((request['tools'] as { $same?: boolean } | undefined)?.$same === true) expanded['tools'] = previous?.['tools'];
+      last.set(kind, expanded);
+      record = expanded;
+    } else if (typeof entry.response === 'string') {
+      record = responseOf(entry.response);
+    }
+    byLine.push(record);
+    if (typeof entry.seq === 'number') bySeq.set(entry.seq, record);
+  }
+  return { byLine, bySeq };
+}
+
+export function provenanceOf(file: string): Provenance {
+  const name = path.basename(file).replace(/\.gz$/, '');
+  return name === 'wire.jsonl' ? 'recorded' : name === 'requests.jsonl' ? 'rebuilt' : 'logged';
+}
+
+const INDEX = 'docs/results/real-usecases/runs/index.json';
+
 export function runFiles(repoRoot: string): RunFiles {
-  const records = new Map<string, Map<number, unknown>>();
-  const recordsOf = (file: string): Map<number, unknown> => {
+  const records = new Map<string, Records>();
+  const recordsOf = (file: string): Records => {
     let found = records.get(file);
     if (found === undefined) {
-      const lines = readFileSync(path.join(repoRoot, file), 'utf8')
-        .split('\n')
-        .filter((line) => line.trim() !== '')
-        .map((line) => JSON.parse(line) as unknown);
-      found = file.endsWith('/requests.jsonl') ? expandRequests(lines) : new Map(lines.map((line) => [(line as { seq?: number }).seq ?? -1, line]));
+      const bytes = readFileSync(path.join(repoRoot, file));
+      found = readRecords(
+        (file.endsWith('.gz') ? gunzipSync(bytes) : bytes)
+          .toString('utf8')
+          .split('\n')
+          .filter((line) => line.trim() !== '')
+          .map((line) => JSON.parse(line) as unknown),
+      );
       records.set(file, found);
     }
     return found;
   };
+  let engines: ReadonlyMap<string, string> | undefined;
+  const engineOf = (file: string): string | undefined => {
+    engines ??= new Map(
+      existsSync(path.join(repoRoot, INDEX))
+        ? (JSON.parse(readFileSync(path.join(repoRoot, INDEX), 'utf8')) as { dir: string; engineCommit?: string }[]).flatMap((entry) =>
+            entry.engineCommit === undefined ? [] : [[entry.dir, entry.engineCommit] as const],
+          )
+        : [],
+    );
+    const dir = /(runs\/[^/]+\/[^/]+)\//.exec(file)?.[1];
+    return dir === undefined ? undefined : engines.get(dir);
+  };
   const modelOf = (file: string, record: unknown): string | undefined => {
-    const own = (record as { model?: unknown }).model;
+    const own = (record as { model?: unknown } | null)?.model;
     if (typeof own === 'string') return own;
-    const session = path.join(path.dirname(file), 'session.jsonl');
-    if (!existsSync(path.join(repoRoot, session))) return undefined;
-    const start = [...recordsOf(session).values()].find((line) => (line as { kind?: string }).kind === 'session-start') as { session?: { model?: string } } | undefined;
+    const session = ['session.jsonl', 'session.jsonl.gz'].map((name) => path.join(path.dirname(file), name)).find((candidate) => existsSync(path.join(repoRoot, candidate)));
+    if (session === undefined) return undefined;
+    const start = recordsOf(session).byLine.find((line) => (line as { kind?: string }).kind === 'session-start') as { session?: { model?: string } } | undefined;
     return start?.session?.model;
   };
 
@@ -129,9 +206,10 @@ export function runFiles(repoRoot: string): RunFiles {
     resolve(mock) {
       const [file, anchor] = mock.source.split('#') as [string, string];
       if (!existsSync(path.join(repoRoot, file))) return { ok: false, reason: `${file} does not exist` };
-      const seq = Number(anchor.slice('seq='.length));
-      const record = recordsOf(file).get(seq);
-      if (record === undefined) return { ok: false, reason: `${file} has no record with seq ${seq}` };
+      const [by, n] = anchor.split('=') as ['seq' | 'line', string];
+      const { byLine, bySeq } = recordsOf(file);
+      const record = by === 'seq' ? bySeq.get(Number(n)) : byLine[Number(n) - 1];
+      if (record === undefined) return { ok: false, reason: by === 'seq' ? `${file} has no record with seq ${n}` : `${file} has no line ${n}; it has ${byLine.length}` };
       let selected: unknown = mock.json;
       if (mock.json === undefined) {
         const picked = follow(record, parsePath(mock.select ?? ''));
@@ -155,6 +233,7 @@ export function runFiles(repoRoot: string): RunFiles {
       const [, runCase, run] = /runs\/([^/]+)\/([^/]+)\//.exec(file) ?? [];
       const label = (runCase ?? '').replace(/^([A-Z]\d+)-/, '$1 ');
       const model = modelOf(file, record);
+      const engine = engineOf(file);
       return {
         ok: true,
         view: {
@@ -164,6 +243,8 @@ export function runFiles(repoRoot: string): RunFiles {
           highlight: highlight.paths,
           collapse: collapse.paths,
           caption: `${label}${run === '1' || run === undefined ? '' : ` (run ${run})`}${model === undefined ? '' : `, ${model}`}`,
+          provenance: provenanceOf(file),
+          ...(engine === undefined ? {} : { engine }),
           file,
           url: `vscode://file${path.join(repoRoot, file)}`,
         },

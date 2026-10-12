@@ -1,0 +1,16 @@
+---
+/**
+ * Real wire data on any page: `<Payload of={frontmatter.payloads.first} />`, or a list to show as tabs. The specs
+ * live in the page's `payloads` frontmatter, where docs:check reads them.
+ */
+import { payloadViews } from '../scenario/site';
+import Sees from './Mock';
+
+interface Props {
+  readonly of: unknown;
+}
+const { of } = Astro.props;
+const views = payloadViews(Array.isArray(of) ? of : [of]);
+---
+
+<Sees client:visible shown={views} />

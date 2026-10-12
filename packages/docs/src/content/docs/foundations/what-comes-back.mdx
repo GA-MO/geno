@@ -3,11 +3,39 @@ title: "Model ตอบกลับอะไรได้บ้าง"
 description: คำตอบของ model มีแค่สามชนิดบล็อก (text thinking tool_use) กับ stop_reason หนึ่งค่า Geno อ่านมันเป็น stream แล้วตัดสินขั้นต่อไปจาก stop_reason
 sidebar:
   order: 6
+payloads:
+  answer:
+    direction: response
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4
+    highlight:
+      - content[2].name
+      - content[3].name
+      - content[4].name
+      - stopReason
+    collapse:
+      - promptParts
+      - timing
+  streamStart:
+    direction: response
+    source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
+    highlight:
+      - "[1].event"
+      - "[2].data.content_block"
+      - "[3].data.delta"
+  streamToolUse:
+    direction: response
+    source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
+    select: "[17]"
+    highlight:
+      - data.content_block
+  streamEnd:
+    direction: response
+    source: docs/results/real-usecases/runs/A01-fix-failing-test/fix-a2/wire.jsonl#line=2
+    select: "[-2]"
+    highlight:
+      - data.delta.stop_reason
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const answer = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4', highlight: ['content[2].name', 'content[3].name', 'content[4].name', 'stopReason'], collapse: ['promptParts', 'timing'] });
+import Payload from '../../../components/Payload.astro';
 
 **คำตอบของ model คือรายการบล็อกกับเหตุผลที่หยุด** ไม่มีอะไรมากกว่านั้น
 บล็อกมีสามชนิดหลัก และ `stop_reason` บอกว่า model หยุดเพราะอะไร
@@ -24,7 +52,7 @@ Geno ใช้สองอย่างนี้ตัดสินว่าจะ
 ในรายการ A06 model ได้คำถามสามข้อ (scripts ไฟล์ใน `src` และไฟล์ test) มันตอบด้วยห้าบล็อก:
 thinking หนึ่ง text สั้นหนึ่ง และ `tool_use` สามบล็อก จบด้วย `stopReason: tool_use`
 
-<Sees client:visible shown={[answer]} />
+<Payload of={frontmatter.payloads.answer} />
 
 การ์ดนี้คือ event `assistant` ที่ Geno บันทึก นอกจาก `content` ยังมี `usage` (token ที่ใช้ แยก cache) `costUsd` และเวลา
 model ไม่ได้รอผลของ `read` ก่อนขอ `list` มันขอทั้งสามพร้อมกันเพราะไม่ขึ้นต่อกัน
@@ -36,33 +64,19 @@ qwen ส่งบล็อก `thinking` มาเองทั้งที่ re
 ## stream: คำตอบมาเป็นชิ้น
 
 Geno ขอคำตอบแบบ `stream: true` ผู้ให้บริการจึงส่ง event ทีละชิ้นแทนที่จะส่งก้อนเดียวตอนจบ
-นี่คือไบต์ที่ได้รับจริงในรายการ A01 รอบ `fix-a2` (engine `6238d339`, `runs/A01-fix-failing-test/fix-a2/wire.jsonl` บรรทัด 2) ตัดตรงกลางออก
+นี่คือไบต์ที่ได้รับจริงในรายการ A01 รอบ `fix-a2` (บรรทัด 2 ของ wire log) stream นี้มี 25 event
+การ์ดแยก event ละก้อน: `event` คือชื่อ และ `data` คือ JSON ที่ตามมา ห้า event แรกคือ `ping` การเปิด message และการเริ่มบล็อก thinking
 
-```text
-event:message_start
-data:{"type":"message_start","message":{"model":"qwen3.8-flash","content":[],"stop_reason":null,"usage":{"input_tokens":6366,"output_tokens":0}}}
-event:content_block_start
-data:{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
-event:content_block_delta
-data:{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let"}}
-  … thinking ต่อ แล้ว text "I'll …" ทีละคำ …
-event:content_block_start
-data:{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_055fa7d76e6c410c8ea08f02","name":"list","input":{}}}
-event:content_block_delta
-data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"directory\": "}}
-event:content_block_delta
-data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"\""}}
-event:content_block_delta
-data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"}"}}
-event:content_block_stop
-data:{"type":"content_block_stop","index":2}
-event:message_delta
-data:{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":6,"output_tokens":50,"cache_creation_input_tokens":497,"cache_read_input_tokens":6295}}
-event:message_stop
-data:{"type":"message_stop"}
-```
+<Payload of={frontmatter.payloads.streamStart} />
 
-(ตัดบาง field ออกเพื่อให้อ่านง่าย เช่น `id` ของ message และ `ping`)
+thinking ไหลต่อทีละคำ แล้วถึงบล็อก text "I'll look at the repo and run the tests to see the failure."
+จากนั้น event ที่ 18 เปิดบล็อก `tool_use` ชื่อ `list` โดย `input` ยังว่าง
+
+<Payload of={frontmatter.payloads.streamToolUse} />
+
+input ตามมาอีกสี่ event (`input_json_delta`) แล้วบล็อกปิด event รองสุดท้ายบอกเหตุผลที่จบ
+
+<Payload of={frontmatter.payloads.streamEnd} />
 
 สามเรื่องที่ควรเห็นจาก stream นี้
 

@@ -3,15 +3,43 @@ title: "Tool คือสัญญา"
 description: tool คือชื่อ คำอธิบาย และ JSON schema ที่ Geno ส่งให้ model model "เลือก" tool ด้วยการเขียน JSON หนึ่งก้อน Geno เป็นคนตรวจและรันทั้งหมด
 sidebar:
   order: 5
+payloads:
+  readTool:
+    direction: request
+    source: docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4
+    select: tools[6]
+    highlight:
+      - name
+      - input_schema.required
+    collapse:
+      - input_schema.properties
+  searchCall:
+    direction: response
+    source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=4
+    select: content[-1]
+    highlight:
+      - name
+      - input
+  searchResult:
+    direction: tool_result
+    source: docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=5
+    select: output
+  badCall:
+    direction: response
+    source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=30
+    select: content[-1].input
+    highlight:
+      - files
+  badResult:
+    direction: tool_result
+    source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=31
+    highlight:
+      - status
+      - output
+    collapse:
+      - timing
 ---
-import Sees from '../../../components/Mock';
-import { card } from '../../../data/foundations/card';
-
-export const readTool = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', select: 'tools[6]', highlight: ['name', 'input_schema.required'], collapse: ['input_schema.properties'] });
-export const searchCall = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=4', select: 'content[-1]', highlight: ['name', 'input'] });
-export const searchResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=5', select: 'output' });
-export const badCall = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=30', select: 'content[-1].input', highlight: ['files'] });
-export const badResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=31', highlight: ['status', 'output'], collapse: ['timing'] });
+import Payload from '../../../components/Payload.astro';
 
 **tool คือสัญญาที่เขียนเป็นข้อความ** มีสามส่วน: ชื่อ คำอธิบายภาษาคน และ `input_schema` ที่บอกว่า input ต้องหน้าตาอย่างไร
 model ไม่ได้ต่อสายเข้าเครื่องของคุณ สิ่งเดียวที่ model ทำได้คือเขียนว่า "ขอเรียก tool ชื่อนี้ ด้วย input นี้" เป็น JSON
@@ -21,7 +49,7 @@ model ไม่ได้ต่อสายเข้าเครื่องข�
 
 นี่คือ tool `read` ใน `tools` ของ request จริง ตรงกับ `TOOL_SPECS.read` ใน `packages/core/src/tools.ts`
 
-<Sees client:visible shown={[readTool]} />
+<Payload of={frontmatter.payloads.readTool} />
 
 model อ่านคำอธิบายนี้ทุก request เหมือนอ่านคู่มือ ประโยค "a PNG, JPEG, GIF or WebP file comes back as the image itself" คือเหตุผลที่ model รู้ว่า `read` เปิดรูปได้
 และ "After a successful edit the file is current, so do not read it again" กันไม่ให้ model เสีย token อ่านไฟล์ซ้ำ
@@ -45,11 +73,11 @@ Geno มี tool หลายสิบตัว ถ้าส่ง schema คร
 
 ในรายการ A05 ผู้ใช้ถามหัวข้อของหน้าเว็บ `web_fetch` เป็น deferred model จึงขอโหลดก่อน
 
-<Sees client:visible shown={[searchCall]} />
+<Payload of={frontmatter.payloads.searchCall} />
 
 ผลที่ได้กลับมาเป็นข้อความธรรมดาที่มี JSON schema ของ `web_fetch` อยู่ข้างใน
 
-<Sees client:visible shown={[searchResult]} />
+<Payload of={frontmatter.payloads.searchResult} />
 
 สังเกตว่า `tools` ของ request ถัดไปไม่เปลี่ยน schema มาถึง model เป็นข้อความใน `tool_result` เท่านั้น
 ทำให้ส่วนต้นของ request ที่ cache ไว้ไม่พัง ถ้า model เรียก deferred tool ก่อนโหลด Geno ตอบเป็น error ว่าให้เรียก `tool_search` ก่อน (`unloadedCallError`)
@@ -63,9 +91,9 @@ model เขียน JSON ผิดได้ ทุก executor จึงตร
 
 ตัวอย่างจริงจากรายการ A35 รอบที่ 1 model ส่ง `files` เป็นสตริงที่หน้าตาเหมือน JSON array แทนที่จะเป็น array
 
-<Sees client:visible shown={[badCall]} />
+<Payload of={frontmatter.payloads.badCall} />
 
-<Sees client:visible shown={[badResult]} />
+<Payload of={frontmatter.payloads.badResult} />
 
 model ลองอีกสามครั้ง เปลี่ยน path เปลี่ยน caption และลดเหลือไฟล์เดียว แต่ `files` ยังเป็นสตริงทุกครั้ง จึงได้ error เดิมทุกครั้ง
 สุดท้าย model เขียน script รวมสองรูปเป็นรูปเดียวแทน
