@@ -95,4 +95,5 @@ scenario:
 - **Edit ไม่ถามในโหมด Ask และ Auto** ผู้ใช้ตรวจการแก้ทีหลัง: ในโหมด review แบบ `auto` ท้าย turn มีแถว "1 file changed · Undo"
   ดู [ดูการเปลี่ยนแปลงของเทิร์นและ Undo](/scenarios/ed/review-auto-undo/) ในโหมด `review` แต่ละ hunk มี Keep และ Undo
 - **โหมด Plan** ปฏิเสธ `edit` ทั้งหมด ผลเป็น error ธรรมดา แผงจึงแสดงว่าขั้นล้มเหลว ไม่ใช่ถูกปฏิเสธ
-- **ไม่มี editor ก็แก้ได้** ใน CLI หรือ session ใน lane engine เขียนไฟล์ชั่วคราวแล้ว rename ทับ ไม่มี action `diff` สดในแผง
+- **ไม่มี editor ก็แก้ได้** เมื่อไม่มี editor ที่เขียนไฟล์ได้แสดง session นั้น (เช่นใน CLI) หรือ session ทำงานใน lane
+  engine เขียนไฟล์ชั่วคราวแล้ว rename ทับ ไม่มี action `diff` สดในแผง

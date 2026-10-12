@@ -69,7 +69,7 @@ scenario:
       at: bridge
       do: >-
         `writeTextFile` เทียบ hash กับข้อความบนดิสก์ ตรงกัน จึงเขียน ถ้าไม่ตรง ได้ stale และ `notebook_edit` บอกโมเดลว่าไฟล์เปลี่ยน
-        หลังเขียน `onWrite` ส่ง action `diff` ให้แผง
+        หลังเขียน callback ที่ `Chat` ส่งให้ `writeTextFile` ส่ง action `diff` ให้แผง เพราะ session นี้เป็นของแผงเอง
       ref: packages/extension/src/chat/bridge.ts#writeTextFile
       emits: [diff]
 
