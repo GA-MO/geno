@@ -1,5 +1,5 @@
 ---
-title: PreToolUse ตัดสิน call ก่อนรัน
+title: "hook PreToolUse ตัดสิน call ก่อนรัน"
 description: hook ที่ตั้งไว้ได้ดู call ทุกตัวก่อนรัน มันปฏิเสธ call อนุญาตพร้อมแก้ input ขอให้ถามผู้ใช้ หรือหยุดทั้ง turn ก็ได้
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [hook.permission-request, hook.user-prompt-submit, perm.ask-allow]
   steps:
     - id: wants
+      beat:
+        title: Model ขอรัน `pnpm deploy --prod`
+        text: โมเดลอยากปล่อยงานขึ้น production จากเครื่องของคุณ
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `bash` ด้วยคำสั่ง `pnpm deploy --prod` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -23,6 +27,9 @@ scenario:
       phase: calling-model
 
     - id: decide
+      beat:
+        title: Geno บันทึกคำขอแล้วเตรียมรัน
+        text: ก่อน call แรกของรอบนี้จะเริ่ม Geno ให้ hook PreToolUse ดูทุก call ก่อน
       lane: loop
       at: step
       do: >-
@@ -32,6 +39,11 @@ scenario:
       phase: running-tools
 
     - id: hook
+      beat:
+        title: Geno ส่ง call ให้ `guard.sh`
+        text: สคริปต์ได้ชื่อ tool และคำสั่งเป็น JSON ทาง stdin ถ้ามีหลาย hook Geno ใช้คำตอบที่เข้มที่สุด
+        to: machine
+        ask: hook ตอบอะไร
       lane: policy
       at: hooks
       do: >-
@@ -47,6 +59,11 @@ scenario:
             label: ปฏิเสธ
             steps:
               - lane: policy
+                beat:
+                  title: hook ปฏิเสธ call
+                  text: สคริปต์จบด้วย exit 2 และเขียน "deploys go through CI" Geno ไม่ขึ้นการ์ด และไม่ถาม classifier
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์จบด้วย exit 2 และเขียน "deploys go through CI" ลง stderr
@@ -55,6 +72,9 @@ scenario:
                 ref: "packages/engine/src/hooks.ts#\"const record: ApprovalRecord = { mode, rule: 'hook-deny'\""
                 emits: [hook-deny, deny]
               - lane: loop
+                beat:
+                  title: Geno ไม่รันคำสั่ง
+                  text: call ยังขึ้นเป็นขั้นในแชต แต่ไม่มีอะไรรัน ผลถึงโมเดลคือข้อความของ hook hook หลังรันก็ไม่ทำงานกับ call นี้
                 at: tools
                 do: >-
                   call ยังขึ้นเป็นขั้นในแผงแชต แต่ `callOf` ไม่รันอะไร ได้ผลสถานะ `denied` ทันที
@@ -64,11 +84,25 @@ scenario:
                 emits: [denied]
               - use: tool-result-returns
               - lane: panel
+                beat:
+                  title: แชตบอกว่า hook ปฏิเสธ
+                  text: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมเหตุผลของ hook
+                  from: panel
+                  sees:
+                    kind: step
+                    label: pnpm deploy --prod
+                    status: denied
+                    note: Denied by a hook · Deploys go through CI.
                 at: rail
                 do: ขั้นของคำสั่งขึ้นป้ายว่า hook ปฏิเสธ พร้อมเหตุผลของ hook
                 sees: "Denied by a hook · Deploys go through CI."
                 ref: packages/extension/src/chat/session-updates.ts#denialOf
               - lane: loop
+                beat:
+                  title: Model อ่านเหตุผลของ hook
+                  text: การปฏิเสธของ hook ไม่ใช่การปฏิเสธของคุณ turn จึงไม่จบ โมเดลอ่านเหตุผล แล้วหาทางอื่น เช่นบอกคุณให้ deploy ผ่าน CI
+                  to: model
+                  end: Model หาทางอื่น
                 at: step
                 do: >-
                   การปฏิเสธจาก hook ไม่ใช่การปฏิเสธของผู้ใช้ `loopStep` จึงตัดสิน `call-model` ตามปกติ
@@ -82,6 +116,11 @@ scenario:
             label: อนุญาตและแก้ input
             steps:
               - lane: policy
+                beat:
+                  title: hook อนุญาตแล้วแก้คำสั่ง
+                  text: hook ตอบ allow พร้อมคำสั่งใหม่ `pnpm deploy --prod --dry-run` ซึ่งแทนคำสั่งของโมเดลทั้งก้อน
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON `permissionDecision: "allow"` พร้อม `updatedInput` ที่เปลี่ยนคำสั่งเป็น `pnpm deploy --prod --dry-run`
@@ -89,18 +128,30 @@ scenario:
                 ref: "packages/engine/src/hooks.ts#\"const updated = decision.kind === 'none' || decision.input === undefined ? use\""
                 emits: [allow, updatedInput]
               - lane: policy
+                beat:
+                  title: กฎ deny ของคุณยังมีผล
+                  text: Geno ยังตรวจกฎ deny ของ workspace แต่การอนุญาตของ hook ตอบคำถามแทนคุณ การ์ดจึงไม่ขึ้น ยกเว้นคำสั่งที่กฎกำหนดว่าต้องถามเสมอ
                 at: rules
                 do: >-
                   `ruledDenial` ยังตรวจกฎ deny ของ workspace ก่อน แต่การอนุญาตของ hook ตอบคำถามแทนผู้ใช้
                   คำสั่งที่ปกติต้องถามจึงไม่ขึ้นการ์ด และข้าม classifier ยกเว้นคำสั่งที่กฎกำหนดว่าต้องถามเสมอ
                 ref: packages/core/src/permission-rules.ts#ruledDenial
               - lane: tool
+                beat:
+                  title: คำสั่งที่แก้แล้วรันใน sandbox
+                  text: การอนุญาตของ hook ไม่ยกเว้น sandbox log ยังเก็บคำสั่งตามที่โมเดลส่ง
+                  from: machine
                 at: shell
                 do: >-
                   `bash` รันคำสั่งที่ hook แก้แล้วใน sandbox การอนุญาตของ hook ไม่ยกเว้น sandbox
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Model อ่านผลของ `--dry-run`
+                  text: Geno เรียกโมเดลอีกครั้ง โมเดลเห็นผลของคำสั่งที่ hook แก้
+                  to: model
+                  end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
                   log เก็บ `tool_use` ตามที่โมเดลส่ง ส่วน PostToolUse hook เห็น input ที่รันจริง
@@ -114,6 +165,11 @@ scenario:
             label: ขอให้ถามผู้ใช้
             steps:
               - lane: policy
+                beat:
+                  title: hook ขอให้ถามคุณ
+                  text: hook ตอบ ask พร้อมเหตุผล "touches production" แม้ในโหมด Auto Geno ก็ไม่ให้ classifier ตัดสินแทน
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON `permissionDecision: "ask"` พร้อม `permissionDecisionReason: "touches production"`
@@ -133,6 +189,14 @@ scenario:
                   PermissionRequest hook (ถ้ามี) ได้ตอบก่อน เมื่อไม่มีก็ส่งต่อให้ผู้ใช้ผ่าน `approval.approve`
                 ref: packages/engine/src/tools/agent.ts#settle
               - lane: server
+                beat:
+                  title: Geno หยุด turn แล้วถามคุณ
+                  text: ถ้ามี hook PermissionRequest มันได้ตอบก่อน เมื่อไม่มี Geno ส่งคำขอ permission ให้ VS Code งานใน Tasks ขึ้นว่ารอคุณ
+                  to: panel
+                  sees:
+                    kind: task
+                    title: pnpm deploy --prod
+                    status: needs-input
                 at: approvals
                 do: >-
                   `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` ที่มีเหตุผลของ hook เป็น `reason`
@@ -147,6 +211,18 @@ scenario:
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
                 emits: [permission]
               - lane: panel
+                beat:
+                  title: คุณเห็นการ์ด “Run this command?”
+                  text: เหตุผลบนการ์ดคือข้อความของ hook ต่อท้ายวลีมาตรฐานของการ์ด
+                  to: you
+                  sees:
+                    kind: permission
+                    command: pnpm deploy --prod
+                    reason: "Geno asks because it uses A PreToolUse hook [settings] asks first: touches production.."
+                    options:
+                      - Allow
+                      - Deny
+                      - No, and tell the agent…
                 at: card
                 do: >-
                   แผงแชตแสดงการ์ดคำสั่ง เหตุผลบนการ์ดคือข้อความของ hook ต่อท้ายวลี "Geno asks because it uses"
@@ -156,6 +232,11 @@ scenario:
                   ปุ่ม [Allow] [Deny] [No, and tell the agent…]
                 ref: packages/extension/src/chat/render.ts#COMMAND_FACE
               - lane: user
+                beat:
+                  title: คุณกด Allow
+                  text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต และ tool ไม่ถามซ้ำ แต่กฎ deny ของ workspace ยังมีผล
+                  from: you
+                  to: engine
                 do: ผู้ใช้อ่านแล้วกด Allow
               - lane: editor
                 at: chat
@@ -171,12 +252,21 @@ scenario:
                 ref: "packages/engine/src/drive.ts#\"const reply = await own.run(raw, { ...toolCtx, hookAllowed: true });\""
                 phase: running-tools
               - lane: tool
+                beat:
+                  title: คำสั่งรันใน sandbox
+                  text: "`pnpm deploy --prod` รัน ผลพาบันทึกว่าคุณเป็นคนอนุญาต"
+                  from: machine
                 at: shell
                 do: >-
                   `bash` รัน `pnpm deploy --prod` ใน sandbox ผลแนบบันทึกว่าผู้ใช้อนุญาต update ปิดจึงมี `APPROVAL_META`
                 ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
               - use: tool-result-returns
               - lane: loop
+                beat:
+                  title: Model อ่านผลของคำสั่ง
+                  text: Geno เรียกโมเดลอีกครั้ง ถ้าคุณกด Deny แทน turn จะจบเหมือนการ์ดของโหมด Ask
+                  to: model
+                  end: Model อ่านผลแล้วทำต่อ
                 at: step
                 do: >-
                   `loopStep` ตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
@@ -190,6 +280,11 @@ scenario:
             label: หยุดทั้ง turn
             steps:
               - lane: policy
+                beat:
+                  title: hook สั่งหยุดทั้ง turn
+                  text: 'hook ตอบ `continue: false` พร้อมเหตุผล "production is frozen" call นี้ถูกปฏิเสธ call อื่นใน turn เดียวกันที่ hook ไม่ได้ปฏิเสธยังรันตามปกติ แล้ว Geno บันทึก error ว่า hook หยุด turn'
+                  from: machine
+                  to: engine
                 at: hooks
                 do: >-
                   สคริปต์พิมพ์ JSON `{"continue": false, "stopReason": "production is frozen"}`
@@ -204,6 +299,18 @@ scenario:
                 ref: "packages/engine/src/drive.ts#\"const message = `A ${stop.by} hook stopped the turn: ${stop.reason}`;\""
                 emits: [denied, blocked]
               - lane: server
+                beat:
+                  title: แชตขึ้นแถบ error
+                  text: ขั้นของคำสั่งขึ้นป้ายปฏิเสธ และท้าย turn มีแถบ error ที่บอกเหตุผลของ hook
+                  from: panel
+                  sees:
+                    - kind: step
+                      label: pnpm deploy --prod
+                      status: denied
+                      note: Denied by a hook · Production is frozen.
+                    - kind: notice
+                      text: "A PreToolUse hook stopped the turn: production is frozen"
+                      tone: error
                 at: updates
                 do: >-
                   ผลของ call ไปเป็น `tool_call_update` และ error ไปเป็น `agent_message_chunk` พร้อม `TURN_ERROR_META`
@@ -217,6 +324,15 @@ scenario:
                   "Denied by a hook · Production is frozen." และแถบ error "A PreToolUse hook stopped the turn: production is frozen"
                 ref: packages/extension/src/chat/render.ts#errorBlock
               - lane: loop
+                beat:
+                  title: Turn ล้มเหลว
+                  text: Geno ไม่เรียกโมเดลอีก งานจบแบบ failed และปุ่ม Send กลับมา
+                  to: panel
+                  end: Turn ล้มเหลวเพราะ hook
+                  sees:
+                    kind: composer
+                    state: idle
+                    header: failed after 4s
                 at: step
                 do: >-
                   `loopStep` เห็น error ชนิด `blocked` จึงตัดสิน `done(error)` โมเดลไม่ถูกเรียกอีก
