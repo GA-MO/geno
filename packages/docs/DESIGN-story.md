@@ -123,6 +123,15 @@ sees:
   list of `{ event, data }`, one per SSE event. Any file takes `#line=N`.
 - A `.jsonl.gz` file reads the same as its `.jsonl`.
 - Paths use dots and brackets. `[-1]` counts from the end.
+- A card never shows less than a whole content block of a message (`content[i]` of a message or a response). A
+  `select` that reaches inside one, such as `content[-1].input`, renders the whole block with the part highlighted,
+  and `docs:check` fails it with the select and highlight to write instead. `cut: <why>` opts out and shows the part
+  alone.
+- A card that shows a message, its `content`, or one of its blocks gets a chip row above the JSON listing the
+  message's blocks in order (`thinking · text · tool_use edit · tool_use edit`). A chip scrolls the JSON to its
+  block; a dashed chip is a block of the same message that the card does not show.
+- The first card on a page that shows a `tool_use` block carries a Thai line on reading one: `name`, `input`, `id`.
+  In a story it is the first beat with one; on other pages, CSS hides it on every later `Payload`.
 - Instead of `source` + `select`, a page may give an inline `json:` excerpt. It still names `source`, which must exist.
 
 `docs:check` fails when the file, the `seq` or line, the `select` path or a `highlight`/`collapse` path does not

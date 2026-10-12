@@ -27,9 +27,9 @@ payloads:
   badCall:
     direction: response
     source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=30
-    select: content[-1].input
+    select: content[-1]
     highlight:
-      - files
+      - input.files
   badResult:
     direction: tool_result
     source: docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=31

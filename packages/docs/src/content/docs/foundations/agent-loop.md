@@ -122,8 +122,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=8
-          select: content[-1].input
-          highlight: [path, new_str]
+          select: content[-1]
+          highlight: [input.path, input.new_str]
       do: >-
         model ขอ `edit` ที่ `src/duration.ts` ด้วย `old_str` เป็น stub ทั้งก้อน จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -178,8 +178,8 @@ scenario:
           kind: payload
           direction: response
           source: docs/results/real-usecases/runs/A13-fail-then-fix/1/session.jsonl#seq=11
-          select: content[-1].input
-          highlight: [command, description]
+          select: content[-1]
+          highlight: [input.command, input.description]
       do: >-
         model ขอ `bash` ด้วย `node --test test/duration.test.ts; echo "exit=$?"; git status --short`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
