@@ -62,10 +62,12 @@ function along(path: SVGGeometryElement): Keyframe[] {
 const PLANS: Readonly<Record<Role, (element: Element, root: Element) => Plan | undefined>> = {
   'draw-x': () => ({ keyframes: [{ scale: '0 1' }, { scale: '1 1' }], duration: TRAVEL }),
   'draw-y': () => ({ keyframes: [{ scale: '1 0' }, { scale: '1 1' }], duration: TRAVEL * 0.8 }),
+  // The arrowhead is a marker on the path's end; it stays off until the line reaches it, then the path's own
+  // marker-end returns as the animation ends.
   'draw-path': (element) => {
     const length = (element as SVGGeometryElement).getTotalLength();
     const dash = `${length} ${length}`;
-    return { keyframes: [{ strokeDasharray: dash, strokeDashoffset: length }, { strokeDasharray: dash, strokeDashoffset: 0 }], duration: TRAVEL };
+    return { keyframes: [{ strokeDasharray: dash, strokeDashoffset: length, markerEnd: 'none' }, { strokeDasharray: dash, strokeDashoffset: 0, markerEnd: 'none' }], duration: TRAVEL };
   },
   ride: (element, root) => {
     const rail = (element as HTMLElement).dataset['rail'];
