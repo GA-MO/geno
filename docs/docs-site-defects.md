@@ -59,3 +59,4 @@ Agents that traced the harness for `packages/docs` read the code behind each sce
 | 36 | A mention error shows the user "Invalid params: …". | — | Read |
 | 37 | A queued follow-up whose text holds an `@` mention but no attachment can be sent mid-turn with Send now, so the mention goes as plain steer text and is never resolved. | `extension/src/chat/steer-model.ts:82` checks attachments only | Read |
 | 38 | After an offline or retry wait ends and the call goes out again, the panel keeps the turn in its waiting state while the re-sent answer streams. | — | Read |
+| 39 | Geno never checks whether the chosen model accepts images. A pasted or attached image goes to a text-only model as base64 and the provider's error reaches the user. | — | Read |
