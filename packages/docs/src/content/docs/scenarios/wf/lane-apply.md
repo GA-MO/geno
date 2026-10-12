@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณกด Apply บน lane ที่ worker ทิ้งไว้
         text: แผง Lanes แสดงทุก lane ของโฟลเดอร์ พร้อม diff ผลของ check และค่าใช้จ่าย คุณกด Apply บน `worker-1a2b3c4d`
+        from: you
+        to: panel
         sees: แถว "worker-1a2b3c4d" บอกจำนวนไฟล์และบรรทัดที่เปลี่ยน และปุ่ม [Open] [Apply] [Discard]
       lane: panel
       at: lanes
@@ -36,6 +38,7 @@ scenario:
       beat:
         title: แชตเริ่ม turn ของการ apply
         text: Apply ได้เฉพาะในแชตของ checkout หลัก แชตส่งคำสั่ง apply เป็น prompt
+        from: panel
         to: engine
         sees:
           kind: message
@@ -61,6 +64,8 @@ scenario:
       beat:
         title: Geno apply เองโดยไม่เรียก model
         text: lane ต้องอยู่ใน repository เดียวกับแชต และงานของ lane ต้องจบแล้ว
+        from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -73,6 +78,8 @@ scenario:
       beat:
         title: Geno merge ทีละไฟล์
         text: Geno merge สามทางระหว่างฐานของ lane ตัว lane และ checkout หลักตอนนี้ รวม buffer ที่ยังไม่บันทึก ไฟล์เดียวที่ชนทำให้ไม่มีอะไรถูกเขียนเลย
+        from: engine
+        to: engine
         ask: merge ชนไหม
       lane: server
       at: turns
@@ -94,6 +101,8 @@ scenario:
                 beat:
                   title: ไฟล์หนึ่งชน Geno ไม่เขียนอะไร
                   text: คุณแก้ `src/log.ts` บรรทัดเดียวกันใน checkout หลักไปแล้ว Geno จดไฟล์ที่ชน ไม่มี checkpoint ไม่มีไฟล์เปลี่ยน
+                  from: engine
+                  to: engine
                 at: turns
                 do: >-
                   ผู้ใช้แก้ `src/log.ts` บรรทัดเดียวกันใน checkout หลักไปแล้ว `applyLaneTurn` บันทึก event `lane-apply` ที่มีรายการที่ชน
@@ -104,6 +113,7 @@ scenario:
                 beat:
                   title: แชตบอกว่าไฟล์ไหนชน
                   text: turn จบ lane ยังอยู่ครบ คุณแก้ที่ checkout หลักแล้ว Apply ใหม่ หรือเปิด lane ไปดูได้
+                  from: engine
                   to: panel
                   sees:
                     kind: message
@@ -129,6 +139,8 @@ scenario:
       beat:
         title: Geno เก็บ checkpoint ก่อนเขียน
         text: Undo All ย้อนการ apply ทั้งหมดได้จาก checkpoint นี้
+        from: engine
+        to: engine
       lane: server
       at: turns
       do: >-
@@ -140,6 +152,7 @@ scenario:
       beat:
         title: แต่ละไฟล์ขึ้นเป็นขั้น edit
         text: แชตเห็นขั้นต่อไฟล์เหมือน agent แก้ VS Code เขียนแต่ละไฟล์และแสดง diff
+        from: engine
         to: panel
         sees:
           kind: step
@@ -158,6 +171,8 @@ scenario:
       beat:
         title: Geno สรุปว่า apply กี่ไฟล์
         text: Geno จดไฟล์ที่เขียนและที่ลบ แล้วส่งข้อความสรุปเป็นคำตอบของ turn
+        from: engine
+        to: panel
         sees:
           kind: message
           from: geno
@@ -182,6 +197,7 @@ scenario:
       beat:
         title: Turn จบ hunk รอคุณตรวจ
         text: ไม่มีการเรียก model การ์ดการเปลี่ยนแปลงแสดงทั้งสองไฟล์ และ editor แสดง hunk ที่รอ Keep หรือ Undo lane ยังอยู่จนคุณ Discard
+        from: engine
         to: panel
         sees:
           kind: composer

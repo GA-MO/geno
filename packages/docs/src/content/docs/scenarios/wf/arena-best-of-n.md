@@ -18,7 +18,8 @@ scenario:
       beat:
         title: คุณพิมพ์ `/best-of-n 3` แล้วกด Start
         text: คุณขอให้ย้าย `src/log.ts` ไปใช้ pino สามแบบ ให้แต่ละ lane ใช้ model ต่างกัน engine ประมาณราคาต่อ lane แล้วแผง Arena แสดงการ์ด คุณกด Start แล้ว Geno สร้างสาม lane แต่ละตัวมี worktree และ session ของตัวเอง
-        to: engine
+        from: you
+        to: panel
         sees: การ์ดของ best-of-3 ที่มี lane A B C กับโมเดลของแต่ละตัว ราคาประมาณ และปุ่ม [Start] [Cancel]
       lane: user
       do: ผู้ใช้พิมพ์คำสั่งแล้วกด Enter
@@ -78,6 +79,7 @@ scenario:
         title: สาม lane รันงานพร้อมกัน
         text: แต่ละ lane ทำงานเดียวกันด้วย model ของตัวเองใน worktree ของตัวเอง ไม่มีแชตไหนรอมัน
         from: model
+        to: engine
         ask: รอหรือหยุด
       lane: child@lane-a
       at: model
@@ -113,6 +115,7 @@ scenario:
                   title: คุณกด Stop
                   text: แชตบอกทุก lane ที่ยังรันให้หยุด
                   from: you
+                  to: panel
                 do: ผู้ใช้กด Stop ในแผง Arena ระหว่างที่ lane ยังรัน
               - lane: editor
                 at: engine-link
@@ -124,6 +127,7 @@ scenario:
                 beat:
                   title: ทุก lane หยุด
                   text: lane ที่หยุดไม่ถูกตรวจและไม่ถูกจัดอันดับ run จบแบบ stopped lane ยังอยู่ให้เปิดดู
+                  from: engine
                   to: panel
                   sees: ป้าย "Stopped" บน run และบนแต่ละ lane
                   end: Run หยุด lane ยังอยู่
@@ -144,6 +148,8 @@ scenario:
       beat:
         title: Geno ตรวจแต่ละ lane แล้วนับที่ผ่าน
         text: check ของโปรเจกต์รันใน sandbox ของแต่ละ lane แผงแสดง Checking แล้ว Passed หรือ Failed เมื่อทุก lane จบ Geno นับ lane ที่ผ่าน
+        from: engine
+        to: machine
         ask: ผ่านกี่ lane
       lane: server
       at: sessions
@@ -173,6 +179,8 @@ scenario:
                 beat:
                   title: ไม่มีอะไรให้เทียบ
                   text: lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่ต้องเรียก review ถ้าไม่มี lane ผ่านเลย run ได้ป้าย "No lane passed"
+                  from: engine
+                  to: engine
                 at: sessions
                 do: >-
                   ไม่มีอะไรให้เทียบ `trivialRanking` ให้ lane เดียวที่ผ่านเป็นที่หนึ่งโดยไม่เรียก review
@@ -183,6 +191,8 @@ scenario:
       beat:
         title: review จัดอันดับ lane ที่ผ่าน
         text: Geno ส่ง diff ของทุก lane ที่ผ่านให้ subagent review ซึ่งจัดอันดับและให้เหตุผล
+        from: model
+        to: engine
       lane: child@review
       at: model
       runs: 1
@@ -196,6 +206,7 @@ scenario:
       beat:
         title: Arena แสดงอันดับและ diff
         text: lane เรียงตามอันดับพร้อมเหตุผล ผลของ check ค่าใช้จ่าย และ diff เทียบกัน ปุ่ม Pick ของอันดับหนึ่งเป็นปุ่มหลัก
+        from: panel
         to: you
         sees: ป้าย "Ranked" แถว lane B อยู่บนสุดพร้อมป้าย "Passed" และปุ่ม [Pick B]
       lane: panel
@@ -212,6 +223,7 @@ scenario:
         title: คุณกด Pick B
         text: Geno จดผู้ชนะแล้ว apply lane B เข้าแชตของ checkout หลัก เมื่อเสร็จ แผงชวนให้ติ๊ก hunk ของ lane อื่นมาทับ
         from: you
+        to: panel
         ask: ทำอะไรต่อ
       lane: editor
       at: chat
@@ -237,6 +249,8 @@ scenario:
                 beat:
                   title: คุณพอแค่ Pick
                   text: การเปลี่ยนของ lane B อยู่ในแชตของ checkout หลักแล้ว ทัวร์ถัดไปเล่าการ apply
+                  from: you
+                  to: panel
                   end: ไปดูการ apply lane
                 at: chat
                 do: >-
@@ -252,6 +266,7 @@ scenario:
                   title: คุณ graft 2 hunk จาก lane C
                   text: คุณติ๊ก 2 hunk ปุ่มเปลี่ยนเป็น "Graft 2 hunks from C" แชตส่งคำสั่ง graft ซึ่ง apply แบบเดียวกับ lane
                   from: you
+                  to: panel
                   end: ไปดูการ apply lane
                 at: chat
                 do: >-
