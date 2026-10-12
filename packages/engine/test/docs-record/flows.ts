@@ -1,4 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk';
+import { STEER_META, TASKS_CAPABILITY, WORKFLOWS_CAPABILITY } from '@g-code/core';
 import { engineShared, gcodeAgent } from '../../src/serve.js';
 import { call, report, say, scripted, sessionIdOf } from '../conformance/scripted.js';
 import type { Responder, ScriptEntry } from '../fake-model.js';
@@ -113,6 +114,10 @@ type Editor = {
   readonly update?: (params: acp.SessionNotification, ctx: acp.ClientContext) => void;
   /** Resolves once the run has done what the flow shows, after the last prompt's turn ends. */
   readonly settled?: (requests: () => number) => Promise<void>;
+  /** Files the workspace holds besides the shared ones. */
+  readonly files?: Readonly<Record<string, string>>;
+  /** Capabilities the editor advertises in `_meta`, as VS Code does for Tasks and workflows. */
+  readonly meta?: Readonly<Record<string, unknown>>;
 };
 
 /** Prompts from an editor over ACP in one session, as `gcode serve` runs them for VS Code. */
@@ -124,7 +129,7 @@ async function editorFlow(
   editor: Editor = {},
   env: Record<string, string> = {},
 ): Promise<Recording> {
-  const run = await scripted('anthropic', script, files(modes));
+  const run = await scripted('anthropic', script, files(modes, editor.files));
   Object.assign(run.env, env);
   const seen = capture(run.io.fetch!);
   const io = { ...run.io, fetch: seen.fetch };
@@ -141,7 +146,7 @@ async function editorFlow(
   try {
     await client.connectWith(gcodeAgent(io, run.store, { maxTurns: 10, maxCostUsd: 1 }, undefined, engine), async (ctx) => {
       connection = ctx;
-      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: { subagents: {} } });
+      await ctx.request(acp.methods.agent.initialize, { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: { subagents: {}, ...(editor.meta === undefined ? {} : { _meta: editor.meta }) } });
       const { sessionId } = await ctx.request(acp.methods.agent.session.new, { cwd: run.workspace, mcpServers: [] });
       await ctx.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
       for (const text of typeof prompts === 'string' ? [prompts] : prompts) await ctx.request(acp.methods.agent.session.prompt, { sessionId, prompt: [{ type: 'text', text }] });
@@ -486,4 +491,67 @@ export const FLOWS: readonly Flow[] = [
         ),
     };
   })(),
+  (() => {
+    let steer = (): Promise<unknown> => Promise.reject(new Error('explore has not started'));
+    return {
+      name: 'user-steers-child',
+      what: "While explore runs, the user types into explore's own conversation; the message reaches explore at its next model call.",
+      run: () =>
+        editorFlow(
+          ['ask'],
+          'ask',
+          [
+            to(ASK_WHERE, agentCall('toolu_agent_1', { agent: 'explore', task: EXPLORE_TASK })),
+            to(EXPLORE_TASK, async () => (void steer(), await sleep(300), grep('toolu_grep_1', 'parseVersion\\('))),
+            to(EXPLORE_TASK, report('src/cli.ts:3 calls parseVersion on the first CLI argument. I skipped src/update.ts, as you asked.', 'toolu_report_1')),
+            to(ASK_WHERE, say('parseVersion is called in src/cli.ts:3; explore skipped src/update.ts as you asked.')),
+          ],
+          ASK_WHERE,
+          {
+            update: (params, ctx) => {
+              const update = params.update as { sessionUpdate: string; sessionId?: string; state?: { state: string } };
+              if (update.sessionUpdate !== 'subagent_update' || update.state?.state !== 'running') return;
+              steer = () => ctx.request(acp.methods.agent.session.prompt, { sessionId: update.sessionId!, prompt: [{ type: 'text', text: 'Skip src/update.ts.' }], _meta: { [STEER_META]: true } });
+            },
+          },
+        ),
+    };
+  })(),
+  {
+    name: 'workflow-run',
+    what: 'The user runs /workflow fix-bug; each step runs as a subagent with its prompt filled in, and the run report wakes the chat.',
+    run: () =>
+      editorFlow(
+        ['ask', 'auto'],
+        'auto',
+        [
+          to('Find where', grep('toolu_grep_1', 'parseVersion')),
+          to('Find where', report("src/version.ts:2 returns [0, 0, 0] for '' instead of failing.", 'toolu_report_1')),
+          to('Fix it.', read('toolu_read_1', 'src/version.ts')),
+          to('Fix it.', editVersion),
+          to('Fix it.', report(WORKER_REPORT, 'toolu_report_2')),
+          { when: (request) => anyText(request.body).includes('Started workflow fix-bug'), answer: say('The workflow fix-bug finished: parseVersion now throws on an empty string (src/version.ts:2).') },
+        ],
+        '/workflow fix-bug parseVersion accepts an empty string',
+        {
+          files: {
+            '.g-code/workflows/fix-bug.json': `${JSON.stringify(
+              {
+                description: 'Find where a bug comes from, then fix it.',
+                input: 'What is broken',
+                steps: [
+                  { id: 'reproduce', role: 'explore', prompt: 'Find where this goes wrong: {{input}}. Cite path:line.' },
+                  { id: 'fix', role: 'worker', prompt: 'Fix it. What the reproduce step found:\n{{reproduce}}' },
+                ],
+              },
+              null,
+              2,
+            )}\n`,
+          },
+          meta: { [TASKS_CAPABILITY]: true, [WORKFLOWS_CAPABILITY]: true },
+          settled: (requests) => until(() => requests() === 6, 'the woken turn'),
+        },
+        { GCODE_WAKE_POLICY: JSON.stringify({ batchMs: 50, secondMs: 20 }) },
+      ),
+  },
 ];

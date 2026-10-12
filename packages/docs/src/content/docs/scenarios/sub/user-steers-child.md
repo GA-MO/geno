@@ -30,13 +30,13 @@ scenario:
 
     - id: type
       beat:
-        title: คุณพิมพ์ “skip the generated folder”
+        title: คุณพิมพ์ “Skip src/update.ts.”
         text: คุณกด Send ใต้ช่องขึ้นว่ากำลังส่ง และข้อความจะลงที่รอบ tool ถัดไป
         from: you
         to: panel
         sees: Sending… it lands at the next tool round
       lane: user
-      do: ผู้ใช้พิมพ์ "skip the generated folder" แล้วกด Send
+      do: ผู้ใช้พิมพ์ "Skip src/update.ts." แล้วกด Send
 
     - id: post
       lane: panel
@@ -113,9 +113,21 @@ scenario:
     - id: logged
       beat:
         title: explore รับข้อความที่จุดปลอดภัย
-        text: ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความเป็นคำของคุณเอง ถ้ามันกำลังรัน tool ข้อความรอจน tool ชุดนั้นจบ
+        text: >-
+          ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความเป็นคำของคุณเอง ถ้ามันกำลังรัน tool ข้อความรอจน tool ชุดนั้นจบ
+          ใน request ถัดไปของ explore ข้อความต่อท้ายผลของ `grep` เป็นโน้ต "[Geno] The user sent a new message while you were working"
+          ไม่อยู่ในรั้ว ต่างจากข้อความที่แม่ส่งด้วย `message_agent` ซึ่งอยู่ในรั้ว `<parent_message>` (แท็บสอง จากอีก flow หนึ่ง)
         from: engine
         to: model
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=6
+            select: messages[2]
+            highlight: ['content[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/background-steer.jsonl#line=10
+            select: messages[2]
+            highlight: ['content[1].text']
       lane: child@explore
       at: loop
       do: >-
@@ -130,7 +142,7 @@ scenario:
         text: ข้อความขึ้นตรงที่ลงจริง พร้อมป้ายว่าส่งระหว่าง turn
         from: panel
         to: you
-        sees: บับเบิล "Sent mid-turn" ที่มีข้อความ "skip the generated folder"
+        sees: บับเบิล "Sent mid-turn" ที่มีข้อความ "Skip src/update.ts."
       lane: server
       at: updates
       do: >-
@@ -143,7 +155,7 @@ scenario:
       at: rail
       alongside: true
       do: ข้อความขึ้นในบทสนทนาของลูกตรงที่ลงจริง
-      sees: บับเบิล "Sent mid-turn" ที่มีข้อความ "skip the generated folder"
+      sees: บับเบิล "Sent mid-turn" ที่มีข้อความ "Skip src/update.ts."
       ref: packages/extension/src/chat/steer-view.ts#steerStep
 
     - id: answered
@@ -170,9 +182,16 @@ scenario:
     - id: reads
       beat:
         title: explore ปรับการค้นตามคุณ
-        text: explore อ่านว่าคุณส่งข้อความใหม่ระหว่างทำงาน แล้วข้ามโฟลเดอร์นั้น แม่ไม่รู้เรื่องนี้จนกว่าจะอ่านรายงานของ explore
+        text: >-
+          explore อ่านว่าคุณส่งข้อความใหม่ระหว่างทำงาน แล้วข้ามไฟล์นั้น แม่ไม่รู้เรื่องนี้จนกว่าจะอ่านรายงานของ explore
+          ซึ่งกลับไปเป็นผลของ call `agent` ในรั้วตามปกติ (การ์ด)
         from: model
         to: engine
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/user-steers-child.jsonl#line=8
+          select: messages[2].content[0]
+          highlight: [content]
         end: explore ทำต่อ
       lane: child@explore
       at: model

@@ -190,9 +190,22 @@ scenario:
     - id: steps
       beat:
         title: แต่ละขั้นเป็น subagent
-        text: "`reproduce` หาเทสต์ที่ล้ม แล้ว `fix` ได้ผลของมันไปแก้ รอบสุดท้ายเป็น gate ที่รัน check ของโปรเจกต์ check ผ่าน"
+        text: >-
+          แต่ละขั้นได้ request แรกแบบลูกทั่วไป: system prompt ของ role ของขั้น และข้อความแรกที่มี environment กับ prompt ของขั้น
+          ที่เติม `{{input}}` แล้ว (แท็บแรก ขั้น `reproduce` บน explore) ขั้นที่อ้าง `{{reproduce}}` ได้รายงานของขั้นนั้นทั้งรั้ว
+          `<subagent_report>` และคำเตือน แทรกในข้อความแรก (แท็บสอง ขั้น `fix` บน worker) การ์ดมาจาก workflow สองขั้นที่บันทึกไว้
+          ทัวร์นี้เล่า workflow สามขั้นที่จบด้วย gate ที่รัน check ของโปรเจกต์
         from: model
         to: engine
+        sees:
+          - kind: payload
+            source: packages/docs/src/data/recorded/workflow-run.jsonl#line=3
+            select: messages[0]
+            highlight: ['content[1].text']
+          - kind: payload
+            source: packages/docs/src/data/recorded/workflow-run.jsonl#line=7
+            select: messages[0]
+            highlight: ['content[1].text']
       lane: child@worker
       at: model
       do: >-
@@ -213,10 +226,17 @@ scenario:
     - id: report
       beat:
         title: Workflow จบแล้วปลุกแชต
-        text: รายงานของ workflow อยู่ในรั้วและเข้ากล่องของแชตที่เริ่ม แชตเปิด turn ใหม่ที่หัวมีกระดิ่ง
+        text: >-
+          รายงานของ workflow อยู่ในรั้ว `<subagent_report agent="workflow fix-bug">` ที่สรุปทุกขั้น แต่ละขั้นมี session ของตัวเอง
+          และต่อด้วยรายงานของขั้นสุดท้าย รายงานเข้ากล่องของแชตที่เริ่ม แชตเปิด turn ใหม่ที่หัวมีกระดิ่ง
+          และ request ของ turn นั้นจบด้วยรั้วนี้กับโน้ตว่า Geno เริ่ม turn เอง
         from: engine
         to: panel
-        sees: กระดิ่งกับป้ายที่ปลุก หัวข้อ "working" และปุ่ม Stop
+        sees:
+          kind: payload
+          source: packages/docs/src/data/recorded/workflow-run.jsonl#line=13
+          select: messages[2]
+          highlight: ['content[2].text', 'content[3].text']
       lane: server
       at: wakes
       do: >-
