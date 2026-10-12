@@ -30,7 +30,7 @@ scenario:
       at: executor
       do: >-
         `spawn_task` ไม่เริ่มอะไร `offerOf` ตรวจว่าไม่มีข้อเสนอที่เปิดอยู่หัวข้อเดียวกัน และข้อเสนอที่เปิดอยู่ไม่เกิน 10
-        แล้วคืนผลที่มีข้อเสนอติดไปด้วย ข้อความถึงโมเดลคือ "Suggested spinoff-1 ... nothing was started. Go on with the current task."
+        แล้วคืนผลที่มีข้อเสนอติดไปด้วย ข้อความถึงโมเดลขึ้นต้นด้วย `Suggested task_<8 หลัก> "Fix the same leap-year bug in src/time.ts".` และบอกว่า "nothing was started. Go on with the current task."
       ref: packages/core/src/spinoff.ts#offerOf
       emits: [offered]
 
