@@ -1,5 +1,5 @@
 ---
-title: โหมด Auto ยังขึ้นการ์ดถาม
+title: "โหมด Auto ยังขึ้นการ์ดถามคุณ"
 description: สามทางที่โหมด Auto ถามผู้ใช้แทน classifier เมื่อ Auto พักเพราะบล็อกบ่อย เมื่อคำสั่ง rm -rf แตะ workspace หรือนอกมัน และเมื่อกฎ ask ของ workspace ตรงกับคำสั่ง
 tableOfContents: false
 sidebar:
@@ -16,6 +16,11 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขอรันคำสั่งนอก safe list"
+        text: >-
+          session อยู่ในโหมด Auto โมเดลขอรันคำสั่งด้วย `bash` แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        to: engine
       do: >-
         โมเดลขอเรียก `bash` และจบคำตอบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -27,6 +32,12 @@ scenario:
     - id: rules
       lane: policy
       at: rules
+      beat:
+        title: "Geno ตรวจกฎตามลำดับ"
+        text: >-
+          Geno ดูกฎห้ามและกฎถามของ workspace ก่อน แล้วจึงดูกฎในตัวของ Geno ปกติโหมด Auto ส่งให้ classifier
+          แต่มีสามทางที่คำสั่งไปถึงคุณ ลองเลือกดู
+        ask: "ทำไมถึงถามคุณ"
       do: >-
         `approveCommand` ให้ `ruledDenial` ตัดสินตามลำดับ: กฎ deny และ ask ของ workspace ก่อน แล้วกฎในตัวของ Geno
       ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -39,6 +50,11 @@ scenario:
             steps:
               - lane: policy
                 at: rules
+                beat:
+                  title: "Auto พักอยู่ คำถามจึงไปถึงคุณ"
+                  text: >-
+                    `node scripts/build-icons.mjs` ไปที่ classifier ซึ่งไม่แน่ใจ ก่อนหน้านี้ classifier บล็อกครบ 3 ครั้งติดกัน
+                    Auto จึงพักอยู่ ความไม่แน่ใจจึงกลายเป็นคำถามถึงคุณพร้อมเหตุผลของ classifier แทนการบล็อก
                 do: >-
                   คำสั่งติดกฎ `unlisted` ซึ่งในโหมด Auto คือ `classify` `ruledDenial` แนบรูปแบบ `node scripts/build-icons.mjs` ไว้ให้บันทึกเป็นกฎ
                 ref: packages/core/src/permission-rules.ts#ruledDenial
@@ -61,6 +77,11 @@ scenario:
             steps:
               - lane: policy
                 at: rules
+                beat:
+                  title: "rm -rf นอก workspace ต้องถามเสมอ"
+                  text: >-
+                    `rm -rf ../old-build` ลบนอก workspace กฎนี้ถามเสมอแม้ในโหมด Auto จึงไม่มี classifier กฎอนุญาตและ hook
+                    ครอบคำสั่งนี้ไม่ได้ และไม่มีรูปแบบให้บันทึก
                 do: >-
                   กฎ `rm-rf-outside-workspace` ครอบคลุม `rm -rf` ของ workspace เอง `.git` หรือ path นอก workspace
                   คำตัดสินเป็น `ALWAYS_ASK`: Auto ก็ `ask` ไม่ใช่ `classify` จึงไม่มี classifier
@@ -73,6 +94,11 @@ scenario:
             steps:
               - lane: policy
                 at: rules
+                beat:
+                  title: "กฎ ask ของ workspace ตรงกับคำสั่ง"
+                  text: >-
+                    คุณตั้งกฎถาม `pnpm publish` ไว้ใน Settings กฎของ workspace มาก่อนกฎในตัว โหมด Auto จึงถามเหมือนโหมด Ask
+                    ไม่ส่งให้ classifier
                 do: >-
                   ผู้ใช้ตั้งกฎ ask `pnpm publish` ไว้ใน Settings `caughtBy` เจอกฎนี้ก่อนกฎในตัว จึงคืน denial `workspace-ask`
                   คำตัดสินเป็น `ask` ในโหมด Auto เช่นเดียวกับ Ask ไม่ส่งให้ classifier (โหมด Plan จะกลายเป็นปฏิเสธ)
@@ -82,6 +108,11 @@ scenario:
     - id: ask
       lane: server
       at: approvals
+      beat:
+        title: "Geno หยุด turn แล้วถามคุณ"
+        text: >-
+          Geno ส่งคำถามไปที่แชต หัวข้อมีเหตุผลของ classifier ถ้ามี งานในแผง Tasks เปลี่ยนเป็นรอคุณ
+        to: panel
       do: >-
         `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` หัวข้อของ call มาจาก `approvalQuestion`
         ซึ่งต่อท้ายเหตุผลของ classifier เมื่อมีคำตอบของ classifier งานในแผง Tasks เปลี่ยนเป็น `needs-input`
@@ -100,6 +131,13 @@ scenario:
     - id: card
       lane: panel
       at: card
+      beat:
+        title: "คุณเห็นการ์ด “Run this command?”"
+        text: >-
+          การ์ดเหมือนในโหมด Ask เหตุผลบอกว่ากฎไหนทำให้ถาม ปุ่ม Always allow ขึ้นเฉพาะเมื่อมีรูปแบบให้บันทึก
+        to: you
+        ask: "กดปุ่มไหน"
+        sees: { kind: permission, command: rm -rf ../old-build, reason: "Geno asks because it uses rm -rf of the workspace, its .git or a path outside it.", options: [ Allow, Deny, "No, and tell the agent…" ] }
       do: >-
         การ์ดคำสั่งขึ้นเหมือนในโหมด Ask เหตุผลบอกว่ากฎไหนทำให้ถาม ถ้า classifier ตอบมา การ์ดมีบรรทัดเหตุผลของมันด้วย
         ปุ่ม Always allow ขึ้นเฉพาะเมื่อมีรูปแบบให้บันทึก (`rm -rf` นอก workspace และกฎ ask ไม่มี)
@@ -121,6 +159,13 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Allow"
+                  text: >-
+                    การ์ดย่อเหลือ Allowed Geno จดว่าคุณอนุญาต ถ้า Auto พักอยู่ การอนุญาตนี้ทำให้ Auto กลับมาใช้ classifier
+                    ถ้าไม่ได้พัก ตัวนับการบล็อกเริ่มใหม่
+                  from: you
+                  to: engine
                 do: >-
                   การ์ดย่อเหลือ Allowed `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -144,6 +189,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Deny"
+                  text: >-
+                    turn จบรอคุณเหมือนการปฏิเสธในโหมด Ask Auto ที่พักอยู่ยังพักต่อ ทัวร์นั้นเล่าต่อ
+                  from: you
+                  end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -166,6 +217,13 @@ scenario:
     - id: run
       lane: tool
       at: shell
+      beat:
+        title: "คำสั่งรันใน sandbox"
+        text: >-
+          การอนุญาตไม่ได้ยกเว้น sandbox `rm -rf ../old-build` ยังลบนอก workspace ไม่ได้ถ้า sandbox
+          ไม่ได้เปิดสิทธิ์เขียนที่นั่น ผลกลับมาที่แชตพร้อมบันทึกว่าคุณอนุญาต
+        from: engine
+        to: machine
       do: >-
         `bash` รันคำสั่งใน sandbox การอนุญาตไม่ได้ยกเว้น sandbox `rm -rf ../old-build` ยังลบนอก workspace ไม่ได้
         ถ้า sandbox ไม่ได้เปิดสิทธิ์เขียนที่นั่นไว้ ผลแนบบันทึกว่าผู้ใช้อนุญาต (`approval`) อัปเดตผลของ call นี้จึงมี `APPROVAL_META`
@@ -176,6 +234,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model อ่านผลของคำสั่ง"
+        text: >-
+          Geno เรียกโมเดลต่อ โมเดลได้อ่านผลของคำสั่ง
+        to: model
+        end: "คุณอนุญาต turn ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model` โมเดลได้อ่านผลของคำสั่ง
       ref: packages/core/src/loop.ts#loopStep
@@ -199,3 +263,5 @@ scenario:
 - **การปฏิเสธไม่ปลด Auto** มีแค่การอนุญาตของผู้ใช้ที่ทำให้ Auto กลับไปตัดสินเอง ผู้ใช้ที่กด Deny ไปเรื่อยๆ จะเห็นการ์ดทุกครั้งที่ classifier ไม่แน่ใจ
 - **`rm -rf` ภายใน workspace ต่างออกไป** กฎ `rm-rf-in-workspace` ให้ classifier ตัดสินในโหมด Auto
   เฉพาะการลบ workspace ทั้งก้อน `.git` หรือนอก workspace ที่ถามผู้ใช้เสมอ
+
+classifier ตัดสินอย่างไรเมื่อไม่ต้องถามคุณ ดู [โหมด Auto ให้ classifier ตัดสินคำสั่ง](/scenarios/perm/auto-classifier/)

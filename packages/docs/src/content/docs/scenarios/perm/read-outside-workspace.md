@@ -1,5 +1,5 @@
 ---
-title: อ่านไฟล์นอก workspace
+title: "Model อ่านไฟล์นอก workspace"
 description: โมเดลอ่านไฟล์ในโปรเจกต์อื่น Geno ถามก่อนเหมือน cat ของ path นั้น ผู้ใช้อนุญาตครั้งเดียว อนุญาตทั้งโฟลเดอร์ตลอด session หรือปฏิเสธ
 tableOfContents: false
 sidebar:
@@ -16,6 +16,12 @@ scenario:
   steps:
     - id: asks
       lane: model
+      beat:
+        title: "Model ขออ่านไฟล์ในโปรเจกต์อื่น"
+        text: >-
+          โมเดลขอ `read` ไฟล์ `/Users/me/shared-lib/src/date.ts` ซึ่งอยู่นอก workspace และยังไม่เคยอนุญาตใน session นี้
+          แชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        to: engine
       do: >-
         โมเดลขอ `read` ไฟล์ด้วย path แบบเต็มนอก workspace จบด้วย `stop_reason: tool_use`
       ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -35,6 +41,11 @@ scenario:
     - id: outside
       lane: tool
       at: executor
+      beat:
+        title: "Geno เห็นว่า path อยู่นอก workspace"
+        text: >-
+          การอ่านที่อาจออกนอก workspace รันตัวเดียวในชุด Geno หา path จริงแล้วพบว่าไม่อยู่ในโฟลเดอร์ใดที่อ่านได้
+          ไม่มีกฎห้ามอ่านตรง จึงต้องถาม
       runs: 0
       do: >-
         `read` ถูกห่อด้วย `withReach` ซึ่งรันมันตัวเดียวในชุดเพราะ path อาจออกนอก workspace
@@ -44,6 +55,20 @@ scenario:
     - id: judge
       lane: policy
       at: rules
+      beat:
+        title: "Geno ใช้กฎเดียวกับ cat ของ path นั้น"
+        text: >-
+          กฎของ path นอก workspace ในโหมด Ask คือถาม Geno เสนอโฟลเดอร์ `/Users/me/shared-lib/src` ให้อนุญาตตลอด session
+          เพราะ path ไม่ใช่ไฟล์ลับ แล้วส่งคำถามไปที่แชต run จริงด้านล่างไม่มีคนดู กฎเดียวกันจึงปฏิเสธเอง
+        to: panel
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A32-outside-explicit/1/session.jsonl#seq=9
+          select: approval
+          highlight:
+            - rule
+            - reason
       do: >-
         `outsideReadDenial` ใช้กฎ `path-outside-workspace` เดียวกับ `cat` ของ path นั้น ในโหมด Ask คือถาม
         และเสนอโฟลเดอร์ `/Users/me/shared-lib/src` ให้อนุญาตตลอด session เพราะ path ไม่ใช่ไฟล์ลับ
@@ -78,6 +103,13 @@ scenario:
     - id: card
       lane: panel
       at: card
+      beat:
+        title: "คุณเห็นการ์ด “Read outside the workspace?”"
+        text: >-
+          การ์ดของการอ่านนอก workspace มีปุ่มอนุญาตทั้งโฟลเดอร์แทนปุ่มบันทึกกฎ ลองเลือกแต่ละทาง
+        to: you
+        ask: "กดปุ่มไหน"
+        sees: "การ์ด \"Read outside the workspace?\" \"Geno asks about a path outside the workspace.\" ปุ่ม Allow, Allow this directory for the session, Deny และ No, and tell the agent…"
       do: >-
         การ์ดใช้หน้าตาของการอ่านนอก workspace
       sees: >-
@@ -97,6 +129,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Allow"
+                  text: >-
+                    Geno จดว่าคุณอนุญาตไฟล์นี้ครั้งเดียว
+                  from: you
+                  to: engine
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -118,6 +156,13 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณอนุญาตทั้งโฟลเดอร์ตลอด session"
+                  text: >-
+                    Geno เพิ่มโฟลเดอร์นี้เข้ารายการที่ session อ่านได้ การอ่านครั้งต่อไปใต้โฟลเดอร์นี้ไม่ถามอีก
+                    แต่ไฟล์ลับในนั้นยังถามแยก
+                  from: you
+                  to: engine
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `allow-session`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -139,6 +184,12 @@ scenario:
             steps:
               - lane: editor
                 at: chat
+                beat:
+                  title: "คุณกด Deny"
+                  text: >-
+                    ไฟล์ไม่ถูกอ่าน turn จบรอคุณเหมือนการปฏิเสธคำสั่งในโหมด Ask ทัวร์นั้นเล่าต่อ
+                  from: you
+                  end: "คุณปฏิเสธ turn จบ"
                 do: >-
                   `askPermission` ตอบ engine ว่า `selected` ตัวเลือก `reject`
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
@@ -160,6 +211,14 @@ scenario:
     - id: read
       lane: tool
       at: executor
+      beat:
+        title: "read อ่านไฟล์ แต่ยังตรวจไฟล์ลับ"
+        text: >-
+          read อ่านไฟล์โดยให้ราก filesystem เป็นที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
+          ผลกลับมาที่แชตพร้อมบันทึกว่าคุณอนุญาต
+        from: engine
+        to: machine
+        sees: { kind: step, label: read /Users/me/shared-lib/src/date.ts, status: done }
       runs: 1
       do: >-
         `read` อ่านไฟล์โดยให้ราก filesystem เป็นโฟลเดอร์ที่อ่านได้สำหรับ call นี้ และยังตรวจกฎไฟล์ลับกับ path เต็ม
@@ -171,6 +230,12 @@ scenario:
     - id: next
       lane: loop
       at: step
+      beat:
+        title: "Model อ่านไฟล์แล้วทำต่อ"
+        text: >-
+          Geno เรียกโมเดลต่อ โมเดลได้เนื้อไฟล์จากโปรเจกต์อื่น
+        to: model
+        end: "คุณอนุญาต turn ทำต่อ"
       do: >-
         `loopStep` เห็น `tool-result` ล่าสุดจึงตัดสิน `call-model`
       ref: packages/core/src/loop.ts#loopStep
@@ -195,3 +260,5 @@ Geno อ่านได้โดยไม่ถามเฉพาะใน works
   และวิธีเพิ่มโฟลเดอร์ใน `permissions.additionalDirectories` เมื่อผู้ใช้กด Deny เอง ข้อความไม่บอก เพราะผู้ใช้สั่งให้หยุด
 - **ไฟล์ลับไม่ได้ปุ่มโฟลเดอร์** ถ้า path เป็นไฟล์ลับหรืออยู่ในที่เก็บรหัสของ home เช่น `~/.aws` การ์ดไม่เสนอให้อนุญาตทั้งโฟลเดอร์
 - **กฎ Read deny มาก่อนคำถาม** ถ้ามีกฎ Read deny ตรง path ไม่มีการ์ด `read` ปฏิเสธตามกฎทันที
+
+ไฟล์ลับใน workspace ดู [Model อ่านไฟล์ลับอย่าง .env](/scenarios/perm/secret-read/)
