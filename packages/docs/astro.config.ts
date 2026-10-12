@@ -63,7 +63,7 @@ export default defineConfig({
       components: { MarkdownContent: './src/overrides/MarkdownContent.astro', ThemeProvider: './src/overrides/ThemeProvider.astro', ThemeSelect: './src/overrides/ThemeSelect.astro', PageTitle: './src/overrides/PageTitle.astro' },
       sidebar: [
         { label: 'เริ่มต้น', items: [{ label: 'หน้าแรก', link: '/' }, { label: 'วิธีอ่านทัวร์', link: '/start/how-to-read/' }] },
-        { label: 'พื้นฐาน', items: [] },
+        { label: 'พื้นฐาน', items: [{ autogenerate: { directory: 'foundations' } }] },
         { label: 'Tool ในการใช้งานจริง', items: [] },
         { label: 'สถานการณ์', items: chapters },
         { label: 'แผนที่ระบบ', link: '/map/' },

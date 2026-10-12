@@ -1,0 +1,113 @@
+---
+title: "Model ตอบกลับอะไรได้บ้าง"
+description: คำตอบของ model มีแค่สามชนิดบล็อก (text thinking tool_use) กับ stop_reason หนึ่งค่า Geno อ่านมันเป็น stream แล้วตัดสินขั้นต่อไปจาก stop_reason
+sidebar:
+  order: 6
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const answer = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/session.jsonl#seq=4', highlight: ['content[2].name', 'content[3].name', 'content[4].name', 'stopReason'], collapse: ['promptParts', 'timing'] });
+
+**คำตอบของ model คือรายการบล็อกกับเหตุผลที่หยุด** ไม่มีอะไรมากกว่านั้น
+บล็อกมีสามชนิดหลัก และ `stop_reason` บอกว่า model หยุดเพราะอะไร
+Geno ใช้สองอย่างนี้ตัดสินว่าจะทำอะไรต่อ
+
+| บล็อก | คืออะไร | Geno ทำอะไรกับมัน |
+| --- | --- | --- |
+| `text` | ข้อความถึงคุณ เป็น Markdown | stream ไปที่แผงแชตทันที เก็บไว้ และส่งกลับใน request ถัดไป |
+| `thinking` | ความคิดก่อนตอบ | เก็บไว้และส่งกลับทุกไบต์ แต่**ไม่แสดง**ในแชต แผงแสดงแค่แถว "Thinking" |
+| `tool_use` | คำขอเรียก tool: `id` `name` `input` | ตรวจ input ตรวจสิทธิ์ รัน แล้วส่งผลกลับเป็น `tool_result` |
+
+## คำตอบจริงที่ขอ tool สามตัวในครั้งเดียว
+
+ในรายการ A06 model ได้คำถามสามข้อ (scripts ไฟล์ใน `src` และไฟล์ test) มันตอบด้วยห้าบล็อก:
+thinking หนึ่ง text สั้นหนึ่ง และ `tool_use` สามบล็อก จบด้วย `stopReason: tool_use`
+
+<Sees client:visible shown={[answer]} />
+
+การ์ดนี้คือ event `assistant` ที่ Geno บันทึก นอกจาก `content` ยังมี `usage` (token ที่ใช้ แยก cache) `costUsd` และเวลา
+model ไม่ได้รอผลของ `read` ก่อนขอ `list` มันขอทั้งสามพร้อมกันเพราะไม่ขึ้นต่อกัน
+Geno เห็นว่าทั้งสามเป็นการอ่านที่ไม่แก้อะไร จึงรันพร้อมกัน (`nextToolBatch` ใน `packages/core/src/tool-batch.ts`)
+แต่ส่งผลกลับในลำดับที่ model ขอ
+
+qwen ส่งบล็อก `thinking` มาเองทั้งที่ request ไม่มี field `thinking` และ `signature` เป็นสตริงว่าง Geno เก็บและส่งกลับตามเดิม
+
+## stream: คำตอบมาเป็นชิ้น
+
+Geno ขอคำตอบแบบ `stream: true` ผู้ให้บริการจึงส่ง event ทีละชิ้นแทนที่จะส่งก้อนเดียวตอนจบ
+นี่คือไบต์ที่ได้รับจริงในรายการ A01 รอบ `fix-a2` (engine `6238d339`, `runs/A01-fix-failing-test/fix-a2/wire.jsonl` บรรทัด 2) ตัดตรงกลางออก
+
+```text
+event:message_start
+data:{"type":"message_start","message":{"model":"qwen3.8-flash","content":[],"stop_reason":null,"usage":{"input_tokens":6366,"output_tokens":0}}}
+event:content_block_start
+data:{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+event:content_block_delta
+data:{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let"}}
+  … thinking ต่อ แล้ว text "I'll …" ทีละคำ …
+event:content_block_start
+data:{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_055fa7d76e6c410c8ea08f02","name":"list","input":{}}}
+event:content_block_delta
+data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"directory\": "}}
+event:content_block_delta
+data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"\""}}
+event:content_block_delta
+data:{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"}"}}
+event:content_block_stop
+data:{"type":"content_block_stop","index":2}
+event:message_delta
+data:{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":6,"output_tokens":50,"cache_creation_input_tokens":497,"cache_read_input_tokens":6295}}
+event:message_stop
+data:{"type":"message_stop"}
+```
+
+(ตัดบาง field ออกเพื่อให้อ่านง่าย เช่น `id` ของ message และ `ping`)
+
+สามเรื่องที่ควรเห็นจาก stream นี้
+
+- **ข้อความไหลมาเป็นคำ** `text_delta` แต่ละชิ้นไปถึงแผงแชตทันที คุณจึงเห็นคำตอบค่อยๆ ขึ้น
+- **input ของ tool มาเป็นเศษ JSON** `{"directory": ` แล้ว `""` แล้ว `}` ยังใช้ไม่ได้จนกว่าบล็อกจะปิด
+  `messageFromEvents` ใน `packages/core/src/stream-message.ts` ประกอบชิ้นเหล่านี้เป็นคำตอบเต็ม
+  ถ้า JSON เสีย Geno เก็บเป็น `{ invalid_json: "…" }` ให้ tool ปฏิเสธและ model ลองใหม่ แทนที่จะทำให้ทั้ง turn ล้ม
+- **`stop_reason` มาตอนท้าย** ใน `message_delta` พร้อม usage จริง (6 token ใหม่ 6,295 อ่านจาก cache 497 เขียนลง cache)
+
+ระหว่าง stream Geno มี watchdog นับทุกไบต์ ถ้าเงียบนาน 180 วินาที (ก่อนไบต์แรกหรือระหว่างไบต์) Geno ตัดแล้วลองใหม่หนึ่งครั้ง
+(`STREAM_LIMITS` ใน `packages/engine/src/stream-watch.ts`)
+
+## stop_reason แต่ละค่า Geno ทำอะไรต่อ
+
+ตาราง `AFTER_STOP` และ `loopStep` ใน `packages/core/src/loop.ts` เป็นที่ตัดสิน
+
+| `stop_reason` | หมายความว่า | Geno ทำต่อ |
+| --- | --- | --- |
+| `tool_use` | model รอผลของ tool | รัน tool ที่ขอ แล้วเรียก model อีกครั้ง |
+| `end_turn` | model ตอบจบแล้ว | จบ turn ถ้าคำตอบว่างเปล่า Geno กระตุ้นหนึ่งครั้งก่อน |
+| `stop_sequence` | เจอคำหยุด | จบ turn แบบเดียวกับ `end_turn` |
+| `max_tokens` | ชนเพดานความยาว | ถ้าตัดกลาง `tool_use` Geno ไม่รัน call นั้น ตอบ model ว่าให้ทำ call ให้เล็กลงแล้วเรียกใหม่ ถ้าชนสองครั้งติดหรือชนกลางข้อความ turn จบแบบล้มเหลว |
+| `pause_turn` | server tool ของผู้ให้บริการขอทำต่อ | เรียก model อีกครั้ง |
+| `refusal` | model ปฏิเสธ | gateway แปลงเป็น error `refusal` turn จบ |
+| `model_context_window_exceeded` | request ยาวเกิน window | compaction หนึ่งครั้งแล้วส่งใหม่ |
+
+ในการรันจริงทั้งหมด คำตอบมีแค่ `tool_use` กับ `end_turn` ค่าอื่นมีให้ดูในทัวร์ของบท
+[Model หยุดแบบไหนบ้าง](/scenarios/#ch-3)
+
+## สอง wire รูปเดียว
+
+ผู้ให้บริการพูดสองภาษา Anthropic Messages กับ OpenAI Chat Completions
+Geno ใช้ Anthropic Messages เป็นรูปแบบภายใน wire ของ Chat Completions (`packages/engine/src/wire-openai.ts`) แปลงชิ้นของ stream
+เป็น event แบบ Anthropic ด้วย `chatStream` ใน `packages/core/src/openai.ts` และแปลง error เป็น class เดียวกัน
+เช่น `finish_reason: length` กลายเป็น `max_tokens` และ `content_filter` กลายเป็น `refusal`
+ส่วนที่เหลือของ Geno (gateway loop session log และหน้าจอ) จึงไม่รู้ว่าใช้ wire ไหน
+
+## model ส่งอะไรออกมาไม่ได้
+
+model เขียนได้แต่ข้อความ ไม่มีบล็อกรูปภาพ ไม่มีบล็อกเสียง และไม่มีช่องให้สั่งงานตรงๆ
+ทุกอย่างที่ดูเหมือน model "ทำ" ผ่าน `tool_use` และทุกภาพที่คุณเห็นในแชต Geno วาดจากข้อความหรือจากไฟล์
+ดู[หน้าที่ 10](/foundations/images-and-multimodal/)
+
+## อ่านต่อ
+
+- [ผลของ tool ส่งกลับอย่างไร](/foundations/tool-results/) ขั้นต่อจาก `stop_reason: tool_use`
+- [จาก output สู่หน้าจอ](/foundations/output-to-screen/) ชิ้นของ stream เดินทางไปถึงแผงแชตอย่างไร
+- ทัวร์ [อ่านหลายไฟล์พร้อมกัน](/scenarios/tool/parallel-read-batch/)

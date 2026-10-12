@@ -1,0 +1,81 @@
+---
+title: "Model คือ API call หนึ่งครั้ง"
+description: Model ไม่มีความจำ ทุกครั้งที่ Geno เรียก model คือ HTTP request หนึ่งก้อนที่มีบทสนทนาทั้งหมด ส่วนอื่นทั้งหมดเป็นงานของ harness
+sidebar:
+  order: 1
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const first = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', select: 'messages', highlight: ['[0].content[3].text'] });
+export const second = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=9', select: 'messages', highlight: ['[1].role', '[1].content[2].name', '[2].role', '[2].content[0].tool_use_id'], collapse: ['[0]'] });
+
+**AI model ที่ Geno ใช้คือ API ที่ไม่มีความจำ** Geno ส่ง request หนึ่งก้อนไป model ส่งคำตอบหนึ่งก้อนกลับมา แล้วจบ
+model ไม่รู้ว่าเคยคุยอะไรกับคุณมาก่อน ไม่รู้ว่าอยู่ในเครื่องไหน และไม่เคยรันคำสั่งเองแม้แต่ครั้งเดียว
+
+ทุกอย่างที่ทำให้ Geno ดูเหมือน "เอเจนต์ที่ทำงานต่อเนื่อง" อยู่นอก model:
+การจำบทสนทนา การรัน tool การขออนุญาต การวาดหน้าจอ และการตัดสินว่าจะเรียก model อีกรอบหรือไม่
+ส่วนที่ทำงานเหล่านี้เรียกว่า **harness** ใน Geno คือ Geno engine
+
+## ดูของจริง: request ที่ 1 กับ request ที่ 2
+
+ในการรันจริงรายการ A06 ผู้ใช้ถามว่า "Show me what the package.json scripts are, list the files under src, and tell me which test files exist."
+turn นี้เรียก model สองครั้ง
+
+**ครั้งที่ 1** `messages` มีข้อความเดียวจากฝั่ง user ข้างในมีสี่บล็อก บล็อกสุดท้ายคือคำถามของผู้ใช้
+สามบล็อกแรกเป็นสิ่งที่ Geno ใส่ให้: ไฟล์คำสั่งของผู้ใช้ สภาพแวดล้อมของเครื่อง และข้อความจาก hook (อธิบายใน[หน้าที่ 4](/foundations/how-the-model-knows/))
+
+<Sees client:visible shown={[first]} />
+
+model ตอบว่าจะดูไฟล์ก่อน แล้วขอเรียก tool สามตัว: `read` `list` และ `glob`
+Geno รันทั้งสามบนเครื่องของคุณ แล้วเรียก model **ครั้งที่ 2**
+
+<Sees client:visible shown={[second]} />
+
+สังเกตสามข้อความใน `messages`
+
+1. ข้อความแรกคือข้อความเดิมทั้งก้อน ทั้งคำถามและสามบล็อกที่ Geno ใส่ (พับไว้ คลิกเพื่อเปิด)
+2. ข้อความที่สองคือคำตอบของ model จาก request ที่ 1 ซึ่ง Geno คัดลอกกลับไปให้ทุกไบต์ รวมถึงคำขอ tool ทั้งสาม
+3. ข้อความที่สามคือผลของ tool ทั้งสาม ในลำดับเดียวกับที่ model ขอ
+
+model ไม่ได้ "จำ" ว่าเคยขออ่าน `package.json` Geno เล่าให้ฟังใหม่ทั้งหมดใน request นี้
+ถ้า Geno ไม่ส่งข้อความที่สอง model จะไม่รู้เลยว่าตัวเองเคยตอบอะไร
+
+การ์ดสองใบนี้มาจาก `requests.jsonl` ซึ่ง engine สร้างใหม่จาก session log ตอนเก็บผล ไม่ใช่ไบต์ที่ส่งจริง
+ไบต์จริงของรายการเดียวกันที่รันซ้ำบน engine `84461d3b` อยู่ใน `runs/A06-read-not-cat/fix-a1/wire.jsonl`
+request ที่สองในไฟล์นั้นก็มี `messages` สามข้อความแบบเดียวกัน
+
+## ทำไมต้องส่งทั้งหมดทุกครั้ง
+
+API ของ model แบบนี้ไม่มี session ฝั่ง server ที่ Geno ไปต่อได้
+ผู้ให้บริการรับ request คำนวณคำตอบ แล้วลืม ถ้าอยากให้ model เห็นบทสนทนา ต้องส่งบทสนทนาไปทั้งหมด
+
+Geno จึงเก็บความจริงไว้ที่เดียว คือ **session log** ไฟล์ JSONL ที่มี event เรียงกัน
+(`user` `assistant` `tool-result` `notice` และอื่นๆ) ก่อนเรียก model ทุกครั้ง
+`buildRequest` ใน `packages/core/src/request.ts` สร้าง request ใหม่จาก log ทั้งก้อน
+ส่วนที่แปลง event เป็น `messages` คือ `replayMessages` ใน `packages/core/src/session.ts`
+
+ผลที่ตามมามีสามข้อ
+
+- **request เป็นผลของ log เสมอ** Geno จึงสร้าง request ในอดีตขึ้นมาใหม่ได้ทุกไบต์ ด้วยคำสั่ง `gcode session request <session-id> <turn>`
+  (engine เก็บส่วนที่ไม่ใช่ `messages` ไว้ครั้งเดียวต่อ hash ใน `packages/engine/src/snapshots.ts`)
+- **request โตขึ้นทุกรอบ** ยิ่ง turn ยาว ยิ่งส่งมาก Geno ลดต้นทุนด้วย prompt cache และย่อบทสนทนาด้วย compaction
+  ดู[หน้าที่ 11](/foundations/memory-and-context/)
+
+## แบ่งงานกันอย่างไร
+
+| model ทำ | harness (Geno) ทำ |
+| --- | --- |
+| อ่าน request แล้วเขียนคำตอบ | เก็บบทสนทนาใน session log และสร้าง request ใหม่ทุกครั้ง |
+| เขียนข้อความถึงคุณ | stream ข้อความนั้นไปที่แผงแชตและวาดเป็น Markdown |
+| เขียนคำขอเรียก tool เป็น JSON | ตรวจ input ตรวจสิทธิ์ รัน tool บนเครื่องของคุณ แล้วส่งผลกลับ |
+| บอกว่าจบหรือยังผ่าน `stop_reason` | ตัดสินว่าจะเรียก model อีกรอบ จบ turn หรือหยุดเพราะเกินงบ |
+| (ไม่มี) | ถามคุณก่อนรันคำสั่งเสี่ยง บังคับ sandbox จับเวลา และ retry เมื่อเครือข่ายล่ม |
+
+คอลัมน์ขวายาวกว่าซ้ายมาก นั่นคือเหตุผลที่บทนี้ทั้งบทพูดถึง harness
+
+## อ่านต่อ
+
+- [ส่วนประกอบของ Geno](/foundations/parts-of-geno/) แต่ละ process อยู่ที่ไหนและคุยกันอย่างไร
+- [ผ่า request หนึ่งก้อน](/foundations/anatomy-of-a-request/) ทุก field ใน request นี้ทำอะไร
+- ทัวร์ [Model เรียก tool แล้วตอบ](/scenarios/turn/with-tools/) เดินผ่าน turn แบบนี้ทีละจังหวะ

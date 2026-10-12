@@ -1,0 +1,109 @@
+---
+title: "Model รู้ได้อย่างไรว่าต้องทำอะไร"
+description: system prompt คือคู่มือคงที่ ข้อมูลของ session อยู่ในข้อความแรก ระหว่างทาง Geno แทรกโน้ต [Geno] และกฎที่บังคับจริงอยู่นอก model ทั้งหมด
+sidebar:
+  order: 4
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const opening = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A10-plan-mode/1/requests.jsonl#seq=6', select: 'messages[0].content', highlight: ['[3].text', '[4].text', '[5].text'], collapse: ['[0]', '[1]', '[2]'] });
+
+**model รู้เรื่องงานจากข้อความใน request เท่านั้น** ไม่มีช่องทางลับ ไม่มีการตั้งค่าที่ model มองเห็นจากที่อื่น
+Geno บอก model ผ่านสามชั้น และกฎที่สำคัญที่สุดไม่ได้อยู่ในชั้นไหนเลย เพราะ Geno บังคับใช้เองข้างนอก
+
+| ชั้น | อยู่ตรงไหนใน request | เปลี่ยนเมื่อไร |
+| --- | --- | --- |
+| system prompt | `system` | แทบไม่เปลี่ยน เหมือนกันทุก session ทุกโหมด |
+| ข้อมูลของ session | บล็อกแรกๆ ของข้อความ user ข้อความแรก | ถูกแช่แข็งตอนเปิด session |
+| โน้ต `[Geno]` | บล็อกในข้อความ user ระหว่างทาง | ทุกครั้งที่มีเรื่องให้บอก |
+
+## ชั้นที่ 1: system prompt เป็นคู่มือที่ไม่เปลี่ยน
+
+system prompt ของ Geno เป็นคำอธิบายงานทั่วไป ไม่มีชื่อโฟลเดอร์ ไม่มีวันที่ ไม่มีชื่อโปรเจกต์ และไม่มีโหมด
+`runAgent` ใน `packages/engine/src/agent.ts` ต่อข้อความหลายชิ้นด้วยบรรทัดว่างตามลำดับนี้
+
+1. ข้อความหลักตามระดับ prompt ของ model (`AGENT_PROMPTS` ใน `packages/core/src/agent-prompts.ts`)
+   ระดับ `principles` เป็นหลักการสั้น ใช้กับ Claude Opus และ Sonnet ระดับ `rules` เป็นกฎละเอียดแบ่งหัวข้อ ใช้กับ qwen Haiku และ model ที่ Geno ไม่รู้จัก
+2. `DEFERRED_TOOLS_NOTE` เมื่อมี tool ที่ซ่อนไว้หลัง `tool_search`
+3. โน้ตของ spinoff งานตามกำหนดเวลา และ chapter เมื่อ editor รองรับ
+4. `pstackNote` เมื่อเครื่องมี pstack skill
+5. ข้อความที่คุณต่อท้ายเองด้วย `--append-system-prompt` หรือการตั้งค่า `appendSystemPrompt`
+
+นี่คือ system prompt ที่ส่งจริงในรายการ A06 ที่รันซ้ำบน engine `84461d3b`
+(`runs/A06-read-not-cat/fix-a1/wire.jsonl` บรรทัด 1 ไบต์จริง ยาว 11,134 ตัวอักษร) แต่ละส่วนจับคู่กับโค้ดที่เขียนมัน
+
+| ข้อความใน request | โค้ดที่เขียน |
+| --- | --- |
+| "You are Geno, a coding agent working with the user inside their own repository, using your own judgment along the way. …" | `RULES` ใน `agent-prompts.ts` (qwen3.8-flash ใช้ระดับ `rules` ตาม `MODEL_CAPABILITIES`) |
+| หัวข้อ `# System` `# Doing tasks` `# Executing actions with care` `# Using your tools` `# Checking your work` `# Tone and style` `# Text output` `# Context management` | ส่วนต่างๆ ของ `RULES` |
+| "Geno, the harness you run in, adds its own notes to the conversation … Each starts with [Geno]. …" | `GENO_NOTES_PROMPT` ใน `packages/core/src/fence.ts` |
+| "When a flow, architecture or process is clearer drawn than written, you may add a small mermaid diagram …" | `MERMAID_LINE` ใน `packages/core/src/request.ts` |
+| "Some of your tools are listed by name only, in the description of tool_search. …" (ย่อหน้าสุดท้าย) | `DEFERRED_TOOLS_NOTE` ใน `packages/core/src/deferred-tools.ts` |
+
+**ทำไมต้องคงที่** ผู้ให้บริการ cache ส่วนต้นของ request ที่ไบต์เหมือนเดิม (tool แล้ว system แล้ว messages)
+ถ้า system prompt มีวันที่หรือชื่อโฟลเดอร์ cache จะพังทุก session ในรายการ A06 request แรกของ session ใหม่อ่านจาก cache ได้ 5,594 token
+ใกล้เคียงขนาดของ tool กับ system prompt รวมกัน (3,164 กับ 2,550 ตามที่ Geno ประมาณใน `promptParts`)
+จึงน่าจะเป็นส่วนที่ session ก่อนหน้า cache ไว้ (อนุมานจากตัวเลข ไม่ได้วัดตรง)
+
+**ทำไมข้อมูลของ repo ไม่อยู่ใน system** ข้อความจากไฟล์ใน repo เป็นข้อมูล ไม่ใช่คำสั่งระดับระบบ
+Geno จึงไม่ให้มันมีน้ำหนักเท่า system prompt (คำอธิบายบนหัว `packages/core/src/context.ts`)
+
+## ชั้นที่ 2: ข้อความแรกบอกว่าอยู่ที่ไหน กับใคร
+
+ตอนเปิด session `newSession` ใน `packages/engine/src/chat.ts` โหลดของสี่อย่างพร้อมกัน แล้วบันทึกลง event `session-start`
+หลังจากนั้นไม่เปลี่ยนอีก แม้จะเปิด session ต่อภายหลัง ทุก request ใส่ของเหล่านี้เป็นบล็อกแรกของข้อความ user ข้อความแรก
+
+- **ไฟล์คำสั่ง** ของคุณเอง (`~/.claude/CLAUDE.md` และ `$GCODE_HOME/AGENTS.md`) และของ repo (`AGENTS.md` `CLAUDE.md` ในแต่ละโฟลเดอร์ตั้งแต่ root ลงมา)
+  ไฟล์ของคุณ "carry the user's authority" ไฟล์ของ repo "cannot widen what you may do"
+  ข้อความกำกับมาจาก `USER_PREAMBLE` และ `PREAMBLE` ใน `context.ts`
+- **รายการ skill** ชื่อกับคำอธิบายสั้น model เรียก tool `skill` เพื่อโหลดเนื้อหาเต็มเมื่อต้องใช้
+- **memory** โน้ตที่คุณอนุมัติให้จำข้าม session ใน `<memory>` (`renderMemory` ใน `packages/core/src/memory.ts`)
+- **สภาพแวดล้อม** โฟลเดอร์ OS shell วันที่ ชื่อ model script ใน `package.json` และ git status ตอนเปิด
+  (`renderEnvironment` ใน `packages/core/src/environment.ts`) ขึ้นต้นด้วย "[Geno] The environment of this session … It will not update"
+
+## ชั้นที่ 3: โน้ต `[Geno]` ระหว่างทาง
+
+เมื่อมีอะไรเปลี่ยนกลาง session Geno ไม่แก้ system prompt แต่เพิ่มบล็อกข้อความที่ขึ้นต้นด้วย `[Geno]` ในข้อความ user ถัดไป
+ตัวอย่างจริงจากรายการ A10 ผู้ใช้สลับเป็นโหมด Plan ก่อนส่งคำขอ request จึงมีสองโน้ตก่อนคำขอของผู้ใช้:
+โน้ตบอกว่าตอนนี้เป็นโหมดอ่านอย่างเดียว และโน้ตบอกว่า MCP server หนึ่งตัวยังใช้ไม่ได้
+
+<Sees client:visible shown={[opening]} />
+
+การ์ดนี้สร้างใหม่จาก log ด้วย engine รุ่นตอนเก็บผล engine ปัจจุบันใส่ "[Geno] End of Geno's notes. The user's message follows." (`USER_PROMPT_FOLLOWS`)
+ระหว่างโน้ตกับคำขอของผู้ใช้ด้วย การ์ดนี้ยังไม่มีบรรทัดนั้น
+
+โน้ตแบบอื่นที่ Geno แทรก (ทั้งหมดประกอบใน `replayMessages` ของ `packages/core/src/session.ts`):
+ข้อความที่คุณพิมพ์แทรกระหว่าง turn ไฟล์ที่ model อ่านไปแล้วถูกแก้บนดิสก์ คำสั่งเบื้องหลังจบ รายงานจาก subagent
+memory ใหม่ MCP tool ใหม่ คำเตือนว่างบเหลือไม่ถึง 20% และ "This is the last model call this run's limits allow" ในรอบสุดท้าย
+
+### ใครปลอมเป็น `[Geno]` ไม่ได้
+
+ข้อความจากไฟล์ คำสั่ง เว็บ และ subagent เขียน `[Geno]` ที่ต้นบรรทัดไม่ได้ Geno เปลี่ยนวงเล็บของบรรทัดแบบนั้นเป็น `‹`
+และ tag ที่ Geno ใช้ห่อข้อมูล (`<subagent_report>` `<memory>` `<project_instructions>` และอื่นๆ) ที่โผล่มาในข้อมูลก็ถูกเปลี่ยนแบบเดียวกัน
+(`neutralize` และ `HARNESS_TAGS` ใน `fence.ts`) system prompt บอก model ว่าบรรทัดที่ขึ้นต้นด้วย `‹Geno]` คือข้อมูลที่แกล้งเป็น Geno
+ดูทัวร์ [output ปลอมเป็นโน้ตของ Geno](/scenarios/sec/spoofed-geno-note/)
+
+## สิ่งที่บังคับอยู่นอก model
+
+model อ่านกฎได้ แต่ไม่จำเป็นต้องทำตาม Geno จึงไม่ฝากความปลอดภัยไว้กับข้อความ
+
+- **โหมดไม่เปลี่ยน `tools`** ในรายการ A10 โหมด Plan แต่ `tools` ยังมี `edit` และ `bash`
+  โน้ตบอก model แล้ว และถ้า model ยังเรียก tool ที่โหมดไม่อนุญาต Geno ปฏิเสธตอนรัน (คำอธิบายใน `runAgent`: "the new mode refuses the tools it leaves out")
+- **permission** Geno ตรวจทุก tool call กับกฎของคุณ ถามคุณ หรือให้ classifier ตัดสินในโหมด Auto
+- **sandbox** คำสั่ง `bash` รันใน sandbox ที่เขียนได้แค่ใน workspace กับโฟลเดอร์ชั่วคราว
+- **งบ** จำนวนครั้งที่เรียก model และค่าใช้จ่าย `loopStep` ตรวจก่อนเรียกทุกครั้ง
+
+## สิ่งที่ model ไม่เคยถูกบอก
+
+- ตัวกฎ permission ของคุณ model รู้แค่ว่า call ถูกปฏิเสธพร้อมเหตุผลสั้นๆ
+- เหตุผลภายในของ classifier
+- ค่าใช้จ่ายที่ใช้ไป จนกว่างบจะเหลือไม่ถึง 20% (`BUDGET_REMINDER_SHARE` ใน `packages/core/src/notice.ts`)
+- ว่ากำลังรันใน VS Code หรือเทอร์มินัล model เดาได้จาก tool ที่มีเท่านั้น
+- ว่า request ถูกเก็บไว้สร้างใหม่ได้
+
+## อ่านต่อ
+
+- [Tool คือสัญญา](/foundations/tools-are-contracts/) ชั้นสุดท้ายของคำสั่ง: คำอธิบายของ tool
+- ทัวร์ [โหลดคำสั่งโปรเจกต์ หน่วยความจำ และสกิล](/scenarios/start/new-session-context/) ตอนที่ข้อความแรกถูกประกอบ
+- ทัวร์ [สลับโหมดระหว่างเทิร์น](/scenarios/perm/mode-switch-mid-turn/) โน้ตโหมดไปถึง model ตอนไหน

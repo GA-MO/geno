@@ -1,0 +1,85 @@
+---
+title: "Tool คือสัญญา"
+description: tool คือชื่อ คำอธิบาย และ JSON schema ที่ Geno ส่งให้ model model "เลือก" tool ด้วยการเขียน JSON หนึ่งก้อน Geno เป็นคนตรวจและรันทั้งหมด
+sidebar:
+  order: 5
+---
+import Sees from '../../../components/Mock';
+import { card } from '../../../data/foundations/card';
+
+export const readTool = card({ direction: 'request', source: 'docs/results/real-usecases/runs/A06-read-not-cat/1/requests.jsonl#seq=4', select: 'tools[6]', highlight: ['name', 'input_schema.required'], collapse: ['input_schema.properties'] });
+export const searchCall = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=4', select: 'content[-1]', highlight: ['name', 'input'] });
+export const searchResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A05-deferred-web-fetch/1/session.jsonl#seq=5', select: 'output' });
+export const badCall = card({ direction: 'response', source: 'docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=30', select: 'content[-1].input', highlight: ['files'] });
+export const badResult = card({ direction: 'tool_result', source: 'docs/results/real-usecases/runs/A35-show-before-after/1/session.jsonl#seq=31', highlight: ['status', 'output'], collapse: ['timing'] });
+
+**tool คือสัญญาที่เขียนเป็นข้อความ** มีสามส่วน: ชื่อ คำอธิบายภาษาคน และ `input_schema` ที่บอกว่า input ต้องหน้าตาอย่างไร
+model ไม่ได้ต่อสายเข้าเครื่องของคุณ สิ่งเดียวที่ model ทำได้คือเขียนว่า "ขอเรียก tool ชื่อนี้ ด้วย input นี้" เป็น JSON
+ส่วนที่เหลือทั้งหมด ตั้งแต่ตรวจ input ขอสิทธิ์ รัน จนส่งผลกลับ เป็นงานของ Geno
+
+## สัญญาหนึ่งฉบับ
+
+นี่คือ tool `read` ใน `tools` ของ request จริง ตรงกับ `TOOL_SPECS.read` ใน `packages/core/src/tools.ts`
+
+<Sees client:visible shown={[readTool]} />
+
+model อ่านคำอธิบายนี้ทุก request เหมือนอ่านคู่มือ ประโยค "a PNG, JPEG, GIF or WebP file comes back as the image itself" คือเหตุผลที่ model รู้ว่า `read` เปิดรูปได้
+และ "After a successful edit the file is current, so do not read it again" กันไม่ให้ model เสีย token อ่านไฟล์ซ้ำ
+คำอธิบายที่ดีจึงเปลี่ยนพฤติกรรมของ model ได้จริง โดยไม่ต้องแตะ system prompt
+
+## model "เลือก" tool อย่างไร
+
+ไม่มีกลไกพิเศษ model เขียนบล็อก `tool_use` ในคำตอบ มี `id` `name` และ `input`
+แล้วจบคำตอบด้วย `stop_reason: tool_use` ซึ่งแปลว่า "รอผลอยู่"
+`loopStep` ใน `packages/core/src/loop.ts` เห็น `tool_use` ที่ยังไม่มีผล จึงตัดสินว่าขั้นต่อไปคือรัน tool
+ตัวอย่างคำตอบที่ขอ tool สามตัวพร้อมกันอยู่ใน[หน้าที่ 6](/foundations/what-comes-back/)
+
+## tool ที่ส่งแค่ชื่อ: `tool_search`
+
+Geno มี tool หลายสิบตัว ถ้าส่ง schema ครบทุกตัวทุก request จะเปลือง token มาก
+`toolRoster` ใน `packages/core/src/deferred-tools.ts` จึงแบ่ง tool เป็นสองกลุ่ม
+
+- **core** ส่ง schema เต็มทุกครั้ง: `agent` `ask_user` `bash` `check` `edit` `glob` `grep` `list` `read` `skill` `todo` (`CORE_TOOL_NAMES`)
+- **deferred** ไม่อยู่ใน `tools` แต่ชื่อกับประโยคแรกของคำอธิบายอยู่ในคำอธิบายของ `tool_search` ซึ่งเป็น tool ตัวสุดท้าย
+  Geno ใช้วิธีนี้เมื่อประหยัดได้อย่างน้อย 300 token หรือเมื่อมี MCP tool ซึ่ง deferred เสมอ
+
+ในรายการ A05 ผู้ใช้ถามหัวข้อของหน้าเว็บ `web_fetch` เป็น deferred model จึงขอโหลดก่อน
+
+<Sees client:visible shown={[searchCall]} />
+
+ผลที่ได้กลับมาเป็นข้อความธรรมดาที่มี JSON schema ของ `web_fetch` อยู่ข้างใน
+
+<Sees client:visible shown={[searchResult]} />
+
+สังเกตว่า `tools` ของ request ถัดไปไม่เปลี่ยน schema มาถึง model เป็นข้อความใน `tool_result` เท่านั้น
+ทำให้ส่วนต้นของ request ที่ cache ไว้ไม่พัง ถ้า model เรียก deferred tool ก่อนโหลด Geno ตอบเป็น error ว่าให้เรียก `tool_search` ก่อน (`unloadedCallError`)
+ผลข้างเคียงหนึ่งคือ qwen เขียนตัวเลขและ boolean ของ tool แบบนี้เป็นสตริง Geno จึงแปลงตาม schema ให้ก่อนรัน (`coerceToSchema`)
+ดูทัวร์ [โหลดเครื่องมือที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
+
+## Geno ตรวจ input ก่อนรันเสมอ
+
+model เขียน JSON ผิดได้ ทุก executor จึงตรวจ input กับ schema ของตัวเองก่อน (`executor` ใน `packages/engine/src/tools/context.ts`)
+ถ้าไม่ผ่าน tool ไม่ทำงาน และ model ได้ error ว่า `invalid input: …`
+
+ตัวอย่างจริงจากรายการ A35 รอบที่ 1 model ส่ง `files` เป็นสตริงที่หน้าตาเหมือน JSON array แทนที่จะเป็น array
+
+<Sees client:visible shown={[badCall]} />
+
+<Sees client:visible shown={[badResult]} />
+
+model ลองอีกสามครั้ง เปลี่ยน path เปลี่ยน caption และลดเหลือไฟล์เดียว แต่ `files` ยังเป็นสตริงทุกครั้ง จึงได้ error เดิมทุกครั้ง
+สุดท้าย model เขียน script รวมสองรูปเป็นรูปเดียวแทน
+หลังจากรอบนั้น `parseShowFilesInput` ใน `packages/core/src/show-files.ts` รับ list ที่เขียนเป็นสตริง JSON ได้ด้วย
+รอบที่ 3 ของรายการเดียวกันส่ง `files` เป็นสตริงแบบเดิมและรูปขึ้นในแชตได้ นี่คือตัวอย่างของ harness ที่ปรับให้เข้ากับนิสัยของ model
+
+## โหมดปฏิเสธตอนรัน ไม่ใช่ตอนส่ง
+
+ทุกโหมด (Ask Auto Plan) ได้ `tools` ชุดเดียวกันและ system prompt เดียวกัน
+โหมด Plan บอก model ผ่านโน้ต `[Geno]` ว่าแก้อะไรไม่ได้ และถ้า model ยังเรียก `edit` Geno ปฏิเสธตอนรัน
+ผลที่ได้คือ `tool_result` ที่บอกเหตุผล ไม่ใช่ tool ที่หายไปจากรายการ ดูทัวร์ [โหมด Plan ปฏิเสธคำสั่งและการแก้ไฟล์](/scenarios/perm/plan-refuses/)
+
+## อ่านต่อ
+
+- [Model ตอบกลับอะไรได้บ้าง](/foundations/what-comes-back/) หน้าตาของ `tool_use` ในคำตอบ
+- [ผลของ tool ส่งกลับอย่างไร](/foundations/tool-results/) ขากลับของสัญญา
+- ทัวร์ [เครื่องมือไม่มีจริงหรือ input ผิด](/scenarios/tool/unknown-or-invalid/)
