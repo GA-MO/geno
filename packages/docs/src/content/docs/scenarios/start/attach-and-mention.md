@@ -44,7 +44,7 @@ scenario:
         แผงแสดงรายการให้เลือก ผู้ใช้เลือก `src/date.test.ts` แล้ววางภาพด้วย Cmd-V ตัวจัดการ `paste` รับไฟล์จาก clipboard เป็นไฟล์แนบ
         ไฟล์ที่ใหญ่เกินหรืออ่านไม่ได้ถูกปฏิเสธพร้อมเหตุผลตั้งแต่ตรงนี้ (โฟลเดอร์ถูกปฏิเสธเมื่อลากหรือเลือกผ่าน "Attach file…")
       sees: >-
-        ในช่องพิมพ์มีข้อความ `@src/date.test.ts` และชิปรูปภาพที่วางอยู่เหนือช่องพิมพ์
+        ในช่องพิมพ์มีข้อความ `@src/date.test.ts` แถวเหนือช่องพิมพ์มีชิป mention ชื่อ `date.test.ts` และชิปรูปภาพที่วาง
         (แถว "Attach file…" ขึ้นบนสุดของรายการเฉพาะตอนพิมพ์ `@` เปล่า)
       ref: "packages/extension/src/chat/composer-attachments.ts#\"target.addEventListener('paste', (event) => {\""
 
