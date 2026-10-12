@@ -21,12 +21,11 @@ const THAI_FONT = ['400', '600'].map((weight) => pathToFileURL(createRequire(imp
 const catalog = catalogSchema.parse(parse(readFileSync(path.join(root, 'src/data/catalog.yaml'), 'utf8')));
 const pagesIn = (dir: string): boolean => existsSync(dir) && readdirSync(dir).some((name) => /\.mdx?$/.test(name));
 
+// Every chapter starts closed; Starlight opens the one that holds the current page.
 const chapters = catalog.chapters.map((chapter) => {
-  const label = chapter.thai;
   const directory = `scenarios/${chapter.prefix}`;
-  return pagesIn(path.join(root, 'src/content/docs', directory))
-    ? { label, items: [{ autogenerate: { directory } }] }
-    : { label, collapsed: true, items: [{ label: 'ยังไม่มีหน้า', link: `/scenarios/#ch-${chapter.number}` }] };
+  const items = pagesIn(path.join(root, 'src/content/docs', directory)) ? [{ autogenerate: { directory } }] : [{ label: 'ยังไม่มีหน้า', link: `/scenarios/#ch-${chapter.number}` }];
+  return { label: chapter.thai, collapsed: true, items };
 });
 
 const scenarioGate = (): AstroIntegration => ({
