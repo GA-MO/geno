@@ -1,0 +1,16 @@
+{
+  "title": "Permission และโหมด",
+  "pages": [
+    "ask-mode-bash-approval",
+    "auto-classifier",
+    "auto-still-asks",
+    "mode-switch-mid-turn",
+    "workspace-rules",
+    "plan-refuses",
+    "plan-start-building",
+    "read-outside-workspace",
+    "secret-read",
+    "refused-before-asking",
+    "..."
+  ]
+}

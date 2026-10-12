@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource/noto-sans-thai/400.css';
+@import '@fontsource/noto-sans-thai/600.css';
+@import './docs.css';
+
+/*
+ * Geist has no Thai, so each Thai run falls through to Noto Sans Thai: its body height (0.55 em) sits closest to
+ * Geist's x-height (0.53 em) of the three faces tried, at the same stroke weight. Thai marks stack above and below,
+ * so prose gets a little more leading than Latin needs, but not Fumadocs' 1.75.
+ */
+@theme {
+  --font-sans: 'Geist Variable', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.prose { line-height: 1.7; }

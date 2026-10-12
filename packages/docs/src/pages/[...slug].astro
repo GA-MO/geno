@@ -1,0 +1,67 @@
+---
+import '../styles/global.css';
+import { render } from 'astro:content';
+import type { TOCItemType } from 'fumadocs-core/toc';
+import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { Docs } from '../components/Docs';
+import Story from '../components/Story';
+import StoryStatic from '../components/StoryStatic.astro';
+import { source } from '../lib/source';
+import { partLabels, scenarioFor, siteFor } from '../scenario/site';
+
+export function getStaticPaths() {
+  return source.getPages().map((page) => ({ params: { slug: page.slugs.length > 0 ? page.slugs.join('/') : undefined }, props: { slugs: page.slugs } }));
+}
+
+const page = source.getPage(Astro.props.slugs)!;
+const entry = page.data._raw;
+const { Content, headings } = await render(entry);
+const { title, description, hero, tableOfContents, scenario: authored } = entry.data;
+const scenario = authored === undefined ? undefined : scenarioFor(entry.filePath!);
+const site = siteFor();
+const parts = partLabels(site.lanes);
+const laneNames = Object.fromEntries(site.lanes.lanes.map((lane) => [lane.id, lane.english]));
+const toc: TOCItemType[] = tableOfContents === false || hero !== undefined ? [] : headings.filter((heading) => heading.depth <= 3).map((heading) => ({ depth: heading.depth, title: heading.text, url: `#${heading.slug}` }));
+const full = scenario !== undefined || entry.id === 'map';
+---
+
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} | Geno ทำงานอย่างไร</title>
+    {description !== undefined && <meta name="description" content={description} />}
+  </head>
+  <body class="flex min-h-screen flex-col">
+    <Docs tree={source.getPageTree()} pathname={page.url} page={{ toc, full }} client:load>
+      <h1 class="text-3xl font-semibold tracking-tight">{title}</h1>
+      {(hero?.tagline ?? description) !== undefined && <p class="mb-4 max-w-[62ch] text-lg text-fd-muted-foreground">{hero?.tagline ?? description}</p>}
+      {
+        hero !== undefined && (
+          <div class="not-prose mb-6 flex flex-wrap gap-3">
+            {hero.actions.map((action) => (
+              <a class:list={['rounded-full px-4 py-2 text-sm font-medium', action.variant === 'minimal' ? 'border border-fd-border' : 'bg-fd-primary text-fd-primary-foreground']} href={action.link}>
+                {action.text}
+              </a>
+            ))}
+          </div>
+        )
+      }
+      <div class="prose flex-1">
+        {
+          scenario === undefined ? (
+            <Content components={defaultMdxComponents} />
+          ) : (
+            <StoryStatic scenario={scenario} parts={parts}>
+              {scenario.story && <Story client:only="react" scenario={scenario} laneNames={laneNames} />}
+              <Fragment slot="prose">
+                <Content components={defaultMdxComponents} />
+              </Fragment>
+            </StoryStatic>
+          )
+        }
+      </div>
+    </Docs>
+  </body>
+</html>

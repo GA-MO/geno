@@ -6,7 +6,7 @@ const pages = Object.values(site.scenarios);
 const chapterOf = (href: string) => href.split('/')[2];
 ---
 
-<div class="index not-content">
+<div class="index not-prose">
   {
     site.catalog.chapters.map((chapter) => {
       const mine = pages.filter((page) => chapterOf(page.href) === chapter.prefix).sort((a, b) => a.title.localeCompare(b.title));

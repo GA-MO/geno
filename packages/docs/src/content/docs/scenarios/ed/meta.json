@@ -1,0 +1,10 @@
+{
+  "title": "Editor: Tab / Cmd-K / Review",
+  "pages": [
+    "review-auto-undo",
+    "review-hunks",
+    "inline-edit-cmd-k",
+    "tab-completion",
+    "..."
+  ]
+}

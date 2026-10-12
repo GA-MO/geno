@@ -1,0 +1,14 @@
+{
+  "title": "Session และประวัติ",
+  "pages": [
+    "new-chat",
+    "open-history",
+    "reload-while-running",
+    "leave-running",
+    "rewind",
+    "model-effort",
+    "history-manage",
+    "save-page",
+    "..."
+  ]
+}

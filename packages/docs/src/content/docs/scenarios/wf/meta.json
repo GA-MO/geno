@@ -1,0 +1,11 @@
+{
+  "title": "Workflow / Arena / Lane",
+  "pages": [
+    "workflow-run",
+    "workflow-resume",
+    "arena-best-of-n",
+    "lane-apply",
+    "spinoff",
+    "..."
+  ]
+}

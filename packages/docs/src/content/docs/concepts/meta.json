@@ -1,0 +1,11 @@
+{
+  "title": "แนวคิดหลัก",
+  "defaultOpen": true,
+  "pages": [
+    "processes",
+    "turn-state-machine",
+    "tool-pipeline",
+    "where-things-live",
+    "..."
+  ]
+}

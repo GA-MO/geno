@@ -1,0 +1,12 @@
+{
+  "title": "Hook",
+  "pages": [
+    "user-prompt-submit",
+    "pretooluse-deny",
+    "permission-request",
+    "post-tool",
+    "stop-keeps-going",
+    "project-untrusted",
+    "..."
+  ]
+}

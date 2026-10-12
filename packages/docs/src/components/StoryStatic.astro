@@ -19,13 +19,13 @@ const steps = Object.keys(scenario.via).length;
     scenario.story ? (
       <>
         <slot />
-        <div class="story-static not-content">
+        <div class="story-static not-prose">
           <StoryList items={storyOutline(scenario)} />
         </div>
       </>
     ) : (
       <>
-        <div class="story-coming not-content">
+        <div class="story-coming not-prose">
           <p class="story-coming-title">เรื่องเล่ากำลังตามมา</p>
           <p>
             หน้านี้ยังไม่มีเรื่องเล่าแบบทีละจังหวะ ระหว่างนี้อ่านได้ทุกขั้นของโค้ด {steps} ขั้นด้านล่าง ตามลำดับที่เกิดขึ้นจริง
@@ -38,7 +38,7 @@ const steps = Object.keys(scenario.via).length;
     )
   }
 
-  <dl class="tour-given not-content">
+  <dl class="tour-given not-prose">
     {
       scenario.given.length > 0 && (
         <>

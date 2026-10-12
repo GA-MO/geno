@@ -1,0 +1,19 @@
+{
+  "title": "Tool",
+  "pages": [
+    "parallel-read-batch",
+    "bash-safe-runs",
+    "bash-refused-before-run",
+    "mixed-batch-sequencing",
+    "bash-background",
+    "unknown-or-invalid",
+    "read-special-files",
+    "deferred-tool-load",
+    "todo-list",
+    "ask-user-question",
+    "web-fetch",
+    "web-search",
+    "read-terminal",
+    "..."
+  ]
+}

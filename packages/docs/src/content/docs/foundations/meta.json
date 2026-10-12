@@ -1,0 +1,18 @@
+{
+  "title": "พื้นฐาน",
+  "defaultOpen": true,
+  "pages": [
+    "model-is-one-call",
+    "parts-of-geno",
+    "anatomy-of-a-request",
+    "how-the-model-knows",
+    "tools-are-contracts",
+    "what-comes-back",
+    "tool-results",
+    "agent-loop",
+    "output-to-screen",
+    "images-and-multimodal",
+    "memory-and-context",
+    "..."
+  ]
+}
