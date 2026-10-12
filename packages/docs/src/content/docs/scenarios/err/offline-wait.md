@@ -1,5 +1,5 @@
 ---
-title: เครือข่ายหลุด หรือถูกจำกัดอัตรา
+title: "เครือข่ายหลุดหรือชน rate limit แล้ว Geno รอ"
 description: การเรียกโมเดลไปไม่ถึงผู้ให้บริการหรือได้ 429 turn ไม่ล้ม แต่รอพร้อมปุ่ม Retry now จนเครือข่ายกลับมา ถึงเวลา ผู้ใช้กด หรือหมดเวลารอ
 tableOfContents: false
 sidebar:
@@ -15,10 +15,20 @@ scenario:
   related: [err.transient-retried, ctl.stop-while-streaming, bg.task-attention]
   steps:
     - use: model-call
+      beat:
+        title: "Geno ส่งคำขอให้ model"
+        text: >-
+          turn กำลังทำงาน Geno ส่งคำขอให้โมเดลตามปกติ
+        to: model
 
     - id: kind
       lane: loop
       at: gateway
+      beat:
+        title: "การเรียกไม่ได้คำตอบ"
+        text: >-
+          Geno ส่ง error ให้ตัวแยกชนิด ซึ่งตัดสินว่าจะลองใหม่เร็วๆ รอนาน หรือเลิก ลองเลือกว่าเกิดอะไรขึ้น
+        ask: "เกิดอะไรขึ้น"
       do: >-
         การเรียกไม่ได้คำตอบ `gatewayFor.turn` ส่ง error ให้ `classifyFailure` แยกชนิด
       ref: packages/engine/src/gateway.ts#gatewayFor.turn
@@ -30,6 +40,11 @@ scenario:
             then: logged
             steps:
               - lane: external
+                beat:
+                  title: "เครือข่ายหลุดก่อนได้ byte แรก"
+                  text: >-
+                    การเชื่อมต่อไปหาผู้ให้บริการล้ม ไม่มีสถานะ HTTP กลับมา Geno จึงถือว่าออฟไลน์ และวางแผนรอ 5
+                    วินาทีแล้วตรวจเครือข่าย เวลารอเพิ่มเป็นสองเท่าจนถึง 60 วินาที และเลิกเมื่อครบ 30 นาที
                 do: >-
                   การเชื่อมต่อไปหาผู้ให้บริการล้มก่อนได้ byte แรก เช่น `ECONNREFUSED` หรือหา DNS ไม่เจอ
                   ไม่มีสถานะ HTTP กลับมา
@@ -46,6 +61,11 @@ scenario:
             then: logged
             steps:
               - lane: model
+                beat:
+                  title: "ผู้ให้บริการตอบ 429"
+                  text: >-
+                    คุณชน rate limit ผู้ให้บริการบางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตมาด้วย Geno รอถึงเวลานั้น ถ้าไม่รู้เวลา รอ 15
+                    วินาทีแล้วเพิ่มขึ้น การรอสั้นๆ พักการเรียกของทุก session ใน engine นี้ด้วย
                 do: >-
                   ผู้ให้บริการตอบ 429 บางรายบอกเวลาที่ขีดจำกัดจะรีเซ็ตไว้ใน header เช่น `retry-after`
                   หรือ `anthropic-ratelimit-requests-reset`
@@ -63,6 +83,12 @@ scenario:
     - id: logged
       lane: loop
       at: model-call
+      beat:
+        title: "Geno บันทึกว่ากำลังรอ"
+        text: >-
+          Geno บันทึกการรอลงบันทึกของ session ถ้า engine ตายระหว่างนี้ ตัวใหม่จะเห็นแล้วรอต่อ งานในแผง Tasks เปลี่ยนเป็น
+          waiting และแชตได้รับแจ้ง
+        to: panel
       do: >-
         `onWait` บันทึก event `wait` ลง log เมื่อการรอเริ่มหรือเปลี่ยนทาง engine ที่เปิดใหม่หลังจากนี้จะเห็น event นี้แล้วรอต่อ
         จากนั้นบอก watcher
@@ -99,6 +125,20 @@ scenario:
     - id: header
       lane: panel
       at: rail
+      beat:
+        title: "แชตบอกว่ากำลังรอ พร้อมปุ่ม Retry now"
+        text: >-
+          หัวข้อของ turn เปลี่ยนจาก working เป็นการรอ แถวเหนือช่องพิมพ์บอกว่ารอถึงเมื่อไร และมีปุ่มให้ลองทันที turn
+          ยังไม่ล้ม
+        sees:
+          - kind: composer
+            state: working
+            header: waiting for the network
+          - kind: notice
+            text: Offline, retrying in 5s
+            actions:
+              - Retry now
+            tone: warning
       alongside: true
       do: >-
         `headerOf` เปลี่ยนหัวข้อของ turn ตามชนิดการรอ
@@ -117,6 +157,12 @@ scenario:
     - id: hold
       lane: loop
       at: gateway
+      beat:
+        title: "Geno นอนรอถึงเวลาลองครั้งถัดไป"
+        text: >-
+          เมื่อออฟไลน์ Geno ตื่นแล้วตรวจ host ก่อน ถ้ายังไม่ตอบก็รอรอบใหม่นานขึ้น เมื่อถูกจำกัด Geno ตื่นแล้วเรียกเลย
+          ถ้าเวลารีเซ็ตไกลกว่า 15 นาที Geno ไม่ปลุกเอง และรอคุณ
+        ask: "อะไรมาก่อน"
       do: >-
         `holdOn` นอนรอถึงเวลาลองครั้งถัดไป เมื่อออฟไลน์ ตื่นแล้วตรวจ host ก่อน ถ้ายังไม่ตอบก็รอรอบใหม่นานขึ้น
         เมื่อถูกจำกัด ตื่นแล้วเรียกเลย ถ้าเวลารีเซ็ตไกลกว่า 15 นาที การรอไม่มีเวลาปลุก (`hold`) และรอจนผู้ใช้กด Retry now หรือ Stop
@@ -130,6 +176,10 @@ scenario:
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "เครือข่ายกลับมา"
+                  text: >-
+                    Geno ตื่นตามเวลา เมื่อออฟไลน์ host ตอบแล้ว เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก การเรียกจึงออกไปได้
                 do: >-
                   `nap` ตื่นตามเวลา เมื่อออฟไลน์ `wire.probe` ตรวจ host แล้วพบว่าตอบ เมื่อถูกจำกัด ถึงเวลาที่ผู้ให้บริการบอก
                   การเรียกจึงออกไปได้
@@ -140,6 +190,13 @@ scenario:
             then: goes
             steps:
               - lane: user
+                beat:
+                  title: "คุณกด Retry now"
+                  text: >-
+                    คุณไม่อยากรอ VS Code ขอ engine ให้ปลุก turn นี้ Geno เรียกทันทีโดยไม่ตรวจ host ถ้ายังออฟไลน์ การรอเดิมทำต่อ
+                    และเวลาเลิกยังนับจากตอนเริ่มรอครั้งแรก
+                  from: you
+                  to: engine
                 do: ผู้ใช้ไม่อยากรอ จึงกด Retry now
               - lane: panel
                 at: composer
@@ -168,6 +225,13 @@ scenario:
             label: ผู้ใช้กด Stop
             steps:
               - lane: user
+                beat:
+                  title: "คุณกด Stop ระหว่างรอ"
+                  text: >-
+                    คุณเลิกรอ แผงตอบการ์ดที่เปิดอยู่ว่ายกเลิก แล้วสั่ง Geno หยุด turn
+                  from: you
+                  to: engine
+                  sees: { kind: composer, state: working, header: waiting for the network }
                 do: ผู้ใช้กด Stop ระหว่างรอ
               - lane: editor
                 at: chat
@@ -177,6 +241,10 @@ scenario:
                 emits: [session/cancel]
               - lane: server
                 at: turns
+                beat:
+                  title: "Geno ยกเลิก turn"
+                  text: >-
+                    engine ยกเลิก turn การรอจบทันที Geno บันทึกว่าคุณเป็นคนหยุด แล้วจบ turn แบบ stopped
                 do: >-
                   engine หา `AbortController` ของ turn ใน `turns` แล้ว abort
                 ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
@@ -203,6 +271,12 @@ scenario:
                 emits: [turn-end]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นว่าคุณเป็นคนหยุด"
+                  text: >-
+                    turn ไม่มีข้อความตอบและไม่มีแถบ error แผงจึงขึ้นประกาศพร้อมปุ่มให้ทำต่อ
+                  end: "คุณหยุด turn"
+                  sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
                 do: >-
                   turn ไม่มีข้อความตอบและไม่มีแถบ error `missingReply` จึงแสดงประกาศพร้อมปุ่มให้ทำต่อ
                 sees: >-
@@ -215,6 +289,11 @@ scenario:
             steps:
               - lane: loop
                 at: gateway
+                beat:
+                  title: "รอจนหมดเวลา Geno เลิก"
+                  text: >-
+                    ออฟไลน์ครบ 30 นาที หรือถูกจำกัดโดยไม่รู้เวลารีเซ็ตครบ 15 นาที Geno ปิดการรอ แล้วถือว่าการเรียกนี้ล้ม
+                    พร้อมเหตุผลของการเลิก
                 do: >-
                   `planWait` ได้ `give-up`: ออฟไลน์ครบ 30 นาที หรือถูกจำกัดโดยไม่รู้เวลารีเซ็ตครบ 15 นาที
                   gateway ปิดการรอและคืน error ชนิด `transport` ข้อความต่อท้ายด้วยเหตุผลของการเลิก เช่นเมื่อออฟไลน์
@@ -222,6 +301,14 @@ scenario:
                 ref: packages/core/src/waiting.ts#planWait
                 emits: [give-up, transport]
               - use: err-turn-fails
+                beat:
+                  title: "แชตขึ้นแถบ error แล้ว turn ล้มเหลว"
+                  text: >-
+                    Geno บันทึก error แชตขึ้นแถบสีแดงพร้อมเหตุผล และ turn จบแบบ failed prompt
+                    ที่ยังไม่ได้คำตอบไปกับข้อความถัดไปที่คุณส่ง
+                  to: panel
+                  end: "หมดเวลารอ turn ล้มเหลว"
+                  sees: { kind: notice, text: the provider has not answered for 30 minutes; check the connection and send again, tone: error }
 
     - id: goes
       lane: loop
@@ -244,6 +331,13 @@ scenario:
     - id: working
       lane: panel
       at: rail
+      beat:
+        title: "แชตกลับมาเป็น working"
+        text: >-
+          เมื่อการเรียกที่ออกไปใหม่ได้ผล Geno ปิดการรอ แถวการรอหายไป เวลาที่ทำงานกลับมา และหัวข้อกลับเป็น working
+          คำตอบที่ stream มาแล้วอยู่ในแผง
+        end: "turn ทำต่อ"
+        sees: { kind: composer, state: working, header: working }
       do: >-
         action `waiting` ที่เป็น null ปิดการรอของ turn แถวการรอหายไป เวลาที่ทำงานกลับมา และหัวข้อกลับเป็น "working"
         reducer ไม่ล้าง `waiting` ด้วย `progress` หรือ `text` ข้อความของคำตอบจึงขึ้นก่อนหัวข้อจะเปลี่ยน
@@ -275,3 +369,5 @@ scenario:
 - **Stop ได้ผลเดียวกันในทุกการรอของ gateway** ทาง "ผู้ใช้กด Stop" ในทัวร์นี้เกิดระหว่าง `nap` ของการรอเครือข่ายหรือ rate limit
   การรอสั้นๆ ก่อนลองใหม่ของ [ข้อผิดพลาดชั่วคราว](/scenarios/err/transient-retried/) (`backOff`) และการรอคิว slot ของผู้ให้บริการ (`slots.run`)
   ฟัง signal เดียวกัน ทุกทางคืน `ABORTED` แล้ว turn จบแบบ `stopped` เหมือนกัน
+
+ถ้า engine ตายระหว่างรอ ดู [Engine ตายกลาง turn แล้วเริ่มใหม่](/scenarios/err/engine-crash-restart/)
