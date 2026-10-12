@@ -122,6 +122,7 @@ scenario:
       runs: 0
       do: >-
         ไม่มีอะไรถูกเขียน ไฟล์ไม่ถูกอ่านผ่าน editor ด้วยซ้ำ ผลของ call เป็น `error` (นอก workspace) หรือ `denied` (กฎ deny)
+        ผล `denied` พาบันทึกการตัดสินของกฎไปด้วย update ปิดของมันจึงมี `APPROVAL_META` ส่วนผล `error` ไม่มีบันทึก
       ref: packages/engine/src/tools/index.ts#runExecutor
 
     - use: tool-result-returns
