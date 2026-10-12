@@ -27,7 +27,7 @@ scenario:
           - kind: payload
             source: packages/docs/src/data/recorded/background-steer.jsonl#line=8
             select: messages[4].content[0]
-            highlight: [content]
+            quote: gets it after its current tool round and before its next model call
           - kind: payload
             source: packages/docs/src/data/recorded/background-steer.jsonl#line=14
             select: messages[5].content
