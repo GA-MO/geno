@@ -32,7 +32,8 @@ scenario:
       at: vscode-ui
       do: >-
         ไม่มีผลเดิมให้ใช้ `#ask` รอให้ผู้ใช้หยุดพิมพ์ตามเวลา debounce แล้ว `streamFim` ส่งคำขอ HTTP `/completion` ไปที่ llama-server
-        ถ้าผู้ใช้พิมพ์ต่อระหว่างนั้น VS Code ยกเลิกคำขอ
+        ถ้าผู้ใช้พิมพ์ต่อระหว่างนั้น VS Code ยกเลิกการขอ completion ครั้งนี้ คำขอ HTTP ยัง stream ต่ออีก 100 ms
+        ให้การขอครั้งถัดไปที่ตรงกับต้นของผลรับช่วงได้ ถ้าไม่มีใครรับ มันจึงถูกยกเลิก
       ref: packages/core/src/tab/stream.ts#streamFim
 
     - id: complete
