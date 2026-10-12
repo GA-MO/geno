@@ -100,6 +100,7 @@ scenario:
                 do: >-
                   ผลของ call มีสถานะ `denied` ข้อความถึงโมเดลคือ "denied: `pnpm add zod` did not run.
                   A PermissionRequest hook answered for the user and refused it: use npm in this repo. Do not retry it; ..."
+                  ผลพาบันทึกการตัดสินของ hook ไปด้วย update ปิดของมันจึงมี `APPROVAL_META`
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied]
               - use: tool-result-returns
@@ -130,7 +131,8 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  ผลของ call มีสถานะ `rejected` และบอกโมเดลให้หยุดรอผู้ใช้ batch หยุดทันที call ที่เหลือไม่เริ่ม
+                  ผลของ call มีสถานะ `rejected` พาบันทึกของ hook ไปเป็น `APPROVAL_META` และบอกโมเดลให้หยุดรอผู้ใช้
+                  เมื่อ batch นี้จบ `runTools` ไม่เริ่ม batch ถัดไป call ที่เหลือของ turn จึงไม่ได้รัน
                 ref: "packages/engine/src/drive.ts#\"results.some((result) => result?.status === 'rejected')\""
                 emits: [rejected]
               - use: tool-result-returns
@@ -173,6 +175,7 @@ scenario:
       at: shell
       do: >-
         `bash` รันคำสั่งใน sandbox การอนุญาตของ hook ไม่ยกเว้น sandbox ผลแนบบันทึกว่า hook เป็นคนอนุญาต
+        update ปิดของ call จึงมี `APPROVAL_META`
       ref: "packages/engine/src/tools/agent.ts#\"tools.sandbox.run(command\""
       phase: running-tools
 

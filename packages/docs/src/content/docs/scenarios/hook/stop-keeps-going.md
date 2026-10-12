@@ -131,7 +131,7 @@ scenario:
       lane: loop
       at: model-call
       do: >-
-        `callModel` ประกอบคำขอ โน้ตของ Stop ไปเป็นข้อความถัดไปที่โมเดลอ่าน:
+        `buildRequest` ประกอบคำขอจาก log (`replayMessages` วางโน้ตของ Stop ไว้ใน user message ถัดไป) โมเดลอ่าน:
         "[Geno] Stop hook blocking error: run pnpm test before you finish"
       ref: packages/core/src/hooks.ts#hookNoteText
 
