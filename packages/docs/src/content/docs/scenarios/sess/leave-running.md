@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณเปิดแชตใหม่ระหว่าง turn ทำงาน
         text: turn ของแชต "Fix date parsing" ยังไม่จบ คุณกด New Chat หรือเปิดแชตอื่นจาก History
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้เปิดแชตใหม่ระหว่างที่ turn ยังไม่จบ
@@ -27,6 +28,7 @@ scenario:
       beat:
         title: แชตปล่อย turn เดิมไว้
         text: การ์ดที่เปิดค้างถูกตอบว่าไม่ได้แสดงแล้ว engine จะถามใหม่ engine เลิกส่งอัปเดตมาที่หน้าต่างนี้ แต่ turn ทำงานต่อ
+        from: panel
         to: engine
       lane: editor
       at: chat
@@ -48,6 +50,7 @@ scenario:
       beat:
         title: แผงแสดงแชตใหม่
         text: engine สร้าง session ใหม่ แผงว่างและปุ่ม Send กลับมา แผง Tasks ยังแสดงแชตเดิมว่าทำงานอยู่
+        from: engine
         to: panel
         sees: หน้าเริ่มต้นของแชตใหม่ ปุ่ม Send และในแผง Tasks แถว "Fix date parsing" ยังทำงานอยู่
       lane: editor
@@ -70,6 +73,8 @@ scenario:
       beat:
         title: turn เดิมทำงานต่อเบื้องหลัง
         text: loop ไม่รู้ว่าไม่มีใครดูอยู่ log ยังบันทึกทุกอย่าง
+        from: engine
+        to: engine
         ask: ไปถึงอะไรก่อน
       lane: loop
       at: drive
@@ -86,6 +91,8 @@ scenario:
                 beat:
                   title: turn ต้องขอ permission
                   text: คำสั่งถัดไปไม่อยู่ในรายการปลอดภัย Geno ต้องถามคุณ
+                  from: engine
+                  to: engine
                 at: settle
                 do: >-
                   คำสั่งถัดไปไม่อยู่ใน safe list `settle` จึงขอให้ผู้ใช้ตัดสินผ่าน `approval.approve`
@@ -95,6 +102,8 @@ scenario:
                 beat:
                   title: Geno รอจนมีคนดู
                   text: ไม่มีหน้าต่างไหนแสดง session นี้ Geno จึงรอ งานใน Tasks เปลี่ยนเป็นรอคุณ
+                  from: engine
+                  to: panel
                   sees:
                     kind: task
                     title: Fix date parsing
@@ -108,6 +117,8 @@ scenario:
                 beat:
                   title: VS Code แจ้งเตือน
                   text: VS Code ขึ้นการแจ้งเตือนที่มีปุ่ม Open ถ้าหน้าต่างไม่มีโฟกัสบน macOS ก็แจ้งผ่าน OS ด้วย
+                  from: panel
+                  to: you
                   sees:
                     kind: toast
                     text: "Geno needs your permission: Fix date parsing"
@@ -124,7 +135,8 @@ scenario:
                 beat:
                   title: คุณกด Open
                   text: แชตเดิมเปิดขึ้น engine เล่นซ้ำ turn ที่กำลังทำงาน แผงรับช่วง turn แล้ว Geno ส่งคำถามมาอีกครั้ง
-                  to: engine
+                  from: you
+                  to: panel
                 do: ผู้ใช้คลิก Open
               - lane: editor
                 at: chat
@@ -137,6 +149,8 @@ scenario:
                 beat:
                   title: แชตเดิมกลับมาพร้อมการ์ด
                   text: บทสนทนาเดิมขึ้นพร้อมการ์ดที่รออยู่ จากตรงนี้เหมือนการ์ดของโหมด Ask
+                  from: panel
+                  to: you
                   sees: บทสนทนา "Fix date parsing" หัวข้อ "waiting for you" และการ์ดขออนุญาต
                   end: ตอบการ์ดตามปกติ
                 at: card
@@ -151,6 +165,8 @@ scenario:
                 beat:
                   title: turn จบเอง
                   text: งานใน Tasks เปลี่ยนเป็นเสร็จ แชตปล่อย turn นั้นไปแล้ว จึงไม่วาดอะไร
+                  from: engine
+                  to: panel
                 at: tasks
                 do: >-
                   turn จบแบบ done งานใน Tasks เปลี่ยนเป็น done และส่ง `TASK_UPDATE_METHOD` ให้ทุกหน้าต่าง
@@ -162,6 +178,8 @@ scenario:
                 beat:
                   title: VS Code บอกว่างานเสร็จ
                   text: แชตนั้นไม่ได้แสดงอยู่ VS Code จึงแจ้งเตือน การจบไม่แจ้งผ่าน OS
+                  from: panel
+                  to: you
                   sees:
                     kind: toast
                     text: "Geno finished: Fix date parsing"

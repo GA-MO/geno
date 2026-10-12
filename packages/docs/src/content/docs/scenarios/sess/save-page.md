@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณเลือก Save as page
         text: คำตอบมีตาราง แผนภาพ และรูป เมนูของข้อความมีรายการบันทึกเป็นหน้า HTML
+        from: you
+        to: panel
         sees: รายการ "Save as page" กับคำอธิบาย "The answer as one HTML file to show someone"
       lane: panel
       at: rail
@@ -35,6 +37,8 @@ scenario:
       beat:
         title: แผงส่งแผนภาพที่วาดไว้แล้ว
         text: แผงส่งแผนภาพตามที่เห็นตอนนี้พร้อมธีมสี หน้า HTML จึงไม่ต้องวาดเอง
+        from: panel
+        to: panel
       lane: panel
       at: rail
       do: >-
@@ -47,6 +51,8 @@ scenario:
       beat:
         title: ส่วนขยายประกอบหน้า HTML
         text: ส่วนขยายดึงคำตอบของ turn นั้น อ่านรูปจาก workspace ฝังเข้าไปในไฟล์เดียว ไม่มีอะไรถูกอัปโหลด
+        from: panel
+        to: panel
       lane: editor
       at: chat
       do: >-
@@ -58,6 +64,8 @@ scenario:
       beat:
         title: ส่วนขยายเลือกชื่อไฟล์
         text: ชื่อไฟล์มาจากหัวข้อของคำตอบ ที่อยู่คือ `geno-pages/` ในโฟลเดอร์แรกของ workspace
+        from: panel
+        to: panel
         ask: มีไฟล์ชื่อนี้ไหม
       lane: editor
       at: vscode-ui
@@ -80,6 +88,8 @@ scenario:
                 beat:
                   title: VS Code ถามว่าจะเขียนทับไหม
                   text: Keep Both บันทึกเป็นชื่อใหม่ที่บอกไว้ในคำถาม
+                  from: panel
+                  to: you
                   sees: '"geno-pages/leap-year-fix.html already exists. Replace it?" ปุ่ม [Replace] [Keep Both] และ Cancel'
                 at: vscode-ui
                 do: >-
@@ -91,6 +101,7 @@ scenario:
                 beat:
                   title: คุณกด Keep Both
                   text: ไฟล์เดิมไม่ถูกแตะ
+                  from: you
                   to: panel
                 do: ผู้ใช้กด Keep Both
 
@@ -98,6 +109,8 @@ scenario:
       beat:
         title: ส่วนขยายเขียนไฟล์
         text: ส่วนขยายเขียนผ่าน filesystem ของ VS Code ไม่ผ่าน engine และไม่มี turn ใหม่
+        from: panel
+        to: machine
       lane: editor
       at: vscode-ui
       do: >-
@@ -108,6 +121,8 @@ scenario:
       beat:
         title: toast บอกที่อยู่ของไฟล์
         text: เปิดหน้าใน browser หรือเปิดโฟลเดอร์ได้จาก toast
+        from: panel
+        to: you
         sees:
           kind: toast
           text: Saved the page to geno-pages/leap-year-fix-2.html.

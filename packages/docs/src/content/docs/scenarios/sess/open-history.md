@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณกดปุ่ม Chat History
         text: แผงเปิด History ในขอบเขต "This project" `/history` ทำแบบเดียวกัน
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้กดปุ่ม Chat History บนหัวแผง
@@ -35,6 +36,7 @@ scenario:
       beat:
         title: แชตขอรายการแชต
         text: engine อ่านชื่อ จำนวน turn ค่าใช้จ่าย และเวลาจาก log ของแต่ละแชต
+        from: panel
         to: engine
       lane: panel
       at: rail
@@ -55,6 +57,8 @@ scenario:
       beat:
         title: รายการแชตเรียงตามเวลา
         text: ช่องค้นหาค้นข้อความในแชตได้ด้วย และสลับเป็น All projects ได้
+        from: panel
+        to: you
         sees: รายการแชตแต่ละแถวมีชื่อ ชื่อโปรเจกต์ "4 turns" ค่าใช้จ่าย และเวลา ด้านบนมีช่อง "Search chats" และปุ่ม This project / All projects
       lane: panel
       at: rail
@@ -68,6 +72,8 @@ scenario:
       beat:
         title: คุณคลิกแชตที่ต้องการ
         text: แชตเทียบโฟลเดอร์ของแชตนั้นกับโฟลเดอร์ของหน้าต่าง lane ของโฟลเดอร์นี้นับเป็นที่เดียวกัน
+        from: you
+        to: panel
         ask: แชตของที่ไหน
       lane: user
       do: ผู้ใช้คลิกแถวของแชตที่ต้องการ
@@ -96,6 +102,7 @@ scenario:
                 beat:
                   title: แผงย้ายไปแชตนั้น
                   text: History ปิด ถ้าแชตปัจจุบันมี turn ทำงานอยู่ turn นั้นทำงานต่อเบื้องหลัง แชตขอโหลดแชตเก่า
+                  from: panel
                   to: engine
                 at: chat
                 do: >-
@@ -106,6 +113,7 @@ scenario:
                 beat:
                   title: Geno เล่น log ซ้ำ
                   text: engine ปฏิเสธถ้าแชตเป็นของ workspace อื่น แล้วส่งทุก turn ตามลำดับ ข้อความของคุณ คำตอบ และ tool call
+                  from: engine
                   to: panel
                 at: sessions
                 do: >-
@@ -126,6 +134,8 @@ scenario:
                 beat:
                   title: แผงวาดบทสนทนาทั้งหมดในครั้งเดียว
                   text: ข้อความไม่ค่อยๆ ขึ้นเหมือนตอน stream ถ้าเปิดจากผลค้นหา แผงเลื่อนไปที่ turn ที่ตรง
+                  from: panel
+                  to: you
                   sees: บทสนทนาเดิมครบทุก turn พร้อมท้าย turn (โมเดล token ค่าใช้จ่าย) diff ของการแก้ และชื่อแชตบนหัวแผง
                 at: rail
                 do: >-
@@ -137,6 +147,8 @@ scenario:
                 beat:
                   title: Geno ปิด session ที่ออกมา
                   text: ถ้าแชตที่ออกมาไม่มี turn ทำงาน engine ปิด MCP server ของมัน ข้อความถัดไปของคุณต่อท้าย log ของแชตที่เปิด
+                  from: engine
+                  to: engine
                   end: คุยต่อในแชตเก่า
                 at: sessions
                 do: >-
@@ -151,6 +163,8 @@ scenario:
                 beat:
                   title: VS Code เปิดโฟลเดอร์ในหน้าต่างใหม่
                   text: ส่วนขยายฝาก id ของแชตไว้กับโฟลเดอร์นั้น แล้วเปิดโฟลเดอร์ในหน้าต่างใหม่ หน้าต่างนี้ไม่เปลี่ยน
+                  from: panel
+                  to: panel
                 at: vscode-ui
                 do: >-
                   `openElsewhere` ตรวจว่าโฟลเดอร์ยังอยู่ เก็บ id ของแชตไว้ใน global state ของ extension ผูกกับโฟลเดอร์นั้น
@@ -160,6 +174,8 @@ scenario:
                 beat:
                   title: หน้าต่างใหม่โหลดแชตนั้น
                   text: หน้าต่างใหม่รับ id ที่ฝากไว้ครั้งเดียว โหลดแชต และโฟกัสแผงแชต จากนั้นเหมือนเปิดหน้าต่างที่จำแชตไว้
+                  from: panel
+                  to: panel
                   end: ไปที่หน้าต่างใหม่
                 at: vscode-ui
                 do: >-
