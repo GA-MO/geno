@@ -65,3 +65,4 @@ Agents that traced the harness for `packages/docs` read the code behind each sce
 | 42 | Real run B04 refuses an edit to a `/var/...` path that is inside the workspace (on macOS `/var` is a symlink to `/private/var`, so a realpath and a plain path may not compare equal). | `docs/results/real-usecases/runs/B04*` | Read; cause is a guess |
 | 43 | Text a child was still streaming when it is cancelled is dropped; its report says "(no report)". | `packages/docs/src/data/recorded/` cancel flow | Recorded with a scripted model |
 | 44 | After Stop, a cancelled background child's empty report still reaches the model with the next prompt. | `packages/docs/src/data/recorded/` stop-with-children flow | Recorded with a scripted model |
+| 45 | A permission card for a single command drops its quotes: `npm pkg set scripts.check="tsc --noEmit"` shows as `scripts.check=tsc --noEmit`. | `packages/extension/src/chat/render.ts` command card | Read |
