@@ -107,8 +107,8 @@ describe('B/B-63 domain and MCP rules in the browser', () => {
 describe('what a browser question asks about', () => {
   it('names the host a navigation opens, without its port, and the tool any other call uses', () => {
     expect(browserDenialFor(call('new_page', { url: 'https://docs.example.com:8443/guide' }), 'ask', ctx())?.subject).toEqual({ kind: 'browse', url: 'https://docs.example.com:8443/guide', host: 'docs.example.com' });
-    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx())?.subject).toEqual({ kind: 'mcp', server: 'browser', tool: 'click' });
-    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx({ page: remotePage }))).toMatchObject({ rule: 'browser-remote-page', subject: { kind: 'mcp', server: 'browser', tool: 'click' } });
+    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx())?.subject).toEqual({ kind: 'mcp', server: 'browser', tool: 'click', arguments: '{\n  "uid": "1"\n}' });
+    expect(browserDenialFor(call('click', { uid: '1' }), 'ask', ctx({ page: remotePage }))).toMatchObject({ rule: 'browser-remote-page', reason: 'acting on https://evil.example/, a page from another host the user did not approve', subject: { kind: 'mcp', server: 'browser', tool: 'click' } });
   });
 });
 

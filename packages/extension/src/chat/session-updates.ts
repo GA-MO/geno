@@ -44,7 +44,7 @@ const approvalSubject = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('read'), path: z.string() }),
   z.object({ kind: z.literal('fetch'), url: z.string(), host: z.string() }),
   z.object({ kind: z.literal('browse'), url: z.string(), host: z.string() }),
-  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string() }),
+  z.object({ kind: z.literal('mcp'), server: z.string(), tool: z.string(), arguments: z.string().catch('') }),
 ]);
 export const permissionInput = z.object({ command: z.string(), line: z.string().optional(), reason: z.string(), description: z.string().optional(), rule: z.string().optional(), subject: approvalSubject.optional().catch(undefined) });
 

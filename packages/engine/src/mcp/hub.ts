@@ -199,7 +199,7 @@ export async function openMcpHub({ store, env, workspace, acp, browser, tokens }
       describe: (args) => `${name} ${JSON.stringify(args)}`,
       async run(args, ctx) {
         const mode = modeOf(approval);
-        const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly };
+        const call = { name, server: info.server, tool: info.tool, readOnly: info.readOnly, args };
         const denial = mcpCallDenial(call, mode, allowed.has(name), (await ctx.permissions?.list()) ?? []);
         const record =
           denial === undefined

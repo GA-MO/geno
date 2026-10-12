@@ -92,7 +92,26 @@ export type ApprovalSubject =
   | { readonly kind: 'read'; readonly path: string }
   | { readonly kind: 'fetch'; readonly url: string; readonly host: string }
   | { readonly kind: 'browse'; readonly url: string; readonly host: string }
-  | { readonly kind: 'mcp'; readonly server: string; readonly tool: string };
+  | { readonly kind: 'mcp'; readonly server: string; readonly tool: string; readonly arguments: string };
+
+/** Past this, a card shows the head of an MCP call's arguments and says how much it left out. */
+export const MAX_SHOWN_ARGUMENTS = 1_500;
+
+/**
+ * An MCP call's arguments as its card shows them: indented JSON, empty for none, cut at a line past
+ * `MAX_SHOWN_ARGUMENTS` characters with a note of how many it left out.
+ */
+export function shownArguments(args: unknown): string {
+  if (args === undefined || (typeof args === 'object' && args !== null && Object.keys(args).length === 0)) return '';
+  const text = JSON.stringify(args, null, 2);
+  if (text.length <= MAX_SHOWN_ARGUMENTS) return text;
+  const lineEnd = text.lastIndexOf('\n', MAX_SHOWN_ARGUMENTS);
+  const kept = text.slice(0, lineEnd > MAX_SHOWN_ARGUMENTS / 2 ? lineEnd : MAX_SHOWN_ARGUMENTS);
+  return `${kept}\n… ${(text.length - kept.length).toLocaleString('en-US')} more characters`;
+}
+
+/** What an MCP call's question asks about: the server's names for server and tool, and the arguments it would send. */
+export const mcpSubject = (server: string, tool: string, args: unknown): ApprovalSubject => ({ kind: 'mcp', server, tool, arguments: shownArguments(args) });
 
 export type Denial = {
   readonly rule: ApprovalRuleId;
@@ -538,8 +557,8 @@ export function hookAskDenial({ reason, from }: { readonly reason: string | unde
 export const isMcpRule = (rule: ApprovalRuleId): rule is McpRuleId => (MCP_RULE_IDS as readonly string[]).includes(rule);
 
 export const MCP_RULES: Readonly<Record<McpRuleId, { readonly reason: string; readonly verdicts: Verdicts }>> = {
-  'mcp-read-only': { reason: 'an MCP tool its server marks read-only', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
-  'mcp-tool': { reason: 'an MCP tool', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
+  'mcp-read-only': { reason: 'a tool its MCP server calls read-only, which Geno cannot check', verdicts: { plan: 'allow', ask: 'ask', auto: 'allow', 'non-interactive': 'allow' } },
+  'mcp-tool': { reason: 'a tool of an MCP server, which runs outside the sandbox', verdicts: { plan: 'deny', ask: 'ask', auto: 'classify', 'non-interactive': 'allow' } },
 };
 
 /**

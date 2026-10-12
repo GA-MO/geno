@@ -1354,7 +1354,8 @@ button.file-chip:hover {
   color: var(--warn);
 }
 
-.permission-command {
+.permission-command,
+.permission-arguments {
   margin: 8px 0 6px;
   padding: 7px 10px;
   border-radius: 7px;
@@ -1368,6 +1369,11 @@ button.file-chip:hover {
 .permission-command::before {
   content: '$ ';
   color: var(--muted);
+}
+
+.permission-arguments {
+  max-height: 240px;
+  overflow: auto;
 }
 
 .permission-reason,
