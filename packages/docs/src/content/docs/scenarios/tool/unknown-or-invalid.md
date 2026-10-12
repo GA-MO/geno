@@ -1,6 +1,6 @@
 ---
 title: "Model เรียก tool ที่ไม่มีจริง หรือส่ง input ผิด"
-description: โมเดลเรียกเครื่องมือที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
+description: โมเดลเรียก tool ที่ไม่มีใน Geno หรือส่ง input ที่ไม่ตรง schema executor ไม่รันอะไร แต่ตอบเป็นผล error ที่บอกวิธีเรียกที่ถูก แล้ว turn ทำงานต่อ
 tableOfContents: false
 sidebar:
   order: 4
@@ -116,15 +116,15 @@ scenario:
 ---
 
 ทุกอย่างที่โมเดลเรียกผิดกลับไปเป็นผล `error` ให้โมเดลอ่าน ไม่มีอะไรทำให้ turn ล้ม
-Geno ไม่ซ่อมหรือเดา input ให้ โมเดลต้องเรียกใหม่เอง (ยกเว้นเครื่องมือที่เลื่อนไว้ ซึ่ง `gate` แปลงค่าที่เขียนเป็นข้อความให้ตรงชนิดตาม schema ก่อนตรวจ)
+Geno ไม่ซ่อมหรือเดา input ให้ โมเดลต้องเรียกใหม่เอง (ยกเว้น tool ที่เลื่อนไว้ ซึ่ง `gate` แปลงค่าที่เขียนเป็นข้อความให้ตรงชนิดตาม schema ก่อนตรวจ)
 
 สิ่งที่ควรสังเกต
 
 - **ชื่อของ harness อื่นได้คำแนะนำ** `create`, `write`, `create_file`, `write_file` และ `Write` ได้ข้อความที่ชี้ไปที่ `edit` กับ `create: true`
-  ชื่ออื่นได้แค่รายชื่อเครื่องมือ
-- **เครื่องมือที่เลื่อนไว้ไม่ใช่ชื่อที่ไม่มี** เครื่องมือ MCP และเครื่องมือที่ไม่ใช่แกนหลักมีอยู่จริงแต่ถูกปฏิเสธจนกว่าจะโหลดด้วย `tool_search`
-  ดู [โหลดเครื่องมือที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
+  ชื่ออื่นได้แค่รายชื่อ tool
+- **tool ที่เลื่อนไว้ไม่ใช่ชื่อที่ไม่มี** tool MCP และ tool ที่ไม่ใช่แกนหลักมีอยู่จริงแต่ถูกปฏิเสธจนกว่าจะโหลดด้วย `tool_search`
+  ดู [Model โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)
 - **input ที่ถูกตัดเพราะ `max_tokens` ไม่มาทางนี้** call ที่ถูกตัดได้คำตอบ `cut-off` จาก loop ก่อนถึง executor
-  ดู [คำตอบชนเพดาน output](/scenarios/mstop/max-tokens/)
+  ดู [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/)
 
 tool ที่มีจริงแต่ยังไม่ได้โหลด ดู [Model โหลด tool ที่เลื่อนไว้ด้วย tool_search](/scenarios/tool/deferred-tool-load/)

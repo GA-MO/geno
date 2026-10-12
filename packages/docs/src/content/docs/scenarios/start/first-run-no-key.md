@@ -155,7 +155,7 @@ Geno ตรวจการตั้งค่าใน extension host ก่อ�
 
 - **toast อาจมาก่อนผู้ใช้ส่งข้อความ** การเปิดแผงครั้งแรกก็เรียก `Engine.connection()` อยู่แล้ว
   (หน้าเริ่มต้นขอรายการแชต และแถบสถานะ PR ขอข้อมูลจาก engine) ผู้ใช้ที่ยังไม่มีคีย์จึงเห็น toast เดียวกันตั้งแต่เปิดแผง
-  ดู [เปิดหน้าต่างและเชื่อม engine](/scenarios/start/open-window/)
+  ดู [เปิดหน้าต่าง VS Code แล้ว Geno ต่อ engine](/scenarios/start/open-window/)
 - **ปุ่มบน toast เปลี่ยนตามสิ่งที่ขาด** ขาดคีย์ได้ "Set API Key" ขาด endpoint ของ Model Studio ได้ "Open Settings"
   ที่เปิดไปที่ `gcode.baseUrl` ขาดโมเดลหรือช่องอื่นได้ "Open Geno Settings"
 - **Model Studio ต้องมีทั้งคีย์และ endpoint** `setupProblem` รายงานทีละอย่าง เรียงตามลำดับช่องของ provider

@@ -199,14 +199,14 @@ scenario:
 
 Stop เดินทางเป็นสายเดียวจากแผงถึงคำขอโมเดล: ข้อความ `stop` ในแผง, notification ACP `session/cancel`,
 `AbortController` ของ turn ในเซิร์ฟเวอร์ engine แล้วจึงถึง stream ของผู้ให้บริการ
-ทุกจุดที่ turn อาจรออยู่ฟังสัญญาณเดียวกัน Stop จึงใช้ได้ทั้งตอน stream ตอนรอ retry และตอนรันเครื่องมือ
+ทุกจุดที่ turn อาจรออยู่ฟังสัญญาณเดียวกัน Stop จึงใช้ได้ทั้งตอน stream ตอนรอ retry และตอนรัน tool
 
 สิ่งที่ควรสังเกต
 
 - **ข้อความครึ่งเดียวไม่ถูกเก็บ** log บันทึกคำตอบของโมเดลเป็น event `assistant` ตอนที่คำตอบจบเท่านั้น
   เมื่อหยุดกลางทาง log มีแค่ error `abort` แผงที่เห็นข้อความอยู่จะยังเห็น แต่โมเดลและการ reload ไม่เห็น
 - **prompt ที่ยังไม่ได้คำตอบยังค้างอยู่** error `abort` ไม่ลบ prompt ออกจากคำขอถัดไป ข้อความถัดไปของผู้ใช้จึงไปพร้อม prompt เดิม
-  และมีโน้ตบอกโมเดลว่าผู้ใช้หยุด turn ที่แล้ว ดู [จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue/Retry](/scenarios/mstop/no-reply-continue-retry/)
+  และมีโน้ตบอกโมเดลว่าผู้ใช้หยุด turn ที่แล้ว ดู [Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry](/scenarios/mstop/no-reply-continue-retry/)
 - **ไม่มีบล็อก error ในแผง** engine ส่ง error `abort` มาเหมือน error อื่น แต่ฝั่ง extension ทิ้งมันไป
   ป้าย "Stopped by you" ท้าย turn ทำหน้าที่บอกแทน
 

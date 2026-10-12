@@ -125,18 +125,18 @@ scenario:
 
 | stop reason | ขั้นต่อไป | หน้า |
 | --- | --- | --- |
-| `end_turn`, `stop_sequence` | จบ (`done`) | [ถามแล้วได้คำตอบเป็นข้อความ](/scenarios/turn/text-answer/) |
-| `tool_use` ที่มีการเรียก | รันเครื่องมือ | [โมเดลเรียกเครื่องมือแล้วตอบ](/scenarios/turn/with-tools/) |
+| `end_turn`, `stop_sequence` | จบ (`done`) | [Model ตอบเป็นข้อความโดยไม่เรียก tool](/scenarios/turn/text-answer/) |
+| `tool_use` ที่มีการเรียก | รัน tool | [Model เรียก tool แล้วตอบ](/scenarios/turn/with-tools/) |
 | `pause_turn` | เรียกโมเดลอีกครั้ง | หน้านี้ |
 | `tool_use` ที่ไม่มีการเรียก, ไม่มี stop reason | `failed` | หน้านี้ |
-| `max_tokens` | `failed` หรือลองใหม่หนึ่งครั้ง | [คำตอบชนเพดาน output](/scenarios/mstop/max-tokens/) |
-| `refusal` | `failed` | [โมเดลปฏิเสธ](/scenarios/mstop/refusal/) |
+| `max_tokens` | `failed` หรือลองใหม่หนึ่งครั้ง | [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/) |
+| `refusal` | `failed` | [Model ปฏิเสธที่จะตอบ](/scenarios/mstop/refusal/) |
 | `model_context_window_exceeded` | สรุปบริบทแล้วส่งใหม่ | [context เกินหน้าต่าง](/scenarios/ctx/overflow-compact-resend/) |
 
 สิ่งที่ควรสังเกต
 
 - **`pause_turn` ไม่มีผลที่ผู้ใช้เห็น** การเรียกครั้งที่สองต่อจากคำตอบเดิม แผงเห็นเป็นข้อความที่ stream ต่อไปเท่านั้น
-- **ทางที่ล้มไม่มีเหตุผลในแผง** เหมือน [คำตอบชนเพดาน output](/scenarios/mstop/max-tokens/) เหตุผล
+- **ทางที่ล้มไม่มีเหตุผลในแผง** เหมือน [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/) เหตุผล
   ("error: the model stopped with tool_use" หรือ "error: the model stopped with no stop reason") อยู่ใน output channel "Geno engine" เท่านั้น
 
 อ่านต่อที่ [คำตอบของ model ชนเพดาน output](/scenarios/mstop/max-tokens/) ซึ่งล้มแบบเงียบเหมือนกัน

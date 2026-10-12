@@ -144,7 +144,7 @@ scenario:
 ---
 
 การสรุปอัตโนมัติเป็นส่วนหนึ่งของการเรียกโมเดลหนึ่งครั้ง Stop ระหว่างสรุปจึงจบ turn แบบเดียวกับ
-[กด Stop ขณะโมเดลกำลังเขียน](/scenarios/ctl/stop-while-streaming/) ต่างกันแค่ไม่มีข้อความครึ่งเดียวค้าง
+[กด Stop ขณะ model กำลังเขียน](/scenarios/ctl/stop-while-streaming/) ต่างกันแค่ไม่มีข้อความครึ่งเดียวค้าง
 
 สิ่งที่ควรสังเกต
 
@@ -153,6 +153,6 @@ scenario:
 - **ยังมี checkpoint หนึ่งจุดหลัง Stop** `callModel` บันทึก `checkpoint` ก่อนรู้ว่าการเรียกจะไม่ออกไป
   Rewind และ Undo จึงเห็นจุดนี้เพิ่มขึ้นหนึ่งจุดโดยไม่มีการเรียกโมเดลตามมา
 - **`/compact` ที่ผู้ใช้สั่งเองต่างออกไป** ทางนั้นไม่ใช่ turn ของ loop Stop ได้คำตอบ "Stopped. The context is as it was."
-  และหัวข้อเป็น "worked for ..." ดู [/compact ระหว่าง turn](/scenarios/ctx/compaction-manual/)
+  และหัวข้อเป็น "worked for ..." ดู [คุณสั่ง /compact ระหว่าง turn](/scenarios/ctx/compaction-manual/)
 
-การสรุปที่ไม่ถูกขัดเดินต่ออย่างไร ดู [สรุปบริบทอัตโนมัติก่อนเรียกโมเดล](/scenarios/ctx/compaction-auto/)
+การสรุปที่ไม่ถูกขัดเดินต่ออย่างไร ดู [Compaction อัตโนมัติก่อนเรียก model](/scenarios/ctx/compaction-auto/)
