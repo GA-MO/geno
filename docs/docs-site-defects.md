@@ -60,3 +60,5 @@ Agents that traced the harness for `packages/docs` read the code behind each sce
 | 37 | A queued follow-up whose text holds an `@` mention but no attachment can be sent mid-turn with Send now, so the mention goes as plain steer text and is never resolved. | `extension/src/chat/steer-model.ts:82` checks attachments only | Read |
 | 38 | After an offline or retry wait ends and the call goes out again, the panel keeps the turn in its waiting state while the re-sent answer streams. | — | Read |
 | 39 | Geno never checks whether the chosen model accepts images. A pasted or attached image goes to a text-only model as base64 and the provider's error reaches the user. | — | Read |
+| 40 | A subagent's last allowed call carries the note "Do not call a tool" while the same request forces the `report` tool call. | `core/src/notice.ts` `LAST_CALL_NOTE`, `engine/src/drive.ts` | Read |
+| 41 | The real-usecase archiver's Authorization-header redaction also matches "authorization:" inside the classifier prompt and breaks the JSON of that wire line (A09 fix-a1 and fix-b2). | `docs/results/real-usecases/runs/A09-auto-classifier/*/wire.jsonl` | Read |
