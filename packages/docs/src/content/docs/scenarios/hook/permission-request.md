@@ -62,7 +62,7 @@ scenario:
                 at: settle
                 do: >-
                   สคริปต์พิมพ์ `{"hookSpecificOutput": {"decision": {"behavior": "allow"}}}`
-                  `settle` บันทึก `decidedBy: hook, verdict: allow` และไม่ขึ้นการ์ด ผู้ใช้ไม่เห็นคำถามเลย
+                  `settle` คืนบันทึก `decidedBy: hook, verdict: allow` และไม่ขึ้นการ์ด ผู้ใช้ไม่เห็นคำถามเลย
                 ref: packages/engine/src/tools/agent.ts#settle
                 emits: [allow]
 
@@ -92,7 +92,7 @@ scenario:
                 at: settle
                 do: >-
                   สคริปต์ตอบ `behavior: "deny"` พร้อม `message: "use npm in this repo"`
-                  `settle` บันทึก `decidedBy: hook, verdict: deny` และ `refusalOf` สร้าง `ToolDenied` คำสั่งไม่ได้รัน
+                  `settle` คืนบันทึก `decidedBy: hook, verdict: deny` และ `refusalOf` สร้าง `ToolDenied` คำสั่งไม่ได้รัน
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolDenied]
               - lane: loop
@@ -124,7 +124,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  สคริปต์ตอบ deny พร้อม `interrupt: true` `settle` บันทึก `interrupt` ไว้ด้วย
+                  สคริปต์ตอบ deny พร้อม `interrupt: true` `settle` ใส่ `interrupt` ไว้ในบันทึกที่คืนด้วย
                   `refusalOf` จึงสร้าง `ToolRejected` เหมือนผู้ใช้กด Deny
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]

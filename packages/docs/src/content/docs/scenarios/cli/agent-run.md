@@ -84,7 +84,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow`
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
               - lane: tool
@@ -175,7 +175,7 @@ scenario:
       lane: policy
       at: settle
       do: >-
-        `askOnTerminal` ได้ `reject` `settle` บันทึก `decidedBy: user, verdict: deny` และ `refusalOf` โยน `ToolRejected`
+        `askOnTerminal` ได้ `reject` `settle` คืนบันทึก `decidedBy: user, verdict: deny` และ `refusalOf` โยน `ToolRejected`
         คำสั่งไม่ได้รัน
       ref: packages/engine/src/tools/agent.ts#refusalOf
       emits: [ToolRejected]
@@ -215,7 +215,7 @@ scenario:
 
 - **ตอบไม่แล้วยังได้ 0** exit code บอกว่ารอบจบอย่างไร ไม่ได้บอกว่างานสำเร็จ สคริปต์ที่เรียก `gcode agent`
   ต้องอ่านข้อความด้วยถ้าอยากรู้ว่าคำสั่งถูกปฏิเสธ
-- **ไม่มีเทอร์มินัลก็บันทึกว่าผู้ใช้ปฏิเสธ** เมื่อ stdin ไม่ใช่เทอร์มินัล `terminalConfirm` ตอบไม่แทน แต่ `settle` บันทึก
+- **ไม่มีเทอร์มินัลก็บันทึกว่าผู้ใช้ปฏิเสธ** เมื่อ stdin ไม่ใช่เทอร์มินัล `terminalConfirm` ตอบไม่แทน แต่ `settle` คืนบันทึก
   `decidedBy: user` เหมือนผู้ใช้กดไม่เอง turn จึงจบแบบเดียวกับการปฏิเสธของคน ต่างจาก `--non-interactive` ที่ทำต่อได้
 - **hook ของ workspace ไม่รัน** บรรทัดคำสั่งไม่มี editor ที่ยืนยันว่าผู้ใช้เชื่อถือโฟลเดอร์ จึงรันเฉพาะ hook ของผู้ใช้
 - **non-interactive ไม่ได้ปฏิเสธทุกอย่าง** คำสั่งที่ไม่อยู่ใน safe list แต่ไม่มีกฎจับ (`unlisted`) รันได้ใน sandbox

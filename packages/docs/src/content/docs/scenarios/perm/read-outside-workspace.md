@@ -109,7 +109,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` สำหรับไฟล์นี้ครั้งเดียว
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` สำหรับไฟล์นี้ครั้งเดียว
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
           - id: allow-session
@@ -151,7 +151,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` และ `outsideRefusal` โยน `ToolRejected` ไฟล์ไม่ถูกอ่าน turn จบรอผู้ใช้
+                  `settle` คืนบันทึก `verdict: deny` และ `outsideRefusal` โยน `ToolRejected` ไฟล์ไม่ถูกอ่าน turn จบรอผู้ใช้
                 ref: packages/engine/src/tools/agent.ts#outsideRefusal
                 emits: [ToolRejected]
                 phase: running-tools

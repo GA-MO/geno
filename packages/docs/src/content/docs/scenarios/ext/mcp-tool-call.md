@@ -102,7 +102,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `permissionAnswerOf` ได้ `allow-session` `settle` บันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อเครื่องมือ
+                  `permissionAnswerOf` ได้ `allow-session` `settle` คืนบันทึกว่าผู้ใช้อนุญาต แล้ว `keepMcpAnswer` เพิ่มชื่อเครื่องมือ
                   ลงชุด `allowed` ของ session call ถัดไปของเครื่องมือนี้ไม่ถาม จนกว่า session จะปิด
                 ref: packages/engine/src/mcp/browser.ts#keepMcpAnswer
                 phase: running-tools

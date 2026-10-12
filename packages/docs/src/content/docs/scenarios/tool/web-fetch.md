@@ -100,7 +100,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow`
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow`
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
           - id: allow-workspace
@@ -142,7 +142,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `verdict: deny` และ `judge` โยน `ToolRejected` ไม่มีการดึงหน้า turn จบรอผู้ใช้
+                  `settle` คืนบันทึก `verdict: deny` และ `judge` โยน `ToolRejected` ไม่มีการดึงหน้า turn จบรอผู้ใช้
                   เหมือนการปฏิเสธคำสั่งในโหมด Ask
                 ref: packages/engine/src/tools/agent.ts#refusalOf
                 emits: [ToolRejected]

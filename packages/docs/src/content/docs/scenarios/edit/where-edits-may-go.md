@@ -100,7 +100,7 @@ scenario:
               - lane: policy
                 at: settle
                 do: >-
-                  `settle` บันทึก `decidedBy: user, verdict: allow` แล้ว `edit` ทำงานตามปกติ ผลของมันแนบบันทึกว่าผู้ใช้อนุญาต
+                  `settle` คืนบันทึก `decidedBy: user, verdict: allow` แล้ว `edit` ทำงานตามปกติ ผลของมันแนบบันทึกว่าผู้ใช้อนุญาต
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: running-tools
                 goto: edit.applied-as-diff

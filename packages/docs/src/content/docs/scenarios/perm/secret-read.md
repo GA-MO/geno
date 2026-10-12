@@ -103,7 +103,7 @@ scenario:
                         - lane: policy
                           at: settle
                           do: >-
-                            `settle` บันทึก `decidedBy: user, verdict: allow` สำหรับการอ่านครั้งนี้ครั้งเดียว
+                            `settle` คืนบันทึก `decidedBy: user, verdict: allow` สำหรับการอ่านครั้งนี้ครั้งเดียว
                           ref: packages/engine/src/tools/agent.ts#settle
                           phase: running-tools
                     - id: reject
