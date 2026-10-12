@@ -15,6 +15,11 @@ scenario:
   related: [bg.child-wakes-parent, perm.ask-allow, err.offline-wait, sess.leave-running]
   steps:
     - id: change
+      beat:
+        title: งานของ “migrate tests” เปลี่ยนสถานะ
+        text: คุณเปลี่ยนแชตไปอีก session และสลับไปเบราว์เซอร์ engine บันทึกสถานะใหม่ของงาน ตัดสินว่าควรแจ้งไหม แล้วส่งให้ทุกหน้าต่าง
+        to: panel
+        ask: งานเปลี่ยนเป็นอะไร
       lane: server
       at: tasks
       do: >-
@@ -29,6 +34,9 @@ scenario:
             label: ต้องขออนุญาต
             steps:
               - lane: editor
+                beat:
+                  title: งานต้องขอ permission
+                  text: งานย้ายเข้ากลุ่ม Needs you ตัวเลขบนไอคอนเพิ่มขึ้น หน้าต่างไม่ได้โฟกัส Geno จึงแจ้งทั้งใน VS Code และผ่าน macOS
                 at: chat
                 do: >-
                   `TaskHost.updated` จัดงานใหม่ งานย้ายเข้า Needs you ด้วยเหตุ `permission` `attentionNotice` ได้
@@ -42,15 +50,32 @@ scenario:
                   `channelsOf` เห็นว่าหน้าต่างไม่ได้โฟกัส จึงใช้ทั้ง toast ของ VS Code และการแจ้งเตือนของ macOS
                 ref: packages/extension/src/chat/notices.ts#channelsOf
               - lane: external
+                beat:
+                  title: macOS แจ้งเตือน
+                  text: ชื่องานไปเป็นข้อความของการแจ้งเตือนเท่านั้น จึงรันเป็น script ไม่ได้
+                  from: machine
+                  sees: 'การแจ้งเตือนของ macOS หัวข้อ "Geno" ข้อความ "Geno needs your permission: migrate tests"'
                 do: >-
                   `osascript` แสดงการแจ้งเตือนของ macOS ข้อความส่งเป็นอาร์กิวเมนต์ ไม่ใช่ตัวสคริปต์ ชื่องานจึงรันเป็น AppleScript ไม่ได้
                 sees: >-
                   การแจ้งเตือนของ macOS หัวข้อ "Geno" ข้อความ "Geno needs your permission: migrate tests"
                 ref: packages/extension/src/chat/notices.ts#osNotification
               - lane: user
+                beat:
+                  title: คุณกด Open บน toast
+                  text: คุณกลับมาที่ VS Code และกด Open
+                  sees:
+                    kind: toast
+                    text: "Geno needs your permission: migrate tests"
+                    actions:
+                      - Open
                 do: >-
                   ผู้ใช้กลับมาที่ VS Code และกด Open บน toast "Geno needs your permission: migrate tests"
               - lane: panel
+                beat:
+                  title: แชตพาไปที่การ์ดที่รออยู่
+                  text: แชตเปิด session นั้นแล้วเลื่อนไปที่การ์ดที่รอคำตอบของคุณ
+                  end: คุณตอบการ์ด
                 at: card
                 do: >-
                   `TaskHost.open` เปิด session นั้นในแผงแชตแล้วเลื่อนไปที่การ์ดที่รออยู่ (`revealOf` ได้ `card`)
@@ -62,6 +87,9 @@ scenario:
             label: เสร็จ
             steps:
               - lane: editor
+                beat:
+                  title: งานเสร็จ
+                  text: งานย้ายเข้ากลุ่ม Ready การแจ้งเป็นระดับ info ไม่ส่งถึง macOS งานที่ยังมีงานเบื้องหลังรอปลุก ยังไม่นับว่าเสร็จ
                 at: chat
                 do: >-
                   งานจบแบบ done และย้ายเข้า Ready `attentionNotice` ได้การแจ้งระดับ info ที่ไม่ส่งถึงระบบปฏิบัติการ
@@ -70,6 +98,14 @@ scenario:
                 emits: [done]
                 phase: idle
               - lane: editor
+                beat:
+                  title: VS Code ขึ้น toast
+                  text: มีแค่ toast ของ VS Code ไม่มีการแจ้งเตือนของ macOS
+                  sees:
+                    kind: toast
+                    text: "Geno finished: migrate tests"
+                    actions:
+                      - Open
                 at: chat
                 do: >-
                   `tell` แสดง toast ของ VS Code อย่างเดียว ไม่มีการแจ้งเตือนของ macOS
@@ -77,6 +113,11 @@ scenario:
                   toast "Geno finished: migrate tests" [Open]
                 ref: packages/extension/src/chat/tasks-host.ts#TaskHost.tell
               - lane: user
+                beat:
+                  title: คุณกด Open
+                  text: แชตเปิด session นั้นที่ท้ายบทสนทนา และนับว่าคุณดูแล้ว
+                  from: you
+                  end: คุณอ่านคำตอบ
                 do: ผู้ใช้กลับมาที่ VS Code เห็น toast แล้วกด Open
               - lane: panel
                 at: rail
@@ -90,6 +131,9 @@ scenario:
             label: ล้มเหลว
             steps:
               - lane: editor
+                beat:
+                  title: งานล้มเหลว
+                  text: งานย้ายเข้ากลุ่ม Needs you การแจ้งเป็นระดับ error และส่งถึง macOS ได้
                 at: chat
                 do: >-
                   งานจบแบบ failed และย้ายเข้า Needs you ด้วยเหตุ `failed` การแจ้งเป็นระดับ error และส่งถึงระบบปฏิบัติการได้
@@ -97,11 +141,25 @@ scenario:
                 emits: [failed]
                 phase: idle
               - lane: external
+                beat:
+                  title: macOS และ VS Code แจ้งว่างานล้ม
+                  text: การแจ้งเตือนของ macOS ขึ้น พร้อม toast สีแดงใน VS Code
+                  from: machine
+                  sees:
+                    kind: toast
+                    text: "Geno failed: migrate tests"
+                    actions:
+                      - Open
                 do: macOS แสดงการแจ้งเตือน
                 sees: >-
                   การแจ้งเตือนของ macOS "Geno failed: migrate tests" และ toast สีแดงใน VS Code พร้อมปุ่ม Open
                 ref: packages/extension/src/chat/notices.ts#osNotification
               - lane: user
+                beat:
+                  title: คุณกด Open
+                  text: แชตเปิด session นั้นที่ท้ายบทสนทนา ซึ่งมีแถบ error ของ turn ที่ล้ม
+                  from: you
+                  end: คุณดู error
                 do: ผู้ใช้กด Open บน toast
               - lane: panel
                 at: rail

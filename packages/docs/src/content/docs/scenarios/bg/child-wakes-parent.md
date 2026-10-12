@@ -1,5 +1,5 @@
 ---
-title: ลูกเบื้องหลังรายงานแล้วปลุกเซสชัน
+title: "subagent เบื้องหลังรายงานแล้วปลุก session"
 description: โมเดลเริ่ม explore แบบเบื้องหลังแล้วจบ turn ลูกทำงานต่อ เมื่อรายงานมาถึง engine บันทึกลง log แล้วเปิด turn ใหม่เองให้โมเดลเล่าผล
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [bg.command-ends-wakes, bg.task-attention, bg.wake-held-or-paused, bg.arrives-mid-turn, sub.blocking-report]
   steps:
     - id: wants
+      beat:
+        title: Model เริ่ม explore แบบเบื้องหลัง
+        text: "คุณขอให้สำรวจว่าโค้ดส่วนไหนใช้ API เก่า model ส่งงานให้ explore พร้อม `background: true` มันจะไม่รอรายงาน"
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `agent` ด้วย `agent: "explore"` และ `background: true` จบคำตอบด้วย `stop_reason: tool_use`
@@ -32,8 +36,22 @@ scenario:
       phase: running-tools
 
     - use: sub-child-starts
+      beat:
+        title: Geno เปิด session ให้ explore
+        text: แชตขึ้นแถวของ explore ใต้ขั้นที่ส่งงาน explore เริ่มค้นโค้ด
+        sees:
+          kind: task
+          title: explore
+          status: running
+          detail: 0:02
+          actions:
+            - Cancel
 
     - id: owed
+      beat:
+        title: Geno ไม่รอ explore
+        text: Geno จดว่า session นี้ค้างรายงานหนึ่งฉบับ แล้วตอบ model ทันทีว่าเริ่ม explore แล้ว model บอกคุณว่า explore กำลังสำรวจ และจะเล่าเมื่อรายงานมาถึง
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -63,6 +81,14 @@ scenario:
       emits: [end_turn]
 
     - id: lets-go
+      beat:
+        title: Turn จบ แต่ explore ทำงานต่อ
+        text: Geno ปลุก session ได้ทีหลัง จึงไม่ถือ turn ไว้ แชตปิดทุกอย่างของ turn แถวของ explore จึงขึ้นว่า Cancelled ทั้งที่มันยังทำงาน
+        to: panel
+        sees:
+          kind: composer
+          state: idle
+          header: worked for 12s
       lane: loop
       at: agent
       do: >-
@@ -81,6 +107,14 @@ scenario:
       phase: idle
 
     - id: report
+      beat:
+        title: explore ส่งรายงาน แล้ว Geno บันทึกไว้
+        text: explore ค้นเสร็จแล้วรายงาน แถวของมันเปลี่ยนจาก Cancelled เป็น Done ไม่มี turn รันอยู่ Geno จึงบันทึกรายงานลง log ทันที
+        to: engine
+        sees:
+          kind: task
+          title: explore
+          status: done
       lane: child@explore
       at: model
       do: >-
@@ -106,6 +140,10 @@ scenario:
       emits: [child-report, child-end]
 
     - id: gate
+      beat:
+        title: Geno ดูว่าปลุกได้ไหม
+        text: Geno รอ 2 วินาทีให้สิ่งที่มาใกล้กันรวมเป็นชุดเดียว และตรวจว่ามีการ์ดค้าง หรือคุณกำลังพิมพ์ไหม
+        ask: คุณทำอะไรอยู่
       lane: server
       at: wakes
       do: >-
@@ -124,6 +162,9 @@ scenario:
             then: wake
             steps:
               - lane: server
+                beat:
+                  title: Geno รอจนคุณลบร่าง
+                  text: ช่องพิมพ์ที่มีร่างบอก engine ว่าคุณกำลังพิมพ์ Geno ไม่ปลุกทับ เมื่อคุณลบร่างจนว่าง Geno รออีก 2 วินาทีแล้วจึงปลุก
                 at: wakes
                 do: >-
                   ช่องพิมพ์ที่มีร่างข้อความบอก engine ผ่าน `_gcode/draft` ประตูตอบ `hold` (`typing`)
@@ -134,6 +175,11 @@ scenario:
             label: ส่ง prompt ใหม่ก่อน
             steps:
               - lane: user
+                beat:
+                  title: คุณส่ง prompt ใหม่ก่อน
+                  text: turn ของคุณเริ่มก่อน และพารายงานที่บันทึกไว้ไปด้วย เมื่อ Geno ดูอีกครั้ง ไม่มีอะไรใหม่ให้ปลุก
+                  from: you
+                  end: Turn ของคุณอ่านรายงาน
                 do: ผู้ใช้ส่งคำถามใหม่ก่อนประตูจะปลุก
               - lane: server
                 at: turns
@@ -146,6 +192,11 @@ scenario:
                 end: { turn: continues }
 
     - id: wake
+      beat:
+        title: Geno เปิด turn ใหม่เอง
+        text: แชตเปิด turn ที่ไม่มีข้อความของคุณ หัวของมันมีกระดิ่งกับเหตุที่ปลุก ปุ่ม Stop ใช้ได้ตามปกติ
+        to: panel
+        sees: 'กระดิ่งกับ "woke: 1 task finished" หัวข้อ "working" และปุ่ม Stop'
       lane: server
       at: wakes
       do: >-
@@ -177,6 +228,11 @@ scenario:
     - use: model-call
 
     - id: relays
+      beat:
+        title: Model เล่าผลของ explore
+        text: model อ่านรายงาน และข้อความว่า Geno เริ่ม turn นี้เอง แล้วเล่าผลให้คุณ การปลุกนับรวมไม่เกิน 12 ครั้งนับจาก prompt ล่าสุดของคุณ
+        to: panel
+        end: Turn ที่ถูกปลุกจบ
       lane: model
       do: >-
         โมเดลอ่านรายงานที่ขึ้นต้นด้วยบรรทัดว่าไม่ใช่ข้อความของผู้ใช้ ตามด้วยข้อความ "Geno started this turn by itself (woke: 1 task finished)..."
