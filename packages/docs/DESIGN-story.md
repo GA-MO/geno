@@ -120,6 +120,12 @@ sees:
 - `wire.jsonl#line=N` is line N, counting from 1: a request body, expanded the same way, or a response stream as a
   list of `{ event, data }`, one per SSE event. Any file takes `#line=N`.
 - A `.jsonl.gz` file reads the same as its `.jsonl`.
+- `packages/docs/src/data/recorded/<flow>.jsonl#line=N` is a flow `pnpm docs:record` ran on the real engine with a
+  scripted model (`packages/engine/test/docs-record/flows.ts`). Line 1 names the flow and the engine commit; then each
+  request line is followed by the reply the scripted model streamed, and a request the engine sent the editor over ACP
+  (`{ acp, params }`, such as a permission card) follows the reply it came after. Use it for a moment no real run
+  shows; a re-run writes the same bytes except the commit. Its cards say "บันทึกจาก engine จริงกับ model จำลอง
+  (commit …)", never that a real model answered.
 - Paths use dots and brackets. `[-1]` counts from the end.
 - `quote: <text>` marks that text in the card. A long string that holds it keeps the stretch around it, not its start,
   so a card can point at one sentence of a 10,000-character system prompt and still show the whole prompt block.
@@ -142,6 +148,7 @@ The label comes from the unit, never from the page:
 | message, messages, tools, tool, system | ข้อความหนึ่งใน request, messages ใน request, tool ทั้งหมดใน request, นิยาม tool, System prompt |
 | stream, stream-event | Stream ที่ model ส่งกลับ, Event หนึ่งใน stream ของ model |
 | log-event | บันทึกใน session log, plus a Thai line on what that kind of event records |
+| editor-request | คำขอที่ Geno ส่งให้ editor (ACP) |
 
 - A card that shows a message, its `content`, or one of its blocks gets a chip row above the JSON listing the
   message's blocks in order (`thinking · text · tool_use edit · tool_use edit`). A chip scrolls the JSON to its

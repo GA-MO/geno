@@ -262,6 +262,18 @@ describe('payload mocks read real runs', () => {
     expect(view('A06-read-not-cat/1/requests.jsonl#seq=9').engine).toBeUndefined();
   });
 
+  test('a flow recorded on the real engine with a scripted model names its flow and the commit it ran on', () => {
+    const recorded = (line: number, select?: string) => runs.resolve({ source: `packages/docs/src/data/recorded/child-permission.jsonl#line=${line}`, ...(select === undefined ? {} : { select }) });
+    const header = JSON.parse(readFileSync(path.join(REPO, 'packages/docs/src/data/recorded/child-permission.jsonl'), 'utf8').split('\n')[0]!) as { recorded: { engineCommit: string } };
+    const sent = recorded(2, 'tools[-2]');
+    if (!sent.ok) throw new Error(sent.reason);
+    expect(sent.view).toMatchObject({ unit: 'tool', provenance: 'scripted', caption: 'child-permission', engine: header.recorded.engineCommit.slice(0, 8), value: { name: 'agent' } });
+    const card = recorded(6);
+    if (!card.ok) throw new Error(card.reason);
+    expect(card.view).toMatchObject({ unit: 'editor-request', label: 'คำขอที่ Geno ส่งให้ editor (ACP)', value: { acp: 'session/request_permission' } });
+    expect(recorded(1)).toMatchObject({ ok: false, reason: expect.stringContaining('no card can say what it is') });
+  });
+
   test('a line past the end of the file fails docs:check', () => {
     expect(messages(story({ kind: 'payload', source: 'docs/results/real-usecases/runs/A06-read-not-cat/fix-a1/wire.jsonl#line=7' }))).toEqual([expect.stringContaining('has no line 7; it has 6')]);
   });
