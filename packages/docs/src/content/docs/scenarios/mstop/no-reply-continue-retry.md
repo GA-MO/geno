@@ -1,5 +1,5 @@
 ---
-title: จบเทิร์นโดยไม่มีคำตอบ แล้วกด Continue หรือ Retry
+title: "Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry"
 description: turn ล่าสุดจบโดยไม่มีข้อความตอบ แผงบอกเหตุผลและให้ผู้ใช้กด Continue หรือ Retry ซึ่งเริ่ม turn ใหม่
 tableOfContents: false
 sidebar:
@@ -17,6 +17,12 @@ scenario:
     - id: notice
       lane: panel
       at: rail
+      beat:
+        title: "แชตบอกว่า Geno หยุดโดยไม่มีคำตอบ"
+        text: >-
+          turn ที่แล้วจบโดยไม่มีข้อความหลังขั้นสุดท้าย ในทัวร์นี้คุณกด Stop ก่อนโมเดลตอบ แผงเลือกเหตุผลจากวิธีที่ turn
+          จบ และใส่ปุ่มให้เพราะนี่คือ turn ล่าสุด
+        sees: { kind: notice, text: Geno stopped without a reply, detail: You stopped it before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         `missingReply` เห็นว่าไม่มีข้อความหลังขั้นสุดท้ายของ turn และไม่มีบล็อก error จึงเลือกเหตุผลจากวิธีที่ turn จบ
         turn นี้จบแบบ stopped และเพราะเป็น turn ล่าสุดที่ช่องพิมพ์ไม่มีข้อความรอในคิว `noReplyNotice` จึงใส่ปุ่ม Continue และ Retry
@@ -27,6 +33,11 @@ scenario:
 
     - id: choice
       lane: user
+      beat:
+        title: "คุณเลือกปุ่ม"
+        text: >-
+          ทั้งสองปุ่มส่งข้อความใหม่เหมือนคุณพิมพ์เอง ต่างกันที่ข้อความ ลองเลือกดู
+        ask: "กดปุ่มไหน"
       do: ผู้ใช้กดปุ่มหนึ่งในสองปุ่ม
       fork:
         ask: ผู้ใช้กดปุ่มไหน
@@ -37,6 +48,12 @@ scenario:
             steps:
               - lane: panel
                 at: rail
+                beat:
+                  title: "คุณกด Continue"
+                  text: >-
+                    แผงส่งข้อความคงที่ที่บอกโมเดลให้ทำต่อจากที่หยุดแล้วตอบให้จบ
+                  from: you
+                  sees: { kind: message, from: you, text: "Continue where you stopped, and finish with your answer." }
                 do: >-
                   ปุ่ม Continue โพสต์ `send` ด้วยข้อความคงที่ `CONTINUE_PROMPT` เหมือนผู้ใช้พิมพ์ส่งเอง
                 sees: บับเบิลใหม่ "Continue where you stopped, and finish with your answer."
@@ -48,6 +65,12 @@ scenario:
             steps:
               - lane: panel
                 at: rail
+                beat:
+                  title: "คุณกด Retry"
+                  text: >-
+                    แผงส่งข้อความเดิมของ turn นั้นซ้ำ เฉพาะข้อความ ไฟล์แนบของ turn เดิมไม่ถูกส่งซ้ำ
+                  from: you
+                  sees: "บับเบิลใหม่ที่มีข้อความเดียวกับ turn ก่อน"
                 do: >-
                   ปุ่ม Retry โพสต์ `send` ด้วยข้อความเดิมของ turn นั้น ส่งเฉพาะข้อความ ไฟล์แนบของ turn เดิมไม่ถูกส่งซ้ำ
                 sees: บับเบิลใหม่ที่มีข้อความเดียวกับ turn ก่อน
@@ -57,6 +80,12 @@ scenario:
     - id: route
       lane: editor
       at: chat
+      beat:
+        title: "VS Code เริ่ม turn ใหม่"
+        text: >-
+          ปุ่มทั้งสองหายไป เพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว VS Code ส่งข้อความใหม่ไปที่ session เดิม
+        to: engine
+        sees: { kind: composer, state: working, header: working }
       do: >-
         `Chat.send` ส่งต่อให้ `prompt()` ซึ่งส่ง action `turn-start` ทันที ปุ่มทั้งสองหายไปเพราะ turn เดิมไม่ใช่ turn ล่าสุดแล้ว
       ref: packages/extension/src/chat/chat.ts#Chat.prompt
@@ -72,6 +101,10 @@ scenario:
     - id: accept
       lane: server
       at: turns
+      beat:
+        title: "Geno รับ turn ใหม่พร้อมขีดจำกัดเต็ม"
+        text: >-
+          engine รับเป็น turn ใหม่ที่มาจากคุณ จำนวนครั้งและค่าใช้จ่ายเริ่มนับใหม่ turn นี้จึงได้ 40 ครั้งและ $0.40 เต็ม
       do: >-
         `runTurn` รับเป็น turn ใหม่ที่มาจากผู้ใช้ และ `drive` เริ่มนับการเรียกโมเดลและค่าใช้จ่ายจาก seq ของ prompt ใหม่
         turn นี้จึงได้ 40 ครั้งและ $0.40 เต็ม (`runTurn` ยังล้างงบของงานตามเวลาที่อาจค้างไว้ด้วย)
@@ -81,6 +114,10 @@ scenario:
     - id: record
       lane: loop
       at: drive
+      beat:
+        title: "Geno บันทึกข้อความใหม่"
+        text: >-
+          Geno บันทึกข้อความใหม่ต่อท้ายบันทึกของ session แล้วตัดสินว่าขั้นต่อไปคือเรียกโมเดล
       do: >-
         `drive` บันทึก event `user` ของข้อความใหม่ต่อท้าย log
       ref: "packages/engine/src/drive.ts#\"await record({ kind: 'user', seq: nextSeq(events), at: new Date().toISOString(), content: prompt });\""
@@ -98,6 +135,11 @@ scenario:
     - id: message
       lane: loop
       at: model-call
+      beat:
+        title: "Geno รวม prompt เดิม โน้ต และข้อความใหม่"
+        text: >-
+          prompt เดิมยังไม่ได้คำตอบ Geno จึงรวมมันกับโน้ตที่บอกว่าคุณหยุด turn ที่แล้ว และข้อความใหม่ เป็นข้อความ user
+          เดียว กด Continue โมเดลเห็นว่าคุณอนุญาตให้ทำต่อ กด Retry โมเดลเห็น prompt เดิมสองครั้ง
       do: >-
         `replayMessages` รวม prompt ที่ยังไม่ได้คำตอบ โน้ต `STOPPED_TURN_NOTE` และข้อความใหม่เป็นข้อความ user เดียว
         กด Retry โมเดลจึงเห็น prompt เดิมสองครั้งโดยมีโน้ตคั่น กด Continue โมเดลเห็น prompt เดิม โน้ต แล้ว `CONTINUE_PROMPT`
@@ -107,6 +149,12 @@ scenario:
     - id: sent
       lane: loop
       at: gateway
+      beat:
+        title: "Geno ส่งคำขอของ turn ใหม่"
+        text: >-
+          คำขอออกไปหาโมเดล จากตรงนี้ turn ใหม่เดินเหมือน turn ปกติ
+        to: model
+        end: "turn ใหม่เริ่ม"
       do: >-
         gateway ส่งคำขอ turn ใหม่ดำเนินต่อเหมือน turn ปกติ
       ref: packages/engine/src/gateway.ts#gatewayFor.turn
@@ -131,3 +179,5 @@ scenario:
   ต่างจาก "Retry now" ในช่องพิมพ์ ซึ่งเร่งการเรียกโมเดลที่กำลังรอ backoff ใน turn เดิม
 - **หลัง Stop โน้ตเป็นตัวกำหนดน้ำเสียง** `STOPPED_TURN_NOTE` บอกโมเดลว่าผู้ใช้หยุด turn ที่แล้ว ให้ตอบคำถามก่อนแล้วถามว่าจะทำต่อหรือไม่
   ข้อความ Continue ที่ตามมาจึงเป็นคำอนุญาตให้ทำต่อ
+
+ทัวร์นี้เริ่มหลังคุณกด Stop ทางที่ไปถึงจุดนั้นอยู่ใน [กด Stop ขณะโมเดลกำลังเขียน](/scenarios/ctl/stop-while-streaming/)

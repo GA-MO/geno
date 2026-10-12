@@ -1,5 +1,5 @@
 ---
-title: ครบ 40 ครั้งของการเรียกโมเดล หรือเกินงบ $0.40
+title: "Turn ครบ 40 ครั้งของการเรียก model หรือเกินงบ $0.40"
 description: รอบการทำงานหนึ่งรอบใกล้ขีดจำกัด Geno ปิดเครื่องมือในการเรียกครั้งสุดท้ายให้โมเดลเขียนรายงาน ถ้าไม่ได้รายงานหรือค่าใช้จ่ายเลยงบ turn จบแบบ failed
 tableOfContents: false
 sidebar:
@@ -18,6 +18,21 @@ scenario:
     - id: decide
       lane: loop
       at: step
+      beat:
+        title: "Geno นับรอบและค่าใช้จ่ายของ turn"
+        text: >-
+          turn นี้เรียกโมเดลไปแล้ว 39 ครั้ง ก่อนเรียกอีก Geno นับจำนวนครั้งและค่าใช้จ่ายของ turn แล้วเทียบกับขีดจำกัด
+          ก่อนหน้านี้ตอนเหลือไม่ถึง 20% Geno เตือนโมเดลล่วงหน้าแล้ว แบบในคำขอจาก run จริงด้านล่าง
+        ask: "ขีดจำกัดไหนมาก่อน"
+        sees:
+          kind: payload
+          direction: request
+          source: docs/results/real-usecases/runs/A17-budget-reminder/1/requests.jsonl#seq=20
+          select: messages[-1].content
+          highlight:
+            - "[-1]"
+          collapse:
+            - "[0].content"
       do: >-
         `loopStep` นับการเรียกโมเดลและค่าใช้จ่ายของรอบนี้ (รวมค่าสรุปบริบทและค่า Auto classifier) แล้วเทียบกับขีดจำกัด
       ref: packages/core/src/loop.ts#limitReached
@@ -31,12 +46,21 @@ scenario:
             steps:
               - lane: loop
                 at: step
+                beat:
+                  title: "เหลือการเรียกได้อีกครั้งเดียว"
+                  text: >-
+                    ใช้ไป 39 ครั้ง ยังไม่ถึง 40 Geno จึงเรียกโมเดลได้อีกครั้ง
                 do: >-
                   ใช้ไป 39 ครั้ง ยังไม่ถึง 40 `loopStep` จึงตัดสิน `call-model`
                 ref: packages/core/src/loop.ts#loopStep
                 emits: [call-model]
               - lane: loop
                 at: drive
+                beat:
+                  title: "Geno บอก model ว่านี่คือครั้งสุดท้าย"
+                  text: >-
+                    Geno รู้ว่าการเรียกนี้เป็นครั้งสุดท้ายที่ขีดจำกัดยอม จึงบันทึกโน้ตบอกโมเดลว่า tool ถูกปิดแล้ว
+                    ให้เขียนรายงานเลย โน้ตนี้ไม่ขึ้นในแชต
                 do: >-
                   `deliver()` เห็นจาก `lastCallDue` ว่าการเรียกนี้เป็นครั้งสุดท้ายที่ขีดจำกัดยอม จึงบันทึก `notice` ที่มี `last: true`
                   โมเดลจะอ่าน `LAST_CALL_NOTE` ว่าเครื่องมือถูกปิดและให้เขียนรายงานเลย ประกาศนี้ไม่แสดงในแผง
@@ -44,12 +68,22 @@ scenario:
                 emits: [notice]
               - lane: loop
                 at: model-call
+                beat:
+                  title: "Geno ส่งคำขอโดยปิด tool"
+                  text: >-
+                    รายชื่อ tool ยังอยู่ในคำขอเพื่อให้ prompt cache ไม่หลุด แต่คำขอสั่งว่าห้ามเรียก tool
+                  to: model
                 do: >-
                   `callModel` บันทึก `checkpoint` แล้วส่งคำขอพร้อม `toolsOff` เครื่องมือยังอยู่ในคำขอเพื่อให้ cache ไม่หลุด
                   แต่ `tool_choice` เป็น `none` โมเดลจึงเรียกเครื่องมือไม่ได้
                 ref: "packages/engine/src/drive.ts#\"{ toolsOff: true }\""
                 emits: [checkpoint]
               - lane: model
+                beat:
+                  title: "Model ตอบโดยเรียก tool ไม่ได้"
+                  text: >-
+                    โมเดลอ่านโน้ตแล้วตอบ ลองเลือกว่ามันเขียนรายงานออกมาหรือไม่
+                  ask: "เขียนรายงานไหม"
                 do: >-
                   โมเดลตอบโดยไม่มีเครื่องมือให้เรียก
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -60,12 +94,32 @@ scenario:
                       label: เขียนรายงาน
                       steps:
                         - use: answer-streams
+                          beat:
+                            title: "รายงานขึ้นในแชต"
+                            text: >-
+                              โมเดลสรุปว่าทำอะไรไปแล้วและเหลืออะไร ข้อความค่อยๆ ขึ้นในแชต
+                            from: engine
+                            to: panel
+                            sees: { kind: message, from: geno, text: แก้ไปแล้ว 12 ไฟล์ เหลืออีก 6 ไฟล์ใน src/shop, streaming: true }
+
                         - use: turn-ends
+                          beat:
+                            title: "Turn จบตามปกติ"
+                            text: >-
+                              โมเดลจบด้วย end_turn Geno จึงจบ turn แบบ done คุณเห็นรายงานโดยไม่มีแถบเตือนขีดจำกัด
+                            to: panel
+                            end: "ได้รายงาน turn จบ"
+                            sees: { kind: composer, state: idle }
+
                     - id: nothing
                       label: ไม่มีข้อความ
                       steps:
                         - lane: loop
                           at: step
+                          beat:
+                            title: "ไม่มีข้อความ Geno ไม่กระตุ้นซ้ำ"
+                            text: >-
+                              คำตอบไม่มีข้อความ ปกติ Geno จะกระตุ้นโมเดลหนึ่งครั้ง แต่ครบ 40 ครั้งแล้ว จึงจบที่ขีดจำกัดก่อน
                           do: >-
                             คำตอบไม่มีข้อความ ปกติ `loopStep` จะกระตุ้นหนึ่งครั้ง แต่ครบ 40 ครั้งแล้ว `limitReached` จึงได้ `done(max-turns)` ก่อน
                           ref: packages/core/src/loop.ts#loopStep
@@ -77,6 +131,11 @@ scenario:
             steps:
               - lane: loop
                 at: step
+                beat:
+                  title: "ค่าใช้จ่ายเลยงบไปแล้ว"
+                  text: >-
+                    การเรียกครั้งก่อนแพงกว่าค่าเฉลี่ยมาก Geno จึงไม่ได้เตือนล่วงหน้า และตอนนี้ค่าใช้จ่ายเลย $0.40 แล้ว Geno
+                    ไม่เรียกโมเดลอีก แม้แต่ครั้งสุดท้ายแบบปิด tool
                 do: >-
                   การเรียกครั้งก่อนแพงกว่าค่าเฉลี่ยมาก `lastCallDue` จึงไม่ได้เตือนล่วงหน้า และตอนนี้ค่าใช้จ่ายของรอบเลย $0.40 ไปแล้ว
                   `loopStep` จึงได้ `done(budget)` แทน `call-model` ไม่มีการเรียกครั้งสุดท้ายแบบปิดเครื่องมือ
@@ -87,6 +146,11 @@ scenario:
     - id: capped
       lane: loop
       at: drive
+      beat:
+        title: "Geno บันทึกว่าชนขีดจำกัด"
+        text: >-
+          Geno บันทึก error ที่บอกว่าหยุดที่ขีดจำกัดไหน แล้วส่งไปที่แชตพร้อมชนิดของขีดจำกัด
+        to: panel
       do: >-
         `finish` เห็นว่ารอบจบที่ขีดจำกัดแต่ยังไม่มี error ของขีดจำกัดนั้น จึงบันทึก event `error` ด้วยข้อความจาก `LIMIT_MESSAGES`
         เช่น "stopped after 40 model calls (--max-turns 40)" หรือ "stopped at an estimated $0.412345, past --max-cost 0.4"
@@ -112,6 +176,12 @@ scenario:
     - id: limit-block
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นแถบเตือนสีเหลือง"
+        text: >-
+          แผงวาดขีดจำกัดเป็นคำเตือนสีเหลือง ไม่ใช่ error สีแดง และแปลชื่อ flag เป็นคำธรรมดา engine บอก VS Code ว่า turn
+          จบแบบ failed
+        sees: { kind: notice, text: Reached the turn limit (40), tone: warning }
       alongside: true
       do: >-
         `errorBlock` วาดขีดจำกัดเป็นคำเตือนสีเหลือง ไม่ใช่ error สีแดง และแปลชื่อ flag เป็นคำธรรมดา
@@ -140,6 +210,13 @@ scenario:
     - id: notice
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นปุ่ม Continue และ Retry"
+        text: >-
+          แถบขีดจำกัดเป็นขั้นสุดท้ายของ turn แผงจึงขึ้นประกาศพร้อมปุ่ม Continue ได้ขีดจำกัดชุดใหม่เต็ม และ prompt
+          เดิมยังอยู่ในคำขอ
+        end: "ชนขีดจำกัด turn ล้มเหลว"
+        sees: { kind: notice, text: Geno stopped without a reply, detail: It reached its limit before it answered., actions: [ Continue, Retry ], tone: warning }
       do: >-
         `missingReply` เห็นบล็อกขีดจำกัดเป็นขั้นสุดท้ายของ turn จึงแสดงประกาศพร้อมปุ่ม Continue และ Retry
         ข้อความที่โมเดลเขียนก่อนบล็อกนั้นไม่ทำให้ประกาศหายไป เพราะมันอยู่ก่อนขั้นสุดท้าย
@@ -169,3 +246,5 @@ scenario:
   และ prompt เดิมยังอยู่ในคำขอ เพราะ error ของขีดจำกัดไม่ลบ prompt ที่ยังไม่ได้คำตอบ
 - **ประกาศแสดงเสมอเมื่อมีแถบขีดจำกัด** `missingReply` มองหาข้อความหลังขั้นสุดท้าย และแถบขีดจำกัดก็นับเป็นขั้น
   ข้อความใดๆ ที่โมเดลเขียนก่อนชนขีดจำกัดจึงไม่ทำให้ประกาศ "It reached its limit before it answered." หายไป
+
+ปุ่ม Continue และ Retry ทำอะไรต่อ ดู [Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry](/scenarios/mstop/no-reply-continue-retry/)

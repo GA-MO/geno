@@ -1,5 +1,5 @@
 ---
-title: คำตอบชนเพดาน output
+title: "คำตอบของ model ชนเพดาน output"
 description: โมเดลเขียนจนถึง max_tokens ถ้าบล็อกที่ถูกตัดเป็นข้อความ turn จบแบบ failed ทันที ถ้าเป็นการเรียกเครื่องมือ Geno บอกโมเดลให้เรียกใหม่ให้เล็กลงหนึ่งครั้ง
 tableOfContents: false
 sidebar:
@@ -15,9 +15,21 @@ scenario:
   related: [mstop.empty-answer-nudged, mstop.no-reply-continue-retry, mstop.limit-max-turns, ctx.compaction-auto]
   steps:
     - use: model-call
+      beat:
+        title: "Geno ส่งคำขอพร้อมเพดาน output ที่ต่ำ"
+        text: >-
+          context ใหญ่มากแล้ว เพดานความยาวของคำตอบหนึ่งครั้งจึงเหลือน้อย เพราะ Geno
+          ตั้งไม่ให้เกินที่ว่างที่เหลือในหน้าต่าง context
+        to: model
 
     - id: cut
       lane: model
+      beat:
+        title: "Model เขียนจนชนเพดาน"
+        text: >-
+          โมเดลเขียนคำตอบยาว หรือเรียก tool เพื่อสร้างไฟล์ยาว จนผู้ให้บริการตัดคำตอบที่เพดาน และจบด้วยสัญญาณ max_tokens
+          ส่วนที่เขียนมาแล้วขึ้นในแชต
+        sees: { kind: message, from: geno, text: ไฟล์ config มีสามส่วน ส่วนแรกคือ, streaming: true }
       do: >-
         โมเดลเขียนจนถึงเพดาน `max_tokens` ของคำขอ ผู้ให้บริการหยุด stream แล้วจบด้วย `stop_reason: max_tokens`
         (wire แบบ OpenAI ได้ `length` ซึ่ง `STOP_REASONS` แปลงเป็น `max_tokens`)
@@ -29,6 +41,11 @@ scenario:
     - id: decide
       lane: loop
       at: step
+      beat:
+        title: "Geno ดูว่าอะไรถูกตัด"
+        text: >-
+          tool call ที่ถูกตัดมี input ไม่ครบ รันไม่ได้ Geno จึงดูว่าบล็อกสุดท้ายของคำตอบเป็นข้อความหรือ tool call
+        ask: "อะไรถูกตัด"
       do: >-
         `loopStep` อ่านคำตอบล่าสุด `cutOff` ดูว่าบล็อกสุดท้ายของคำตอบที่จบด้วย `max_tokens` เป็นการเรียกเครื่องมือหรือไม่
         เพราะการเรียกที่ถูกตัดมี input ไม่ครบ รันไม่ได้
@@ -41,6 +58,10 @@ scenario:
             steps:
               - lane: loop
                 at: step
+                beat:
+                  title: "ข้อความถูกตัด Geno จบ turn ทันที"
+                  text: >-
+                    ข้อความครึ่งเดียวไม่มีอะไรให้รัน Geno ไม่เรียกโมเดลให้เขียนต่อ และจบ turn แบบ error
                 do: >-
                   ไม่มี `tool_use` ค้าง ตาราง `AFTER_STOP` แปลง `max_tokens` เป็น `done(error)` ทันที
                   ไม่มีการเรียกโมเดลซ้ำให้เขียนต่อ และ Stop hook ไม่ทำงานในทางนี้
@@ -48,8 +69,22 @@ scenario:
                 emits: [error]
                 phase: ending
               - use: mstop-fails-quietly
+                beat:
+                  title: "เหตุผลไปอยู่แค่ใน output channel"
+                  text: >-
+                    Geno ไม่บันทึก error ลงบันทึกของ session เหตุผลถูกเขียนลง output channel "Geno engine" เท่านั้น แผงรู้แค่ว่า
+                    turn ล้มเหลว
+                  to: panel
+
               - lane: panel
                 at: rail
+                beat:
+                  title: "คำตอบค้างกลางประโยค"
+                  text: >-
+                    คำตอบหยุดกลางประโยค ท้าย turn ขึ้น Failed ไม่มีแถบ error และไม่มีปุ่ม Continue เพราะมีข้อความแล้ว คุณต้องเปิด
+                    output channel จึงจะรู้ว่าทำไม
+                  end: "ข้อความถูกตัด turn ล้มเหลว"
+                  sees: { kind: message, from: geno, text: ไฟล์ config มีสามส่วน ส่วนแรกคือ, footer: [ failed after 2m 4s, Failed ] }
                 do: >-
                   `headerOf` เปลี่ยนหัวข้อเป็น "failed after ..." `missingReply` เห็นข้อความหลังขั้นสุดท้าย
                   จึงไม่แสดงประกาศ Continue และ Retry คำตอบครึ่งเดียวค้างอยู่โดยไม่มีอะไรบอกว่าทำไม
@@ -63,6 +98,10 @@ scenario:
             steps:
               - lane: loop
                 at: step
+                beat:
+                  title: "Geno ไม่รัน tool call ที่ถูกตัด"
+                  text: >-
+                    tool call ที่ถูกตัดไม่ได้รัน ส่วน call อื่นที่ครบในคำตอบเดียวกันยังรันได้ในรอบถัดไป
                 do: >-
                   `loopStep` เห็น `tool_use` ที่ยังไม่มีผล `unrunnable` คืนเฉพาะ call ที่ถูกตัดพร้อมข้อความ `UNRUN_TEXTS['cut-off']`
                   จึงตัดสิน `answer-tools` call อื่นที่ครบในคำตอบเดียวกัน (ถ้ามี) ยังรันได้ในรอบถัดไป
@@ -71,6 +110,11 @@ scenario:
                 phase: running-tools
               - lane: loop
                 at: drive
+                beat:
+                  title: "Geno บอก model ให้เรียกให้เล็กลง"
+                  text: >-
+                    Geno บันทึกผลของ call นั้นเป็น error ที่บอกโมเดลว่าคำตอบชนเพดานจน call ถูกตัด ให้ทำต่อด้วย call ที่เล็กลง
+                  to: panel
                 do: >-
                   `drive` บอก watcher ว่าข้าม call นี้ แล้วบันทึก `tool-result` สถานะ error ที่บอกโมเดลว่า
                   "Your response hit the output limit and cut this tool call short, so it did not run. Continue, and keep each tool call smaller."
@@ -85,6 +129,13 @@ scenario:
                 emits: [tool_call, pending, tool_call_update]
               - lane: panel
                 at: rail
+                beat:
+                  title: "แชตขึ้นขั้น edit ที่ล้มเหลว แล้ว Geno ลองใหม่"
+                  text: >-
+                    ขั้นของ call ขึ้นแล้วล้มเหลวทันที ชื่อขั้นเป็นชื่อ tool เพราะ input อ่านไม่ครบ เพิ่งถูกตัดครั้งเดียว Geno
+                    จึงเรียกโมเดลอีกรอบ
+                  to: model
+                  sees: { kind: step, label: edit, status: failed, output: "Your response hit the output limit and cut this tool call short, so it did not run. Continue, and keep each tool call smaller." }
                 alongside: true
                 do: >-
                   ขั้นของ call ขึ้นแล้วล้มเหลวทันที ชื่อขั้นมาจากชื่อเครื่องมือเพราะ input ที่ถูกตัดอ่านไม่ได้ครบ
@@ -100,6 +151,11 @@ scenario:
                 phase: calling-model
               - use: model-call
               - lane: model
+                beat:
+                  title: "Model ตอบใหม่"
+                  text: >-
+                    โมเดลอ่านผลที่บอกว่า call ถูกตัด แล้วตอบอีกครั้ง ลองเลือกว่ารอบนี้ถูกตัดอีกไหม
+                  ask: "ถูกตัดอีกไหม"
                 do: >-
                   โมเดลอ่านผลที่บอกว่า call ถูกตัด แล้วตอบใหม่
                 ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -110,6 +166,11 @@ scenario:
                       label: ไม่ เรียกเล็กลงแล้ว
                       steps:
                         - lane: model
+                          beat:
+                            title: "Model แบ่ง tool call ให้เล็กลง"
+                            text: >-
+                              โมเดลแบ่งงาน เช่นสร้างไฟล์ส่วนแรกก่อน แล้วจบด้วย tool_use ตามปกติ Geno รัน tool และ turn ทำต่อ
+                            end: "เรียกเล็กลง turn ทำต่อ"
                           do: >-
                             โมเดลแบ่งงานเป็น call ที่เล็กลง เช่นสร้างไฟล์ส่วนแรกก่อน แล้วจบด้วย `stop_reason: tool_use` ตามปกติ
                           ref: "packages/engine/src/gateway.ts#\"stopReason: message.stop_reason,\""
@@ -127,6 +188,11 @@ scenario:
                       steps:
                         - lane: loop
                           at: tools
+                          beat:
+                            title: "ถูกตัดอีก Geno เลิกลอง"
+                            text: >-
+                              call ที่ถูกตัดครั้งที่สองได้คำตอบแบบเดียวกัน และอีกขั้นในแชตล้มเหลว คำตอบสองครั้งล่าสุดถูกตัดที่ tool call
+                              ทั้งคู่ Geno จึงจบ turn แบบ error แทนที่จะเสียรอบไปกับการถูกตัดซ้ำ เหตุผลไปอยู่ใน output channel เท่านั้น
                           do: >-
                             call ที่ถูกตัดครั้งที่สองได้คำตอบ `cut-off` แบบเดียวกัน ขั้นของมันในแผงล้มเหลวอีกขั้น
                           ref: "packages/engine/src/drive.ts#\"watcher.toolSkipped?.(answer.use, describeCall(answer.use, mode.executors));\""
@@ -143,6 +209,12 @@ scenario:
                         - use: mstop-fails-quietly
                         - lane: panel
                           at: rail
+                          beat:
+                            title: "แชตขึ้นว่า Geno หยุดโดยไม่มีคำตอบ"
+                            text: >-
+                              ขั้นสุดท้ายล้มเหลวและไม่มีข้อความตามหลัง แผงจึงบอกว่าคำตอบสุดท้ายไม่มีข้อความ พร้อมปุ่มทำต่อหรือลองใหม่
+                            end: "ถูกตัดสองครั้ง turn ล้มเหลว"
+                            sees: { kind: notice, text: Geno stopped without a reply, detail: Its last reply had no text., actions: [ Continue, Retry ], tone: warning }
                           do: >-
                             ขั้นสุดท้ายล้มเหลวและไม่มีข้อความตามหลัง ไม่มีแถบ error และไม่ได้ถูกหยุดหรือปฏิเสธ
                             `missingReply` จึงให้เหตุผลว่าคำตอบสุดท้ายไม่มีข้อความ
@@ -170,3 +242,5 @@ scenario:
   "error: the model stopped with max_tokens"
 - **`STOP_MESSAGES.max_tokens` ของ extension ไม่เคยถูกใช้กับ loop ของ Geno** เพราะ ACP ได้ `stopReason: end_turn` เสมอเมื่อ turn จบด้วย error
 - **การถูกตัดนับเป็นการเรียกโมเดลหนึ่งครั้ง** การลองใหม่หลัง `cut-off` ใช้ขีดจำกัด 40 ครั้งของรอบเหมือนการเรียกอื่น
+
+ปุ่ม Continue และ Retry ทำอะไรต่อ ดู [Turn จบโดยไม่มีคำตอบ แล้วคุณกด Continue หรือ Retry](/scenarios/mstop/no-reply-continue-retry/)

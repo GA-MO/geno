@@ -1,5 +1,5 @@
 ---
-title: โมเดลปฏิเสธ
+title: "Model ปฏิเสธที่จะตอบ"
 description: โมเดลจบคำตอบด้วย stop_reason refusal gateway แปลงเป็น error ชนิด refusal turn จบแบบ failed และ prompt นั้นถูกตัดออกจากคำขอต่อไป
 tableOfContents: false
 sidebar:
@@ -15,6 +15,11 @@ scenario:
   steps:
     - id: refuse
       lane: model
+      beat:
+        title: "Model ปฏิเสธที่จะตอบต่อ"
+        text: >-
+          โมเดลปฏิเสธคำขอนี้ บางครั้งมีคำอธิบายสั้นๆ มาด้วย แล้วจบคำตอบด้วยสัญญาณ refusal
+        to: engine
       do: >-
         โมเดลปฏิเสธที่จะตอบต่อ บางครั้งมีข้อความอธิบายสั้นๆ หรือ `stop_details.explanation` มาด้วย
         แล้วจบด้วย `stop_reason: refusal`
@@ -25,6 +30,10 @@ scenario:
     - id: gateway
       lane: loop
       at: gateway
+      beat:
+        title: "Geno แปลงการปฏิเสธเป็น error"
+        text: >-
+          Geno ไม่ถือว่านี่เป็นคำตอบ แต่บันทึกเป็น error ชนิด refusal ข้อความที่โมเดลเขียนมาก่อนปฏิเสธจึงไม่อยู่ในบันทึก
       do: >-
         gateway ไม่คืนเป็นคำตอบ แต่คืน error ชนิด `refusal` ข้อความมาจาก `refusalMessage`:
         คำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ "the model refused"
@@ -41,6 +50,11 @@ scenario:
     - id: error-update
       lane: server
       at: updates
+      beat:
+        title: "Geno ส่ง error ไปที่แชต"
+        text: >-
+          engine ส่ง error ไปพร้อมป้ายว่าเป็น error ของ turn VS Code อ่านป้ายนั้นแล้วบอกแผงให้วาดเป็นบล็อก error
+        to: panel
       do: >-
         `errorUpdate` ส่ง error เป็น `agent_message_chunk` ข้อความ `[refusal] ...` พร้อม `TURN_ERROR_META`
       ref: packages/engine/src/session-replay.ts#errorUpdate
@@ -57,6 +71,12 @@ scenario:
     - id: error-block
       lane: panel
       at: rail
+      beat:
+        title: "แชตขึ้นบล็อก error สีแดง"
+        text: >-
+          แผงวาดบล็อก error ด้วยคำอธิบายของผู้ให้บริการ ถ้าไม่มีก็ใช้ข้อความที่โมเดลเขียน ถ้าไม่มีอีกก็ขึ้นข้อความสั้นๆ
+          ด้านล่าง
+        sees: { kind: notice, text: The model refused, tone: error }
       alongside: true
       do: >-
         `errorBlock` วาดบล็อก error สีแดงด้วยข้อความของ refusal ที่ขึ้นต้นด้วยตัวพิมพ์ใหญ่
@@ -66,6 +86,10 @@ scenario:
     - id: done
       lane: loop
       at: step
+      beat:
+        title: "Geno จบ turn"
+        text: >-
+          Geno เห็นว่าเหตุการณ์ล่าสุดคือการปฏิเสธ จึงจบ turn Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบด้วยคำตอบ
       do: >-
         `loopStep` เห็น event ล่าสุดเป็น error `refusal` ตาราง `ERROR_REASON` ให้ `done(refusal)`
         Stop hook ไม่ทำงาน เพราะโมเดลไม่ได้จบ turn ด้วยคำตอบ
@@ -75,6 +99,11 @@ scenario:
     - id: response
       lane: server
       at: turns
+      beat:
+        title: "งานใน Tasks จบเป็น failed"
+        text: >-
+          engine บอก VS Code ว่า turn จบเพราะโมเดลปฏิเสธ งานในแผง Tasks จบแบบ failed และ session พร้อมรับข้อความถัดไป
+        to: panel
       do: >-
         `runTurn` แปลงผลด้วย `TURN_ENDS`: ACP ได้ `stopReason: refusal` meta บอกว่างานจบแบบ `failed`
         งานในแผง Tasks จบแบบ failed แล้วปลด lock ของ session
@@ -93,6 +122,13 @@ scenario:
     - id: shown
       lane: panel
       at: rail
+      beat:
+        title: "Turn จบโดยไม่มีปุ่ม Continue"
+        text: >-
+          บล็อก error บอกเหตุผลไว้แล้ว แผงจึงไม่ขึ้นประกาศ "Geno stopped without a reply" และไม่มีปุ่ม Continue หรือ
+          Retry prompt ที่ถูกปฏิเสธไม่ถูกส่งซ้ำในคำขอครั้งหน้า คุณต้องพิมพ์ข้อความใหม่เอง
+        end: "Model ปฏิเสธ turn ล้มเหลว"
+        sees: { kind: composer, state: idle }
       do: >-
         `missingReply` เห็นบล็อก error ที่ไม่ใช่ขีดจำกัด จึงไม่แสดงประกาศ "Geno stopped without a reply" และไม่มีปุ่ม Continue หรือ Retry
       sees: หัวข้อ "failed after 4s" บล็อก error ค้างอยู่ และท้าย turn ขึ้น "Failed" ปุ่ม Send กลับมา
@@ -112,3 +148,5 @@ refusal เป็นการหยุดเพียงแบบเดียว
   ผู้ให้บริการแบบ OpenAI-compatible จึงได้ผลเหมือนกันทุกขั้น
 - **ไม่มีปุ่ม Continue หรือ Retry** ประกาศ "Geno stopped without a reply" ไม่แสดงเมื่อ turn มีบล็อก error ที่ไม่ใช่ขีดจำกัด
   ผู้ใช้ต้องพิมพ์ข้อความใหม่เอง
+
+ทางหยุดแบบอื่นของ model ดูตารางใน [Model จบด้วย stop reason ที่ไม่ใช่การตอบหรือเรียก tool](/scenarios/mstop/pause-or-malformed-stop/)
