@@ -69,19 +69,19 @@ scenario:
                 do: >-
                   `/pstack:how` เป็นสกิล ข้อความของ turn ยังเป็นสิ่งที่ผู้ใช้พิมพ์ทั้งบรรทัด และเนื้อหา `SKILL.md` ไปเป็น context item
                   ชนิด `skill` ค่า `context: fork` ในสกิลไม่มีผลในทางนี้ สกิลไม่ถูกแยกไปรันเป็น subagent
-                ref: "packages/core/src/commands.ts#\"skill: ({ name, path, text: skill }, text, args) => ({\""
+                ref: "packages/core/src/commands.ts#\"skill: ({ name, path, text: skill, description }, text, args) => ({\""
                 emits: [skill]
 
     - id: prompt-logged
       beat:
         title: Geno บันทึก prompt ที่แปลงแล้ว
-        text: Geno บันทึกข้อความ ชื่อคำสั่งกับอาร์กิวเมนต์ และ context ของ skill ถ้ามี ก่อนเปิดรอบ
+        text: Geno บันทึกข้อความ ชื่อคำสั่งกับอาร์กิวเมนต์และคำอธิบายของคำสั่ง และ context ของ skill ถ้ามี ก่อนเปิดรอบ
         from: engine
         to: engine
       lane: server
       at: turns
       do: >-
-        ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความที่แปลงแล้ว ชื่อคำสั่งกับอาร์กิวเมนต์
+        ภายใน lock ของ session `logPrompt` บันทึก event `user` เองก่อนเปิดรอบ: ข้อความที่แปลงแล้ว ชื่อคำสั่ง อาร์กิวเมนต์และคำอธิบายของคำสั่ง
         และ context item ของสกิล (ถ้ามี) แล้ว `runTurn` เรียก `runAgent` ด้วย prompt ว่าง ให้ loop ใช้ prompt ที่อยู่ใน log
       ref: packages/engine/src/serve.ts#logPrompt
       emits: [user]

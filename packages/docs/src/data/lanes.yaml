@@ -74,7 +74,7 @@ lanes:
       - { id: chat, label: Chat (ตัวกลางแผงกับ engine), ref: packages/extension/src/chat/chat.ts#Chat }
       - { id: engine-link, label: ตัวเชื่อม engine, ref: packages/extension/src/chat/engine.ts#Engine }
       - { id: bridge, label: เขียนไฟล์ลง buffer, ref: packages/extension/src/chat/bridge.ts#writeTextFile }
-      - { id: vscode-ui, label: "หน้าจอของ VS Code (toast, quick pick, modal)", ref: packages/extension/src/extension.ts#registerChat }
+      - { id: vscode-ui, label: "หน้าจอของ VS Code (toast, quick pick, modal)", ref: packages/extension/src/chat-activation.ts#registerChat }
       - { id: review, label: Review และ Undo, ref: packages/extension/src/review/controller.ts#ReviewController }
 
   - id: server

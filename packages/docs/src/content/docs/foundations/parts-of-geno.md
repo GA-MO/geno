@@ -27,9 +27,9 @@ scenario:
       lane: editor
       at: vscode-ui
       do: >-
-        เมื่อ VS Code เปิดเสร็จ `activate` เรียก `registerChat` ซึ่งสร้าง `Chat` กับตัวเชื่อม `Engine`
+        เมื่อ VS Code เปิดเสร็จ `activate` เรียก `registerChat` ใน `chat-activation.ts` พร้อมรีวิวการแก้ของ editor `registerChat` สร้าง `Chat` กับตัวเชื่อม `Engine`
         และลงทะเบียนแผงแชต ยังไม่ต่อ engine
-      ref: packages/extension/src/extension.ts#registerChat
+      ref: packages/extension/src/chat-activation.ts#registerChat
 
     - id: type
       lane: user

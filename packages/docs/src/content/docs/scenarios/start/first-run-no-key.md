@@ -60,7 +60,7 @@ scenario:
       do: >-
         `prompt()` เรียก `link()` ซึ่งเรียก `Engine.connection()` การเชื่อมต่อครั้งแรกเริ่มที่ `engineSettings`
         ซึ่งอ่าน provider model และคีย์ แล้วให้ `setupProblem` ตรวจ ช่องที่ขาดช่องแรกของ Model Studio คือ API key
-      ref: packages/extension/src/extension.ts#engineSettings
+      ref: packages/extension/src/chat-activation.ts#engineSettings
 
     - id: toast
       lane: editor
@@ -77,7 +77,7 @@ scenario:
         engine ไม่ถูกเปิด และไม่มี session ใดถูกสร้าง
       sees: >-
         toast สีเหลืองมุมขวาล่าง: "Geno has no Model Studio API key. Run Geno: Set API Key." พร้อมปุ่ม [Set API Key]
-      ref: "packages/extension/src/extension.ts#\"void vscode.window.showWarningMessage(problem.message, problem.fix.label).then((choice) => {\""
+      ref: "packages/extension/src/chat-activation.ts#\"void vscode.window.showWarningMessage(problem.message, problem.fix.label).then((choice) => {\""
 
     - id: failed
       lane: editor
@@ -139,7 +139,7 @@ scenario:
                   end: "ไปตั้ง API key"
                 do: >-
                   ปุ่มบน toast เรียกคำสั่ง `gcode.setApiKey` (คำสั่งเดียวกับ "Geno: Set API Key" ใน Command Palette)
-                ref: "packages/extension/src/extension.ts#\"if (choice !== undefined) void vscode.commands.executeCommand(problem.fix.command, ...problem.fix.args);\""
+                ref: "packages/extension/src/chat-activation.ts#\"if (choice !== undefined) void vscode.commands.executeCommand(problem.fix.command, ...problem.fix.args);\""
                 goto: start.set-api-key
           - id: dismiss
             label: ปิด toast
