@@ -11,7 +11,7 @@ import { runFiles, type PayloadView } from '../src/scenario/payload.js';
 import type { SourceIndex } from '../src/scenario/refs.js';
 import { lanesSchema, scenarioSchema } from '../src/scenario/schema.js';
 import { loadSite, siteOptions } from '../src/scenario/site.js';
-import { ACTORS, beatsOf, branchesAt, choose, layoutLanes, storyBeats, storyFromHash, storyHash, storyStart } from '../src/scenario/story.js';
+import { ACTORS, actorsOn, beatsOf, branchesAt, choose, layoutLanes, storyBeats, storyFromHash, storyHash, storyStart } from '../src/scenario/story.js';
 import { walk } from '../src/scenario/tour.js';
 import { FACES, MEMORY_SCOPES, PERMISSION_FACES } from '../src/scenario/faces.js';
 
@@ -132,6 +132,14 @@ describe('actors', () => {
       ['external', 'machine'],
     ]);
     for (const lane of lanes.lanes) expect(named.has(lane.actor)).toBe(true);
+  });
+});
+
+describe('the panel actor', () => {
+  test('is labelled by where the tour happens: the terminal for the CLI, VS Code otherwise', () => {
+    const panel = (surface: Parameters<typeof actorsOn>[0]) => actorsOn(surface).find((actor) => actor.id === 'panel')!.sub;
+    expect([panel('cli'), panel('vscode'), panel('acp-editor')]).toEqual(['ในเทอร์มินัล', 'ใน VS Code', 'ใน editor ของคุณ']);
+    expect(actorsOn('cli').filter((actor) => actor.id !== 'panel')).toEqual(ACTORS.filter((actor) => actor.id !== 'panel'));
   });
 });
 

@@ -1,5 +1,5 @@
 import type { BeatHead, Choices, Flow, ForkOption, Link, OptionId, Scenario, StepId, TurnEnd } from './model.js';
-import type { Actor } from './schema.js';
+import type { Actor, Surface } from './schema.js';
 import { walk } from './tour.js';
 
 export const ACTORS: readonly { readonly id: Actor; readonly name: string; readonly sub: string }[] = [
@@ -9,6 +9,10 @@ export const ACTORS: readonly { readonly id: Actor; readonly name: string; reado
   { id: 'model', name: 'AI model', sub: 'คิดและขอ tool' },
   { id: 'machine', name: 'เครื่องของคุณ', sub: 'shell และไฟล์' },
 ];
+/** Where the panel actor lives: the chat in VS Code, the terminal for the CLI, the editor that speaks ACP. */
+const PANEL_SUB: Readonly<Record<Surface, string>> = { vscode: 'ใน VS Code', cli: 'ในเทอร์มินัล', 'acp-editor': 'ใน editor ของคุณ' };
+/** The actors as a tour on this surface labels them. */
+export const actorsOn = (surface: Surface): typeof ACTORS => ACTORS.map((actor) => (actor.id === 'panel' ? { ...actor, sub: PANEL_SUB[surface] } : actor));
 export const ACTOR_NAME: Readonly<Record<Actor, string>> = Object.fromEntries(ACTORS.map((actor) => [actor.id, actor.name])) as Record<Actor, string>;
 export const actorIndex = (actor: Actor): number => ACTORS.findIndex((candidate) => candidate.id === actor);
 

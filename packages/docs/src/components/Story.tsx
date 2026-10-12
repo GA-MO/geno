@@ -3,6 +3,7 @@ import type { Scenario } from '../scenario/model.js';
 import {
   ACTOR_NAME,
   ACTORS,
+  actorsOn,
   actorIndex,
   branchesAt,
   choose,
@@ -114,7 +115,7 @@ function Sequence({ scenario, beats, state, go, pick }: { readonly scenario: Sce
   return (
     <section className="seq tour-card" aria-label="Sequence diagram">
       <div className="sq-head">
-        {ACTORS.map((actor) => (
+        {actorsOn(scenario.surface).map((actor) => (
           <div key={actor.id} className="sq-actor" style={{ left: `${xOf(actor.id)}%` }}>
             <strong>{actor.name}</strong>
             <span>{actor.sub}</span>
@@ -170,6 +171,7 @@ function edgePath(from: Box, to: Box): string {
 function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenario; readonly beats: readonly Beat[]; readonly state: StoryState; readonly go: (i: number) => void; readonly pick: (branch: Branch) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const layout = useMemo(() => layoutLanes(scenario, state.choices, beats), [scenario, state.choices, beats]);
+  const actors = actorsOn(scenario.surface);
   const boxes = layout.items.map((item) => ({ ...item, cy: item.row * LANE_H + CAPTION + (LANE_H - CAPTION) / 2 }));
   const current = layout.items.findIndex((item) => item.kind === 'beat' && item.beat === state.at);
   useLayoutEffect(() => {
@@ -194,7 +196,7 @@ function Lanes({ scenario, beats, state, go, pick }: { readonly scenario: Scenar
       <div className="ln-captions" aria-hidden="true">
         {[...Array(layout.rows).keys()].map((row) => (
           <p key={row} className="ln-caption" style={{ top: row * LANE_H }}>
-            {ACTORS[row] === undefined ? null : <><strong>{ACTORS[row].name}</strong> <span>{ACTORS[row].sub}</span></>}
+            {actors[row] === undefined ? null : <><strong>{actors[row].name}</strong> <span>{actors[row].sub}</span></>}
           </p>
         ))}
       </div>
