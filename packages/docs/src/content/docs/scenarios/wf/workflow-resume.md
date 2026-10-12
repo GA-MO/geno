@@ -18,6 +18,8 @@ scenario:
       beat:
         title: คุณพิมพ์ `/workflow fix-bug --resume`
         text: รอบก่อนหยุดที่ขั้น `fix` เพราะถึงเพดาน คุณสั่งให้ทำต่อจากรอบนั้น
+        from: you
+        to: panel
         sees:
           kind: message
           from: you
@@ -27,6 +29,8 @@ scenario:
       beat:
         title: Geno สร้าง call workflow ในนามคุณ
         text: Geno ไม่ถาม model มันสร้าง call ที่บอกให้ resume รอบเก่าเอง
+        from: engine
+        to: engine
       lane: loop
       at: drive
       do: >-
@@ -40,6 +44,8 @@ scenario:
       beat:
         title: Geno เปิด log ของรอบเก่า
         text: Geno ตรวจว่า id เป็นรอบของ `fix-bug` จริง แล้วอ่าน journal และ input เดิมของรอบนั้น
+        from: engine
+        to: engine
         ask: id ถูกไหม
       lane: loop
       at: tools
@@ -61,6 +67,8 @@ scenario:
                 beat:
                   title: ไม่ใช่รอบของ fix-bug
                   text: Geno ตอบ error ไม่มีการ์ด ไม่มี session ใหม่ ขั้นของ workflow ขึ้นว่าล้มเหลว และ turn จบโดยไม่เรียก model
+                  from: engine
+                  to: panel
                   sees:
                     kind: step
                     label: workflow fix-bug --resume ...
@@ -83,6 +91,7 @@ scenario:
       beat:
         title: Geno คำนวณขั้นที่ได้ผลเดิม
         text: ขั้นที่อยู่ใน journal ได้ผลเดิมโดยไม่เรียก model Geno หาขั้นแรกที่ต้องรันจริง แล้วขอ permission
+        from: engine
         to: panel
       lane: loop
       at: tools
@@ -95,6 +104,7 @@ scenario:
       beat:
         title: คุณเห็นการ์ด “Run this workflow?”
         text: การ์ดหน้าตาเหมือนการรันใหม่ ไม่บอกว่าเป็นการ resume และราคาคิดจากทุกขั้น รวมขั้นที่จะได้ผลเดิมฟรี
+        from: panel
         to: you
         sees: การ์ด "Run this workflow?" รายการขั้นและราคาเหมือนรอบใหม่ ปุ่ม [Run] [Don't run]
       lane: panel
@@ -111,7 +121,8 @@ scenario:
       beat:
         title: คุณกด Run
         text: Geno เปิด session ใหม่ของ workflow ที่จดว่ามัน resume รอบเก่า
-        to: engine
+        from: you
+        to: panel
       lane: user
       do: ผู้ใช้กด Run
 
@@ -129,6 +140,8 @@ scenario:
       beat:
         title: ขั้นที่เสร็จแล้วได้ผลเดิมฟรี
         text: "`reproduce` ได้ผลเดิมจาก journal Geno ข้ามไปจนเจอขั้นที่ต้องรันจริง แผง Tasks เริ่มที่ขั้นนั้น จากตรงนี้ workflow รันเหมือนรอบปกติ"
+        from: engine
+        to: model
         sees:
           kind: task
           title: Workflow fix-bug

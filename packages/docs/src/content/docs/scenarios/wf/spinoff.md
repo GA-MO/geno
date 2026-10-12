@@ -18,6 +18,7 @@ scenario:
       beat:
         title: Model เสนองานแยก
         text: ระหว่างแก้ bug ใน `src/date.ts` model เห็นว่า `src/time.ts` มีปัญหาแบบเดียวกัน แทนที่จะขยายงาน มันเรียก `spawn_task` พร้อมหัวข้อ สรุป และ prompt ที่ครบในตัว
+        from: model
         to: engine
       lane: model
       do: >-
@@ -33,6 +34,8 @@ scenario:
       beat:
         title: Geno ไม่เริ่มอะไร แค่เก็บข้อเสนอ
         text: Geno ตรวจว่าไม่มีข้อเสนอหัวข้อเดียวกันเปิดอยู่ และข้อเสนอที่เปิดอยู่ไม่เกิน 10 แล้วตอบ model พร้อมข้อเสนอนั้น
+        from: engine
+        to: model
       lane: tool
       at: executor
       do: >-
@@ -45,6 +48,8 @@ scenario:
       beat:
         title: แชตขึ้นการ์ดข้อเสนอ
         text: ขั้นของ `spawn_task` วาดเป็นการ์ดในบทสนทนา การ์ดเดียวกันขึ้นในแผง Tasks ใต้ "Suggested in this chat"
+        from: panel
+        to: you
         sees: การ์ด "Suggested task" หัวข้อ สรุป prompt ที่พับไว้ และปุ่ม [Start] [Dismiss]
 
     - id: card
@@ -63,7 +68,8 @@ scenario:
       beat:
         title: Model ทำงานเดิมต่อ
         text: model แก้ `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่เข้ามาในบทสนทนานี้
-        to: panel
+        from: model
+        to: engine
       lane: model
       do: >-
         โมเดลทำ bug ใน `src/date.ts` ต่อจนจบ turn งานที่เสนอไม่ได้เข้ามาในบทสนทนานี้
@@ -74,6 +80,8 @@ scenario:
       beat:
         title: คุณอ่านการ์ด
         text: คุณตัดสินได้ทั้งระหว่าง turn และหลังจบ
+        from: panel
+        to: you
         ask: คุณกดอะไร
       lane: user
       do: ผู้ใช้อ่านการ์ด (ระหว่าง turn หรือหลังจบก็ได้)
@@ -91,7 +99,8 @@ scenario:
                 beat:
                   title: คุณกด Dismiss
                   text: Geno จดว่าคุณปฏิเสธลง log ของแชตทันที model อ่านได้ในคำขอครั้งถัดไป การ์ดหายไป และเสนอหัวข้อเดิมใหม่ได้
-                  to: engine
+                  from: you
+                  to: panel
                   end: ข้อเสนอหายไป
                 at: chat
                 do: >-
@@ -111,7 +120,8 @@ scenario:
       beat:
         title: คุณกด Start
         text: การ์ดขึ้น "Starting…" แชตขอให้ engine เริ่มงาน
-        to: engine
+        from: you
+        to: panel
       lane: editor
       at: chat
       do: >-
@@ -123,6 +133,8 @@ scenario:
       beat:
         title: Geno เปิด lane และ session ใหม่
         text: Geno กันการกด Start ซ้ำ สร้าง lane ใหม่ชื่อตามหัวข้อ แล้วเปิด session ใน lane นั้นด้วย prompt ของข้อเสนอ session ใหม่ไม่ใช่ subagent ของแชตนี้
+        from: engine
+        to: engine
       lane: server
       at: sessions
       do: >-
@@ -135,6 +147,7 @@ scenario:
       beat:
         title: การ์ดย่อเหลือ Started
         text: Geno จดลง log ของแชตว่างานเริ่มแล้ว model ของแชตจึงรู้ งานใหม่ขึ้นใน Working ของแผง Tasks
+        from: engine
         to: panel
         sees: บรรทัด "Started Fix the same leap-year bug in src/time.ts" และงานใหม่ใน Tasks ที่บอก "Lane fix-the-same-leap-year..."
         end: งานใหม่รันใน lane
