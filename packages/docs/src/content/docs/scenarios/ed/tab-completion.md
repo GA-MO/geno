@@ -18,6 +18,7 @@ scenario:
       beat:
         title: คุณพิมพ์แล้วหยุด
         text: คุณพิมพ์ `export function isWeekend(` แล้วหยุดครู่หนึ่ง VS Code ขอคำเติม
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้พิมพ์แล้วหยุด
@@ -27,6 +28,7 @@ scenario:
       beat:
         title: ส่วนขยายส่งคำขอให้ llama-server
         text: ส่วนขยายสร้าง prompt จากข้อความก่อนและหลังเคอร์เซอร์ และไฟล์อื่นที่เปิดอยู่ แล้วรอจนคุณหยุดพิมพ์ ไม่มี engine เกี่ยวข้อง
+        from: panel
         to: model
       lane: editor
       at: vscode-ui
@@ -48,6 +50,7 @@ scenario:
       beat:
         title: llama-server บนเครื่องเติมโค้ด
         text: model เติมโค้ดขนาดเล็กบนเครื่องของคุณ stream ข้อความที่ควรอยู่ตรงเคอร์เซอร์กลับมา
+        from: model
         to: panel
       lane: model
       do: >-
@@ -58,6 +61,8 @@ scenario:
       beat:
         title: ส่วนขยายกรองผล
         text: ผลถูกทิ้งถ้าคุณขยับเคอร์เซอร์ไปแล้ว ผลว่าง บรรทัดแรกซ้ำข้อความหลังเคอร์เซอร์ หรือยาวเกิน 8 บรรทัด
+        from: panel
+        to: panel
         ask: ผ่านตัวกรองไหม
       lane: editor
       at: vscode-ui
@@ -76,6 +81,7 @@ scenario:
                 beat:
                   title: VS Code แสดงข้อความจาง
                   text: ข้อความจางต่อจากเคอร์เซอร์ คุณรับด้วย Tab หรือพิมพ์ต่อก็ได้
+                  from: panel
                   to: you
                   sees: "ข้อความจางต่อจากเคอร์เซอร์ `date: Date): boolean {` และบรรทัดถัดไปของฟังก์ชัน"
                   ask: กด Tab ไหม
@@ -98,6 +104,7 @@ scenario:
                             title: คุณกด Tab
                             text: VS Code แทรกข้อความ ส่วนขยายจดว่าคุณรับ และตรวจภายหลังว่าข้อความยังอยู่ในไฟล์ไหม
                             from: you
+                            to: panel
                             end: โค้ดอยู่ในไฟล์แล้ว
                           at: vscode-ui
                           do: >-
@@ -114,6 +121,7 @@ scenario:
                             title: คุณพิมพ์ต่อ
                             text: ข้อความจางหายไป ถ้าสิ่งที่คุณพิมพ์ตรงกับต้นของผล ผลนั้นยังใช้ต่อได้
                             from: you
+                            to: panel
                             end: ข้อความจางหายไป
                           at: vscode-ui
                           do: >-
@@ -128,6 +136,8 @@ scenario:
                 beat:
                   title: ไม่มีข้อความจาง
                   text: ส่วนขยายไม่คืนอะไร ผลยังอยู่ใน cache ถ้าคุณพิมพ์ต่อในทางเดียวกับมัน
+                  from: panel
+                  to: panel
                   end: ไม่มีคำเติม
                 at: vscode-ui
                 do: >-

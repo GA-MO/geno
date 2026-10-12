@@ -34,6 +34,7 @@ scenario:
       beat:
         title: คุณพิมพ์ “รองรับรูปแบบ ISO week”
         text: คุณกด Enter คำสั่งไปทางเดียวกับข้อความที่พิมพ์ในแผง พร้อมบอกไฟล์และช่วงบรรทัด
+        from: you
         to: panel
       lane: user
       do: ผู้ใช้พิมพ์ "รองรับรูปแบบ ISO week" แล้วกด Enter
@@ -42,6 +43,7 @@ scenario:
       beat:
         title: แชตในแผงขึ้น turn ของการแก้
         text: บับเบิลบอกไฟล์และช่วงบรรทัด turn นี้แสดงในแผงเหมือน turn อื่น
+        from: panel
         to: engine
         sees:
           kind: message
@@ -68,6 +70,7 @@ scenario:
       beat:
         title: Geno เตรียม turn ที่มีแค่ tool edit
         text: Geno ปฏิเสธไฟล์นอก workspace อ่านไฟล์และ problem ของไฟล์จาก VS Code แล้วสร้าง prompt ที่มีทั้งไฟล์พร้อมเลขบรรทัด ช่วงที่เลือก และคำสั่งของคุณ แล้วส่งให้ model
+        from: engine
         to: model
       lane: server
       at: turns
@@ -100,6 +103,7 @@ scenario:
       beat:
         title: Model ขอแก้ช่วงนั้น
         text: model อ่านไฟล์จาก prompt จึงไม่ต้อง read ก่อน มันส่ง `old_str` และ `new_str` แชตขึ้นขั้นของ edit
+        from: model
         to: engine
       lane: model
       do: >-
@@ -114,6 +118,8 @@ scenario:
       beat:
         title: Geno แทน `old_str` ในไฟล์
         text: Geno เทียบข้อความปัจจุบันกับข้อความที่อยู่ใน prompt แล้วหาข้อความเดิม
+        from: engine
+        to: engine
         ask: การแก้ลงไหม
       lane: tool
       at: executor
@@ -130,6 +136,7 @@ scenario:
                 beat:
                   title: VS Code เขียนการแก้ลง buffer
                   text: การแก้เข้า buffer ที่คุณเปิดอยู่ ขั้นของ edit บอกจำนวนบรรทัด Geno ส่งผลให้ model
+                  from: engine
                   to: panel
                   sees:
                     kind: step
@@ -142,6 +149,7 @@ scenario:
                 beat:
                   title: Model บอกว่าแก้อะไร
                   text: model ตอบสั้นๆ แล้วจบ turn
+                  from: model
                   to: panel
                 do: >-
                   โมเดลตอบสั้นๆ ว่าแก้อะไรไป แล้วจบด้วย `end_turn`
@@ -151,6 +159,8 @@ scenario:
                 beat:
                   title: Turn จบ
                   text: ปุ่ม Send กลับมา hunk ของการแก้รอคุณตรวจตามโหมด review
+                  from: engine
+                  to: panel
                   sees:
                     kind: composer
                     state: idle
@@ -162,6 +172,8 @@ scenario:
                 beat:
                   title: การแก้ไม่ลง
                   text: "`old_str` ไม่ตรง หรือคุณแก้ไฟล์ไประหว่างนั้น ไม่มีอะไรถูกเขียน"
+                  from: engine
+                  to: model
                 at: executor
                 do: >-
                   `old_str` ไม่ตรง หรือผู้ใช้แก้ไฟล์ไประหว่างนั้น `edit` ล้มเหลวด้วย `ToolError` ไม่มีอะไรถูกเขียน
@@ -171,7 +183,8 @@ scenario:
                 beat:
                   title: Model ลองใหม่ได้สามครั้ง
                   text: Geno ให้ model ลองใหม่ ถ้าครบสามครั้งยังไม่ลง การเรียกครั้งสุดท้ายไม่มี tool model จึงเขียนได้แค่ประโยคปิดท้าย
-                  to: model
+                  from: model
+                  to: engine
                   end: Turn จบโดยแก้ไม่ลง
                 at: step
                 do: >-
