@@ -588,7 +588,8 @@ const commandBody =
   (because: (reason: string) => string) =>
   (block: PermissionBlock): Child[] => [
     block.description !== undefined && h('p', { class: 'permission-description' }, block.description),
-    h('pre', { class: 'permission-command' }, h('code', {}, block.command)),
+    h('pre', { class: 'permission-command' }, h('code', {}, block.line ?? block.command)),
+    block.line !== undefined && h('p', { class: 'permission-part' }, 'Needs approval: ', h('code', {}, block.command)),
     h('p', { class: 'permission-reason' }, because(block.reason)),
     block.classifier !== undefined && h('p', { class: 'permission-classifier' }, icon('zap'), `Auto could not decide: ${block.classifier}.`),
     block.rule !== undefined &&

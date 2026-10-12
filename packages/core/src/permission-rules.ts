@@ -7,6 +7,7 @@ import {
   mcpDenialFor,
   mergedDenial,
   parseCommandLine,
+  SHELL_KEYWORDS,
   simpleCommand,
   splitCommand,
   type ApprovalMode,
@@ -16,6 +17,7 @@ import {
   type Flag,
   type ParsedCommand,
   type SimpleCommand,
+  withLine,
   withSubject,
 } from './approval.js';
 
@@ -256,7 +258,7 @@ const isOpenEnded = (words: readonly string[]): boolean => OPEN_ENDED.has(words[
  */
 function offerFor(words: readonly string[], flagged: readonly DenyRuleId[], scope: CommandScope, mode: ApprovalMode): CommandPattern | undefined {
   const [program] = words;
-  if (program === undefined || program.includes('/') || program.includes('=')) return undefined;
+  if (program === undefined || program.includes('/') || program.includes('=') || SHELL_KEYWORDS.has(program)) return undefined;
   let verbs = 0;
   while (verbs < MAX_OFFER_VERBS && isVerb(words[1 + verbs])) verbs++;
   for (let length = Math.max(2, 1 + verbs); length <= words.length; length++) {
@@ -312,7 +314,10 @@ function caughtBy(effect: RuleEffect, parsed: readonly ParsedCommand[], rules: r
  * hook's allow, which answers the question and skips the classifier after the deny rules, unless a flagged command is
  * firm (FIRM_RULES, `isHardAsk`).
  */
-export function ruledDenial(command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[], hookAllows = false): Denial | undefined {
+export const ruledDenial = (command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[], hookAllows = false): Denial | undefined =>
+  withLine(lineVerdict(command, scope, mode, rules, hookAllows), command);
+
+function lineVerdict(command: string, scope: CommandScope, mode: ApprovalMode, rules: readonly PermissionRule[], hookAllows: boolean): Denial | undefined {
   const parsed = parseCommandLine(command, scope);
   const honours = RULES_IN_MODE[mode];
   for (const effect of ['deny', 'ask'] as const) {

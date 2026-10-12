@@ -218,6 +218,8 @@ export type PermissionBlock = {
   readonly kind: 'permission';
   readonly id: string;
   readonly command: string;
+  /** The whole command line, which one yes runs, when `command` is only the part that needs the answer. */
+  readonly line?: string | undefined;
   readonly reason: string;
   /** The asking bash call's description, when it gave one. */
   readonly description?: string | undefined;
@@ -306,6 +308,7 @@ export type Action =
       readonly type: 'permission';
       readonly id: string;
       readonly command: string;
+      readonly line?: string | undefined;
       readonly reason: string;
       readonly description?: string | undefined;
       readonly options: readonly PermissionChoice[];

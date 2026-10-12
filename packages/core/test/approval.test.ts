@@ -287,6 +287,7 @@ describe('the deny-to-approve list', () => {
       rule: 'git-push',
       reason: 'git push',
       command: 'git push',
+      line: 'rm -rf dist; git push',
       verdict: 'deny',
     });
   });
@@ -340,6 +341,7 @@ describe('the deny-to-approve list', () => {
       rule: 'git-push',
       reason: 'git push',
       command: 'git push --force',
+      line: 'npm ci; git push --force',
       verdict: 'deny',
     });
   });
@@ -531,6 +533,30 @@ describe('splitCommand', () => {
       ['ls', '..'],
       ['echo', '`ls ..`', 'done'],
     ]);
+  });
+
+  it('drops the shell keywords that open a command, so the command after them starts its words', () => {
+    expect(splitCommand('for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12')).toEqual([
+      ['for', 'f', 'in', 'server.js', 'lib/*.js'],
+      ['node', '--check', '$f'],
+      ['done'],
+      ['npm', 'test'],
+      ['tail', '-12'],
+    ]);
+    expect(splitCommand('if ! grep -q x a.txt; then node a.js; elif true; then echo b; else { rm b; }; fi')).toEqual([
+      ['grep', '-q', 'x', 'a.txt'],
+      ['node', 'a.js'],
+      ['true'],
+      ['echo', 'b'],
+      ['rm', 'b'],
+      ['}'],
+      ['fi'],
+    ]);
+    expect(splitCommand('while read l; do echo $l; done < in.txt')).toEqual([['read', 'l'], ['echo', '$l'], ['done', 'in.txt']]);
+  });
+
+  it('keeps a keyword that is an argument or quoted', () => {
+    expect(splitCommand(`echo do then; 'do' x`)).toEqual([['echo', 'do', 'then'], ['do', 'x']]);
   });
 });
 

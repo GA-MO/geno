@@ -528,7 +528,7 @@ describe('gcode serve', () => {
     });
 
     expect(editor.permissions.map((p) => p.toolCall.toolCallId)).toEqual([asked.id, prompted.id]);
-    expect(editor.permissions[0]!.toolCall.title).toBe('Allow `cd ~`? It uses a path outside the workspace.');
+    expect(editor.permissions[0]!.toolCall.title).toBe(`Allow \`cd ~\` in \`cd ~ && du -d 1 .gcode-test-missing-0\`? It uses a path outside the workspace.`);
     expect(editor.permissions[1]!.toolCall.title).toBe('Allow `node -e console.log(4)`? It uses a command not on the safe list. The classifier says: unclear why this is needed.');
     const results = new Map(
       transport.requests.flatMap((r) =>

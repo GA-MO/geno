@@ -37,4 +37,19 @@ describe('the approval cards at 300px', () => {
     expect(await overflow(panel)).toEqual([]);
     await panel.close();
   });
+
+  it('shows the whole line one yes runs, and names the part that needs it', async () => {
+    const panel = await playFixture(fixtureOf('approve-compound'));
+    expect(
+      await panel.eval(
+        `(() => { const card = doc.querySelector('${CARD}'); return [card.querySelector('.permission-command').textContent, card.querySelector('.permission-part').textContent, card.querySelector('.permission-rule').textContent]; })()`,
+      ),
+    ).toEqual([
+      'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12',
+      'Needs approval: node --check $f',
+      'Always allow saves the rule node --check for this workspace. Settings lists its rules.',
+    ]);
+    expect(await overflow(panel)).toEqual([]);
+    await panel.close();
+  });
 });

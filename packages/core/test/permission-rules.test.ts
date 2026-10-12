@@ -231,6 +231,7 @@ describe('ruledDenial', () => {
       rule: 'workspace-deny',
       reason: 'the workspace rule that denies `pnpm publish`, which the user set in Settings under Permissions',
       command: 'pnpm publish --tag x',
+      line: 'pnpm test && pnpm publish --tag x',
       verdict: 'deny',
     });
     expect(ruledDenial('timeout 9 pnpm publish', scope, 'auto', [ask('pnpm publish')])).toEqual({
@@ -308,10 +309,23 @@ describe('the offered rule', () => {
     ['auto', '$TOOL run', undefined],
     ['plan', 'git push', undefined],
     ['non-interactive', 'git push', undefined],
+    ['ask', 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12', 'node --check'],
+    ['ask', 'if [ -f a.js ]; then node a.js; fi', 'node a.js'],
+    ['ask', 'node scan.js; echo ok', 'node scan.js'],
+    ['ask', 'grep -c x a.txt; echo scan exit: $?', undefined],
+    ['ask', 'while true; do git push; done', 'git push'],
+    ['ask', 'for f in ../x/*.js; do echo $f; done', undefined],
   ];
   it.each(OFFERS)('%s: %s offers %s', (mode, command, offered) => {
     const offer = ruledDenial(command, scope, mode, [])?.offer;
     expect(offer === undefined ? undefined : patternText(offer)).toBe(offered);
+  });
+
+  it('asks about the flagged part beside the whole line, which one yes runs', () => {
+    const line = 'for f in server.js lib/*.js; do node --check $f; done && npm test 2>&1 | tail -12';
+    expect(ruledDenial(` ${line} `, scope, 'ask', [])).toMatchObject({ command: 'node --check $f', line });
+    expect(ruledDenial('grep -c x a.txt; echo scan exit: $?', scope, 'ask', [])).toMatchObject({ command: 'echo scan exit: $?', line: 'grep -c x a.txt; echo scan exit: $?' });
+    expect(ruledDenial('git push', scope, 'ask', [])).not.toHaveProperty('line');
   });
 
   it('covers the command it was offered for', () => {
