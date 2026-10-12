@@ -75,7 +75,7 @@ scenario:
       lane: server
       at: turns
       do: >-
-        `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง ล้างขีดจำกัดของรอบ และเรียก `runAgent` ด้วยโหมด Ask
+        `runTurn` รับเป็น turn ใหม่ที่ผู้ใช้ส่ง และเรียก `runAgent` ซึ่งตัดสินแต่ละ call ด้วยโหมด Ask ขีดจำกัดของรอบนับใหม่จาก prompt นี้
       ref: packages/engine/src/serve.ts#runTurn
       phase: starting
 

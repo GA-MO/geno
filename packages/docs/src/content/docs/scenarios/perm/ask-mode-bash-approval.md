@@ -159,8 +159,8 @@ scenario:
               - lane: loop
                 at: tools
                 do: >-
-                  ผลของ call นี้มีสถานะ `rejected` และบอกโมเดลให้หยุดรอผู้ใช้ ลูปของ batch หยุดทันที
-                  call ที่เหลือใน turn เดียวกันจะไม่เริ่ม
+                  ผลของ call นี้มีสถานะ `rejected` และบอกโมเดลให้หยุดรอผู้ใช้ เมื่อ batch นี้จบ `runTools` ไม่เริ่ม batch ถัดไป
+                  call ที่เหลือใน turn เดียวกันจึงไม่เริ่ม
                 ref: "packages/engine/src/drive.ts#\"results.some((result) => result?.status === 'rejected')\""
                 emits: [rejected]
               - lane: server
@@ -184,7 +184,7 @@ scenario:
               - lane: loop
                 at: step
                 do: >-
-                  `loopStep` รอบถัดไปตอบ call ที่ยังไม่ได้รันด้วย `UNRUN_TEXTS.rejected` แล้วตัดสิน `done(end_turn)`
+                  `loopStep` รอบถัดไปตอบ call ที่ยังไม่ได้รัน (ถ้ามี) ด้วย `UNRUN_TEXTS.rejected` แล้วตัดสิน `done(end_turn)`
                   เพราะคำปฏิเสธจากผู้ใช้จบ turn ผู้ใช้คือคนที่พูดต่อ Stop hook ไม่ทำงานในทางนี้
                 ref: packages/core/src/loop.ts#unrunnable
                 emits: [end_turn]
@@ -197,8 +197,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` อ่านผลแล้วส่ง action `turn-end` สถานะ `done`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `prompt()` ใช้ `turnEndOf` อ่านผลแล้วส่ง action `turn-end` สถานะ `done`
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
@@ -323,8 +323,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end` สถานะ `stopped`
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `prompt()` ใช้ `turnEndOf` อ่านได้ `stopped` แล้วส่ง action `turn-end` สถานะ `stopped`
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
@@ -374,7 +374,7 @@ scenario:
 engine ตั้งชื่อสองตัวเลือกแรกว่า "Allow once" และ "Reject" (`PERMISSION_OPTIONS` ใน `serve.ts`)
 แต่แผงแชตแสดงเป็น **Allow** และ **Deny** ตาม `CHOICE_LABELS` ใน `render.ts`
 
-กด Stop ขณะการ์ดรออยู่ `Chat.stop` ส่งสองข้อความเกือบพร้อมกัน: คำตอบ `cancelled` ของการ์ด และ `session/cancel`
-ทัวร์เดินตามลำดับที่ `Chat.stop` เรียก คือ abort ไปถึง batch ก่อน call จึงถูกตอบว่าถูกหยุดระหว่างรัน
-ถ้าคำตอบของการ์ดไปถึงก่อน `settle` จะบันทึก call เป็น `rejected` เหมือนกด Deny แทน ทั้งสองทาง turn จบแบบ `stopped`
+กด Stop ขณะการ์ดรออยู่ `Chat.stop` ส่งสองข้อความเกือบพร้อมกัน: ตอบการ์ดว่า `cancelled` ก่อน แล้วจึงส่ง `session/cancel`
+ทัวร์เดินทางที่ abort ไปถึง batch ก่อนที่ `settle` จะได้คำตอบของการ์ด call จึงถูกตอบว่าถูกหยุดระหว่างรัน
+ถ้า `settle` ได้คำตอบก่อน มันจะบันทึก call เป็น `rejected` เหมือนกด Deny แทน (ใครมาก่อนขึ้นกับจังหวะใน engine ไม่ได้ทดลองจริง) ทั้งสองทาง turn จบแบบ `stopped`
 และคำสั่งไม่ได้รัน แต่ในทางแรกข้อความที่โมเดลได้อ่านบอกว่าคำสั่ง "may have partly run" ซึ่งไม่ตรงกับที่เกิดขึ้น

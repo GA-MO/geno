@@ -56,7 +56,8 @@ scenario:
                 at: tools
                 do: >-
                   ผลมีสถานะ `denied` ข้อความบอกโมเดลว่า call ตรงกับกฎ deny `WebFetch` ที่ผู้ใช้ตั้งใน `.claude/settings.json`
-                  ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้
+                  ห้ามลองซ้ำ ให้หาทางอื่นหรือบอกว่ากฎกันไว้ `ToolDenied` พาบันทึกของกฎ (`approval`) มากับผล
+                  อัปเดตผลของ call นี้จึงมี `APPROVAL_META` ซึ่งแผงใช้ขึ้นป้าย
                 ref: packages/engine/src/tools/agent.ts#denialText
                 emits: [denied]
               - use: tool-result-returns
@@ -89,7 +90,7 @@ scenario:
                 at: executor
                 do: >-
                   ผลมีสถานะ `error` ข้อความว่า ".env is off limits to grep: it matches Geno's built-in rule for credentials files ..."
-                  และบอกให้ถามผู้ใช้ถ้างานต้องการค่าจากไฟล์นั้น
+                  และบอกให้ถามผู้ใช้ถ้างานต้องการค่าจากไฟล์นั้น `ToolError` ไม่มีบันทึกการอนุญาต อัปเดตผลจึงไม่มี `APPROVAL_META`
                 ref: "packages/engine/src/tools/index.ts#\"if (error instanceof ToolError) return { status: 'error', text: error.message };\""
               - use: tool-result-returns
               - lane: loop
