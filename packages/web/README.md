@@ -28,7 +28,13 @@ Keys come from the environment the command runs in, under the names the extensio
 
 ## What differs from VS Code
 
-There is no editor. Opening a file, revealing it, or showing a diff shows a toast that says what VS Code would have done. Keep and Undo on reviewed changes need VS Code's review, which is not loaded. The engine sees no unsaved buffers, diagnostics or terminals. Open and save dialogs ask for a path instead.
+There is no editor. Opening a file, revealing it, or showing a diff shows a toast that says what VS Code would have done. The engine sees no unsaved buffers, diagnostics or terminals. Open and save dialogs ask for a path instead.
+
+Review runs VS Code's own review code. A turn's Undo restores the checkpoint before the turn, and in review mode (`"gcode.review.mode": "review"`) Keep and Undo on a hunk work from the diff cards. Both write to disk, so an editor open on the folder reloads the files. The review differs from VS Code's in these ways:
+
+- There are no CodeLens buttons, highlights or Changes view, because there is no editor. Decide in the chat.
+- An undo goes straight to disk, not through an editor buffer, so an editor with unsaved changes to that file does not see it until it reloads.
+- An edit made in another editor reaches the review only when the web host next reads the file. That happens before each undo, so a hunk still lands in the right place after an edit elsewhere in its file.
 
 ## How it is checked
 
@@ -36,4 +42,4 @@ There is no editor. Opening a file, revealing it, or showing a diff shows a toas
 pnpm vitest run --project unit packages/web/test
 ```
 
-`web.e2e.test.ts` runs the built host against the engine's fake model, sends a prompt and answers a permission card over the host's own wire, and loads the panel in Chromium.
+`web.e2e.test.ts` runs the built host against the engine's fake model. Over the host's own wire it sends a prompt, answers a permission card, undoes a turn, and keeps and undoes hunks in review mode, then reloads the host to check the engine logged those decisions. It also loads the panel in Chromium and clicks a turn's Undo.

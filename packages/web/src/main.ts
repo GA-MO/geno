@@ -10,6 +10,7 @@ import type * as vscode from 'vscode';
 import { registerChat } from '../../extension/src/chat-activation.js';
 import { CHAT_VIEW } from '../../extension/src/chat/chat.js';
 import { findExecutable } from '../../extension/src/executables.js';
+import { editorReview } from '../../extension/src/review/commands.js';
 import { gcodeHome } from '../../extension/src/tab/log.js';
 import { newToken } from './security.js';
 import { WebServer } from './server.js';
@@ -102,7 +103,7 @@ export async function startWeb(options: WebOptions, extension: string, client: s
   const rg = process.env['GCODE_RG'] ?? (await findExecutable('rg', process.env));
   configureShim({ workspace: options.workspace, trusted: options.trusted, settings, page: server, rg });
   const context = extensionContext(extension, options.workspace, home);
-  registerChat(context, () => undefined);
+  registerChat(context, editorReview(context));
   const provider = viewProvider(CHAT_VIEW);
   if (provider === undefined) throw new Error('the chat registered no view');
   await provider.resolveWebviewView(webviewView('chat') as unknown as vscode.WebviewView, { state: undefined }, new CancellationTokenSource().token);
