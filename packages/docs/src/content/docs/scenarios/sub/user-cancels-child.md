@@ -1,5 +1,5 @@
 ---
-title: ผู้ใช้ยกเลิกเอเจนต์ลูก
+title: "ยกเลิก subagent ระหว่างทำงาน"
 description: ผู้ใช้กด Cancel บนแถวของลูก ลูกหยุด แม่ได้รายงานเท่าที่ลูกมี แล้ว turn ของแม่ทำต่อ
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [sub.parent-stop-with-children, sub.blocking-report, bg.task-stop-or-list]
   steps:
     - id: wants
+      beat:
+        title: Model ส่งงานค้นหาให้ explore
+        text: model ของแม่ส่งคำถามกว้างๆ ให้ explore แล้วรอรายงาน
+        to: engine
       lane: model
       do: >-
         โมเดลของแม่ขอเรียก `agent` ด้วย `agent: "explore"` และงานค้นหา จบคำตอบด้วย `stop_reason: tool_use`
@@ -32,8 +36,22 @@ scenario:
       phase: running-tools
 
     - use: sub-child-starts
+      beat:
+        title: Geno เปิด session ให้ explore
+        text: แชตขึ้นแถวของ explore พร้อมนาฬิกาและปุ่ม Cancel explore ค้นอยู่นาน
+        sees:
+          kind: task
+          title: explore
+          status: running
+          detail: 0:38
+          actions:
+            - Cancel
 
     - id: click
+      beat:
+        title: คุณกด Cancel บนแถวของ explore
+        text: คุณเห็นว่า explore ค้นผิดทาง ปุ่มบอกว่ามันหยุดแค่ explore และ turn ทำต่อด้วยสิ่งที่มันหาได้
+        to: panel
       lane: user
       do: ผู้ใช้กด Cancel บนแถวของ explore (ปุ่มบอกว่า "Stop explore; the turn goes on with what it found")
 
@@ -46,6 +64,10 @@ scenario:
       emits: [cancel-child]
 
     - id: cancel
+      beat:
+        title: แชตยกเลิกแค่ session ของ explore
+        text: คำขอยกเลิกใช้ session ของ explore ไม่ใช่ของแม่ engine หาตัวยกเลิกของ explore เจอ turn ของแม่ไม่ถูกแตะ
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -62,6 +84,9 @@ scenario:
       ref: "packages/engine/src/serve.ts#\"childCancels.get(params.sessionId)?.();\""
 
     - id: aborted
+      beat:
+        title: explore หยุด
+        text: สิ่งที่ explore กำลังรอหยุดทันที มันจบแบบ cancelled
       lane: child@explore
       at: loop
       do: >-
@@ -71,6 +96,9 @@ scenario:
       emits: [abort, cancelled]
 
     - id: partial
+      beat:
+        title: Geno ส่งรายงานเท่าที่ explore มี
+        text: Geno รวมข้อความที่ explore เขียนไว้เป็นรายงานบางส่วน และบอกว่ามันถูกยกเลิกก่อนเสร็จ
       lane: loop
       at: tools
       do: >-
@@ -81,6 +109,10 @@ scenario:
       emits: [child-end, partial]
 
     - id: ended
+      beat:
+        title: แถวของ explore ขึ้นว่ายกเลิก
+        text: แถวหยุดนาฬิกาและขึ้นไอคอนยกเลิก ปุ่ม Cancel หายไป
+        sees: แถว "⊘ explore · <โมเดล> · 41s" สถานะ Cancelled
       lane: server
       at: updates
       do: >-
@@ -99,6 +131,11 @@ scenario:
     - use: tool-result-returns
 
     - id: goes-on
+      beat:
+        title: Model อ่านรายงานบางส่วนแล้วทำต่อ
+        text: การยกเลิกลูกไม่ใช่การปฏิเสธ turn ของแม่ไม่จบ model ทำงานต่อเอง หรือถามคุณว่าจะไปทางไหน
+        to: model
+        end: Turn ทำต่อ
       lane: loop
       at: step
       do: >-

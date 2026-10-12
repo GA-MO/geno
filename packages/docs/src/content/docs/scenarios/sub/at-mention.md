@@ -1,5 +1,5 @@
 ---
-title: "@mention เรียกเอเจนต์ลูกโดยตรง"
+title: "@mention เรียก subagent โดยตรง"
 description: ผู้ใช้พิมพ์ @explore ตามด้วยคำถาม ข้อความกลายเป็น call agent ของผู้ใช้เอง ลูกตอบ แล้ว turn จบโดยไม่เรียกโมเดลของแม่เลย
 tableOfContents: false
 sidebar:
@@ -15,8 +15,18 @@ scenario:
   related: [sub.blocking-report, sub.user-cancels-child, ext.slash-template]
   steps:
     - use: prompt-starts-turn
+      beat:
+        title: คุณพิมพ์ `@explore` ตามด้วยคำถาม
+        text: คุณพิมพ์ "@explore parseConfig ถูกนิยามไว้ที่ไหน" แล้วกด Enter `@` ใช้ได้ทุกโหมด แม้ model จะเรียก subagent เองไม่ได้
+        sees:
+          kind: message
+          from: you
+          text: "@explore parseConfig ถูกนิยามไว้ที่ไหน"
 
     - id: issued
+      beat:
+        title: Geno สร้าง tool call `agent` ในนามคุณ
+        text: Geno เห็นว่า prompt ขึ้นต้นด้วยชื่อ subagent จึงไม่ถาม model ของแม่ มันสร้าง call ส่งงานให้ explore เอง งานคือข้อความหลังชื่อ
       lane: loop
       at: step
       do: >-
@@ -36,8 +46,29 @@ scenario:
       phase: running-tools
 
     - use: sub-child-starts
+      beat:
+        title: Geno เปิด session ให้ explore
+        text: explore ได้บันทึกและงบของตัวเอง แชตขึ้นแถวของมันใต้ขั้นที่ส่งงาน พร้อมนาฬิกาและปุ่ม Cancel explore ค้นโค้ดด้วย tool ที่อ่านอย่างเดียว
+        sees:
+          kind: task
+          title: explore
+          status: running
+          detail: 0:02
+          actions:
+            - Cancel
 
     - id: report
+      beat:
+        title: explore ส่งรายงานที่อ้าง `path:line`
+        text: รอบสุดท้าย explore เรียก tool `report` พร้อมคำตอบ แล้วจบงานของตัวเอง การ์ดเป็นรายงานจริงจากการรันที่ explore หาจุดเรียก `getUser`
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a1/child-181ba39b-227d-4bba-814b-cfb5a5eb66be.jsonl#seq=16
+          select: content[0]
+          highlight:
+            - input.message
       lane: child@explore
       at: model
       do: >-
@@ -53,6 +84,14 @@ scenario:
       ref: packages/core/src/handback.ts#handedBack
 
     - id: ended
+      beat:
+        title: แชตติดเครื่องหมายว่า explore เสร็จ
+        text: แถวของ explore หยุดนาฬิกา ขึ้นเครื่องหมายถูก เวลาที่ใช้ และค่าใช้จ่าย
+        sees:
+          kind: task
+          title: explore
+          status: done
+          detail: 9s · $0.01
       lane: server
       at: updates
       do: >-
@@ -69,6 +108,15 @@ scenario:
       ref: packages/extension/src/chat/subagent-view.ts#childLook
 
     - id: fenced
+      beat:
+        title: Geno ล้อมรั้วรายงานเป็นผลของ call
+        text: รายงานอยู่ในรั้ว `<subagent_report>` ที่บอกว่ามันเป็นข้อมูล ไม่ใช่คำสั่งของคุณ การ์ดเป็นผลจริงจากการรันเดียวกัน ซึ่ง model เป็นคนเรียก explore
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A11-explore-subagent/fix-a1/session.jsonl#seq=6
+          highlight:
+            - output
       lane: loop
       at: tools
       do: >-
@@ -79,6 +127,9 @@ scenario:
     - use: tool-result-returns
 
     - id: no-model
+      beat:
+        title: Turn จบโดยไม่เรียก model ของแม่
+        text: call ที่ Geno สร้างให้คุณมีตัวเดียว เมื่อได้ผลแล้ว turn จึงจบทันที model ของแม่ไม่ถูกเรียกเลย รายงานอยู่ใน log ให้ prompt ถัดไปของคุณ
       lane: loop
       at: step
       do: >-
@@ -105,6 +156,18 @@ scenario:
       emits: [turn-end]
 
     - id: footer
+      beat:
+        title: แชตบอกว่าไม่มีคำตอบ ทั้งที่ explore ตอบแล้ว
+        text: คำตอบของ explore อยู่ในผลของขั้น agent และในบทสนทนาของมัน ไม่มีข้อความของ Geno ตามหลัง แชตจึงขึ้นประกาศว่าคำตอบไม่มีข้อความ
+        sees:
+          kind: notice
+          text: Geno stopped without a reply
+          detail: Its last reply had no text.
+          actions:
+            - Continue
+            - Retry
+          tone: warning
+        end: Turn จบ คำตอบอยู่ในขั้น agent
       lane: panel
       at: rail
       do: >-

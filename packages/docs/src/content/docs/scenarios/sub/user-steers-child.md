@@ -1,5 +1,5 @@
 ---
-title: ผู้ใช้ส่งข้อความถึงลูก
+title: "พิมพ์ข้อความถึง subagent โดยตรง"
 description: ผู้ใช้เปิดบทสนทนาของลูกที่กำลังทำงานแล้วพิมพ์ข้อความในช่องของลูก ข้อความไปถึงลูกที่จุดปลอดภัยถัดไปเป็นคำของผู้ใช้เอง
 tableOfContents: false
 sidebar:
@@ -14,6 +14,11 @@ scenario:
   related: [sub.message-running-child, ctl.steer-delivered, sub.user-cancels-child]
   steps:
     - id: open
+      beat:
+        title: คุณเปิดบทสนทนาของ explore
+        text: คลิกแถวของ explore แชตแสดงบทสนทนาของมันแทนของแม่ ใต้บทสนทนามีช่องข้อความของ explore ตราบที่มันยังทำงาน
+        from: you
+        sees: บทสนทนาของ explore และช่อง "Message explore…" พร้อมปุ่ม [Send]
       lane: panel
       at: rail
       do: >-
@@ -23,6 +28,11 @@ scenario:
       phase: running-tools
 
     - id: type
+      beat:
+        title: คุณพิมพ์ “skip the generated folder”
+        text: คุณกด Send ใต้ช่องขึ้นว่ากำลังส่ง และข้อความจะลงที่รอบ tool ถัดไป
+        to: panel
+        sees: Sending… it lands at the next tool round
       lane: user
       do: ผู้ใช้พิมพ์ "skip the generated folder" แล้วกด Send
 
@@ -36,6 +46,10 @@ scenario:
       emits: [steer]
 
     - id: request
+      beat:
+        title: แชตส่งข้อความไปที่ session ของ explore
+        text: คำขอนี้ไม่เริ่ม turn ใหม่ มันขอให้ข้อความเข้า turn ที่ explore รันอยู่
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -45,6 +59,10 @@ scenario:
       emits: [session/prompt, gcode/steer]
 
     - id: route
+      beat:
+        title: Geno ใส่ข้อความในกล่องของ explore
+        text: ข้อความต้องเป็นข้อความล้วน แนบไฟล์หรือ @mention ไม่ได้ Geno รอจนรู้ว่า explore รับหรือรับไม่ได้
+        ask: explore ยังทำงานไหม
       lane: server
       at: turns
       do: >-
@@ -62,12 +80,20 @@ scenario:
             label: จบไปก่อนแล้ว
             steps:
               - lane: server
+                beat:
+                  title: explore จบไปก่อนแล้ว
+                  text: explore จบระหว่างที่คุณพิมพ์ Geno ตอบ error ข้อความไม่ไปถึงใคร และไม่กลายเป็น turn ใหม่
                 at: turns
                 do: >-
                   ลูกจบระหว่างที่ผู้ใช้พิมพ์ กล่องของลูกปิดไปแล้ว `steerRunning` จึงตอบ error "the subagent already finished"
                   ข้อความไม่ไปถึงใคร และไม่กลายเป็น turn ใหม่
                 ref: packages/engine/src/steer.ts#steerRunning
               - lane: panel
+                beat:
+                  title: แชตบอกว่า explore จบแล้ว
+                  text: บรรทัดสถานะใต้ช่องบอกเหตุ และช่องพิมพ์ซ่อนไป
+                  sees: explore already finished
+                  end: ข้อความไม่ถึงใคร
                 at: rail
                 do: >-
                   `fieldStatus` แปลง error เป็นบรรทัดสถานะใต้ช่อง ช่องพิมพ์ของลูกซ่อนเพราะลูกไม่ Running แล้ว
@@ -76,6 +102,9 @@ scenario:
                 end: { turn: continues }
 
     - id: logged
+      beat:
+        title: explore รับข้อความที่จุดปลอดภัย
+        text: ก่อนเรียก model ครั้งถัดไป explore บันทึกข้อความเป็นคำของคุณเอง ถ้ามันกำลังรัน tool ข้อความรอจน tool ชุดนั้นจบ
       lane: child@explore
       at: loop
       do: >-
@@ -85,6 +114,10 @@ scenario:
       emits: [user]
 
     - id: shown
+      beat:
+        title: ข้อความขึ้นในบทสนทนาของ explore
+        text: ข้อความขึ้นตรงที่ลงจริง พร้อมป้ายว่าส่งระหว่าง turn
+        sees: บับเบิล "Sent mid-turn" ที่มีข้อความ "skip the generated folder"
       lane: server
       at: updates
       do: >-
@@ -101,6 +134,10 @@ scenario:
       ref: packages/extension/src/chat/steer-view.ts#steerStep
 
     - id: answered
+      beat:
+        title: แชตบอกว่าข้อความถึงแล้ว
+        text: engine ตอบคำขอทันทีที่ explore รับข้อความ บรรทัดสถานะใต้ช่องเปลี่ยน
+        sees: Delivered at its next tool round
       lane: server
       at: turns
       do: >-
@@ -116,6 +153,10 @@ scenario:
       ref: packages/extension/src/chat/steer-model.ts#fieldStatus
 
     - id: reads
+      beat:
+        title: explore ปรับการค้นตามคุณ
+        text: explore อ่านว่าคุณส่งข้อความใหม่ระหว่างทำงาน แล้วข้ามโฟลเดอร์นั้น แม่ไม่รู้เรื่องนี้จนกว่าจะอ่านรายงานของ explore
+        end: explore ทำต่อ
       lane: child@explore
       at: model
       do: >-

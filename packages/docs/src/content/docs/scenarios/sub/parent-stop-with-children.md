@@ -1,5 +1,5 @@
 ---
-title: หยุดเทิร์นแม่ขณะลูกทำงาน
+title: "หยุด turn ของแม่ขณะ subagent ทำงาน"
 description: ผู้ใช้กด Stop ขณะลูกแบบรอผลและลูกเบื้องหลังยังทำงาน ลูกทุกตัวหยุด รายงานของลูกเบื้องหลังไม่ถูกส่ง และการปลุกถูกพักจนกว่าผู้ใช้จะพิมพ์ใหม่
 tableOfContents: false
 sidebar:
@@ -15,6 +15,13 @@ scenario:
   related: [sub.user-cancels-child, bg.child-wakes-parent, ctl.stop-while-tools-run, bg.wake-held-or-paused]
   steps:
     - id: press
+      beat:
+        title: คุณกด Stop
+        text: แถวของ explore ยังหมุนอยู่ใต้ขั้นที่ส่งงาน และ review ทำงานเบื้องหลังอยู่ คุณกด Stop
+        to: panel
+        sees:
+          kind: composer
+          state: working
       lane: user
       do: ผู้ใช้กด Stop ขณะแถวของ explore ยังหมุนอยู่ใต้ขั้น `agent`
       phase: running-tools
@@ -28,6 +35,10 @@ scenario:
       emits: [stop]
 
     - id: cancel
+      beat:
+        title: แชตส่งคำขอยกเลิกไปที่ engine
+        text: แชตยกเลิกการ์ดและคำถามที่เปิดอยู่ แล้วบอก engine ให้หยุด turn ของแม่
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -36,6 +47,9 @@ scenario:
       emits: [session/cancel]
 
     - id: abort
+      beat:
+        title: Geno หยุด turn ของแม่
+        text: สัญญาณหยุดไหลไปถึงทุกอย่างที่ turn นี้เริ่มไว้
       lane: server
       at: turns
       do: >-
@@ -43,6 +57,9 @@ scenario:
       ref: "packages/engine/src/serve.ts#\"turns.get(params.sessionId)?.abort();\""
 
     - id: blocking-stops
+      beat:
+        title: explore หยุดทันที
+        text: explore ผูกกับ call ที่แม่รออยู่ มันจึงหยุดพร้อม turn และจบแบบ cancelled
       lane: child@explore
       at: loop
       do: >-
@@ -52,6 +69,9 @@ scenario:
       emits: [cancelled]
 
     - id: answered
+      beat:
+        title: Geno ปิด call ที่ค้างแล้วบันทึกการหยุด
+        text: Geno เลิกรอ explore ทันที call ของแม่ได้คำตอบว่าถูกหยุด แทนรายงาน
       lane: loop
       at: tools
       do: >-
@@ -71,6 +91,9 @@ scenario:
       phase: ending
 
     - id: background
+      beat:
+        title: Geno หยุด review ที่ทำงานเบื้องหลัง
+        text: turn ไม่ได้จบเอง Geno จึงหยุดลูกเบื้องหลังทุกตัวด้วย review ไม่ส่งรายงาน จึงไม่มีอะไรปลุก session ทีหลัง
       lane: loop
       at: agent
       do: >-
@@ -88,6 +111,9 @@ scenario:
       emits: [child-end]
 
     - id: response
+      beat:
+        title: Turn จบแบบ stopped
+        text: งานใน Tasks จบแบบ stopped และการปลุกของ session นี้ถูกพักจนกว่าคุณจะพิมพ์ prompt ใหม่
       lane: server
       at: turns
       do: >-
@@ -116,6 +142,21 @@ scenario:
       emits: [turn-end]
 
     - id: footer
+      beat:
+        title: แชตปิดทุกแถวเป็น Cancelled
+        text: ขั้นที่ยังหมุนและแถวของลูกทั้งสองขึ้นว่ายกเลิก turn ไม่มีข้อความตอบ แชตจึงบอกว่าคุณหยุดก่อนได้คำตอบ
+        sees:
+          - kind: composer
+            state: idle
+            header: stopped after 1m 05s
+          - kind: notice
+            text: Geno stopped without a reply
+            detail: You stopped it before it answered.
+            actions:
+              - Continue
+              - Retry
+            tone: warning
+        end: คุณหยุด turn
       lane: panel
       at: rail
       do: >-

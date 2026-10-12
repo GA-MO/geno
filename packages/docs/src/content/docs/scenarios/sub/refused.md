@@ -1,5 +1,5 @@
 ---
-title: ลูกที่เริ่มไม่ได้
+title: "subagent ที่เริ่มไม่ได้"
 description: ใน run แบบ non-interactive ลูกที่แก้ไฟล์ได้ถูกปฏิเสธ และเมื่องบของลูกในรอบนี้หมด ลูกตัวใหม่ก็ถูกปฏิเสธ โมเดลได้ error แล้วทำต่อเอง
 tableOfContents: false
 sidebar:
@@ -16,6 +16,10 @@ scenario:
   related: [cli.non-interactive, sub.blocking-report, cli.agent-run]
   steps:
     - id: wants
+      beat:
+        title: Model ขอเรียก agent อีกครั้ง
+        text: ใน run แบบ non-interactive ของ `gcode agent` model ขอส่งงานให้ subagent ลูกตัวก่อนหน้าใน run นี้ใช้งบไปแล้ว
+        to: engine
       lane: model
       do: >-
         โมเดลขอเรียก `agent` พร้อม task จบคำตอบด้วย `stop_reason: tool_use`
@@ -24,6 +28,11 @@ scenario:
       phase: calling-model
 
     - id: decide
+      beat:
+        title: เทอร์มินัลพิมพ์ชื่อขั้น
+        text: Geno ตัดสินว่าจะรัน tool call นี้ เทอร์มินัลพิมพ์บรรทัดของขั้นที่เริ่ม
+        to: panel
+        sees: "> agent worker: migrate src/log.ts to pino"
       lane: loop
       at: step
       do: >-
@@ -42,6 +51,10 @@ scenario:
       ref: packages/engine/src/drive.ts#terminalSurface
 
     - id: launch
+      beat:
+        title: Geno ตรวจว่าเริ่ม subagent ได้ไหม
+        text: ก่อนเปิดอะไร Geno ตรวจสองอย่าง subagent แก้ไฟล์ได้ไหม และงบของลูกใน run นี้เหลือไหม
+        ask: Model ขอตัวไหน
       lane: loop
       at: tools
       do: >-
@@ -55,6 +68,9 @@ scenario:
             then: logged
             steps:
               - lane: loop
+                beat:
+                  title: worker แก้ไฟล์ได้ แต่ไม่มีใครตอบการ์ด
+                  text: run นี้ไม่มีคนตอบ permission และไม่ได้ส่ง `--allow-worker` Geno จึงปฏิเสธ worker ทันที
                 at: tools
                 do: >-
                   `worker` ไม่ใช่ลูกอ่านอย่างเดียว และ run นี้ไม่มีใครตอบการ์ด (`non-interactive`) โดยไม่มี `--allow-worker`
@@ -68,6 +84,9 @@ scenario:
             then: logged
             steps:
               - lane: loop
+                beat:
+                  title: explore ผ่าน แต่งบหมดแล้ว
+                  text: ลูกแต่ละตัวจองงบทั้งก้อนตอนเริ่ม และคืนส่วนที่ไม่ได้ใช้ตอนจบ งบ `--max-cost` ที่เหลือเป็นศูนย์ Geno จึงไม่เปิด session ของลูก
                 at: tools
                 do: >-
                   `explore` ผ่านด่านแรก `runChild` คำนวณเพดานด้วย `childCaps` จากงบ `--max-cost` ลบด้วยที่ลูกก่อนหน้าจองไว้
@@ -82,6 +101,10 @@ scenario:
                 emits: [ToolError]
 
     - id: logged
+      beat:
+        title: Geno ส่ง error ให้ model อ่าน
+        text: ผลของ call เป็น error ที่บอกเหตุผล เทอร์มินัลไม่พิมพ์ผลนี้
+        to: model
       lane: loop
       at: tools
       do: >-
@@ -93,6 +116,10 @@ scenario:
     - use: model-call
 
     - id: goes-on
+      beat:
+        title: Model ทำงานนั้นเอง
+        text: model อ่าน error แล้วทำงานเอง หรือบอกในคำตอบว่าต้องการอะไรจากคุณ เช่นให้รันใหม่ด้วย `--allow-worker`
+        end: Model ทำต่อเอง
       lane: model
       do: >-
         โมเดลอ่าน error แล้วทำงานนั้นเอง หรือบอกในคำตอบว่าต้องการอะไรจากผู้ใช้ เช่นให้รันใหม่ด้วย `--allow-worker`
