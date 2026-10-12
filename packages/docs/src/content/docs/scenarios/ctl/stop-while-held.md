@@ -72,7 +72,7 @@ scenario:
       lane: loop
       at: agent
       do: >-
-        `finally` ของ `runAgent` เห็นว่า turn ไม่ได้จบด้วย `end_turn` และไม่มีตัวปลุก จึงเรียก `stopBackground`:
+        `finally` ของ `runAgent` เรียก `stopBackground` เมื่อ turn ไม่ได้จบด้วย `end_turn` หรือไม่มีตัวปลุก (ที่นี่เป็นทั้งสองอย่าง):
         abort ลูกเบื้องหลังทุกตัว และตั้งว่ารายงานของพวกมันไม่มีใครฟังแล้ว แล้วรอให้ลูกจบก่อนปิด sandbox
       ref: "packages/engine/src/subagents.ts#\"stopBackground: () => {\""
 
