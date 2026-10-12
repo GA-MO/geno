@@ -16,6 +16,18 @@ scenario:
   related: [edit.create-file, ed.review-auto-undo, edit.without-read-or-stale, edit.old-str-mismatch, ed.review-hunks]
   steps:
     - id: asks
+      beat:
+        title: Model ขอแก้ `src/date.ts`
+        text: โมเดลอ่านไฟล์นี้ไปแล้วใน turn นี้ ตอนนี้มันขอแทนข้อความช่วงหนึ่ง (`old_str`) ด้วยข้อความใหม่ (`new_str`) การ์ดข้างล่างเป็นคำขอจริงจากการรันที่แก้ `src/config.ts` แบบเดียวกัน
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/1/session.jsonl#seq=7
+          select: content[1]
+          highlight:
+            - input.old_str
+            - input.new_str
       lane: model
       do: >-
         โมเดลขอเรียก `edit` กับ `src/date.ts` แทนข้อความหนึ่งช่วง (`old_str`) ด้วยข้อความใหม่ (`new_str`)
@@ -33,8 +45,18 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น edit
+        text: Geno จัดคิวการแก้นี้ให้รันทีละตัว เพราะมันเปลี่ยนไฟล์ แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: edit src/date.ts
+          status: running
 
     - id: guards
+      beat:
+        title: Geno ตรวจว่าแก้ไฟล์นี้ได้
+        text: ไฟล์ต้องอยู่ใน workspace และโมเดลต้องเคยอ่านมันมาก่อน Geno จึงรู้ว่าโมเดลแก้จากข้อความไหน ในโหมด Ask และ Auto การแก้ใน workspace ไม่ต้องขอ permission
       lane: tool
       at: executor
       do: >-
@@ -44,6 +66,9 @@ scenario:
       ref: packages/engine/src/tools/agent.ts#editExecutor
 
     - id: apply
+      beat:
+        title: Geno หา `old_str` ในไฟล์
+        text: Geno อ่านไฟล์อีกครั้งเพื่อให้แน่ใจว่ายังไม่มีใครแก้ แล้วหาข้อความเดิม ซึ่งต้องตรงทุกตัวอักษรและมีที่เดียว จากนั้นแทนด้วยข้อความใหม่
       lane: tool
       at: executor
       do: >-
@@ -52,8 +77,25 @@ scenario:
       ref: packages/engine/src/files.ts#applyEditToFile
 
     - use: edit-write-lands
+      beat:
+        title: VS Code เขียนไฟล์แล้วแชตแสดง diff
+        text: Geno ส่งข้อความทั้งไฟล์ให้ VS Code เขียน การแก้จึงเข้า buffer ที่คุณเปิดอยู่ด้วย ขั้นของ edit บอกจำนวนบรรทัดที่เพิ่มและลบ และท้าย turn มีการ์ดการเปลี่ยนแปลงให้รีวิว
+        sees:
+          - kind: step
+            label: Edited date.ts
+            status: done
+            note: +3 −1
 
     - id: result
+      beat:
+        title: Geno บอก model ว่าแก้แล้ว
+        text: ผลบอกโมเดลว่าไม่ต้องอ่านไฟล์ซ้ำ ถ้าโปรเจกต์ตั้งคำสั่ง check ไว้ Geno รันมันแล้วต่อผลท้ายข้อความ ผลยังเป็น ok แม้ check จะล้มเหลว เหมือนในการรันจริงนี้
+        to: model
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A04-blind-edit-recovery/1/session.jsonl#seq=8
+          select: output
       lane: tool
       at: executor
       do: >-
@@ -72,6 +114,10 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Geno เรียก model อีกครั้ง
+        text: ก่อนเรียกโมเดล Geno เก็บ checkpoint ที่รวมไฟล์นี้ไว้ ให้คุณย้อนการแก้ได้ภายหลัง แล้วโมเดลอ่านผลเพื่อตัดสินว่าจะทำอะไรต่อ
+        end: Model อ่านผลแล้วทำต่อ
       lane: loop
       at: step
       do: >-

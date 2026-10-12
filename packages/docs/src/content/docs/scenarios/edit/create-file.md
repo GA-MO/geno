@@ -1,5 +1,5 @@
 ---
-title: สร้างไฟล์ใหม่
+title: "สร้างไฟล์ใหม่ด้วย edit"
 description: โมเดลเรียก edit ด้วย create true กับ path ที่ยังไม่มี Geno ไม่ต้องให้อ่านก่อน เขียนไฟล์ใหม่ผ่าน VS Code และแสดงเป็น diff
 tableOfContents: false
 sidebar:
@@ -15,6 +15,18 @@ scenario:
   related: [edit.applied-as-diff, ed.review-auto-undo, tool.unknown-or-invalid]
   steps:
     - id: asks
+      beat:
+        title: Model ขอสร้าง `src/slug.ts`
+        text: "โมเดลเรียก edit ด้วย `create: true` และเนื้อหาทั้งไฟล์ใน `new_str` ไม่มี `old_str` เพราะยังไม่มีอะไรให้แทน การ์ดเป็นคำขอจริงจากการรันที่สร้าง `src/clamp.ts`"
+        to: engine
+        sees:
+          kind: payload
+          direction: response
+          source: docs/results/real-usecases/runs/A03-new-file-create/fix-a1/session.jsonl#seq=23
+          select: content[2]
+          highlight:
+            - input.create
+            - input.path
       lane: model
       do: >-
         โมเดลขอเรียก `edit` เพื่อสร้าง `src/slug.ts` ด้วย `create: true` และเนื้อหาทั้งไฟล์ แล้วจบคำตอบด้วย `stop_reason: tool_use`
@@ -31,8 +43,18 @@ scenario:
       emits: [assistant]
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น edit
+        text: Geno จัดคิวการแก้นี้ให้รันทีละตัว เพราะมันเขียนไฟล์ แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: edit src/slug.ts
+          status: running
 
     - id: missing
+      beat:
+        title: Geno เห็นว่าไฟล์ยังไม่มี
+        text: Geno ถาม VS Code หาไฟล์ แล้วได้คำตอบว่าไม่มี ไฟล์ที่ยังไม่มีจึงไม่ต้องอ่านก่อน ต่างจากไฟล์ที่มีอยู่แล้ว เนื้อหาใหม่คือ `new_str` ทั้งก้อน
       lane: tool
       at: executor
       do: >-
@@ -49,8 +71,25 @@ scenario:
       ref: "packages/core/src/edit.ts#\"if (input['create'] === true) return { kind: 'applied', after: newStr };\""
 
     - use: edit-write-lands
+      beat:
+        title: VS Code สร้างไฟล์แล้วแชตแสดง diff
+        text: Geno ส่งเนื้อหาให้ VS Code เขียน ขั้นของ edit บอกจำนวนบรรทัดที่เพิ่ม และท้าย turn มีการ์ดการเปลี่ยนแปลงให้รีวิว
+        sees:
+          kind: step
+          label: Edited slug.ts
+          status: done
+          note: "+12"
 
     - id: result
+      beat:
+        title: Geno บอก model ว่าสร้างแล้ว
+        text: ผลขึ้นต้นด้วย "Created" แทน "Edited" และบอกโมเดลว่าไม่ต้องอ่านไฟล์ซ้ำ ในการรันจริงนี้ check ของโปรเจกต์ล้มเหลวจากเทสต์เดิม ผลจึงมีรายงานของ check ต่อท้าย
+        to: model
+        sees:
+          kind: payload
+          direction: tool_result
+          source: docs/results/real-usecases/runs/A03-new-file-create/fix-a1/session.jsonl#seq=24
+          select: output
       lane: tool
       at: executor
       do: >-
@@ -60,6 +99,10 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Geno เรียก model อีกครั้ง
+        text: checkpoint ถัดไปรวมไฟล์ใหม่นี้ คุณจึงย้อนการสร้างได้ แล้วโมเดลอ่านผลเพื่อทำงานต่อ
+        end: Model อ่านผลแล้วทำต่อ
       lane: loop
       at: step
       do: >-

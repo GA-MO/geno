@@ -1,5 +1,5 @@
 ---
-title: แก้ไฟล์นอก workspace หรือในที่ที่กฎ Edit ครอบ
+title: "แก้ไฟล์นอก workspace หรือในที่ที่กฎ Edit ครอบ"
 description: edit เขียนได้เฉพาะใน workspace และโฟลเดอร์ที่ตั้งให้เขียนได้ ที่อื่นถูกปฏิเสธโดยไม่มีการ์ด ภายใน workspace กฎ Edit(...) ของผู้ใช้ทำให้ถามหรือปฏิเสธก่อนแก้
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [edit.applied-as-diff, edit.without-read-or-stale, perm.read-outside-workspace, perm.deny-rule, perm.ask-allow]
   steps:
     - id: asks
+      beat:
+        title: Model ขอแก้ไฟล์
+        text: โมเดลขอ edit ไฟล์หนึ่ง Geno ต้องตัดสินก่อนว่าไฟล์นั้นอยู่ในที่ที่แก้ได้หรือไม่
+        to: engine
       lane: model
       do: >-
         โมเดลขอ `edit` และจบคำตอบด้วย `stop_reason: tool_use`
@@ -23,8 +27,20 @@ scenario:
       phase: calling-model
 
     - use: tool-call-opens
+      beat:
+        title: แชตขึ้นขั้น edit
+        text: Geno จัดคิวการแก้ให้รันทีละตัว แผงแชตขึ้นขั้นใหม่พร้อมจุดหมุน
+        sees:
+          kind: step
+          label: edit
+          status: running
 
     - id: rules
+      beat:
+        title: Geno หาว่าไฟล์อยู่ที่ไหนและกฎไหนครอบ
+        text: Geno อ่านกฎ path ของ workspace ใหม่ทุกครั้ง หาที่อยู่จริงของไฟล์ แล้วดูว่ามีกฎ `Edit(...)` ข้อไหนครอบ คำตอบขึ้นกับไฟล์ที่โมเดลขอ
+        from: engine
+        ask: Model ขอแก้ไฟล์ไหน
       lane: policy
       at: rules
       do: >-
@@ -35,10 +51,13 @@ scenario:
         ask: โมเดลขอแก้ไฟล์ไหน
         options:
           - id: outside
-            label: /etc/hosts (นอก workspace)
+            label: /etc/hosts นอก workspace
             then: refused
             steps:
               - lane: tool
+                beat:
+                  title: ไฟล์อยู่นอก workspace
+                  text: edit เขียนได้เฉพาะใน workspace และโฟลเดอร์ที่คุณตั้งให้เขียนได้ ที่อื่นถูกปฏิเสธทันทีโดยไม่มีการ์ด symlink ที่ชี้ออกไปนอก workspace ก็ถูกจับแบบเดียวกัน
                 at: executor
                 runs: 0
                 do: >-
@@ -48,9 +67,12 @@ scenario:
                 ref: packages/engine/src/tools/context.ts#resolveWritable
                 emits: [is outside the workspace]
           - id: ask-rule
-            label: src/generated/api.ts (กฎ ask)
+            label: ไฟล์ที่กฎ ask ครอบ
             steps:
               - lane: policy
+                beat:
+                  title: กฎของคุณสั่งให้ถามก่อนแก้
+                  text: กฎ `Edit(src/generated/**)` แบบ ask ครอบไฟล์นี้ แม้ในโหมด Auto Geno ก็ไม่ให้ classifier ตัดสินแทน เพราะกฎบอกให้ถามคุณ
                 at: rules
                 do: >-
                   `pathRuleFor` เจอกฎ ask `Edit(src/generated/**)` `userRuleDenial` สร้างคำถาม `workspace-ask` สำหรับ `edit src/generated/api.ts`
@@ -63,6 +85,10 @@ scenario:
                   `settle` ไม่ส่งให้ classifier แม้ในโหมด Auto เพราะคำตัดสินคือ `ask` ไม่ใช่ `classify` ไม่มี hook ตอบแทน จึงถามผู้ใช้
                 ref: packages/engine/src/tools/agent.ts#settle
               - lane: server
+                beat:
+                  title: Geno หยุด turn แล้วถามคุณ
+                  text: Geno ส่งคำขอ permission ให้ VS Code แผงแชตเลื่อนมาให้เห็นและรอคำตอบของคุณ
+                  to: panel
                 at: approvals
                 do: >-
                   `editorTurn.approve` ส่งคำขอ ACP `session/request_permission` ชนิดของ call เป็น `execute` เพราะกฎ workspace ไม่มีชนิดของตัวเอง
@@ -76,6 +102,18 @@ scenario:
                 ref: packages/extension/src/chat/chat.ts#Chat.askPermission
                 emits: [permission]
               - lane: panel
+                beat:
+                  title: คุณเห็นการ์ด “Run this command?”
+                  text: การ์ดใช้หน้าตาเดียวกับการขอรันคำสั่ง และบอกว่ากฎข้อไหนของคุณทำให้ Geno ถาม
+                  to: you
+                  sees:
+                    kind: permission
+                    command: edit src/generated/api.ts
+                    reason: Geno asks because it uses the workspace rule that asks before `Edit(src/generated/**)`.
+                    options:
+                      - Allow
+                      - Deny
+                      - No, and tell the agent…
                 at: card
                 do: >-
                   การ์ดใช้หน้าตาของคำสั่ง ไม่ใช่การ์ด "Change this file?" ซึ่งใช้กับ agent ภายนอกเท่านั้น
@@ -85,6 +123,11 @@ scenario:
                   ปุ่ม [Allow] [Deny] [No, and tell the agent…]
                 ref: packages/extension/src/chat/render.ts#permissionCard
               - lane: user
+                beat:
+                  title: คุณกด Allow แล้ว Geno แก้ไฟล์ตามปกติ
+                  text: การ์ดย่อเหลือ Allowed Geno จดว่าคุณเป็นคนอนุญาต แล้วการแก้เดินต่อแบบเดียวกับไฟล์ที่ไม่มีกฎครอบ
+                  from: you
+                  end: แก้ไฟล์ตามปกติ
                 do: ผู้ใช้กด Allow
               - lane: editor
                 at: chat
@@ -105,10 +148,13 @@ scenario:
                 phase: running-tools
                 goto: edit.applied-as-diff
           - id: deny-rule
-            label: src/generated/api.ts (กฎ deny)
+            label: ไฟล์ที่กฎ deny ครอบ
             then: refused
             steps:
               - lane: policy
+                beat:
+                  title: กฎของคุณปฏิเสธทันที
+                  text: กฎ `Edit(src/generated/**)` แบบ deny ครอบไฟล์นี้ Geno ไม่ถามใคร และจดว่ากฎเป็นคนปฏิเสธ
                 at: rules
                 do: >-
                   กฎเป็น deny `settle` ไม่ถามใครและบันทึก `decidedBy: rule, verdict: deny` `refusalOf` โยน `ToolDenied`
@@ -117,6 +163,14 @@ scenario:
                 emits: [ToolDenied, workspace-deny]
 
     - id: refused
+      beat:
+        title: Geno ไม่เขียนอะไรเลย
+        text: ไฟล์ไม่ถูกแตะ Geno ไม่ได้อ่านมันด้วยซ้ำ ขั้นของ edit ในแชตขึ้นว่าล้มเหลวหรือถูกปฏิเสธ และผลบอกเหตุผลให้โมเดล
+        to: panel
+        sees:
+          kind: step
+          label: edit
+          status: denied
       lane: tool
       at: executor
       runs: 0
@@ -128,6 +182,11 @@ scenario:
     - use: tool-result-returns
 
     - id: next
+      beat:
+        title: Model อ่านเหตุผลแล้วตัดสินใจต่อ
+        text: turn ไม่จบ โมเดลอ่านเหตุผลแล้วบอกคุณ หรือหาทางอื่นที่อยู่ในที่ที่แก้ได้
+        to: model
+        end: Model อ่านเหตุผลแล้วทำต่อ
       lane: loop
       at: step
       do: >-
