@@ -193,9 +193,16 @@ const PROVENANCE_LABELS: Readonly<Record<PayloadView['provenance'], string>> = {
   recorded: 'ไบต์จริงจาก wire log',
   rebuilt: 'request ที่ engine สร้างใหม่จาก session log ตอนเก็บผล',
   logged: 'event ใน session log',
+  scripted: 'บันทึกจาก engine จริงกับ model จำลอง',
 };
 
-const chipLabel = (chip: BlockChip): string => (chip.name === undefined ? chip.type : `${chip.type} ${chip.name}`);
+/** A figure's title says whether a real model or a scripted one answered the engine. */
+function payloadsCaption(views: readonly PayloadView[]): string {
+  const scripted = views.filter((view) => view.provenance === 'scripted').length;
+  return scripted === 0 ? 'ข้อมูลจากการรันจริง' : scripted === views.length ? 'ข้อมูลจาก engine จริงกับ model จำลอง' : 'ข้อมูลจากการรันจริงและจาก model จำลอง';
+}
+
+const chipLabel =(chip: BlockChip): string => (chip.name === undefined ? chip.type : `${chip.type} ${chip.name}`);
 
 /** Whether a card shows a tool_use block, so the page explains how to read one. */
 export const showsToolUse = (shown: readonly Shown[]): boolean =>
@@ -263,7 +270,7 @@ function Panel({ view, legend, hidden }: { readonly view: PayloadView; readonly 
         <a href={view.url} title={view.file}>
           {view.caption}
         </a>
-        {` · ${PROVENANCE_LABELS[view.provenance]}${view.engine === undefined ? '' : ` · engine ${view.engine}`}`}
+        {` · ${PROVENANCE_LABELS[view.provenance]}${view.engine === undefined ? '' : view.provenance === 'scripted' ? ` (commit ${view.engine})` : ` · engine ${view.engine}`}`}
       </p>
     </div>
   );
@@ -365,7 +372,7 @@ export default function Sees({ shown, legend = true }: { readonly shown: readonl
       )}
       {payloads.length === 0 ? null : (
         <figure className="sees">
-          <figcaption>ข้อมูลจากการรันจริง</figcaption>
+          <figcaption>{payloadsCaption(payloads)}</figcaption>
           <Payloads views={payloads} legend={legend} />
         </figure>
       )}

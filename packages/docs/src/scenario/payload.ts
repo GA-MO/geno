@@ -16,9 +16,11 @@ export interface More {
 
 /**
  * Where a record's bytes come from: `recorded` went over the wire (`wire.jsonl`), `rebuilt` is a request the engine
- * rebuilt from the session log when the run was archived (`requests.jsonl`), `logged` is an event in a session log.
+ * rebuilt from the session log when the run was archived (`requests.jsonl`), `logged` is an event in a session log,
+ * and `scripted` went over the wire between the real engine and a scripted model (`src/data/recorded`, written by
+ * `pnpm docs:record`).
  */
-export type Provenance = 'recorded' | 'rebuilt' | 'logged';
+export type Provenance = 'recorded' | 'rebuilt' | 'logged' | 'scripted';
 
 /**
  * What a card shows, read off the record and never written by the page: a whole request, a stream or one of its
@@ -38,7 +40,8 @@ export type Unit =
   | 'tools'
   | 'tool'
   | 'system'
-  | 'log-event';
+  | 'log-event'
+  | 'editor-request';
 
 /** One content block of the message a card shows, in order: its chip in the summary row. */
 export interface BlockChip {
@@ -113,12 +116,13 @@ const valueAt = (root: unknown, keys: readonly Key[]): unknown => keys.reduce<un
 const pathText = (keys: readonly Key[]): string => keys.map((key, i) => (typeof key === 'number' ? `[${key}]` : i === 0 ? key : `.${key}`)).join('');
 
 /** A whole thing a card may show, by where it sits in its record. */
-type Spot = 'request' | 'response' | 'stream' | 'stream-event' | 'messages' | 'message' | 'content' | 'block' | 'tools' | 'tool' | 'system' | 'event';
+type Spot = 'request' | 'response' | 'stream' | 'stream-event' | 'messages' | 'message' | 'content' | 'block' | 'tools' | 'tool' | 'system' | 'event' | 'editor-request';
 
 function rootSpot(record: unknown, logged: boolean): Spot | undefined {
   if (isStream(record)) return 'stream';
   if (!isObject(record)) return undefined;
   if (logged && typeof record['kind'] === 'string') return 'event';
+  if (typeof record['acp'] === 'string' && isObject(record['params'])) return 'editor-request';
   if (Array.isArray(record['messages'])) return 'request';
   if (record['type'] === 'message') return 'response';
   return undefined;
@@ -183,6 +187,7 @@ const SPOT_UNITS: Readonly<Record<Exclude<Spot, 'message' | 'content' | 'block' 
   tools: 'tools',
   tool: 'tool',
   system: 'system',
+  'editor-request': 'editor-request',
 };
 
 /** The blocks a card shows, when it shows a message, its content, or one block. */
@@ -216,6 +221,7 @@ const LABELS: Readonly<Record<Unit, string>> = {
   tool: 'นิยาม tool',
   system: 'System prompt',
   'log-event': 'บันทึกใน session log',
+  'editor-request': 'คำขอที่ Geno ส่งให้ editor (ACP)',
 };
 
 /** What each kind of session log event records, in one line; a kind with no line here gets a generic one. */
@@ -387,7 +393,11 @@ export function readRecords(lines: readonly unknown[]): Records {
   return { byLine, bySeq };
 }
 
+/** Where `pnpm docs:record` writes its flows. */
+export const RECORDED_DIR = 'packages/docs/src/data/recorded/';
+
 export function provenanceOf(file: string): Provenance {
+  if (file.startsWith(RECORDED_DIR)) return 'scripted';
   const name = path.basename(file).replace(/\.gz$/, '');
   return name === 'wire.jsonl' ? 'recorded' : name === 'requests.jsonl' ? 'rebuilt' : 'logged';
 }
@@ -429,6 +439,7 @@ export function runFiles(repoRoot: string): RunFiles {
           )
         : [],
     );
+    if (file.startsWith(RECORDED_DIR)) return (recordsOf(file).byLine[0] as { recorded?: { engineCommit?: string } }).recorded?.engineCommit?.slice(0, 8);
     const dir = /(runs\/[^/]+\/[^/]+)\//.exec(file)?.[1];
     return dir === undefined ? undefined : engines.get(dir);
   };
@@ -453,7 +464,7 @@ export function runFiles(repoRoot: string): RunFiles {
       const picked = follow(record, parsePath(mock.select ?? ''));
       if (!picked.ok) return { ok: false, reason: `select ${mock.select}: ${picked.reason}` };
       const spotted = spotOf(record, picked.keys, provenance === 'logged');
-      if (spotted === undefined) return { ok: false, reason: `${mock.source} is not a request, a response, a stream or a session log event, so no card can say what it is` };
+      if (spotted === undefined) return { ok: false, reason: `${mock.source} is not a request, a response, a stream, a session log event or an editor request, so no card can say what it is` };
       const outer = picked.keys.slice(0, spotted.depth);
       const inner = picked.keys.slice(spotted.depth);
       const selected = valueAt(record, outer);
@@ -486,8 +497,8 @@ export function runFiles(repoRoot: string): RunFiles {
       });
       const blocks = chipsOf(record, picked.keys, spotted);
       const [, runCase, run] = /runs\/([^/]+)\/([^/]+)\//.exec(file) ?? [];
-      const label = (runCase ?? '').replace(/^([A-Z]\d+)-/, '$1 ');
-      const model = modelOf(file, record);
+      const label = provenance === 'scripted' ? path.basename(file, '.jsonl') : (runCase ?? '').replace(/^([A-Z]\d+)-/, '$1 ');
+      const model = provenance === 'scripted' ? undefined : modelOf(file, record);
       const engine = engineOf(file);
       return {
         ok: true,

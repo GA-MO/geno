@@ -124,6 +124,7 @@ const SHAPES: Readonly<Record<string, (root: unknown) => boolean>> = {
   tool: (root) => isObject(root) && typeof root['name'] === 'string' && ('input_schema' in root || 'description' in root),
   system: (root) => typeof root === 'string' || blocksOf(root).every((block) => block['type'] === 'text'),
   'log-event': (root) => isObject(root) && typeof root['kind'] === 'string' && 'seq' in root,
+  'editor-request': (root) => isObject(root) && typeof root['acp'] === 'string' && isObject(root['params']),
 };
 const LOG_LABEL = 'บันทึกใน session log';
 

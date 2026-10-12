@@ -86,9 +86,15 @@ const segment = String.raw`(?:[A-Za-z_$][\w$-]*|\[-?\d+\])`;
 const jsonPath = z.string().regex(new RegExp(String.raw`^${segment}(?:\.?${segment})*$`), 'a JSON path such as messages[-1].content[0]');
 /**
  * A record in a recorded run: `docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl[.gz]#seq=<n>` for the record
- * with that `seq`, or `#line=<n>` for the record on that line, counting from 1.
+ * with that `seq`, or `#line=<n>` for the record on that line, counting from 1. A flow that `pnpm docs:record` ran on
+ * the real engine with a scripted model is `packages/docs/src/data/recorded/<flow>.jsonl#line=<n>`.
  */
-const runSource = z.string().regex(/^docs\/results\/real-usecases\/runs\/[^#\s]+\.jsonl(?:\.gz)?#(?:seq|line)=\d+$/, 'docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl[.gz]#seq=<n> or #line=<n>');
+const runSource = z
+  .string()
+  .regex(
+    /^(?:docs\/results\/real-usecases\/runs\/[^#\s]+\.jsonl(?:\.gz)?#(?:seq|line)=\d+|packages\/docs\/src\/data\/recorded\/[\w-]+\.jsonl#line=\d+)$/,
+    'docs/results/real-usecases/runs/<case>/<n>/<file>.jsonl[.gz]#seq=<n> or #line=<n>, or packages/docs/src/data/recorded/<flow>.jsonl#line=<n>',
+  );
 
 /** Real wire data from a recorded run, on a beat or on any page's `payloads`. */
 export const payloadSpecSchema = z
