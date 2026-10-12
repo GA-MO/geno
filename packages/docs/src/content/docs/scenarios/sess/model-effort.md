@@ -1,5 +1,5 @@
 ---
-title: เปลี่ยน effort หรือเปลี่ยนโมเดล
+title: "เปลี่ยน effort หรือเปลี่ยน model"
 description: เมนูโมเดลในช่องพิมพ์เปลี่ยนได้สองอย่างที่มีผลต่างกัน effort เป็นของ session และมีผลจากรอบถัดไป ส่วนโมเดลเป็นการตั้งค่าของ VS Code ที่เปลี่ยน engine และมีผลกับแชตใหม่
 tableOfContents: false
 sidebar:
@@ -15,6 +15,10 @@ scenario:
   related: [perm.mode-switch-mid-turn, start.set-api-key, sess.new-chat]
   steps:
     - id: menu
+      beat:
+        title: คุณเปิดเมนู model ในช่องพิมพ์
+        text: เมนูรวม backend ที่คุยกับแชต model ของ Geno และ effort ของ session สองอย่างหลังมีผลต่างกัน
+        ask: คุณเลือกอะไร
       lane: panel
       at: composer
       do: >-
@@ -32,6 +36,10 @@ scenario:
             label: effort high
             steps:
               - lane: panel
+                beat:
+                  title: คุณเลือก effort high
+                  text: แชตส่งค่าใหม่ให้ engine
+                  to: engine
                 at: composer
                 do: เมนูโพสต์ `set-effort` พร้อมค่า `high`
                 ref: "packages/extension/src/chat/composer-view.ts#\"if (!e.current) post({ type: 'set-effort', value: e.value });\""
@@ -42,6 +50,10 @@ scenario:
                   `ComposerHost` ส่งคำขอ ACP `session/set_config_option` ที่มี `configId` ของ effort ไปที่ engine
                 ref: "packages/extension/src/chat/composer-host.ts#\"const { configOptions } = await connection.agent.request(acp.methods.agent.session.setConfigOption, { sessionId, configId: EFFORT_CONFIG_ID, value });\""
               - lane: server
+                beat:
+                  title: Geno บันทึก effort ลง log
+                  text: effort เป็นของ session ถ้า turn ทำงานอยู่ Geno บันทึกข้าง turn นั้น ช่องพิมพ์แสดง effort ใหม่
+                  sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
                 at: sessions
                 do: >-
                   engine บันทึก event `effort` ลง log ของ session (ถ้า turn ทำงานอยู่ บันทึกข้าง turn นั้น)
@@ -55,6 +67,10 @@ scenario:
                 sees: ปุ่มโมเดลในช่องพิมพ์บอก effort "high"
                 ref: packages/extension/src/chat/composer-view.ts#modelMenu
               - lane: loop
+                beat:
+                  title: มีผลตั้งแต่การเรียก model ครั้งถัดไป
+                  text: ทุกการเรียก model อ่าน effort ล่าสุดจาก log แล้วปรับระดับตามชนิดของการเรียก
+                  end: effort ใหม่มีผล
                 at: model-call
                 do: >-
                   ตั้งแต่รอบถัดไป ทุกการเรียกโมเดลอ่าน effort ล่าสุดจาก log ผ่าน `withTurnEffort` ซึ่งขยับระดับตาม policy ของชนิดการเรียก
@@ -65,6 +81,10 @@ scenario:
             label: โมเดลอื่นของ provider เดียวกัน
             steps:
               - lane: panel
+                beat:
+                  title: คุณเลือก model อื่น
+                  text: model ของ Geno เป็นการตั้งค่าของ VS Code ไม่ใช่ของ session VS Code เขียนการตั้งค่าระดับผู้ใช้ โดยไม่ส่งอะไรถึง engine
+                  to: panel
                 at: composer
                 do: เมนูโพสต์ `set-model` พร้อม provider และโมเดล
                 ref: "packages/extension/src/chat/composer-view.ts#\"if (!m.current) post(m.pick.kind === 'geno' ? { type: 'set-model', provider: m.pick.provider, model: m.pick.model } : { type: 'set-agent-model', value: m.pick.value });\""
@@ -75,6 +95,10 @@ scenario:
                   `setRole` เขียนการตั้งค่า `gcode.provider` และ `gcode.model` ระดับผู้ใช้ ไม่ได้ส่งอะไรถึง engine
                 ref: packages/extension/src/chat/settings-host.ts#setRole
               - lane: editor
+                beat:
+                  title: ส่วนขยายเปลี่ยนไปใช้ engine ตัวใหม่
+                  text: การตั้งค่าที่ engine ใช้เปลี่ยน ส่วนขยายจึงตัดการเชื่อมต่อ และเปิด engine ตัวใหม่ตามการตั้งค่าชุดใหม่ ปุ่มในช่องพิมพ์ขึ้นชื่อ model ใหม่
+                  sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
                 at: engine-link
                 do: >-
                   การตั้งค่าที่ engine ใช้เปลี่ยน `resetEngine` จึงตัดการเชื่อมต่อ socket ครั้งต่อไปที่ต้องใช้ engine
@@ -87,6 +111,10 @@ scenario:
                 sees: ปุ่มโมเดลในช่องพิมพ์เปลี่ยนเป็นชื่อโมเดลใหม่
                 ref: packages/extension/src/chat/composer-view.ts#modelMenu
               - lane: server
+                beat:
+                  title: engine ตัวเดิมปิดตัวเอง
+                  text: engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวหลังว่าง 10 วินาที engine ตัวใหม่รับแชตที่เปิดอยู่ model ใหม่มีผลกับแชตใหม่
+                  end: model ใหม่ใช้กับแชตใหม่
                 at: sessions
                 do: >-
                   engine ตัวเดิมไม่มีหน้าต่างเชื่อมแล้ว มันปิดตัวเองหลังว่างและไม่มีการเชื่อมต่อ 10 วินาที

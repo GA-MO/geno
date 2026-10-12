@@ -15,11 +15,19 @@ scenario:
   related: [sess.reload-while-running, sess.new-chat, sess.open-history, perm.ask-allow]
   steps:
     - id: new
+      beat:
+        title: คุณเปิดแชตใหม่ระหว่าง turn ทำงาน
+        text: turn ของแชต "Fix date parsing" ยังไม่จบ คุณกด New Chat หรือเปิดแชตอื่นจาก History
+        to: panel
       lane: user
       do: ผู้ใช้เปิดแชตใหม่ระหว่างที่ turn ยังไม่จบ
       phase: calling-model
 
     - id: leave
+      beat:
+        title: แชตปล่อย turn เดิมไว้
+        text: การ์ดที่เปิดค้างถูกตอบว่าไม่ได้แสดงแล้ว engine จะถามใหม่ engine เลิกส่งอัปเดตมาที่หน้าต่างนี้ แต่ turn ทำงานต่อ
+        to: engine
       lane: editor
       at: chat
       do: >-
@@ -37,6 +45,11 @@ scenario:
       ref: "packages/engine/src/serve.ts#\".onRequest(DETACH_METHOD, sessionRequest, async ({ params }) => {\""
 
     - id: fresh
+      beat:
+        title: แผงแสดงแชตใหม่
+        text: engine สร้าง session ใหม่ แผงว่างและปุ่ม Send กลับมา แผง Tasks ยังแสดงแชตเดิมว่าทำงานอยู่
+        to: panel
+        sees: หน้าเริ่มต้นของแชตใหม่ ปุ่ม Send และในแผง Tasks แถว "Fix date parsing" ยังทำงานอยู่
       lane: editor
       at: chat
       do: >-
@@ -54,6 +67,10 @@ scenario:
       ref: packages/extension/src/chat/webview.ts#render
 
     - id: away
+      beat:
+        title: turn เดิมทำงานต่อเบื้องหลัง
+        text: loop ไม่รู้ว่าไม่มีใครดูอยู่ log ยังบันทึกทุกอย่าง
+        ask: ไปถึงอะไรก่อน
       lane: loop
       at: drive
       do: >-
@@ -66,18 +83,36 @@ scenario:
             label: ต้องขออนุญาตผู้ใช้
             steps:
               - lane: policy
+                beat:
+                  title: turn ต้องขอ permission
+                  text: คำสั่งถัดไปไม่อยู่ในรายการปลอดภัย Geno ต้องถามคุณ
                 at: settle
                 do: >-
                   คำสั่งถัดไปไม่อยู่ใน safe list `settle` จึงขอให้ผู้ใช้ตัดสินผ่าน `approval.approve`
                 ref: packages/engine/src/tools/agent.ts#settle
                 phase: waiting-user
               - lane: server
+                beat:
+                  title: Geno รอจนมีคนดู
+                  text: ไม่มีหน้าต่างไหนแสดง session นี้ Geno จึงรอ งานใน Tasks เปลี่ยนเป็นรอคุณ
+                  sees:
+                    kind: task
+                    title: Fix date parsing
+                    status: needs-input
                 at: approvals
                 do: >-
                   `Viewers.ask` ไม่พบ editor ที่แสดง session นี้ จึงรอจนกว่าจะมี งานใน Tasks เปลี่ยนเป็น `needs-input`
                 ref: packages/engine/src/viewers.ts#Viewers.ask
                 emits: [needs-input]
               - lane: editor
+                beat:
+                  title: VS Code แจ้งเตือน
+                  text: VS Code ขึ้นการแจ้งเตือนที่มีปุ่ม Open ถ้าหน้าต่างไม่มีโฟกัสบน macOS ก็แจ้งผ่าน OS ด้วย
+                  sees:
+                    kind: toast
+                    text: "Geno needs your permission: Fix date parsing"
+                    actions:
+                      - Open
                 at: vscode-ui
                 do: >-
                   `TaskHost.updated` เห็นงานต้องการผู้ใช้ `tell` ขึ้นการแจ้งเตือนของ VS Code ที่มีปุ่ม Open
@@ -86,6 +121,10 @@ scenario:
                   การแจ้งเตือน "Geno needs your permission: Fix date parsing" พร้อมปุ่ม [Open]
                 ref: packages/extension/src/chat/tasks-host.ts#TaskHost.tell
               - lane: user
+                beat:
+                  title: คุณกด Open
+                  text: แชตเดิมเปิดขึ้น engine เล่นซ้ำ turn ที่กำลังทำงาน แผงรับช่วง turn แล้ว Geno ส่งคำถามมาอีกครั้ง
+                  to: engine
                 do: ผู้ใช้คลิก Open
               - lane: editor
                 at: chat
@@ -95,6 +134,11 @@ scenario:
                 ref: packages/extension/src/chat/tasks-host.ts#TaskHost.open
                 emits: [requestPermission]
               - lane: panel
+                beat:
+                  title: แชตเดิมกลับมาพร้อมการ์ด
+                  text: บทสนทนาเดิมขึ้นพร้อมการ์ดที่รออยู่ จากตรงนี้เหมือนการ์ดของโหมด Ask
+                  sees: บทสนทนา "Fix date parsing" หัวข้อ "waiting for you" และการ์ดขออนุญาต
+                  end: ตอบการ์ดตามปกติ
                 at: card
                 do: แผงแสดงบทสนทนาเดิมพร้อมการ์ดที่รออยู่
                 sees: บทสนทนา "Fix date parsing" หัวข้อ "waiting for you" และการ์ดขออนุญาต
@@ -104,6 +148,9 @@ scenario:
             label: จบเอง
             steps:
               - lane: server
+                beat:
+                  title: turn จบเอง
+                  text: งานใน Tasks เปลี่ยนเป็นเสร็จ แชตปล่อย turn นั้นไปแล้ว จึงไม่วาดอะไร
                 at: tasks
                 do: >-
                   turn จบแบบ done งานใน Tasks เปลี่ยนเป็น done และส่ง `TASK_UPDATE_METHOD` ให้ทุกหน้าต่าง
@@ -112,6 +159,15 @@ scenario:
                 emits: [TASK_UPDATE_METHOD]
                 phase: ending
               - lane: editor
+                beat:
+                  title: VS Code บอกว่างานเสร็จ
+                  text: แชตนั้นไม่ได้แสดงอยู่ VS Code จึงแจ้งเตือน การจบไม่แจ้งผ่าน OS
+                  sees:
+                    kind: toast
+                    text: "Geno finished: Fix date parsing"
+                    actions:
+                      - Open
+                  end: เปิดดูเมื่อพร้อม
                 at: vscode-ui
                 do: >-
                   `TaskHost.updated` เห็นงานเปลี่ยนจากกำลังทำงานเป็นพร้อมให้ดู แชตนั้นไม่ได้แสดงอยู่ `tell` จึงขึ้นการแจ้งเตือนของ VS Code
