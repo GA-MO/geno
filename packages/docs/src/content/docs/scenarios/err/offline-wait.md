@@ -198,8 +198,8 @@ scenario:
               - lane: editor
                 at: chat
                 do: >-
-                  `turnEndOf` อ่านได้ `stopped` และส่ง action `turn-end` (error ชนิด `abort` ไม่ขึ้นเป็นแถบ error)
-                ref: packages/extension/src/chat/chat.ts#turnEndOf
+                  `prompt()` ใช้ `turnEndOf` อ่านได้ `stopped` และส่ง action `turn-end` (error ชนิด `abort` ไม่ขึ้นเป็นแถบ error)
+                ref: "packages/extension/src/chat/chat.ts#\"const status = turnEndOf(response);\""
                 emits: [turn-end]
               - lane: panel
                 at: rail
@@ -217,7 +217,7 @@ scenario:
                 at: gateway
                 do: >-
                   `planWait` ได้ `give-up`: ออฟไลน์ครบ 30 นาที หรือถูกจำกัดโดยไม่รู้เวลารีเซ็ตครบ 15 นาที
-                  gateway ปิดการรอและคืน error ชนิด `transport` ข้อความต่อท้ายว่า
+                  gateway ปิดการรอและคืน error ชนิด `transport` ข้อความต่อท้ายด้วยเหตุผลของการเลิก เช่นเมื่อออฟไลน์
                   "the provider has not answered for 30 minutes; check the connection and send again"
                 ref: packages/core/src/waiting.ts#planWait
                 emits: [give-up, transport]
@@ -227,7 +227,8 @@ scenario:
       lane: loop
       at: gateway
       do: >-
-        การเรียกออกไปอีกครั้ง `endWait` ปิดการรอและบอก watcher ว่าไม่รอแล้ว (`onWait(null)`)
+        การเรียกออกไปอีกครั้ง แต่การรอยังไม่ถูกปิดตอนนี้ `endWait` บอก watcher ว่าไม่รอแล้ว (`onWait(null)`)
+        เมื่อ `slots.run` ของการเรียกนี้คืนผล คือหลังคำตอบ stream จบ หรือเมื่อการเรียกล้มอีกครั้ง
       ref: "packages/engine/src/gateway.ts#\"const endWait = async () => {\""
       phase: calling-model
 
@@ -235,7 +236,8 @@ scenario:
       lane: server
       at: updates
       do: >-
-        `waitUpdate(null)` ส่ง `notice` "Sending again" พร้อม `WAITING_META` เป็น null และงานในแผง Tasks กลับเป็น running
+        เมื่อการเรียกจบ `waitUpdate(null)` ส่ง `notice` "Sending again" พร้อม `WAITING_META` เป็น null และงานในแผง Tasks กลับเป็น running
+        ระหว่างที่คำตอบ stream ก่อนหน้านั้น turn ในแผงยังถือ `waiting` อยู่
       ref: packages/engine/src/wait-hooks.ts#waitUpdate
       emits: [Sending again]
 
@@ -243,8 +245,9 @@ scenario:
       lane: panel
       at: rail
       do: >-
-        แถวการรอหายไป เวลาที่ทำงานกลับมา หัวข้อกลับเป็น "working" แล้วคำตอบของโมเดลเริ่ม stream ตามปกติ
-      sees: หัวข้อ "working" และแถว "Thinking" ปุ่ม Retry now หายไป
+        action `waiting` ที่เป็น null ปิดการรอของ turn แถวการรอหายไป เวลาที่ทำงานกลับมา และหัวข้อกลับเป็น "working"
+        reducer ไม่ล้าง `waiting` ด้วย `progress` หรือ `text` ข้อความของคำตอบจึงขึ้นก่อนหัวข้อจะเปลี่ยน
+      sees: หัวข้อ "working" ปุ่ม Retry now หายไป ส่วนคำตอบที่ stream มาแล้วอยู่ในแผง
       ref: packages/extension/src/chat/rail.ts#headerOf
       end: { turn: continues }
 ---
